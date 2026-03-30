@@ -1,0 +1,158 @@
+<div class="drawer lg:drawer-open min-h-screen">
+  <input id="sidebar" type="checkbox" class="drawer-toggle" />
+  <div class="drawer-content flex flex-col">
+    <nav class="navbar bg-base-100 shadow-sm lg:hidden">
+      <div class="flex-none">
+        <label for="sidebar" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </label>
+      </div>
+      <div class="flex-1">
+        <a class="btn btn-ghost text-xl" routerLink="/">{{ 'app.name' | translate }}</a>
+      </div>
+    </nav>
+    <main class="flex-1 p-4 lg:p-6">
+      <router-outlet />
+    </main>
+  </div>
+
+  <div class="drawer-side z-40">
+    <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
+    <aside class="bg-base-100 w-64 min-h-full flex flex-col">
+      <div class="p-4 border-b border-base-200">
+        <a routerLink="/" class="text-2xl font-bold">{{ 'app.name' | translate }}</a>
+      </div>
+
+      <ul class="menu p-4 flex-1 gap-1 min-w-64">
+        <li>
+          <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+            {{ 'nav.dashboard' | translate }}
+          </a>
+        </li>
+        <li>
+          <a routerLink="/movies" routerLinkActive="active">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+            </svg>
+            {{ 'nav.movies' | translate }}
+          </a>
+        </li>
+        <li>
+          <a routerLink="/series" routerLinkActive="active">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            {{ 'nav.series' | translate }}
+          </a>
+        </li>
+        <li>
+          <a routerLink="/add" routerLinkActive="active">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            {{ 'nav.add' | translate }}
+          </a>
+        </li>
+        <li>
+          <a routerLink="/requests" routerLinkActive="active">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            {{ 'nav.requests' | translate }}
+          </a>
+        </li>
+        <li>
+          <a routerLink="/activity" routerLinkActive="active">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            {{ 'nav.activity' | translate }}
+          </a>
+        </li>
+        <li>
+          <a routerLink="/calendar" routerLinkActive="active">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            {{ 'nav.calendar' | translate }}
+          </a>
+        </li>
+        @if (auth.isAdmin()) {
+          <li>
+            <a routerLink="/import-disk" routerLinkActive="active">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 12V4m0 0L8 8m4-4l4 4" />
+              </svg>
+              {{ 'nav.import_disk' | translate }}
+            </a>
+          </li>
+        }
+        @if (auth.isAdmin()) {
+          <li>
+            <a routerLink="/system" routerLinkActive="active">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
+              </svg>
+              {{ 'nav.system' | translate }}
+            </a>
+          </li>
+        }
+
+        <!-- Settings — collapsible dropdown (admin only) -->
+        @if (auth.isAdmin()) {
+          <li>
+            <details [open]="isSettingsOpen()">
+              <summary>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {{ 'nav.settings' | translate }}
+              </summary>
+              <ul>
+                <li><a routerLink="/settings/general" routerLinkActive="active">{{ 'settings.nav.general' | translate }}</a></li>
+                <li><a routerLink="/settings/quality-profiles" routerLinkActive="active">{{ 'settings.nav.quality_profiles' | translate }}</a></li>
+                <li><a routerLink="/settings/custom-formats" routerLinkActive="active">{{ 'settings.nav.custom_formats' | translate }}</a></li>
+                <li><a routerLink="/settings/indexers" routerLinkActive="active">{{ 'settings.nav.indexers' | translate }}</a></li>
+                <li><a routerLink="/settings/download-clients" routerLinkActive="active">{{ 'settings.nav.download_clients' | translate }}</a></li>
+                <li><a routerLink="/settings/naming" routerLinkActive="active">{{ 'settings.nav.naming' | translate }}</a></li>
+                <li><a routerLink="/settings/blocklist" routerLinkActive="active">{{ 'settings.nav.blocklist' | translate }}</a></li>
+                <li><a routerLink="/settings/notifications" routerLinkActive="active">{{ 'settings.nav.notifications' | translate }}</a></li>
+                <li><a routerLink="/settings/root-folders" routerLinkActive="active">{{ 'settings.nav.root_folders' | translate }}</a></li>
+                <li><a routerLink="/settings/tags" routerLinkActive="active">{{ 'settings.nav.tags' | translate }}</a></li>
+                <li><a routerLink="/settings/users" routerLinkActive="active">{{ 'settings.nav.users' | translate }}</a></li>
+                <li><a routerLink="/settings/auto-approval" routerLinkActive="active">{{ 'settings.nav.auto_approval' | translate }}</a></li>
+              </ul>
+            </details>
+          </li>
+        }
+      </ul>
+
+      <div class="p-4 border-t border-base-200">
+        @if (auth.user(); as user) {
+          <div class="flex items-center gap-3">
+            <div class="avatar placeholder">
+              <div class="bg-neutral text-neutral-content w-8 rounded-full">
+                <span class="text-sm">{{ user.username[0].toUpperCase() }}</span>
+              </div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium truncate">{{ user.username }}</p>
+              <p class="text-sm text-base-content/50">{{ ('roles.' + user.role) | translate }}</p>
+            </div>
+            <button class="btn btn-ghost btn-sm btn-square" (click)="auth.logout()" [attr.aria-label]="'nav.logout' | translate">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
+          </div>
+        }
+      </div>
+    </aside>
+  </div>
+</div>

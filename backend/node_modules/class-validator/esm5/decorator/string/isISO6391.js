@@ -1,0 +1,22 @@
+import { buildMessage, ValidateBy } from '../common/ValidateBy';
+import isISO6391Validator from 'validator/lib/isISO6391';
+export var IS_ISO6391 = 'isISO6391';
+/**
+ * Check if the string is a valid [ISO 639-1](https://en.wikipedia.org/wiki/ISO_639-1) officially assigned language code.
+ */
+export function isISO6391(value) {
+    return typeof value === 'string' && isISO6391Validator(value);
+}
+/**
+ * Check if the string is a valid [ISO 639-1](https://en.wikipedia.org/wiki/ISO_639-1) officially assigned language code.
+ */
+export function IsISO6391(validationOptions) {
+    return ValidateBy({
+        name: IS_ISO6391,
+        validator: {
+            validate: function (value, args) { return isISO6391(value); },
+            defaultMessage: buildMessage(function (eachPrefix) { return eachPrefix + '$property must be a valid ISO 639-1 language code'; }, validationOptions),
+        },
+    }, validationOptions);
+}
+//# sourceMappingURL=isISO6391.js.map

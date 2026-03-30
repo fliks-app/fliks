@@ -1,0 +1,49 @@
+import { Repository } from 'typeorm';
+import { Media } from './entities/media.entity';
+import { DownloadHistory } from './entities/download-history.entity';
+import { Indexer } from '../indexers/entities/indexer.entity';
+import { DownloadClient } from '../download-clients/entities/download-client.entity';
+import { TorznabService } from '../indexers/torznab.service';
+import { QbittorrentService } from '../download-clients/qbittorrent.service';
+import { CustomFormatsService } from '../profiles/custom-formats.service';
+import { BlocklistService } from '../blocklist/blocklist.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { GrabMovieDto } from './dto/grab-movie.dto';
+export interface MovieReleaseRow {
+    title: string;
+    downloadUrl: string;
+    qualityId: number;
+    qualityName: string;
+    rank: number;
+    allowed: boolean;
+    customFormatScore: number;
+    blocklisted: boolean;
+    indexerId: number;
+    indexerName: string;
+    languageId: number;
+    languageName: string;
+    languageAllowed: boolean;
+    size: number;
+    seeders: number;
+    leechers: number;
+}
+export declare class MovieDownloadService {
+    private readonly mediaRepo;
+    private readonly historyRepo;
+    private readonly indexerRepo;
+    private readonly clientRepo;
+    private readonly torznab;
+    private readonly qbittorrent;
+    private readonly customFormats;
+    private readonly blocklist;
+    private readonly notifications;
+    private readonly log;
+    constructor(mediaRepo: Repository<Media>, historyRepo: Repository<DownloadHistory>, indexerRepo: Repository<Indexer>, clientRepo: Repository<DownloadClient>, torznab: TorznabService, qbittorrent: QbittorrentService, customFormats: CustomFormatsService, blocklist: BlocklistService, notifications: NotificationsService);
+    private allowedQualityIds;
+    private searchIndexer;
+    private searchQueryForMedia;
+    searchMovieReleases(mediaId: number): Promise<MovieReleaseRow[]>;
+    grabMovie(mediaId: number, dto: GrabMovieDto): Promise<DownloadHistory>;
+    searchUpgradeReleases(mediaId: number): Promise<MovieReleaseRow[]>;
+    grabUpgrade(mediaId: number, dto: GrabMovieDto): Promise<DownloadHistory>;
+}

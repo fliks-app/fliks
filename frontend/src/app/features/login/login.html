@@ -1,0 +1,50 @@
+<div class="min-h-screen flex items-center justify-center bg-base-200">
+  <div class="card w-96 bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title text-2xl justify-center mb-4">{{ 'app.name' | translate }}</h2>
+
+      @if (error()) {
+        <div role="alert" class="alert alert-error mb-4">
+          <span>{{ error() }}</span>
+        </div>
+      }
+
+      <form [formGroup]="form" (ngSubmit)="onSubmit()">
+        <fieldset class="fieldset">
+          <label class="fieldset-label" for="username">{{ 'login.username' | translate }}</label>
+          <input
+            id="username"
+            type="text"
+            class="input input-bordered w-full"
+            formControlName="username"
+            autocomplete="username"
+          />
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <label class="fieldset-label" for="password">{{ 'login.password' | translate }}</label>
+          <input
+            id="password"
+            type="password"
+            class="input input-bordered w-full"
+            formControlName="password"
+            autocomplete="current-password"
+          />
+        </fieldset>
+
+        <div class="card-actions mt-6">
+          <button
+            type="submit"
+            class="btn btn-primary w-full"
+            [disabled]="loading()"
+          >
+            @if (loading()) {
+              <span class="loading loading-spinner loading-sm"></span>
+            }
+            {{ 'login.submit' | translate }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

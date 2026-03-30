@@ -1,0 +1,60 @@
+import {
+  Component,
+  ChangeDetectionStrategy,
+  signal,
+  inject,
+  OnInit,
+} from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
+import { TranslateModule } from '@ngx-translate/core';
+import { firstValueFrom } from 'rxjs';
+
+interface DiskSpaceEntry {
+  path: string;
+  label: string | null;
+  freeSpace: number;
+  totalSpace: number;
+}
+
+interface StatsReport {
+  movies: number;
+  series: number;
+  pendingRequests: number;
+  diskSpace: DiskSpaceEntry[];
+}
+
+@Component({
+  selector: 'app-dashboard',
+  imports: [RouterLink, TranslateModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  templateUrl: './dashboard.html',
+})
+export class DashboardComponent implements OnInit {
+  private readonly http = inject(HttpClient);
+
+  readonly stats = signal<StatsReport | null>(null);
+  readonly loading = signal(true);
+
+  async ngOnInit() {
+    try {
+      const data = await firstValueFrom(this.http.get<StatsReport>('/api/system/stats'));
+      this.stats.set(data);
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  formatBytes(bytes: number): string {
+    if (bytes < 0) return '—';
+    if (bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    return `${(bytes / Math.pow(1024, i)).toFixed(i >= 3 ? 1 : 0)} ${units[i]}`;
+  }
+
+  diskUsedPercent(entry: DiskSpaceEntry): number {
+    if (entry.totalSpace <= 0) return 0;
+    return Math.round(((entry.totalSpace - entry.freeSpace) / entry.totalSpace) * 100);
+  }
+}

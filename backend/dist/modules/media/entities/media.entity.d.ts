@@ -1,0 +1,36 @@
+import { BaseEntity } from '../../../common/entities/base.entity';
+import { MediaType, MediaStatus } from '../../../common/enums';
+import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
+import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
+import { Tag } from '../../tags/entities/tag.entity';
+import { Season } from './season.entity';
+import { MediaFile } from './media-file.entity';
+export declare class Media extends BaseEntity {
+    title: string;
+    originalTitle: string;
+    year: number;
+    type: MediaType;
+    tmdbId: number;
+    imdbId: string;
+    overview: string;
+    status: MediaStatus;
+    monitored: boolean;
+    path: string;
+    posterUrl: string;
+    fanartUrl: string;
+    rating: number;
+    genres: string[];
+    runtime: number;
+    releaseDate: string;
+    inCinemas: string;
+    digitalRelease: string;
+    physicalRelease: string;
+    searchVector: string;
+    qualityProfile: QualityProfile;
+    qualityProfileId: number;
+    languageProfile: LanguageProfile;
+    languageProfileId: number;
+    tags: Tag[];
+    seasons: Season[];
+    files: MediaFile[];
+}

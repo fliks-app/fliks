@@ -1,0 +1,135 @@
+import {
+  Component,
+  ChangeDetectionStrategy,
+  signal,
+  inject,
+  OnInit,
+} from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import {
+  CustomFormatsApiService,
+  CustomFormat,
+  CustomFormatSpec,
+} from '../../../core/services/api/custom-formats-api.service';
+
+@Component({
+  selector: 'app-custom-formats-settings',
+  imports: [FormsModule, TranslateModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  templateUrl: './custom-formats.html',
+})
+export class CustomFormatsSettingsComponent implements OnInit {
+  private readonly api = inject(CustomFormatsApiService);
+  private readonly translate = inject(TranslateService);
+
+  readonly rows = signal<CustomFormat[]>([]);
+  readonly loading = signal(true);
+  readonly listError = signal('');
+
+  readonly editorOpen = signal(false);
+  readonly saving = signal(false);
+  readonly saveError = signal('');
+  readonly editingId = signal<number | null>(null);
+
+  readonly formName = signal('');
+  readonly formScore = signal(0);
+  readonly formSpecs = signal<CustomFormatSpec[]>([]);
+
+  readonly specTypes = ['title_regex', 'source', 'resolution', 'language'] as const;
+
+  ngOnInit() {
+    this.reloadAll();
+  }
+
+  async reloadAll() {
+    this.loading.set(true);
+    try {
+      const list = await this.api.list();
+      this.rows.set(list);
+    } catch {
+      this.listError.set(this.translate.instant('settings.custom_formats.load_error'));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  openCreate() {
+    this.editingId.set(null);
+    this.formName.set('');
+    this.formScore.set(0);
+    this.formSpecs.set([]);
+    this.saveError.set('');
+    this.editorOpen.set(true);
+  }
+
+  openEdit(cf: CustomFormat) {
+    this.editingId.set(cf.id);
+    this.formName.set(cf.name);
+    this.formScore.set(cf.score);
+    this.formSpecs.set(cf.specs.map((s) => ({ ...s })));
+    this.saveError.set('');
+    this.editorOpen.set(true);
+  }
+
+  closeEditor() {
+    this.editorOpen.set(false);
+  }
+
+  addSpec() {
+    this.formSpecs.update((specs) => [
+      ...specs,
+      { type: 'title_regex', value: '', negate: false, required: false },
+    ]);
+  }
+
+  removeSpec(index: number) {
+    this.formSpecs.update((specs) => specs.filter((_, i) => i !== index));
+  }
+
+  updateSpec(index: number, patch: Partial<CustomFormatSpec>) {
+    this.formSpecs.update((specs) =>
+      specs.map((s, i) => (i === index ? { ...s, ...patch } : s)),
+    );
+  }
+
+  async save() {
+    const name = this.formName().trim();
+    if (!name) {
+      this.saveError.set(this.translate.instant('settings.custom_formats.name_required'));
+      return;
+    }
+    this.saving.set(true);
+    this.saveError.set('');
+    const body = {
+      name,
+      score: this.formScore(),
+      specs: this.formSpecs(),
+    };
+    const id = this.editingId();
+    try {
+      await (id == null ? this.api.create(body) : this.api.update(id, body));
+      this.closeEditor();
+      await this.reloadAll();
+    } catch (err: unknown) {
+      const httpErr = err as { error?: { message?: string | string[] } };
+      const msg = Array.isArray(httpErr.error?.message)
+        ? httpErr.error.message.join(', ')
+        : httpErr.error?.message;
+      this.saveError.set(msg ?? this.translate.instant('settings.custom_formats.save_error'));
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  async deleteRow(cf: CustomFormat) {
+    if (!confirm(this.translate.instant('settings.custom_formats.confirm_delete', { name: cf.name }))) return;
+    try {
+      await this.api.remove(cf.id);
+      await this.reloadAll();
+    } catch (err: unknown) {
+      const httpErr = err as { error?: { message?: string } };
+      alert(httpErr.error?.message ?? 'Error');
+    }
+  }
+}

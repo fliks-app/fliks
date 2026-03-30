@@ -1,0 +1,144 @@
+---
+id: extratorrent-st
+name: ExtraTorrent.st
+description: "ExtraTorrent.st is a Public tracker for MOVIE / TV / GENERAL magnets"
+language: en-US
+type: public
+encoding: UTF-8
+links:
+  - https://extratorrent.st/
+  - https://extratorrent.ninjaproxy1.com/
+  - https://extratorrent.proxyninja.org/
+  - https://extratorrent.proxyninja.net/
+legacylinks:
+  - https://extratorrent.mrunblock.bond/
+  - https://extratorrent.nocensor.cloud/
+  - https://extratorrent.unblockit.download/ # 502
+
+caps:
+  categorymappings:
+    - {id: 3D Movies, cat: Movies/3D, desc: Movies 3D}
+    - {id: AAC, cat: Audio, desc: Music AAC}
+    - {id: "Adult / Porn", cat: XXX, desc: "Adult / Porn"}
+    - {id: Android, cat: PC/Mobile-Android, desc: Software Android}
+    - {id: Anime, cat: TV/Anime, desc: Anime}
+    - {id: Audio books, cat: Audio/Audiobook, desc: Books Audiobook}
+    - {id: Bollywood, cat: Movies, desc: Bollywood}
+    - {id: Comics, cat: Books/Comics, desc: Books Comics}
+    - {id: DVD, cat: Movies/DVD, desc: Movies DVD}
+    - {id: Documentary, cat: TV/Documentary, desc: Documentary}
+    - {id: Dubbed Movies, cat: Movies/Foreign, desc: Movies Dubbed}
+    - {id: Ebooks, cat: Books/EBook, desc: Books Ebook}
+    - {id: English-translated, cat: TV/Anime, desc: Anime  English-translated}
+    - {id: Episodes HD, cat: TV/HD, desc: Episodes HD}
+    - {id: Episodes 4K UHD, cat: TV/UHD, desc: Episodes 4K UHD}
+    - {id: Games, cat: XXX/Other, desc: Adult Games}
+    - {id: Hentai, cat: XXX/Other, desc: Adult Hentai}
+    - {id: Highres Movies, cat: Movies/HD, desc: Movies HD}
+    - {id: Linux, cat: PC, desc: Software Linux}
+    - {id: "Live Action [Non-English]", cat: TV/Anime, desc: "Live Action [Non-English]"}
+    - {id: Lossless, cat: Audio/Lossless, desc: Music Lossless}
+    - {id: "Manga [English-translated]", cat: Books/Comics, desc: "Manga [English-translated]"}
+    - {id: "Manga [Raw]", cat: Books/Comics, desc: "Manga [Raw]"}
+    - {id: MP3, cat: Audio/MP3, desc: Music MP3}
+    - {id: MP4, cat: Movies, desc: Movies MP4}
+    - {id: Mac, cat: PC/Mac, desc: Software Mac}
+    - {id: Magazines, cat: XXX/Other, desc: Adult Magazines}
+    - {id: Movie clips, cat: Movies, desc: Movies clips}
+    - {id: Movies, cat: Movies, desc: Movies}
+    - {id: Music, cat: Audio, desc: Music}
+    - {id: Music videos, cat: Audio/Video, desc: Music Videos}
+    - {id: NDS, cat: Console/NDS, desc: Games NDS}
+    - {id: Other Applications, cat: PC, desc: Other Applications}
+    - {id: Other Games, cat: Console/Other, desc: Games Other}
+    - {id: Other Movies, cat: Movies/Other, desc: Movies Other}
+    - {id: Other Music, cat: Audio/Other, desc: Music Other}
+    - {id: Other, cat: Other/Misc, desc: Other}
+    - {id: PC Games, cat: PC/Games, desc: PC Games}
+    - {id: PS3, cat: Console/PS3, desc: Games PS3}
+    - {id: PS4, cat: Console/PS4, desc: Games PS4}
+    - {id: PSP, cat: Console/PSP, desc: Games PSP}
+    - {id: Pictures, cat: XXX/ImageSet, desc: Adult Pictures}
+    - {id: Radio Shows, cat: Audio/Other, desc: Music Radio}
+    - {id: Raw, cat: TV/Anime, desc: Anime Raw}
+    - {id: Season Packs, cat: TV, desc: Season Packs}
+    - {id: Software, cat: PC/0day, desc: Software}
+    - {id: Sports, cat: TV/Sport, desc: Sports}
+    - {id: Subs, cat: TV/Anime, desc: Anime Subs}
+    - {id: Switch, cat: Console/Other, desc: Games Switch}
+    - {id: TV, cat: TV, desc: TV}
+    - {id: UltraHD, cat: Movies/UHD, desc: Movies UHD}
+    - {id: Video, cat: XXX, desc: Adult / Porn}
+    - {id: Wii, cat: Console/Wii, desc: Games Wii}
+    - {id: Windows, cat: PC, desc: Software Windows}
+    - {id: Xbox360, cat: Console/XBox 360, desc: Games Xbox360}
+
+  modes:
+    search: [q]
+    tv-search: [q, season, ep]
+    movie-search: [q]
+    music-search: [q]
+    book-search: [q]
+
+settings:
+  - name: info_flaresolverr
+    type: info_flaresolverr
+
+search:
+  paths:
+    # https://extratorrent.st/search/?srt=added&order=desc&search=captain&new=1&x=0&y=0
+    - path: "{{ if .Keywords }}search/?srt=added&order=desc&search={{ .Keywords }}&new=1&x=0&y=0{{ else }}{{ end }}"
+  keywordsfilters:
+    - name: re_replace
+      args: ["[\\s]+", "."]
+
+  rows:
+    selector: tr[class^="tl"]:has(a[href^="magnet:?xt="])
+    filters:
+      - name: andmatch
+
+  fields:
+    category:
+      selector: span.c_tor
+      filters:
+        - name: replace
+          args: ["in ", ""]
+        - name: trim
+    title:
+      selector: a[href^="/torrent/"]:not([href$="comments"])
+    details:
+      selector: a[href^="/torrent/"]
+      attribute: href
+    download:
+      selector: a[href^="magnet:?xt="]
+      attribute: href
+    date:
+      # 8m , 13h, 2d , 3w , 1m , 1y # site uses m for both minutes and months!?!?
+      selector: td:nth-last-of-type(5)
+      filters:
+        - name: replace
+          args: ["m", " minutes"]
+        - name: replace
+          args: ["h", " hours"]
+        - name: replace
+          args: ["y", " years"]
+        - name: replace
+          args: ["d", " days"]
+        - name: replace
+          args: ["w", " weeks"]
+        - name: timeago
+    size:
+      selector: td:nth-last-of-type(4)
+    seeders:
+      selector: td.sy, td.sn
+      optional: true
+      default: 0
+    leechers:
+      selector: td.ly, td.ln
+      optional: true
+      default: 0
+    downloadvolumefactor:
+      text: 0
+    uploadvolumefactor:
+      text: 1
+# engine n/a

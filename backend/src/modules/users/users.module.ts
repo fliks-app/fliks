@@ -1,0 +1,15 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { User } from './entities/user.entity';
+import { MediaServer } from './entities/media-server.entity';
+import { UsersService } from './users.service';
+import { UsersController } from './users.controller';
+import { AuthModule } from '../auth/auth.module';
+
+@Module({
+  imports: [TypeOrmModule.forFeature([User, MediaServer]), AuthModule],
+  controllers: [UsersController],
+  providers: [UsersService],
+  exports: [TypeOrmModule, UsersService],
+})
+export class UsersModule {}

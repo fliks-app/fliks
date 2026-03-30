@@ -1,0 +1,74 @@
+<div class="flex flex-col gap-6">
+  <div>
+    <h1 class="text-2xl font-bold">{{ 'settings.tags.title' | translate }}</h1>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'settings.tags.subtitle' | translate }}</p>
+  </div>
+
+  <!-- Add form -->
+  <div class="card bg-base-100 border border-base-200">
+    <div class="card-body py-4 px-5">
+      <div class="flex gap-2">
+        <input
+          type="text"
+          class="input input-bordered input-sm flex-1"
+          [ngModel]="newLabel()"
+          (ngModelChange)="newLabel.set($event)"
+          [placeholder]="'settings.tags.new_placeholder' | translate"
+          (keydown.enter)="add()"
+        />
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          (click)="add()"
+          [disabled]="adding() || !newLabel().trim()"
+        >
+          @if (adding()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'settings.tags.add' | translate }}
+        </button>
+      </div>
+      @if (addError()) {
+        <div role="alert" class="alert alert-error text-sm mt-2">{{ addError() }}</div>
+      }
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-8">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (listError()) {
+    <div role="alert" class="alert alert-error">{{ listError() }}</div>
+  } @else if (tags().length === 0) {
+    <p class="text-center py-8 text-base-content/50">{{ 'settings.tags.empty' | translate }}</p>
+  } @else {
+    <div class="flex flex-wrap gap-2">
+      @for (tag of tags(); track tag.id) {
+        @if (editingId() === tag.id) {
+          <div class="flex items-center gap-1 bg-base-200 rounded-full px-2 py-1">
+            <input
+              type="text"
+              class="input input-xs bg-transparent border-none focus:outline-none w-24"
+              [ngModel]="editLabel()"
+              (ngModelChange)="editLabel.set($event)"
+              (keydown.enter)="saveEdit(tag)"
+              (keydown.escape)="cancelEdit()"
+            />
+            <button type="button" class="btn btn-ghost btn-xs" (click)="saveEdit(tag)">✓</button>
+            <button type="button" class="btn btn-ghost btn-xs" (click)="cancelEdit()">✕</button>
+          </div>
+        } @else {
+          <div class="badge badge-lg gap-2 cursor-pointer hover:badge-primary" (click)="startEdit(tag)">
+            {{ tag.label }}
+            <button
+              type="button"
+              class="text-base-content/40 hover:text-error"
+              (click)="$event.stopPropagation(); remove(tag)"
+            >✕</button>
+          </div>
+        }
+      }
+    </div>
+  }
+</div>

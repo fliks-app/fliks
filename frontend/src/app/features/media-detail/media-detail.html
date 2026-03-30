@@ -1,0 +1,994 @@
+<div class="flex flex-col gap-4">
+  <a [routerLink]="['/', backSegment()]" class="btn btn-ghost btn-sm w-fit gap-1">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+    </svg>
+    {{ 'media_detail.back' | translate }}
+  </a>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (notFound()) {
+    <div class="text-center py-16 text-base-content/50">
+      <p class="text-lg">{{ 'media_detail.not_found' | translate }}</p>
+    </div>
+  } @else if (media(); as m) {
+    <div class="flex flex-col lg:flex-row gap-6 lg:gap-10">
+      <div class="shrink-0 w-full max-w-[240px] mx-auto lg:mx-0">
+        @if (m.posterUrl) {
+          <img
+            [src]="m.posterUrl"
+            [alt]="m.title"
+            class="w-full rounded-lg shadow-lg aspect-2/3 object-cover bg-base-300"
+          />
+        } @else {
+          <div class="aspect-2/3 rounded-lg bg-base-300 flex items-center justify-center text-base-content/30">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-20 w-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+            </svg>
+          </div>
+        }
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          <span class="badge badge-lg">{{ m.status }}</span>
+          @if (!m.monitored) {
+            <span class="badge badge-lg badge-ghost">{{ 'media_detail.unmonitored' | translate }}</span>
+          }
+          @if (m.rating) {
+            <span class="badge badge-lg badge-warning">{{ m.rating | number:'1.1-1' }}</span>
+          }
+          <span class="text-sm text-base-content/60">{{ m.year }}</span>
+          @if (m.runtime) {
+            <span class="text-sm text-base-content/60">
+              &middot; {{ m.runtime }} {{ 'common.min' | translate }}
+            </span>
+          }
+        </div>
+        <h1 class="text-3xl font-bold">{{ m.title }}</h1>
+        @if (m.originalTitle && m.originalTitle !== m.title) {
+          <p class="text-base-content/60 mt-1">{{ m.originalTitle }}</p>
+        }
+        @if (m.genres.length) {
+          <p class="text-sm mt-3 text-base-content/70">{{ m.genres.join(' · ') }}</p>
+        }
+        @if (m.overview) {
+          <p class="mt-4 text-base-content/90 leading-relaxed whitespace-pre-line">{{ m.overview }}</p>
+        }
+
+        <!-- Metadata grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-sm mt-5">
+          <div class="flex justify-between">
+            <span class="text-base-content/60">{{ 'media_detail.quality_profile_label' | translate }}</span>
+            <span class="font-medium">{{ m.qualityProfile?.name ?? ('media_detail.profile_none' | translate) }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-base-content/60">{{ 'media_detail.language_profile_label' | translate }}</span>
+            <span class="font-medium">{{ m.languageProfile?.name ?? ('media_detail.profile_none' | translate) }}</span>
+          </div>
+          @if (m.inCinemas) {
+            <div class="flex justify-between">
+              <span class="text-base-content/60">{{ 'media_detail.in_cinemas_label' | translate }}</span>
+              <span class="font-medium">{{ m.inCinemas }}</span>
+            </div>
+          }
+          @if (m.digitalRelease) {
+            <div class="flex justify-between">
+              <span class="text-base-content/60">{{ 'media_detail.digital_release_label' | translate }}</span>
+              <span class="font-medium">{{ m.digitalRelease }}</span>
+            </div>
+          }
+          @if (m.physicalRelease) {
+            <div class="flex justify-between">
+              <span class="text-base-content/60">{{ 'media_detail.physical_release_label' | translate }}</span>
+              <span class="font-medium">{{ m.physicalRelease }}</span>
+            </div>
+          }
+          @if (m.releaseDate && !m.inCinemas && !m.digitalRelease && !m.physicalRelease) {
+            <div class="flex justify-between">
+              <span class="text-base-content/60">{{ 'media_detail.release_date_label' | translate }}</span>
+              <span class="font-medium">{{ m.releaseDate }}</span>
+            </div>
+          }
+          @if (m.runtime) {
+            <div class="flex justify-between">
+              <span class="text-base-content/60">{{ 'media_detail.runtime_label' | translate }}</span>
+              <span class="font-medium">{{ m.runtime }} {{ 'common.min' | translate }}</span>
+            </div>
+          }
+          @if (m.rating) {
+            <div class="flex justify-between">
+              <span class="text-base-content/60">{{ 'media_detail.rating_label' | translate }}</span>
+              <span class="font-medium">{{ m.rating | number:'1.1-1' }} / 10</span>
+            </div>
+          }
+          @if (m.status) {
+            <div class="flex justify-between">
+              <span class="text-base-content/60">{{ 'media_detail.status_label' | translate }}</span>
+              <span class="font-medium">{{ m.status }}</span>
+            </div>
+          }
+          <div class="flex justify-between sm:col-span-2">
+            <span class="text-base-content/60">{{ 'media_detail.root_folder_label' | translate }}</span>
+            <span class="font-mono text-sm">{{ m.path || ('media_detail.no_root_folder' | translate) }}</span>
+          </div>
+          @if (m.tags?.length) {
+            <div class="flex justify-between sm:col-span-2">
+              <span class="text-base-content/60">{{ 'media_detail.tags_label' | translate }}</span>
+              <span class="flex flex-wrap gap-1">
+                @for (t of m.tags; track t.id) {
+                  <span class="badge badge-xs badge-outline">{{ t.label }}</span>
+                }
+              </span>
+            </div>
+          }
+        </div>
+
+        <!-- Action buttons -->
+        <div class="flex flex-wrap gap-2 mt-5">
+          @if (canEditProfiles()) {
+            <button type="button" class="btn btn-ghost btn-sm" (click)="openProfilesModal()">
+              {{ 'media_detail.edit_profiles' | translate }}
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm" (click)="openRootFolderModal()">
+              {{ 'media_detail.edit_root_folder' | translate }}
+            </button>
+          }
+          @if (isAdmin()) {
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              (click)="refreshMetadata()"
+              [disabled]="refreshLoading()"
+            >
+              @if (refreshLoading()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+              {{ 'media_detail.refresh_metadata' | translate }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              (click)="toggleMonitored()"
+              [disabled]="monitoredLoading()"
+            >
+              @if (monitoredLoading()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+              @if (m.monitored) {
+                {{ 'media_detail.unmonitor' | translate }}
+              } @else {
+                {{ 'media_detail.monitor' | translate }}
+              }
+            </button>
+            <button
+              type="button"
+              class="btn btn-error btn-outline btn-sm"
+              (click)="deleteMedia()"
+              [disabled]="deleteLoading()"
+            >
+              @if (deleteLoading()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+              {{ 'media_detail.delete' | translate }}
+            </button>
+          }
+        </div>
+
+        @if (m.files?.length) {
+          <div class="divider my-6"></div>
+          <section class="space-y-3">
+            <h2 class="text-xl font-semibold">{{ 'media_detail.files_section' | translate }}</h2>
+            <div class="overflow-x-auto rounded-lg border border-base-200">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>{{ 'media_detail.col_file_path' | translate }}</th>
+                    <th>{{ 'media_detail.col_file_quality' | translate }}</th>
+                    <th class="text-right">{{ 'media_detail.col_file_size' | translate }}</th>
+                    <th class="w-24"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (f of m.files; track f.id) {
+                    <tr>
+                      <td class="font-mono text-sm max-w-[min(28rem,50vw)] truncate" [title]="f.relativePath">{{ f.relativePath }}</td>
+                      <td><span class="badge badge-sm badge-ghost">{{ f.quality }}</span></td>
+                      <td class="text-right text-sm tabular-nums">{{ formatBytes(f.size) }}</td>
+                      <td>
+                        <div class="dropdown dropdown-end">
+                          <label tabindex="0" class="btn btn-ghost btn-xs btn-circle">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </label>
+                          <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-200 rounded-box shadow-lg z-10 w-56 p-2">
+                            <li>
+                              <button (click)="deleteFile(f.id, false)">
+                                {{ 'media_detail.untrack_file' | translate }}
+                              </button>
+                            </li>
+                            <li>
+                              <button class="text-error" (click)="deleteFile(f.id, true)">
+                                {{ 'media_detail.delete_file_disk' | translate }}
+                              </button>
+                            </li>
+                          </ul>
+                        </div>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </section>
+        }
+
+        <!-- ============================================================ -->
+        <!-- SEASONS (series)                                             -->
+        <!-- ============================================================ -->
+        @if (expectedKind() === 'series' && m.seasons?.length) {
+          <div class="divider my-6"></div>
+          <section class="space-y-3">
+            <h2 class="text-xl font-semibold">{{ 'media_detail.seasons_section' | translate }}</h2>
+            <div class="flex flex-col gap-2">
+              @for (season of m.seasons; track season.id) {
+                <div class="border border-base-200 rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    class="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-base-200/50 transition-colors"
+                    (click)="toggleSeasonExpanded(season.id)"
+                  >
+                    <div class="flex items-center gap-3">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        class="h-4 w-4 transition-transform"
+                        [class.rotate-90]="expandedSeasonId() === season.id"
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                      >
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                      </svg>
+                      <span class="font-medium">
+                        {{ 'media_detail.season' | translate }} {{ season.seasonNumber }}
+                      </span>
+                      <span class="text-sm text-base-content/50">
+                        {{ season.episodes.length }} {{ 'media_detail.episodes' | translate }}
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      @if (!season.monitored) {
+                        <span class="badge badge-xs badge-ghost">{{ 'media_detail.unmonitored' | translate }}</span>
+                      }
+                      @if (canGrab()) {
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-outline btn-primary"
+                          [disabled]="seasonReleasesLoading() && seasonReleasesOpen() === season.id"
+                          (click)="$event.stopPropagation(); loadSeasonReleases(m.id, season)"
+                        >
+                          @if (seasonReleasesLoading() && seasonReleasesOpen() === season.id) {
+                            <span class="loading loading-spinner loading-xs"></span>
+                          } @else {
+                            {{ 'media_detail.season_releases' | translate }}
+                          }
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-primary"
+                          [disabled]="seasonGrabBusy() === season.id"
+                          (click)="$event.stopPropagation(); grabSeasonAuto(m.id, season)"
+                        >
+                          @if (seasonGrabBusy() === season.id) {
+                            <span class="loading loading-spinner loading-xs"></span>
+                          } @else {
+                            {{ 'media_detail.grab_season' | translate }}
+                          }
+                        </button>
+                      }
+                      @if (isAdmin()) {
+                        <span
+                          class="btn btn-xs btn-ghost"
+                          [class.opacity-50]="seasonBusy() === season.id"
+                          (click)="$event.stopPropagation(); toggleSeasonMonitored(season)"
+                        >
+                          @if (seasonBusy() === season.id) {
+                            <span class="loading loading-spinner loading-xs"></span>
+                          } @else if (season.monitored) {
+                            {{ 'media_detail.unmonitor' | translate }}
+                          } @else {
+                            {{ 'media_detail.monitor' | translate }}
+                          }
+                        </span>
+                      }
+                    </div>
+                  </button>
+                  @if (expandedSeasonId() === season.id) {
+                    <div class="border-t border-base-200">
+                      @if (seasonGrabResult(season.id); as res) {
+                        <div class="px-4 pt-3">
+                          @if (res.grabbed > 0 && res.errors.length === 0) {
+                            <div role="alert" class="alert alert-success text-sm py-2">
+                              {{ res.grabbed }} {{ 'media_detail.season_grab_ok' | translate }}
+                            </div>
+                          } @else if (res.grabbed > 0) {
+                            <div role="alert" class="alert alert-warning text-sm py-2">
+                              {{ res.grabbed }} {{ 'media_detail.season_grab_ok' | translate }} —
+                              {{ res.errors.length }} {{ 'media_detail.season_grab_errors' | translate }}
+                            </div>
+                          } @else {
+                            <div role="alert" class="alert alert-error text-sm py-2">
+                              {{ res.errors[0] ?? ('media_detail.grab_error' | translate) }}
+                            </div>
+                          }
+                        </div>
+                      }
+                      <table class="table table-xs w-full">
+                        <thead>
+                          <tr>
+                            <th class="w-10">{{ 'media_detail.col_ep' | translate }}</th>
+                            <th>{{ 'media_detail.col_title' | translate }}</th>
+                            <th class="w-24">{{ 'media_detail.col_airdate' | translate }}</th>
+                            @if (isAdmin()) {
+                              <th class="w-20"></th>
+                            }
+                            @if (canGrab()) {
+                              <th class="w-24"></th>
+                            }
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (ep of season.episodes; track ep.id) {
+                            <tr [class.opacity-50]="!ep.monitored">
+                              <td class="font-mono text-sm">{{ ep.episodeNumber }}</td>
+                              <td class="text-sm">
+                                <span>{{ ep.title ?? ('media_detail.ep_no_title' | translate) }}</span>
+                                @if (ep.hasFile) {
+                                  <span class="badge badge-xs badge-success ml-1" [title]="'media_detail.has_file' | translate">✓</span>
+                                }
+                              </td>
+                              <td class="text-sm text-base-content/60">{{ ep.airDate ?? '—' }}</td>
+                              @if (isAdmin()) {
+                                <td>
+                                  <button
+                                    type="button"
+                                    class="btn btn-xs btn-ghost"
+                                    [disabled]="episodeBusy() === ep.id"
+                                    (click)="toggleEpisodeMonitored(season.id, ep)"
+                                  >
+                                    @if (episodeBusy() === ep.id) {
+                                      <span class="loading loading-spinner loading-xs"></span>
+                                    } @else if (ep.monitored) {
+                                      {{ 'media_detail.unmonitor' | translate }}
+                                    } @else {
+                                      {{ 'media_detail.monitor' | translate }}
+                                    }
+                                  </button>
+                                </td>
+                              }
+                              @if (canGrab()) {
+                                <td>
+                                  <button
+                                    type="button"
+                                    class="btn btn-xs btn-ghost"
+                                    [disabled]="epReleasesLoading() && selectedEpisodeId() === ep.id"
+                                    (click)="loadEpisodeReleases(m.id, season.id, ep.id)"
+                                  >
+                                    @if (epReleasesLoading() && selectedEpisodeId() === ep.id) {
+                                      <span class="loading loading-spinner loading-xs"></span>
+                                    } @else {
+                                      {{ 'media_detail.ep_search_releases' | translate }}
+                                    }
+                                  </button>
+                                </td>
+                              }
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          </section>
+        }
+
+        <!-- ============================================================ -->
+        <!-- UPGRADE (movie with files + upgradeAllowed)                  -->
+        <!-- ============================================================ -->
+        @if (expectedKind() === 'movie' && m.files?.length && m.qualityProfile?.upgradeAllowed) {
+          <div class="divider my-6"></div>
+          <section class="space-y-3">
+            <h2 class="text-xl font-semibold">{{ 'media_detail.upgrade_section' | translate }}</h2>
+            <p class="text-sm text-base-content/60">
+              {{ 'media_detail.upgrade_current_quality' | translate }}:
+              @for (f of m.files; track f.id) {
+                <span class="badge badge-sm badge-ghost ml-1">{{ f.quality }}</span>
+              }
+            </p>
+            @if (canGrab()) {
+              <div class="flex flex-wrap gap-2 items-center">
+                <button
+                  type="button"
+                  class="btn btn-outline btn-sm"
+                  (click)="loadUpgradeReleases()"
+                  [disabled]="upgradeReleasesLoading()"
+                >
+                  @if (upgradeReleasesLoading()) {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  }
+                  {{ 'media_detail.search_upgrade_releases' | translate }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  (click)="grabUpgradeBest()"
+                  [disabled]="upgradeGrabBusy() !== null"
+                >
+                  @if (upgradeGrabBusy() === 'best') {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  }
+                  {{ 'media_detail.grab_upgrade_best' | translate }}
+                </button>
+              </div>
+            }
+          </section>
+        }
+
+        <!-- ============================================================ -->
+        <!-- DOWNLOAD (movie)                                             -->
+        <!-- ============================================================ -->
+        @if (expectedKind() === 'movie') {
+          <div class="divider my-6"></div>
+          <section class="space-y-3">
+            <h2 class="text-xl font-semibold">{{ 'media_detail.download_section' | translate }}</h2>
+            @if (canGrab()) {
+              <div class="flex flex-wrap gap-2 items-center">
+                <button
+                  type="button"
+                  class="btn btn-outline btn-sm"
+                  (click)="loadReleases()"
+                  [disabled]="releasesLoading()"
+                >
+                  @if (releasesLoading()) {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  }
+                  {{ 'media_detail.search_releases' | translate }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-primary btn-sm"
+                  (click)="grabBest()"
+                  [disabled]="grabBusy() !== null"
+                >
+                  @if (grabBusy() === 'best') {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  }
+                  {{ 'media_detail.grab_best' | translate }}
+                </button>
+              </div>
+            }
+          </section>
+        }
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODALS                                                       -->
+    <!-- ============================================================ -->
+
+    <!-- Movie releases modal -->
+    <dialog #movieReleasesModal class="modal">
+      <div class="modal-box w-11/12 max-w-5xl">
+        <form method="dialog">
+          <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+        </form>
+        <h3 class="text-lg font-bold mb-4">{{ 'media_detail.download_section' | translate }}</h3>
+        @if (releasesLoading()) {
+          <div class="flex justify-center py-8">
+            <span class="loading loading-spinner loading-lg"></span>
+          </div>
+        } @else if (releasesError()) {
+          <div role="alert" class="alert alert-error text-sm">{{ releasesError() }}</div>
+        } @else if (releasesSearched() && releases().length === 0) {
+          <p class="text-sm text-base-content/60 py-4">{{ 'media_detail.releases_empty' | translate }}</p>
+        } @else if (releases().length) {
+          <div class="overflow-x-auto rounded-lg border border-base-200">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>{{ 'media_detail.col_release' | translate }}</th>
+                  <th>{{ 'media_detail.col_quality' | translate }}</th>
+                  <th class="text-center w-16">{{ 'media_detail.col_cf_score' | translate }}</th>
+                  <th class="text-right w-20">{{ 'media_detail.col_size' | translate }}</th>
+                  <th class="w-20">{{ 'media_detail.col_peers' | translate }}</th>
+                  <th>{{ 'media_detail.col_indexer' | translate }}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of releases(); track r.downloadUrl; let i = $index) {
+                  <tr [class.opacity-50]="!r.allowed || r.blocklisted || !r.languageAllowed">
+                    <td class="max-w-[min(28rem,50vw)] whitespace-normal text-sm">{{ r.title }}</td>
+                    <td>
+                      <div class="flex flex-wrap gap-1">
+                        <span class="badge badge-sm badge-ghost">{{ r.qualityName }}</span>
+                        <span class="badge badge-sm" [class]="r.languageAllowed ? 'badge-info' : 'badge-warning'">{{ r.languageName }}</span>
+                        @if (r.blocklisted) {
+                          <span class="badge badge-sm badge-error">{{ 'media_detail.blocklisted' | translate }}</span>
+                        } @else if (r.allowed) {
+                          <span class="badge badge-sm badge-success">{{ 'media_detail.allowed' | translate }}</span>
+                        } @else {
+                          <span class="badge badge-sm badge-warning">{{ 'media_detail.not_allowed' | translate }}</span>
+                        }
+                      </div>
+                    </td>
+                    <td class="text-center tabular-nums text-sm">
+                      @if (r.customFormatScore !== 0) {
+                        <span [class]="r.customFormatScore > 0 ? 'text-success font-medium' : 'text-error'">
+                          {{ r.customFormatScore > 0 ? '+' : '' }}{{ r.customFormatScore }}
+                        </span>
+                      } @else {
+                        <span class="text-base-content/30">—</span>
+                      }
+                    </td>
+                    <td class="text-sm tabular-nums text-right">{{ formatBytes(r.size) }}</td>
+                    <td class="text-sm tabular-nums whitespace-nowrap">
+                      <span class="text-success">▲{{ r.seeders }}</span>
+                      <span class="text-base-content/40 mx-0.5">/</span>
+                      <span class="text-warning">▼{{ r.leechers }}</span>
+                    </td>
+                    <td class="text-sm">{{ r.indexerName }}</td>
+                    <td class="w-10">
+                      @if (canGrab() && r.allowed && !r.blocklisted) {
+                        @if (grabState().get('r-' + i) === 'ok') {
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                        } @else {
+                          <button
+                            type="button"
+                            class="btn btn-ghost btn-xs btn-square"
+                            (click)="grabRelease(r, i)"
+                            [disabled]="grabBusy() !== null"
+                          >
+                            @if (grabBusy() === ('r-' + i)) {
+                              <span class="loading loading-spinner loading-xs"></span>
+                            } @else if (grabState().get('r-' + i) === 'error') {
+                              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" /></svg>
+                            } @else {
+                              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                            }
+                          </button>
+                        }
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+        <div class="modal-action">
+          <form method="dialog">
+            <button class="btn btn-sm">{{ 'common.close' | translate }}</button>
+          </form>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+
+    <!-- Upgrade releases modal -->
+    <dialog #upgradeReleasesModal class="modal">
+      <div class="modal-box w-11/12 max-w-5xl">
+        <form method="dialog">
+          <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+        </form>
+        <h3 class="text-lg font-bold mb-4">{{ 'media_detail.upgrade_section' | translate }}</h3>
+        @if (upgradeReleasesLoading()) {
+          <div class="flex justify-center py-8">
+            <span class="loading loading-spinner loading-lg"></span>
+          </div>
+        } @else if (upgradeReleasesError()) {
+          <div role="alert" class="alert alert-error text-sm">{{ upgradeReleasesError() }}</div>
+        } @else if (upgradeReleasesSearched() && upgradeReleases().length === 0) {
+          <p class="text-sm text-base-content/60 py-4">{{ 'media_detail.upgrade_releases_empty' | translate }}</p>
+        } @else if (upgradeReleases().length) {
+          <div class="overflow-x-auto rounded-lg border border-base-200">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>{{ 'media_detail.col_release' | translate }}</th>
+                  <th>{{ 'media_detail.col_quality' | translate }}</th>
+                  <th class="text-center w-16">{{ 'media_detail.col_cf_score' | translate }}</th>
+                  <th class="text-right w-20">{{ 'media_detail.col_size' | translate }}</th>
+                  <th class="w-20">{{ 'media_detail.col_peers' | translate }}</th>
+                  <th>{{ 'media_detail.col_indexer' | translate }}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of upgradeReleases(); track r.downloadUrl; let i = $index) {
+                  <tr [class.opacity-50]="!r.allowed || r.blocklisted || !r.languageAllowed">
+                    <td class="max-w-[min(28rem,50vw)] whitespace-normal text-sm">{{ r.title }}</td>
+                    <td>
+                      <div class="flex flex-wrap gap-1">
+                        <span class="badge badge-sm badge-ghost">{{ r.qualityName }}</span>
+                        <span class="badge badge-sm" [class]="r.languageAllowed ? 'badge-info' : 'badge-warning'">{{ r.languageName }}</span>
+                        @if (r.blocklisted) {
+                          <span class="badge badge-sm badge-error">{{ 'media_detail.blocklisted' | translate }}</span>
+                        } @else if (r.allowed) {
+                          <span class="badge badge-sm badge-success">{{ 'media_detail.allowed' | translate }}</span>
+                        } @else {
+                          <span class="badge badge-sm badge-warning">{{ 'media_detail.not_allowed' | translate }}</span>
+                        }
+                      </div>
+                    </td>
+                    <td class="text-center tabular-nums text-sm">
+                      @if (r.customFormatScore !== 0) {
+                        <span [class]="r.customFormatScore > 0 ? 'text-success font-medium' : 'text-error'">
+                          {{ r.customFormatScore > 0 ? '+' : '' }}{{ r.customFormatScore }}
+                        </span>
+                      } @else {
+                        <span class="text-base-content/30">—</span>
+                      }
+                    </td>
+                    <td class="text-sm tabular-nums text-right">{{ formatBytes(r.size) }}</td>
+                    <td class="text-sm tabular-nums whitespace-nowrap">
+                      <span class="text-success">▲{{ r.seeders }}</span>
+                      <span class="text-base-content/40 mx-0.5">/</span>
+                      <span class="text-warning">▼{{ r.leechers }}</span>
+                    </td>
+                    <td class="text-sm">{{ r.indexerName }}</td>
+                    <td class="w-10">
+                      @if (canGrab() && r.allowed && !r.blocklisted) {
+                        @if (upgradeGrabState().get('u-' + i) === 'ok') {
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                        } @else {
+                          <button
+                            type="button"
+                            class="btn btn-ghost btn-xs btn-square"
+                            (click)="grabUpgradeRelease(r, i)"
+                            [disabled]="upgradeGrabBusy() !== null"
+                          >
+                            @if (upgradeGrabBusy() === ('u-' + i)) {
+                              <span class="loading loading-spinner loading-xs"></span>
+                            } @else if (upgradeGrabState().get('u-' + i) === 'error') {
+                              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" /></svg>
+                            } @else {
+                              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                            }
+                          </button>
+                        }
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+        <div class="modal-action">
+          <form method="dialog">
+            <button class="btn btn-sm">{{ 'common.close' | translate }}</button>
+          </form>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+
+    <!-- Episode releases modal -->
+    <dialog #episodeReleasesModal class="modal">
+      <div class="modal-box w-11/12 max-w-5xl">
+        <form method="dialog">
+          <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+        </form>
+        <h3 class="text-lg font-bold mb-4">{{ 'media_detail.ep_releases_title' | translate }}</h3>
+        @if (canGrab()) {
+          <div class="flex flex-wrap items-center gap-2 mb-3">
+            <button
+              type="button"
+              class="btn btn-primary btn-xs"
+              (click)="grabEpisodeBest(m.id, selectedEpisodeId()!)"
+              [disabled]="epGrabBusy() !== null"
+            >
+              @if (epGrabBusy() === 'best') {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+              {{ 'media_detail.grab_best' | translate }}
+            </button>
+          </div>
+        }
+        @if (epReleasesLoading()) {
+          <div class="flex justify-center py-8">
+            <span class="loading loading-spinner loading-lg"></span>
+          </div>
+        } @else if (epReleasesError()) {
+          <div role="alert" class="alert alert-error text-sm">{{ epReleasesError() }}</div>
+        } @else if (epReleasesSearched() && epReleases().length === 0) {
+          <p class="text-sm text-base-content/60 py-4">{{ 'media_detail.releases_empty' | translate }}</p>
+        } @else if (epReleases().length) {
+          <div class="overflow-x-auto rounded-lg border border-base-200">
+            <table class="table table-xs">
+              <thead>
+                <tr>
+                  <th>{{ 'media_detail.col_release' | translate }}</th>
+                  <th>{{ 'media_detail.col_quality' | translate }}</th>
+                  <th class="text-center w-12">{{ 'media_detail.col_cf_score' | translate }}</th>
+                  <th class="text-right w-16">{{ 'media_detail.col_size' | translate }}</th>
+                  <th class="w-16">{{ 'media_detail.col_peers' | translate }}</th>
+                  <th>{{ 'media_detail.col_indexer' | translate }}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of epReleases(); track r.downloadUrl; let i = $index) {
+                  <tr [class.opacity-50]="!r.allowed || r.blocklisted || !r.languageAllowed">
+                    <td class="max-w-[min(22rem,45vw)] whitespace-normal text-sm">{{ r.title }}</td>
+                    <td>
+                      <div class="flex flex-wrap gap-1">
+                        <span class="badge badge-xs badge-ghost">{{ r.qualityName }}</span>
+                        <span class="badge badge-xs" [class]="r.languageAllowed ? 'badge-info' : 'badge-warning'">{{ r.languageName }}</span>
+                        @if (r.blocklisted) {
+                          <span class="badge badge-xs badge-error">{{ 'media_detail.blocklisted' | translate }}</span>
+                        } @else if (r.allowed) {
+                          <span class="badge badge-xs badge-success">{{ 'media_detail.allowed' | translate }}</span>
+                        } @else {
+                          <span class="badge badge-xs badge-warning">{{ 'media_detail.not_allowed' | translate }}</span>
+                        }
+                      </div>
+                    </td>
+                    <td class="text-center tabular-nums text-sm">
+                      @if (r.customFormatScore !== 0) {
+                        <span [class]="r.customFormatScore > 0 ? 'text-success font-medium' : 'text-error'">
+                          {{ r.customFormatScore > 0 ? '+' : '' }}{{ r.customFormatScore }}
+                        </span>
+                      } @else {
+                        <span class="text-base-content/30">—</span>
+                      }
+                    </td>
+                    <td class="text-sm tabular-nums text-right">{{ formatBytes(r.size) }}</td>
+                    <td class="text-sm tabular-nums whitespace-nowrap">
+                      <span class="text-success">▲{{ r.seeders }}</span>
+                      <span class="text-base-content/40 mx-0.5">/</span>
+                      <span class="text-warning">▼{{ r.leechers }}</span>
+                    </td>
+                    <td class="text-sm">{{ r.indexerName }}</td>
+                    <td class="w-10">
+                      @if (r.allowed && !r.blocklisted) {
+                        @if (epGrabState().get('ep-' + i) === 'ok') {
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                        } @else {
+                          <button
+                            type="button"
+                            class="btn btn-ghost btn-xs btn-square"
+                            (click)="grabEpisodeRelease(m.id, selectedEpisodeId()!, r, i)"
+                            [disabled]="epGrabBusy() !== null"
+                          >
+                            @if (epGrabBusy() === ('ep-' + i)) {
+                              <span class="loading loading-spinner loading-xs"></span>
+                            } @else if (epGrabState().get('ep-' + i) === 'error') {
+                              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" /></svg>
+                            } @else {
+                              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                            }
+                          </button>
+                        }
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+        <div class="modal-action">
+          <form method="dialog">
+            <button class="btn btn-sm">{{ 'common.close' | translate }}</button>
+          </form>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+
+    <!-- Season releases modal -->
+    <dialog #seasonReleasesModal class="modal">
+      <div class="modal-box w-11/12 max-w-5xl">
+        <form method="dialog">
+          <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+        </form>
+        <h3 class="text-lg font-bold mb-4">{{ 'media_detail.season_packs_title' | translate }}</h3>
+        @if (seasonReleasesLoading()) {
+          <div class="flex justify-center py-8">
+            <span class="loading loading-spinner loading-lg"></span>
+          </div>
+        } @else if (seasonReleasesError()) {
+          <div role="alert" class="alert alert-error text-sm">{{ seasonReleasesError() }}</div>
+        } @else if (seasonReleases().length === 0) {
+          <p class="text-sm text-base-content/60 py-4">{{ 'media_detail.releases_empty' | translate }}</p>
+        } @else {
+          <div class="overflow-x-auto rounded-lg border border-base-200">
+            <table class="table table-xs">
+              <thead>
+                <tr>
+                  <th>{{ 'media_detail.col_release' | translate }}</th>
+                  <th>{{ 'media_detail.col_quality' | translate }}</th>
+                  <th class="text-right w-16">{{ 'media_detail.col_size' | translate }}</th>
+                  <th class="w-16">{{ 'media_detail.col_peers' | translate }}</th>
+                  <th>{{ 'media_detail.col_indexer' | translate }}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of seasonReleases(); track r.downloadUrl; let i = $index) {
+                  <tr [class.opacity-50]="!r.allowed || r.blocklisted || !r.languageAllowed">
+                    <td class="max-w-[min(22rem,45vw)] whitespace-normal text-sm">{{ r.title }}</td>
+                    <td>
+                      <div class="flex flex-wrap gap-1">
+                        <span class="badge badge-xs badge-ghost">{{ r.qualityName }}</span>
+                        <span class="badge badge-xs" [class]="r.languageAllowed ? 'badge-info' : 'badge-warning'">{{ r.languageName }}</span>
+                        @if (r.blocklisted) {
+                          <span class="badge badge-xs badge-error">{{ 'media_detail.blocklisted' | translate }}</span>
+                        } @else if (r.allowed) {
+                          <span class="badge badge-xs badge-success">{{ 'media_detail.allowed' | translate }}</span>
+                        }
+                      </div>
+                    </td>
+                    <td class="text-sm tabular-nums text-right">{{ formatBytes(r.size) }}</td>
+                    <td class="text-sm tabular-nums whitespace-nowrap">
+                      <span class="text-success">▲{{ r.seeders }}</span>
+                      <span class="text-base-content/40 mx-0.5">/</span>
+                      <span class="text-warning">▼{{ r.leechers }}</span>
+                    </td>
+                    <td class="text-sm">{{ r.indexerName }}</td>
+                    <td class="w-10">
+                      @if (r.allowed && !r.blocklisted && r.languageAllowed) {
+                        @if (seasonReleaseGrabState().get('s-' + i) === 'ok') {
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                        } @else {
+                          <button
+                            type="button"
+                            class="btn btn-ghost btn-xs btn-square"
+                            [disabled]="seasonGrabBusy() !== null"
+                            (click)="grabSeasonRelease(m.id, seasonForReleases()!, r, i)"
+                          >
+                            @if (seasonGrabBusy() !== null) {
+                              <span class="loading loading-spinner loading-xs"></span>
+                            } @else if (seasonReleaseGrabState().get('s-' + i) === 'error') {
+                              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" /></svg>
+                            } @else {
+                              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                            }
+                          </button>
+                        }
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+        <div class="modal-action">
+          <form method="dialog">
+            <button class="btn btn-sm">{{ 'common.close' | translate }}</button>
+          </form>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+
+    <!-- Profiles modal -->
+    <dialog #profilesModal class="modal">
+      <div class="modal-box max-w-md">
+        <form method="dialog">
+          <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+        </form>
+        <h3 class="text-lg font-bold mb-4">{{ 'media_detail.profiles_section' | translate }}</h3>
+        @if (profilesOptionsLoading()) {
+          <div class="flex justify-center py-8">
+            <span class="loading loading-spinner loading-lg"></span>
+          </div>
+        } @else {
+          <form class="flex flex-col gap-4" (ngSubmit)="saveProfiles()">
+            <label class="form-control w-full">
+              <span class="label-text">{{ 'media_detail.quality_profile_label' | translate }}</span>
+              <select
+                class="select select-bordered select-sm w-full"
+                name="qualityProfile"
+                [ngModel]="draftQualityProfileId()"
+                (ngModelChange)="draftQualityProfileId.set($event)"
+              >
+                <option [ngValue]="null">{{ 'media_detail.profile_none' | translate }}</option>
+                @for (p of qualityProfileOptions(); track p.id) {
+                  <option [ngValue]="p.id">{{ p.name }}</option>
+                }
+              </select>
+            </label>
+            <label class="form-control w-full">
+              <span class="label-text">{{ 'media_detail.language_profile_label' | translate }}</span>
+              <select
+                class="select select-bordered select-sm w-full"
+                name="languageProfile"
+                [ngModel]="draftLanguageProfileId()"
+                (ngModelChange)="draftLanguageProfileId.set($event)"
+              >
+                <option [ngValue]="null">{{ 'media_detail.profile_none' | translate }}</option>
+                @for (p of languageProfileOptions(); track p.id) {
+                  <option [ngValue]="p.id">{{ p.name }}</option>
+                }
+              </select>
+            </label>
+            @if (profilesOk()) {
+              <div role="alert" class="alert alert-success text-sm py-2">{{ profilesOk() }}</div>
+            }
+            @if (profilesErr()) {
+              <div role="alert" class="alert alert-error text-sm py-2">{{ profilesErr() }}</div>
+            }
+            <div class="modal-action">
+              <button
+                type="submit"
+                class="btn btn-primary btn-sm"
+                [disabled]="profilesSaveLoading()"
+              >
+                @if (profilesSaveLoading()) {
+                  <span class="loading loading-spinner loading-xs"></span>
+                }
+                {{ 'media_detail.save_profiles' | translate }}
+              </button>
+              <button type="button" class="btn btn-sm" onclick="this.closest('dialog').close()">
+                {{ 'common.close' | translate }}
+              </button>
+            </div>
+          </form>
+        }
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+
+    <!-- Root folder modal -->
+    <dialog #rootFolderModal class="modal">
+      <div class="modal-box max-w-md">
+        <form method="dialog">
+          <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+        </form>
+        <h3 class="text-lg font-bold mb-4">{{ 'media_detail.root_folder_section' | translate }}</h3>
+        <form class="flex flex-col gap-4" (ngSubmit)="saveRootFolder()">
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'media_detail.root_folder_label' | translate }}</span>
+            <select
+              class="select select-bordered select-sm w-full font-mono"
+              name="rootFolder"
+              [ngModel]="selectedRootFolderId()"
+              (ngModelChange)="selectedRootFolderId.set($event)"
+            >
+              <option [ngValue]="null">{{ 'media_detail.no_root_folder' | translate }}</option>
+              @for (rf of rootFolders(); track rf.id) {
+                <option [ngValue]="rf.id">{{ rf.label ? rf.label + ' — ' + rf.path : rf.path }}</option>
+              }
+            </select>
+          </label>
+          @if (pathOk()) {
+            <div role="alert" class="alert alert-success text-sm py-2">{{ 'media_detail.root_folder_saved' | translate }}</div>
+          }
+          <div class="modal-action">
+            <button
+              type="submit"
+              class="btn btn-primary btn-sm"
+              [disabled]="pathSaving() || selectedRootFolderId() === null"
+            >
+              @if (pathSaving()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+              {{ 'common.save' | translate }}
+            </button>
+            <button type="button" class="btn btn-sm" onclick="this.closest('dialog').close()">
+              {{ 'common.close' | translate }}
+            </button>
+          </div>
+        </form>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+  }
+</div>

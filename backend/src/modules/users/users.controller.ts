@@ -1,0 +1,67 @@
+import {
+  Controller,
+  Get,
+  Put,
+  Delete,
+  Post,
+  Body,
+  Param,
+  UseGuards,
+  ParseIntPipe,
+} from '@nestjs/common';
+import { UsersService } from './users.service';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
+import { PoliciesGuard } from '../auth/casl/policies.guard';
+import { CheckPolicies } from '../auth/casl/check-policies.decorator';
+import { Action } from '../auth/casl/actions.enum';
+import { User } from './entities/user.entity';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+
+@Controller('users')
+@UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  /** Admin: list all users */
+  @Get()
+  @CheckPolicies((ability) => ability.can(Action.Manage, User))
+  findAll() {
+    return this.usersService.findAll();
+  }
+
+  /** Admin or self */
+  @Get(':id')
+  @CheckPolicies((ability) => ability.can(Action.Read, User))
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.findOne(id);
+  }
+
+  /** Admin or self */
+  @Put(':id')
+  @CheckPolicies((ability) => ability.can(Action.Update, User))
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateUserDto,
+    @CurrentUser() requester: User,
+  ) {
+    return this.usersService.update(id, dto, requester);
+  }
+
+  /** Admin only */
+  @Delete(':id')
+  @CheckPolicies((ability) => ability.can(Action.Manage, User))
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.remove(id);
+  }
+
+  /** Admin or self: regenerate API key */
+  @Post(':id/api-key/regenerate')
+  @CheckPolicies((ability) => ability.can(Action.Update, User))
+  regenerateApiKey(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() requester: User,
+  ) {
+    return this.usersService.regenerateApiKey(id, requester);
+  }
+}

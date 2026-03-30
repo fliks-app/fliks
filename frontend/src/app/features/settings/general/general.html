@@ -1,0 +1,85 @@
+<div class="flex flex-col gap-6">
+  <div>
+    <h1 class="text-2xl font-bold">{{ 'settings.general.title' | translate }}</h1>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'settings.general.subtitle' | translate }}</p>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else {
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-5">
+        <h2 class="card-title text-base">{{ 'settings.general.section_metadata' | translate }}</h2>
+
+        <label class="form-control w-full max-w-md">
+          <div class="label">
+            <span class="label-text">{{ 'settings.general.tmdb_api_key' | translate }}</span>
+          </div>
+          <input
+            type="password"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="tmdbApiKey()"
+            (ngModelChange)="tmdbApiKey.set($event)"
+            placeholder="eyJhbGciOiJIUzI1NiJ9..."
+          />
+          <div class="label">
+            <span class="label-text-alt text-base-content/50">{{ 'settings.general.tmdb_api_key_hint' | translate }}</span>
+          </div>
+        </label>
+
+        <div class="divider my-0"></div>
+        <h2 class="card-title text-base">{{ 'settings.general.section_automation' | translate }}</h2>
+
+        <label class="form-control w-full max-w-xs">
+          <div class="label">
+            <span class="label-text">{{ 'settings.general.rss_interval' | translate }}</span>
+          </div>
+          <input
+            type="number"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="rssSyncInterval()"
+            (ngModelChange)="rssSyncInterval.set($event)"
+            min="5"
+            max="120"
+          />
+          <div class="label">
+            <span class="label-text-alt text-base-content/50">{{ 'settings.general.rss_interval_hint' | translate }}</span>
+          </div>
+        </label>
+
+        <label class="label cursor-pointer justify-start gap-3 max-w-max">
+          <input
+            type="checkbox"
+            class="toggle toggle-sm"
+            [ngModel]="searchMissingAuto() === 'true'"
+            (ngModelChange)="searchMissingAuto.set($event ? 'true' : 'false')"
+          />
+          <span class="label-text">{{ 'settings.general.search_missing_auto' | translate }}</span>
+        </label>
+
+        @if (error()) {
+          <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
+        }
+        @if (saved()) {
+          <div role="alert" class="alert alert-success text-sm">{{ 'settings.general.saved' | translate }}</div>
+        }
+
+        <div class="card-actions justify-end">
+          <button
+            type="button"
+            class="btn btn-primary"
+            (click)="save()"
+            [disabled]="saving()"
+          >
+            @if (saving()) {
+              <span class="loading loading-spinner loading-sm"></span>
+            }
+            {{ 'common.save' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

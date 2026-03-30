@@ -1,0 +1,162 @@
+<div class="flex flex-col gap-4">
+  <div>
+    <h1 class="text-2xl font-bold">{{ 'discover.title' | translate }}</h1>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'discover.subtitle' | translate }}</p>
+  </div>
+
+  @if (!canImport()) {
+    <div role="alert" class="alert alert-warning">
+      <span>{{ 'discover.readonly_hint' | translate }}</span>
+    </div>
+  }
+
+  @if (error()) {
+    <div role="alert" class="alert alert-error">
+      <span>{{ error() }}</span>
+    </div>
+  }
+
+  <div role="tablist" class="tabs tabs-boxed w-fit">
+    <button
+      type="button"
+      role="tab"
+      class="tab"
+      [class.tab-active]="tab() === 'movie'"
+      (click)="setTab('movie')"
+    >
+      {{ 'discover.tab_movies' | translate }}
+    </button>
+    <button
+      type="button"
+      role="tab"
+      class="tab"
+      [class.tab-active]="tab() === 'series'"
+      (click)="setTab('series')"
+    >
+      {{ 'discover.tab_series' | translate }}
+    </button>
+  </div>
+
+  @if (canImport()) {
+    <div class="flex flex-wrap gap-4">
+      @if (qualityProfiles().length) {
+        <div class="form-control w-full max-w-xs">
+          <label class="label py-1">
+            <span class="label-text">{{ 'discover.quality_profile' | translate }}</span>
+          </label>
+          <select
+            class="select select-bordered select-sm w-full"
+            [ngModel]="selectedQualityProfileId()"
+            (ngModelChange)="selectedQualityProfileId.set(+$event)"
+          >
+            @for (p of qualityProfiles(); track p.id) {
+              <option [ngValue]="p.id">{{ p.name }}</option>
+            }
+          </select>
+        </div>
+      }
+      @if (rootFolders().length) {
+        <div class="form-control w-full max-w-xs">
+          <label class="label py-1">
+            <span class="label-text">{{ 'discover.root_folder' | translate }}</span>
+          </label>
+          <select
+            class="select select-bordered select-sm w-full"
+            [ngModel]="selectedRootFolderId()"
+            (ngModelChange)="selectedRootFolderId.set(+$event)"
+          >
+            @for (f of rootFolders(); track f.id) {
+              <option [ngValue]="f.id">{{ f.path }}</option>
+            }
+          </select>
+        </div>
+      }
+    </div>
+  }
+
+  <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
+    <input
+      type="search"
+      class="input input-bordered flex-1 max-w-xl"
+      [placeholder]="'discover.search_placeholder' | translate"
+      [ngModel]="query()"
+      (ngModelChange)="onQueryInput($event)"
+      (keydown.enter)="searchNow()"
+    />
+    <button type="button" class="btn btn-primary" (click)="searchNow()">
+      {{ 'discover.search' | translate }}
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-12">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (query().trim().length === 0) {
+    <p class="text-base-content/50 text-center py-8">{{ 'discover.hint' | translate }}</p>
+  } @else if (results().length === 0) {
+    <p class="text-base-content/50 text-center py-8">{{ 'discover.no_results' | translate }}</p>
+  } @else {
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      @for (row of results(); track row.tmdbId) {
+        <div
+          class="card bg-base-100 shadow-md border border-base-200 cursor-pointer hover:shadow-xl transition-shadow relative overflow-hidden"
+          [class.opacity-70]="!!row.existingMediaId"
+          (click)="onCardClick(row)"
+        >
+          <figure class="relative aspect-[2/3] bg-base-300">
+            @if (row.posterUrl) {
+              <img [src]="row.posterUrl" [alt]="row.title" class="w-full h-full object-cover" />
+            } @else {
+              <div class="flex items-center justify-center w-full h-full text-base-content/30">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-14 w-14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+                </svg>
+              </div>
+            }
+            @if (row.existingMediaId) {
+              <div class="absolute top-1.5 left-1.5">
+                <span class="badge badge-sm badge-success gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                  </svg>
+                  {{ 'discover.in_library' | translate }}
+                </span>
+              </div>
+            }
+            @if (row.rating) {
+              <div class="absolute bottom-2 right-2">
+                <span class="badge badge-sm badge-warning">{{ row.rating | number:'1.1-1' }}</span>
+              </div>
+            }
+          </figure>
+          <div class="card-body p-3 gap-2">
+            <h3 class="card-title text-sm line-clamp-2 min-h-[2.5rem]">{{ row.title }}</h3>
+            <p class="text-sm text-base-content/60">
+              @if (row.year) {
+                {{ row.year }}
+              }
+            </p>
+            @if (canImport()) {
+              <button
+                type="button"
+                class="btn btn-sm btn-block"
+                [ngClass]="row.existingMediaId ? 'btn-ghost' : 'btn-primary'"
+                [disabled]="!!row.existingMediaId || importingTmdbId() === row.tmdbId"
+                (click)="importResult($event, row)"
+              >
+                @if (importingTmdbId() === row.tmdbId) {
+                  <span class="loading loading-spinner loading-xs"></span>
+                } @else if (row.existingMediaId) {
+                  {{ 'discover.already_added' | translate }}
+                } @else {
+                  {{ 'discover.add_to_library' | translate }}
+                }
+              </button>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

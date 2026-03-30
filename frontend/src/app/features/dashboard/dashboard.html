@@ -1,0 +1,112 @@
+<div class="flex flex-col gap-6">
+  <div>
+    <h1 class="text-2xl font-bold">{{ 'dashboard.title' | translate }}</h1>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'dashboard.subtitle' | translate }}</p>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (stats(); as s) {
+    <!-- Stat cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <a routerLink="/movies" class="card bg-base-100 border border-base-200 hover:border-primary transition-colors cursor-pointer">
+        <div class="card-body py-5 px-5 gap-1">
+          <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'dashboard.stat_movies' | translate }}</p>
+          <p class="text-3xl font-bold tabular-nums">{{ s.movies }}</p>
+        </div>
+      </a>
+
+      <a routerLink="/series" class="card bg-base-100 border border-base-200 hover:border-primary transition-colors cursor-pointer">
+        <div class="card-body py-5 px-5 gap-1">
+          <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'dashboard.stat_series' | translate }}</p>
+          <p class="text-3xl font-bold tabular-nums">{{ s.series }}</p>
+        </div>
+      </a>
+
+      <a
+        routerLink="/requests"
+        [queryParams]="{ status: 'pending' }"
+        class="card bg-base-100 border transition-colors cursor-pointer"
+        [class.border-base-200]="s.pendingRequests === 0"
+        [class.hover:border-primary]="s.pendingRequests === 0"
+        [class.border-warning]="s.pendingRequests > 0"
+      >
+        <div class="card-body py-5 px-5 gap-1">
+          <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'dashboard.stat_pending' | translate }}</p>
+          <p class="text-3xl font-bold tabular-nums" [class.text-warning]="s.pendingRequests > 0">{{ s.pendingRequests }}</p>
+        </div>
+      </a>
+
+      <div class="card bg-base-100 border border-base-200">
+        <div class="card-body py-5 px-5 gap-1">
+          <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'dashboard.stat_total' | translate }}</p>
+          <p class="text-3xl font-bold tabular-nums">{{ s.movies + s.series }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Disk space -->
+    @if (s.diskSpace.length) {
+      <div>
+        <h2 class="text-lg font-semibold mb-3">{{ 'dashboard.disk_title' | translate }}</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+          @for (disk of s.diskSpace; track disk.path) {
+            <div class="card bg-base-100 border border-base-200">
+              <div class="card-body py-4 px-5 gap-3">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <p class="font-medium text-sm truncate" [title]="disk.path">
+                      {{ disk.label || disk.path }}
+                    </p>
+                    @if (disk.label) {
+                      <p class="text-sm text-base-content/40 truncate" [title]="disk.path">{{ disk.path }}</p>
+                    }
+                  </div>
+                  @if (disk.totalSpace > 0) {
+                    <span
+                      class="badge badge-sm shrink-0"
+                      [class.badge-error]="diskUsedPercent(disk) >= 90"
+                      [class.badge-warning]="diskUsedPercent(disk) >= 75 && diskUsedPercent(disk) < 90"
+                      [class.badge-ghost]="diskUsedPercent(disk) < 75"
+                    >{{ diskUsedPercent(disk) }}%</span>
+                  }
+                </div>
+                @if (disk.totalSpace > 0) {
+                  <div class="space-y-1">
+                    <progress
+                      class="progress w-full"
+                      [class.progress-error]="diskUsedPercent(disk) >= 90"
+                      [class.progress-warning]="diskUsedPercent(disk) >= 75 && diskUsedPercent(disk) < 90"
+                      [class.progress-info]="diskUsedPercent(disk) < 75"
+                      [value]="diskUsedPercent(disk)"
+                      max="100"
+                    ></progress>
+                    <div class="flex justify-between text-sm text-base-content/50">
+                      <span>{{ 'dashboard.disk_free' | translate }}: {{ formatBytes(disk.freeSpace) }}</span>
+                      <span>{{ formatBytes(disk.totalSpace) }}</span>
+                    </div>
+                  </div>
+                } @else {
+                  <p class="text-sm text-error">{{ 'dashboard.disk_unavailable' | translate }}</p>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Quick links -->
+    <div>
+      <h2 class="text-lg font-semibold mb-3">{{ 'dashboard.quick_links' | translate }}</h2>
+      <div class="flex flex-wrap gap-2">
+        <a routerLink="/add" class="btn btn-outline btn-sm">{{ 'nav.add' | translate }}</a>
+        <a routerLink="/activity" class="btn btn-outline btn-sm">{{ 'nav.activity' | translate }}</a>
+        <a routerLink="/calendar" class="btn btn-outline btn-sm">{{ 'nav.calendar' | translate }}</a>
+        <a routerLink="/requests" class="btn btn-outline btn-sm">{{ 'nav.requests' | translate }}</a>
+      </div>
+    </div>
+  }
+</div>

@@ -1,0 +1,216 @@
+---
+id: thepiratebay
+name: The Pirate Bay
+description: "The Pirate Bay (TPB) is the galaxy’s most resilient Public BitTorrent site"
+language: en-US
+type: public
+encoding: UTF-8
+links:
+  - https://thepiratebay.org/
+  - https://thepiratebay.unblockninja.com/
+  - https://thepiratebay.ninjaproxy1.com/
+  - https://tpb.proxyninja.org/
+  - https://thepiratebay.proxyninja.net/
+  - https://thepiratebay.torrentbay.st/
+  - https://tpb.skynetcloud.site/
+  - https://piratehaven.xyz/
+  - https://mirrorbay.top/
+  - https://thepiratebay0.org/
+  - https://thepiratebay10.xyz/
+  - https://pirateproxylive.org/
+  - https://thehiddenbay.com/
+  - https://thepiratebay.zone/
+  - https://tpb.party/
+  - https://piratebayproxy.live/
+  - https://piratebay.live/
+  - https://piratebay.party/
+  - https://thepiratebay.party/
+  - https://thepiratebaye.org/
+  - https://thepiratebay.cloud/
+  - https://tpb-proxy.xyz/
+  - https://tpb.re/
+  - https://tpirbay.site/
+  - https://tpirbay.top/
+  - https://tpirbay.xyz/
+legacylinks:
+  - https://pirate-proxy.page/
+  - https://5mins.shop/
+  - https://tpb.surf/
+  - https://tpb.monster/
+  - https://thepiratebay.host/
+  - https://piratetoday.xyz/
+  - https://tpb.wtf/
+  - https://piratebayo3klnzokct3wt5yyxb2vpebbuyjl7m623iaxmqhsd52coid.onion.ly/
+  - https://piratebayo3klnzokct3wt5yyxb2vpebbuyjl7m623iaxmqhsd52coid.tor2web.to/
+  - https://piratebayo3klnzokct3wt5yyxb2vpebbuyjl7m623iaxmqhsd52coid.tor2web.link/
+  - https://tpb25.ukpass.co/
+  - https://tpb29.ukpass.co/
+  - https://piratenow.xyz/
+  - https://pirate-proxy.ink/
+  - https://proxifiedpiratebay.org/
+  - https://unlockedpiratebay.com/
+  - https://tpb.one/
+  - https://piratebayorg.net/
+  - https://tpbproxy.click/
+  - https://pirateproxy.live/
+  - https://ukpiratebay.org/
+  - https://piratebay.by/
+  - https://pirate-proxy.date/
+  - https://thepirateproxy.net/
+  - https://thepiratebay.abcproxy.org/
+  - https://tpb.proxyninja.net/
+  - https://tpb31.ukpass.co/
+  - https://thepiratebay10.org/
+  - https://pirate-proxy.africa/
+  - https://5mins.eu/
+  - https://piratebay.army/
+  - https://tpb-visit.me/
+  - https://pirate-proxy.ong/
+
+caps:
+  categorymappings:
+    # Audio
+    - {id: 100, cat: Audio, desc: "Audio"}
+    - {id: 101, cat: Audio, desc: "Music"}
+    - {id: 102, cat: Audio/Audiobook, desc: "Audio Books"}
+    - {id: 103, cat: Audio, desc: "Sound Clips"}
+    - {id: 104, cat: Audio/Lossless, desc: "FLAC"}
+    - {id: 199, cat: Audio/Other, desc: "Audio Other"}
+    # Video
+    - {id: 200, cat: Movies, desc: "Video"}
+    - {id: 201, cat: Movies, desc: "Movies"}
+    - {id: 202, cat: Movies, desc: "Movies DVDR"}
+    - {id: 203, cat: Audio/Video, desc: "Music Videos"}
+    - {id: 204, cat: Movies/Other, desc: "Movie Clips"}
+    - {id: 205, cat: TV, desc: "TV Shows"}
+    - {id: 206, cat: TV/Other, desc: "Handheld"}
+    - {id: 207, cat: Movies/HD, desc: "HD - Movies"}
+    - {id: 208, cat: TV/HD, desc: "HD - TV shows"}
+    - {id: 209, cat: Movies/3D, desc: "3D"}
+    - {id: 210, cat: Movies/SD, desc: "CAM/TS"}
+    - {id: 211, cat: Movies/UHD, desc: "UHD/4k - Movies"}
+    - {id: 212, cat: TV/UHD, desc: "UHD/4k - TV shows"}
+    - {id: 299, cat: Movies/Other, desc: "Video Other"}
+    # Applications
+    - {id: 300, cat: PC, desc: "Applications"}
+    - {id: 301, cat: PC, desc: "Windows"}
+    - {id: 302, cat: PC/Mac, desc: "Mac"}
+    - {id: 303, cat: PC, desc: "UNIX"}
+    - {id: 304, cat: PC/Mobile-Other, desc: "Handheld"}
+    - {id: 305, cat: PC/Mobile-iOS, desc: "IOS (iPad/iPhone)"}
+    - {id: 306, cat: PC/Mobile-Android, desc: "Android"}
+    - {id: 399, cat: PC, desc: "Other OS"}
+    # Games
+    - {id: 400, cat: Console, desc: "Games"}
+    - {id: 401, cat: PC/Games, desc: "PC"}
+    - {id: 402, cat: PC/Mac, desc: "Mac"}
+    - {id: 403, cat: Console/PS4, desc: "PSx"}
+    - {id: 404, cat: Console/XBox, desc: "XBOX360"}
+    - {id: 405, cat: Console/Wii, desc: "Wii"}
+    - {id: 406, cat: Console/Other, desc: "Handheld"}
+    - {id: 407, cat: Console/Other, desc: "IOS (iPad/iPhone)"}
+    - {id: 408, cat: Console/Other, desc: "Android"}
+    - {id: 499, cat: Console/Other, desc: "Games Other"}
+    # Porn
+    - {id: 500, cat: XXX, desc: "Porn"}
+    - {id: 501, cat: XXX, desc: "Movies"}
+    - {id: 502, cat: XXX/DVD, desc: "Movies DVDR"}
+    - {id: 503, cat: XXX/ImageSet, desc: "Pictures"}
+    - {id: 504, cat: XXX, desc: "Games"}
+    - {id: 505, cat: XXX/x264, desc: "HD - Movies"}
+    - {id: 506, cat: XXX, desc: "Movie Clips"}
+    - {id: 507, cat: XXX/UHD, desc: "UHD/4k - Movies"}
+    - {id: 599, cat: XXX/Other, desc: "Porn other"}
+    # Other
+    - {id: 600, cat: Other, desc: "Other"}
+    - {id: 601, cat: Books/EBook, desc: "E-books"}
+    - {id: 602, cat: Books/Comics, desc: "Comics"}
+    - {id: 603, cat: Books, desc: "Pictures"}
+    - {id: 604, cat: Books, desc: "Covers"}
+    - {id: 605, cat: Books, desc: "Physibles"}
+    - {id: 699, cat: Books/Other, desc: "Other Other"}
+
+  modes:
+    search: [q]
+    tv-search: [q, season, ep]
+    movie-search: [q]
+    music-search: [q]
+    book-search: [q]
+
+settings:
+  - name: apiurl
+    label: API URL
+    type: text
+    default: apibay.org
+  - name: uploader
+    type: text
+    label: Filter by Uploader
+  - name: info_uploader
+    type: info
+    label: About filtering by Uploader
+    default: "You can filter by Uploader by entering a Case Sensitive username, or leave empty to get all results.<br>Note: this is the username of the Uploader and not the Groupname that often show up at the end of TPB titles, eg -MeGusta."
+
+search:
+  paths:
+    - path: "https://{{ .Config.apiurl }}/{{ if .Keywords }}q.php?q={{ .Keywords }}&cat={{ join .Categories \",\" }}{{ else }}precompiled/data_top100_recent.json{{ end }}"
+      response:
+        type: json
+
+  keywordsfilters:
+    # remove it's #8829
+    - name: re_replace
+      args: ["(?i)\\bit's\\b", ""]
+    # replace simplified Chinese as this confuses TPB search engine #7291
+    - name: re_replace
+      args: ["([\\p{IsCJKUnifiedIdeographs}\\W]+)", "."]
+    - name: tolower
+
+  rows:
+    selector: "${{ if .Config.uploader }}:has(username:contains({{ .Config.uploader }})){{ else }}{{ end }}"
+    count:
+      selector: $[0].id
+
+  fields:
+    _id:
+      selector: id
+    category:
+      selector: category
+    title:
+      selector: name
+      filters:
+        - name: re_replace
+          args: ["- (\\w+-?\\w*)$", "-$1"]
+        - name: re_replace # Season X / Season X Complete --> S0X
+          args: ["(?i)\\bSeason[\\s\\.]+(\\d)([\\s\\.]+Complete)?\\b", "S0$1"]
+        - name: re_replace # Season XX / Season XX Complete --> SXX
+          args: ["(?i)\\bSeason[\\s\\.]+(\\d{1,2})([\\s\\.]+Complete)?\\b", "S$1"]
+    details:
+      text: "{{ .Config.sitelink }}description.php?id={{ .Result._id }}"
+    infohash:
+      selector: info_hash
+    imdbid:
+      selector: imdb
+    date:
+      # unix
+      selector: added
+    size:
+      selector: size
+    files:
+      selector: num_files
+      optional: true
+    seeders:
+      selector: seeders
+    leechers:
+      selector: leechers
+    _username:
+      selector: username
+    description:
+      selector: name
+      filters:
+        - name: prepend
+          args: "Uploader: {{ .Result._username }}<br>"
+    downloadvolumefactor:
+      text: 0
+    uploadvolumefactor:
+      text: 1
+# json engine n/a

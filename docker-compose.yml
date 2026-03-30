@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: suitarr
+      POSTGRES_PASSWORD: suitarr
+      POSTGRES_DB: suitarr
+    volumes:
+      - suitarr_pgdata:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"
+
+  backend:
+    build: ./backend
+    ports:
+      - "3001:3000"
+    env_file: ./backend/.env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      CHOKIDAR_USEPOLLING: "1"
+      CHOKIDAR_INTERVAL: "1000"
+    volumes:
+      - ./backend:/app
+      - backend_node_modules:/app/node_modules
+      - ./volumes/downloads:/downloads
+      - ./volumes/medias:/app/medias
+    depends_on:
+      - postgres
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "4500:4500"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+      - frontend_angular_cache:/app/.angular
+    depends_on:
+      - backend
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: suitarr-qbittorrent
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Paris
+      - WEBUI_PORT=8080
+    ports:
+      - "8080:8080"
+      - "6881:6881"
+      - "6881:6881/udp"
+    volumes:
+      - qbittorrent_config:/config
+      - ./volumes/downloads:/downloads
+    restart: unless-stopped
+
+volumes:
+  suitarr_pgdata:
+  backend_node_modules:
+  frontend_node_modules:
+  frontend_angular_cache:
+  qbittorrent_config:

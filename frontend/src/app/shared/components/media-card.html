@@ -1,0 +1,44 @@
+<a
+  [routerLink]="['/', media().type === 'movie' ? 'movies' : 'series', media().id]"
+  class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow cursor-pointer relative overflow-hidden"
+  [class.opacity-60]="!media().monitored"
+>
+  <figure class="relative aspect-[2/3] bg-base-300">
+    @if (media().posterUrl) {
+      <img
+        [src]="media().posterUrl"
+        [alt]="media().title"
+        class="w-full h-full object-cover"
+      />
+    } @else {
+      <div class="flex items-center justify-center w-full h-full text-base-content/30">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+        </svg>
+      </div>
+    }
+    @if (!media().monitored) {
+      <div class="absolute top-1.5 left-1.5">
+        <span class="badge badge-xs badge-neutral opacity-80">✕</span>
+      </div>
+    }
+  </figure>
+
+  <div class="px-3 py-2 text-center">
+    <h3 class="text-sm font-medium line-clamp-1">{{ media().title }}</h3>
+    <p class="text-xs text-base-content/60">
+      {{ statusLabel() | translate }}
+      @if (qualityLabel()) {
+        <br />{{ qualityLabel() }}
+      }
+    </p>
+  </div>
+
+  <div class="absolute bottom-0 left-0 right-0 h-1 bg-base-100">
+    <div
+      class="h-full transition-all"
+      [ngClass]="barColorClass()"
+      [style.width.%]="barPercent()"
+    ></div>
+  </div>
+</a>

@@ -1,0 +1,175 @@
+---
+id: hdc
+name: HDCiTY
+description: "HDCiTY (HDC) is a CHINESE Private Torrent Tracker for HD MOVIES / TV / GENERAL"
+language: zh-CN
+type: private
+encoding: UTF-8
+links:
+  - https://hdcity.city/
+  - https://hdcity.work/
+  - https://hdcity.leniter.org/
+legacylinks:
+  - https://hdcity4.leniter.org/
+
+caps:
+  categorymappings:
+    - {id: 401, cat: Movies, desc: "Movies/电影"}
+    - {id: 402, cat: TV, desc: "Series/剧集"}
+    - {id: 404, cat: TV/Documentary, desc: "Doc/档案记录"}
+    - {id: 405, cat: TV/Anime, desc: "Anim/动漫"}
+    - {id: 403, cat: TV, desc: "Shows/节目"}
+    - {id: 406, cat: Audio/Video, desc: "MV/音乐视频"}
+    - {id: 407, cat: TV/Sport, desc: "Sports/体育"}
+    - {id: 408, cat: Audio, desc: "Audio/音频"}
+    - {id: 727, cat: XXX, desc: "XXX/家长指引"}
+    - {id: 728, cat: Other, desc: "Edu/文档/教材"}
+    - {id: 729, cat: PC, desc: "Soft/软件"}
+    - {id: 409, cat: Other, desc: "Other/其他"}
+
+  modes:
+    search: [q]
+    tv-search: [q, season, ep, imdbid]
+    movie-search: [q, imdbid]
+    music-search: [q]
+
+settings:
+  - name: username
+    type: text
+    label: Username
+  - name: password
+    type: password
+    label: Password
+  - name: freeleech
+    type: checkbox
+    label: Search freeleech only
+    default: false
+  - name: sort
+    type: select
+    label: Sort requested from site
+    default: 4
+    options:
+      4: created
+      7: seeders
+      5: size
+  - name: type
+    type: select
+    label: Order requested from site
+    default: desc
+    options:
+      desc: desc
+      asc: asc
+  - name: info_Results
+    type: info
+    label: Settings for Results
+    default: "To use this indexer please set the following on your HDC account <b>profile</b>:<ul><li><i>Site Language:</i><b> English</b></li><li><i>Torrent List Profile:</i> <b>Default Modern [preview]</b></li><li><i>Time Type: </i><b>Time Added</b></li><li><i>Torrents per page:</i><b> 100</b></li></ul>"
+  - name: info_activity
+    type: info
+    label: Account Inactivity
+    default: "Cherish your user account. Inactive accounts would be deleted based on the following rules:<ol><li>Veteran User or above would never be deleted.</li><li>Elite User or above would never be deleted if parked (at User CP).</li><li>Parked accounts would be deleted if users have not logged in for more than 180 days in a row.</li><li>Unparked accounts would be deleted if users have not logged in for more than 60 days in a row.</li><li>Accounts with both uploaded and downloaded amount being 0 would be deleted if users have not logged in for more than 30 days in a row.</li></ol>"
+
+login:
+  path: login
+  method: form
+  form: form[action="signinhandler"]
+  inputs:
+    nftsidl1c03b: "{{ .Config.username }}"
+    insf0urO0abl1i: "{{ .Config.password }}"
+  selectorinputs:
+    s0hot:
+      selector: input[name="s0hot"]
+      attribute: value
+    asDf0z:
+      selector: input[name="asDf0z"]
+      attribute: value
+  error:
+    - selector: div.errormsg
+  test:
+    path: /
+    selector: a[href^="logout?key="]
+
+search:
+  paths:
+    # https://hdcity.city/pt?incldead=0&spstate=0&inclbookmarked=0&iwannaseethis=shanghai+triad&search_area=0&search_mode=0
+    # https://hdcity.city/pt?incldead=0&spstate=0&inclbookmarked=0&iwannaseethis=115012&search_area=4&search_mode=0
+    - path: pt
+  inputs:
+    $raw: "{{ range .Categories }}cat{{.}}=1&{{end}}"
+    iwannaseethis: "{{ if .Query.IMDBID }}{{ .Query.IMDBIDShort }}{{ else }}{{ .Keywords }}{{ end }}"
+    # 0 incldead, 1 active, 2 dead
+    incldead: 0
+    # 0 all, 1 normal, 2 free, 3 2x, 4 2xfree, 5 50%, 6 2x50%, 7 30%
+    spstate: "{{ if .Config.freeleech }}2{{ else }}0{{ end }}"
+    # 0 title, 1 descr, 3 uploader, 4 imdb number
+    search_area: "{{ if .Query.IMDBID }}4{{ else }}0{{ end }}"
+    # 0 AND, 1 OR, 2 exact
+    search_mode: 0
+    sort: "{{ .Config.sort }}"
+    type: "{{ .Config.type }}"
+    notnewword: 1
+
+  rows:
+    selector: div.mitem
+
+  fields:
+    category:
+      selector: div.mcontent
+      attribute: style
+      filters:
+        - name: regexp
+          args: "\\/(\\d+).png"
+    title:
+      selector: div.mtop a[href^="t-"]
+    details:
+      selector: div.mtop a[href^="t-"]
+      attribute: href
+    download:
+      selector: a[href^="download?id="]
+      attribute: href
+    poster:
+      selector: div.mcontent:not(:has(img[src$="poster.jpg"])) img
+      attribute: src
+    imdbid:
+      selector: a[href*="imdb.com/title/tt"]
+      attribute: href
+    size:
+      selector: div.mbottom div:nth-last-child(7)
+      remove: i
+    seeders:
+      selector: a[href$="#seeders"]
+      optional: true
+      default: 0
+    leechers:
+      selector: a[href$="#leechers"]
+      optional: true
+      default: 0
+    grabs:
+      selector: a[href^="viewsnatches?id="]
+      optional: true
+      default: 0
+    date:
+      selector: div[style="minfo"]
+      remove: span
+      filters:
+        - name: append
+          args: " +08:00" # CST
+        - name: dateparse
+          args: "yyyy-MM-dd HH:mm:ss zzz"
+    downloadvolumefactor:
+      case:
+        div.bfree: 0
+        div.btwoupfree: 0
+        div.bhalfdown: 0.5
+        div.btwouphalfdown: 0.5
+        div.bthirdown: 0.3
+        div.bnone: 1
+        "*": 1
+    uploadvolumefactor:
+      case:
+        div.btwouphalfdown: 2
+        div.btwoupfree: 2
+        div.btwoup: 2
+        "*": 1
+    minimumratio:
+      text: 1
+# engine n/a (based on NexusPHP)

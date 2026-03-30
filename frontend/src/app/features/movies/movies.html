@@ -1,0 +1,79 @@
+<div class="flex flex-col gap-4">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-2xl font-bold">{{ 'movies.title' | translate }}</h1>
+    <div class="flex flex-wrap items-center gap-2">
+      <input
+        type="text"
+        [placeholder]="'common.search' | translate"
+        class="input input-bordered input-sm w-52"
+        [ngModel]="searchQuery()"
+        (ngModelChange)="onSearch($event)"
+      />
+      <select
+        class="select select-bordered select-sm"
+        [ngModel]="filterMonitored()"
+        (ngModelChange)="filterMonitored.set($event); onFilterChange()"
+      >
+        <option value="">{{ 'movies.filter_all' | translate }}</option>
+        <option value="true">{{ 'movies.filter_monitored' | translate }}</option>
+        <option value="false">{{ 'movies.filter_unmonitored' | translate }}</option>
+      </select>
+      <select
+        class="select select-bordered select-sm"
+        [ngModel]="sortBy()"
+        (ngModelChange)="sortBy.set($event); onFilterChange()"
+      >
+        <option value="title">{{ 'movies.sort_title' | translate }}</option>
+        <option value="year">{{ 'movies.sort_year' | translate }}</option>
+        <option value="added">{{ 'movies.sort_added' | translate }}</option>
+        <option value="rating">{{ 'movies.sort_rating' | translate }}</option>
+      </select>
+    </div>
+  </div>
+
+  @if (loading() && movies().length === 0) {
+    <div class="flex justify-center py-12">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (movies().length === 0) {
+    <div class="text-center py-12 text-base-content/50">
+      <p class="text-lg">{{ 'movies.empty' | translate }}</p>
+      <p class="text-sm mt-2">{{ 'movies.empty_hint' | translate }}</p>
+    </div>
+  } @else {
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      @for (movie of movies(); track movie.id) {
+        <app-media-card [media]="movie" />
+      }
+    </div>
+  }
+
+  @if (total() > movies().length) {
+    <div class="flex justify-center mt-4">
+      <button class="btn btn-outline btn-sm" (click)="loadMore()" [disabled]="loading()">
+        @if (loading()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ 'movies.load_more' | translate }}
+      </button>
+    </div>
+  }
+
+  @if (movies().length > 0) {
+    <div class="flex flex-wrap items-start justify-between gap-6 mt-6 px-2 py-3 border-t border-base-200 text-sm text-base-content/70">
+      <div class="flex flex-col gap-1">
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-green-500"></span> {{ 'legend.downloaded_monitored' | translate }}</div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-green-800"></span> {{ 'legend.downloaded_unmonitored' | translate }}</div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-red-500"></span> {{ 'legend.missing_monitored' | translate }}</div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-amber-500"></span> {{ 'legend.missing_unmonitored' | translate }}</div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-blue-400"></span> {{ 'legend.unreleased' | translate }}</div>
+      </div>
+      <div class="flex flex-wrap gap-x-8 gap-y-1">
+        <div><span class="font-semibold">{{ 'legend.movies' | translate }}</span> {{ total() }}</div>
+        <div><span class="font-semibold">{{ 'legend.movie_files' | translate }}</span> {{ movieFileCount() }}</div>
+        <div><span class="font-semibold">{{ 'legend.monitored' | translate }}</span> {{ monitoredCount() }}</div>
+        <div><span class="font-semibold">{{ 'legend.unmonitored' | translate }}</span> {{ total() - monitoredCount() }}</div>
+      </div>
+    </div>
+  }
+</div>

@@ -1,0 +1,143 @@
+<div class="flex flex-col gap-4">
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <h1 class="text-2xl font-bold">{{ 'requests.title' | translate }}</h1>
+    <select
+      class="select select-bordered select-sm w-full sm:w-48"
+      [ngModel]="statusFilter()"
+      (ngModelChange)="onStatusChange($event)"
+    >
+      <option value="">{{ 'requests.filter_all' | translate }}</option>
+      <option value="pending">{{ 'requests.status.pending' | translate }}</option>
+      <option value="approved">{{ 'requests.status.approved' | translate }}</option>
+      <option value="declined">{{ 'requests.status.declined' | translate }}</option>
+      <option value="processing">{{ 'requests.status.processing' | translate }}</option>
+      <option value="available">{{ 'requests.status.available' | translate }}</option>
+      <option value="failed">{{ 'requests.status.failed' | translate }}</option>
+    </select>
+  </div>
+
+  @if (loading() && rows().length === 0) {
+    <div class="flex justify-center py-12">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (rows().length === 0) {
+    <div class="text-center py-12 text-base-content/50">
+      <p class="text-lg">{{ 'requests.empty' | translate }}</p>
+    </div>
+  } @else {
+    <div class="overflow-x-auto rounded-lg border border-base-200">
+      <table class="table table-sm table-zebra">
+        <thead>
+          <tr>
+            <th>{{ 'requests.col_title' | translate }}</th>
+            <th>{{ 'requests.col_type' | translate }}</th>
+            <th>{{ 'requests.col_status' | translate }}</th>
+            @if (auth.isAdmin()) {
+              <th>{{ 'requests.col_user' | translate }}</th>
+            }
+            <th>{{ 'requests.col_date' | translate }}</th>
+            <th class="text-end">{{ 'requests.col_actions' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.id) {
+            <tr>
+              <td class="font-medium max-w-[200px] truncate" [title]="row.title">{{ row.title }}</td>
+              <td>
+                @if (row.mediaType === 'movie') {
+                  {{ 'requests.type_movie' | translate }}
+                } @else {
+                  {{ 'requests.type_series' | translate }}
+                }
+              </td>
+              <td>
+                <span class="badge badge-sm">{{ ('requests.status.' + row.status) | translate }}</span>
+              </td>
+              @if (auth.isAdmin()) {
+                <td>{{ row.user.username }}</td>
+              }
+              <td class="whitespace-nowrap text-base-content/70">{{ row.createdAt | date:'short' }}</td>
+              <td class="text-end">
+                <div class="flex flex-wrap justify-end gap-1">
+                  @if (auth.isAdmin() && row.status === 'pending') {
+                    <button
+                      type="button"
+                      class="btn btn-success btn-xs"
+                      [disabled]="actionBusyId() === row.id"
+                      (click)="approve(row.id)"
+                    >
+                      {{ 'requests.approve' | translate }}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-warning btn-xs"
+                      [disabled]="actionBusyId() === row.id"
+                      (click)="openDecline(row.id)"
+                    >
+                      {{ 'requests.decline' | translate }}
+                    </button>
+                  }
+                  @if (canCancel(row)) {
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs text-error"
+                      [disabled]="actionBusyId() === row.id"
+                      (click)="cancelRequest(row)"
+                    >
+                      {{ 'requests.cancel' | translate }}
+                    </button>
+                  }
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  @if (canLoadMore()) {
+    <div class="flex justify-center">
+      <button type="button" class="btn btn-outline btn-sm" [disabled]="loading()" (click)="loadMore()">
+        {{ 'requests.load_more' | translate }}
+      </button>
+    </div>
+  }
+</div>
+
+@if (declineForId(); as declineId) {
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+    (click)="closeDecline()"
+    role="presentation"
+  >
+    <div
+      class="bg-base-100 rounded-lg shadow-xl max-w-md w-full p-6 border border-base-200"
+      (click)="$event.stopPropagation()"
+      role="dialog"
+      [attr.aria-labelledby]="'decline-title'"
+    >
+      <h2 id="decline-title" class="text-lg font-semibold">{{ 'requests.decline_title' | translate }}</h2>
+      <textarea
+        class="textarea textarea-bordered w-full mt-3"
+        rows="3"
+        [placeholder]="'requests.decline_reason_placeholder' | translate"
+        [ngModel]="declineReasonText()"
+        (ngModelChange)="declineReasonText.set($event)"
+      ></textarea>
+      <div class="flex justify-end gap-2 mt-4">
+        <button type="button" class="btn btn-ghost btn-sm" (click)="closeDecline()">
+          {{ 'common.cancel' | translate }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-warning btn-sm"
+          [disabled]="actionBusyId() === declineId"
+          (click)="submitDecline()"
+        >
+          {{ 'requests.decline_submit' | translate }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
