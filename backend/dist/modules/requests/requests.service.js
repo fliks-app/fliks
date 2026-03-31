@@ -68,7 +68,30 @@ let RequestsService = class RequestsService {
         };
         return rules.some((rule) => rule.conditions.every((cond) => this.evalCondition(cond, context)));
     }
+    async checkQuota(user, mediaType) {
+        const limit = mediaType === enums_1.MediaType.MOVIE
+            ? user.movieQuotaLimit
+            : user.seriesQuotaLimit;
+        if (!limit)
+            return;
+        const periodDays = user.quotaPeriodDays || 7;
+        const since = new Date();
+        since.setDate(since.getDate() - periodDays);
+        const count = await this.requestRepo
+            .createQueryBuilder('r')
+            .where('r.userId = :userId', { userId: user.id })
+            .andWhere('r.mediaType = :mediaType', { mediaType })
+            .andWhere('r.status IN (:...statuses)', {
+            statuses: [enums_1.RequestStatus.PENDING, enums_1.RequestStatus.APPROVED],
+        })
+            .andWhere('r.createdAt >= :since', { since })
+            .getCount();
+        if (count >= limit) {
+            throw new common_1.ForbiddenException(`Quota exceeded: ${count}/${limit} ${mediaType} requests in last ${periodDays} days`);
+        }
+    }
     async create(user, dto) {
+        await this.checkQuota(user, dto.mediaType);
         const dup = await this.requestRepo.findOne({
             where: {
                 userId: user.id,

@@ -25,9 +25,9 @@ __decorate([
 ], UpdateMediaProfilesDto.prototype, "qualityProfileId", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.ValidateIf)((_, v) => v !== null && v !== undefined),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(1),
+    (0, class_validator_1.ValidateIf)((o) => o.languageProfileId !== null),
     __metadata("design:type", Object)
 ], UpdateMediaProfilesDto.prototype, "languageProfileId", void 0);
 //# sourceMappingURL=update-media-profiles.dto.js.map

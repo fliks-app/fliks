@@ -26,6 +26,7 @@ const grab_movie_dto_1 = require("./dto/grab-movie.dto");
 const scan_folder_dto_1 = require("./dto/scan-folder.dto");
 const confirm_disk_import_dto_1 = require("./dto/confirm-disk-import.dto");
 const update_media_profiles_dto_1 = require("./dto/update-media-profiles.dto");
+const bulk_update_media_dto_1 = require("./dto/bulk-update-media.dto");
 const calendar_query_dto_1 = require("./dto/calendar-query.dto");
 const history_query_dto_1 = require("./dto/history-query.dto");
 const patch_monitored_dto_1 = require("./dto/patch-monitored.dto");
@@ -81,26 +82,32 @@ let MediaController = class MediaController {
     retryImport(id) {
         return this.mediaService.retryImport(id);
     }
-    movieReleases(id) {
-        return this.movieDownload.searchMovieReleases(id);
+    bulkUpdate(dto) {
+        return this.mediaService.bulkUpdate(dto);
+    }
+    renameFiles(id) {
+        return this.mediaService.renameFiles(id);
+    }
+    movieReleases(id, customQuery) {
+        return this.movieDownload.searchMovieReleases(id, customQuery);
     }
     grabMovie(id, dto) {
         return this.movieDownload.grabMovie(id, dto ?? {});
     }
-    upgradeReleases(id) {
-        return this.movieDownload.searchUpgradeReleases(id);
+    upgradeReleases(id, customQuery) {
+        return this.movieDownload.searchUpgradeReleases(id, customQuery);
     }
     grabUpgrade(id, dto) {
         return this.movieDownload.grabUpgrade(id, dto ?? {});
     }
-    seasonReleases(id, seasonId) {
-        return this.episodeDownload.searchSeasonReleases(id, seasonId);
+    seasonReleases(id, seasonId, customQuery) {
+        return this.episodeDownload.searchSeasonReleases(id, seasonId, customQuery);
     }
     grabSeason(id, seasonId, dto) {
         return this.episodeDownload.grabSeason(id, seasonId, dto ?? {});
     }
-    episodeReleases(id, episodeId) {
-        return this.episodeDownload.searchEpisodeReleases(id, episodeId);
+    episodeReleases(id, episodeId, customQuery) {
+        return this.episodeDownload.searchEpisodeReleases(id, episodeId, customQuery);
     }
     grabEpisode(id, episodeId, dto) {
         return this.episodeDownload.grabEpisode(id, episodeId, dto ?? {});
@@ -222,11 +229,28 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], MediaController.prototype, "retryImport", null);
 __decorate([
-    (0, common_1.Get)(':id/releases'),
-    (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Read, media_entity_1.Media)),
+    (0, common_1.Patch)('bulk'),
+    (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Update, media_entity_1.Media)),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [bulk_update_media_dto_1.BulkUpdateMediaDto]),
+    __metadata("design:returntype", void 0)
+], MediaController.prototype, "bulkUpdate", null);
+__decorate([
+    (0, common_1.Post)(':id/rename'),
+    (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Update, media_entity_1.Media)),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Number]),
+    __metadata("design:returntype", void 0)
+], MediaController.prototype, "renameFiles", null);
+__decorate([
+    (0, common_1.Get)(':id/releases'),
+    (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Read, media_entity_1.Media)),
+    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Query)('q')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, String]),
     __metadata("design:returntype", void 0)
 ], MediaController.prototype, "movieReleases", null);
 __decorate([
@@ -242,8 +266,9 @@ __decorate([
     (0, common_1.Get)(':id/upgrade-releases'),
     (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Read, media_entity_1.Media)),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Query)('q')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number]),
+    __metadata("design:paramtypes", [Number, String]),
     __metadata("design:returntype", void 0)
 ], MediaController.prototype, "upgradeReleases", null);
 __decorate([
@@ -260,8 +285,9 @@ __decorate([
     (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Read, media_entity_1.Media)),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Param)('seasonId', common_1.ParseIntPipe)),
+    __param(2, (0, common_1.Query)('q')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number, Number]),
+    __metadata("design:paramtypes", [Number, Number, String]),
     __metadata("design:returntype", void 0)
 ], MediaController.prototype, "seasonReleases", null);
 __decorate([
@@ -279,8 +305,9 @@ __decorate([
     (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Read, media_entity_1.Media)),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Param)('episodeId', common_1.ParseIntPipe)),
+    __param(2, (0, common_1.Query)('q')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number, Number]),
+    __metadata("design:paramtypes", [Number, Number, String]),
     __metadata("design:returntype", void 0)
 ], MediaController.prototype, "episodeReleases", null);
 __decorate([

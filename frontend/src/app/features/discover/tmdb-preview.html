@@ -63,7 +63,7 @@
           }
         </div>
 
-        @if (m.genres?.length) {
+        @if (m.genres.length) {
           <div class="flex flex-wrap gap-1.5">
             @for (g of m.genres; track g) {
               <span class="badge badge-ghost badge-sm">{{ g }}</span>
@@ -125,13 +125,13 @@
               <span class="font-medium">{{ m.revenue | currency:'USD':'symbol':'1.0-0' }}</span>
             </div>
           }
-          @if (m.productionCountries?.length) {
+          @if (m.productionCountries.length) {
             <div>
               <span class="text-base-content/50 block">{{ 'discover.preview_countries' | translate }}</span>
               <span class="font-medium">{{ m.productionCountries.join(', ') }}</span>
             </div>
           }
-          @if (m.productionCompanies?.length) {
+          @if (m.productionCompanies.length) {
             <div>
               <span class="text-base-content/50 block">{{ 'discover.preview_studios' | translate }}</span>
               <span class="font-medium">{{ m.productionCompanies.join(', ') }}</span>

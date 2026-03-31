@@ -11,6 +11,24 @@ export declare class MetadataProvidersController {
     searchTv(q: string, year?: string): Promise<{
         tmdbId: number;
     }[]>;
+    trendingMovies(): Promise<{
+        tmdbId: number;
+    }[]>;
+    popularMovies(): Promise<{
+        tmdbId: number;
+    }[]>;
+    upcomingMovies(): Promise<{
+        tmdbId: number;
+    }[]>;
+    trendingTv(): Promise<{
+        tmdbId: number;
+    }[]>;
+    popularTv(): Promise<{
+        tmdbId: number;
+    }[]>;
+    upcomingTv(): Promise<{
+        tmdbId: number;
+    }[]>;
     getMovieDetails(tmdbId: number): Promise<import("./interfaces/metadata-provider.interface").MetadataDetails>;
     getTvDetails(tmdbId: number): Promise<import("./interfaces/metadata-provider.interface").MetadataDetails>;
     getTvSeasons(tmdbId: number): Promise<import("./interfaces/metadata-provider.interface").SeasonDetails[]>;

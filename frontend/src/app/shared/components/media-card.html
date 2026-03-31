@@ -24,12 +24,12 @@
     }
   </figure>
 
-  <div class="px-3 py-2 text-center">
+  <div class="px-3 py-2 text-center h-14">
     <h3 class="text-sm font-medium line-clamp-1">{{ media().title }}</h3>
-    <p class="text-xs text-base-content/60">
+    <p class="text-xs text-base-content/60 line-clamp-1">
       {{ statusLabel() | translate }}
       @if (qualityLabel()) {
-        <br />{{ qualityLabel() }}
+        — {{ qualityLabel() }}
       }
     </p>
   </div>

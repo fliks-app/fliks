@@ -42,6 +42,9 @@ export class DiscoverComponent implements OnInit, OnDestroy {
   readonly selectedRootFolderId = signal<number | null>(null);
 
   readonly tab = signal<DiscoverTab>('movie');
+  readonly discoverMode = signal<'search' | 'trending' | 'popular' | 'upcoming'>('trending');
+  readonly discoverResults = signal<MetadataSearchResult[]>([]);
+  readonly discoverLoading = signal(false);
   readonly query = signal('');
   readonly results = signal<MetadataSearchResult[]>([]);
   readonly loading = signal(false);
@@ -57,19 +60,21 @@ export class DiscoverComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     const r = this.auth.user()?.role;
-    if (r !== 'admin' && r !== 'user') return;
-    const [profiles, folders] = await Promise.all([
-      this.profilesApi.getQualityProfiles(),
-      this.rootFoldersApi.list(),
-    ]);
-    this.qualityProfiles.set(profiles.map((p) => ({ id: p.id, name: p.name })));
-    if (profiles.length && this.selectedQualityProfileId() == null) {
-      this.selectedQualityProfileId.set(profiles[0].id);
+    if (r === 'admin' || r === 'user') {
+      const [profiles, folders] = await Promise.all([
+        this.profilesApi.getQualityProfiles(),
+        this.rootFoldersApi.list(),
+      ]);
+      this.qualityProfiles.set(profiles.map((p) => ({ id: p.id, name: p.name })));
+      if (profiles.length && this.selectedQualityProfileId() == null) {
+        this.selectedQualityProfileId.set(profiles[0].id);
+      }
+      this.rootFolders.set(folders);
+      if (folders.length && this.selectedRootFolderId() == null) {
+        this.selectedRootFolderId.set(folders[0].id);
+      }
     }
-    this.rootFolders.set(folders);
-    if (folders.length && this.selectedRootFolderId() == null) {
-      this.selectedRootFolderId.set(folders[0].id);
-    }
+    this.loadDiscover();
   }
 
   ngOnDestroy() {
@@ -80,12 +85,52 @@ export class DiscoverComponent implements OnInit, OnDestroy {
     this.tab.set(t);
     this.results.set([]);
     this.error.set('');
-    this.scheduleSearch();
+    if (this.discoverMode() === 'search') {
+      this.scheduleSearch();
+    } else {
+      this.loadDiscover();
+    }
   }
 
   onQueryInput(value: string) {
     this.query.set(value);
-    this.scheduleSearch();
+    if (value.trim()) {
+      this.discoverMode.set('search');
+      this.scheduleSearch();
+    } else {
+      this.discoverMode.set('trending');
+      this.results.set([]);
+      this.loading.set(false);
+      this.loadDiscover();
+    }
+  }
+
+  async loadDiscover() {
+    const mode = this.discoverMode();
+    if (mode === 'search') return;
+    this.discoverLoading.set(true);
+    this.error.set('');
+    try {
+      const isMovie = this.tab() === 'movie';
+      let rows: MetadataSearchResult[];
+      switch (mode) {
+        case 'trending':
+          rows = await (isMovie ? this.metadata.getTrendingMovies() : this.metadata.getTrendingTv());
+          break;
+        case 'popular':
+          rows = await (isMovie ? this.metadata.getPopularMovies() : this.metadata.getPopularTv());
+          break;
+        case 'upcoming':
+          rows = await (isMovie ? this.metadata.getUpcomingMovies() : this.metadata.getUpcomingTv());
+          break;
+      }
+      this.discoverResults.set(rows);
+    } catch {
+      this.discoverResults.set([]);
+      this.error.set(this.translate.instant('discover.search_error'));
+    } finally {
+      this.discoverLoading.set(false);
+    }
   }
 
   private scheduleSearch() {

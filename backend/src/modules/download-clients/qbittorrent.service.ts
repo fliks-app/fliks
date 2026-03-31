@@ -237,24 +237,24 @@ export class QbittorrentService {
   async addTorrentUrl(
     client: DownloadClient,
     torrentUrl: string,
+    mediaType?: 'movie' | 'series',
   ): Promise<void> {
     torrentUrl = this.sanitizeUrl(torrentUrl);
-    const s = client.settings as {
+    const s = client.settings as Record<string, unknown>;
+    const base = this.buildBaseUrl(s as {
       host?: string;
-      username?: string;
-      password?: string;
-      useSsl?: boolean;
       port?: number;
-      category?: string;
-    };
-    const base = this.buildBaseUrl(s);
+      useSsl?: boolean;
+    });
     if (!base) {
       throw new BadRequestException(
         'qBittorrent client has no host configured',
       );
     }
 
-    const category = s.category?.trim() ?? '';
+    let category = String(s.category ?? '').trim();
+    if (mediaType === 'movie' && s.movieCategory) category = String(s.movieCategory).trim();
+    if (mediaType === 'series' && s.seriesCategory) category = String(s.seriesCategory).trim();
 
     const http = axios.create({
       timeout: 60_000,
@@ -263,8 +263,8 @@ export class QbittorrentService {
 
     // --- Authenticate ---
     const formAuth = new URLSearchParams({
-      username: s.username ?? '',
-      password: s.password ?? '',
+      username: String(s.username ?? ''),
+      password: String(s.password ?? ''),
     });
 
     let cookieHeader = '';

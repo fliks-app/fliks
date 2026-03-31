@@ -40,6 +40,30 @@ let MetadataProvidersController = class MetadataProvidersController {
         const results = await this.tmdb.searchTvShow(query, year ? +year : undefined);
         return this.enrichWithExisting(results, 'series');
     }
+    async trendingMovies() {
+        const results = await this.tmdb.getTrendingMovies();
+        return this.enrichWithExisting(results, 'movie');
+    }
+    async popularMovies() {
+        const results = await this.tmdb.getPopularMovies();
+        return this.enrichWithExisting(results, 'movie');
+    }
+    async upcomingMovies() {
+        const results = await this.tmdb.getUpcomingMovies();
+        return this.enrichWithExisting(results, 'movie');
+    }
+    async trendingTv() {
+        const results = await this.tmdb.getTrendingTvShows();
+        return this.enrichWithExisting(results, 'series');
+    }
+    async popularTv() {
+        const results = await this.tmdb.getPopularTvShows();
+        return this.enrichWithExisting(results, 'series');
+    }
+    async upcomingTv() {
+        const results = await this.tmdb.getUpcomingTvShows();
+        return this.enrichWithExisting(results, 'series');
+    }
     getMovieDetails(tmdbId) {
         return this.tmdb.getMovieDetails(tmdbId);
     }
@@ -85,6 +109,42 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], MetadataProvidersController.prototype, "searchTv", null);
+__decorate([
+    (0, common_1.Get)('trending/movie'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], MetadataProvidersController.prototype, "trendingMovies", null);
+__decorate([
+    (0, common_1.Get)('popular/movie'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], MetadataProvidersController.prototype, "popularMovies", null);
+__decorate([
+    (0, common_1.Get)('upcoming/movie'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], MetadataProvidersController.prototype, "upcomingMovies", null);
+__decorate([
+    (0, common_1.Get)('trending/tv'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], MetadataProvidersController.prototype, "trendingTv", null);
+__decorate([
+    (0, common_1.Get)('popular/tv'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], MetadataProvidersController.prototype, "popularTv", null);
+__decorate([
+    (0, common_1.Get)('upcoming/tv'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], MetadataProvidersController.prototype, "upcomingTv", null);
 __decorate([
     (0, common_1.Get)('movie/:tmdbId'),
     __param(0, (0, common_1.Param)('tmdbId', common_1.ParseIntPipe)),

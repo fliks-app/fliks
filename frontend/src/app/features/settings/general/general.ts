@@ -27,6 +27,7 @@ export class GeneralSettingsComponent implements OnInit {
   readonly tmdbApiKey = signal('');
   readonly searchMissingAuto = signal('true');
   readonly rssSyncInterval = signal('15');
+  readonly postImportScript = signal('');
 
   async ngOnInit() {
     try {
@@ -34,6 +35,7 @@ export class GeneralSettingsComponent implements OnInit {
       this.tmdbApiKey.set(map['tmdb_api_key'] ?? '');
       this.searchMissingAuto.set(map['search_missing_auto'] ?? 'true');
       this.rssSyncInterval.set(map['rss_sync_interval'] ?? '15');
+      this.postImportScript.set(map['post_import_script'] ?? '');
     } catch {
       this.error.set(this.translate.instant('settings.general.load_error'));
     } finally {
@@ -50,6 +52,7 @@ export class GeneralSettingsComponent implements OnInit {
         tmdb_api_key: this.tmdbApiKey(),
         search_missing_auto: this.searchMissingAuto(),
         rss_sync_interval: this.rssSyncInterval(),
+        post_import_script: this.postImportScript(),
       });
       this.saved.set(true);
       setTimeout(() => this.saved.set(false), 3000);

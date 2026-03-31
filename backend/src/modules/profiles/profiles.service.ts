@@ -54,6 +54,7 @@ export class ProfilesService {
         },
         allowed: i.allowed,
         sortOrder: i.sortOrder,
+        groupId: i.groupId ?? undefined,
       })),
     });
     return this.qpRepo.save(profile);
@@ -83,6 +84,7 @@ export class ProfilesService {
       },
       allowed: i.allowed,
       sortOrder: i.sortOrder,
+      groupId: i.groupId ?? undefined,
     }));
     return this.qpRepo.save(profile);
   }

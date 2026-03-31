@@ -30,6 +30,42 @@ export class MetadataProvidersController {
     return this.enrichWithExisting(results, 'series');
   }
 
+  @Get('trending/movie')
+  async trendingMovies() {
+    const results = await this.tmdb.getTrendingMovies();
+    return this.enrichWithExisting(results, 'movie');
+  }
+
+  @Get('popular/movie')
+  async popularMovies() {
+    const results = await this.tmdb.getPopularMovies();
+    return this.enrichWithExisting(results, 'movie');
+  }
+
+  @Get('upcoming/movie')
+  async upcomingMovies() {
+    const results = await this.tmdb.getUpcomingMovies();
+    return this.enrichWithExisting(results, 'movie');
+  }
+
+  @Get('trending/tv')
+  async trendingTv() {
+    const results = await this.tmdb.getTrendingTvShows();
+    return this.enrichWithExisting(results, 'series');
+  }
+
+  @Get('popular/tv')
+  async popularTv() {
+    const results = await this.tmdb.getPopularTvShows();
+    return this.enrichWithExisting(results, 'series');
+  }
+
+  @Get('upcoming/tv')
+  async upcomingTv() {
+    const results = await this.tmdb.getUpcomingTvShows();
+    return this.enrichWithExisting(results, 'series');
+  }
+
   @Get('movie/:tmdbId')
   getMovieDetails(@Param('tmdbId', ParseIntPipe) tmdbId: number) {
     return this.tmdb.getMovieDetails(tmdbId);

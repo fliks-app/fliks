@@ -1,10 +1,43 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
@@ -28,6 +61,10 @@ const tmdb_provider_1 = require("../metadata-providers/providers/tmdb.provider")
 const enums_1 = require("../../common/enums");
 const profiles_service_1 = require("../profiles/profiles.service");
 const root_folder_entity_1 = require("../root-folders/entities/root-folder.entity");
+const naming_service_1 = require("../scheduler/naming.service");
+const suitarr_qualities_1 = require("../../common/constants/suitarr-qualities");
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
 let MediaService = MediaService_1 = class MediaService {
     mediaRepo;
     tagRepo;
@@ -40,8 +77,9 @@ let MediaService = MediaService_1 = class MediaService {
     tmdb;
     config;
     profiles;
+    naming;
     log = new common_1.Logger(MediaService_1.name);
-    constructor(mediaRepo, tagRepo, seasonRepo, episodeRepo, mediaFileRepo, historyRepo, rootFolderRepo, dataSource, tmdb, config, profiles) {
+    constructor(mediaRepo, tagRepo, seasonRepo, episodeRepo, mediaFileRepo, historyRepo, rootFolderRepo, dataSource, tmdb, config, profiles, naming) {
         this.mediaRepo = mediaRepo;
         this.tagRepo = tagRepo;
         this.seasonRepo = seasonRepo;
@@ -53,6 +91,7 @@ let MediaService = MediaService_1 = class MediaService {
         this.tmdb = tmdb;
         this.config = config;
         this.profiles = profiles;
+        this.naming = naming;
     }
     async importFromTmdb(dto) {
         const key = this.config.get('TMDB_API_KEY', '');
@@ -107,7 +146,9 @@ let MediaService = MediaService_1 = class MediaService {
         const sortBy = query.sortBy ?? 'media.title';
         const sortOrder = query.sortOrder ?? 'ASC';
         qb.orderBy(sortBy.includes('.') ? sortBy : `media.${sortBy}`, sortOrder);
-        qb.skip(offset).take(limit);
+        if (limit > 0) {
+            qb.skip(offset).take(limit);
+        }
         const [data, total] = await qb.getManyAndCount();
         const seriesIds = data.filter((m) => m.type === 'series').map((m) => m.id);
         let episodeStatsMap = new Map();
@@ -125,7 +166,7 @@ let MediaService = MediaService_1 = class MediaService {
                 { totalEpisodes: parseInt(s.total, 10), downloadedEpisodes: parseInt(s.downloaded, 10) },
             ]));
         }
-        const enriched = data.map((m) => {
+        let enriched = data.map((m) => {
             const stats = episodeStatsMap.get(m.id);
             return {
                 ...m,
@@ -133,6 +174,20 @@ let MediaService = MediaService_1 = class MediaService {
                 episodeStats: stats ?? undefined,
             };
         });
+        if (query.cutoffUnmet === true) {
+            const qualityByName = new Map(suitarr_qualities_1.SUITARR_QUALITIES.map((q) => [q.name, q]));
+            enriched = enriched.filter((m) => {
+                if (!m.files?.length || !m.qualityProfile)
+                    return false;
+                const cutoffQuality = (0, suitarr_qualities_1.getSuitarrQualityById)(m.qualityProfile.cutoff);
+                if (!cutoffQuality)
+                    return false;
+                return !m.files.some((f) => {
+                    const fq = qualityByName.get(f.quality);
+                    return fq && fq.rank >= cutoffQuality.rank;
+                });
+            });
+        }
         return { data: enriched, total };
     }
     async findOne(id) {
@@ -196,6 +251,31 @@ let MediaService = MediaService_1 = class MediaService {
         }
         await this.mediaRepo.update({ id }, patch);
         return this.findOne(id);
+    }
+    async bulkUpdate(dto) {
+        const patch = {};
+        if (dto.qualityProfileId !== undefined) {
+            patch.qualityProfileId = dto.qualityProfileId;
+        }
+        if (dto.languageProfileId !== undefined) {
+            patch.languageProfileId = dto.languageProfileId;
+        }
+        if (dto.monitored !== undefined) {
+            patch.monitored = dto.monitored;
+        }
+        if (dto.rootFolder !== undefined) {
+            patch.path = dto.rootFolder;
+        }
+        if (Object.keys(patch).length === 0) {
+            throw new common_1.BadRequestException('Provide at least one field to update');
+        }
+        const result = await this.mediaRepo
+            .createQueryBuilder()
+            .update(media_entity_1.Media)
+            .set(patch)
+            .whereInIds(dto.ids)
+            .execute();
+        return { updated: result.affected ?? 0 };
     }
     async remove(id) {
         const media = await this.findOne(id);
@@ -522,6 +602,18 @@ let MediaService = MediaService_1 = class MediaService {
                 lpId: query.languageProfileId,
             });
         }
+        if (query.missing === true) {
+            qb.andWhere('files.id IS NULL');
+        }
+        if (query.letter) {
+            const letter = query.letter.toUpperCase();
+            if (letter === '#') {
+                qb.andWhere(`media.title !~ '^[A-Za-z]'`);
+            }
+            else if (/^[A-Z]$/.test(letter)) {
+                qb.andWhere(`UPPER(LEFT(media.title, 1)) = :letter`, { letter });
+            }
+        }
     }
     applyFullTextSearch(qb, searchTerm) {
         qb.addSelect(`ts_rank(media."searchVector", plainto_tsquery('french', :q))`, 'rank');
@@ -635,6 +727,62 @@ let MediaService = MediaService_1 = class MediaService {
         await this.updateSearchVector(saved.id);
         return this.findOne(saved.id);
     }
+    async renameFiles(mediaId) {
+        const media = await this.mediaRepo.findOne({
+            where: { id: mediaId },
+            relations: ['files', 'seasons', 'seasons.episodes'],
+        });
+        if (!media)
+            throw new common_1.NotFoundException(`Media #${mediaId} not found`);
+        if (!media.files?.length)
+            return { renamed: 0 };
+        if (!media.path)
+            throw new common_1.BadRequestException('No root folder set for this media');
+        const [movieFormatRow] = await this.dataSource.query(`SELECT value FROM app_settings WHERE key = 'movie_format' LIMIT 1`);
+        const [seriesFormatRow] = await this.dataSource.query(`SELECT value FROM app_settings WHERE key = 'series_format' LIMIT 1`);
+        const movieFormat = movieFormatRow?.value || '{Movie Title} ({Release Year}) - {Quality Full}';
+        const seriesFormat = seriesFormatRow?.value || '{Series Title} - S{season:00}E{episode:00} - {Episode Title} - {Quality Full}';
+        let renamed = 0;
+        for (const file of media.files) {
+            const ext = path.extname(file.relativePath);
+            const oldAbsPath = path.join(media.path, file.relativePath);
+            if (!fs.existsSync(oldAbsPath))
+                continue;
+            let newName;
+            if (media.type === enums_1.MediaType.MOVIE) {
+                newName = this.naming.applyMovieFormat(movieFormat, {
+                    title: media.title,
+                    originalTitle: media.originalTitle,
+                    year: media.year,
+                    quality: file.quality,
+                    tmdbId: media.tmdbId,
+                });
+            }
+            else {
+                const episode = media.seasons
+                    ?.flatMap((s) => s.episodes ?? [])
+                    .find((e) => e.id === file.episodeId);
+                const season = media.seasons?.find((s) => s.episodes?.some((e) => e.id === file.episodeId));
+                newName = this.naming.applySeriesFormat(seriesFormat, {
+                    seriesTitle: media.title,
+                    season: season?.seasonNumber ?? 1,
+                    episode: episode?.episodeNumber ?? 1,
+                    episodeTitle: episode?.title ?? '',
+                    quality: file.quality,
+                });
+            }
+            const newRelativePath = newName + ext;
+            if (newRelativePath === file.relativePath)
+                continue;
+            const newAbsPath = path.join(media.path, newRelativePath);
+            fs.mkdirSync(path.dirname(newAbsPath), { recursive: true });
+            fs.renameSync(oldAbsPath, newAbsPath);
+            file.relativePath = newRelativePath;
+            await this.mediaFileRepo.save(file);
+            renamed++;
+        }
+        return { renamed };
+    }
 };
 exports.MediaService = MediaService;
 exports.MediaService = MediaService = MediaService_1 = __decorate([
@@ -656,6 +804,7 @@ exports.MediaService = MediaService = MediaService_1 = __decorate([
         typeorm_2.DataSource,
         tmdb_provider_1.TmdbProvider,
         config_1.ConfigService,
-        profiles_service_1.ProfilesService])
+        profiles_service_1.ProfilesService,
+        naming_service_1.NamingService])
 ], MediaService);
 //# sourceMappingURL=media.service.js.map

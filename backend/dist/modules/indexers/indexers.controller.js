@@ -14,6 +14,8 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.IndexersController = void 0;
 const common_1 = require("@nestjs/common");
+const typeorm_1 = require("@nestjs/typeorm");
+const typeorm_2 = require("typeorm");
 const indexers_service_1 = require("./indexers.service");
 const create_indexer_dto_1 = require("./dto/create-indexer.dto");
 const update_indexer_dto_1 = require("./dto/update-indexer.dto");
@@ -23,10 +25,13 @@ const policies_guard_1 = require("../auth/casl/policies.guard");
 const check_policies_decorator_1 = require("../auth/casl/check-policies.decorator");
 const actions_enum_1 = require("../auth/casl/actions.enum");
 const indexer_entity_1 = require("./entities/indexer.entity");
+const indexer_stat_entity_1 = require("./entities/indexer-stat.entity");
 let IndexersController = class IndexersController {
     indexersService;
-    constructor(indexersService) {
+    statRepo;
+    constructor(indexersService, statRepo) {
         this.indexersService = indexersService;
+        this.statRepo = statRepo;
     }
     testConnection(dto) {
         return this.indexersService.testConnection(dto);
@@ -45,6 +50,23 @@ let IndexersController = class IndexersController {
     }
     remove(id) {
         return this.indexersService.remove(id);
+    }
+    async getStats(id) {
+        const since = new Date();
+        since.setDate(since.getDate() - 30);
+        const rows = await this.statRepo
+            .createQueryBuilder('s')
+            .select("DATE(s.queryDate)", 'date')
+            .addSelect("COUNT(*)", 'queries')
+            .addSelect("AVG(s.responseTimeMs)::int", 'avgResponseMs')
+            .addSelect("SUM(s.resultCount)::int", 'totalResults')
+            .addSelect("SUM(CASE WHEN s.errorMessage IS NOT NULL THEN 1 ELSE 0 END)::int", 'errors')
+            .where('s.indexerId = :id', { id })
+            .andWhere('s.queryDate >= :since', { since })
+            .groupBy("DATE(s.queryDate)")
+            .orderBy("date", 'DESC')
+            .getRawMany();
+        return rows;
     }
 };
 exports.IndexersController = IndexersController;
@@ -96,9 +118,19 @@ __decorate([
     __metadata("design:paramtypes", [Number]),
     __metadata("design:returntype", void 0)
 ], IndexersController.prototype, "remove", null);
+__decorate([
+    (0, common_1.Get)(':id/stats'),
+    (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Read, indexer_entity_1.Indexer)),
+    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number]),
+    __metadata("design:returntype", Promise)
+], IndexersController.prototype, "getStats", null);
 exports.IndexersController = IndexersController = __decorate([
     (0, common_1.Controller)('indexers'),
     (0, common_1.UseGuards)(jwt_or_api_key_guard_1.JwtOrApiKeyGuard, policies_guard_1.PoliciesGuard),
-    __metadata("design:paramtypes", [indexers_service_1.IndexersService])
+    __param(1, (0, typeorm_1.InjectRepository)(indexer_stat_entity_1.IndexerStat)),
+    __metadata("design:paramtypes", [indexers_service_1.IndexersService,
+        typeorm_2.Repository])
 ], IndexersController);
 //# sourceMappingURL=indexers.controller.js.map

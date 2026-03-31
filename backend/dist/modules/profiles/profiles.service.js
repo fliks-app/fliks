@@ -57,6 +57,7 @@ let ProfilesService = class ProfilesService {
                 },
                 allowed: i.allowed,
                 sortOrder: i.sortOrder,
+                groupId: i.groupId ?? undefined,
             })),
         });
         return this.qpRepo.save(profile);
@@ -84,6 +85,7 @@ let ProfilesService = class ProfilesService {
             },
             allowed: i.allowed,
             sortOrder: i.sortOrder,
+            groupId: i.groupId ?? undefined,
         }));
         return this.qpRepo.save(profile);
     }

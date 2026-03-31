@@ -33,12 +33,19 @@ let IndexersService = class IndexersService {
         const apiKey = String(dto.settings?.apiKey ?? '').trim();
         return this.torznab.testConnection(baseUrl, apiKey);
     }
+    sanitizeSettings(settings) {
+        const out = { ...(settings ?? {}) };
+        if ('minSeeders' in out) {
+            out['minSeeders'] = Math.max(0, Math.floor(Number(out['minSeeders']) || 0));
+        }
+        return out;
+    }
     async create(dto) {
         const { tagIds, ...fields } = dto;
         const row = this.indexerRepo.create({
             name: fields.name,
             implementation: fields.implementation,
-            settings: dto.settings ?? {},
+            settings: this.sanitizeSettings(dto.settings),
             enableRss: fields.enableRss ?? true,
             enableSearch: fields.enableSearch ?? true,
             priority: fields.priority ?? 25,
@@ -76,7 +83,7 @@ let IndexersService = class IndexersService {
         if (patch.enabled !== undefined)
             ix.enabled = patch.enabled;
         if (patch.settings !== undefined)
-            ix.settings = patch.settings;
+            ix.settings = this.sanitizeSettings(patch.settings);
         if (tagIds !== undefined) {
             ix.tags = tagIds.length
                 ? await this.tagRepo.find({ where: { id: (0, typeorm_2.In)(tagIds) } })

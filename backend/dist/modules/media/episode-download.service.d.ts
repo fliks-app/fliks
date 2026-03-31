@@ -8,9 +8,11 @@ import { DownloadClient } from '../download-clients/entities/download-client.ent
 import { TorznabService } from '../indexers/torznab.service';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
+import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { GrabMovieDto } from './dto/grab-movie.dto';
+import { ReleaseRejection } from './release-rejection.helper';
 export interface EpisodeReleaseRow {
     title: string;
     downloadUrl: string;
@@ -28,6 +30,9 @@ export interface EpisodeReleaseRow {
     size: number;
     seeders: number;
     leechers: number;
+    rejections: ReleaseRejection[];
+    freeleech: boolean;
+    downloadVolumeFactor: number;
 }
 export declare class EpisodeDownloadService {
     private readonly mediaRepo;
@@ -41,14 +46,15 @@ export declare class EpisodeDownloadService {
     private readonly customFormats;
     private readonly blocklist;
     private readonly notifications;
+    private readonly qualityDefs;
     private readonly log;
-    constructor(mediaRepo: Repository<Media>, seasonRepo: Repository<Season>, episodeRepo: Repository<Episode>, historyRepo: Repository<DownloadHistory>, indexerRepo: Repository<Indexer>, clientRepo: Repository<DownloadClient>, torznab: TorznabService, qbittorrent: QbittorrentService, customFormats: CustomFormatsService, blocklist: BlocklistService, notifications: NotificationsService);
+    constructor(mediaRepo: Repository<Media>, seasonRepo: Repository<Season>, episodeRepo: Repository<Episode>, historyRepo: Repository<DownloadHistory>, indexerRepo: Repository<Indexer>, clientRepo: Repository<DownloadClient>, torznab: TorznabService, qbittorrent: QbittorrentService, customFormats: CustomFormatsService, blocklist: BlocklistService, notifications: NotificationsService, qualityDefs: QualityDefinitionsService);
     private allowedQualityIds;
     private getEpisodeWithContext;
-    searchEpisodeReleases(mediaId: number, episodeId: number): Promise<EpisodeReleaseRow[]>;
+    searchEpisodeReleases(mediaId: number, episodeId: number, customQuery?: string): Promise<EpisodeReleaseRow[]>;
     grabEpisode(mediaId: number, episodeId: number, dto?: GrabMovieDto): Promise<DownloadHistory>;
     private buildReleaseRow;
-    searchSeasonReleases(mediaId: number, seasonId: number): Promise<EpisodeReleaseRow[]>;
+    searchSeasonReleases(mediaId: number, seasonId: number, customQuery?: string): Promise<EpisodeReleaseRow[]>;
     grabSeason(mediaId: number, seasonId: number, dto?: GrabMovieDto): Promise<{
         grabbed: number;
         errors: string[];

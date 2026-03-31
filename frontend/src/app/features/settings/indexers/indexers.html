@@ -45,6 +45,9 @@
                 }
               </td>
               <td class="text-end">
+                <button type="button" class="btn btn-ghost btn-xs" (click)="openStats(ix)">
+                  {{ 'settings.indexers.stats' | translate }}
+                </button>
                 <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(ix)">
                   {{ 'settings.indexers.edit' | translate }}
                 </button>
@@ -84,7 +87,7 @@
           </svg>
         </button>
       </div>
-      <div class="px-5 sm:px-6 py-4 space-y-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+      <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
         <label class="form-control w-full">
           <span class="label-text">{{ 'settings.indexers.field_name' | translate }}</span>
           <input
@@ -152,6 +155,16 @@
               min="0"
             />
           </label>
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.indexers.field_min_seeders' | translate }}</span>
+            <input
+              type="number"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formMinSeeders()"
+              (ngModelChange)="formMinSeeders.set(+$event)"
+              min="0"
+            />
+          </label>
         </div>
         <label class="label cursor-pointer justify-start gap-3">
           <input
@@ -201,5 +214,47 @@
       (keydown.enter)="closeEditor()"
       [attr.aria-label]="'common.close' | translate"
     ></div>
+  </div>
+}
+
+@if (statsOpen()) {
+  <div class="modal modal-open z-50" role="dialog" aria-modal="true">
+    <div class="modal-box max-w-2xl">
+      <h2 class="text-lg font-bold">{{ statsIndexerName() }} — {{ 'settings.indexers.stats_title' | translate }}</h2>
+      @if (statsLoading()) {
+        <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+      } @else if (statsData().length === 0) {
+        <p class="text-center py-8 text-base-content/50">{{ 'settings.indexers.stats_empty' | translate }}</p>
+      } @else {
+        <div class="overflow-x-auto mt-4 rounded-lg border border-base-200">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>{{ 'settings.indexers.stats_date' | translate }}</th>
+                <th class="text-right">{{ 'settings.indexers.stats_queries' | translate }}</th>
+                <th class="text-right">{{ 'settings.indexers.stats_avg_time' | translate }}</th>
+                <th class="text-right">{{ 'settings.indexers.stats_results' | translate }}</th>
+                <th class="text-right">{{ 'settings.indexers.stats_errors' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of statsData(); track row.date) {
+                <tr>
+                  <td class="tabular-nums">{{ row.date }}</td>
+                  <td class="text-right tabular-nums">{{ row.queries }}</td>
+                  <td class="text-right tabular-nums">{{ row.avgResponseMs }}ms</td>
+                  <td class="text-right tabular-nums">{{ row.totalResults }}</td>
+                  <td class="text-right tabular-nums" [class.text-error]="row.errors > 0">{{ row.errors }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+      <div class="modal-action">
+        <button type="button" class="btn btn-ghost" (click)="statsOpen.set(false)">{{ 'common.close' | translate }}</button>
+      </div>
+    </div>
+    <div role="button" tabindex="0" class="modal-backdrop bg-black/50" (click)="statsOpen.set(false)" (keydown.enter)="statsOpen.set(false)"></div>
   </div>
 }

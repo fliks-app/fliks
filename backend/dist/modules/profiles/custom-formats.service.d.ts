@@ -9,7 +9,19 @@ export declare class CustomFormatsService {
     findOne(id: number): Promise<CustomFormat>;
     update(id: number, dto: CreateCustomFormatDto): Promise<CustomFormat>;
     remove(id: number): Promise<void>;
-    scoreRelease(releaseTitle: string): Promise<number>;
+    testRelease(title: string, meta?: {
+        freeleech?: boolean;
+        downloadVolumeFactor?: number;
+    }): Promise<{
+        formatId: number;
+        formatName: string;
+        matched: boolean;
+        score: number;
+    }[]>;
+    scoreRelease(releaseTitle: string, meta?: {
+        freeleech?: boolean;
+        downloadVolumeFactor?: number;
+    }): Promise<number>;
     private matchesFormat;
     private evalSpec;
 }

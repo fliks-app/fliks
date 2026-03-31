@@ -6,7 +6,6 @@ import {
   OnInit,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   IndexersApiService,
@@ -15,7 +14,7 @@ import {
 
 @Component({
   selector: 'app-indexers-settings',
-  imports: [FormsModule, RouterLink, TranslateModule],
+  imports: [FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './indexers.html',
 })
@@ -38,9 +37,15 @@ export class IndexersSettingsComponent implements OnInit {
   readonly formEnableSearch = signal(true);
   readonly formTorznabBase = signal('');
   readonly formTorznabKey = signal('');
+  readonly formMinSeeders = signal(0);
 
   readonly testLoading = signal(false);
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
+
+  readonly statsOpen = signal(false);
+  readonly statsLoading = signal(false);
+  readonly statsData = signal<{ date: string; queries: number; avgResponseMs: number; totalResults: number; errors: number }[]>([]);
+  readonly statsIndexerName = signal('');
 
   ngOnInit() {
     this.reloadAll();
@@ -69,6 +74,7 @@ export class IndexersSettingsComponent implements OnInit {
     this.formEnableSearch.set(true);
     this.formTorznabBase.set('');
     this.formTorznabKey.set('');
+    this.formMinSeeders.set(0);
     this.saveError.set('');
     this.testResult.set(null);
     this.editorOpen.set(true);
@@ -83,6 +89,7 @@ export class IndexersSettingsComponent implements OnInit {
     const s = ix.settings ?? {};
     this.formTorznabBase.set(String(s['baseUrl'] ?? ''));
     this.formTorznabKey.set(String(s['apiKey'] ?? ''));
+    this.formMinSeeders.set(Number(s['minSeeders'] ?? 0));
     this.saveError.set('');
     this.testResult.set(null);
     this.editorOpen.set(true);
@@ -147,6 +154,7 @@ export class IndexersSettingsComponent implements OnInit {
       settings: {
         baseUrl: base.replace(/\/$/, ''),
         apiKey: this.formTorznabKey().trim(),
+        minSeeders: this.formMinSeeders(),
       },
     };
 
@@ -167,6 +175,18 @@ export class IndexersSettingsComponent implements OnInit {
       );
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  async openStats(ix: IndexerRow) {
+    this.statsIndexerName.set(ix.name);
+    this.statsOpen.set(true);
+    this.statsLoading.set(true);
+    try {
+      const data = await this.api.getStats(ix.id);
+      this.statsData.set(data);
+    } finally {
+      this.statsLoading.set(false);
     }
   }
 

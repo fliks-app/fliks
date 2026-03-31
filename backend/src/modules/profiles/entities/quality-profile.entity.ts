@@ -25,4 +25,6 @@ export interface QualityProfileItem {
   };
   allowed: boolean;
   sortOrder: number;
+  /** Items sharing the same non-null groupId are treated as equivalent rank. */
+  groupId?: number;
 }

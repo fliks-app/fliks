@@ -1,0 +1,13 @@
+{
+  "name": "Suitarr",
+  "short_name": "Suitarr",
+  "theme_color": "#1d232a",
+  "background_color": "#1d232a",
+  "display": "standalone",
+  "scope": "/",
+  "start_url": "/",
+  "icons": [
+    { "src": "icons/icon-192x192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512x512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

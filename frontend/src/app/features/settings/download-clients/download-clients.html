@@ -85,7 +85,7 @@
         </button>
       </div>
 
-      <div class="px-5 sm:px-6 py-4 space-y-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+      <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
         <label class="form-control w-full">
           <span class="label-text">{{ 'settings.download_clients.field_name' | translate }}</span>
           <input
@@ -160,6 +160,26 @@
             class="input input-bordered input-sm w-full"
             [ngModel]="formCategory()"
             (ngModelChange)="formCategory.set($event)"
+          />
+        </label>
+
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.download_clients.field_movie_category' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formMovieCategory()"
+            (ngModelChange)="formMovieCategory.set($event)"
+          />
+        </label>
+
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.download_clients.field_series_category' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formSeriesCategory()"
+            (ngModelChange)="formSeriesCategory.set($event)"
           />
         </label>
 

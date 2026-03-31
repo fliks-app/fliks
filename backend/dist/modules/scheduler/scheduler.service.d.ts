@@ -13,6 +13,8 @@ import { MediaService } from '../media/media.service';
 import { ConfigService } from '@nestjs/config';
 import { CompletionService } from './completion.service';
 import { NamingService } from './naming.service';
+import { DelayProfile } from '../profiles/entities/delay-profile.entity';
+import { EventsService } from './events.service';
 export declare class SchedulerService {
     private readonly commandRepo;
     private readonly mediaRepo;
@@ -28,8 +30,10 @@ export declare class SchedulerService {
     private readonly config;
     private readonly completion;
     private readonly naming;
+    private readonly delayProfileRepo;
+    private readonly eventsService;
     private readonly log;
-    constructor(commandRepo: Repository<Command>, mediaRepo: Repository<Media>, historyRepo: Repository<DownloadHistory>, seasonRepo: Repository<Season>, episodeRepo: Repository<Episode>, indexerRepo: Repository<Indexer>, clientRepo: Repository<DownloadClient>, torznab: TorznabService, qbittorrent: QbittorrentService, tmdb: TmdbProvider, mediaService: MediaService, config: ConfigService, completion: CompletionService, naming: NamingService);
+    constructor(commandRepo: Repository<Command>, mediaRepo: Repository<Media>, historyRepo: Repository<DownloadHistory>, seasonRepo: Repository<Season>, episodeRepo: Repository<Episode>, indexerRepo: Repository<Indexer>, clientRepo: Repository<DownloadClient>, torznab: TorznabService, qbittorrent: QbittorrentService, tmdb: TmdbProvider, mediaService: MediaService, config: ConfigService, completion: CompletionService, naming: NamingService, delayProfileRepo: Repository<DelayProfile>, eventsService: EventsService);
     searchMissing(): Promise<void>;
     refreshMetadata(): Promise<void>;
     rssSync(): Promise<void>;
@@ -42,4 +46,6 @@ export declare class SchedulerService {
     private searchMissingEpisodes;
     private doRefreshMetadata;
     private doRssSync;
+    private isDelayed;
+    private isAvailable;
 }

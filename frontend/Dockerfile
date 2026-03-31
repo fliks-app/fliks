@@ -1,7 +1,12 @@
-FROM node:22-bookworm-slim
+FROM node:24.14.0-alpine
 
 WORKDIR /app
 
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+
 EXPOSE 4500
 
-CMD ["sh", "-c", "test -x node_modules/.bin/ng || npm ci; exec npm run start:docker"]
+CMD ["npm", "run", "start:docker"]

@@ -5,6 +5,7 @@ export declare class QualityItemDto {
     source: string;
     allowed: boolean;
     sortOrder: number;
+    groupId?: number;
 }
 export declare class CreateQualityProfileDto {
     name: string;

@@ -13,4 +13,7 @@ export declare class SearchMediaDto {
     sortOrder?: 'ASC' | 'DESC';
     page?: number;
     limit?: number;
+    missing?: boolean;
+    cutoffUnmet?: boolean;
+    letter?: string;
 }

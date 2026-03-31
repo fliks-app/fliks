@@ -51,8 +51,8 @@
         @if (m.originalTitle && m.originalTitle !== m.title) {
           <p class="text-base-content/60 mt-1">{{ m.originalTitle }}</p>
         }
-        @if (m.genres.length) {
-          <p class="text-sm mt-3 text-base-content/70">{{ m.genres.join(' · ') }}</p>
+        @if (m.genres?.length) {
+          <p class="text-sm mt-3 text-base-content/70">{{ m.genres?.join(' · ') }}</p>
         }
         @if (m.overview) {
           <p class="mt-4 text-base-content/90 leading-relaxed whitespace-pre-line">{{ m.overview }}</p>
@@ -110,11 +110,17 @@
               <span class="font-medium">{{ m.status }}</span>
             </div>
           }
+          @if (m.type === 'movie') {
+            <div class="flex justify-between">
+              <span class="text-base-content/60">{{ 'media_detail.availability_label' | translate }}</span>
+              <span class="font-medium">{{ 'media_detail.availability_' + (m.minimumAvailability ?? 'released') | translate }}</span>
+            </div>
+          }
           <div class="flex justify-between sm:col-span-2">
             <span class="text-base-content/60">{{ 'media_detail.root_folder_label' | translate }}</span>
             <span class="font-mono text-sm">{{ m.path || ('media_detail.no_root_folder' | translate) }}</span>
           </div>
-          @if (m.tags?.length) {
+          @if (m.tags.length) {
             <div class="flex justify-between sm:col-span-2">
               <span class="text-base-content/60">{{ 'media_detail.tags_label' | translate }}</span>
               <span class="flex flex-wrap gap-1">
@@ -180,7 +186,18 @@
         @if (m.files?.length) {
           <div class="divider my-6"></div>
           <section class="space-y-3">
-            <h2 class="text-xl font-semibold">{{ 'media_detail.files_section' | translate }}</h2>
+            <div class="flex items-center justify-between">
+              <h2 class="text-xl font-semibold">{{ 'media_detail.files_section' | translate }}</h2>
+              @if (isAdmin()) {
+                <button type="button" class="btn btn-ghost btn-sm" (click)="renameFiles()" [disabled]="renameLoading()">
+                  @if (renameLoading()) { <span class="loading loading-spinner loading-xs"></span> }
+                  {{ 'media_detail.rename_files' | translate }}
+                </button>
+              }
+            </div>
+            @if (renameToast()) {
+              <div role="alert" class="alert alert-info text-sm py-2">{{ renameToast() }}</div>
+            }
             <div class="overflow-x-auto rounded-lg border border-base-200">
               <table class="table table-sm">
                 <thead>
@@ -319,7 +336,7 @@
                             </div>
                           } @else {
                             <div role="alert" class="alert alert-error text-sm py-2">
-                              {{ res.errors[0] ?? ('media_detail.grab_error' | translate) }}
+                              {{ res.errors.at(0) ?? ('media_detail.grab_error' | translate) }}
                             </div>
                           }
                         </div>
@@ -486,6 +503,15 @@
           <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
         </form>
         <h3 class="text-lg font-bold mb-4">{{ 'media_detail.download_section' | translate }}</h3>
+        <div class="mb-3">
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [placeholder]="'media_detail.custom_search_placeholder' | translate"
+            [ngModel]="customSearchQuery()"
+            (ngModelChange)="customSearchQuery.set($event)"
+          />
+        </div>
         @if (releasesLoading()) {
           <div class="flex justify-center py-8">
             <span class="loading loading-spinner loading-lg"></span>
@@ -510,18 +536,35 @@
               </thead>
               <tbody>
                 @for (r of releases(); track r.downloadUrl; let i = $index) {
-                  <tr [class.opacity-50]="!r.allowed || r.blocklisted || !r.languageAllowed">
+                  <tr [class.opacity-50]="!r.allowed || r.blocklisted || !r.languageAllowed || r.rejections.length > 0">
                     <td class="max-w-[min(28rem,50vw)] whitespace-normal text-sm">{{ r.title }}</td>
                     <td>
-                      <div class="flex flex-wrap gap-1">
+                      <div class="flex flex-wrap gap-1 items-center">
                         <span class="badge badge-sm badge-ghost">{{ r.qualityName }}</span>
                         <span class="badge badge-sm" [class]="r.languageAllowed ? 'badge-info' : 'badge-warning'">{{ r.languageName }}</span>
+                        @if (r.freeleech) {
+                          <span class="badge badge-sm badge-success">FL</span>
+                        }
                         @if (r.blocklisted) {
                           <span class="badge badge-sm badge-error">{{ 'media_detail.blocklisted' | translate }}</span>
                         } @else if (r.allowed) {
                           <span class="badge badge-sm badge-success">{{ 'media_detail.allowed' | translate }}</span>
                         } @else {
                           <span class="badge badge-sm badge-warning">{{ 'media_detail.not_allowed' | translate }}</span>
+                        }
+                        @if (r.rejections.length > 0) {
+                          <div class="tooltip tooltip-bottom">
+                            <div class="tooltip-content bg-base-200 text-base-content shadow-lg rounded-lg p-2 text-xs max-w-xs">
+                              <ul class="list-disc list-inside space-y-0.5">
+                                @for (rej of r.rejections; track rej.code) {
+                                  <li>{{ formatRejection(rej) }}</li>
+                                }
+                              </ul>
+                            </div>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.87A1 1 0 002.57 20h18.86a1 1 0 00.86-1.27L13.71 3.86a1 1 0 00-1.42 0z" />
+                            </svg>
+                          </div>
                         }
                       </div>
                     </td>
@@ -609,18 +652,35 @@
               </thead>
               <tbody>
                 @for (r of upgradeReleases(); track r.downloadUrl; let i = $index) {
-                  <tr [class.opacity-50]="!r.allowed || r.blocklisted || !r.languageAllowed">
+                  <tr [class.opacity-50]="!r.allowed || r.blocklisted || !r.languageAllowed || r.rejections.length > 0">
                     <td class="max-w-[min(28rem,50vw)] whitespace-normal text-sm">{{ r.title }}</td>
                     <td>
-                      <div class="flex flex-wrap gap-1">
+                      <div class="flex flex-wrap gap-1 items-center">
                         <span class="badge badge-sm badge-ghost">{{ r.qualityName }}</span>
                         <span class="badge badge-sm" [class]="r.languageAllowed ? 'badge-info' : 'badge-warning'">{{ r.languageName }}</span>
+                        @if (r.freeleech) {
+                          <span class="badge badge-sm badge-success">FL</span>
+                        }
                         @if (r.blocklisted) {
                           <span class="badge badge-sm badge-error">{{ 'media_detail.blocklisted' | translate }}</span>
                         } @else if (r.allowed) {
                           <span class="badge badge-sm badge-success">{{ 'media_detail.allowed' | translate }}</span>
                         } @else {
                           <span class="badge badge-sm badge-warning">{{ 'media_detail.not_allowed' | translate }}</span>
+                        }
+                        @if (r.rejections.length > 0) {
+                          <div class="tooltip tooltip-bottom">
+                            <div class="tooltip-content bg-base-200 text-base-content shadow-lg rounded-lg p-2 text-xs max-w-xs">
+                              <ul class="list-disc list-inside space-y-0.5">
+                                @for (rej of r.rejections; track rej.code) {
+                                  <li>{{ formatRejection(rej) }}</li>
+                                }
+                              </ul>
+                            </div>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.87A1 1 0 002.57 20h18.86a1 1 0 00.86-1.27L13.71 3.86a1 1 0 00-1.42 0z" />
+                            </svg>
+                          </div>
                         }
                       </div>
                     </td>
@@ -723,18 +783,35 @@
               </thead>
               <tbody>
                 @for (r of epReleases(); track r.downloadUrl; let i = $index) {
-                  <tr [class.opacity-50]="!r.allowed || r.blocklisted || !r.languageAllowed">
+                  <tr [class.opacity-50]="!r.allowed || r.blocklisted || !r.languageAllowed || r.rejections.length > 0">
                     <td class="max-w-[min(22rem,45vw)] whitespace-normal text-sm">{{ r.title }}</td>
                     <td>
-                      <div class="flex flex-wrap gap-1">
+                      <div class="flex flex-wrap gap-1 items-center">
                         <span class="badge badge-xs badge-ghost">{{ r.qualityName }}</span>
                         <span class="badge badge-xs" [class]="r.languageAllowed ? 'badge-info' : 'badge-warning'">{{ r.languageName }}</span>
+                        @if (r.freeleech) {
+                          <span class="badge badge-xs badge-success">FL</span>
+                        }
                         @if (r.blocklisted) {
                           <span class="badge badge-xs badge-error">{{ 'media_detail.blocklisted' | translate }}</span>
                         } @else if (r.allowed) {
                           <span class="badge badge-xs badge-success">{{ 'media_detail.allowed' | translate }}</span>
                         } @else {
                           <span class="badge badge-xs badge-warning">{{ 'media_detail.not_allowed' | translate }}</span>
+                        }
+                        @if (r.rejections.length > 0) {
+                          <div class="tooltip tooltip-bottom">
+                            <div class="tooltip-content bg-base-200 text-base-content shadow-lg rounded-lg p-2 text-xs max-w-xs">
+                              <ul class="list-disc list-inside space-y-0.5">
+                                @for (rej of r.rejections; track rej.code) {
+                                  <li>{{ formatRejection(rej) }}</li>
+                                }
+                              </ul>
+                            </div>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.87A1 1 0 002.57 20h18.86a1 1 0 00.86-1.27L13.71 3.86a1 1 0 00-1.42 0z" />
+                            </svg>
+                          </div>
                         }
                       </div>
                     </td>
@@ -821,16 +898,33 @@
               </thead>
               <tbody>
                 @for (r of seasonReleases(); track r.downloadUrl; let i = $index) {
-                  <tr [class.opacity-50]="!r.allowed || r.blocklisted || !r.languageAllowed">
+                  <tr [class.opacity-50]="!r.allowed || r.blocklisted || !r.languageAllowed || r.rejections.length > 0">
                     <td class="max-w-[min(22rem,45vw)] whitespace-normal text-sm">{{ r.title }}</td>
                     <td>
-                      <div class="flex flex-wrap gap-1">
+                      <div class="flex flex-wrap gap-1 items-center">
                         <span class="badge badge-xs badge-ghost">{{ r.qualityName }}</span>
                         <span class="badge badge-xs" [class]="r.languageAllowed ? 'badge-info' : 'badge-warning'">{{ r.languageName }}</span>
+                        @if (r.freeleech) {
+                          <span class="badge badge-xs badge-success">FL</span>
+                        }
                         @if (r.blocklisted) {
                           <span class="badge badge-xs badge-error">{{ 'media_detail.blocklisted' | translate }}</span>
                         } @else if (r.allowed) {
                           <span class="badge badge-xs badge-success">{{ 'media_detail.allowed' | translate }}</span>
+                        }
+                        @if (r.rejections.length > 0) {
+                          <div class="tooltip tooltip-bottom">
+                            <div class="tooltip-content bg-base-200 text-base-content shadow-lg rounded-lg p-2 text-xs max-w-xs">
+                              <ul class="list-disc list-inside space-y-0.5">
+                                @for (rej of r.rejections; track rej.code) {
+                                  <li>{{ formatRejection(rej) }}</li>
+                                }
+                              </ul>
+                            </div>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.87A1 1 0 002.57 20h18.86a1 1 0 00.86-1.27L13.71 3.86a1 1 0 00-1.42 0z" />
+                            </svg>
+                          </div>
                         }
                       </div>
                     </td>

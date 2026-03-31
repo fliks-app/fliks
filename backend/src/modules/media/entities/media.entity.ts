@@ -9,7 +9,7 @@ import {
   Index,
 } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
-import { MediaType, MediaStatus } from '../../../common/enums';
+import { MediaType, MediaStatus, MinimumAvailability } from '../../../common/enums';
 import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
 import { Tag } from '../../tags/entities/tag.entity';
@@ -76,6 +76,9 @@ export class Media extends BaseEntity {
 
   @Column({ type: 'date', nullable: true })
   physicalRelease: string;
+
+  @Column({ type: 'varchar', default: MinimumAvailability.RELEASED })
+  minimumAvailability: MinimumAvailability;
 
   @Column({
     type: 'tsvector',

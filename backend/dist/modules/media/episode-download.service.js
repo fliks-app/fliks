@@ -28,6 +28,7 @@ const qbittorrent_service_1 = require("../download-clients/qbittorrent.service")
 const release_quality_parser_1 = require("./release-quality.parser");
 const release_language_parser_1 = require("./release-language.parser");
 const custom_formats_service_1 = require("../profiles/custom-formats.service");
+const quality_definitions_service_1 = require("../profiles/quality-definitions.service");
 const blocklist_service_1 = require("../blocklist/blocklist.service");
 const notifications_service_1 = require("../notifications/notifications.service");
 const enums_1 = require("../../common/enums");
@@ -41,6 +42,7 @@ function allowedLanguageIds(items) {
     }
     return set;
 }
+const release_rejection_helper_1 = require("./release-rejection.helper");
 let EpisodeDownloadService = EpisodeDownloadService_1 = class EpisodeDownloadService {
     mediaRepo;
     seasonRepo;
@@ -53,8 +55,9 @@ let EpisodeDownloadService = EpisodeDownloadService_1 = class EpisodeDownloadSer
     customFormats;
     blocklist;
     notifications;
+    qualityDefs;
     log = new common_1.Logger(EpisodeDownloadService_1.name);
-    constructor(mediaRepo, seasonRepo, episodeRepo, historyRepo, indexerRepo, clientRepo, torznab, qbittorrent, customFormats, blocklist, notifications) {
+    constructor(mediaRepo, seasonRepo, episodeRepo, historyRepo, indexerRepo, clientRepo, torznab, qbittorrent, customFormats, blocklist, notifications, qualityDefs) {
         this.mediaRepo = mediaRepo;
         this.seasonRepo = seasonRepo;
         this.episodeRepo = episodeRepo;
@@ -66,16 +69,10 @@ let EpisodeDownloadService = EpisodeDownloadService_1 = class EpisodeDownloadSer
         this.customFormats = customFormats;
         this.blocklist = blocklist;
         this.notifications = notifications;
+        this.qualityDefs = qualityDefs;
     }
     allowedQualityIds(items) {
-        const set = new Set();
-        if (!items?.length)
-            return set;
-        for (const row of items) {
-            if (row.allowed)
-                set.add(row.quality.id);
-        }
-        return set;
+        return (0, release_rejection_helper_1.buildAllowedQualityIds)(items);
     }
     async getEpisodeWithContext(mediaId, episodeId) {
         const media = await this.mediaRepo.findOne({
@@ -98,45 +95,25 @@ let EpisodeDownloadService = EpisodeDownloadService_1 = class EpisodeDownloadSer
         }
         return { media, episode, season: episode.season };
     }
-    async searchEpisodeReleases(mediaId, episodeId) {
+    async searchEpisodeReleases(mediaId, episodeId, customQuery) {
         const { media, episode, season } = await this.getEpisodeWithContext(mediaId, episodeId);
         const allowed = this.allowedQualityIds(media.qualityProfile?.items);
         if (!allowed.size) {
             throw new common_1.BadRequestException('Assign a quality profile with at least one allowed quality to this series');
         }
-        const allowedLangs = allowedLanguageIds(media.languageProfile?.languages);
         const indexers = await this.indexerRepo.find({
             where: { enabled: true },
             order: { priority: 'ASC', id: 'ASC' },
         });
-        const batches = await Promise.all(indexers.map((ix) => this.torznab.searchSeries(ix, media.title, season.seasonNumber, episode.episodeNumber)));
+        const allowedLangs = allowedLanguageIds(media.languageProfile?.languages);
+        const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
+        const indexerMinSeeders = (0, release_rejection_helper_1.buildIndexerMinSeeders)(indexers);
+        const searchQuery = customQuery?.trim();
+        const batches = await Promise.all(searchQuery
+            ? indexers.map((ix) => this.torznab.searchSeries(ix, searchQuery, season.seasonNumber, episode.episodeNumber))
+            : indexers.map((ix) => this.torznab.searchSeries(ix, media.title, season.seasonNumber, episode.episodeNumber)));
         const flat = batches.flat();
-        const rows = await Promise.all(flat.map(async (r) => {
-            const parsed = (0, release_quality_parser_1.parseReleaseQuality)(r.title);
-            const lang = (0, release_language_parser_1.parseReleaseLanguage)(r.title);
-            const [cfScore, isBlocklisted] = await Promise.all([
-                this.customFormats.scoreRelease(r.title),
-                this.blocklist.isBlocked(r.title),
-            ]);
-            return {
-                title: r.title,
-                downloadUrl: r.downloadUrl,
-                qualityId: parsed.quality.id,
-                qualityName: parsed.quality.name,
-                rank: parsed.quality.rank,
-                allowed: allowed.has(parsed.quality.id),
-                customFormatScore: cfScore,
-                blocklisted: isBlocklisted,
-                indexerId: r.indexerId,
-                indexerName: r.indexerName,
-                languageId: lang.id,
-                languageName: lang.name,
-                languageAllowed: allowedLangs.size === 0 || allowedLangs.has(lang.id),
-                size: r.size,
-                seeders: r.seeders,
-                leechers: r.leechers,
-            };
-        }));
+        const rows = await Promise.all(flat.map((r) => this.buildReleaseRow(r, allowed, allowedLangs, sizeByQuality, indexerMinSeeders)));
         rows.sort((a, b) => b.rank !== a.rank ? b.rank - a.rank : b.customFormatScore - a.customFormatScore);
         return rows;
     }
@@ -146,14 +123,14 @@ let EpisodeDownloadService = EpisodeDownloadService_1 = class EpisodeDownloadSer
         if (!allowed.size) {
             throw new common_1.BadRequestException('Assign a quality profile with at least one allowed quality to this series');
         }
-        const allowedLangs = allowedLanguageIds(media.languageProfile?.languages);
         let downloadUrl = dto?.downloadUrl?.trim();
         let sourceTitle = dto?.sourceTitle?.trim();
         const epLabel = `S${String(season.seasonNumber).padStart(2, '0')}E${String(episode.episodeNumber).padStart(2, '0')}`;
         this.log.log(`grabEpisode #${mediaId} "${media.title}" ${epLabel} — manual URL: ${downloadUrl || '(auto)'}`);
         if (!downloadUrl) {
             const rows = await this.searchEpisodeReleases(mediaId, episodeId);
-            const pick = rows.find((r) => r.allowed && !r.blocklisted && r.languageAllowed);
+            const pick = rows.find((r) => r.allowed && !r.blocklisted && r.rejections.length === 0)
+                ?? rows.find((r) => r.allowed && !r.blocklisted);
             if (!pick) {
                 throw new common_1.BadRequestException('No release matches the quality and language profiles. Add indexers or widen the profiles.');
             }
@@ -172,12 +149,6 @@ let EpisodeDownloadService = EpisodeDownloadService_1 = class EpisodeDownloadSer
         if (!allowed.has(parsed.quality.id)) {
             throw new common_1.BadRequestException(`This release (${parsed.quality.name}) is not allowed by the series quality profile`);
         }
-        if (allowedLangs.size > 0) {
-            const lang = (0, release_language_parser_1.parseReleaseLanguage)(sourceTitle);
-            if (!allowedLangs.has(lang.id)) {
-                throw new common_1.BadRequestException(`This release language (${lang.name}) is not allowed by the language profile`);
-            }
-        }
         const clients = await this.clientRepo.find({
             order: { priority: 'ASC', id: 'ASC' },
         });
@@ -186,7 +157,7 @@ let EpisodeDownloadService = EpisodeDownloadService_1 = class EpisodeDownloadSer
             throw new common_1.BadRequestException('No enabled qBittorrent download client configured');
         }
         this.log.log(`Sending to qBittorrent: "${sourceTitle}" — ${downloadUrl}`);
-        await this.qbittorrent.addTorrentUrl(qbit, downloadUrl);
+        await this.qbittorrent.addTorrentUrl(qbit, downloadUrl, 'series');
         this.log.log(`Grab successful for "${sourceTitle}"`);
         const row = this.historyRepo.create({
             mediaId: media.id,
@@ -203,13 +174,25 @@ let EpisodeDownloadService = EpisodeDownloadService_1 = class EpisodeDownloadSer
         });
         return saved;
     }
-    async buildReleaseRow(r, allowed, allowedLangs) {
+    async buildReleaseRow(r, allowed, allowedLangs, sizeByQuality, indexerMinSeeders) {
         const parsed = (0, release_quality_parser_1.parseReleaseQuality)(r.title);
         const lang = (0, release_language_parser_1.parseReleaseLanguage)(r.title);
         const [cfScore, isBlocklisted] = await Promise.all([
-            this.customFormats.scoreRelease(r.title),
+            this.customFormats.scoreRelease(r.title, { freeleech: r.freeleech, downloadVolumeFactor: r.downloadVolumeFactor }),
             this.blocklist.isBlocked(r.title),
         ]);
+        const rejections = (0, release_rejection_helper_1.computeRejections)({
+            qualityId: parsed.quality.id,
+            allowed,
+            languageId: lang.id,
+            allowedLangs,
+            isBlocklisted,
+            sizeBytes: r.size,
+            sizeByQuality,
+            seeders: r.seeders,
+            indexerId: r.indexerId,
+            indexerMinSeeders,
+        });
         return {
             title: r.title,
             downloadUrl: r.downloadUrl,
@@ -227,9 +210,12 @@ let EpisodeDownloadService = EpisodeDownloadService_1 = class EpisodeDownloadSer
             size: r.size,
             seeders: r.seeders,
             leechers: r.leechers,
+            rejections,
+            freeleech: r.freeleech,
+            downloadVolumeFactor: r.downloadVolumeFactor,
         };
     }
-    async searchSeasonReleases(mediaId, seasonId) {
+    async searchSeasonReleases(mediaId, seasonId, customQuery) {
         const media = await this.mediaRepo.findOne({
             where: { id: mediaId },
             relations: ['qualityProfile', 'languageProfile'],
@@ -247,13 +233,16 @@ let EpisodeDownloadService = EpisodeDownloadService_1 = class EpisodeDownloadSer
         if (!allowed.size) {
             throw new common_1.BadRequestException('Assign a quality profile with at least one allowed quality to this series');
         }
-        const allowedLangs = allowedLanguageIds(media.languageProfile?.languages);
         const indexers = await this.indexerRepo.find({
             where: { enabled: true },
             order: { priority: 'ASC', id: 'ASC' },
         });
-        const batches = await Promise.all(indexers.map((ix) => this.torznab.searchSeasonPack(ix, media.title, season.seasonNumber)));
-        const rows = await Promise.all(batches.flat().map((r) => this.buildReleaseRow(r, allowed, allowedLangs)));
+        const allowedLangs = allowedLanguageIds(media.languageProfile?.languages);
+        const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
+        const indexerMinSeeders = (0, release_rejection_helper_1.buildIndexerMinSeeders)(indexers);
+        const searchTitle = customQuery?.trim() || media.title;
+        const batches = await Promise.all(indexers.map((ix) => this.torznab.searchSeasonPack(ix, searchTitle, season.seasonNumber)));
+        const rows = await Promise.all(batches.flat().map((r) => this.buildReleaseRow(r, allowed, allowedLangs, sizeByQuality, indexerMinSeeders)));
         rows.sort((a, b) => b.rank !== a.rank ? b.rank - a.rank : b.customFormatScore - a.customFormatScore);
         return rows;
     }
@@ -278,7 +267,6 @@ let EpisodeDownloadService = EpisodeDownloadService_1 = class EpisodeDownloadSer
         if (!allowed.size) {
             throw new common_1.BadRequestException('Assign a quality profile with at least one allowed quality to this series');
         }
-        const allowedLangs = allowedLanguageIds(media.languageProfile?.languages);
         const clients = await this.clientRepo.find({ order: { priority: 'ASC', id: 'ASC' } });
         const qbit = clients.find((c) => this.qbittorrent.supports(c));
         if (!qbit) {
@@ -292,7 +280,7 @@ let EpisodeDownloadService = EpisodeDownloadService_1 = class EpisodeDownloadSer
                 throw new common_1.BadRequestException(`"${sourceTitle}" is in the blocklist`);
             }
             const parsed = (0, release_quality_parser_1.parseReleaseQuality)(sourceTitle);
-            await this.qbittorrent.addTorrentUrl(qbit, downloadUrl);
+            await this.qbittorrent.addTorrentUrl(qbit, downloadUrl, 'series');
             await this.historyRepo.save(this.historyRepo.create({
                 mediaId,
                 downloadClientId: qbit.id,
@@ -311,13 +299,16 @@ let EpisodeDownloadService = EpisodeDownloadService_1 = class EpisodeDownloadSer
             where: { enabled: true },
             order: { priority: 'ASC', id: 'ASC' },
         });
+        const allowedLangs = allowedLanguageIds(media.languageProfile?.languages);
+        const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
+        const indexerMinSeeders = (0, release_rejection_helper_1.buildIndexerMinSeeders)(indexers);
         const packBatches = await Promise.all(indexers.map((ix) => this.torznab.searchSeasonPack(ix, media.title, season.seasonNumber)));
-        const packRows = await Promise.all(packBatches.flat().map((r) => this.buildReleaseRow(r, allowed, allowedLangs)));
+        const packRows = await Promise.all(packBatches.flat().map((r) => this.buildReleaseRow(r, allowed, allowedLangs, sizeByQuality, indexerMinSeeders)));
         packRows.sort((a, b) => b.rank !== a.rank ? b.rank - a.rank : b.customFormatScore - a.customFormatScore);
-        const bestPack = packRows.find((r) => r.allowed && !r.blocklisted && r.languageAllowed);
+        const bestPack = packRows.find((r) => r.allowed && !r.blocklisted && r.rejections.length === 0);
         if (bestPack) {
             this.log.log(`Season pack found: "${bestPack.title}" — ${bestPack.downloadUrl}`);
-            await this.qbittorrent.addTorrentUrl(qbit, bestPack.downloadUrl);
+            await this.qbittorrent.addTorrentUrl(qbit, bestPack.downloadUrl, 'series');
             await this.historyRepo.save(this.historyRepo.create({
                 mediaId,
                 downloadClientId: qbit.id,
@@ -340,12 +331,12 @@ let EpisodeDownloadService = EpisodeDownloadService_1 = class EpisodeDownloadSer
         for (const ep of missingEpisodes) {
             try {
                 const epBatches = await Promise.all(indexers.map((ix) => this.torznab.searchSeries(ix, media.title, season.seasonNumber, ep.episodeNumber)));
-                const epRows = await Promise.all(epBatches.flat().map((r) => this.buildReleaseRow(r, allowed, allowedLangs)));
+                const epRows = await Promise.all(epBatches.flat().map((r) => this.buildReleaseRow(r, allowed, allowedLangs, sizeByQuality, indexerMinSeeders)));
                 epRows.sort((a, b) => b.rank !== a.rank ? b.rank - a.rank : b.customFormatScore - a.customFormatScore);
-                const pick = epRows.find((r) => r.allowed && !r.blocklisted && r.languageAllowed);
+                const pick = epRows.find((r) => r.allowed && !r.blocklisted && r.rejections.length === 0);
                 if (!pick)
                     continue;
-                await this.qbittorrent.addTorrentUrl(qbit, pick.downloadUrl);
+                await this.qbittorrent.addTorrentUrl(qbit, pick.downloadUrl, 'series');
                 await this.historyRepo.save(this.historyRepo.create({
                     mediaId,
                     downloadClientId: qbit.id,
@@ -385,6 +376,7 @@ exports.EpisodeDownloadService = EpisodeDownloadService = EpisodeDownloadService
         qbittorrent_service_1.QbittorrentService,
         custom_formats_service_1.CustomFormatsService,
         blocklist_service_1.BlocklistService,
-        notifications_service_1.NotificationsService])
+        notifications_service_1.NotificationsService,
+        quality_definitions_service_1.QualityDefinitionsService])
 ], EpisodeDownloadService);
 //# sourceMappingURL=episode-download.service.js.map

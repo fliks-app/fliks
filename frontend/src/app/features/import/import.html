@@ -1,0 +1,134 @@
+<div class="flex flex-col gap-6">
+  <div>
+    <h1 class="text-2xl font-bold">{{ 'import.title' | translate }}</h1>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'import.subtitle' | translate }}</p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Radarr -->
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-4">
+        <h2 class="card-title text-base">{{ 'import.radarr_title' | translate }}</h2>
+        <p class="text-sm text-base-content/60">{{ 'import.radarr_desc' | translate }}</p>
+
+        <div class="form-control">
+          <label class="label"><span class="label-text">{{ 'import.url_label' | translate }}</span></label>
+          <input
+            type="url"
+            class="input input-bordered input-sm"
+            [placeholder]="'import.radarr_url_placeholder' | translate"
+            [ngModel]="radarrUrl()"
+            (ngModelChange)="radarrUrl.set($event)"
+          />
+        </div>
+
+        <div class="form-control">
+          <label class="label"><span class="label-text">{{ 'import.api_key_label' | translate }}</span></label>
+          <input
+            type="password"
+            class="input input-bordered input-sm"
+            [placeholder]="'import.api_key_placeholder' | translate"
+            [ngModel]="radarrApiKey()"
+            (ngModelChange)="radarrApiKey.set($event)"
+          />
+        </div>
+
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          [disabled]="radarrLoading() || !radarrUrl() || !radarrApiKey()"
+          (click)="importRadarr()"
+        >
+          @if (radarrLoading()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'import.import_btn' | translate }}
+        </button>
+
+        @if (radarrError()) {
+          <div role="alert" class="alert alert-error text-sm">{{ radarrError() }}</div>
+        }
+
+        @if (radarrResult(); as r) {
+          <div role="alert" class="alert text-sm" [class.alert-success]="r.errors.length === 0" [class.alert-warning]="r.errors.length > 0">
+            <div>
+              <p>{{ 'import.result_imported' | translate:{ count: r.imported } }}</p>
+              @if (r.qualityProfilesCreated.length) {
+                <p class="mt-1">{{ 'import.quality_profiles_created' | translate:{ count: r.qualityProfilesCreated.length } }}: {{ r.qualityProfilesCreated.join(', ') }}</p>
+              }
+              @if (r.rootFoldersCreated.length) {
+                <p class="mt-1">{{ 'import.root_folders_created' | translate:{ count: r.rootFoldersCreated.length } }}: {{ r.rootFoldersCreated.join(', ') }}</p>
+              }
+              @if (r.errors.length) {
+                <p class="mt-1">{{ r.errors.length }} {{ 'import.result_errors' | translate }}: {{ r.errors.slice(0, 5).join(', ') }}</p>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- Sonarr -->
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-4">
+        <h2 class="card-title text-base">{{ 'import.sonarr_title' | translate }}</h2>
+        <p class="text-sm text-base-content/60">{{ 'import.sonarr_desc' | translate }}</p>
+
+        <div class="form-control">
+          <label class="label"><span class="label-text">{{ 'import.url_label' | translate }}</span></label>
+          <input
+            type="url"
+            class="input input-bordered input-sm"
+            [placeholder]="'import.sonarr_url_placeholder' | translate"
+            [ngModel]="sonarrUrl()"
+            (ngModelChange)="sonarrUrl.set($event)"
+          />
+        </div>
+
+        <div class="form-control">
+          <label class="label"><span class="label-text">{{ 'import.api_key_label' | translate }}</span></label>
+          <input
+            type="password"
+            class="input input-bordered input-sm"
+            [placeholder]="'import.api_key_placeholder' | translate"
+            [ngModel]="sonarrApiKey()"
+            (ngModelChange)="sonarrApiKey.set($event)"
+          />
+        </div>
+
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          [disabled]="sonarrLoading() || !sonarrUrl() || !sonarrApiKey()"
+          (click)="importSonarr()"
+        >
+          @if (sonarrLoading()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'import.import_btn' | translate }}
+        </button>
+
+        @if (sonarrError()) {
+          <div role="alert" class="alert alert-error text-sm">{{ sonarrError() }}</div>
+        }
+
+        @if (sonarrResult(); as r) {
+          <div role="alert" class="alert text-sm" [class.alert-success]="r.errors.length === 0" [class.alert-warning]="r.errors.length > 0">
+            <div>
+              <p>{{ 'import.result_imported' | translate:{ count: r.imported } }}</p>
+              @if (r.qualityProfilesCreated.length) {
+                <p class="mt-1">{{ 'import.quality_profiles_created' | translate:{ count: r.qualityProfilesCreated.length } }}: {{ r.qualityProfilesCreated.join(', ') }}</p>
+              }
+              @if (r.rootFoldersCreated.length) {
+                <p class="mt-1">{{ 'import.root_folders_created' | translate:{ count: r.rootFoldersCreated.length } }}: {{ r.rootFoldersCreated.join(', ') }}</p>
+              }
+              @if (r.errors.length) {
+                <p class="mt-1">{{ r.errors.length }} {{ 'import.result_errors' | translate }}: {{ r.errors.slice(0, 5).join(', ') }}</p>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+</div>

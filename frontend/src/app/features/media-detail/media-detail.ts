@@ -46,6 +46,8 @@ export class MediaDetailComponent implements OnInit {
   readonly notFound = signal(false);
   readonly expectedKind = signal<'movie' | 'series'>('movie');
 
+  readonly customSearchQuery = signal('');
+
   readonly releases = signal<MovieRelease[]>([]);
   readonly releasesLoading = signal(false);
   readonly releasesSearched = signal(false);
@@ -80,6 +82,8 @@ export class MediaDetailComponent implements OnInit {
 
   readonly isAdmin = computed(() => this.auth.user()?.role === 'admin');
   readonly deleteLoading = signal(false);
+  readonly renameLoading = signal(false);
+  readonly renameToast = signal('');
   readonly monitoredLoading = signal(false);
   readonly refreshLoading = signal(false);
   readonly refreshToast = signal('');
@@ -135,7 +139,8 @@ export class MediaDetailComponent implements OnInit {
     }
 
     const role = this.auth.user()?.role;
-    if (role === 'admin' || role === 'user') {
+    const loadProfiles = async () => {
+      if (role !== 'admin' && role !== 'user') return;
       this.profilesOptionsLoading.set(true);
       try {
         const [q, l, rf] = await Promise.all([
@@ -146,10 +151,15 @@ export class MediaDetailComponent implements OnInit {
         this.qualityProfileOptions.set(q.map((p) => ({ id: p.id, name: p.name })));
         this.languageProfileOptions.set(l.map((p) => ({ id: p.id, name: p.name })));
         this.rootFolders.set(rf);
+      } catch {
+        // Profiles will just be empty — the page still works
       } finally {
         this.profilesOptionsLoading.set(false);
       }
-    }
+    };
+
+    // Load profiles in parallel with media — neither blocks the other
+    void loadProfiles();
 
     try {
       const m = await this.mediaService.getOne(id);
@@ -237,7 +247,7 @@ export class MediaDetailComponent implements OnInit {
     this.releasesSearched.set(false);
     this.movieReleasesDialog()?.nativeElement.showModal();
     try {
-      const rows = await this.mediaService.getMovieReleases(m.id);
+      const rows = await this.mediaService.getMovieReleases(m.id, this.customSearchQuery());
       this.releases.set(rows);
       this.releasesSearched.set(true);
     } catch (err: unknown) {
@@ -378,7 +388,7 @@ export class MediaDetailComponent implements OnInit {
     this.epReleasesLoading.set(true);
     this.episodeReleasesDialog()?.nativeElement.showModal();
     try {
-      const rows = await this.mediaService.getEpisodeReleases(mediaId, episodeId);
+      const rows = await this.mediaService.getEpisodeReleases(mediaId, episodeId, this.customSearchQuery());
       this.epReleases.set(rows);
       this.epReleasesSearched.set(true);
     } catch (err: unknown) {
@@ -427,7 +437,7 @@ export class MediaDetailComponent implements OnInit {
     this.upgradeReleasesSearched.set(false);
     this.upgradeReleasesDialog()?.nativeElement.showModal();
     try {
-      const rows = await this.mediaService.getUpgradeReleases(m.id);
+      const rows = await this.mediaService.getUpgradeReleases(m.id, this.customSearchQuery());
       this.upgradeReleases.set(rows);
       this.upgradeReleasesSearched.set(true);
     } catch (err: unknown) {
@@ -479,7 +489,7 @@ export class MediaDetailComponent implements OnInit {
     this.seasonReleasesLoading.set(true);
     this.seasonReleasesDialog()?.nativeElement.showModal();
     try {
-      const rows = await this.mediaService.getSeasonReleases(mediaId, season.id);
+      const rows = await this.mediaService.getSeasonReleases(mediaId, season.id, this.customSearchQuery());
       this.seasonReleases.set(rows);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
@@ -537,6 +547,24 @@ export class MediaDetailComponent implements OnInit {
     return this.seasonGrabResults().get(seasonId) ?? null;
   }
 
+  async renameFiles() {
+    const m = this.media();
+    if (!m) return;
+    this.renameLoading.set(true);
+    this.renameToast.set('');
+    try {
+      const result = await this.mediaService.renameFiles(m.id);
+      this.renameToast.set(this.translate.instant('media_detail.rename_ok', { count: result.renamed }));
+      const updated = await this.mediaService.getOne(m.id);
+      this.media.set(updated);
+    } catch (err: unknown) {
+      const httpErr = err as { error?: { message?: string } };
+      this.renameToast.set(httpErr.error?.message ?? this.translate.instant('media_detail.rename_error'));
+    } finally {
+      this.renameLoading.set(false);
+    }
+  }
+
   async deleteFile(fileId: number, deleteOnDisk: boolean) {
     const m = this.media();
     if (!m) return;
@@ -552,6 +580,12 @@ export class MediaDetailComponent implements OnInit {
     } catch {
       // ignore
     }
+  }
+
+  formatRejection(r: { code: string; params?: Record<string, number | string> }): string {
+    const key = `media_detail.rejection.${r.code}`;
+    const translated = this.translate.instant(key, r.params);
+    return translated !== key ? translated : r.code;
   }
 
   formatBytes(bytes: number): string {

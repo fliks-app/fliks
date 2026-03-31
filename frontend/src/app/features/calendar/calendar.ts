@@ -7,7 +7,7 @@ import {
   computed,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { DatePipe, NgClass } from '@angular/common';
+import { NgClass } from '@angular/common';
 import { TranslateModule } from '@ngx-translate/core';
 import { MediaService, CalendarEntry } from '../../core/services/api/media.service';
 
@@ -25,7 +25,7 @@ interface CalendarDay {
 
 @Component({
   selector: 'app-calendar',
-  imports: [RouterLink, TranslateModule, DatePipe, NgClass],
+  imports: [RouterLink, TranslateModule, NgClass],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './calendar.html',
 })

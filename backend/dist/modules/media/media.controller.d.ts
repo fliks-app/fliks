@@ -10,6 +10,7 @@ import { GrabMovieDto } from './dto/grab-movie.dto';
 import { ScanFolderDto } from './dto/scan-folder.dto';
 import { ConfirmDiskImportDto } from './dto/confirm-disk-import.dto';
 import { UpdateMediaProfilesDto } from './dto/update-media-profiles.dto';
+import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { HistoryQueryDto } from './dto/history-query.dto';
 import { PatchMonitoredDto } from './dto/patch-monitored.dto';
@@ -56,16 +57,22 @@ export declare class MediaController {
     deleteHistory(id: number): Promise<void>;
     linkTorrent(dto: LinkTorrentDto): Promise<import("./entities/download-history.entity").DownloadHistory>;
     retryImport(id: number): Promise<void>;
-    movieReleases(id: number): Promise<import("./movie-download.service").MovieReleaseRow[]>;
+    bulkUpdate(dto: BulkUpdateMediaDto): Promise<{
+        updated: number;
+    }>;
+    renameFiles(id: number): Promise<{
+        renamed: number;
+    }>;
+    movieReleases(id: number, customQuery?: string): Promise<import("./movie-download.service").MovieReleaseRow[]>;
     grabMovie(id: number, dto: GrabMovieDto): Promise<import("./entities/download-history.entity").DownloadHistory>;
-    upgradeReleases(id: number): Promise<import("./movie-download.service").MovieReleaseRow[]>;
+    upgradeReleases(id: number, customQuery?: string): Promise<import("./movie-download.service").MovieReleaseRow[]>;
     grabUpgrade(id: number, dto: GrabMovieDto): Promise<import("./entities/download-history.entity").DownloadHistory>;
-    seasonReleases(id: number, seasonId: number): Promise<import("./episode-download.service").EpisodeReleaseRow[]>;
+    seasonReleases(id: number, seasonId: number, customQuery?: string): Promise<import("./episode-download.service").EpisodeReleaseRow[]>;
     grabSeason(id: number, seasonId: number, dto: GrabMovieDto): Promise<{
         grabbed: number;
         errors: string[];
     }>;
-    episodeReleases(id: number, episodeId: number): Promise<import("./episode-download.service").EpisodeReleaseRow[]>;
+    episodeReleases(id: number, episodeId: number, customQuery?: string): Promise<import("./episode-download.service").EpisodeReleaseRow[]>;
     grabEpisode(id: number, episodeId: number, dto: GrabMovieDto): Promise<import("./entities/download-history.entity").DownloadHistory>;
     deleteFile(id: number, fileId: number, deleteOnDisk?: string): Promise<void>;
     updatePath(id: number, dto: UpdatePathDto): Promise<Media>;

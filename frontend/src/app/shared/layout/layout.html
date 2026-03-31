@@ -91,6 +91,14 @@
               {{ 'nav.import_disk' | translate }}
             </a>
           </li>
+          <li>
+            <a routerLink="/import" routerLinkActive="active">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              {{ 'nav.import' | translate }}
+            </a>
+          </li>
         }
         @if (auth.isAdmin()) {
           <li>
@@ -117,6 +125,8 @@
               <ul>
                 <li><a routerLink="/settings/general" routerLinkActive="active">{{ 'settings.nav.general' | translate }}</a></li>
                 <li><a routerLink="/settings/quality-profiles" routerLinkActive="active">{{ 'settings.nav.quality_profiles' | translate }}</a></li>
+                <li><a routerLink="/settings/language-profiles" routerLinkActive="active">{{ 'settings.nav.language_profiles' | translate }}</a></li>
+                <li><a routerLink="/settings/quality-definitions" routerLinkActive="active">{{ 'settings.nav.quality_definitions' | translate }}</a></li>
                 <li><a routerLink="/settings/custom-formats" routerLinkActive="active">{{ 'settings.nav.custom_formats' | translate }}</a></li>
                 <li><a routerLink="/settings/indexers" routerLinkActive="active">{{ 'settings.nav.indexers' | translate }}</a></li>
                 <li><a routerLink="/settings/download-clients" routerLinkActive="active">{{ 'settings.nav.download_clients' | translate }}</a></li>
@@ -124,6 +134,7 @@
                 <li><a routerLink="/settings/blocklist" routerLinkActive="active">{{ 'settings.nav.blocklist' | translate }}</a></li>
                 <li><a routerLink="/settings/notifications" routerLinkActive="active">{{ 'settings.nav.notifications' | translate }}</a></li>
                 <li><a routerLink="/settings/root-folders" routerLinkActive="active">{{ 'settings.nav.root_folders' | translate }}</a></li>
+                <li><a routerLink="/settings/remote-path-mappings" routerLinkActive="active">{{ 'settings.nav.remote_path_mappings' | translate }}</a></li>
                 <li><a routerLink="/settings/tags" routerLinkActive="active">{{ 'settings.nav.tags' | translate }}</a></li>
                 <li><a routerLink="/settings/users" routerLinkActive="active">{{ 'settings.nav.users' | translate }}</a></li>
                 <li><a routerLink="/settings/auto-approval" routerLinkActive="active">{{ 'settings.nav.auto_approval' | translate }}</a></li>
@@ -145,6 +156,13 @@
               <p class="text-sm font-medium truncate">{{ user.username }}</p>
               <p class="text-sm text-base-content/50">{{ ('roles.' + user.role) | translate }}</p>
             </div>
+            <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="toggleTheme()">
+              @if (theme() === 'dark') {
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m8.66-13.66l-.71.71M4.05 19.95l-.71.71M21 12h-1M4 12H3m16.66 7.66l-.71-.71M4.05 4.05l-.71-.71M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+              } @else {
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.005 9.005 0 0012 21a9.005 9.005 0 008.354-5.646z" /></svg>
+              }
+            </button>
             <button class="btn btn-ghost btn-sm btn-square" (click)="auth.logout()" [attr.aria-label]="'nav.logout' | translate">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />

@@ -27,5 +27,5 @@ export declare class QbittorrentService {
     deleteTorrent(client: DownloadClient, hash: string, deleteFiles?: boolean): Promise<void>;
     supports(client: DownloadClient): boolean;
     private sanitizeUrl;
-    addTorrentUrl(client: DownloadClient, torrentUrl: string): Promise<void>;
+    addTorrentUrl(client: DownloadClient, torrentUrl: string, mediaType?: 'movie' | 'series'): Promise<void>;
 }

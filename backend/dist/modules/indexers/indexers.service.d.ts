@@ -14,6 +14,7 @@ export declare class IndexersService {
         ok: boolean;
         message: string;
     }>;
+    private sanitizeSettings;
     create(dto: CreateIndexerDto): Promise<Indexer>;
     findAll(): Promise<Indexer[]>;
     findOne(id: number): Promise<Indexer>;

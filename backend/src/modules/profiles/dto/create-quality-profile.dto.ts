@@ -19,6 +19,10 @@ export class QualityItemDto {
 
   @IsNumber()
   sortOrder: number;
+
+  @IsNumber()
+  @IsOptional()
+  groupId?: number;
 }
 
 export class CreateQualityProfileDto {

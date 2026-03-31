@@ -9,6 +9,8 @@ export interface QbittorrentSettings {
   password?: string;
   useSsl?: boolean;
   category?: string;
+  movieCategory?: string;
+  seriesCategory?: string;
 }
 
 export interface DownloadClientRow {

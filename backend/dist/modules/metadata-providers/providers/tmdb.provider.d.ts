@@ -15,6 +15,12 @@ export declare class TmdbProvider implements IMetadataProvider {
         episodeCount: number;
     }[]>;
     getTvShowSeasons(tmdbId: number): Promise<SeasonDetails[]>;
+    getTrendingMovies(): Promise<MetadataSearchResult[]>;
+    getPopularMovies(): Promise<MetadataSearchResult[]>;
+    getUpcomingMovies(): Promise<MetadataSearchResult[]>;
+    getTrendingTvShows(): Promise<MetadataSearchResult[]>;
+    getPopularTvShows(): Promise<MetadataSearchResult[]>;
+    getUpcomingTvShows(): Promise<MetadataSearchResult[]>;
     private mapMovieResult;
     private mapTvResult;
     private extractReleaseDates;

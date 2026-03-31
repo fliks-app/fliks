@@ -158,21 +158,25 @@ let QbittorrentService = QbittorrentService_1 = class QbittorrentService {
     sanitizeUrl(url) {
         return url.replace(/&amp;/g, '&');
     }
-    async addTorrentUrl(client, torrentUrl) {
+    async addTorrentUrl(client, torrentUrl, mediaType) {
         torrentUrl = this.sanitizeUrl(torrentUrl);
         const s = client.settings;
         const base = this.buildBaseUrl(s);
         if (!base) {
             throw new common_1.BadRequestException('qBittorrent client has no host configured');
         }
-        const category = s.category?.trim() ?? '';
+        let category = String(s.category ?? '').trim();
+        if (mediaType === 'movie' && s.movieCategory)
+            category = String(s.movieCategory).trim();
+        if (mediaType === 'series' && s.seriesCategory)
+            category = String(s.seriesCategory).trim();
         const http = axios_1.default.create({
             timeout: 60_000,
             headers: { 'User-Agent': 'Suitarr/1.0' },
         });
         const formAuth = new URLSearchParams({
-            username: s.username ?? '',
-            password: s.password ?? '',
+            username: String(s.username ?? ''),
+            password: String(s.password ?? ''),
         });
         let cookieHeader = '';
         try {

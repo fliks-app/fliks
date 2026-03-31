@@ -11,11 +11,13 @@ import { UpdateMediaDto } from './dto/update-media.dto';
 import { SearchMediaDto } from './dto/search-media.dto';
 import { ImportTmdbDto } from './dto/import-tmdb.dto';
 import { UpdateMediaProfilesDto } from './dto/update-media-profiles.dto';
+import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { HistoryQueryDto } from './dto/history-query.dto';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
 import { ProfilesService } from '../profiles/profiles.service';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
+import { NamingService } from '../scheduler/naming.service';
 export declare class MediaService {
     private readonly mediaRepo;
     private readonly tagRepo;
@@ -28,8 +30,9 @@ export declare class MediaService {
     private readonly tmdb;
     private readonly config;
     private readonly profiles;
+    private readonly naming;
     private readonly log;
-    constructor(mediaRepo: Repository<Media>, tagRepo: Repository<Tag>, seasonRepo: Repository<Season>, episodeRepo: Repository<Episode>, mediaFileRepo: Repository<MediaFile>, historyRepo: Repository<DownloadHistory>, rootFolderRepo: Repository<RootFolder>, dataSource: DataSource, tmdb: TmdbProvider, config: ConfigService, profiles: ProfilesService);
+    constructor(mediaRepo: Repository<Media>, tagRepo: Repository<Tag>, seasonRepo: Repository<Season>, episodeRepo: Repository<Episode>, mediaFileRepo: Repository<MediaFile>, historyRepo: Repository<DownloadHistory>, rootFolderRepo: Repository<RootFolder>, dataSource: DataSource, tmdb: TmdbProvider, config: ConfigService, profiles: ProfilesService, naming: NamingService);
     importFromTmdb(dto: ImportTmdbDto): Promise<Media>;
     create(dto: CreateMediaDto): Promise<Media>;
     findAll(query: SearchMediaDto): Promise<{
@@ -40,6 +43,9 @@ export declare class MediaService {
     update(id: number, dto: UpdateMediaDto): Promise<Media>;
     updatePath(id: number, path: string): Promise<Media>;
     updateProfiles(id: number, dto: UpdateMediaProfilesDto): Promise<Media>;
+    bulkUpdate(dto: BulkUpdateMediaDto): Promise<{
+        updated: number;
+    }>;
     remove(id: number): Promise<void>;
     getCalendar(dto: CalendarQueryDto): Promise<{
         id: number;
@@ -76,4 +82,7 @@ export declare class MediaService {
     private buildMediaFieldsFromTmdb;
     private persistImportedMovie;
     private persistImportedSeries;
+    renameFiles(mediaId: number): Promise<{
+        renamed: number;
+    }>;
 }

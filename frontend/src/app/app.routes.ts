@@ -83,6 +83,12 @@ export const routes: Routes = [
         canActivate: [adminGuard],
       },
       {
+        path: 'import',
+        loadComponent: () =>
+          import('./features/import/import').then((m) => m.ImportComponent),
+        canActivate: [adminGuard],
+      },
+      {
         path: 'system',
         loadComponent: () =>
           import('./features/system/system').then((m) => m.SystemComponent),
@@ -114,6 +120,20 @@ export const routes: Routes = [
               import(
                 './features/settings/quality-profiles/quality-profiles'
               ).then((m) => m.QualityProfilesComponent),
+          },
+          {
+            path: 'language-profiles',
+            loadComponent: () =>
+              import(
+                './features/settings/language-profiles/language-profiles'
+              ).then((m) => m.LanguageProfilesComponent),
+          },
+          {
+            path: 'quality-definitions',
+            loadComponent: () =>
+              import(
+                './features/settings/quality-definitions/quality-definitions'
+              ).then((m) => m.QualityDefinitionsComponent),
           },
           {
             path: 'custom-formats',
@@ -177,6 +197,20 @@ export const routes: Routes = [
               import('./features/settings/users/users').then(
                 (m) => m.UsersSettingsComponent,
               ),
+          },
+          {
+            path: 'remote-path-mappings',
+            loadComponent: () =>
+              import(
+                './features/settings/remote-path-mappings/remote-path-mappings'
+              ).then((m) => m.RemotePathMappingsSettingsComponent),
+          },
+          {
+            path: 'delay-profiles',
+            loadComponent: () =>
+              import(
+                './features/settings/delay-profiles/delay-profiles'
+              ).then((m) => m.DelayProfilesComponent),
           },
           {
             path: 'auto-approval',

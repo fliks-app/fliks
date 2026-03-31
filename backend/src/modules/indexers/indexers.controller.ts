@@ -9,6 +9,8 @@ import {
   UseGuards,
   ParseIntPipe,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { IndexersService } from './indexers.service';
 import { CreateIndexerDto } from './dto/create-indexer.dto';
 import { UpdateIndexerDto } from './dto/update-indexer.dto';
@@ -18,11 +20,16 @@ import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
 import { Indexer } from './entities/indexer.entity';
+import { IndexerStat } from './entities/indexer-stat.entity';
 
 @Controller('indexers')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
 export class IndexersController {
-  constructor(private readonly indexersService: IndexersService) {}
+  constructor(
+    private readonly indexersService: IndexersService,
+    @InjectRepository(IndexerStat)
+    private readonly statRepo: Repository<IndexerStat>,
+  ) {}
 
   @Post('test-connection')
   @CheckPolicies((ability) => ability.can(Action.Read, Indexer))
@@ -58,5 +65,27 @@ export class IndexersController {
   @CheckPolicies((ability) => ability.can(Action.Delete, Indexer))
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.indexersService.remove(id);
+  }
+
+  @Get(':id/stats')
+  @CheckPolicies((ability) => ability.can(Action.Read, Indexer))
+  async getStats(@Param('id', ParseIntPipe) id: number) {
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+
+    const rows = await this.statRepo
+      .createQueryBuilder('s')
+      .select("DATE(s.queryDate)", 'date')
+      .addSelect("COUNT(*)", 'queries')
+      .addSelect("AVG(s.responseTimeMs)::int", 'avgResponseMs')
+      .addSelect("SUM(s.resultCount)::int", 'totalResults')
+      .addSelect("SUM(CASE WHEN s.errorMessage IS NOT NULL THEN 1 ELSE 0 END)::int", 'errors')
+      .where('s.indexerId = :id', { id })
+      .andWhere('s.queryDate >= :since', { since })
+      .groupBy("DATE(s.queryDate)")
+      .orderBy("date", 'DESC')
+      .getRawMany();
+
+    return rows;
   }
 }

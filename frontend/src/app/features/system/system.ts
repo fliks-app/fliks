@@ -4,11 +4,14 @@ import {
   signal,
   inject,
   OnInit,
+  OnDestroy,
 } from '@angular/core';
-import { DatePipe, NgClass } from '@angular/common';
+import { DatePipe, NgClass, KeyValuePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
+import { SseService } from '../../core/services/sse.service';
 
 interface CommandEntry {
   id: number;
@@ -35,13 +38,14 @@ interface HealthReport {
 
 @Component({
   selector: 'app-system',
-  imports: [TranslateModule, DatePipe, NgClass],
+  imports: [TranslateModule, DatePipe, NgClass, FormsModule, KeyValuePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './system.html',
 })
-export class SystemComponent implements OnInit {
+export class SystemComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
   private readonly translate = inject(TranslateService);
+  readonly sse = inject(SseService);
 
   readonly health = signal<HealthReport | null>(null);
   readonly healthLoading = signal(true);
@@ -49,6 +53,20 @@ export class SystemComponent implements OnInit {
   readonly commands = signal<CommandEntry[]>([]);
   readonly loading = signal(true);
   readonly triggering = signal<string | null>(null);
+
+  readonly backups = signal<{ filename: string; size: number; date: string }[]>([]);
+  readonly backupsLoading = signal(false);
+  readonly backupCreating = signal(false);
+
+  readonly logs = signal<{ timestamp: string; level: string; context: string; message: string }[]>([]);
+  readonly logsLoading = signal(false);
+  readonly logLevel = signal('');
+  readonly logSearch = signal('');
+  private logInterval: any;
+
+  readonly importRadarrLoading = signal(false);
+  readonly importSonarrLoading = signal(false);
+  readonly importResult = signal<{ imported: number; skipped: number; errors: string[] } | null>(null);
 
   readonly availableCommands = [
     { name: 'RssSync', label: 'system.cmd_rss_sync' },
@@ -58,8 +76,16 @@ export class SystemComponent implements OnInit {
   ];
 
   ngOnInit() {
+    this.sse.connect();
     this.loadHealth();
     this.loadCommands();
+    this.loadBackups();
+    this.loadLogs();
+    this.logInterval = setInterval(() => this.loadLogs(), 5000);
+  }
+
+  ngOnDestroy() {
+    clearInterval(this.logInterval);
   }
 
   async loadHealth() {
@@ -69,6 +95,20 @@ export class SystemComponent implements OnInit {
       this.health.set(report);
     } finally {
       this.healthLoading.set(false);
+    }
+  }
+
+  async loadLogs() {
+    this.logsLoading.set(true);
+    try {
+      const params: Record<string, string> = {};
+      if (this.logLevel()) params['level'] = this.logLevel();
+      if (this.logSearch()) params['q'] = this.logSearch();
+      params['limit'] = '200';
+      const entries = await firstValueFrom(this.http.get<any[]>('/api/system/logs', { params }));
+      this.logs.set(entries);
+    } finally {
+      this.logsLoading.set(false);
     }
   }
 
@@ -102,6 +142,83 @@ export class SystemComponent implements OnInit {
     } finally {
       this.triggering.set(null);
     }
+  }
+
+  async loadBackups() {
+    this.backupsLoading.set(true);
+    try {
+      const list = await firstValueFrom(this.http.get<{ filename: string; size: number; date: string }[]>('/api/system/backups'));
+      this.backups.set(list);
+    } finally {
+      this.backupsLoading.set(false);
+    }
+  }
+
+  async createBackup() {
+    this.backupCreating.set(true);
+    try {
+      await firstValueFrom(this.http.post('/api/system/backup', {}));
+      await this.loadBackups();
+    } catch (err: unknown) {
+      const httpErr = err as { error?: { message?: string } };
+      alert(httpErr.error?.message ?? 'Backup failed');
+    } finally {
+      this.backupCreating.set(false);
+    }
+  }
+
+  async restoreBackup(filename: string) {
+    if (!confirm(this.translate.instant('system.confirm_restore'))) return;
+    try {
+      await firstValueFrom(this.http.post('/api/system/restore', { filename }));
+      alert(this.translate.instant('system.restore_ok'));
+    } catch (err: unknown) {
+      const httpErr = err as { error?: { message?: string } };
+      alert(httpErr.error?.message ?? 'Restore failed');
+    }
+  }
+
+  async importRadarr(event: Event) {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    this.importRadarrLoading.set(true);
+    this.importResult.set(null);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const result = await firstValueFrom(this.http.post<{ imported: number; skipped: number; errors: string[] }>('/api/system/import-radarr', formData));
+      this.importResult.set(result);
+    } catch (err: unknown) {
+      const httpErr = err as { error?: { message?: string } };
+      this.importResult.set({ imported: 0, skipped: 0, errors: [httpErr.error?.message ?? 'Import failed'] });
+    } finally {
+      this.importRadarrLoading.set(false);
+    }
+  }
+
+  async importSonarr(event: Event) {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    this.importSonarrLoading.set(true);
+    this.importResult.set(null);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const result = await firstValueFrom(this.http.post<{ imported: number; skipped: number; errors: string[] }>('/api/system/import-sonarr', formData));
+      this.importResult.set(result);
+    } catch (err: unknown) {
+      const httpErr = err as { error?: { message?: string } };
+      this.importResult.set({ imported: 0, skipped: 0, errors: [httpErr.error?.message ?? 'Import failed'] });
+    } finally {
+      this.importSonarrLoading.set(false);
+    }
+  }
+
+  formatBytes(bytes: number): string {
+    if (!bytes || bytes < 0) return '—';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    return `${(bytes / Math.pow(1024, i)).toFixed(i >= 2 ? 1 : 0)} ${units[i]}`;
   }
 
   statusClass(status: string): string {

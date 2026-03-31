@@ -5,7 +5,6 @@ import {
   inject,
   OnInit,
 } from '@angular/core';
-import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
@@ -15,7 +14,7 @@ import {
 
 @Component({
   selector: 'app-root-folders-settings',
-  imports: [FormsModule, TranslateModule, DecimalPipe],
+  imports: [FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './root-folders.html',
 })

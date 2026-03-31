@@ -27,6 +27,9 @@ class SearchMediaDto {
     sortOrder;
     page;
     limit;
+    missing;
+    cutoffUnmet;
+    letter;
 }
 exports.SearchMediaDto = SearchMediaDto;
 __decorate([
@@ -101,4 +104,21 @@ __decorate([
     (0, class_transformer_1.Type)(() => Number),
     __metadata("design:type", Number)
 ], SearchMediaDto.prototype, "limit", void 0);
+__decorate([
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Boolean),
+    __metadata("design:type", Boolean)
+], SearchMediaDto.prototype, "missing", void 0);
+__decorate([
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Boolean),
+    __metadata("design:type", Boolean)
+], SearchMediaDto.prototype, "cutoffUnmet", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], SearchMediaDto.prototype, "letter", void 0);
 //# sourceMappingURL=search-media.dto.js.map

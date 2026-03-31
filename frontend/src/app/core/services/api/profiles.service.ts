@@ -11,6 +11,7 @@ export interface QualityProfile {
     quality: { id: number; name: string; resolution: number; source: string };
     allowed: boolean;
     sortOrder: number;
+    groupId?: number;
   }[];
 }
 
@@ -25,6 +26,7 @@ export interface CreateQualityProfilePayload {
     source: string;
     allowed: boolean;
     sortOrder: number;
+    groupId?: number;
   }[];
 }
 
@@ -34,6 +36,18 @@ export interface LanguageProfile {
   cutoff: number;
   languages: {
     language: { id: number; name: string; isoCode: string };
+    allowed: boolean;
+    sortOrder: number;
+  }[];
+}
+
+export interface CreateLanguageProfilePayload {
+  name: string;
+  cutoff: number;
+  languages: {
+    languageId: number;
+    languageName: string;
+    isoCode: string;
     allowed: boolean;
     sortOrder: number;
   }[];
@@ -65,5 +79,23 @@ export class ProfilesService {
 
   getLanguageProfiles() {
     return firstValueFrom(this.http.get<LanguageProfile[]>('/api/profiles/language'));
+  }
+
+  getLanguageDefinitions() {
+    return firstValueFrom(
+      this.http.get<{ id: number; name: string; isoCode: string }[]>('/api/profiles/language-definitions'),
+    );
+  }
+
+  createLanguageProfile(body: CreateLanguageProfilePayload) {
+    return firstValueFrom(this.http.post<LanguageProfile>('/api/profiles/language', body));
+  }
+
+  updateLanguageProfile(id: number, body: CreateLanguageProfilePayload) {
+    return firstValueFrom(this.http.put<LanguageProfile>(`/api/profiles/language/${id}`, body));
+  }
+
+  deleteLanguageProfile(id: number) {
+    return firstValueFrom(this.http.delete<void>(`/api/profiles/language/${id}`));
   }
 }

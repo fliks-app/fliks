@@ -19,4 +19,5 @@ __exportStar(require("./media-status.enum"), exports);
 __exportStar(require("./request-status.enum"), exports);
 __exportStar(require("./user-role.enum"), exports);
 __exportStar(require("./media-server-type.enum"), exports);
+__exportStar(require("./minimum-availability.enum"), exports);
 //# sourceMappingURL=index.js.map

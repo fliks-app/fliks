@@ -13,7 +13,7 @@ import { User } from '../users/entities/user.entity';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { ListRequestsDto } from './dto/list-requests.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
-import { RequestStatus, UserRole } from '../../common/enums';
+import { MediaType, RequestStatus, UserRole } from '../../common/enums';
 import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
@@ -76,10 +76,45 @@ export class RequestsService {
   }
 
   // ---------------------------------------------------------------------------
+  // Quota enforcement
+  // ---------------------------------------------------------------------------
+
+  private async checkQuota(user: User, mediaType: MediaType): Promise<void> {
+    const limit =
+      mediaType === MediaType.MOVIE
+        ? user.movieQuotaLimit
+        : user.seriesQuotaLimit;
+
+    if (!limit) return; // 0 or undefined = unlimited
+
+    const periodDays = user.quotaPeriodDays || 7;
+    const since = new Date();
+    since.setDate(since.getDate() - periodDays);
+
+    const count = await this.requestRepo
+      .createQueryBuilder('r')
+      .where('r.userId = :userId', { userId: user.id })
+      .andWhere('r.mediaType = :mediaType', { mediaType })
+      .andWhere('r.status IN (:...statuses)', {
+        statuses: [RequestStatus.PENDING, RequestStatus.APPROVED],
+      })
+      .andWhere('r.createdAt >= :since', { since })
+      .getCount();
+
+    if (count >= limit) {
+      throw new ForbiddenException(
+        `Quota exceeded: ${count}/${limit} ${mediaType} requests in last ${periodDays} days`,
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Requests CRUD
   // ---------------------------------------------------------------------------
 
   async create(user: User, dto: CreateRequestDto): Promise<SuitarrRequest> {
+    await this.checkQuota(user, dto.mediaType);
+
     const dup = await this.requestRepo.findOne({
       where: {
         userId: user.id,

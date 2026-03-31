@@ -1,0 +1,129 @@
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'settings.language_profiles.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.language_profiles.subtitle' | translate }}</p>
+    </div>
+    <button type="button" class="btn btn-primary" (click)="openCreate()">
+      {{ 'settings.language_profiles.new' | translate }}
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (listError()) {
+    <div role="alert" class="alert alert-error">{{ listError() }}</div>
+  } @else if (profiles().length === 0) {
+    <p class="text-center py-12 text-base-content/50">{{ 'settings.language_profiles.empty' | translate }}</p>
+  } @else {
+    <div class="overflow-x-auto rounded-lg border border-base-200">
+      <table class="table table-zebra">
+        <thead>
+          <tr>
+            <th>{{ 'settings.language_profiles.col_name' | translate }}</th>
+            <th>{{ 'settings.language_profiles.col_cutoff' | translate }}</th>
+            <th class="text-end">{{ 'settings.language_profiles.col_allowed_count' | translate }}</th>
+            <th class="text-end w-40">{{ 'settings.language_profiles.actions' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (p of profiles(); track p.id) {
+            <tr>
+              <td class="font-medium">{{ p.name }}</td>
+              <td class="text-sm">{{ cutoffLabel(p.cutoff) }}</td>
+              <td class="text-end">{{ allowedCount(p) }}</td>
+              <td class="text-end">
+                <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(p)">
+                  {{ 'settings.language_profiles.edit' | translate }}
+                </button>
+                <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteProfile(p)">
+                  {{ 'settings.language_profiles.delete' | translate }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>
+
+@if (editorOpen()) {
+  <div class="modal modal-open z-50" role="dialog" aria-modal="true">
+    <div class="modal-box max-w-2xl max-h-[90vh] flex flex-col">
+      <h2 class="text-lg font-bold shrink-0">
+        @if (editingId() === null) {
+          {{ 'settings.language_profiles.editor_create_title' | translate }}
+        } @else {
+          {{ 'settings.language_profiles.editor_edit_title' | translate }}
+        }
+      </h2>
+      <div class="py-4 flex flex-col gap-6 overflow-y-auto flex-1 min-h-0">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.language_profiles.field_name' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formName()"
+            (ngModelChange)="formName.set($event)"
+          />
+        </label>
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.language_profiles.field_cutoff' | translate }}</span>
+          <select
+            class="select select-bordered select-sm w-full"
+            [ngModel]="formCutoff()"
+            (ngModelChange)="formCutoff.set(+$event)"
+          >
+            @for (l of definitions(); track l.id) {
+              <option [ngValue]="l.id">{{ l.name }} ({{ l.isoCode }})</option>
+            }
+          </select>
+        </label>
+        <div>
+          <p class="text-sm font-medium mb-2">{{ 'settings.language_profiles.languages_group' | translate }}</p>
+          <div class="rounded-lg border border-base-200 divide-y divide-base-200 max-h-[28rem] overflow-y-auto">
+            @for (l of definitions(); track l.id) {
+              <div class="px-3 py-2 hover:bg-base-200/50">
+                <div class="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm"
+                    [checked]="isAllowed(l.id)"
+                    (change)="toggleLanguage(l.id, $event)"
+                  />
+                  <span class="text-sm flex-1">{{ l.name }}</span>
+                  <span class="text-sm text-base-content/50 font-mono">{{ l.isoCode }}</span>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+        @if (saveError()) {
+          <div role="alert" class="alert alert-error text-sm">{{ saveError() }}</div>
+        }
+      </div>
+      <div class="modal-action shrink-0">
+        <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
+          {{ 'settings.language_profiles.cancel' | translate }}
+        </button>
+        <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+          @if (saving()) {
+            <span class="loading loading-spinner loading-sm"></span>
+          }
+          {{ 'settings.language_profiles.save' | translate }}
+        </button>
+      </div>
+    </div>
+    <div
+      role="button"
+      tabindex="0"
+      class="modal-backdrop bg-black/50"
+      (click)="closeEditor()"
+      (keydown.enter)="closeEditor()"
+      [attr.aria-label]="'common.close' | translate"
+    ></div>
+  </div>
+}

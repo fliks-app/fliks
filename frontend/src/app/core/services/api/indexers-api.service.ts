@@ -67,4 +67,8 @@ export class IndexersApiService {
       ),
     );
   }
+
+  getStats(id: number) {
+    return firstValueFrom(this.http.get<{ date: string; queries: number; avgResponseMs: number; totalResults: number; errors: number }[]>(`/api/indexers/${id}/stats`));
+  }
 }

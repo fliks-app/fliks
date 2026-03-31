@@ -23,6 +23,7 @@ import { GrabMovieDto } from './dto/grab-movie.dto';
 import { ScanFolderDto } from './dto/scan-folder.dto';
 import { ConfirmDiskImportDto } from './dto/confirm-disk-import.dto';
 import { UpdateMediaProfilesDto } from './dto/update-media-profiles.dto';
+import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { HistoryQueryDto } from './dto/history-query.dto';
 import { PatchMonitoredDto } from './dto/patch-monitored.dto';
@@ -115,10 +116,22 @@ export class MediaController {
     return this.mediaService.retryImport(id);
   }
 
+  @Patch('bulk')
+  @CheckPolicies((ability) => ability.can(Action.Update, Media))
+  bulkUpdate(@Body() dto: BulkUpdateMediaDto) {
+    return this.mediaService.bulkUpdate(dto);
+  }
+
+  @Post(':id/rename')
+  @CheckPolicies((ability) => ability.can(Action.Update, Media))
+  renameFiles(@Param('id', ParseIntPipe) id: number) {
+    return this.mediaService.renameFiles(id);
+  }
+
   @Get(':id/releases')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  movieReleases(@Param('id', ParseIntPipe) id: number) {
-    return this.movieDownload.searchMovieReleases(id);
+  movieReleases(@Param('id', ParseIntPipe) id: number, @Query('q') customQuery?: string) {
+    return this.movieDownload.searchMovieReleases(id, customQuery);
   }
 
   @Post(':id/grab')
@@ -132,8 +145,8 @@ export class MediaController {
 
   @Get(':id/upgrade-releases')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  upgradeReleases(@Param('id', ParseIntPipe) id: number) {
-    return this.movieDownload.searchUpgradeReleases(id);
+  upgradeReleases(@Param('id', ParseIntPipe) id: number, @Query('q') customQuery?: string) {
+    return this.movieDownload.searchUpgradeReleases(id, customQuery);
   }
 
   @Post(':id/upgrade')
@@ -150,8 +163,9 @@ export class MediaController {
   seasonReleases(
     @Param('id', ParseIntPipe) id: number,
     @Param('seasonId', ParseIntPipe) seasonId: number,
+    @Query('q') customQuery?: string,
   ) {
-    return this.episodeDownload.searchSeasonReleases(id, seasonId);
+    return this.episodeDownload.searchSeasonReleases(id, seasonId, customQuery);
   }
 
   @Post(':id/seasons/:seasonId/grab')
@@ -169,8 +183,9 @@ export class MediaController {
   episodeReleases(
     @Param('id', ParseIntPipe) id: number,
     @Param('episodeId', ParseIntPipe) episodeId: number,
+    @Query('q') customQuery?: string,
   ) {
-    return this.episodeDownload.searchEpisodeReleases(id, episodeId);
+    return this.episodeDownload.searchEpisodeReleases(id, episodeId, customQuery);
   }
 
   @Post(':id/episodes/:episodeId/grab')

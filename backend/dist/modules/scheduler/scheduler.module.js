@@ -19,9 +19,16 @@ const episode_entity_1 = require("../media/entities/episode.entity");
 const indexer_entity_1 = require("../indexers/entities/indexer.entity");
 const download_client_entity_1 = require("../download-clients/entities/download-client.entity");
 const root_folder_entity_1 = require("../root-folders/entities/root-folder.entity");
+const remote_path_mapping_entity_1 = require("../settings/entities/remote-path-mapping.entity");
+const quality_profile_entity_1 = require("../profiles/entities/quality-profile.entity");
 const scheduler_service_1 = require("./scheduler.service");
 const completion_service_1 = require("./completion.service");
 const naming_service_1 = require("./naming.service");
+const backup_service_1 = require("./backup.service");
+const log_buffer_service_1 = require("./log-buffer.service");
+const events_service_1 = require("./events.service");
+const import_radarr_service_1 = require("./import-radarr.service");
+const import_sonarr_service_1 = require("./import-sonarr.service");
 const commands_controller_1 = require("./commands.controller");
 const system_controller_1 = require("./system.controller");
 const indexers_module_1 = require("../indexers/indexers.module");
@@ -30,6 +37,8 @@ const metadata_providers_module_1 = require("../metadata-providers/metadata-prov
 const notifications_module_1 = require("../notifications/notifications.module");
 const media_module_1 = require("../media/media.module");
 const auth_module_1 = require("../auth/auth.module");
+const blocklist_module_1 = require("../blocklist/blocklist.module");
+const delay_profile_entity_1 = require("../profiles/entities/delay-profile.entity");
 let SuitarrSchedulerModule = class SuitarrSchedulerModule {
 };
 exports.SuitarrSchedulerModule = SuitarrSchedulerModule;
@@ -47,6 +56,9 @@ exports.SuitarrSchedulerModule = SuitarrSchedulerModule = __decorate([
                 indexer_entity_1.Indexer,
                 download_client_entity_1.DownloadClient,
                 root_folder_entity_1.RootFolder,
+                delay_profile_entity_1.DelayProfile,
+                remote_path_mapping_entity_1.RemotePathMapping,
+                quality_profile_entity_1.QualityProfile,
             ]),
             indexers_module_1.IndexersModule,
             download_clients_module_1.DownloadClientsModule,
@@ -54,10 +66,11 @@ exports.SuitarrSchedulerModule = SuitarrSchedulerModule = __decorate([
             notifications_module_1.NotificationsModule,
             media_module_1.MediaModule,
             auth_module_1.AuthModule,
+            blocklist_module_1.BlocklistModule,
         ],
         controllers: [commands_controller_1.CommandsController, system_controller_1.SystemController],
-        providers: [scheduler_service_1.SchedulerService, completion_service_1.CompletionService, naming_service_1.NamingService],
-        exports: [scheduler_service_1.SchedulerService, completion_service_1.CompletionService],
+        providers: [scheduler_service_1.SchedulerService, completion_service_1.CompletionService, naming_service_1.NamingService, backup_service_1.BackupService, log_buffer_service_1.LogBufferService, events_service_1.EventsService, import_radarr_service_1.ImportRadarrService, import_sonarr_service_1.ImportSonarrService],
+        exports: [scheduler_service_1.SchedulerService, completion_service_1.CompletionService, naming_service_1.NamingService, log_buffer_service_1.LogBufferService, events_service_1.EventsService],
     })
 ], SuitarrSchedulerModule);
 //# sourceMappingURL=scheduler.module.js.map

@@ -19,6 +19,7 @@ import { UpdateMediaDto } from './dto/update-media.dto';
 import { SearchMediaDto } from './dto/search-media.dto';
 import { ImportTmdbDto } from './dto/import-tmdb.dto';
 import { UpdateMediaProfilesDto } from './dto/update-media-profiles.dto';
+import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { HistoryQueryDto } from './dto/history-query.dto';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
@@ -26,6 +27,10 @@ import { MetadataDetails, SeasonDetails } from '../metadata-providers/interfaces
 import { MediaType, MediaStatus } from '../../common/enums';
 import { ProfilesService } from '../profiles/profiles.service';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
+import { NamingService } from '../scheduler/naming.service';
+import { getSuitarrQualityById, SUITARR_QUALITIES } from '../../common/constants/suitarr-qualities';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class MediaService {
@@ -50,6 +55,7 @@ export class MediaService {
     private readonly tmdb: TmdbProvider,
     private readonly config: ConfigService,
     private readonly profiles: ProfilesService,
+    private readonly naming: NamingService,
   ) {}
 
   async importFromTmdb(dto: ImportTmdbDto): Promise<Media> {
@@ -124,7 +130,9 @@ export class MediaService {
       sortOrder,
     );
 
-    qb.skip(offset).take(limit);
+    if (limit > 0) {
+      qb.skip(offset).take(limit);
+    }
 
     const [data, total] = await qb.getManyAndCount();
 
@@ -152,7 +160,7 @@ export class MediaService {
       );
     }
 
-    const enriched = data.map((m) => {
+    let enriched = data.map((m) => {
       const stats = episodeStatsMap.get(m.id);
       return {
         ...m,
@@ -160,6 +168,19 @@ export class MediaService {
         episodeStats: stats ?? undefined,
       };
     });
+
+    if (query.cutoffUnmet === true) {
+      const qualityByName = new Map(SUITARR_QUALITIES.map((q) => [q.name, q]));
+      enriched = enriched.filter((m) => {
+        if (!m.files?.length || !m.qualityProfile) return false;
+        const cutoffQuality = getSuitarrQualityById(m.qualityProfile.cutoff);
+        if (!cutoffQuality) return false;
+        return !m.files.some((f) => {
+          const fq = qualityByName.get(f.quality);
+          return fq && fq.rank >= cutoffQuality.rank;
+        });
+      });
+    }
 
     return { data: enriched, total };
   }
@@ -242,6 +263,38 @@ export class MediaService {
       patch as Parameters<Repository<Media>['update']>[1],
     );
     return this.findOne(id);
+  }
+
+  async bulkUpdate(dto: BulkUpdateMediaDto): Promise<{ updated: number }> {
+    const patch: Partial<Record<string, unknown>> = {};
+
+    if (dto.qualityProfileId !== undefined) {
+      patch.qualityProfileId = dto.qualityProfileId;
+    }
+    if (dto.languageProfileId !== undefined) {
+      patch.languageProfileId = dto.languageProfileId;
+    }
+    if (dto.monitored !== undefined) {
+      patch.monitored = dto.monitored;
+    }
+    if (dto.rootFolder !== undefined) {
+      patch.path = dto.rootFolder;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      throw new BadRequestException(
+        'Provide at least one field to update',
+      );
+    }
+
+    const result = await this.mediaRepo
+      .createQueryBuilder()
+      .update(Media)
+      .set(patch)
+      .whereInIds(dto.ids)
+      .execute();
+
+    return { updated: result.affected ?? 0 };
   }
 
   async remove(id: number): Promise<void> {
@@ -627,6 +680,17 @@ export class MediaService {
         lpId: query.languageProfileId,
       });
     }
+    if (query.missing === true) {
+      qb.andWhere('files.id IS NULL');
+    }
+    if (query.letter) {
+      const letter = query.letter.toUpperCase();
+      if (letter === '#') {
+        qb.andWhere(`media.title !~ '^[A-Za-z]'`);
+      } else if (/^[A-Z]$/.test(letter)) {
+        qb.andWhere(`UPPER(LEFT(media.title, 1)) = :letter`, { letter });
+      }
+    }
   }
 
   private applyFullTextSearch(
@@ -777,5 +841,68 @@ export class MediaService {
 
     await this.updateSearchVector(saved.id);
     return this.findOne(saved.id);
+  }
+
+  async renameFiles(mediaId: number): Promise<{ renamed: number }> {
+    const media = await this.mediaRepo.findOne({
+      where: { id: mediaId },
+      relations: ['files', 'seasons', 'seasons.episodes'],
+    });
+    if (!media) throw new NotFoundException(`Media #${mediaId} not found`);
+    if (!media.files?.length) return { renamed: 0 };
+    if (!media.path) throw new BadRequestException('No root folder set for this media');
+
+    const [movieFormatRow] = await this.dataSource.query(
+      `SELECT value FROM app_settings WHERE key = 'movie_format' LIMIT 1`,
+    );
+    const [seriesFormatRow] = await this.dataSource.query(
+      `SELECT value FROM app_settings WHERE key = 'series_format' LIMIT 1`,
+    );
+    const movieFormat = movieFormatRow?.value || '{Movie Title} ({Release Year}) - {Quality Full}';
+    const seriesFormat = seriesFormatRow?.value || '{Series Title} - S{season:00}E{episode:00} - {Episode Title} - {Quality Full}';
+
+    let renamed = 0;
+    for (const file of media.files) {
+      const ext = path.extname(file.relativePath);
+      const oldAbsPath = path.join(media.path, file.relativePath);
+      if (!fs.existsSync(oldAbsPath)) continue;
+
+      let newName: string;
+      if (media.type === MediaType.MOVIE) {
+        newName = this.naming.applyMovieFormat(movieFormat, {
+          title: media.title,
+          originalTitle: media.originalTitle,
+          year: media.year,
+          quality: file.quality,
+          tmdbId: media.tmdbId,
+        });
+      } else {
+        const episode = media.seasons
+          ?.flatMap((s) => s.episodes ?? [])
+          .find((e) => e.id === file.episodeId);
+        const season = media.seasons?.find((s) =>
+          s.episodes?.some((e) => e.id === file.episodeId),
+        );
+        newName = this.naming.applySeriesFormat(seriesFormat, {
+          seriesTitle: media.title,
+          season: season?.seasonNumber ?? 1,
+          episode: episode?.episodeNumber ?? 1,
+          episodeTitle: episode?.title ?? '',
+          quality: file.quality,
+        });
+      }
+
+      const newRelativePath = newName + ext;
+      if (newRelativePath === file.relativePath) continue;
+
+      const newAbsPath = path.join(media.path, newRelativePath);
+      fs.mkdirSync(path.dirname(newAbsPath), { recursive: true });
+      fs.renameSync(oldAbsPath, newAbsPath);
+      file.relativePath = newRelativePath;
+      await this.mediaFileRepo.save(file);
+      renamed++;
+    }
+
+    return { renamed };
   }
 }

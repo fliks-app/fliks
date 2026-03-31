@@ -1,0 +1,125 @@
+<div class="flex flex-col gap-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'settings.remote_path_mappings.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.remote_path_mappings.subtitle' | translate }}</p>
+    </div>
+    <button type="button" class="btn btn-primary btn-sm" (click)="openModal()">
+      {{ 'settings.remote_path_mappings.new' | translate }}
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-8">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (listError()) {
+    <div role="alert" class="alert alert-error">{{ listError() }}</div>
+  } @else if (mappings().length === 0) {
+    <p class="text-center py-8 text-base-content/50">{{ 'settings.remote_path_mappings.empty' | translate }}</p>
+  } @else {
+    <div class="overflow-x-auto">
+      <table class="table table-zebra w-full">
+        <thead>
+          <tr>
+            <th>{{ 'settings.remote_path_mappings.col_client' | translate }}</th>
+            <th>{{ 'settings.remote_path_mappings.col_remote' | translate }}</th>
+            <th>{{ 'settings.remote_path_mappings.col_local' | translate }}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (m of mappings(); track m.id) {
+            <tr>
+              <td>{{ clientName(m.downloadClientId) }}</td>
+              <td class="font-mono text-sm">{{ m.remotePath }}</td>
+              <td class="font-mono text-sm">{{ m.localPath }}</td>
+              <td class="text-right">
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs text-error"
+                  (click)="remove(m)"
+                >
+                  {{ 'settings.remote_path_mappings.delete' | translate }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <!-- Create modal -->
+  @if (modalOpen()) {
+    <div class="modal modal-open">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">{{ 'settings.remote_path_mappings.new' | translate }}</h3>
+
+        <div class="form-control mb-3">
+          <label class="label">
+            <span class="label-text">{{ 'settings.remote_path_mappings.field_client' | translate }}</span>
+          </label>
+          <select
+            class="select select-bordered"
+            [value]="formClientId() ?? ''"
+            (change)="onClientChange($any($event.target).value)"
+          >
+            <option value="">—</option>
+            @for (c of clients(); track c.id) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="form-control mb-3">
+          <label class="label">
+            <span class="label-text">{{ 'settings.remote_path_mappings.field_remote' | translate }}</span>
+          </label>
+          <input
+            type="text"
+            class="input input-bordered"
+            [ngModel]="formRemotePath()"
+            (ngModelChange)="formRemotePath.set($event)"
+            placeholder="/downloads/"
+          />
+        </div>
+
+        <div class="form-control mb-3">
+          <label class="label">
+            <span class="label-text">{{ 'settings.remote_path_mappings.field_local' | translate }}</span>
+          </label>
+          <input
+            type="text"
+            class="input input-bordered"
+            [ngModel]="formLocalPath()"
+            (ngModelChange)="formLocalPath.set($event)"
+            placeholder="/media/downloads/"
+          />
+        </div>
+
+        @if (saveError()) {
+          <div role="alert" class="alert alert-error text-sm mb-3">{{ saveError() }}</div>
+        }
+
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost" (click)="closeModal()">
+            {{ 'settings.remote_path_mappings.cancel' | translate }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            (click)="save()"
+            [disabled]="saving() || !formRemotePath().trim() || !formLocalPath().trim()"
+          >
+            @if (saving()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'settings.remote_path_mappings.save' | translate }}
+          </button>
+        </div>
+      </div>
+      <div class="modal-backdrop" (click)="closeModal()"></div>
+    </div>
+  }
+</div>

@@ -61,4 +61,18 @@ export class SearchMediaDto {
   @IsOptional()
   @Type(() => Number)
   limit?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  @Type(() => Boolean)
+  missing?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  @Type(() => Boolean)
+  cutoffUnmet?: boolean;
+
+  @IsString()
+  @IsOptional()
+  letter?: string;
 }

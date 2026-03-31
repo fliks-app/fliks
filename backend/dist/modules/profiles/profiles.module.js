@@ -13,33 +13,43 @@ exports.ProfilesModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const quality_profile_entity_1 = require("./entities/quality-profile.entity");
+const quality_definition_entity_1 = require("./entities/quality-definition.entity");
 const language_profile_entity_1 = require("./entities/language-profile.entity");
 const custom_format_entity_1 = require("./entities/custom-format.entity");
 const profiles_service_1 = require("./profiles.service");
 const profiles_controller_1 = require("./profiles.controller");
+const quality_definitions_service_1 = require("./quality-definitions.service");
+const quality_definitions_controller_1 = require("./quality-definitions.controller");
 const custom_formats_service_1 = require("./custom-formats.service");
 const custom_formats_controller_1 = require("./custom-formats.controller");
+const delay_profile_entity_1 = require("./entities/delay-profile.entity");
+const delay_profiles_controller_1 = require("./delay-profiles.controller");
+const tag_entity_1 = require("../tags/entities/tag.entity");
 const auth_module_1 = require("../auth/auth.module");
 let ProfilesModule = class ProfilesModule {
     profiles;
-    constructor(profiles) {
+    qualityDefs;
+    constructor(profiles, qualityDefs) {
         this.profiles = profiles;
+        this.qualityDefs = qualityDefs;
     }
     onModuleInit() {
         void this.profiles.ensureDefaultQualityProfiles();
+        void this.qualityDefs.ensureDefaults();
     }
 };
 exports.ProfilesModule = ProfilesModule;
 exports.ProfilesModule = ProfilesModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            typeorm_1.TypeOrmModule.forFeature([quality_profile_entity_1.QualityProfile, language_profile_entity_1.LanguageProfile, custom_format_entity_1.CustomFormat]),
+            typeorm_1.TypeOrmModule.forFeature([quality_profile_entity_1.QualityProfile, quality_definition_entity_1.QualityDefinition, language_profile_entity_1.LanguageProfile, custom_format_entity_1.CustomFormat, delay_profile_entity_1.DelayProfile, tag_entity_1.Tag]),
             auth_module_1.AuthModule,
         ],
-        controllers: [profiles_controller_1.ProfilesController, custom_formats_controller_1.CustomFormatsController],
-        providers: [profiles_service_1.ProfilesService, custom_formats_service_1.CustomFormatsService],
-        exports: [profiles_service_1.ProfilesService, custom_formats_service_1.CustomFormatsService],
+        controllers: [profiles_controller_1.ProfilesController, custom_formats_controller_1.CustomFormatsController, delay_profiles_controller_1.DelayProfilesController, quality_definitions_controller_1.QualityDefinitionsController],
+        providers: [profiles_service_1.ProfilesService, quality_definitions_service_1.QualityDefinitionsService, custom_formats_service_1.CustomFormatsService],
+        exports: [profiles_service_1.ProfilesService, quality_definitions_service_1.QualityDefinitionsService, custom_formats_service_1.CustomFormatsService],
     }),
-    __metadata("design:paramtypes", [profiles_service_1.ProfilesService])
+    __metadata("design:paramtypes", [profiles_service_1.ProfilesService,
+        quality_definitions_service_1.QualityDefinitionsService])
 ], ProfilesModule);
 //# sourceMappingURL=profiles.module.js.map

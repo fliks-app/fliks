@@ -59,6 +59,13 @@ export class MetadataService {
     );
   }
 
+  getTrendingMovies() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/trending/movie')); }
+  getPopularMovies() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/popular/movie')); }
+  getUpcomingMovies() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/upcoming/movie')); }
+  getTrendingTv() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/trending/tv')); }
+  getPopularTv() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/popular/tv')); }
+  getUpcomingTv() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/upcoming/tv')); }
+
   getMovieDetails(tmdbId: number) {
     return firstValueFrom(
       this.http.get<MetadataDetails>(`/api/metadata/movie/${tmdbId}`),

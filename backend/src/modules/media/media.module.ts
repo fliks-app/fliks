@@ -18,6 +18,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { MovieDownloadService } from './movie-download.service';
 import { EpisodeDownloadService } from './episode-download.service';
 import { DiskImportService } from './disk-import.service';
+import { NamingService } from '../scheduler/naming.service';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
 
 @Module({
@@ -40,7 +41,7 @@ import { RootFolder } from '../root-folders/entities/root-folder.entity';
     NotificationsModule,
   ],
   controllers: [MediaController],
-  providers: [MediaService, MovieDownloadService, EpisodeDownloadService, DiskImportService],
+  providers: [MediaService, MovieDownloadService, EpisodeDownloadService, DiskImportService, NamingService],
   exports: [MediaService],
 })
 export class MediaModule {}

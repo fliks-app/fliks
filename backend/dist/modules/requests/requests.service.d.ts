@@ -15,6 +15,7 @@ export declare class RequestsService {
     constructor(requestRepo: Repository<SuitarrRequest>, commentRepo: Repository<RequestComment>, ruleRepo: Repository<AutoApprovalRule>, notifications: NotificationsService);
     private evalCondition;
     private shouldAutoApprove;
+    private checkQuota;
     create(user: User, dto: CreateRequestDto): Promise<SuitarrRequest>;
     findAll(user: User, query: ListRequestsDto): Promise<{
         data: SuitarrRequest[];

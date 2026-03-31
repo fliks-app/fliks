@@ -63,6 +63,8 @@ const root_folder_entity_1 = require("../root-folders/entities/root-folder.entit
 const qbittorrent_service_1 = require("../download-clients/qbittorrent.service");
 const notifications_service_1 = require("../notifications/notifications.service");
 const naming_service_1 = require("./naming.service");
+const blocklist_service_1 = require("../blocklist/blocklist.service");
+const remote_path_mapping_entity_1 = require("../settings/entities/remote-path-mapping.entity");
 let CompletionService = CompletionService_1 = class CompletionService {
     dataSource;
     mediaRepo;
@@ -75,8 +77,10 @@ let CompletionService = CompletionService_1 = class CompletionService {
     qbittorrent;
     notifications;
     naming;
+    blocklist;
+    pathMappingRepo;
     log = new common_1.Logger(CompletionService_1.name);
-    constructor(dataSource, mediaRepo, mediaFileRepo, historyRepo, seasonRepo, episodeRepo, clientRepo, rootFolderRepo, qbittorrent, notifications, naming) {
+    constructor(dataSource, mediaRepo, mediaFileRepo, historyRepo, seasonRepo, episodeRepo, clientRepo, rootFolderRepo, qbittorrent, notifications, naming, blocklist, pathMappingRepo) {
         this.dataSource = dataSource;
         this.mediaRepo = mediaRepo;
         this.mediaFileRepo = mediaFileRepo;
@@ -88,8 +92,11 @@ let CompletionService = CompletionService_1 = class CompletionService {
         this.qbittorrent = qbittorrent;
         this.notifications = notifications;
         this.naming = naming;
+        this.blocklist = blocklist;
+        this.pathMappingRepo = pathMappingRepo;
     }
     async processCompleted() {
+        const mappings = await this.pathMappingRepo.find();
         const grabbed = await this.historyRepo.find({
             where: [{ status: 'grabbed' }, { status: 'failed' }],
         });
@@ -102,7 +109,10 @@ let CompletionService = CompletionService_1 = class CompletionService {
             this.log.warn('Import: no enabled qBittorrent client found');
             return;
         }
-        const allTorrents = (await Promise.all(qbitClients.map((c) => this.qbittorrent.getTorrents(c)))).flat();
+        const allTorrents = (await Promise.all(qbitClients.map(async (c) => {
+            const torrents = await this.qbittorrent.getTorrents(c);
+            return torrents.map((t) => ({ ...t, _clientId: c.id }));
+        }))).flat();
         this.log.log(`Import: ${allTorrents.length} torrents from ${qbitClients.length} client(s)`);
         const completedTorrents = allTorrents.filter((t) => t.progress >= 1 || t.state === 'seeding' || t.state === 'stalledUP');
         this.log.log(`Import: ${completedTorrents.length} completed torrents`);
@@ -116,11 +126,15 @@ let CompletionService = CompletionService_1 = class CompletionService {
         ];
         const fmtRows = await this.dataSource.query(`SELECT key, value FROM app_settings WHERE key = ANY($1)`, [fmtKeys]);
         const fmtMap = Object.fromEntries(fmtRows.map((r) => [r.key, r.value]));
-        const movieFormat = fmtMap['naming_movie_format'] ?? '{Movie Title} ({Release Year}) {Quality Full}';
-        const seriesFormat = fmtMap['naming_series_format'] ?? '{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}';
+        const movieFormat = fmtMap['naming_movie_format'] ??
+            '{Movie Title} ({Release Year}) {Quality Full}';
+        const seriesFormat = fmtMap['naming_series_format'] ??
+            '{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}';
         const seriesFolderFormat = fmtMap['naming_series_folder_format'] ?? '{Series Title}';
         const seasonFolderFormat = fmtMap['naming_season_folder_format'] ?? 'Season {season:00}';
-        const rootFolders = await this.rootFolderRepo.find({ order: { path: 'ASC' } });
+        const rootFolders = await this.rootFolderRepo.find({
+            order: { path: 'ASC' },
+        });
         for (const history of grabbed) {
             const torrent = completedTorrents.find((t) => t.name.toLowerCase() === history.sourceTitle.toLowerCase() ||
                 t.name.toLowerCase().startsWith(history.sourceTitle.toLowerCase()));
@@ -131,23 +145,45 @@ let CompletionService = CompletionService_1 = class CompletionService {
             this.log.log(`Import: matched "${history.sourceTitle}" → torrent "${torrent.name}" (state=${torrent.state}, progress=${torrent.progress})`);
             try {
                 await this.historyRepo.update(history.id, { status: 'importing' });
-                await this.processOne(history, torrent, movieFormat, seriesFormat, seriesFolderFormat, seasonFolderFormat, rootFolders);
+                await this.processOne(history, torrent, movieFormat, seriesFormat, seriesFolderFormat, seasonFolderFormat, rootFolders, mappings);
             }
             catch (e) {
                 this.log.error(`Import: FAILED for "${history.sourceTitle}": ${e.message}`);
                 await this.historyRepo.update(history.id, { status: 'failed' });
+                try {
+                    await this.blocklist.create({
+                        sourceTitle: history.sourceTitle,
+                        quality: history.quality,
+                        mediaId: history.mediaId,
+                        note: `Auto-blocklist: import failed — ${e.message}`,
+                    });
+                    this.log.log(`Import: auto-blocklisted "${history.sourceTitle}"`);
+                }
+                catch {
+                }
             }
         }
     }
-    async processOne(history, torrent, movieFormat, seriesFormat, seriesFolderFormat, seasonFolderFormat, rootFolders) {
-        const saveDir = path.join(torrent.save_path, torrent.name);
+    translatePath(savePath, clientId, mappings) {
+        for (const m of mappings) {
+            if (m.downloadClientId && m.downloadClientId !== clientId)
+                continue;
+            if (savePath.startsWith(m.remotePath)) {
+                return m.localPath + savePath.slice(m.remotePath.length);
+            }
+        }
+        return savePath;
+    }
+    async processOne(history, torrent, movieFormat, seriesFormat, seriesFolderFormat, seasonFolderFormat, rootFolders, mappings) {
+        const translatedSavePath = this.translatePath(torrent.save_path, torrent._clientId, mappings);
+        const saveDir = path.join(translatedSavePath, torrent.name);
         const isDirTorrent = fs.existsSync(saveDir) && fs.statSync(saveDir).isDirectory();
-        const searchDir = isDirTorrent ? saveDir : torrent.save_path;
+        const searchDir = isDirTorrent ? saveDir : translatedSavePath;
         this.log.log(`Import[${history.sourceTitle}]: searching for video in "${searchDir}" (isDir=${isDirTorrent})`);
         let videoFile = this.naming.findLargestVideoFile(searchDir);
         if (!videoFile) {
             for (const ext of ['.mkv', '.mp4', '.avi', '.mov', '.ts']) {
-                const candidate = path.join(torrent.save_path, torrent.name + ext);
+                const candidate = path.join(translatedSavePath, torrent.name + ext);
                 if (fs.existsSync(candidate)) {
                     const stat = fs.statSync(candidate);
                     videoFile = { filePath: candidate, size: stat.size };
@@ -160,7 +196,9 @@ let CompletionService = CompletionService_1 = class CompletionService {
             return;
         }
         this.log.log(`Import[${history.sourceTitle}]: found video "${videoFile.filePath}" (${(videoFile.size / 1024 / 1024).toFixed(1)} MB)`);
-        const media = await this.mediaRepo.findOne({ where: { id: history.mediaId } });
+        const media = await this.mediaRepo.findOne({
+            where: { id: history.mediaId },
+        });
         if (!media) {
             this.log.warn(`Import[${history.sourceTitle}]: media id=${history.mediaId} not found in DB`);
             return;
@@ -258,6 +296,35 @@ let CompletionService = CompletionService_1 = class CompletionService {
             quality: history.quality,
             sourceTitle: history.sourceTitle,
         });
+        try {
+            const [scriptSetting] = await this.dataSource.query(`SELECT value FROM app_settings WHERE key = 'post_import_script' LIMIT 1`);
+            const script = scriptSetting?.value?.trim();
+            if (script) {
+                const { exec } = await import('child_process');
+                const { promisify } = await import('util');
+                const execAsync = promisify(exec);
+                const env = {
+                    ...process.env,
+                    SUITARR_MEDIA_TITLE: media.title,
+                    SUITARR_MEDIA_ID: String(media.id),
+                    SUITARR_MEDIA_TYPE: media.type,
+                    SUITARR_QUALITY: history.quality,
+                    SUITARR_FILE_PATH: destPath,
+                    SUITARR_SOURCE_TITLE: history.sourceTitle,
+                };
+                const { stdout, stderr } = await execAsync(script, {
+                    env,
+                    timeout: 30_000,
+                });
+                if (stdout.trim())
+                    this.log.log(`Post-import script stdout: ${stdout.trim()}`);
+                if (stderr.trim())
+                    this.log.warn(`Post-import script stderr: ${stderr.trim()}`);
+            }
+        }
+        catch (e) {
+            this.log.warn(`Post-import script failed: ${e.message}`);
+        }
     }
 };
 exports.CompletionService = CompletionService;
@@ -276,6 +343,7 @@ exports.CompletionService = CompletionService = CompletionService_1 = __decorate
     __param(5, (0, typeorm_1.InjectRepository)(episode_entity_1.Episode)),
     __param(6, (0, typeorm_1.InjectRepository)(download_client_entity_1.DownloadClient)),
     __param(7, (0, typeorm_1.InjectRepository)(root_folder_entity_1.RootFolder)),
+    __param(12, (0, typeorm_1.InjectRepository)(remote_path_mapping_entity_1.RemotePathMapping)),
     __metadata("design:paramtypes", [typeorm_2.DataSource,
         typeorm_2.Repository,
         typeorm_2.Repository,
@@ -286,6 +354,8 @@ exports.CompletionService = CompletionService = CompletionService_1 = __decorate
         typeorm_2.Repository,
         qbittorrent_service_1.QbittorrentService,
         notifications_service_1.NotificationsService,
-        naming_service_1.NamingService])
+        naming_service_1.NamingService,
+        blocklist_service_1.BlocklistService,
+        typeorm_2.Repository])
 ], CompletionService);
 //# sourceMappingURL=completion.service.js.map

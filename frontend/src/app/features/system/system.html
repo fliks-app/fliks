@@ -66,6 +66,20 @@
     </div>
   }
 
+  <!-- Active task progress -->
+  @if (sse.activeProgress().size > 0) {
+    <div class="space-y-2">
+      @for (entry of sse.activeProgress() | keyvalue; track entry.key) {
+        <div class="flex items-center gap-3">
+          <span class="text-sm font-medium w-32">{{ entry.value.command }}</span>
+          <progress class="progress progress-primary flex-1" [value]="entry.value.current" [max]="entry.value.total"></progress>
+          <span class="text-xs text-base-content/60 tabular-nums w-16 text-right">{{ entry.value.current }}/{{ entry.value.total }}</span>
+          <span class="text-xs text-base-content/50 truncate w-52">{{ entry.value.message }}</span>
+        </div>
+      }
+    </div>
+  }
+
   <!-- Manual commands -->
   <div class="card bg-base-100 border border-base-200">
     <div class="card-body gap-4">
@@ -138,4 +152,119 @@
       </div>
     }
   </div>
+
+  <!-- Backups section -->
+  <div class="divider"></div>
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-semibold">{{ 'system.backups_title' | translate }}</h2>
+    <button
+      type="button"
+      class="btn btn-primary btn-sm"
+      (click)="createBackup()"
+      [disabled]="backupCreating()"
+    >
+      @if (backupCreating()) {
+        <span class="loading loading-spinner loading-xs"></span>
+      }
+      {{ 'system.create_backup' | translate }}
+    </button>
+  </div>
+  @if (backupsLoading()) {
+    <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+  } @else if (backups().length === 0) {
+    <p class="text-center py-6 text-base-content/50">{{ 'system.no_backups' | translate }}</p>
+  } @else {
+    <div class="overflow-x-auto rounded-lg border border-base-200">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>{{ 'system.col_backup_name' | translate }}</th>
+            <th class="text-right">{{ 'system.col_backup_size' | translate }}</th>
+            <th>{{ 'system.col_backup_date' | translate }}</th>
+            <th class="w-32"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (b of backups(); track b.filename) {
+            <tr>
+              <td class="font-mono text-sm">{{ b.filename }}</td>
+              <td class="text-right tabular-nums text-sm">{{ formatBytes(b.size) }}</td>
+              <td class="text-sm">{{ b.date | date:'dd/MM/yyyy HH:mm' }}</td>
+              <td class="text-end">
+                <a class="btn btn-ghost btn-xs" [href]="'/api/system/backups/' + b.filename" target="_blank">
+                  {{ 'system.download_backup' | translate }}
+                </a>
+                <button type="button" class="btn btn-ghost btn-xs text-warning" (click)="restoreBackup(b.filename)">
+                  {{ 'system.restore_backup' | translate }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <!-- Logs section -->
+  <div class="divider"></div>
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-semibold">{{ 'system.logs_title' | translate }}</h2>
+    <div class="flex gap-2">
+      <select class="select select-bordered select-xs" [ngModel]="logLevel()" (ngModelChange)="logLevel.set($event); loadLogs()">
+        <option value="">{{ 'system.logs_all_levels' | translate }}</option>
+        <option value="log">Info</option>
+        <option value="warn">Warning</option>
+        <option value="error">Error</option>
+      </select>
+      <input type="text" class="input input-bordered input-xs w-40" [placeholder]="'common.search' | translate"
+        [ngModel]="logSearch()" (ngModelChange)="logSearch.set($event); loadLogs()" />
+    </div>
+  </div>
+  <div class="overflow-x-auto max-h-96 overflow-y-auto rounded-lg border border-base-200 mt-3">
+    <table class="table table-xs font-mono">
+      <thead class="sticky top-0 bg-base-100">
+        <tr>
+          <th class="w-40">{{ 'system.col_log_time' | translate }}</th>
+          <th class="w-16">{{ 'system.col_log_level' | translate }}</th>
+          <th class="w-32">{{ 'system.col_log_context' | translate }}</th>
+          <th>{{ 'system.col_log_message' | translate }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (entry of logs(); track entry.timestamp + entry.message) {
+          <tr [class.text-warning]="entry.level === 'warn'" [class.text-error]="entry.level === 'error'" [class.text-info]="entry.level === 'debug'">
+            <td class="text-xs tabular-nums whitespace-nowrap">{{ entry.timestamp | date:'HH:mm:ss.SSS' }}</td>
+            <td><span class="badge badge-xs" [ngClass]="{'badge-success': entry.level === 'log', 'badge-warning': entry.level === 'warn', 'badge-error': entry.level === 'error', 'badge-info': entry.level === 'debug'}">{{ entry.level }}</span></td>
+            <td class="text-xs truncate max-w-[8rem]">{{ entry.context }}</td>
+            <td class="text-xs whitespace-pre-wrap break-all">{{ entry.message }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Import section -->
+  <div class="divider"></div>
+  <h2 class="text-xl font-semibold">{{ 'system.import_title' | translate }}</h2>
+  <p class="text-sm text-base-content/60 mb-3">{{ 'system.import_subtitle' | translate }}</p>
+  <div class="flex flex-wrap gap-4">
+    <label class="btn btn-outline btn-sm">
+      @if (importRadarrLoading()) { <span class="loading loading-spinner loading-xs"></span> }
+      {{ 'system.import_radarr' | translate }}
+      <input type="file" class="hidden" accept=".sql,.dump" (change)="importRadarr($event)" [disabled]="importRadarrLoading()" />
+    </label>
+    <label class="btn btn-outline btn-sm">
+      @if (importSonarrLoading()) { <span class="loading loading-spinner loading-xs"></span> }
+      {{ 'system.import_sonarr' | translate }}
+      <input type="file" class="hidden" accept=".sql,.dump" (change)="importSonarr($event)" [disabled]="importSonarrLoading()" />
+    </label>
+  </div>
+  @if (importResult(); as ir) {
+    <div role="alert" class="alert text-sm mt-3" [class.alert-success]="ir.errors.length === 0" [class.alert-warning]="ir.errors.length > 0">
+      {{ ir.imported }} importé(s), {{ ir.skipped }} ignoré(s).
+      @if (ir.errors.length) {
+        <br>{{ ir.errors.length }} erreur(s): {{ ir.errors.slice(0, 3).join(', ') }}
+      }
+    </div>
+  }
 </div>

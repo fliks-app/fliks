@@ -28,6 +28,9 @@ let CustomFormatsController = class CustomFormatsController {
     create(dto) {
         return this.service.create(dto);
     }
+    testRelease(body) {
+        return this.service.testRelease(body.title);
+    }
     findAll() {
         return this.service.findAll();
     }
@@ -50,6 +53,14 @@ __decorate([
     __metadata("design:paramtypes", [create_custom_format_dto_1.CreateCustomFormatDto]),
     __metadata("design:returntype", void 0)
 ], CustomFormatsController.prototype, "create", null);
+__decorate([
+    (0, common_1.Post)('test'),
+    (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Read, 'Settings')),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], CustomFormatsController.prototype, "testRelease", null);
 __decorate([
     (0, common_1.Get)(),
     (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Read, 'Settings')),

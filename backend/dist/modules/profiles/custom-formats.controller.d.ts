@@ -4,6 +4,14 @@ export declare class CustomFormatsController {
     private readonly service;
     constructor(service: CustomFormatsService);
     create(dto: CreateCustomFormatDto): Promise<import("./entities/custom-format.entity").CustomFormat>;
+    testRelease(body: {
+        title: string;
+    }): Promise<{
+        formatId: number;
+        formatName: string;
+        matched: boolean;
+        score: number;
+    }[]>;
     findAll(): Promise<import("./entities/custom-format.entity").CustomFormat[]>;
     findOne(id: number): Promise<import("./entities/custom-format.entity").CustomFormat>;
     update(id: number, dto: CreateCustomFormatDto): Promise<import("./entities/custom-format.entity").CustomFormat>;

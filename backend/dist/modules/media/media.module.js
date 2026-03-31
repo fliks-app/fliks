@@ -27,6 +27,7 @@ const notifications_module_1 = require("../notifications/notifications.module");
 const movie_download_service_1 = require("./movie-download.service");
 const episode_download_service_1 = require("./episode-download.service");
 const disk_import_service_1 = require("./disk-import.service");
+const naming_service_1 = require("../scheduler/naming.service");
 const root_folder_entity_1 = require("../root-folders/entities/root-folder.entity");
 let MediaModule = class MediaModule {
 };
@@ -52,7 +53,7 @@ exports.MediaModule = MediaModule = __decorate([
             notifications_module_1.NotificationsModule,
         ],
         controllers: [media_controller_1.MediaController],
-        providers: [media_service_1.MediaService, movie_download_service_1.MovieDownloadService, episode_download_service_1.EpisodeDownloadService, disk_import_service_1.DiskImportService],
+        providers: [media_service_1.MediaService, movie_download_service_1.MovieDownloadService, episode_download_service_1.EpisodeDownloadService, disk_import_service_1.DiskImportService, naming_service_1.NamingService],
         exports: [media_service_1.MediaService],
     })
 ], MediaModule);

@@ -19,6 +19,7 @@ class QualityItemDto {
     source;
     allowed;
     sortOrder;
+    groupId;
 }
 exports.QualityItemDto = QualityItemDto;
 __decorate([
@@ -45,6 +46,11 @@ __decorate([
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], QualityItemDto.prototype, "sortOrder", void 0);
+__decorate([
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], QualityItemDto.prototype, "groupId", void 0);
 class CreateQualityProfileDto {
     name;
     cutoff;

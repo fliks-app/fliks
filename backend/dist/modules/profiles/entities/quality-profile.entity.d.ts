@@ -14,4 +14,5 @@ export interface QualityProfileItem {
     };
     allowed: boolean;
     sortOrder: number;
+    groupId?: number;
 }

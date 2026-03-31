@@ -162,6 +162,36 @@ export class TmdbProvider implements IMetadataProvider {
     return seasons;
   }
 
+  async getTrendingMovies(): Promise<MetadataSearchResult[]> {
+    const { data } = await this.client.get('/trending/movie/week', { params: { language: 'fr-FR' } });
+    return data.results.map((r: any) => this.mapMovieResult(r));
+  }
+
+  async getPopularMovies(): Promise<MetadataSearchResult[]> {
+    const { data } = await this.client.get('/movie/popular', { params: { language: 'fr-FR' } });
+    return data.results.map((r: any) => this.mapMovieResult(r));
+  }
+
+  async getUpcomingMovies(): Promise<MetadataSearchResult[]> {
+    const { data } = await this.client.get('/movie/upcoming', { params: { language: 'fr-FR', region: 'FR' } });
+    return data.results.map((r: any) => this.mapMovieResult(r));
+  }
+
+  async getTrendingTvShows(): Promise<MetadataSearchResult[]> {
+    const { data } = await this.client.get('/trending/tv/week', { params: { language: 'fr-FR' } });
+    return data.results.map((r: any) => this.mapTvResult(r));
+  }
+
+  async getPopularTvShows(): Promise<MetadataSearchResult[]> {
+    const { data } = await this.client.get('/tv/popular', { params: { language: 'fr-FR' } });
+    return data.results.map((r: any) => this.mapTvResult(r));
+  }
+
+  async getUpcomingTvShows(): Promise<MetadataSearchResult[]> {
+    const { data } = await this.client.get('/tv/on_the_air', { params: { language: 'fr-FR' } });
+    return data.results.map((r: any) => this.mapTvResult(r));
+  }
+
   private mapMovieResult(r: any): MetadataSearchResult {
     return {
       tmdbId: r.id,

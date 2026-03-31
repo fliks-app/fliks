@@ -10,6 +10,7 @@ exports.IndexersModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const indexer_entity_1 = require("./entities/indexer.entity");
+const indexer_stat_entity_1 = require("./entities/indexer-stat.entity");
 const tag_entity_1 = require("../tags/entities/tag.entity");
 const torznab_service_1 = require("./torznab.service");
 const indexers_service_1 = require("./indexers.service");
@@ -20,7 +21,7 @@ let IndexersModule = class IndexersModule {
 exports.IndexersModule = IndexersModule;
 exports.IndexersModule = IndexersModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([indexer_entity_1.Indexer, tag_entity_1.Tag]), auth_module_1.AuthModule],
+        imports: [typeorm_1.TypeOrmModule.forFeature([indexer_entity_1.Indexer, indexer_stat_entity_1.IndexerStat, tag_entity_1.Tag]), auth_module_1.AuthModule],
         controllers: [indexers_controller_1.IndexersController],
         providers: [
             torznab_service_1.TorznabService,

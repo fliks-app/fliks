@@ -47,6 +47,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SystemController = void 0;
 const common_1 = require("@nestjs/common");
+const platform_express_1 = require("@nestjs/platform-express");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const fs = __importStar(require("fs"));
@@ -58,18 +59,38 @@ const jwt_or_api_key_guard_1 = require("../auth/guards/jwt-or-api-key.guard");
 const policies_guard_1 = require("../auth/casl/policies.guard");
 const check_policies_decorator_1 = require("../auth/casl/check-policies.decorator");
 const actions_enum_1 = require("../auth/casl/actions.enum");
+const backup_service_1 = require("./backup.service");
+const log_buffer_service_1 = require("./log-buffer.service");
+const events_service_1 = require("./events.service");
+const import_radarr_service_1 = require("./import-radarr.service");
+const import_sonarr_service_1 = require("./import-sonarr.service");
+const import_api_dto_1 = require("./dto/import-api.dto");
+const rxjs_1 = require("rxjs");
 let SystemController = class SystemController {
     dataSource;
     indexerRepo;
     clientRepo;
     rootFolderRepo;
     qbittorrent;
-    constructor(dataSource, indexerRepo, clientRepo, rootFolderRepo, qbittorrent) {
+    backup;
+    logBuffer;
+    eventsService;
+    importRadarrService;
+    importSonarrService;
+    constructor(dataSource, indexerRepo, clientRepo, rootFolderRepo, qbittorrent, backup, logBuffer, eventsService, importRadarrService, importSonarrService) {
         this.dataSource = dataSource;
         this.indexerRepo = indexerRepo;
         this.clientRepo = clientRepo;
         this.rootFolderRepo = rootFolderRepo;
         this.qbittorrent = qbittorrent;
+        this.backup = backup;
+        this.logBuffer = logBuffer;
+        this.eventsService = eventsService;
+        this.importRadarrService = importRadarrService;
+        this.importSonarrService = importSonarrService;
+    }
+    events() {
+        return this.eventsService.getStream();
     }
     async health() {
         const [dbStatus, indexers, clients] = await Promise.all([
@@ -129,6 +150,44 @@ let SystemController = class SystemController {
             diskSpace,
         };
     }
+    createBackup() {
+        return this.backup.createBackup();
+    }
+    listBackups() {
+        return this.backup.listBackups();
+    }
+    restore(body) {
+        return this.backup.restore(body.filename);
+    }
+    downloadBackup(name, res) {
+        const filePath = this.backup.getBackupPath(name);
+        res.download(filePath, name);
+    }
+    getLogs(level, q, limit) {
+        return this.logBuffer.getEntries({
+            level: level || undefined,
+            q: q || undefined,
+            limit: limit ? parseInt(limit, 10) : 200,
+        });
+    }
+    importRadarr(file) {
+        if (!file?.buffer?.length) {
+            throw new common_1.BadRequestException('No file uploaded');
+        }
+        return this.importRadarrService.importFromDump(file.buffer);
+    }
+    importSonarr(file) {
+        if (!file?.buffer?.length) {
+            throw new common_1.BadRequestException('No file uploaded');
+        }
+        return this.importSonarrService.importFromDump(file.buffer);
+    }
+    importRadarrApi(dto) {
+        return this.importRadarrService.importFromApi(dto.url, dto.apiKey);
+    }
+    importSonarrApi(dto) {
+        return this.importSonarrService.importFromApi(dto.url, dto.apiKey);
+    }
     async checkClients() {
         const clients = await this.clientRepo.find({ where: { enabled: true } });
         return Promise.all(clients.map(async (c) => {
@@ -138,6 +197,12 @@ let SystemController = class SystemController {
     }
 };
 exports.SystemController = SystemController;
+__decorate([
+    (0, common_1.Sse)('events'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", rxjs_1.Observable)
+], SystemController.prototype, "events", null);
 __decorate([
     (0, common_1.Get)('health'),
     (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Read, 'Settings')),
@@ -152,6 +217,81 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], SystemController.prototype, "stats", null);
+__decorate([
+    (0, common_1.Post)('backup'),
+    (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Create, 'Settings')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], SystemController.prototype, "createBackup", null);
+__decorate([
+    (0, common_1.Get)('backups'),
+    (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Read, 'Settings')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], SystemController.prototype, "listBackups", null);
+__decorate([
+    (0, common_1.Post)('restore'),
+    (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Create, 'Settings')),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], SystemController.prototype, "restore", null);
+__decorate([
+    (0, common_1.Get)('backups/:name'),
+    (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Read, 'Settings')),
+    __param(0, (0, common_1.Param)('name')),
+    __param(1, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], SystemController.prototype, "downloadBackup", null);
+__decorate([
+    (0, common_1.Get)('logs'),
+    (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Read, 'Settings')),
+    __param(0, (0, common_1.Query)('level')),
+    __param(1, (0, common_1.Query)('q')),
+    __param(2, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:returntype", void 0)
+], SystemController.prototype, "getLogs", null);
+__decorate([
+    (0, common_1.Post)('import-radarr'),
+    (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Create, 'Settings')),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file')),
+    __param(0, (0, common_1.UploadedFile)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], SystemController.prototype, "importRadarr", null);
+__decorate([
+    (0, common_1.Post)('import-sonarr'),
+    (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Create, 'Settings')),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file')),
+    __param(0, (0, common_1.UploadedFile)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], SystemController.prototype, "importSonarr", null);
+__decorate([
+    (0, common_1.Post)('import-radarr-api'),
+    (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Create, 'Settings')),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [import_api_dto_1.ImportApiDto]),
+    __metadata("design:returntype", Promise)
+], SystemController.prototype, "importRadarrApi", null);
+__decorate([
+    (0, common_1.Post)('import-sonarr-api'),
+    (0, check_policies_decorator_1.CheckPolicies)((ability) => ability.can(actions_enum_1.Action.Create, 'Settings')),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [import_api_dto_1.ImportApiDto]),
+    __metadata("design:returntype", Promise)
+], SystemController.prototype, "importSonarrApi", null);
 exports.SystemController = SystemController = __decorate([
     (0, common_1.Controller)('system'),
     (0, common_1.UseGuards)(jwt_or_api_key_guard_1.JwtOrApiKeyGuard, policies_guard_1.PoliciesGuard),
@@ -162,6 +302,11 @@ exports.SystemController = SystemController = __decorate([
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
-        qbittorrent_service_1.QbittorrentService])
+        qbittorrent_service_1.QbittorrentService,
+        backup_service_1.BackupService,
+        log_buffer_service_1.LogBufferService,
+        events_service_1.EventsService,
+        import_radarr_service_1.ImportRadarrService,
+        import_sonarr_service_1.ImportSonarrService])
 ], SystemController);
 //# sourceMappingURL=system.controller.js.map

@@ -39,6 +39,8 @@ export class DownloadClientsSettingsComponent implements OnInit {
   readonly formPassword = signal('');
   readonly formUseSsl = signal(false);
   readonly formCategory = signal('suitarr');
+  readonly formMovieCategory = signal('');
+  readonly formSeriesCategory = signal('');
   readonly formPriority = signal(1);
   readonly formEnabled = signal(true);
 
@@ -74,6 +76,8 @@ export class DownloadClientsSettingsComponent implements OnInit {
     this.formPassword.set('');
     this.formUseSsl.set(false);
     this.formCategory.set('suitarr');
+    this.formMovieCategory.set('');
+    this.formSeriesCategory.set('');
     this.formPriority.set(1);
     this.formEnabled.set(true);
     this.saveError.set('');
@@ -91,6 +95,8 @@ export class DownloadClientsSettingsComponent implements OnInit {
     this.formPassword.set('');
     this.formUseSsl.set(dc.settings.useSsl ?? false);
     this.formCategory.set(dc.settings.category ?? 'suitarr');
+    this.formMovieCategory.set(dc.settings.movieCategory ?? '');
+    this.formSeriesCategory.set(dc.settings.seriesCategory ?? '');
     this.formPriority.set(dc.priority);
     this.formEnabled.set(dc.enabled);
     this.saveError.set('');
@@ -113,6 +119,8 @@ export class DownloadClientsSettingsComponent implements OnInit {
         password: this.formPassword() || undefined,
         useSsl: this.formUseSsl(),
         category: this.formCategory().trim() || undefined,
+        movieCategory: this.formMovieCategory().trim() || undefined,
+        seriesCategory: this.formSeriesCategory().trim() || undefined,
       },
       priority: this.formPriority(),
       enabled: this.formEnabled(),

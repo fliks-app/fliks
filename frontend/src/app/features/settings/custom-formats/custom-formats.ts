@@ -36,7 +36,12 @@ export class CustomFormatsSettingsComponent implements OnInit {
   readonly formScore = signal(0);
   readonly formSpecs = signal<CustomFormatSpec[]>([]);
 
-  readonly specTypes = ['title_regex', 'source', 'resolution', 'language'] as const;
+  readonly testTitle = signal('');
+  readonly testResults = signal<{ formatId: number; formatName: string; matched: boolean; score: number }[]>([]);
+  readonly testLoading = signal(false);
+
+  readonly specTypes = ['title_regex', 'source', 'resolution', 'language', 'indexer_flag'] as const;
+  readonly indexerFlagValues = ['freeleech', 'halfleech'] as const;
 
   ngOnInit() {
     this.reloadAll();
@@ -119,6 +124,18 @@ export class CustomFormatsSettingsComponent implements OnInit {
       this.saveError.set(msg ?? this.translate.instant('settings.custom_formats.save_error'));
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  async runTest() {
+    const title = this.testTitle().trim();
+    if (!title) return;
+    this.testLoading.set(true);
+    try {
+      const results = await this.api.testTitle(title);
+      this.testResults.set(results);
+    } finally {
+      this.testLoading.set(false);
     }
   }
 

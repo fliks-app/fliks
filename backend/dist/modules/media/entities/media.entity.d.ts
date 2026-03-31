@@ -1,5 +1,5 @@
 import { BaseEntity } from '../../../common/entities/base.entity';
-import { MediaType, MediaStatus } from '../../../common/enums';
+import { MediaType, MediaStatus, MinimumAvailability } from '../../../common/enums';
 import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
 import { Tag } from '../../tags/entities/tag.entity';
@@ -25,6 +25,7 @@ export declare class Media extends BaseEntity {
     inCinemas: string;
     digitalRelease: string;
     physicalRelease: string;
+    minimumAvailability: MinimumAvailability;
     searchVector: string;
     qualityProfile: QualityProfile;
     qualityProfileId: number;

@@ -53,23 +53,32 @@ let CustomFormatsService = class CustomFormatsService {
         const cf = await this.findOne(id);
         await this.repo.remove(cf);
     }
-    async scoreRelease(releaseTitle) {
+    async testRelease(title, meta) {
+        const formats = await this.repo.find();
+        return formats.map(cf => ({
+            formatId: cf.id,
+            formatName: cf.name,
+            matched: this.matchesFormat(title, cf, meta),
+            score: this.matchesFormat(title, cf, meta) ? cf.score : 0,
+        }));
+    }
+    async scoreRelease(releaseTitle, meta) {
         const formats = await this.findAll();
         let total = 0;
         for (const fmt of formats) {
-            if (this.matchesFormat(releaseTitle, fmt)) {
+            if (this.matchesFormat(releaseTitle, fmt, meta)) {
                 total += fmt.score;
             }
         }
         return total;
     }
-    matchesFormat(title, fmt) {
+    matchesFormat(title, fmt, meta) {
         const titleLower = title.toLowerCase();
         let allRequiredMet = true;
         let anyNonRequiredMet = false;
         let hasNonRequired = false;
         for (const spec of fmt.specifications) {
-            const match = this.evalSpec(titleLower, spec);
+            const match = this.evalSpec(titleLower, spec, meta);
             const result = spec.negate ? !match : match;
             if (spec.required) {
                 if (!result)
@@ -87,7 +96,7 @@ let CustomFormatsService = class CustomFormatsService {
             return false;
         return true;
     }
-    evalSpec(titleLower, spec) {
+    evalSpec(titleLower, spec, meta) {
         const val = (spec.value || '').toLowerCase();
         switch (spec.implementation) {
             case 'title_regex':
@@ -103,6 +112,12 @@ let CustomFormatsService = class CustomFormatsService {
                 return titleLower.includes(val);
             case 'language':
                 return titleLower.includes(val);
+            case 'indexer_flag':
+                if (val === 'freeleech')
+                    return meta?.freeleech === true;
+                if (val === 'halfleech')
+                    return meta?.downloadVolumeFactor === 0.5;
+                return false;
             default:
                 return false;
         }

@@ -9,6 +9,8 @@ import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NamingService } from './naming.service';
+import { BlocklistService } from '../blocklist/blocklist.service';
+import { RemotePathMapping } from '../settings/entities/remote-path-mapping.entity';
 export declare class CompletionService {
     private readonly dataSource;
     private readonly mediaRepo;
@@ -21,8 +23,11 @@ export declare class CompletionService {
     private readonly qbittorrent;
     private readonly notifications;
     private readonly naming;
+    private readonly blocklist;
+    private readonly pathMappingRepo;
     private readonly log;
-    constructor(dataSource: DataSource, mediaRepo: Repository<Media>, mediaFileRepo: Repository<MediaFile>, historyRepo: Repository<DownloadHistory>, seasonRepo: Repository<Season>, episodeRepo: Repository<Episode>, clientRepo: Repository<DownloadClient>, rootFolderRepo: Repository<RootFolder>, qbittorrent: QbittorrentService, notifications: NotificationsService, naming: NamingService);
+    constructor(dataSource: DataSource, mediaRepo: Repository<Media>, mediaFileRepo: Repository<MediaFile>, historyRepo: Repository<DownloadHistory>, seasonRepo: Repository<Season>, episodeRepo: Repository<Episode>, clientRepo: Repository<DownloadClient>, rootFolderRepo: Repository<RootFolder>, qbittorrent: QbittorrentService, notifications: NotificationsService, naming: NamingService, blocklist: BlocklistService, pathMappingRepo: Repository<RemotePathMapping>);
     processCompleted(): Promise<void>;
+    private translatePath;
     private processOne;
 }

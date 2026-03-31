@@ -13,10 +13,12 @@ import { TorznabService } from '../indexers/torznab.service';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
 import { MediaService } from '../media/media.service';
-import { MediaType, MediaStatus } from '../../common/enums';
+import { MediaType, MediaStatus, MinimumAvailability } from '../../common/enums';
 import { ConfigService } from '@nestjs/config';
 import { CompletionService } from './completion.service';
 import { NamingService } from './naming.service';
+import { DelayProfile } from '../profiles/entities/delay-profile.entity';
+import { EventsService } from './events.service';
 
 @Injectable()
 export class SchedulerService {
@@ -44,6 +46,9 @@ export class SchedulerService {
     private readonly config: ConfigService,
     private readonly completion: CompletionService,
     private readonly naming: NamingService,
+    @InjectRepository(DelayProfile)
+    private readonly delayProfileRepo: Repository<DelayProfile>,
+    private readonly eventsService: EventsService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -170,12 +175,25 @@ export class SchedulerService {
 
     if (!missing.length) return;
 
-    for (const media of missing) {
+    const today = new Date().toISOString().slice(0, 10);
+    this.eventsService.emit({ command: 'SearchMissing', current: 0, total: missing.length, message: 'Searching movies...' });
+
+    for (let i = 0; i < missing.length; i++) {
+      const media = missing[i];
+      // Skip if availability criteria not met
+      if (!this.isAvailable(media, today)) {
+        this.eventsService.emit({ command: 'SearchMissing', current: i + 1, total: missing.length, message: media.title });
+        continue;
+      }
+
       // Skip if already grabbed and pending
       const pending = await this.historyRepo.findOne({
         where: { mediaId: media.id, status: 'grabbed' },
       });
-      if (pending) continue;
+      if (pending) {
+        this.eventsService.emit({ command: 'SearchMissing', current: i + 1, total: missing.length, message: media.title });
+        continue;
+      }
 
       const query = [media.title, media.year].filter(Boolean).join(' ');
       const batches = await Promise.allSettled(
@@ -184,11 +202,14 @@ export class SchedulerService {
       const results = batches.flatMap((r) =>
         r.status === 'fulfilled' ? r.value : [],
       );
-      if (!results.length) continue;
+      if (!results.length) {
+        this.eventsService.emit({ command: 'SearchMissing', current: i + 1, total: missing.length, message: media.title });
+        continue;
+      }
 
       const pick = results[0];
       try {
-        await this.qbittorrent.addTorrentUrl(qbitClient, pick.downloadUrl);
+        await this.qbittorrent.addTorrentUrl(qbitClient, pick.downloadUrl, 'movie');
         await this.historyRepo.save(
           this.historyRepo.create({
             mediaId: media.id,
@@ -203,6 +224,7 @@ export class SchedulerService {
       } catch (e) {
         this.log.warn(`SearchMissing[movie]: grab failed for "${media.title}": ${(e as Error).message}`);
       }
+      this.eventsService.emit({ command: 'SearchMissing', current: i + 1, total: missing.length, message: media.title });
     }
   }
 
@@ -231,7 +253,10 @@ export class SchedulerService {
 
     if (!episodes.length) return;
 
-    for (const ep of episodes) {
+    this.eventsService.emit({ command: 'SearchMissing', current: 0, total: episodes.length, message: 'Searching episodes...' });
+
+    for (let i = 0; i < episodes.length; i++) {
+      const ep = episodes[i];
       const season = (ep as any).season as Season;
       const media = (season as any).media as Media;
 
@@ -244,7 +269,10 @@ export class SchedulerService {
           pattern: `%S${String(season.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}%`,
         })
         .getOne();
-      if (pending) continue;
+      if (pending) {
+        this.eventsService.emit({ command: 'SearchMissing', current: i + 1, total: episodes.length, message: media.title });
+        continue;
+      }
 
       const batches = await Promise.allSettled(
         indexers.map((ix) =>
@@ -254,11 +282,14 @@ export class SchedulerService {
       const results = batches.flatMap((r) =>
         r.status === 'fulfilled' ? r.value : [],
       );
-      if (!results.length) continue;
+      if (!results.length) {
+        this.eventsService.emit({ command: 'SearchMissing', current: i + 1, total: episodes.length, message: media.title });
+        continue;
+      }
 
       const pick = results[0];
       try {
-        await this.qbittorrent.addTorrentUrl(qbitClient, pick.downloadUrl);
+        await this.qbittorrent.addTorrentUrl(qbitClient, pick.downloadUrl, 'series');
         await this.historyRepo.save(
           this.historyRepo.create({
             mediaId: media.id,
@@ -276,6 +307,7 @@ export class SchedulerService {
           `SearchMissing[series]: grab failed for "${media.title}" ep ${ep.id}: ${(e as Error).message}`,
         );
       }
+      this.eventsService.emit({ command: 'SearchMissing', current: i + 1, total: episodes.length, message: media.title });
     }
   }
 
@@ -289,13 +321,17 @@ export class SchedulerService {
     const allMedia = await this.mediaRepo.find({ where: { monitored: true } });
     let updated = 0;
 
-    for (const media of allMedia) {
+    this.eventsService.emit({ command: 'RefreshMetadata', current: 0, total: allMedia.length, message: 'Refreshing metadata...' });
+
+    for (let i = 0; i < allMedia.length; i++) {
+      const media = allMedia[i];
       try {
         await this.mediaService.refreshMetadata(media.id);
         updated++;
       } catch (e) {
         this.log.warn(`RefreshMetadata: failed for "${media.title}": ${(e as Error).message}`);
       }
+      this.eventsService.emit({ command: 'RefreshMetadata', current: i + 1, total: allMedia.length, message: media.title });
     }
 
     this.log.log(`RefreshMetadata: updated ${updated}/${allMedia.length} titles`);
@@ -313,12 +349,18 @@ export class SchedulerService {
     const monitored = await this.mediaRepo.find({
       where: { monitored: true, type: MediaType.MOVIE },
       select: ['id', 'title', 'year'],
+      relations: ['tags'],
     });
     const clients = await this.clientRepo.find({ where: { enabled: true } });
     const qbitClient = clients.find((c) => this.qbittorrent.supports(c));
     if (!qbitClient) return;
 
-    for (const indexer of indexers) {
+    const delayProfiles = await this.delayProfileRepo.find({ order: { order: 'ASC' } });
+
+    this.eventsService.emit({ command: 'RssSync', current: 0, total: indexers.length, message: 'RSS sync...' });
+
+    for (let i = 0; i < indexers.length; i++) {
+      const indexer = indexers[i];
       try {
         const results = await this.torznab.rssSearch(indexer);
         for (const release of results) {
@@ -327,6 +369,9 @@ export class SchedulerService {
           );
           if (!match) continue;
 
+          // Check delay profile
+          if (release.publishDate && this.isDelayed(match, release.publishDate, delayProfiles)) continue;
+
           // Check if already in history
           const alreadyGrabbed = await this.historyRepo.findOne({
             where: { mediaId: match.id, sourceTitle: release.title },
@@ -334,7 +379,7 @@ export class SchedulerService {
           if (alreadyGrabbed) continue;
 
           try {
-            await this.qbittorrent.addTorrentUrl(qbitClient, release.downloadUrl);
+            await this.qbittorrent.addTorrentUrl(qbitClient, release.downloadUrl, 'movie');
             await this.historyRepo.save(
               this.historyRepo.create({
                 mediaId: match.id,
@@ -353,6 +398,36 @@ export class SchedulerService {
       } catch (e) {
         this.log.warn(`RssSync: indexer "${indexer.name}" failed: ${(e as Error).message}`);
       }
+      this.eventsService.emit({ command: 'RssSync', current: i + 1, total: indexers.length, message: indexer.name });
+    }
+  }
+
+  private isDelayed(media: Media, publishDate: string, delayProfiles: DelayProfile[]): boolean {
+    if (!delayProfiles.length) return false;
+    const mediaTags = new Set((media.tags ?? []).map((t) => t.id));
+    // Find the first matching delay profile (by tag intersection, or empty tags = matches all)
+    const profile = delayProfiles.find((dp) => {
+      if (!dp.tags?.length) return true; // no tags = global default
+      return dp.tags.some((t) => mediaTags.has(t.id));
+    });
+    if (!profile || profile.torrentDelay <= 0) return false;
+    const ageHours = (Date.now() - new Date(publishDate).getTime()) / 3_600_000;
+    return ageHours < profile.torrentDelay;
+  }
+
+  private isAvailable(media: Media, today: string): boolean {
+    switch (media.minimumAvailability) {
+      case MinimumAvailability.ANNOUNCED:
+        return true;
+      case MinimumAvailability.IN_CINEMAS:
+        return !!(media.inCinemas && media.inCinemas <= today);
+      case MinimumAvailability.RELEASED:
+        return !!(
+          (media.digitalRelease && media.digitalRelease <= today) ||
+          (media.physicalRelease && media.physicalRelease <= today)
+        );
+      default:
+        return true;
     }
   }
 }

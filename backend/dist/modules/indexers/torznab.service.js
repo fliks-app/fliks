@@ -5,6 +5,12 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -12,7 +18,10 @@ var TorznabService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TorznabService = void 0;
 const common_1 = require("@nestjs/common");
+const typeorm_1 = require("@nestjs/typeorm");
+const typeorm_2 = require("typeorm");
 const axios_1 = __importDefault(require("axios"));
+const indexer_stat_entity_1 = require("./entities/indexer-stat.entity");
 function decodeXmlEntities(s) {
     return s
         .replace(/&amp;/g, '&')
@@ -74,6 +83,16 @@ function parseTorznabItems(xml, indexer) {
         const size = sizeStr ? parseInt(sizeStr, 10) || 0 : 0;
         const seeders = parseInt(torznabAttr(block, 'seeders') ?? '0', 10) || 0;
         const leechers = parseInt(torznabAttr(block, 'leechers') ?? torznabAttr(block, 'peers') ?? '0', 10) || 0;
+        const dvfStr = torznabAttr(block, 'downloadvolumefactor');
+        const downloadVolumeFactor = dvfStr !== null ? parseFloat(dvfStr) : 1;
+        const freeleech = downloadVolumeFactor === 0;
+        const pubDateRaw = extractInnerXml(block, 'pubDate');
+        let publishDate = null;
+        if (pubDateRaw) {
+            const d = new Date(pubDateRaw);
+            if (!isNaN(d.getTime()))
+                publishDate = d.toISOString();
+        }
         out.push({
             title,
             downloadUrl: ensureApiKey(url, apiKey),
@@ -82,12 +101,19 @@ function parseTorznabItems(xml, indexer) {
             size,
             seeders,
             leechers,
+            publishDate,
+            freeleech,
+            downloadVolumeFactor,
         });
     }
     return out;
 }
 let TorznabService = TorznabService_1 = class TorznabService {
+    statRepo;
     log = new common_1.Logger(TorznabService_1.name);
+    constructor(statRepo) {
+        this.statRepo = statRepo;
+    }
     async testConnection(baseUrl, apiKey) {
         const base = String(baseUrl || '').replace(/\/$/, '');
         if (!base) {
@@ -130,6 +156,7 @@ let TorznabService = TorznabService_1 = class TorznabService {
         if (!baseUrl)
             return [];
         const url = `${baseUrl}?t=search&q=&cat=2000&apikey=${encodeURIComponent(apiKey)}`;
+        const start = Date.now();
         try {
             const res = await axios_1.default.get(url, {
                 timeout: 60_000,
@@ -138,9 +165,24 @@ let TorznabService = TorznabService_1 = class TorznabService {
                 validateStatus: (s) => s >= 200 && s < 400,
             });
             const body = typeof res.data === 'string' ? res.data : String(res.data);
-            return parseTorznabItems(body, indexer);
+            const results = parseTorznabItems(body, indexer);
+            void this.statRepo.save(this.statRepo.create({
+                indexerId: indexer.id,
+                queryType: 'rss',
+                responseTimeMs: Date.now() - start,
+                resultCount: results.length,
+                errorMessage: null,
+            }));
+            return results;
         }
         catch (e) {
+            void this.statRepo.save(this.statRepo.create({
+                indexerId: indexer.id,
+                queryType: 'rss',
+                responseTimeMs: Date.now() - start,
+                resultCount: 0,
+                errorMessage: e.message,
+            }));
             this.log.warn(`RSS sync failed for "${indexer.name}": ${e.message}`);
             return [];
         }
@@ -157,6 +199,7 @@ let TorznabService = TorznabService_1 = class TorznabService {
         if (!baseUrl)
             return [];
         const url = `${baseUrl}?t=tvsearch&q=${encodeURIComponent(showTitle)}&season=${season}&cat=5000&apikey=${encodeURIComponent(apiKey)}`;
+        const start = Date.now();
         try {
             const res = await axios_1.default.get(url, {
                 timeout: 90_000,
@@ -165,9 +208,24 @@ let TorznabService = TorznabService_1 = class TorznabService {
                 validateStatus: (s) => s >= 200 && s < 400,
             });
             const body = typeof res.data === 'string' ? res.data : String(res.data);
-            return parseTorznabItems(body, indexer);
+            const results = parseTorznabItems(body, indexer);
+            void this.statRepo.save(this.statRepo.create({
+                indexerId: indexer.id,
+                queryType: 'season',
+                responseTimeMs: Date.now() - start,
+                resultCount: results.length,
+                errorMessage: null,
+            }));
+            return results;
         }
         catch (e) {
+            void this.statRepo.save(this.statRepo.create({
+                indexerId: indexer.id,
+                queryType: 'season',
+                responseTimeMs: Date.now() - start,
+                resultCount: 0,
+                errorMessage: e.message,
+            }));
             this.log.warn(`Torznab season pack search failed for "${indexer.name}": ${e.message}`);
             return [];
         }
@@ -184,6 +242,7 @@ let TorznabService = TorznabService_1 = class TorznabService {
         if (!baseUrl)
             return [];
         const url = `${baseUrl}?t=tvsearch&q=${encodeURIComponent(showTitle)}&season=${season}&ep=${episode}&cat=5000&apikey=${encodeURIComponent(apiKey)}`;
+        const start = Date.now();
         try {
             const res = await axios_1.default.get(url, {
                 timeout: 90_000,
@@ -192,9 +251,24 @@ let TorznabService = TorznabService_1 = class TorznabService {
                 validateStatus: (s) => s >= 200 && s < 400,
             });
             const body = typeof res.data === 'string' ? res.data : String(res.data);
-            return parseTorznabItems(body, indexer);
+            const results = parseTorznabItems(body, indexer);
+            void this.statRepo.save(this.statRepo.create({
+                indexerId: indexer.id,
+                queryType: 'tvsearch',
+                responseTimeMs: Date.now() - start,
+                resultCount: results.length,
+                errorMessage: null,
+            }));
+            return results;
         }
         catch (e) {
+            void this.statRepo.save(this.statRepo.create({
+                indexerId: indexer.id,
+                queryType: 'tvsearch',
+                responseTimeMs: Date.now() - start,
+                resultCount: 0,
+                errorMessage: e.message,
+            }));
             this.log.warn(`Torznab tvsearch failed for "${indexer.name}": ${e.message}`);
             return [];
         }
@@ -213,6 +287,7 @@ let TorznabService = TorznabService_1 = class TorznabService {
             return [];
         }
         const url = `${baseUrl}?t=search&q=${encodeURIComponent(query)}&cat=2000&apikey=${encodeURIComponent(apiKey)}`;
+        const start = Date.now();
         try {
             const res = await axios_1.default.get(url, {
                 timeout: 90_000,
@@ -221,9 +296,24 @@ let TorznabService = TorznabService_1 = class TorznabService {
                 validateStatus: (s) => s >= 200 && s < 400,
             });
             const body = typeof res.data === 'string' ? res.data : String(res.data);
-            return parseTorznabItems(body, indexer);
+            const results = parseTorznabItems(body, indexer);
+            void this.statRepo.save(this.statRepo.create({
+                indexerId: indexer.id,
+                queryType: 'search',
+                responseTimeMs: Date.now() - start,
+                resultCount: results.length,
+                errorMessage: null,
+            }));
+            return results;
         }
         catch (e) {
+            void this.statRepo.save(this.statRepo.create({
+                indexerId: indexer.id,
+                queryType: 'search',
+                responseTimeMs: Date.now() - start,
+                resultCount: 0,
+                errorMessage: e.message,
+            }));
             this.log.warn(`Torznab search failed for "${indexer.name}": ${e.message}`);
             return [];
         }
@@ -231,6 +321,8 @@ let TorznabService = TorznabService_1 = class TorznabService {
 };
 exports.TorznabService = TorznabService;
 exports.TorznabService = TorznabService = TorznabService_1 = __decorate([
-    (0, common_1.Injectable)()
+    (0, common_1.Injectable)(),
+    __param(0, (0, typeorm_1.InjectRepository)(indexer_stat_entity_1.IndexerStat)),
+    __metadata("design:paramtypes", [typeorm_2.Repository])
 ], TorznabService);
 //# sourceMappingURL=torznab.service.js.map

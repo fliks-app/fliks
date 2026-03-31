@@ -38,6 +38,7 @@ let Media = class Media extends base_entity_1.BaseEntity {
     inCinemas;
     digitalRelease;
     physicalRelease;
+    minimumAvailability;
     searchVector;
     qualityProfile;
     qualityProfileId;
@@ -124,6 +125,10 @@ __decorate([
     (0, typeorm_1.Column)({ type: 'date', nullable: true }),
     __metadata("design:type", String)
 ], Media.prototype, "physicalRelease", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', default: enums_1.MinimumAvailability.RELEASED }),
+    __metadata("design:type", String)
+], Media.prototype, "minimumAvailability", void 0);
 __decorate([
     (0, typeorm_1.Column)({
         type: 'tsvector',

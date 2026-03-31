@@ -154,6 +154,30 @@ let TmdbProvider = TmdbProvider_1 = class TmdbProvider {
         }
         return seasons;
     }
+    async getTrendingMovies() {
+        const { data } = await this.client.get('/trending/movie/week', { params: { language: 'fr-FR' } });
+        return data.results.map((r) => this.mapMovieResult(r));
+    }
+    async getPopularMovies() {
+        const { data } = await this.client.get('/movie/popular', { params: { language: 'fr-FR' } });
+        return data.results.map((r) => this.mapMovieResult(r));
+    }
+    async getUpcomingMovies() {
+        const { data } = await this.client.get('/movie/upcoming', { params: { language: 'fr-FR', region: 'FR' } });
+        return data.results.map((r) => this.mapMovieResult(r));
+    }
+    async getTrendingTvShows() {
+        const { data } = await this.client.get('/trending/tv/week', { params: { language: 'fr-FR' } });
+        return data.results.map((r) => this.mapTvResult(r));
+    }
+    async getPopularTvShows() {
+        const { data } = await this.client.get('/tv/popular', { params: { language: 'fr-FR' } });
+        return data.results.map((r) => this.mapTvResult(r));
+    }
+    async getUpcomingTvShows() {
+        const { data } = await this.client.get('/tv/on_the_air', { params: { language: 'fr-FR' } });
+        return data.results.map((r) => this.mapTvResult(r));
+    }
     mapMovieResult(r) {
         return {
             tmdbId: r.id,
