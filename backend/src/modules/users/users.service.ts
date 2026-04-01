@@ -33,7 +33,11 @@ export class UsersService {
    * Admin can update any user.
    * Regular users can only update themselves (no role/enabled changes).
    */
-  async update(targetId: number, dto: UpdateUserDto, requester: User): Promise<User> {
+  async update(
+    targetId: number,
+    dto: UpdateUserDto,
+    requester: User,
+  ): Promise<User> {
     const target = await this.findOne(targetId);
     const isSelf = requester.id === targetId;
     const isAdmin = requester.role === UserRole.ADMIN;
@@ -41,7 +45,9 @@ export class UsersService {
     if (!isSelf && !isAdmin) throw new ForbiddenException();
 
     if (dto.username !== undefined) {
-      const dup = await this.userRepo.findOne({ where: { username: dto.username } });
+      const dup = await this.userRepo.findOne({
+        where: { username: dto.username },
+      });
       if (dup && dup.id !== targetId) {
         throw new ConflictException('Username already taken');
       }
@@ -57,12 +63,17 @@ export class UsersService {
       if (dto.role !== undefined) target.role = dto.role as UserRole;
       if (dto.enabled !== undefined) target.enabled = dto.enabled;
     } else if (dto.role !== undefined || dto.enabled !== undefined) {
-      throw new ForbiddenException('Only admins can change role or enabled status');
+      throw new ForbiddenException(
+        'Only admins can change role or enabled status',
+      );
     }
 
-    if (dto.movieQuotaLimit !== undefined) target.movieQuotaLimit = dto.movieQuotaLimit;
-    if (dto.seriesQuotaLimit !== undefined) target.seriesQuotaLimit = dto.seriesQuotaLimit;
-    if (dto.quotaPeriodDays !== undefined) target.quotaPeriodDays = dto.quotaPeriodDays;
+    if (dto.movieQuotaLimit !== undefined)
+      target.movieQuotaLimit = dto.movieQuotaLimit;
+    if (dto.seriesQuotaLimit !== undefined)
+      target.seriesQuotaLimit = dto.seriesQuotaLimit;
+    if (dto.quotaPeriodDays !== undefined)
+      target.quotaPeriodDays = dto.quotaPeriodDays;
 
     return this.userRepo.save(target);
   }

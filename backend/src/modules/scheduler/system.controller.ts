@@ -123,12 +123,19 @@ export class SystemController {
   @Get('stats')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   async stats(): Promise<StatsReport> {
-    const [[moviesRow], [seriesRow], [pendingRow], rootFolders] = await Promise.all([
-      this.dataSource.query(`SELECT COUNT(*)::int AS count FROM media WHERE type = 'movie'`),
-      this.dataSource.query(`SELECT COUNT(*)::int AS count FROM media WHERE type = 'series'`),
-      this.dataSource.query(`SELECT COUNT(*)::int AS count FROM requests WHERE status = 'pending'`),
-      this.rootFolderRepo.find({ order: { path: 'ASC' } }),
-    ]);
+    const [[moviesRow], [seriesRow], [pendingRow], rootFolders] =
+      await Promise.all([
+        this.dataSource.query(
+          `SELECT COUNT(*)::int AS count FROM media WHERE type = 'movie'`,
+        ),
+        this.dataSource.query(
+          `SELECT COUNT(*)::int AS count FROM media WHERE type = 'series'`,
+        ),
+        this.dataSource.query(
+          `SELECT COUNT(*)::int AS count FROM requests WHERE status = 'pending'`,
+        ),
+        this.rootFolderRepo.find({ order: { path: 'ASC' } }),
+      ]);
 
     const diskSpace: DiskSpaceEntry[] = rootFolders.map((f) => {
       try {
@@ -140,7 +147,12 @@ export class SystemController {
           totalSpace: stat.blocks * stat.bsize,
         };
       } catch {
-        return { path: f.path, label: f.label ?? null, freeSpace: -1, totalSpace: -1 };
+        return {
+          path: f.path,
+          label: f.label ?? null,
+          freeSpace: -1,
+          totalSpace: -1,
+        };
       }
     });
 
@@ -228,7 +240,11 @@ export class SystemController {
     return Promise.all(
       clients.map(async (c) => {
         const result = await this.qbittorrent.testConnection(c.settings);
-        return { name: c.name, ok: result.ok, message: result.ok ? undefined : result.message };
+        return {
+          name: c.name,
+          ok: result.ok,
+          message: result.ok ? undefined : result.message,
+        };
       }),
     );
   }

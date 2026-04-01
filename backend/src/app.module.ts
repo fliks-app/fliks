@@ -15,6 +15,7 @@ import { RootFoldersModule } from './modules/root-folders/root-folders.module';
 import { BlocklistModule } from './modules/blocklist/blocklist.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { SubtitlesModule } from './modules/subtitles/subtitles.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { SettingsModule } from './modules/settings/settings.module';
     BlocklistModule,
     NotificationsModule,
     SettingsModule,
+    SubtitlesModule,
   ],
 })
 export class AppModule {}

@@ -18,10 +18,7 @@ export interface JwtPayload {
 }
 
 function jwtFromCookie(req: Request): string | null {
-  return parseCookieValue(
-    getRequestCookieHeader(req),
-    ACCESS_TOKEN_COOKIE,
-  );
+  return parseCookieValue(getRequestCookieHeader(req), ACCESS_TOKEN_COOKIE);
 }
 
 @Injectable()

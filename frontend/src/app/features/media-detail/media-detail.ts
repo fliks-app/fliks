@@ -25,6 +25,11 @@ import {
   RootFoldersApiService,
   RootFolder,
 } from '../../core/services/api/root-folders-api.service';
+import {
+  SubtitlesApiService,
+  SubtitleFileRow,
+  SubtitleSearchResult,
+} from '../../core/services/api/subtitles-api.service';
 
 @Component({
   selector: 'app-media-detail',
@@ -40,6 +45,7 @@ export class MediaDetailComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly translate = inject(TranslateService);
   private readonly rootFoldersApi = inject(RootFoldersApiService);
+  private readonly subtitlesApi = inject(SubtitlesApiService);
 
   readonly media = signal<Media | null>(null);
   readonly loading = signal(true);
@@ -126,6 +132,16 @@ export class MediaDetailComponent implements OnInit {
   readonly seasonReleasesDialog = viewChild<ElementRef<HTMLDialogElement>>('seasonReleasesModal');
   readonly profilesDialog = viewChild<ElementRef<HTMLDialogElement>>('profilesModal');
   readonly rootFolderDialog = viewChild<ElementRef<HTMLDialogElement>>('rootFolderModal');
+  readonly subtitleSearchDialog = viewChild<ElementRef<HTMLDialogElement>>('subtitleSearchModal');
+
+  // Subtitles
+  readonly subtitles = signal<SubtitleFileRow[]>([]);
+  readonly subtitlesLoading = signal(false);
+  readonly subtitleActionBusy = signal(false);
+  readonly subSearchLang = signal('en');
+  readonly subSearchResults = signal<SubtitleSearchResult[]>([]);
+  readonly subSearchLoading = signal(false);
+  readonly subSearchSearched = signal(false);
 
   async ngOnInit() {
     const kind = this.route.snapshot.data['kind'] as 'movie' | 'series';
@@ -174,6 +190,7 @@ export class MediaDetailComponent implements OnInit {
       this.media.set(m);
       this.draftQualityProfileId.set(m.qualityProfile?.id ?? null);
       this.draftLanguageProfileId.set(m.languageProfile?.id ?? null);
+      void this.loadSubtitles(m.id);
       // Match current path to a root folder
       const rf = this.rootFolders().find((r) => m.path?.startsWith(r.path));
       this.selectedRootFolderId.set(rf?.id ?? null);
@@ -579,6 +596,82 @@ export class MediaDetailComponent implements OnInit {
       );
     } catch {
       // ignore
+    }
+  }
+
+  // ── Subtitles ──────────────────────────────────────────────────────
+
+  async loadSubtitles(mediaId: number) {
+    this.subtitlesLoading.set(true);
+    try {
+      this.subtitles.set(await this.subtitlesApi.getForMedia(mediaId));
+    } catch {
+      this.subtitles.set([]);
+    } finally {
+      this.subtitlesLoading.set(false);
+    }
+  }
+
+  openSubtitleSearch() {
+    this.subSearchResults.set([]);
+    this.subSearchSearched.set(false);
+    this.subtitleSearchDialog()?.nativeElement.showModal();
+  }
+
+  async searchSubtitles() {
+    const m = this.media();
+    if (!m) return;
+    this.subSearchLoading.set(true);
+    this.subSearchSearched.set(false);
+    this.subSearchResults.set([]);
+    try {
+      const results = await this.subtitlesApi.search(m.id, this.subSearchLang());
+      this.subSearchResults.set(results);
+    } catch {
+      this.subSearchResults.set([]);
+    } finally {
+      this.subSearchLoading.set(false);
+      this.subSearchSearched.set(true);
+    }
+  }
+
+  async downloadSearchResult(r: SubtitleSearchResult) {
+    const m = this.media();
+    if (!m?.files?.length) return;
+    this.subtitleActionBusy.set(true);
+    try {
+      await this.subtitlesApi.download(m.id, {
+        searchResult: r,
+        mediaFileId: m.files[0].id,
+      });
+      await this.loadSubtitles(m.id);
+    } finally {
+      this.subtitleActionBusy.set(false);
+    }
+  }
+
+  async syncSubtitle(subtitleId: number) {
+    const m = this.media();
+    if (!m) return;
+    this.subtitleActionBusy.set(true);
+    try {
+      await this.subtitlesApi.sync(m.id, subtitleId);
+      await this.loadSubtitles(m.id);
+    } finally {
+      this.subtitleActionBusy.set(false);
+    }
+  }
+
+  async deleteSubtitle(subtitleId: number) {
+    const m = this.media();
+    if (!m) return;
+    if (!confirm(this.translate.instant('media_detail.confirm_delete_subtitle'))) return;
+    this.subtitleActionBusy.set(true);
+    try {
+      await this.subtitlesApi.delete(m.id, subtitleId);
+      await this.loadSubtitles(m.id);
+    } finally {
+      this.subtitleActionBusy.set(false);
     }
   }
 

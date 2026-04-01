@@ -10,7 +10,16 @@ import { Episode } from './entities/episode.entity';
 import { parseReleaseQuality } from './release-quality.parser';
 import { ImportFileEntry } from './dto/confirm-disk-import.dto';
 
-const VIDEO_EXTS = new Set(['.mkv', '.mp4', '.avi', '.mov', '.ts', '.m2ts', '.wmv', '.flv']);
+const VIDEO_EXTS = new Set([
+  '.mkv',
+  '.mp4',
+  '.avi',
+  '.mov',
+  '.ts',
+  '.m2ts',
+  '.wmv',
+  '.flv',
+]);
 
 export interface ScanCandidate {
   filePath: string;
@@ -47,7 +56,9 @@ export class DiskImportService {
     try {
       stat = fs.statSync(resolved);
     } catch {
-      throw new BadRequestException(`Path "${resolved}" does not exist or is not accessible`);
+      throw new BadRequestException(
+        `Path "${resolved}" does not exist or is not accessible`,
+      );
     }
     if (!stat.isDirectory()) {
       throw new BadRequestException(`Path "${resolved}" is not a directory`);
@@ -71,7 +82,9 @@ export class DiskImportService {
 
     for (const entry of imports) {
       try {
-        const media = await this.mediaRepo.findOne({ where: { id: entry.mediaId } });
+        const media = await this.mediaRepo.findOne({
+          where: { id: entry.mediaId },
+        });
         if (!media) {
           errors.push(`Media #${entry.mediaId} not found`);
           continue;
@@ -116,7 +129,9 @@ export class DiskImportService {
 
         imported++;
       } catch (e) {
-        errors.push(`${path.basename(entry.filePath)}: ${(e as Error).message}`);
+        errors.push(
+          `${path.basename(entry.filePath)}: ${(e as Error).message}`,
+        );
       }
     }
 
@@ -202,7 +217,10 @@ export class DiskImportService {
     name = name.replace(/[._]/g, ' ');
     // Cut off at quality markers or episode pattern
     name = name.replace(/\s*\b(2160|4k|uhd|1080|720|480p?)\b.*/i, '');
-    name = name.replace(/\s*\b(bluray|blu.?ray|web.?dl|web.?rip|hdtv|dvdrip|bdrip|remux)\b.*/i, '');
+    name = name.replace(
+      /\s*\b(bluray|blu.?ray|web.?dl|web.?rip|hdtv|dvdrip|bdrip|remux)\b.*/i,
+      '',
+    );
     name = name.replace(/\s*\b(x264|x265|xvid|h264|h265|hevc|avc)\b.*/i, '');
     name = name.replace(/\s*[Ss]\d{1,2}[Ee]\d{1,3}.*/i, '');
     // Remove trailing year
@@ -245,7 +263,9 @@ export class DiskImportService {
     return match ?? null;
   }
 
-  private parseEpisodeNumbers(filename: string): { season: number; episode: number } | null {
+  private parseEpisodeNumbers(
+    filename: string,
+  ): { season: number; episode: number } | null {
     const m = filename.match(/[Ss](\d{1,2})[Ee](\d{1,3})/);
     if (!m) return null;
     return { season: parseInt(m[1], 10), episode: parseInt(m[2], 10) };

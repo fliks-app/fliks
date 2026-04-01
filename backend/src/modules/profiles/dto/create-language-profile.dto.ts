@@ -1,32 +1,47 @@
-import { IsString, IsNumber, IsBoolean, IsArray, ValidateNested } from 'class-validator';
+import {
+  IsString,
+  IsBoolean,
+  IsArray,
+  ValidateNested,
+  IsOptional,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class LanguageItemDto {
-  @IsNumber()
-  languageId: number;
-
-  @IsString()
-  languageName: string;
-
+export class AudioLanguageItemDto {
   @IsString()
   isoCode: string;
 
-  @IsBoolean()
-  allowed: boolean;
+  @IsString()
+  name: string;
+}
 
-  @IsNumber()
-  sortOrder: number;
+export class SubtitleLanguageItemDto {
+  @IsString()
+  isoCode: string;
+
+  @IsString()
+  name: string;
+
+  @IsBoolean()
+  forced: boolean;
+
+  @IsBoolean()
+  hi: boolean;
 }
 
 export class CreateLanguageProfileDto {
   @IsString()
   name: string;
 
-  @IsNumber()
-  cutoff: number;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AudioLanguageItemDto)
+  @IsOptional()
+  audioLanguages?: AudioLanguageItemDto[];
 
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => LanguageItemDto)
-  languages: LanguageItemDto[];
+  @Type(() => SubtitleLanguageItemDto)
+  @IsOptional()
+  subtitleLanguages?: SubtitleLanguageItemDto[];
 }

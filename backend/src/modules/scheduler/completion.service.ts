@@ -19,6 +19,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NamingService } from './naming.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
 import { RemotePathMapping } from '../settings/entities/remote-path-mapping.entity';
+import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 
 @Injectable()
 export class CompletionService {
@@ -46,6 +47,7 @@ export class CompletionService {
     private readonly blocklist: BlocklistService,
     @InjectRepository(RemotePathMapping)
     private readonly pathMappingRepo: Repository<RemotePathMapping>,
+    private readonly subtitleScheduler: SubtitleSchedulerService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -353,7 +355,7 @@ export class CompletionService {
     }
 
     const relativePath = path.relative(destDir, destPath);
-    await this.mediaFileRepo.save(
+    const savedFile = await this.mediaFileRepo.save(
       this.mediaFileRepo.create({
         mediaId: media.id,
         episodeId,
@@ -371,6 +373,11 @@ export class CompletionService {
       quality: history.quality,
       sourceTitle: history.sourceTitle,
     });
+
+    // Trigger subtitle search for the newly imported file
+    void this.subtitleScheduler
+      .onMediaFileImported(media.id, savedFile.id, episodeId)
+      .catch((e) => this.log.warn(`Post-import subtitle search failed: ${e}`));
 
     // Execute post-import script if configured
     try {

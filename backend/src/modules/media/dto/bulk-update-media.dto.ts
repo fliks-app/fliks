@@ -1,18 +1,29 @@
-import { IsArray, IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsNumber,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class BulkUpdateMediaDto {
-  @IsArray() @IsNumber({}, { each: true })
+  @IsArray()
+  @IsNumber({}, { each: true })
   ids: number[];
 
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   qualityProfileId?: number;
 
-  @IsNumber() @IsOptional()
+  @IsNumber()
+  @IsOptional()
   languageProfileId?: number;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   monitored?: boolean;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   rootFolder?: string;
 }

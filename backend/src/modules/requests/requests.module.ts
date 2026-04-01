@@ -11,7 +11,11 @@ import { AutoApprovalRulesController } from './auto-approval-rules.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([SuitarrRequest, RequestComment, AutoApprovalRule]),
+    TypeOrmModule.forFeature([
+      SuitarrRequest,
+      RequestComment,
+      AutoApprovalRule,
+    ]),
     AuthModule,
     NotificationsModule,
   ],

@@ -33,9 +33,13 @@ export class RootFoldersService {
     return { ...folder, ...disk, accessible: disk.freeSpace !== -1 };
   }
 
-  async create(dto: CreateRootFolderDto): Promise<ReturnType<typeof this.enrich>> {
+  async create(
+    dto: CreateRootFolderDto,
+  ): Promise<ReturnType<typeof this.enrich>> {
     if (!fs.existsSync(dto.path)) {
-      throw new BadRequestException(`Path "${dto.path}" does not exist on the server`);
+      throw new BadRequestException(
+        `Path "${dto.path}" does not exist on the server`,
+      );
     }
     const row = this.repo.create({ path: dto.path, label: dto.label });
     const saved = await this.repo.save(row);

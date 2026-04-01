@@ -11,13 +11,7 @@ import { AuthModule } from '../auth/auth.module';
 @Module({
   imports: [TypeOrmModule.forFeature([Indexer, IndexerStat, Tag]), AuthModule],
   controllers: [IndexersController],
-  providers: [
-    TorznabService,
-    IndexersService,
-  ],
-  exports: [
-    TypeOrmModule,
-    TorznabService,
-  ],
+  providers: [TorznabService, IndexersService],
+  exports: [TypeOrmModule, TorznabService],
 })
 export class IndexersModule {}

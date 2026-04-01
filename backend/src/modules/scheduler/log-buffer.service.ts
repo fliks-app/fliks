@@ -24,7 +24,11 @@ export class LogBufferService extends ConsoleLogger implements LoggerService {
 
   error(message: any, trace?: string, context?: string): void {
     super.error(message, trace, context);
-    this.push('error', String(message) + (trace ? `\n${trace}` : ''), context ?? '');
+    this.push(
+      'error',
+      String(message) + (trace ? `\n${trace}` : ''),
+      context ?? '',
+    );
   }
 
   debug(message: any, context?: string): void {
@@ -33,18 +37,31 @@ export class LogBufferService extends ConsoleLogger implements LoggerService {
   }
 
   private push(level: LogEntry['level'], message: string, context: string) {
-    this.buffer.push({ timestamp: new Date().toISOString(), level, context, message });
+    this.buffer.push({
+      timestamp: new Date().toISOString(),
+      level,
+      context,
+      message,
+    });
     if (this.buffer.length > this.maxSize) {
       this.buffer = this.buffer.slice(-this.maxSize);
     }
   }
 
-  getEntries(opts?: { level?: string; q?: string; limit?: number }): LogEntry[] {
+  getEntries(opts?: {
+    level?: string;
+    q?: string;
+    limit?: number;
+  }): LogEntry[] {
     let entries = [...this.buffer];
-    if (opts?.level) entries = entries.filter(e => e.level === opts.level);
+    if (opts?.level) entries = entries.filter((e) => e.level === opts.level);
     if (opts?.q) {
       const q = opts.q.toLowerCase();
-      entries = entries.filter(e => e.message.toLowerCase().includes(q) || e.context.toLowerCase().includes(q));
+      entries = entries.filter(
+        (e) =>
+          e.message.toLowerCase().includes(q) ||
+          e.context.toLowerCase().includes(q),
+      );
     }
     entries.reverse(); // newest first
     if (opts?.limit && opts.limit > 0) entries = entries.slice(0, opts.limit);

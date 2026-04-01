@@ -13,7 +13,11 @@ import { TorznabService } from '../indexers/torznab.service';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
 import { MediaService } from '../media/media.service';
-import { MediaType, MediaStatus, MinimumAvailability } from '../../common/enums';
+import {
+  MediaType,
+  MediaStatus,
+  MinimumAvailability,
+} from '../../common/enums';
 import { ConfigService } from '@nestjs/config';
 import { CompletionService } from './completion.service';
 import { NamingService } from './naming.service';
@@ -82,7 +86,12 @@ export class SchedulerService {
   // ---------------------------------------------------------------------------
 
   async triggerCommand(name: string): Promise<Command> {
-    const known = ['SearchMissing', 'RefreshMetadata', 'RssSync', 'ImportCompleted'];
+    const known = [
+      'SearchMissing',
+      'RefreshMetadata',
+      'RssSync',
+      'ImportCompleted',
+    ];
     if (!known.includes(name)) {
       throw new Error(`Unknown command: ${name}. Valid: ${known.join(', ')}`);
     }
@@ -116,7 +125,12 @@ export class SchedulerService {
     fn: () => Promise<void>,
   ): Promise<void> {
     const cmd = await this.commandRepo.save(
-      this.commandRepo.create({ name, status: 'running', trigger, startedOn: new Date() }),
+      this.commandRepo.create({
+        name,
+        status: 'running',
+        trigger,
+        startedOn: new Date(),
+      }),
     );
     try {
       await fn();
@@ -131,15 +145,25 @@ export class SchedulerService {
   }
 
   private async dispatchCommand(name: string, cmdId: number): Promise<void> {
-    await this.commandRepo.update(cmdId, { status: 'running', startedOn: new Date() });
+    await this.commandRepo.update(cmdId, {
+      status: 'running',
+      startedOn: new Date(),
+    });
     try {
       if (name === 'SearchMissing') await this.doSearchMissing();
       else if (name === 'RefreshMetadata') await this.doRefreshMetadata();
       else if (name === 'RssSync') await this.doRssSync();
-      else if (name === 'ImportCompleted') await this.completion.processCompleted();
-      await this.commandRepo.update(cmdId, { status: 'completed', endedOn: new Date() });
+      else if (name === 'ImportCompleted')
+        await this.completion.processCompleted();
+      await this.commandRepo.update(cmdId, {
+        status: 'completed',
+        endedOn: new Date(),
+      });
     } catch (e) {
-      await this.commandRepo.update(cmdId, { status: 'failed', endedOn: new Date() });
+      await this.commandRepo.update(cmdId, {
+        status: 'failed',
+        endedOn: new Date(),
+      });
       throw e;
     }
   }
@@ -176,13 +200,23 @@ export class SchedulerService {
     if (!missing.length) return;
 
     const today = new Date().toISOString().slice(0, 10);
-    this.eventsService.emit({ command: 'SearchMissing', current: 0, total: missing.length, message: 'Searching movies...' });
+    this.eventsService.emit({
+      command: 'SearchMissing',
+      current: 0,
+      total: missing.length,
+      message: 'Searching movies...',
+    });
 
     for (let i = 0; i < missing.length; i++) {
       const media = missing[i];
       // Skip if availability criteria not met
       if (!this.isAvailable(media, today)) {
-        this.eventsService.emit({ command: 'SearchMissing', current: i + 1, total: missing.length, message: media.title });
+        this.eventsService.emit({
+          command: 'SearchMissing',
+          current: i + 1,
+          total: missing.length,
+          message: media.title,
+        });
         continue;
       }
 
@@ -191,7 +225,12 @@ export class SchedulerService {
         where: { mediaId: media.id, status: 'grabbed' },
       });
       if (pending) {
-        this.eventsService.emit({ command: 'SearchMissing', current: i + 1, total: missing.length, message: media.title });
+        this.eventsService.emit({
+          command: 'SearchMissing',
+          current: i + 1,
+          total: missing.length,
+          message: media.title,
+        });
         continue;
       }
 
@@ -203,13 +242,22 @@ export class SchedulerService {
         r.status === 'fulfilled' ? r.value : [],
       );
       if (!results.length) {
-        this.eventsService.emit({ command: 'SearchMissing', current: i + 1, total: missing.length, message: media.title });
+        this.eventsService.emit({
+          command: 'SearchMissing',
+          current: i + 1,
+          total: missing.length,
+          message: media.title,
+        });
         continue;
       }
 
       const pick = results[0];
       try {
-        await this.qbittorrent.addTorrentUrl(qbitClient, pick.downloadUrl, 'movie');
+        await this.qbittorrent.addTorrentUrl(
+          qbitClient,
+          pick.downloadUrl,
+          'movie',
+        );
         await this.historyRepo.save(
           this.historyRepo.create({
             mediaId: media.id,
@@ -220,11 +268,20 @@ export class SchedulerService {
             status: 'grabbed',
           }),
         );
-        this.log.log(`SearchMissing[movie]: grabbed "${pick.title}" for "${media.title}"`);
+        this.log.log(
+          `SearchMissing[movie]: grabbed "${pick.title}" for "${media.title}"`,
+        );
       } catch (e) {
-        this.log.warn(`SearchMissing[movie]: grab failed for "${media.title}": ${(e as Error).message}`);
+        this.log.warn(
+          `SearchMissing[movie]: grab failed for "${media.title}": ${(e as Error).message}`,
+        );
       }
-      this.eventsService.emit({ command: 'SearchMissing', current: i + 1, total: missing.length, message: media.title });
+      this.eventsService.emit({
+        command: 'SearchMissing',
+        current: i + 1,
+        total: missing.length,
+        message: media.title,
+      });
     }
   }
 
@@ -253,7 +310,12 @@ export class SchedulerService {
 
     if (!episodes.length) return;
 
-    this.eventsService.emit({ command: 'SearchMissing', current: 0, total: episodes.length, message: 'Searching episodes...' });
+    this.eventsService.emit({
+      command: 'SearchMissing',
+      current: 0,
+      total: episodes.length,
+      message: 'Searching episodes...',
+    });
 
     for (let i = 0; i < episodes.length; i++) {
       const ep = episodes[i];
@@ -270,26 +332,45 @@ export class SchedulerService {
         })
         .getOne();
       if (pending) {
-        this.eventsService.emit({ command: 'SearchMissing', current: i + 1, total: episodes.length, message: media.title });
+        this.eventsService.emit({
+          command: 'SearchMissing',
+          current: i + 1,
+          total: episodes.length,
+          message: media.title,
+        });
         continue;
       }
 
       const batches = await Promise.allSettled(
         indexers.map((ix) =>
-          this.torznab.searchSeries(ix, media.title, season.seasonNumber, ep.episodeNumber),
+          this.torznab.searchSeries(
+            ix,
+            media.title,
+            season.seasonNumber,
+            ep.episodeNumber,
+          ),
         ),
       );
       const results = batches.flatMap((r) =>
         r.status === 'fulfilled' ? r.value : [],
       );
       if (!results.length) {
-        this.eventsService.emit({ command: 'SearchMissing', current: i + 1, total: episodes.length, message: media.title });
+        this.eventsService.emit({
+          command: 'SearchMissing',
+          current: i + 1,
+          total: episodes.length,
+          message: media.title,
+        });
         continue;
       }
 
       const pick = results[0];
       try {
-        await this.qbittorrent.addTorrentUrl(qbitClient, pick.downloadUrl, 'series');
+        await this.qbittorrent.addTorrentUrl(
+          qbitClient,
+          pick.downloadUrl,
+          'series',
+        );
         await this.historyRepo.save(
           this.historyRepo.create({
             mediaId: media.id,
@@ -301,13 +382,20 @@ export class SchedulerService {
           }),
         );
         const epLabel = `S${String(season.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
-        this.log.log(`SearchMissing[series]: grabbed "${pick.title}" for "${media.title}" ${epLabel}`);
+        this.log.log(
+          `SearchMissing[series]: grabbed "${pick.title}" for "${media.title}" ${epLabel}`,
+        );
       } catch (e) {
         this.log.warn(
           `SearchMissing[series]: grab failed for "${media.title}" ep ${ep.id}: ${(e as Error).message}`,
         );
       }
-      this.eventsService.emit({ command: 'SearchMissing', current: i + 1, total: episodes.length, message: media.title });
+      this.eventsService.emit({
+        command: 'SearchMissing',
+        current: i + 1,
+        total: episodes.length,
+        message: media.title,
+      });
     }
   }
 
@@ -321,7 +409,12 @@ export class SchedulerService {
     const allMedia = await this.mediaRepo.find({ where: { monitored: true } });
     let updated = 0;
 
-    this.eventsService.emit({ command: 'RefreshMetadata', current: 0, total: allMedia.length, message: 'Refreshing metadata...' });
+    this.eventsService.emit({
+      command: 'RefreshMetadata',
+      current: 0,
+      total: allMedia.length,
+      message: 'Refreshing metadata...',
+    });
 
     for (let i = 0; i < allMedia.length; i++) {
       const media = allMedia[i];
@@ -329,12 +422,21 @@ export class SchedulerService {
         await this.mediaService.refreshMetadata(media.id);
         updated++;
       } catch (e) {
-        this.log.warn(`RefreshMetadata: failed for "${media.title}": ${(e as Error).message}`);
+        this.log.warn(
+          `RefreshMetadata: failed for "${media.title}": ${(e as Error).message}`,
+        );
       }
-      this.eventsService.emit({ command: 'RefreshMetadata', current: i + 1, total: allMedia.length, message: media.title });
+      this.eventsService.emit({
+        command: 'RefreshMetadata',
+        current: i + 1,
+        total: allMedia.length,
+        message: media.title,
+      });
     }
 
-    this.log.log(`RefreshMetadata: updated ${updated}/${allMedia.length} titles`);
+    this.log.log(
+      `RefreshMetadata: updated ${updated}/${allMedia.length} titles`,
+    );
   }
 
   private async doRssSync(): Promise<void> {
@@ -355,9 +457,16 @@ export class SchedulerService {
     const qbitClient = clients.find((c) => this.qbittorrent.supports(c));
     if (!qbitClient) return;
 
-    const delayProfiles = await this.delayProfileRepo.find({ order: { order: 'ASC' } });
+    const delayProfiles = await this.delayProfileRepo.find({
+      order: { order: 'ASC' },
+    });
 
-    this.eventsService.emit({ command: 'RssSync', current: 0, total: indexers.length, message: 'RSS sync...' });
+    this.eventsService.emit({
+      command: 'RssSync',
+      current: 0,
+      total: indexers.length,
+      message: 'RSS sync...',
+    });
 
     for (let i = 0; i < indexers.length; i++) {
       const indexer = indexers[i];
@@ -370,7 +479,11 @@ export class SchedulerService {
           if (!match) continue;
 
           // Check delay profile
-          if (release.publishDate && this.isDelayed(match, release.publishDate, delayProfiles)) continue;
+          if (
+            release.publishDate &&
+            this.isDelayed(match, release.publishDate, delayProfiles)
+          )
+            continue;
 
           // Check if already in history
           const alreadyGrabbed = await this.historyRepo.findOne({
@@ -379,7 +492,11 @@ export class SchedulerService {
           if (alreadyGrabbed) continue;
 
           try {
-            await this.qbittorrent.addTorrentUrl(qbitClient, release.downloadUrl, 'movie');
+            await this.qbittorrent.addTorrentUrl(
+              qbitClient,
+              release.downloadUrl,
+              'movie',
+            );
             await this.historyRepo.save(
               this.historyRepo.create({
                 mediaId: match.id,
@@ -390,19 +507,32 @@ export class SchedulerService {
                 status: 'grabbed',
               }),
             );
-            this.log.log(`RssSync: grabbed "${release.title}" for "${match.title}"`);
+            this.log.log(
+              `RssSync: grabbed "${release.title}" for "${match.title}"`,
+            );
           } catch {
             // ignore individual grab errors
           }
         }
       } catch (e) {
-        this.log.warn(`RssSync: indexer "${indexer.name}" failed: ${(e as Error).message}`);
+        this.log.warn(
+          `RssSync: indexer "${indexer.name}" failed: ${(e as Error).message}`,
+        );
       }
-      this.eventsService.emit({ command: 'RssSync', current: i + 1, total: indexers.length, message: indexer.name });
+      this.eventsService.emit({
+        command: 'RssSync',
+        current: i + 1,
+        total: indexers.length,
+        message: indexer.name,
+      });
     }
   }
 
-  private isDelayed(media: Media, publishDate: string, delayProfiles: DelayProfile[]): boolean {
+  private isDelayed(
+    media: Media,
+    publishDate: string,
+    delayProfiles: DelayProfile[],
+  ): boolean {
     if (!delayProfiles.length) return false;
     const mediaTags = new Set((media.tags ?? []).map((t) => t.id));
     // Find the first matching delay profile (by tag intersection, or empty tags = matches all)

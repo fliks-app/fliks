@@ -1,4 +1,11 @@
-import { Controller, Get, Param, Query, UseGuards, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Query,
+  UseGuards,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { TmdbProvider } from './providers/tmdb.provider';
@@ -18,7 +25,10 @@ export class MetadataProvidersController {
   async searchMovie(@Query('q') q: string, @Query('year') year?: string) {
     const query = q?.trim();
     if (!query) return [];
-    const results = await this.tmdb.searchMovie(query, year ? +year : undefined);
+    const results = await this.tmdb.searchMovie(
+      query,
+      year ? +year : undefined,
+    );
     return this.enrichWithExisting(results, 'movie');
   }
 
@@ -26,7 +36,10 @@ export class MetadataProvidersController {
   async searchTv(@Query('q') q: string, @Query('year') year?: string) {
     const query = q?.trim();
     if (!query) return [];
-    const results = await this.tmdb.searchTvShow(query, year ? +year : undefined);
+    const results = await this.tmdb.searchTvShow(
+      query,
+      year ? +year : undefined,
+    );
     return this.enrichWithExisting(results, 'series');
   }
 
@@ -91,7 +104,9 @@ export class MetadataProvidersController {
       where: { tmdbId: In(tmdbIds), type: type as any },
       select: ['id', 'tmdbId', 'type'],
     });
-    const map = new Map(existing.map((m) => [m.tmdbId, { id: m.id, type: m.type }]));
+    const map = new Map(
+      existing.map((m) => [m.tmdbId, { id: m.id, type: m.type }]),
+    );
     return results.map((r) => {
       const match = map.get(r.tmdbId);
       return {

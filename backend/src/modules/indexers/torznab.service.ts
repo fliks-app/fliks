@@ -188,22 +188,26 @@ export class TorznabService {
       });
       const body = typeof res.data === 'string' ? res.data : String(res.data);
       const results = parseTorznabItems(body, indexer);
-      void this.statRepo.save(this.statRepo.create({
-        indexerId: indexer.id,
-        queryType: 'rss',
-        responseTimeMs: Date.now() - start,
-        resultCount: results.length,
-        errorMessage: null,
-      }));
+      void this.statRepo.save(
+        this.statRepo.create({
+          indexerId: indexer.id,
+          queryType: 'rss',
+          responseTimeMs: Date.now() - start,
+          resultCount: results.length,
+          errorMessage: null,
+        }),
+      );
       return results;
     } catch (e) {
-      void this.statRepo.save(this.statRepo.create({
-        indexerId: indexer.id,
-        queryType: 'rss',
-        responseTimeMs: Date.now() - start,
-        resultCount: 0,
-        errorMessage: (e as Error).message,
-      }));
+      void this.statRepo.save(
+        this.statRepo.create({
+          indexerId: indexer.id,
+          queryType: 'rss',
+          responseTimeMs: Date.now() - start,
+          resultCount: 0,
+          errorMessage: (e as Error).message,
+        }),
+      );
       this.log.warn(
         `RSS sync failed for "${indexer.name}": ${(e as Error).message}`,
       );
@@ -237,22 +241,26 @@ export class TorznabService {
       });
       const body = typeof res.data === 'string' ? res.data : String(res.data);
       const results = parseTorznabItems(body, indexer);
-      void this.statRepo.save(this.statRepo.create({
-        indexerId: indexer.id,
-        queryType: 'season',
-        responseTimeMs: Date.now() - start,
-        resultCount: results.length,
-        errorMessage: null,
-      }));
+      void this.statRepo.save(
+        this.statRepo.create({
+          indexerId: indexer.id,
+          queryType: 'season',
+          responseTimeMs: Date.now() - start,
+          resultCount: results.length,
+          errorMessage: null,
+        }),
+      );
       return results;
     } catch (e) {
-      void this.statRepo.save(this.statRepo.create({
-        indexerId: indexer.id,
-        queryType: 'season',
-        responseTimeMs: Date.now() - start,
-        resultCount: 0,
-        errorMessage: (e as Error).message,
-      }));
+      void this.statRepo.save(
+        this.statRepo.create({
+          indexerId: indexer.id,
+          queryType: 'season',
+          responseTimeMs: Date.now() - start,
+          resultCount: 0,
+          errorMessage: (e as Error).message,
+        }),
+      );
       this.log.warn(
         `Torznab season pack search failed for "${indexer.name}": ${(e as Error).message}`,
       );
@@ -286,22 +294,26 @@ export class TorznabService {
       });
       const body = typeof res.data === 'string' ? res.data : String(res.data);
       const results = parseTorznabItems(body, indexer);
-      void this.statRepo.save(this.statRepo.create({
-        indexerId: indexer.id,
-        queryType: 'tvsearch',
-        responseTimeMs: Date.now() - start,
-        resultCount: results.length,
-        errorMessage: null,
-      }));
+      void this.statRepo.save(
+        this.statRepo.create({
+          indexerId: indexer.id,
+          queryType: 'tvsearch',
+          responseTimeMs: Date.now() - start,
+          resultCount: results.length,
+          errorMessage: null,
+        }),
+      );
       return results;
     } catch (e) {
-      void this.statRepo.save(this.statRepo.create({
-        indexerId: indexer.id,
-        queryType: 'tvsearch',
-        responseTimeMs: Date.now() - start,
-        resultCount: 0,
-        errorMessage: (e as Error).message,
-      }));
+      void this.statRepo.save(
+        this.statRepo.create({
+          indexerId: indexer.id,
+          queryType: 'tvsearch',
+          responseTimeMs: Date.now() - start,
+          resultCount: 0,
+          errorMessage: (e as Error).message,
+        }),
+      );
       this.log.warn(
         `Torznab tvsearch failed for "${indexer.name}": ${(e as Error).message}`,
       );
@@ -336,22 +348,26 @@ export class TorznabService {
       });
       const body = typeof res.data === 'string' ? res.data : String(res.data);
       const results = parseTorznabItems(body, indexer);
-      void this.statRepo.save(this.statRepo.create({
-        indexerId: indexer.id,
-        queryType: 'search',
-        responseTimeMs: Date.now() - start,
-        resultCount: results.length,
-        errorMessage: null,
-      }));
+      void this.statRepo.save(
+        this.statRepo.create({
+          indexerId: indexer.id,
+          queryType: 'search',
+          responseTimeMs: Date.now() - start,
+          resultCount: results.length,
+          errorMessage: null,
+        }),
+      );
       return results;
     } catch (e) {
-      void this.statRepo.save(this.statRepo.create({
-        indexerId: indexer.id,
-        queryType: 'search',
-        responseTimeMs: Date.now() - start,
-        resultCount: 0,
-        errorMessage: (e as Error).message,
-      }));
+      void this.statRepo.save(
+        this.statRepo.create({
+          indexerId: indexer.id,
+          queryType: 'search',
+          responseTimeMs: Date.now() - start,
+          resultCount: 0,
+          errorMessage: (e as Error).message,
+        }),
+      );
       this.log.warn(
         `Torznab search failed for "${indexer.name}": ${(e as Error).message}`,
       );

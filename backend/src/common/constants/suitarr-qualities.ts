@@ -27,18 +27,32 @@ export const SUITARR_QUALITIES: SuitarrQualityDefinition[] = [
   { id: 15, name: 'HDTV-1080p', resolution: 1080, source: 'hdtv', rank: 55 },
   { id: 16, name: 'WEBDL-1080p', resolution: 1080, source: 'web', rank: 62 },
   { id: 17, name: 'WEBRip-1080p', resolution: 1080, source: 'web', rank: 60 },
-  { id: 18, name: 'Bluray-1080p', resolution: 1080, source: 'bluray', rank: 68 },
+  {
+    id: 18,
+    name: 'Bluray-1080p',
+    resolution: 1080,
+    source: 'bluray',
+    rank: 68,
+  },
   { id: 19, name: 'Remux-1080p', resolution: 1080, source: 'remux', rank: 72 },
   { id: 20, name: 'HDTV-2160p', resolution: 2160, source: 'hdtv', rank: 75 },
   { id: 21, name: 'WEBDL-2160p', resolution: 2160, source: 'web', rank: 82 },
   { id: 22, name: 'WEBRip-2160p', resolution: 2160, source: 'web', rank: 80 },
-  { id: 23, name: 'Bluray-2160p', resolution: 2160, source: 'bluray', rank: 88 },
+  {
+    id: 23,
+    name: 'Bluray-2160p',
+    resolution: 2160,
+    source: 'bluray',
+    rank: 88,
+  },
   { id: 24, name: 'Remux-2160p', resolution: 2160, source: 'remux', rank: 95 },
 ];
 
 const byId = new Map(SUITARR_QUALITIES.map((q) => [q.id, q]));
 
-export function getSuitarrQualityById(id: number): SuitarrQualityDefinition | undefined {
+export function getSuitarrQualityById(
+  id: number,
+): SuitarrQualityDefinition | undefined {
   return byId.get(id);
 }
 

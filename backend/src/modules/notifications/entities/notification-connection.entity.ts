@@ -1,7 +1,12 @@
 import { Entity, Column } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
-export type NotificationType = 'discord' | 'slack' | 'webhook' | 'gotify' | 'ntfy';
+export type NotificationType =
+  | 'discord'
+  | 'slack'
+  | 'webhook'
+  | 'gotify'
+  | 'ntfy';
 
 export type NotificationEvent =
   | 'request.created'
@@ -9,7 +14,10 @@ export type NotificationEvent =
   | 'request.declined'
   | 'grab.started'
   | 'download.complete'
-  | 'health.issue';
+  | 'health.issue'
+  | 'subtitle.downloaded'
+  | 'subtitle.upgraded'
+  | 'subtitle.failed';
 
 @Entity('notification_connections')
 export class NotificationConnection extends BaseEntity {

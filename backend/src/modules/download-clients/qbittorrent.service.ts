@@ -241,11 +241,13 @@ export class QbittorrentService {
   ): Promise<void> {
     torrentUrl = this.sanitizeUrl(torrentUrl);
     const s = client.settings as Record<string, unknown>;
-    const base = this.buildBaseUrl(s as {
-      host?: string;
-      port?: number;
-      useSsl?: boolean;
-    });
+    const base = this.buildBaseUrl(
+      s as {
+        host?: string;
+        port?: number;
+        useSsl?: boolean;
+      },
+    );
     if (!base) {
       throw new BadRequestException(
         'qBittorrent client has no host configured',
@@ -253,8 +255,10 @@ export class QbittorrentService {
     }
 
     let category = String(s.category ?? '').trim();
-    if (mediaType === 'movie' && s.movieCategory) category = String(s.movieCategory).trim();
-    if (mediaType === 'series' && s.seriesCategory) category = String(s.seriesCategory).trim();
+    if (mediaType === 'movie' && s.movieCategory)
+      category = String(s.movieCategory).trim();
+    if (mediaType === 'series' && s.seriesCategory)
+      category = String(s.seriesCategory).trim();
 
     const http = axios.create({
       timeout: 60_000,

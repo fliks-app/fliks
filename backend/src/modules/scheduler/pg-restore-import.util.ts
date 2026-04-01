@@ -52,14 +52,19 @@ export async function withTemporaryRestoredDatabase(
           { env, maxBuffer: MAX_PSQL_BUFFER },
         );
       } else {
-        await execFileAsync('psql', [...pgCommon, '-d', dbName, '-v', 'ON_ERROR_STOP=1', '-f', dumpPath], {
-          env,
-          maxBuffer: MAX_PSQL_BUFFER,
-        });
+        await execFileAsync(
+          'psql',
+          [...pgCommon, '-d', dbName, '-v', 'ON_ERROR_STOP=1', '-f', dumpPath],
+          {
+            env,
+            maxBuffer: MAX_PSQL_BUFFER,
+          },
+        );
       }
     } catch (e: unknown) {
       const err = e as { stderr?: string; stdout?: string; message?: string };
-      const detail = err.stderr?.trim() || err.stdout?.trim() || err.message || String(e);
+      const detail =
+        err.stderr?.trim() || err.stdout?.trim() || err.message || String(e);
       throw new Error(`PostgreSQL restore failed: ${detail}`);
     }
 
@@ -72,7 +77,9 @@ export async function withTemporaryRestoredDatabase(
     }
   } finally {
     try {
-      await execFileAsync('dropdb', [...pgCommon, '--if-exists', dbName], { env });
+      await execFileAsync('dropdb', [...pgCommon, '--if-exists', dbName], {
+        env,
+      });
     } catch {
       /* best effort */
     }
@@ -86,7 +93,15 @@ export function rowMonitored(v: unknown): boolean {
 
 export async function queryRadarrMovies(
   client: Client,
-): Promise<Array<{ title: string; tmdbId: number; year: number | null; path: string | null; monitored: unknown }>> {
+): Promise<
+  Array<{
+    title: string;
+    tmdbId: number;
+    year: number | null;
+    path: string | null;
+    monitored: unknown;
+  }>
+> {
   const attempts = [
     `SELECT "Title" AS title, "TmdbId" AS tmdbid, "Year" AS year, "Path" AS path, "Monitored" AS monitored FROM "Movies"`,
     `SELECT title, tmdbid AS tmdbid, year, path, monitored FROM movies`,
@@ -116,7 +131,11 @@ export async function queryRadarrMovies(
   );
 }
 
-async function tableHasColumn(client: Client, table: string, column: string): Promise<boolean> {
+async function tableHasColumn(
+  client: Client,
+  table: string,
+  column: string,
+): Promise<boolean> {
   const r = await client.query(
     `SELECT 1 FROM information_schema.columns
      WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2 LIMIT 1`,
@@ -134,7 +153,15 @@ async function sonarrUsesTmdb(client: Client): Promise<boolean> {
 
 export async function querySonarrSeries(
   client: Client,
-): Promise<Array<{ title: string; externalId: number; year: number | null; path: string | null; monitored: unknown }>> {
+): Promise<
+  Array<{
+    title: string;
+    externalId: number;
+    year: number | null;
+    path: string | null;
+    monitored: unknown;
+  }>
+> {
   const useTmdb = await sonarrUsesTmdb(client);
 
   const attempts = useTmdb

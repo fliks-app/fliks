@@ -13,6 +13,8 @@ import { DownloadClient } from '../../download-clients/entities/download-client.
 import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
 import { Tag } from '../../tags/entities/tag.entity';
+import { SubtitleProvider } from '../../subtitles/entities/subtitle-provider.entity';
+import { SubtitleFile } from '../../subtitles/entities/subtitle-file.entity';
 import { Action } from './actions.enum';
 import { UserRole } from '../../../common/enums';
 
@@ -26,6 +28,8 @@ type Subjects =
       | typeof QualityProfile
       | typeof LanguageProfile
       | typeof Tag
+      | typeof SubtitleProvider
+      | typeof SubtitleFile
     >
   | 'Settings'
   | 'all';
@@ -50,6 +54,10 @@ export class CaslAbilityFactory {
         can(Action.Read, Tag);
         can(Action.Read, QualityProfile);
         can(Action.Read, LanguageProfile);
+        can(Action.Read, SubtitleFile);
+        can(Action.Create, SubtitleFile);
+        can(Action.Delete, SubtitleFile);
+        can(Action.Read, SubtitleProvider);
 
         can(Action.Create, SuitarrRequest);
         can(Action.Read, SuitarrRequest, { userId: user.id } as any);
@@ -71,6 +79,8 @@ export class CaslAbilityFactory {
         can(Action.Read, Tag);
         can(Action.Read, QualityProfile);
         can(Action.Read, LanguageProfile);
+        can(Action.Read, SubtitleFile);
+        can(Action.Read, SubtitleProvider);
         can(Action.Read, SuitarrRequest, { userId: user.id } as any);
         can(Action.Read, User, { id: user.id } as any);
         break;

@@ -35,6 +35,9 @@ import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
 import { Media } from './entities/media.entity';
+import { SubtitlesService } from '../subtitles/subtitles.service';
+import { SubtitleSyncService } from '../subtitles/subtitle-sync.service';
+import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 
 @Controller('media')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
@@ -44,6 +47,8 @@ export class MediaController {
     private readonly movieDownload: MovieDownloadService,
     private readonly episodeDownload: EpisodeDownloadService,
     private readonly diskImport: DiskImportService,
+    private readonly subtitlesService: SubtitlesService,
+    private readonly subtitleSync: SubtitleSyncService,
   ) {}
 
   @Post('import/tmdb')
@@ -130,22 +135,25 @@ export class MediaController {
 
   @Get(':id/releases')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  movieReleases(@Param('id', ParseIntPipe) id: number, @Query('q') customQuery?: string) {
+  movieReleases(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('q') customQuery?: string,
+  ) {
     return this.movieDownload.searchMovieReleases(id, customQuery);
   }
 
   @Post(':id/grab')
   @CheckPolicies((ability) => ability.can(Action.Grab, Media))
-  grabMovie(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: GrabMovieDto,
-  ) {
+  grabMovie(@Param('id', ParseIntPipe) id: number, @Body() dto: GrabMovieDto) {
     return this.movieDownload.grabMovie(id, dto ?? {});
   }
 
   @Get(':id/upgrade-releases')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  upgradeReleases(@Param('id', ParseIntPipe) id: number, @Query('q') customQuery?: string) {
+  upgradeReleases(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('q') customQuery?: string,
+  ) {
     return this.movieDownload.searchUpgradeReleases(id, customQuery);
   }
 
@@ -185,7 +193,11 @@ export class MediaController {
     @Param('episodeId', ParseIntPipe) episodeId: number,
     @Query('q') customQuery?: string,
   ) {
-    return this.episodeDownload.searchEpisodeReleases(id, episodeId, customQuery);
+    return this.episodeDownload.searchEpisodeReleases(
+      id,
+      episodeId,
+      customQuery,
+    );
   }
 
   @Post(':id/episodes/:episodeId/grab')
@@ -205,7 +217,11 @@ export class MediaController {
     @Param('fileId', ParseIntPipe) fileId: number,
     @Query('deleteOnDisk') deleteOnDisk?: string,
   ) {
-    return this.mediaService.deleteMediaFile(id, fileId, deleteOnDisk === 'true');
+    return this.mediaService.deleteMediaFile(
+      id,
+      fileId,
+      deleteOnDisk === 'true',
+    );
   }
 
   @Patch(':id/root-folder')
@@ -220,8 +236,7 @@ export class MediaController {
   @Patch(':id/profiles')
   @CheckPolicies(
     (ability) =>
-      ability.can(Action.Grab, Media) ||
-      ability.can(Action.Update, Media),
+      ability.can(Action.Grab, Media) || ability.can(Action.Update, Media),
   )
   updateProfiles(
     @Param('id', ParseIntPipe) id: number,
@@ -236,6 +251,87 @@ export class MediaController {
     return this.mediaService.refreshMetadata(id);
   }
 
+  @Get(':id/subtitles')
+  @CheckPolicies((ability) => ability.can(Action.Read, SubtitleFile))
+  getSubtitles(@Param('id', ParseIntPipe) id: number) {
+    return this.subtitlesService.getSubtitlesForMedia(id);
+  }
+
+  @Get(':id/subtitles/search')
+  @CheckPolicies((ability) => ability.can(Action.Read, SubtitleFile))
+  async searchSubtitles(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('language') language?: string,
+    @Query('episodeId') episodeId?: string,
+  ) {
+    const media = await this.mediaService.findOne(id);
+    return this.subtitlesService.searchSubtitles({
+      imdbId: media.imdbId ?? undefined,
+      tmdbId: media.tmdbId,
+      title: media.title,
+      year: media.year ?? undefined,
+      language: language ?? 'en',
+      episode: episodeId ? Number(episodeId) : undefined,
+    });
+  }
+
+  @Post(':id/subtitles/download')
+  @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
+  async downloadSubtitle(
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    body: { searchResult: any; mediaFileId: number; episodeId?: number },
+  ) {
+    const media = await this.mediaService.findOne(id);
+    const file = media.files?.find((f) => f.id === body.mediaFileId);
+    if (!file) throw new Error('MediaFile not found');
+    return this.subtitlesService.downloadSubtitle(
+      id,
+      body.mediaFileId,
+      body.episodeId,
+      body.searchResult,
+      file.relativePath,
+    );
+  }
+
+  @Delete(':id/subtitles/:subtitleId')
+  @CheckPolicies((ability) => ability.can(Action.Delete, SubtitleFile))
+  deleteSubtitle(
+    @Param('id', ParseIntPipe) _id: number,
+    @Param('subtitleId', ParseIntPipe) subtitleId: number,
+  ) {
+    return this.subtitlesService.deleteSubtitle(subtitleId);
+  }
+
+  @Post(':id/subtitles/:subtitleId/sync')
+  @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
+  async syncSubtitle(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('subtitleId', ParseIntPipe) subtitleId: number,
+  ) {
+    const media = await this.mediaService.findOne(id);
+    const file = media.files?.[0];
+    if (!file) throw new Error('No media file found');
+    return this.subtitleSync.syncSubtitle(subtitleId, file.relativePath);
+  }
+
+  @Post(':id/subtitles/:subtitleId/upgrade')
+  @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
+  async upgradeSubtitle(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('subtitleId', ParseIntPipe) subtitleId: number,
+    @Body() body: { searchResult: any },
+  ) {
+    const media = await this.mediaService.findOne(id);
+    const file = media.files?.[0];
+    if (!file) throw new Error('No media file found');
+    return this.subtitlesService.upgradeSubtitle(
+      subtitleId,
+      body.searchResult,
+      file.relativePath,
+    );
+  }
+
   @Get(':id')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
   findOne(@Param('id', ParseIntPipe) id: number) {
@@ -244,10 +340,7 @@ export class MediaController {
 
   @Put(':id')
   @CheckPolicies((ability) => ability.can(Action.Update, Media))
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateMediaDto,
-  ) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateMediaDto) {
     return this.mediaService.update(id, dto);
   }
 

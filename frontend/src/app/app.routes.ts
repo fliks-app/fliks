@@ -206,6 +206,20 @@ export const routes: Routes = [
               ).then((m) => m.RemotePathMappingsSettingsComponent),
           },
           {
+            path: 'subtitle-providers',
+            loadComponent: () =>
+              import(
+                './features/settings/subtitle-providers/subtitle-providers'
+              ).then((m) => m.SubtitleProvidersSettingsComponent),
+          },
+          {
+            path: 'subtitles',
+            loadComponent: () =>
+              import(
+                './features/settings/subtitles/subtitles-settings'
+              ).then((m) => m.SubtitlesSettingsComponent),
+          },
+          {
             path: 'delay-profiles',
             loadComponent: () =>
               import(

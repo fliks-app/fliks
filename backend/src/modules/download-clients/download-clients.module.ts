@@ -9,7 +9,10 @@ import { DownloadClientsController } from './download-clients.controller';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([DownloadClient, Tag, DownloadHistory]), AuthModule],
+  imports: [
+    TypeOrmModule.forFeature([DownloadClient, Tag, DownloadHistory]),
+    AuthModule,
+  ],
   controllers: [DownloadClientsController],
   providers: [QbittorrentService, DownloadClientsService],
   exports: [TypeOrmModule, QbittorrentService],

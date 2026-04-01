@@ -18,7 +18,9 @@ export interface SizeLimits {
  * Build the set of allowed quality IDs, considering groups.
  * If any quality in a group is allowed, all qualities in that group are allowed.
  */
-export function buildAllowedQualityIds(items: QualityProfileItem[] | undefined): Set<number> {
+export function buildAllowedQualityIds(
+  items: QualityProfileItem[] | undefined,
+): Set<number> {
   const set = new Set<number>();
   if (!items?.length) return set;
 
@@ -43,9 +45,14 @@ export function buildAllowedQualityIds(items: QualityProfileItem[] | undefined):
   return set;
 }
 
-export function buildIndexerMinSeeders(indexers: Indexer[]): Map<number, number> {
+export function buildIndexerMinSeeders(
+  indexers: Indexer[],
+): Map<number, number> {
   return new Map(
-    indexers.map((ix) => [ix.id, Math.max(0, Number(ix.settings?.['minSeeders']) || 0)]),
+    indexers.map((ix) => [
+      ix.id,
+      Math.max(0, Number(ix.settings?.['minSeeders']) || 0),
+    ]),
   );
 }
 
@@ -84,10 +91,16 @@ export function computeRejections(opts: {
 
   if (limits && sizeMb > 0) {
     if (limits.min > 0 && sizeMb < limits.min) {
-      out.push({ code: 'SIZE_TOO_LOW', params: { actual: Math.round(sizeMb), min: limits.min } });
+      out.push({
+        code: 'SIZE_TOO_LOW',
+        params: { actual: Math.round(sizeMb), min: limits.min },
+      });
     }
     if (limits.max > 0 && sizeMb > limits.max) {
-      out.push({ code: 'SIZE_TOO_HIGH', params: { actual: Math.round(sizeMb), max: limits.max } });
+      out.push({
+        code: 'SIZE_TOO_HIGH',
+        params: { actual: Math.round(sizeMb), max: limits.max },
+      });
     }
     if (
       limits.preferred > 0 &&
@@ -105,7 +118,10 @@ export function computeRejections(opts: {
 
   const minSeed = opts.indexerMinSeeders.get(opts.indexerId) ?? 0;
   if (minSeed > 0 && opts.seeders < minSeed) {
-    out.push({ code: 'MIN_SEEDERS', params: { actual: opts.seeders, min: minSeed } });
+    out.push({
+      code: 'MIN_SEEDERS',
+      params: { actual: opts.seeders, min: minSeed },
+    });
   }
 
   return out;

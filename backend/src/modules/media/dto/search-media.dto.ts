@@ -1,4 +1,10 @@
-import { IsString, IsOptional, IsEnum, IsNumber, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsNumber,
+  IsBoolean,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { MediaType, MediaStatus } from '../../../common/enums';
 

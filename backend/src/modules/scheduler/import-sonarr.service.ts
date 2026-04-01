@@ -170,9 +170,7 @@ export class ImportSonarrService {
       const existingProfiles = await this.qpRepo.find();
       const existingByName = new Map(existingProfiles.map((p) => [p.name, p]));
 
-      this.log.log(
-        `Found ${remoteProfiles.length} quality profiles in Sonarr`,
-      );
+      this.log.log(`Found ${remoteProfiles.length} quality profiles in Sonarr`);
 
       for (const remote of remoteProfiles) {
         const existing = existingByName.get(remote.name);

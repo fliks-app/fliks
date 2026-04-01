@@ -80,7 +80,10 @@ export class RequestsController {
 
   @Get(':id/comments')
   @CheckPolicies((ability) => ability.can(Action.Read, SuitarrRequest))
-  getComments(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: User) {
+  getComments(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
     return this.requestsService.getComments(id, user);
   }
 

@@ -2,7 +2,16 @@ import { Injectable } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const VIDEO_EXTS = new Set(['.mkv', '.mp4', '.avi', '.mov', '.ts', '.m2ts', '.wmv', '.flv']);
+const VIDEO_EXTS = new Set([
+  '.mkv',
+  '.mp4',
+  '.avi',
+  '.mov',
+  '.ts',
+  '.m2ts',
+  '.wmv',
+  '.flv',
+]);
 
 @Injectable()
 export class NamingService {
@@ -19,8 +28,14 @@ export class NamingService {
   ): string {
     let name = format;
     name = name.replace(/\{Movie Title\}/g, data.title ?? '');
-    name = name.replace(/\{Original Title\}/g, data.originalTitle || data.title || '');
-    name = name.replace(/\{Release Year\}/g, data.year ? String(data.year) : '');
+    name = name.replace(
+      /\{Original Title\}/g,
+      data.originalTitle || data.title || '',
+    );
+    name = name.replace(
+      /\{Release Year\}/g,
+      data.year ? String(data.year) : '',
+    );
     name = name.replace(/\{Quality Full\}/g, data.quality ?? '');
     name = name.replace(/\{Quality Title\}/g, data.quality ?? '');
     name = name.replace(/\{Release Group\}/g, data.releaseGroup ?? '');
@@ -45,7 +60,10 @@ export class NamingService {
     let name = format;
     name = name.replace(/\{Series Title\}/g, data.seriesTitle ?? '');
     name = name.replace(/\{season:00\}/g, String(data.season).padStart(2, '0'));
-    name = name.replace(/\{episode:00\}/g, String(data.episode).padStart(2, '0'));
+    name = name.replace(
+      /\{episode:00\}/g,
+      String(data.episode).padStart(2, '0'),
+    );
     name = name.replace(/\{Episode Title\}/g, data.episodeTitle ?? '');
     name = name.replace(/\{Quality Full\}/g, data.quality ?? '');
     name = name.replace(/\{Quality Title\}/g, data.quality ?? '');
@@ -66,15 +84,15 @@ export class NamingService {
   ): string {
     let name = format;
     name = name.replace(/\{Series Title\}/g, data.seriesTitle ?? '');
-    name = name.replace(/\{Release Year\}/g, data.year ? String(data.year) : '');
+    name = name.replace(
+      /\{Release Year\}/g,
+      data.year ? String(data.year) : '',
+    );
     name = name.replace(/\{TMDB Id\}/g, data.tmdbId ? String(data.tmdbId) : '');
     return this.sanitize(name);
   }
 
-  applySeasonFolderFormat(
-    format: string,
-    data: { season: number },
-  ): string {
+  applySeasonFolderFormat(format: string, data: { season: number }): string {
     let name = format;
     name = name.replace(/\{season:00\}/g, String(data.season).padStart(2, '0'));
     name = name.replace(/\{season\}/g, String(data.season));
@@ -83,7 +101,11 @@ export class NamingService {
 
   parseQuality(sourceTitle: string): string {
     const upper = sourceTitle.toUpperCase();
-    if (upper.includes('2160P') || upper.includes('4K') || upper.includes('UHD'))
+    if (
+      upper.includes('2160P') ||
+      upper.includes('4K') ||
+      upper.includes('UHD')
+    )
       return '2160p';
     if (upper.includes('1080P')) return '1080p';
     if (upper.includes('720P')) return '720p';
@@ -109,13 +131,17 @@ export class NamingService {
     return m?.[1] ?? '';
   }
 
-  parseEpisodeNumbers(sourceTitle: string): { season: number; episode: number } | null {
+  parseEpisodeNumbers(
+    sourceTitle: string,
+  ): { season: number; episode: number } | null {
     const m = sourceTitle.match(/[Ss](\d{1,2})[Ee](\d{1,3})/);
     if (!m) return null;
     return { season: parseInt(m[1], 10), episode: parseInt(m[2], 10) };
   }
 
-  findLargestVideoFile(dirPath: string): { filePath: string; size: number } | null {
+  findLargestVideoFile(
+    dirPath: string,
+  ): { filePath: string; size: number } | null {
     try {
       const entries = fs.readdirSync(dirPath, { withFileTypes: true });
       let best: { filePath: string; size: number } | null = null;
@@ -139,12 +165,12 @@ export class NamingService {
 
   private sanitize(name: string): string {
     return name
-      .replace(/\{[^}]*\}/g, '')        // remove unreplaced tokens
-      .replace(/undefined/g, '')         // remove stray "undefined"
+      .replace(/\{[^}]*\}/g, '') // remove unreplaced tokens
+      .replace(/undefined/g, '') // remove stray "undefined"
       .replace(/[<>:"/\\|?*\x00-\x1f]/g, '')
       .replace(/\s{2,}/g, ' ')
-      .replace(/\(\s*\)/g, '')           // remove empty parentheses
-      .replace(/\[\s*\]/g, '')           // remove empty brackets
+      .replace(/\(\s*\)/g, '') // remove empty parentheses
+      .replace(/\[\s*\]/g, '') // remove empty brackets
       .replace(/\s{2,}/g, ' ')
       .trim();
   }

@@ -18,8 +18,8 @@ export class EventsService {
   }
 
   getStream(): Observable<MessageEvent> {
-    return this.subject.asObservable().pipe(
-      map((data) => ({ data: JSON.stringify(data) } as MessageEvent)),
-    );
+    return this.subject
+      .asObservable()
+      .pipe(map((data) => ({ data: JSON.stringify(data) }) as MessageEvent));
   }
 }

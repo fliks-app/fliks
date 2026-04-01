@@ -23,12 +23,18 @@ import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { HistoryQueryDto } from './dto/history-query.dto';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
-import { MetadataDetails, SeasonDetails } from '../metadata-providers/interfaces/metadata-provider.interface';
+import {
+  MetadataDetails,
+  SeasonDetails,
+} from '../metadata-providers/interfaces/metadata-provider.interface';
 import { MediaType, MediaStatus } from '../../common/enums';
 import { ProfilesService } from '../profiles/profiles.service';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { NamingService } from '../scheduler/naming.service';
-import { getSuitarrQualityById, SUITARR_QUALITIES } from '../../common/constants/suitarr-qualities';
+import {
+  getSuitarrQualityById,
+  SUITARR_QUALITIES,
+} from '../../common/constants/suitarr-qualities';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -78,7 +84,9 @@ export class MediaService {
 
     let rootPath: string | undefined;
     if (dto.rootFolderId) {
-      const rf = await this.rootFolderRepo.findOne({ where: { id: dto.rootFolderId } });
+      const rf = await this.rootFolderRepo.findOne({
+        where: { id: dto.rootFolderId },
+      });
       if (rf) rootPath = rf.path;
     }
 
@@ -89,7 +97,12 @@ export class MediaService {
 
     const details = await this.tmdb.getTvShowDetails(dto.tmdbId);
     const seasons = await this.tmdb.getTvShowSeasons(dto.tmdbId);
-    return this.persistImportedSeries(details, seasons, qualityProfileId, rootPath);
+    return this.persistImportedSeries(
+      details,
+      seasons,
+      qualityProfileId,
+      rootPath,
+    );
   }
 
   async create(dto: CreateMediaDto): Promise<Media> {
@@ -105,7 +118,9 @@ export class MediaService {
     return this.findOne(saved.id);
   }
 
-  async findAll(query: SearchMediaDto): Promise<{ data: Media[]; total: number }> {
+  async findAll(
+    query: SearchMediaDto,
+  ): Promise<{ data: Media[]; total: number }> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 25;
     const offset = (page - 1) * limit;
@@ -125,10 +140,7 @@ export class MediaService {
 
     const sortBy = query.sortBy ?? 'media.title';
     const sortOrder = query.sortOrder ?? 'ASC';
-    qb.orderBy(
-      sortBy.includes('.') ? sortBy : `media.${sortBy}`,
-      sortOrder,
-    );
+    qb.orderBy(sortBy.includes('.') ? sortBy : `media.${sortBy}`, sortOrder);
 
     if (limit > 0) {
       qb.skip(offset).take(limit);
@@ -138,7 +150,10 @@ export class MediaService {
 
     // For series: attach episode stats
     const seriesIds = data.filter((m) => m.type === 'series').map((m) => m.id);
-    let episodeStatsMap = new Map<number, { totalEpisodes: number; downloadedEpisodes: number }>();
+    let episodeStatsMap = new Map<
+      number,
+      { totalEpisodes: number; downloadedEpisodes: number }
+    >();
     if (seriesIds.length) {
       const stats: { mediaId: number; total: string; downloaded: string }[] =
         await this.dataSource.query(
@@ -155,7 +170,10 @@ export class MediaService {
       episodeStatsMap = new Map(
         stats.map((s) => [
           s.mediaId,
-          { totalEpisodes: parseInt(s.total, 10), downloadedEpisodes: parseInt(s.downloaded, 10) },
+          {
+            totalEpisodes: parseInt(s.total, 10),
+            downloadedEpisodes: parseInt(s.downloaded, 10),
+          },
         ]),
       );
     }
@@ -216,9 +234,7 @@ export class MediaService {
     Object.assign(media, rest);
 
     if (tagIds !== undefined) {
-      media.tags = tagIds.length
-        ? await this.tagRepo.findByIds(tagIds)
-        : [];
+      media.tags = tagIds.length ? await this.tagRepo.findByIds(tagIds) : [];
     }
 
     const saved = await this.mediaRepo.save(media);
@@ -282,9 +298,7 @@ export class MediaService {
     }
 
     if (Object.keys(patch).length === 0) {
-      throw new BadRequestException(
-        'Provide at least one field to update',
-      );
+      throw new BadRequestException('Provide at least one field to update');
     }
 
     const result = await this.mediaRepo
@@ -359,8 +373,14 @@ export class MediaService {
         .andWhere(
           new Brackets((qb) => {
             qb.where('m.inCinemas BETWEEN :start AND :end', { start, end })
-              .orWhere('m.digitalRelease BETWEEN :start AND :end', { start, end })
-              .orWhere('m.physicalRelease BETWEEN :start AND :end', { start, end })
+              .orWhere('m.digitalRelease BETWEEN :start AND :end', {
+                start,
+                end,
+              })
+              .orWhere('m.physicalRelease BETWEEN :start AND :end', {
+                start,
+                end,
+              })
               .orWhere('m.releaseDate BETWEEN :start AND :end', { start, end });
           }),
         )
@@ -503,7 +523,8 @@ export class MediaService {
 
   private parseQuality(title: string): string {
     const u = title.toUpperCase();
-    if (u.includes('2160P') || u.includes('4K') || u.includes('UHD')) return '2160p';
+    if (u.includes('2160P') || u.includes('4K') || u.includes('UHD'))
+      return '2160p';
     if (u.includes('1080P')) return '1080p';
     if (u.includes('720P')) return '720p';
     if (u.includes('480P')) return '480p';
@@ -539,11 +560,17 @@ export class MediaService {
     return this.episodeRepo.save(episode);
   }
 
-  async deleteMediaFile(mediaId: number, fileId: number, deleteOnDisk: boolean): Promise<void> {
+  async deleteMediaFile(
+    mediaId: number,
+    fileId: number,
+    deleteOnDisk: boolean,
+  ): Promise<void> {
     const media = await this.mediaRepo.findOne({ where: { id: mediaId } });
     if (!media) throw new NotFoundException(`Media #${mediaId} not found`);
 
-    const file = await this.mediaFileRepo.findOne({ where: { id: fileId, mediaId } });
+    const file = await this.mediaFileRepo.findOne({
+      where: { id: fileId, mediaId },
+    });
     if (!file) throw new NotFoundException(`File #${fileId} not found`);
 
     if (deleteOnDisk && media.path) {
@@ -625,8 +652,10 @@ export class MediaService {
         if (existing) {
           const updates: Partial<Episode> = {};
           if (ep.title && ep.title !== existing.title) updates.title = ep.title;
-          if (ep.overview && ep.overview !== existing.overview) updates.overview = ep.overview;
-          if (ep.airDate && ep.airDate !== existing.airDate) updates.airDate = ep.airDate;
+          if (ep.overview && ep.overview !== existing.overview)
+            updates.overview = ep.overview;
+          if (ep.airDate && ep.airDate !== existing.airDate)
+            updates.airDate = ep.airDate;
           if (Object.keys(updates).length > 0) {
             await this.episodeRepo.update(existing.id, updates);
           }
@@ -778,9 +807,7 @@ export class MediaService {
       releaseDate: details.releaseDate
         ? details.releaseDate.slice(0, 10)
         : undefined,
-      inCinemas: details.inCinemas
-        ? details.inCinemas.slice(0, 10)
-        : undefined,
+      inCinemas: details.inCinemas ? details.inCinemas.slice(0, 10) : undefined,
       digitalRelease: details.digitalRelease
         ? details.digitalRelease.slice(0, 10)
         : undefined,
@@ -850,7 +877,8 @@ export class MediaService {
     });
     if (!media) throw new NotFoundException(`Media #${mediaId} not found`);
     if (!media.files?.length) return { renamed: 0 };
-    if (!media.path) throw new BadRequestException('No root folder set for this media');
+    if (!media.path)
+      throw new BadRequestException('No root folder set for this media');
 
     const [movieFormatRow] = await this.dataSource.query(
       `SELECT value FROM app_settings WHERE key = 'movie_format' LIMIT 1`,
@@ -858,8 +886,12 @@ export class MediaService {
     const [seriesFormatRow] = await this.dataSource.query(
       `SELECT value FROM app_settings WHERE key = 'series_format' LIMIT 1`,
     );
-    const movieFormat = movieFormatRow?.value || '{Movie Title} ({Release Year}) - {Quality Full}';
-    const seriesFormat = seriesFormatRow?.value || '{Series Title} - S{season:00}E{episode:00} - {Episode Title} - {Quality Full}';
+    const movieFormat =
+      movieFormatRow?.value ||
+      '{Movie Title} ({Release Year}) - {Quality Full}';
+    const seriesFormat =
+      seriesFormatRow?.value ||
+      '{Series Title} - S{season:00}E{episode:00} - {Episode Title} - {Quality Full}';
 
     let renamed = 0;
     for (const file of media.files) {

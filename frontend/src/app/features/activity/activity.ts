@@ -21,8 +21,12 @@ import {
   Media,
   HistoryEntry,
 } from '../../core/services/api/media.service';
+import {
+  SubtitlesApiService,
+  SubtitleHistoryEntry,
+} from '../../core/services/api/subtitles-api.service';
 
-type Tab = 'queue' | 'history';
+type Tab = 'queue' | 'history' | 'subtitles';
 
 @Component({
   selector: 'app-activity',
@@ -33,6 +37,7 @@ type Tab = 'queue' | 'history';
 export class ActivityComponent implements OnInit, OnDestroy {
   private readonly downloadApi = inject(DownloadClientsApiService);
   private readonly mediaService = inject(MediaService);
+  private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly translate = inject(TranslateService);
 
   readonly tab = signal<Tab>('queue');
@@ -49,6 +54,15 @@ export class ActivityComponent implements OnInit, OnDestroy {
   readonly historyPage = signal(1);
   readonly historyLoading = signal(true);
   readonly historyError = signal('');
+
+  // Subtitles
+  readonly subHistory = signal<SubtitleHistoryEntry[]>([]);
+  readonly subHistoryTotal = signal(0);
+  readonly subHistoryPage = signal(1);
+  readonly subHistoryLoading = signal(false);
+  readonly subHistoryError = signal('');
+  readonly subFilterStatus = signal('');
+  readonly subFilterLang = signal('');
 
   // Link torrent modal
   readonly linkDialog = viewChild<ElementRef<HTMLDialogElement>>('linkModal');
@@ -76,6 +90,7 @@ export class ActivityComponent implements OnInit, OnDestroy {
   switchTab(t: Tab) {
     this.tab.set(t);
     if (t === 'history' && this.history().length === 0) this.loadHistory(1);
+    if (t === 'subtitles' && this.subHistory().length === 0) this.loadSubHistory(1);
   }
 
   get hasImportable(): boolean {
@@ -226,6 +241,41 @@ export class ActivityComponent implements OnInit, OnDestroy {
     if (h > 0) return `${h}h ${m}m`;
     if (m > 0) return `${m}m ${s}s`;
     return `${s}s`;
+  }
+
+  async loadSubHistory(page = 1) {
+    this.subHistoryPage.set(page);
+    this.subHistoryLoading.set(true);
+    this.subHistoryError.set('');
+    try {
+      const params: Record<string, any> = { page, limit: 25 };
+      if (this.subFilterStatus()) params['status'] = this.subFilterStatus();
+      if (this.subFilterLang()) params['language'] = this.subFilterLang();
+      const res = await this.subtitlesApi.getHistory(params);
+      this.subHistory.set(res.data);
+      this.subHistoryTotal.set(res.total);
+    } catch {
+      this.subHistoryError.set(this.translate.instant('activity.subtitle_history_error'));
+    } finally {
+      this.subHistoryLoading.set(false);
+    }
+  }
+
+  applySubFilters() {
+    this.loadSubHistory(1);
+  }
+
+  get subHistoryTotalPages(): number {
+    return Math.max(1, Math.ceil(this.subHistoryTotal() / 25));
+  }
+
+  subStatusClass(status: string): string {
+    switch (status) {
+      case 'downloaded': case 'synced': return 'badge-success';
+      case 'upgraded': return 'badge-warning';
+      case 'failed': return 'badge-error';
+      default: return 'badge-ghost';
+    }
   }
 
   stateClass(status: string): string {

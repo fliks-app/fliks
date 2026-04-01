@@ -86,11 +86,15 @@ export class DownloadClientsService {
     return dc;
   }
 
-  async update(id: number, dto: UpdateDownloadClientDto): Promise<DownloadClient> {
+  async update(
+    id: number,
+    dto: UpdateDownloadClientDto,
+  ): Promise<DownloadClient> {
     const dc = await this.findOne(id);
     const { tagIds, ...patch } = dto;
     if (patch.name !== undefined) dc.name = patch.name;
-    if (patch.implementation !== undefined) dc.implementation = patch.implementation;
+    if (patch.implementation !== undefined)
+      dc.implementation = patch.implementation;
     if (patch.settings !== undefined) dc.settings = patch.settings;
     if (patch.enabled !== undefined) dc.enabled = patch.enabled;
     if (patch.priority !== undefined) dc.priority = patch.priority;
@@ -139,7 +143,12 @@ export class DownloadClientsService {
 
     // Match queue items with history entries to find mediaId & import status
     const historyEntries = await this.historyRepo.find({
-      where: [{ status: 'grabbed' }, { status: 'completed' }, { status: 'failed' }, { status: 'importing' }],
+      where: [
+        { status: 'grabbed' },
+        { status: 'completed' },
+        { status: 'failed' },
+        { status: 'importing' },
+      ],
       relations: ['media'],
     });
 
@@ -153,7 +162,8 @@ export class DownloadClientsService {
     const filtered: QueueEntry[] = [];
     for (const entry of results) {
       const name = entry.name.toLowerCase();
-      const isCompleted = completedTitles.has(name) ||
+      const isCompleted =
+        completedTitles.has(name) ||
         [...completedTitles].some((t) => name.startsWith(t));
       if (isCompleted) continue;
 

@@ -57,11 +57,7 @@ export class DownloadClientsController {
     @Query('clientId', ParseIntPipe) clientId: number,
     @Query('deleteFiles') deleteFiles?: string,
   ) {
-    return this.service.removeTorrent(
-      clientId,
-      hash,
-      deleteFiles === 'true',
-    );
+    return this.service.removeTorrent(clientId, hash, deleteFiles === 'true');
   }
 
   @Get(':id')
@@ -72,7 +68,10 @@ export class DownloadClientsController {
 
   @Put(':id')
   @CheckPolicies((ability) => ability.can(Action.Update, DownloadClient))
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateDownloadClientDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateDownloadClientDto,
+  ) {
     return this.service.update(id, dto);
   }
 

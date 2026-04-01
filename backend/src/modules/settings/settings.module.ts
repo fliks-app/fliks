@@ -8,7 +8,10 @@ import { RemotePathMappingsController } from './remote-path-mappings.controller'
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([AppSetting, RemotePathMapping]), AuthModule],
+  imports: [
+    TypeOrmModule.forFeature([AppSetting, RemotePathMapping]),
+    AuthModule,
+  ],
   controllers: [SettingsController, RemotePathMappingsController],
   providers: [SettingsService],
   exports: [SettingsService],

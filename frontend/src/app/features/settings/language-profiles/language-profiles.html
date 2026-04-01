@@ -23,8 +23,8 @@
         <thead>
           <tr>
             <th>{{ 'settings.language_profiles.col_name' | translate }}</th>
-            <th>{{ 'settings.language_profiles.col_cutoff' | translate }}</th>
-            <th class="text-end">{{ 'settings.language_profiles.col_allowed_count' | translate }}</th>
+            <th class="text-end">{{ 'settings.language_profiles.col_audio_count' | translate }}</th>
+            <th class="text-end">{{ 'settings.language_profiles.col_subtitle_count' | translate }}</th>
             <th class="text-end w-40">{{ 'settings.language_profiles.actions' | translate }}</th>
           </tr>
         </thead>
@@ -32,8 +32,8 @@
           @for (p of profiles(); track p.id) {
             <tr>
               <td class="font-medium">{{ p.name }}</td>
-              <td class="text-sm">{{ cutoffLabel(p.cutoff) }}</td>
-              <td class="text-end">{{ allowedCount(p) }}</td>
+              <td class="text-end">{{ audioCount(p) }}</td>
+              <td class="text-end">{{ subtitleCount(p) }}</td>
               <td class="text-end">
                 <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(p)">
                   {{ 'settings.language_profiles.edit' | translate }}
@@ -70,29 +70,20 @@
             (ngModelChange)="formName.set($event)"
           />
         </label>
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.language_profiles.field_cutoff' | translate }}</span>
-          <select
-            class="select select-bordered select-sm w-full"
-            [ngModel]="formCutoff()"
-            (ngModelChange)="formCutoff.set(+$event)"
-          >
-            @for (l of definitions(); track l.id) {
-              <option [ngValue]="l.id">{{ l.name }} ({{ l.isoCode }})</option>
-            }
-          </select>
-        </label>
+
+        <!-- Audio Languages -->
         <div>
-          <p class="text-sm font-medium mb-2">{{ 'settings.language_profiles.languages_group' | translate }}</p>
-          <div class="rounded-lg border border-base-200 divide-y divide-base-200 max-h-[28rem] overflow-y-auto">
+          <p class="text-sm font-medium mb-2">{{ 'settings.language_profiles.audio_languages' | translate }}</p>
+          <p class="text-xs text-base-content/50 mb-2">{{ 'settings.language_profiles.audio_languages_hint' | translate }}</p>
+          <div class="rounded-lg border border-base-200 divide-y divide-base-200 max-h-[14rem] overflow-y-auto">
             @for (l of definitions(); track l.id) {
               <div class="px-3 py-2 hover:bg-base-200/50">
                 <div class="flex items-center gap-3">
                   <input
                     type="checkbox"
                     class="checkbox checkbox-sm"
-                    [checked]="isAllowed(l.id)"
-                    (change)="toggleLanguage(l.id, $event)"
+                    [checked]="isAudioSelected(l.isoCode)"
+                    (change)="toggleAudio(l.isoCode, $event)"
                   />
                   <span class="text-sm flex-1">{{ l.name }}</span>
                   <span class="text-sm text-base-content/50 font-mono">{{ l.isoCode }}</span>
@@ -101,6 +92,49 @@
             }
           </div>
         </div>
+
+        <!-- Subtitle Languages -->
+        <div>
+          <p class="text-sm font-medium mb-2">{{ 'settings.language_profiles.subtitle_languages' | translate }}</p>
+          <p class="text-xs text-base-content/50 mb-2">{{ 'settings.language_profiles.subtitle_languages_hint' | translate }}</p>
+          <div class="rounded-lg border border-base-200 divide-y divide-base-200 max-h-[14rem] overflow-y-auto">
+            @for (l of definitions(); track l.id) {
+              <div class="px-3 py-2 hover:bg-base-200/50">
+                <div class="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm"
+                    [checked]="isSubtitleSelected(l.isoCode)"
+                    (change)="toggleSubtitle(l.isoCode, $event)"
+                  />
+                  <span class="text-sm flex-1">{{ l.name }}</span>
+                  <span class="text-sm text-base-content/50 font-mono mr-2">{{ l.isoCode }}</span>
+                  @if (isSubtitleSelected(l.isoCode)) {
+                    <label class="flex items-center gap-1 text-xs">
+                      <input
+                        type="checkbox"
+                        class="checkbox checkbox-xs"
+                        [checked]="isSubForced(l.isoCode)"
+                        (change)="toggleSubForced(l.isoCode, $event)"
+                      />
+                      Forced
+                    </label>
+                    <label class="flex items-center gap-1 text-xs">
+                      <input
+                        type="checkbox"
+                        class="checkbox checkbox-xs"
+                        [checked]="isSubHi(l.isoCode)"
+                        (change)="toggleSubHi(l.isoCode, $event)"
+                      />
+                      HI
+                    </label>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
         @if (saveError()) {
           <div role="alert" class="alert alert-error text-sm">{{ saveError() }}</div>
         }

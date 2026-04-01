@@ -25,6 +25,14 @@
     >
       {{ 'activity.tab_history' | translate }}
     </button>
+    <button
+      role="tab"
+      class="tab"
+      [class.tab-active]="tab() === 'subtitles'"
+      (click)="switchTab('subtitles')"
+    >
+      {{ 'activity.tab_subtitles' | translate }}
+    </button>
   </div>
 
   <!-- Queue tab -->
@@ -264,6 +272,93 @@
           <button class="btn btn-sm btn-ghost" [disabled]="historyPage() <= 1" (click)="loadHistory(historyPage() - 1)">«</button>
           <span class="btn btn-sm btn-ghost pointer-events-none">{{ historyPage() }} / {{ historyTotalPages }}</span>
           <button class="btn btn-sm btn-ghost" [disabled]="historyPage() >= historyTotalPages" (click)="loadHistory(historyPage() + 1)">»</button>
+        </div>
+      }
+    }
+  }
+
+  <!-- Subtitles tab -->
+  @if (tab() === 'subtitles') {
+    <div class="flex gap-2 mb-4">
+      <select class="select select-bordered select-sm" [ngModel]="subFilterStatus()" (ngModelChange)="subFilterStatus.set($event); applySubFilters()">
+        <option value="">{{ 'activity.all_statuses' | translate }}</option>
+        <option value="downloaded">Downloaded</option>
+        <option value="upgraded">Upgraded</option>
+        <option value="synced">Synced</option>
+        <option value="failed">Failed</option>
+      </select>
+      <select class="select select-bordered select-sm" [ngModel]="subFilterLang()" (ngModelChange)="subFilterLang.set($event); applySubFilters()">
+        <option value="">{{ 'activity.all_languages' | translate }}</option>
+        <option value="en">English</option>
+        <option value="fr">French</option>
+        <option value="de">German</option>
+        <option value="es">Spanish</option>
+        <option value="it">Italian</option>
+        <option value="pt">Portuguese</option>
+        <option value="ja">Japanese</option>
+        <option value="ko">Korean</option>
+        <option value="zh">Chinese</option>
+        <option value="ru">Russian</option>
+        <option value="ar">Arabic</option>
+        <option value="nl">Dutch</option>
+      </select>
+    </div>
+
+    @if (subHistoryLoading()) {
+      <div class="flex justify-center py-12">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    } @else if (subHistoryError()) {
+      <div role="alert" class="alert alert-error">{{ subHistoryError() }}</div>
+    } @else if (subHistory().length === 0) {
+      <p class="text-center py-12 text-base-content/50">{{ 'activity.no_subtitle_history' | translate }}</p>
+    } @else {
+      <div class="overflow-x-auto rounded-lg border border-base-200">
+        <table class="table table-sm table-zebra">
+          <thead>
+            <tr>
+              <th>{{ 'activity.col_date' | translate }}</th>
+              <th>{{ 'activity.col_media' | translate }}</th>
+              <th>{{ 'activity.col_language' | translate }}</th>
+              <th>{{ 'activity.col_provider' | translate }}</th>
+              <th class="text-center">{{ 'activity.col_score' | translate }}</th>
+              <th class="text-center">{{ 'activity.col_status' | translate }}</th>
+              <th class="text-center">{{ 'activity.col_flags' | translate }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (entry of subHistory(); track entry.id) {
+              <tr>
+                <td class="text-sm whitespace-nowrap">{{ entry.createdAt | date:'short' }}</td>
+                <td class="font-medium max-w-[14rem] truncate" [title]="entry.mediaTitle">{{ entry.mediaTitle }}</td>
+                <td class="text-sm font-mono">{{ entry.language }}</td>
+                <td class="text-sm">{{ entry.providerType }}</td>
+                <td class="text-center tabular-nums">{{ entry.score }}</td>
+                <td class="text-center">
+                  <span class="badge badge-sm" [ngClass]="subStatusClass(entry.status)">{{ entry.status }}</span>
+                </td>
+                <td class="text-center text-xs">
+                  @if (entry.forced) { <span class="badge badge-xs badge-outline mr-1">F</span> }
+                  @if (entry.hearingImpaired) { <span class="badge badge-xs badge-outline">HI</span> }
+                  @if (entry.synced) { <span class="badge badge-xs badge-info ml-1">Synced</span> }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (subHistoryTotalPages > 1) {
+        <div class="flex justify-center mt-4">
+          <div class="join">
+            @for (p of [].constructor(subHistoryTotalPages); track $index) {
+              <button
+                class="join-item btn btn-sm"
+                [class.btn-active]="subHistoryPage() === $index + 1"
+                (click)="loadSubHistory($index + 1)"
+              >{{ $index + 1 }}</button>
+            }
+          </div>
         </div>
       }
     }

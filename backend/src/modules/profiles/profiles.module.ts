@@ -17,10 +17,22 @@ import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([QualityProfile, QualityDefinition, LanguageProfile, CustomFormat, DelayProfile, Tag]),
+    TypeOrmModule.forFeature([
+      QualityProfile,
+      QualityDefinition,
+      LanguageProfile,
+      CustomFormat,
+      DelayProfile,
+      Tag,
+    ]),
     AuthModule,
   ],
-  controllers: [ProfilesController, CustomFormatsController, DelayProfilesController, QualityDefinitionsController],
+  controllers: [
+    ProfilesController,
+    CustomFormatsController,
+    DelayProfilesController,
+    QualityDefinitionsController,
+  ],
   providers: [ProfilesService, QualityDefinitionsService, CustomFormatsService],
   exports: [ProfilesService, QualityDefinitionsService, CustomFormatsService],
 })

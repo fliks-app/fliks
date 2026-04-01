@@ -28,11 +28,16 @@ export class PoliciesGuard implements CanActivate {
 
     const ability = this.caslAbilityFactory.createForUser(user);
 
-    return policyHandlers.every((handler) => execPolicyHandler(handler, ability));
+    return policyHandlers.every((handler) =>
+      execPolicyHandler(handler, ability),
+    );
   }
 }
 
-function execPolicyHandler(handler: PolicyHandler, ability: AppAbility): boolean {
+function execPolicyHandler(
+  handler: PolicyHandler,
+  ability: AppAbility,
+): boolean {
   if (typeof handler === 'function') {
     return handler(ability);
   }

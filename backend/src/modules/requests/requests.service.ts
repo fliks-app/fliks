@@ -8,7 +8,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
 import { SuitarrRequest } from './entities/request.entity';
 import { RequestComment } from './entities/request-comment.entity';
-import { AutoApprovalRule, AutoApprovalCondition } from './entities/auto-approval-rule.entity';
+import {
+  AutoApprovalRule,
+  AutoApprovalCondition,
+} from './entities/auto-approval-rule.entity';
 import { User } from '../users/entities/user.entity';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { ListRequestsDto } from './dto/list-requests.dto';
@@ -34,21 +37,38 @@ export class RequestsService {
 
   private evalCondition(
     cond: AutoApprovalCondition,
-    context: { role: string; userId: number; mediaType: string; tmdbId: number; title: string },
+    context: {
+      role: string;
+      userId: number;
+      mediaType: string;
+      tmdbId: number;
+      title: string;
+    },
   ): boolean {
     let actual: string | number;
     switch (cond.field) {
-      case 'role':   actual = context.role; break;
-      case 'userId': actual = context.userId; break;
-      default:       return true; // genre/year/seasons require metadata lookup — skip for now
+      case 'role':
+        actual = context.role;
+        break;
+      case 'userId':
+        actual = context.userId;
+        break;
+      default:
+        return true; // genre/year/seasons require metadata lookup — skip for now
     }
     switch (cond.operator) {
-      case 'equals':      return String(actual) === String(cond.value);
-      case 'notEquals':   return String(actual) !== String(cond.value);
-      case 'greaterThan': return Number(actual) > Number(cond.value);
-      case 'lessThan':    return Number(actual) < Number(cond.value);
-      case 'contains':    return String(actual).includes(String(cond.value));
-      default:            return false;
+      case 'equals':
+        return String(actual) === String(cond.value);
+      case 'notEquals':
+        return String(actual) !== String(cond.value);
+      case 'greaterThan':
+        return Number(actual) > Number(cond.value);
+      case 'lessThan':
+        return Number(actual) < Number(cond.value);
+      case 'contains':
+        return String(actual).includes(String(cond.value));
+      default:
+        return false;
     }
   }
 
@@ -146,7 +166,10 @@ export class RequestsService {
     const saved = await this.requestRepo.save(row);
 
     const event = autoApprove ? 'request.approved' : 'request.created';
-    void this.notifications.dispatch(event, { title: dto.title, mediaType: dto.mediaType });
+    void this.notifications.dispatch(event, {
+      title: dto.title,
+      mediaType: dto.mediaType,
+    });
 
     return saved;
   }
@@ -212,7 +235,9 @@ export class RequestsService {
     row.approvedById = admin.id;
     row.declinedReason = null;
     const saved = await this.requestRepo.save(row);
-    void this.notifications.dispatch('request.approved', { title: saved.title });
+    void this.notifications.dispatch('request.approved', {
+      title: saved.title,
+    });
     return saved;
   }
 
@@ -231,7 +256,10 @@ export class RequestsService {
     row.approvedById = admin.id;
     row.declinedReason = reason ?? null;
     const saved = await this.requestRepo.save(row);
-    void this.notifications.dispatch('request.declined', { title: saved.title, reason: reason ?? '' });
+    void this.notifications.dispatch('request.declined', {
+      title: saved.title,
+      reason: reason ?? '',
+    });
     return saved;
   }
 
@@ -244,8 +272,11 @@ export class RequestsService {
     user: User,
     dto: CreateCommentDto,
   ): Promise<RequestComment> {
-    const request = await this.requestRepo.findOne({ where: { id: requestId } });
-    if (!request) throw new NotFoundException(`Request #${requestId} not found`);
+    const request = await this.requestRepo.findOne({
+      where: { id: requestId },
+    });
+    if (!request)
+      throw new NotFoundException(`Request #${requestId} not found`);
     if (user.role !== UserRole.ADMIN && request.userId !== user.id) {
       throw new ForbiddenException();
     }
@@ -258,8 +289,11 @@ export class RequestsService {
   }
 
   async getComments(requestId: number, user: User): Promise<RequestComment[]> {
-    const request = await this.requestRepo.findOne({ where: { id: requestId } });
-    if (!request) throw new NotFoundException(`Request #${requestId} not found`);
+    const request = await this.requestRepo.findOne({
+      where: { id: requestId },
+    });
+    if (!request)
+      throw new NotFoundException(`Request #${requestId} not found`);
     if (user.role !== UserRole.ADMIN && request.userId !== user.id) {
       throw new ForbiddenException();
     }
@@ -275,7 +309,8 @@ export class RequestsService {
       where: { id: commentId },
       relations: ['request'],
     });
-    if (!comment) throw new NotFoundException(`Comment #${commentId} not found`);
+    if (!comment)
+      throw new NotFoundException(`Comment #${commentId} not found`);
     if (user.role !== UserRole.ADMIN && comment.userId !== user.id) {
       throw new ForbiddenException();
     }

@@ -1,0 +1,165 @@
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'settings.subtitle_providers.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.subtitle_providers.subtitle' | translate }}</p>
+    </div>
+    <button type="button" class="btn btn-primary" (click)="openCreate()">
+      {{ 'settings.subtitle_providers.new' | translate }}
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (listError()) {
+    <div role="alert" class="alert alert-error">{{ listError() }}</div>
+  } @else if (rows().length === 0) {
+    <p class="text-center py-12 text-base-content/50">{{ 'settings.subtitle_providers.empty' | translate }}</p>
+  } @else {
+    <div class="overflow-x-auto rounded-lg border border-base-200">
+      <table class="table table-zebra">
+        <thead>
+          <tr>
+            <th>{{ 'settings.subtitle_providers.col_name' | translate }}</th>
+            <th>{{ 'settings.subtitle_providers.col_type' | translate }}</th>
+            <th class="text-end">{{ 'settings.subtitle_providers.col_priority' | translate }}</th>
+            <th class="text-center">{{ 'settings.subtitle_providers.col_enabled' | translate }}</th>
+            <th class="text-end w-40">{{ 'settings.subtitle_providers.actions' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.id) {
+            <tr>
+              <td class="font-medium">{{ row.name }}</td>
+              <td class="text-sm">{{ providerLabel(row.type) }}</td>
+              <td class="text-end">{{ row.priority }}</td>
+              <td class="text-center">
+                @if (row.enabled) {
+                  <span class="badge badge-success badge-sm">ON</span>
+                } @else {
+                  <span class="badge badge-ghost badge-sm">OFF</span>
+                }
+              </td>
+              <td class="text-end">
+                <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(row)">
+                  {{ 'settings.subtitle_providers.edit' | translate }}
+                </button>
+                <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRow(row)">
+                  {{ 'settings.subtitle_providers.delete' | translate }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>
+
+@if (editorOpen()) {
+  <div class="modal modal-open z-50" role="dialog" aria-modal="true">
+    <div class="modal-box max-w-2xl max-h-[90vh] flex flex-col">
+      <h2 class="text-lg font-bold shrink-0">
+        @if (editingId() === null) {
+          {{ 'settings.subtitle_providers.editor_create_title' | translate }}
+        } @else {
+          {{ 'settings.subtitle_providers.editor_edit_title' | translate }}
+        }
+      </h2>
+      <div class="py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.subtitle_providers.field_name' | translate }}</span>
+          <input type="text" class="input input-bordered input-sm w-full"
+            [ngModel]="formName()" (ngModelChange)="formName.set($event)" />
+        </label>
+
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.subtitle_providers.field_type' | translate }}</span>
+          <select class="select select-bordered select-sm w-full"
+            [ngModel]="formType()" (ngModelChange)="formType.set($event)">
+            @for (pt of providerTypes; track pt.value) {
+              <option [ngValue]="pt.value">{{ pt.label }}</option>
+            }
+          </select>
+        </label>
+
+        @if (currentFields().includes('apiKey')) {
+          <label class="form-control w-full">
+            <span class="label-text">API Key</span>
+            <input type="text" class="input input-bordered input-sm w-full font-mono"
+              [ngModel]="formApiKey()" (ngModelChange)="formApiKey.set($event)" />
+          </label>
+        }
+
+        @if (currentFields().includes('username')) {
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.subtitle_providers.field_username' | translate }}</span>
+            <input type="text" class="input input-bordered input-sm w-full"
+              [ngModel]="formUsername()" (ngModelChange)="formUsername.set($event)" />
+          </label>
+        }
+
+        @if (currentFields().includes('password')) {
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.subtitle_providers.field_password' | translate }}</span>
+            <input type="password" class="input input-bordered input-sm w-full"
+              [ngModel]="formPassword()" (ngModelChange)="formPassword.set($event)" />
+          </label>
+        }
+
+        @if (currentFields().includes('baseUrl')) {
+          <label class="form-control w-full">
+            <span class="label-text">Base URL</span>
+            <input type="text" class="input input-bordered input-sm w-full"
+              [ngModel]="formBaseUrl()" (ngModelChange)="formBaseUrl.set($event)" />
+          </label>
+        }
+
+        <div class="flex gap-4">
+          <label class="form-control w-28">
+            <span class="label-text">{{ 'settings.subtitle_providers.field_priority' | translate }}</span>
+            <input type="number" class="input input-bordered input-sm w-full" min="0"
+              [ngModel]="formPriority()" (ngModelChange)="formPriority.set(+$event)" />
+          </label>
+          <label class="flex items-end gap-2 pb-1">
+            <input type="checkbox" class="checkbox checkbox-sm"
+              [ngModel]="formEnabled()" (ngModelChange)="formEnabled.set($event)" />
+            <span class="label-text">{{ 'settings.subtitle_providers.field_enabled' | translate }}</span>
+          </label>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button type="button" class="btn btn-outline btn-sm" (click)="testConnection()" [disabled]="testLoading()">
+            @if (testLoading()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'settings.subtitle_providers.test' | translate }}
+          </button>
+          @if (testResult(); as r) {
+            <span class="text-sm" [class.text-success]="r.ok" [class.text-error]="!r.ok">{{ r.message }}</span>
+          }
+        </div>
+
+        @if (saveError()) {
+          <div role="alert" class="alert alert-error text-sm">{{ saveError() }}</div>
+        }
+      </div>
+      <div class="modal-action shrink-0">
+        <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
+          {{ 'settings.subtitle_providers.cancel' | translate }}
+        </button>
+        <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+          @if (saving()) {
+            <span class="loading loading-spinner loading-sm"></span>
+          }
+          {{ 'settings.subtitle_providers.save' | translate }}
+        </button>
+      </div>
+    </div>
+    <div role="button" tabindex="0" class="modal-backdrop bg-black/50"
+      (click)="closeEditor()" (keydown.enter)="closeEditor()"
+      [attr.aria-label]="'common.close' | translate"></div>
+  </div>
+}

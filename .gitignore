@@ -1,1 +1,3 @@
 volumes/*
+**/dist/*
+**/node_modules/*

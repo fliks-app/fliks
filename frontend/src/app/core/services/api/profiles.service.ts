@@ -30,27 +30,29 @@ export interface CreateQualityProfilePayload {
   }[];
 }
 
+export interface AudioLanguageItem {
+  isoCode: string;
+  name: string;
+}
+
+export interface SubtitleLanguageItem {
+  isoCode: string;
+  name: string;
+  forced: boolean;
+  hi: boolean;
+}
+
 export interface LanguageProfile {
   id: number;
   name: string;
-  cutoff: number;
-  languages: {
-    language: { id: number; name: string; isoCode: string };
-    allowed: boolean;
-    sortOrder: number;
-  }[];
+  audioLanguages: AudioLanguageItem[];
+  subtitleLanguages: SubtitleLanguageItem[];
 }
 
 export interface CreateLanguageProfilePayload {
   name: string;
-  cutoff: number;
-  languages: {
-    languageId: number;
-    languageName: string;
-    isoCode: string;
-    allowed: boolean;
-    sortOrder: number;
-  }[];
+  audioLanguages: AudioLanguageItem[];
+  subtitleLanguages: SubtitleLanguageItem[];
 }
 
 @Injectable({ providedIn: 'root' })

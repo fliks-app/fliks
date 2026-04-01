@@ -75,15 +75,18 @@ export class IndexersController {
 
     const rows = await this.statRepo
       .createQueryBuilder('s')
-      .select("DATE(s.queryDate)", 'date')
-      .addSelect("COUNT(*)", 'queries')
-      .addSelect("AVG(s.responseTimeMs)::int", 'avgResponseMs')
-      .addSelect("SUM(s.resultCount)::int", 'totalResults')
-      .addSelect("SUM(CASE WHEN s.errorMessage IS NOT NULL THEN 1 ELSE 0 END)::int", 'errors')
+      .select('DATE(s.queryDate)', 'date')
+      .addSelect('COUNT(*)', 'queries')
+      .addSelect('AVG(s.responseTimeMs)::int', 'avgResponseMs')
+      .addSelect('SUM(s.resultCount)::int', 'totalResults')
+      .addSelect(
+        'SUM(CASE WHEN s.errorMessage IS NOT NULL THEN 1 ELSE 0 END)::int',
+        'errors',
+      )
       .where('s.indexerId = :id', { id })
       .andWhere('s.queryDate >= :since', { since })
-      .groupBy("DATE(s.queryDate)")
-      .orderBy("date", 'DESC')
+      .groupBy('DATE(s.queryDate)')
+      .orderBy('date', 'DESC')
       .getRawMany();
 
     return rows;

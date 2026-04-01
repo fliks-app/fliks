@@ -47,7 +47,10 @@ export class CustomFormatsController {
 
   @Put(':id')
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateCustomFormatDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateCustomFormatDto,
+  ) {
     return this.service.update(id, dto);
   }
 

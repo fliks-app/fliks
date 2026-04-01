@@ -6,7 +6,10 @@ import { SUITARR_QUALITIES } from '../../common/constants/suitarr-qualities';
 import { QualityDefinitionItemDto } from './dto/update-quality-definitions.dto';
 
 /** Default preferred sizes in MB/h by resolution. */
-const DEFAULTS: Record<number, { min: number; preferred: number; max: number }> = {
+const DEFAULTS: Record<
+  number,
+  { min: number; preferred: number; max: number }
+> = {
   0: { min: 0, preferred: 95, max: 100 },
   480: { min: 0, preferred: 95, max: 100 },
   720: { min: 0, preferred: 137.3, max: 162.2 },
@@ -46,7 +49,9 @@ export class QualityDefinitionsService {
     return this.repo.find({ order: { qualityId: 'ASC' } });
   }
 
-  async updateAll(items: QualityDefinitionItemDto[]): Promise<QualityDefinition[]> {
+  async updateAll(
+    items: QualityDefinitionItemDto[],
+  ): Promise<QualityDefinition[]> {
     await this.ensureDefaults();
 
     for (const item of items) {
@@ -64,7 +69,9 @@ export class QualityDefinitionsService {
     return this.findAll();
   }
 
-  async getSizeLimitsMap(): Promise<Map<number, { min: number; preferred: number; max: number }>> {
+  async getSizeLimitsMap(): Promise<
+    Map<number, { min: number; preferred: number; max: number }>
+  > {
     const defs = await this.findAll();
     return new Map(
       defs.map((d) => [

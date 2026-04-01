@@ -1,10 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
 import { IsString } from 'class-validator';
 import { SchedulerService } from './scheduler.service';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';

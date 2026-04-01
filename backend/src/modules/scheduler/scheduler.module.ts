@@ -30,6 +30,10 @@ import { MediaModule } from '../media/media.module';
 import { AuthModule } from '../auth/auth.module';
 import { BlocklistModule } from '../blocklist/blocklist.module';
 import { DelayProfile } from '../profiles/entities/delay-profile.entity';
+import { SubtitleSchedulerService } from './subtitle-scheduler.service';
+import { SubtitlesModule } from '../subtitles/subtitles.module';
+import { SettingsModule } from '../settings/settings.module';
+import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 
 @Module({
   imports: [
@@ -47,6 +51,7 @@ import { DelayProfile } from '../profiles/entities/delay-profile.entity';
       DelayProfile,
       RemotePathMapping,
       QualityProfile,
+      SubtitleFile,
     ]),
     IndexersModule,
     DownloadClientsModule,
@@ -55,9 +60,28 @@ import { DelayProfile } from '../profiles/entities/delay-profile.entity';
     MediaModule,
     AuthModule,
     BlocklistModule,
+    SubtitlesModule,
+    SettingsModule,
   ],
   controllers: [CommandsController, SystemController],
-  providers: [SchedulerService, CompletionService, NamingService, BackupService, LogBufferService, EventsService, ImportRadarrService, ImportSonarrService],
-  exports: [SchedulerService, CompletionService, NamingService, LogBufferService, EventsService],
+  providers: [
+    SchedulerService,
+    CompletionService,
+    NamingService,
+    BackupService,
+    LogBufferService,
+    EventsService,
+    ImportRadarrService,
+    ImportSonarrService,
+    SubtitleSchedulerService,
+  ],
+  exports: [
+    SchedulerService,
+    CompletionService,
+    NamingService,
+    LogBufferService,
+    EventsService,
+    SubtitleSchedulerService,
+  ],
 })
 export class SuitarrSchedulerModule {}

@@ -10,6 +10,8 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   ProfilesService,
   LanguageProfile,
+  AudioLanguageItem,
+  SubtitleLanguageItem,
 } from '../../../core/services/api/profiles.service';
 
 interface LangDef {
@@ -39,8 +41,8 @@ export class LanguageProfilesComponent implements OnInit {
   readonly editingId = signal<number | null>(null);
 
   readonly formName = signal('');
-  readonly formCutoff = signal(1);
-  readonly allowedIds = signal<Set<number>>(new Set());
+  readonly audioIsoCodes = signal<Set<string>>(new Set());
+  readonly subtitleEntries = signal<Map<string, { forced: boolean; hi: boolean }>>(new Map());
 
   ngOnInit() {
     this.reloadAll();
@@ -63,20 +65,19 @@ export class LanguageProfilesComponent implements OnInit {
     }
   }
 
-  cutoffLabel(id: number): string {
-    const d = this.definitions().find((l) => l.id === id);
-    return d ? d.name : String(id);
+  audioCount(p: LanguageProfile): number {
+    return p.audioLanguages.length;
   }
 
-  allowedCount(p: LanguageProfile): number {
-    return p.languages.filter((l) => l.allowed).length;
+  subtitleCount(p: LanguageProfile): number {
+    return p.subtitleLanguages.length;
   }
 
   openCreate() {
     this.editingId.set(null);
     this.formName.set('');
-    this.formCutoff.set(1);
-    this.allowedIds.set(new Set());
+    this.audioIsoCodes.set(new Set());
+    this.subtitleEntries.set(new Map());
     this.saveError.set('');
     this.editorOpen.set(true);
   }
@@ -84,8 +85,12 @@ export class LanguageProfilesComponent implements OnInit {
   openEdit(p: LanguageProfile) {
     this.editingId.set(p.id);
     this.formName.set(p.name);
-    this.formCutoff.set(p.cutoff);
-    this.allowedIds.set(new Set(p.languages.filter((l) => l.allowed).map((l) => l.language.id)));
+    this.audioIsoCodes.set(new Set(p.audioLanguages.map((l) => l.isoCode)));
+    const subs = new Map<string, { forced: boolean; hi: boolean }>();
+    for (const s of p.subtitleLanguages) {
+      subs.set(s.isoCode, { forced: s.forced, hi: s.hi });
+    }
+    this.subtitleEntries.set(subs);
     this.saveError.set('');
     this.editorOpen.set(true);
   }
@@ -94,31 +99,71 @@ export class LanguageProfilesComponent implements OnInit {
     this.editorOpen.set(false);
   }
 
-  isAllowed(id: number): boolean {
-    return this.allowedIds().has(id);
+  isAudioSelected(isoCode: string): boolean {
+    return this.audioIsoCodes().has(isoCode);
   }
 
-  toggleLanguage(id: number, ev: Event) {
+  toggleAudio(isoCode: string, ev: Event) {
     const checked = (ev.target as HTMLInputElement).checked;
-    const next = new Set(this.allowedIds());
-    if (checked) next.add(id);
-    else next.delete(id);
-    this.allowedIds.set(next);
+    const next = new Set(this.audioIsoCodes());
+    if (checked) next.add(isoCode);
+    else next.delete(isoCode);
+    this.audioIsoCodes.set(next);
+  }
+
+  isSubtitleSelected(isoCode: string): boolean {
+    return this.subtitleEntries().has(isoCode);
+  }
+
+  toggleSubtitle(isoCode: string, ev: Event) {
+    const checked = (ev.target as HTMLInputElement).checked;
+    const next = new Map(this.subtitleEntries());
+    if (checked) next.set(isoCode, { forced: false, hi: false });
+    else next.delete(isoCode);
+    this.subtitleEntries.set(next);
+  }
+
+  isSubForced(isoCode: string): boolean {
+    return this.subtitleEntries().get(isoCode)?.forced ?? false;
+  }
+
+  isSubHi(isoCode: string): boolean {
+    return this.subtitleEntries().get(isoCode)?.hi ?? false;
+  }
+
+  toggleSubForced(isoCode: string, ev: Event) {
+    const checked = (ev.target as HTMLInputElement).checked;
+    const next = new Map(this.subtitleEntries());
+    const entry = next.get(isoCode);
+    if (entry) {
+      next.set(isoCode, { ...entry, forced: checked });
+      this.subtitleEntries.set(next);
+    }
+  }
+
+  toggleSubHi(isoCode: string, ev: Event) {
+    const checked = (ev.target as HTMLInputElement).checked;
+    const next = new Map(this.subtitleEntries());
+    const entry = next.get(isoCode);
+    if (entry) {
+      next.set(isoCode, { ...entry, hi: checked });
+      this.subtitleEntries.set(next);
+    }
   }
 
   private buildPayload() {
     const defs = this.definitions();
-    return {
-      name: this.formName().trim(),
-      cutoff: this.formCutoff(),
-      languages: defs.map((l, index) => ({
-        languageId: l.id,
-        languageName: l.name,
-        isoCode: l.isoCode,
-        allowed: this.allowedIds().has(l.id),
-        sortOrder: index,
-      })),
-    };
+    const audioLanguages: AudioLanguageItem[] = [];
+    for (const iso of this.audioIsoCodes()) {
+      const def = defs.find((d) => d.isoCode === iso);
+      if (def) audioLanguages.push({ isoCode: def.isoCode, name: def.name });
+    }
+    const subtitleLanguages: SubtitleLanguageItem[] = [];
+    for (const [iso, opts] of this.subtitleEntries()) {
+      const def = defs.find((d) => d.isoCode === iso);
+      if (def) subtitleLanguages.push({ isoCode: def.isoCode, name: def.name, forced: opts.forced, hi: opts.hi });
+    }
+    return { name: this.formName().trim(), audioLanguages, subtitleLanguages };
   }
 
   async save() {

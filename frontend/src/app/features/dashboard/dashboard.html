@@ -98,6 +98,67 @@
       </div>
     }
 
+    <!-- Subtitles widget -->
+    @if (subStats(); as sub) {
+      <div>
+        <h2 class="text-lg font-semibold mb-3">{{ 'dashboard.subtitles_title' | translate }}</h2>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <div class="card bg-base-100 border border-base-200">
+            <div class="card-body py-4 px-5 gap-1">
+              <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'dashboard.sub_total' | translate }}</p>
+              <p class="text-2xl font-bold tabular-nums">{{ sub.total }}</p>
+            </div>
+          </div>
+          <div class="card bg-base-100 border border-base-200">
+            <div class="card-body py-4 px-5 gap-1">
+              <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'dashboard.sub_downloaded' | translate }}</p>
+              <p class="text-2xl font-bold tabular-nums text-success">{{ sub.byStatus['downloaded'] || 0 }}</p>
+            </div>
+          </div>
+          <div class="card bg-base-100 border border-base-200">
+            <div class="card-body py-4 px-5 gap-1">
+              <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'dashboard.sub_failed' | translate }}</p>
+              <p class="text-2xl font-bold tabular-nums" [class.text-error]="(sub.byStatus['failed'] || 0) > 0">{{ sub.byStatus['failed'] || 0 }}</p>
+            </div>
+          </div>
+          <div class="card bg-base-100 border border-base-200">
+            <div class="card-body py-4 px-5 gap-1">
+              <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'dashboard.sub_synced' | translate }}</p>
+              <p class="text-2xl font-bold tabular-nums">{{ sub.byStatus['synced'] || 0 }}</p>
+            </div>
+          </div>
+        </div>
+
+        @if (sub.recent.length) {
+          <h3 class="text-sm font-medium text-base-content/60 mb-2">{{ 'dashboard.sub_recent' | translate }}</h3>
+          <div class="overflow-x-auto rounded-lg border border-base-200">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>{{ 'dashboard.sub_col_media' | translate }}</th>
+                  <th>{{ 'dashboard.sub_col_lang' | translate }}</th>
+                  <th>{{ 'dashboard.sub_col_provider' | translate }}</th>
+                  <th class="text-center">{{ 'dashboard.sub_col_score' | translate }}</th>
+                  <th class="text-sm">{{ 'dashboard.sub_col_date' | translate }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of sub.recent; track r.id) {
+                  <tr>
+                    <td class="font-medium max-w-[12rem] truncate">{{ r.mediaTitle }}</td>
+                    <td class="font-mono text-sm">{{ r.language }}</td>
+                    <td class="text-sm">{{ r.providerType }}</td>
+                    <td class="text-center tabular-nums">{{ r.score }}</td>
+                    <td class="text-sm whitespace-nowrap">{{ r.createdAt | date:'short' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    }
+
     <!-- Quick links -->
     <div>
       <h2 class="text-lg font-semibold mb-3">{{ 'dashboard.quick_links' | translate }}</h2>
