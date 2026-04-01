@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
   IndexersApiService,
   IndexerRow,
@@ -21,6 +22,7 @@ import {
 export class IndexersSettingsComponent implements OnInit {
   private readonly api = inject(IndexersApiService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly rows = signal<IndexerRow[]>([]);
   readonly loading = signal(true);
@@ -194,16 +196,18 @@ export class IndexersSettingsComponent implements OnInit {
     const msg = this.translate.instant('settings.indexers.confirm_delete', {
       name: ix.name,
     });
-    if (!confirm(msg)) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: msg, variant: 'danger' })) return;
     try {
       await this.api.remove(ix.id);
       await this.reloadAll();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(
-        httpErr.error?.message ??
+      void this.confirmation.alert({
+        title: this.translate.instant('common.error'),
+        message: httpErr.error?.message ??
           this.translate.instant('settings.indexers.delete_error'),
-      );
+        variant: 'danger',
+      });
     }
   }
 }

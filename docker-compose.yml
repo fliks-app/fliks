@@ -23,7 +23,7 @@ services:
     volumes:
       - ./backend:/app
       - ./volumes/downloads:/downloads
-      - ./volumes/medias:/app/medias
+      - ./volumes/medias:/medias
     depends_on:
       - postgres
 
@@ -53,6 +53,35 @@ services:
       - ./volumes/downloads:/downloads
     restart: unless-stopped
 
+  jackett:
+    image: lscr.io/linuxserver/jackett:latest
+    container_name: suitarr-jackett
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Paris
+    ports:
+      - "9117:9117"
+    volumes:
+      - jackett_config:/config
+    restart: unless-stopped
+
+  emby:
+    image: lscr.io/linuxserver/emby:latest
+    container_name: suitarr-emby
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Paris
+    ports:
+      - "8096:8096"
+    volumes:
+      - emby_config:/config
+      - ./volumes/medias:/medias
+    restart: unless-stopped
+
 volumes:
   suitarr_pgdata:
   qbittorrent_config:
+  jackett_config:
+  emby_config:

@@ -20,14 +20,6 @@
     <button
       role="tab"
       class="tab"
-      [class.tab-active]="tab() === 'history'"
-      (click)="switchTab('history')"
-    >
-      {{ 'activity.tab_history' | translate }}
-    </button>
-    <button
-      role="tab"
-      class="tab"
       [class.tab-active]="tab() === 'subtitles'"
       (click)="switchTab('subtitles')"
     >
@@ -83,16 +75,19 @@
             <div class="card-body py-3 px-4 gap-2">
               <div class="flex flex-wrap items-start justify-between gap-2">
                 <div class="flex-1 min-w-0">
-                  <p class="font-medium text-sm leading-tight truncate" [title]="item.name">
-                    {{ item.name }}
-                  </p>
+                  @if (item.mediaId) {
+                    <a
+                      [routerLink]="['/' + (item.mediaType === 'series' ? 'series' : 'movies'), item.mediaId]"
+                      class="font-medium text-sm leading-tight truncate text-primary hover:underline"
+                      [title]="item.name"
+                    >{{ item.name }}</a>
+                  } @else {
+                    <p class="font-medium text-sm leading-tight truncate" [title]="item.name">
+                      {{ item.name }}
+                    </p>
+                  }
                   <div class="flex items-center gap-2">
-                    @if (item.mediaTitle && item.mediaId) {
-                      <a
-                        [routerLink]="['/' + (item.mediaType === 'series' ? 'series' : 'movies'), item.mediaId]"
-                        class="text-sm text-primary hover:underline"
-                      >{{ item.mediaTitle }}</a>
-                    } @else {
+                    @if (!item.mediaId) {
                       <button
                         type="button"
                         class="btn btn-outline btn-xs gap-1"
@@ -134,6 +129,16 @@
                       </svg>
                     </label>
                     <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-200 rounded-box shadow-lg z-10 w-56 p-2">
+                      @if (item.status === 'Imported' || item.status === 'Quality not upgraded') {
+                        <li>
+                          <button (click)="reimport(item)">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            {{ 'activity.reimport' | translate }}
+                          </button>
+                        </li>
+                      }
                       <li>
                         <button (click)="removeTorrent(item, false)">
                           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -159,8 +164,8 @@
                 <div
                   class="h-1.5 rounded-full transition-all duration-500"
                   [class.bg-primary]="item.status === 'Downloading' || item.status === 'Downloading metadata'"
-                  [class.bg-success]="item.status === 'Seeding' || item.status === 'Awaiting import'"
-                  [class.bg-warning]="item.status === 'Stalled' || item.status === 'Importing'"
+                  [class.bg-success]="item.status === 'Seeding' || item.status === 'Awaiting import' || item.status === 'Imported'"
+                  [class.bg-warning]="item.status === 'Stalled' || item.status === 'Importing' || item.status === 'Quality not upgraded'"
                   [class.bg-error]="item.status === 'Import failed'"
                   [class.bg-base-content/20]="item.status === 'Paused' || item.status === 'Stopped'"
                   [style.width.%]="item.progress * 100"
@@ -188,92 +193,20 @@
                 @if (item.clientName) {
                   <span class="badge badge-outline badge-xs">{{ item.clientName }}</span>
                 }
+              @if (item.statusMessage) {
+                <div class="flex items-start gap-2 text-xs text-warning bg-warning/10 rounded px-2 py-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.87A1 1 0 002.57 20h18.86a1 1 0 00.86-1.27L13.71 3.86a1 1 0 00-1.42 0z" />
+                  </svg>
+                  <span>{{ item.statusMessage }}</span>
+                </div>
+              }
               </div>
             </div>
           </div>
         }
       </div>
-    }
-  }
-
-  <!-- History tab -->
-  @if (tab() === 'history') {
-    @if (historyLoading() && history().length === 0) {
-      <div class="flex justify-center py-16">
-        <span class="loading loading-spinner loading-lg"></span>
-      </div>
-    } @else if (historyError()) {
-      <div role="alert" class="alert alert-error">{{ historyError() }}</div>
-    } @else if (history().length === 0) {
-      <p class="text-center py-16 text-base-content/50">{{ 'activity.history_empty' | translate }}</p>
-    } @else {
-      <div class="overflow-x-auto rounded-lg border border-base-200">
-        <table class="table table-sm">
-          <thead>
-            <tr>
-              <th>{{ 'activity.col_title' | translate }}</th>
-              <th>{{ 'activity.col_media' | translate }}</th>
-              <th>{{ 'activity.col_quality' | translate }}</th>
-              <th>{{ 'activity.col_status' | translate }}</th>
-              <th>{{ 'activity.col_date' | translate }}</th>
-              <th class="w-24"></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (entry of history(); track entry.id) {
-              <tr>
-                <td class="max-w-[20rem] truncate text-sm">{{ entry.sourceTitle }}</td>
-                <td class="text-sm">
-                  @if (entry.mediaId && entry.mediaType) {
-                    <a
-                      [routerLink]="['/' + (entry.mediaType === 'series' ? 'series' : 'movies'), entry.mediaId]"
-                      class="text-primary hover:underline"
-                    >{{ entry.mediaTitle }}</a>
-                  } @else {
-                    {{ entry.mediaTitle }}
-                  }
-                </td>
-                <td>
-                  <span class="badge badge-ghost badge-sm">{{ entry.quality }}</span>
-                </td>
-                <td>
-                  <span class="badge badge-sm" [ngClass]="historyStatusClass(entry.status)">{{ entry.status }}</span>
-                </td>
-                <td class="text-sm text-base-content/50 tabular-nums">
-                  {{ entry.date | date:'dd/MM/yy HH:mm' }}
-                </td>
-                <td class="flex gap-1">
-                  @if (entry.status === 'failed') {
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-xs text-warning tooltip"
-                      data-tip="Relancer l'import"
-                      (click)="retryImport(entry)"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                    </button>
-                  }
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs text-error"
-                    (click)="deleteHistory(entry)"
-                  >✕</button>
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-
-      @if (historyTotalPages > 1) {
-        <div class="flex justify-center gap-2">
-          <button class="btn btn-sm btn-ghost" [disabled]="historyPage() <= 1" (click)="loadHistory(historyPage() - 1)">«</button>
-          <span class="btn btn-sm btn-ghost pointer-events-none">{{ historyPage() }} / {{ historyTotalPages }}</span>
-          <button class="btn btn-sm btn-ghost" [disabled]="historyPage() >= historyTotalPages" (click)="loadHistory(historyPage() + 1)">»</button>
-        </div>
-      }
     }
   }
 

@@ -5,6 +5,8 @@ import { OpenSubtitlesProvider } from './opensubtitles.provider';
 import { SubdlProvider } from './subdl.provider';
 import { SubsynchroProvider } from './subsynchro.provider';
 import { SupersubtitlesProvider } from './supersubtitles.provider';
+import { YifyProvider } from './yify.provider';
+import { GestdownProvider } from './gestdown.provider';
 
 @Injectable()
 export class SubtitleProviderFactory {
@@ -21,6 +23,10 @@ export class SubtitleProviderFactory {
         return new SubsynchroProvider(settings as any);
       case SubtitleProviderType.SUPERSUBTITLES:
         return new SupersubtitlesProvider(settings as any);
+      case SubtitleProviderType.YIFY:
+        return new YifyProvider();
+      case SubtitleProviderType.GESTDOWN:
+        return new GestdownProvider();
       default:
         throw new Error(`Unsupported subtitle provider type: ${type}`);
     }

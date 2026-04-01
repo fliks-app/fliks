@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
   DownloadClientsApiService,
   DownloadClientRow,
@@ -21,6 +22,7 @@ import {
 export class DownloadClientsSettingsComponent implements OnInit {
   private readonly api = inject(DownloadClientsApiService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly rows = signal<DownloadClientRow[]>([]);
   readonly loading = signal(true);
@@ -186,11 +188,13 @@ export class DownloadClientsSettingsComponent implements OnInit {
 
   async deleteRow(dc: DownloadClientRow) {
     if (
-      !confirm(
-        this.translate.instant('settings.download_clients.confirm_delete', {
+      !await this.confirmation.confirm({
+        title: this.translate.instant('common.confirm'),
+        message: this.translate.instant('settings.download_clients.confirm_delete', {
           name: dc.name,
         }),
-      )
+        variant: 'danger',
+      })
     )
       return;
     try {
@@ -198,10 +202,12 @@ export class DownloadClientsSettingsComponent implements OnInit {
       await this.reloadAll();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(
-        httpErr.error?.message ??
+      void this.confirmation.alert({
+        title: this.translate.instant('common.error'),
+        message: httpErr.error?.message ??
           this.translate.instant('settings.download_clients.delete_error'),
-      );
+        variant: 'danger',
+      });
     }
   }
 }

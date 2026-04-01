@@ -29,6 +29,7 @@ import {
   buildIndexerMinSeeders,
   buildAllowedQualityIds,
   computeRejections,
+  sortReleasesByRelevance,
 } from './release-rejection.helper';
 
 function inferTitleFromTorrentUrl(url: string): string {
@@ -134,6 +135,7 @@ export class MovieDownloadService {
           allowedLangs,
           isBlocklisted,
           sizeBytes: r.size,
+          runtimeMinutes: media.runtime ?? 0,
           sizeByQuality,
           seeders: r.seeders,
           indexerId: r.indexerId,
@@ -220,13 +222,7 @@ export class MovieDownloadService {
       allowedLangs,
     );
 
-    // Sort: quality rank desc, then custom format score desc
-    rows.sort((a, b) =>
-      b.rank !== a.rank
-        ? b.rank - a.rank
-        : b.customFormatScore - a.customFormatScore,
-    );
-    return rows;
+    return sortReleasesByRelevance(rows);
   }
 
   async grabMovie(
@@ -241,6 +237,11 @@ export class MovieDownloadService {
     if (media.type !== MediaType.MOVIE) {
       throw new BadRequestException(
         'Download grab is only available for movies',
+      );
+    }
+    if (!media.path) {
+      throw new BadRequestException(
+        'Assign a root folder to this movie before downloading',
       );
     }
 
@@ -304,13 +305,18 @@ export class MovieDownloadService {
     }
 
     this.log.log(`Sending to qBittorrent: "${sourceTitle}" — ${downloadUrl}`);
-    await this.qbittorrent.addTorrentUrl(qbit, downloadUrl, 'movie');
-    this.log.log(`Grab successful for "${sourceTitle}"`);
+    const torrentHash = await this.qbittorrent.addTorrentUrl(
+      qbit,
+      downloadUrl,
+      'movie',
+    );
+    this.log.log(`Grab successful for "${sourceTitle}" (hash=${torrentHash})`);
 
     const row = this.historyRepo.create({
       mediaId: media.id,
       downloadClientId: qbit.id,
       sourceTitle,
+      torrentHash: torrentHash || undefined,
       quality: parsed.quality.name,
       status: 'grabbed',
     });
@@ -393,13 +399,9 @@ export class MovieDownloadService {
     );
 
     // Only keep releases that are strictly better than current AND within cutoff
-    return rows
-      .filter((r) => r.rank > currentRank && r.rank <= cutoffRank)
-      .sort((a, b) =>
-        b.rank !== a.rank
-          ? b.rank - a.rank
-          : b.customFormatScore - a.customFormatScore,
-      );
+    return sortReleasesByRelevance(
+      rows.filter((r) => r.rank > currentRank && r.rank <= cutoffRank),
+    );
   }
 
   async grabUpgrade(
@@ -414,6 +416,11 @@ export class MovieDownloadService {
     if (media.type !== MediaType.MOVIE) {
       throw new BadRequestException(
         'Upgrade grab is only available for movies',
+      );
+    }
+    if (!media.path) {
+      throw new BadRequestException(
+        'Assign a root folder to this movie before downloading',
       );
     }
 
@@ -506,13 +513,20 @@ export class MovieDownloadService {
     this.log.log(
       `Sending upgrade to qBittorrent: "${sourceTitle}" — ${downloadUrl}`,
     );
-    await this.qbittorrent.addTorrentUrl(qbit, downloadUrl, 'movie');
-    this.log.log(`Upgrade grab successful for "${sourceTitle}"`);
+    const torrentHash = await this.qbittorrent.addTorrentUrl(
+      qbit,
+      downloadUrl,
+      'movie',
+    );
+    this.log.log(
+      `Upgrade grab successful for "${sourceTitle}" (hash=${torrentHash})`,
+    );
 
     const row = this.historyRepo.create({
       mediaId: media.id,
       downloadClientId: qbit.id,
       sourceTitle,
+      torrentHash: torrentHash || undefined,
       quality: parsed.quality.name,
       status: 'grabbed',
     });

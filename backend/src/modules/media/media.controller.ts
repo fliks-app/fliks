@@ -25,7 +25,6 @@ import { ConfirmDiskImportDto } from './dto/confirm-disk-import.dto';
 import { UpdateMediaProfilesDto } from './dto/update-media-profiles.dto';
 import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
-import { HistoryQueryDto } from './dto/history-query.dto';
 import { PatchMonitoredDto } from './dto/patch-monitored.dto';
 import { UpdatePathDto } from './dto/update-path.dto';
 import { LinkTorrentDto } from './dto/link-torrent.dto';
@@ -81,6 +80,12 @@ export class MediaController {
     return this.mediaService.findAll(query);
   }
 
+  @Get('counts')
+  @CheckPolicies((ability) => ability.can(Action.Read, Media))
+  counts() {
+    return this.mediaService.getCounts();
+  }
+
   @Get('qualities')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
   suitarrQualities() {
@@ -93,18 +98,6 @@ export class MediaController {
     return this.mediaService.getCalendar(query);
   }
 
-  @Get('history')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  history(@Query() query: HistoryQueryDto) {
-    return this.mediaService.getHistory(query);
-  }
-
-  @Delete('history/:historyId')
-  @CheckPolicies((ability) => ability.can(Action.Delete, Media))
-  deleteHistory(@Param('historyId', ParseIntPipe) id: number) {
-    return this.mediaService.deleteHistoryEntry(id);
-  }
-
   @Post('history/link')
   @CheckPolicies((ability) => ability.can(Action.Manage, Media))
   linkTorrent(@Body() dto: LinkTorrentDto) {
@@ -113,12 +106,6 @@ export class MediaController {
       dto.sourceTitle,
       dto.clientId,
     );
-  }
-
-  @Post('history/:historyId/retry')
-  @CheckPolicies((ability) => ability.can(Action.Manage, Media))
-  retryImport(@Param('historyId', ParseIntPipe) id: number) {
-    return this.mediaService.retryImport(id);
   }
 
   @Patch('bulk')
@@ -265,14 +252,72 @@ export class MediaController {
     @Query('episodeId') episodeId?: string,
   ) {
     const media = await this.mediaService.findOne(id);
+
+    // `episodeId` = id DB de l'épisode ; les APIs (OpenSubtitles, Subdl…) attendent
+    // season_number + episode_number (ex. S02E05 → 2 et 5), pas la clé primaire.
+    let season: number | undefined;
+    let episode: number | undefined;
+    if (episodeId != null && episodeId !== '') {
+      const epDbId = Number(episodeId);
+      if (Number.isFinite(epDbId)) {
+        for (const s of media.seasons ?? []) {
+          const ep = s.episodes?.find((e) => e.id === epDbId);
+          if (ep) {
+            season = s.seasonNumber;
+            episode = ep.episodeNumber;
+            break;
+          }
+        }
+      }
+    }
+
     return this.subtitlesService.searchSubtitles({
       imdbId: media.imdbId ?? undefined,
       tmdbId: media.tmdbId,
       title: media.title,
       year: media.year ?? undefined,
       language: language ?? 'en',
-      episode: episodeId ? Number(episodeId) : undefined,
+      season,
+      episode,
     });
+  }
+
+  @Post(':id/subtitles/auto')
+  @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
+  async autoSubtitle(
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    body: { mediaFileId: number; episodeId?: number; language?: string },
+  ) {
+    const media = await this.mediaService.findOne(id);
+
+    let season: number | undefined;
+    let episode: number | undefined;
+    if (body.episodeId != null) {
+      for (const s of media.seasons ?? []) {
+        const ep = s.episodes?.find((e) => e.id === body.episodeId);
+        if (ep) {
+          season = s.seasonNumber;
+          episode = ep.episodeNumber;
+          break;
+        }
+      }
+    }
+
+    return this.subtitlesService.autoDownload(
+      id,
+      body.mediaFileId,
+      body.episodeId,
+      {
+        imdbId: media.imdbId ?? undefined,
+        tmdbId: media.tmdbId,
+        title: media.title,
+        year: media.year ?? undefined,
+        language: body.language ?? 'fr',
+        season,
+        episode,
+      },
+    );
   }
 
   @Post(':id/subtitles/download')
@@ -282,15 +327,11 @@ export class MediaController {
     @Body()
     body: { searchResult: any; mediaFileId: number; episodeId?: number },
   ) {
-    const media = await this.mediaService.findOne(id);
-    const file = media.files?.find((f) => f.id === body.mediaFileId);
-    if (!file) throw new Error('MediaFile not found');
     return this.subtitlesService.downloadSubtitle(
       id,
       body.mediaFileId,
       body.episodeId,
       body.searchResult,
-      file.relativePath,
     );
   }
 
@@ -306,30 +347,20 @@ export class MediaController {
   @Post(':id/subtitles/:subtitleId/sync')
   @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
   async syncSubtitle(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParseIntPipe) _id: number,
     @Param('subtitleId', ParseIntPipe) subtitleId: number,
   ) {
-    const media = await this.mediaService.findOne(id);
-    const file = media.files?.[0];
-    if (!file) throw new Error('No media file found');
-    return this.subtitleSync.syncSubtitle(subtitleId, file.relativePath);
+    return this.subtitleSync.syncSubtitle(subtitleId);
   }
 
   @Post(':id/subtitles/:subtitleId/upgrade')
   @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
   async upgradeSubtitle(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParseIntPipe) _id: number,
     @Param('subtitleId', ParseIntPipe) subtitleId: number,
     @Body() body: { searchResult: any },
   ) {
-    const media = await this.mediaService.findOne(id);
-    const file = media.files?.[0];
-    if (!file) throw new Error('No media file found');
-    return this.subtitlesService.upgradeSubtitle(
-      subtitleId,
-      body.searchResult,
-      file.relativePath,
-    );
+    return this.subtitlesService.upgradeSubtitle(subtitleId, body.searchResult);
   }
 
   @Get(':id')

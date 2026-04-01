@@ -15,6 +15,7 @@ import {
   DownloadClientsApiService,
   DownloadClientRow,
 } from '../../../core/services/api/download-clients-api.service';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 
 @Component({
   selector: 'app-remote-path-mappings-settings',
@@ -26,6 +27,7 @@ export class RemotePathMappingsSettingsComponent implements OnInit {
   private readonly api = inject(RemotePathMappingsApiService);
   private readonly clientsApi = inject(DownloadClientsApiService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly mappings = signal<RemotePathMapping[]>([]);
   readonly clients = signal<DownloadClientRow[]>([]);
@@ -99,7 +101,7 @@ export class RemotePathMappingsSettingsComponent implements OnInit {
   }
 
   async remove(mapping: RemotePathMapping) {
-    if (!confirm(this.translate.instant('settings.remote_path_mappings.confirm_delete'))) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('settings.remote_path_mappings.confirm_delete'), variant: 'danger' })) return;
     try {
       await this.api.remove(mapping.id);
       this.mappings.update((list) => list.filter((m) => m.id !== mapping.id));

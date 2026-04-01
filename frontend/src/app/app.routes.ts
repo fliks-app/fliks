@@ -62,6 +62,13 @@ export const routes: Routes = [
         data: { kind: 'series' },
       },
       {
+        path: 'series/:id/episode/:episodeId',
+        loadComponent: () =>
+          import('./features/episode-detail/episode-detail').then(
+            (m) => m.EpisodeDetailComponent,
+          ),
+      },
+      {
         path: 'requests',
         loadComponent: () =>
           import('./features/requests/requests').then((m) => m.RequestsComponent),

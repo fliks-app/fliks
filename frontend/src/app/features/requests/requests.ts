@@ -10,6 +10,7 @@ import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
+import { ConfirmationService } from '../../core/services/confirmation.service';
 import {
   RequestsService,
   SuitarrRequestRow,
@@ -25,6 +26,7 @@ import {
 export class RequestsComponent implements OnInit {
   private readonly requestsService = inject(RequestsService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
   readonly auth = inject(AuthService);
 
   readonly rows = signal<SuitarrRequestRow[]>([]);
@@ -118,7 +120,7 @@ export class RequestsComponent implements OnInit {
   }
 
   async cancelRequest(row: SuitarrRequestRow) {
-    if (!confirm(this.translate.instant('requests.confirm_cancel'))) {
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('requests.confirm_cancel'), variant: 'danger' })) {
       return;
     }
     const id = row.id;

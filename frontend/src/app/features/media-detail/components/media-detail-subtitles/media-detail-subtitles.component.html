@@ -1,0 +1,119 @@
+<div class="divider my-6" [class.hidden]="embedded()"></div>
+<section class="space-y-3" [class.space-y-2]="embedded()">
+  <div class="flex items-center justify-between gap-2">
+    <h2
+      class="font-semibold"
+      [class.text-xl]="!embedded()"
+      [class.text-base]="embedded()"
+    >
+      {{ 'media_detail.subtitles_section' | translate }}
+    </h2>
+    @if (canGrab()) {
+      <div class="flex gap-2">
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm shrink-0"
+          [disabled]="searchDisabled() || subtitleActionBusy()"
+          [attr.title]="searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null"
+          (click)="autoSubtitle.emit()"
+        >
+          @if (subtitleActionBusy()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'media_detail.auto_subtitle' | translate }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary btn-sm shrink-0"
+          [disabled]="searchDisabled() || subtitleActionBusy()"
+          [attr.title]="searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null"
+          (click)="openSubtitleSearch.emit()"
+        >
+          {{ 'media_detail.search_subtitles' | translate }}
+        </button>
+      </div>
+    }
+  </div>
+
+  @if (subtitlesLoading()) {
+    <div class="flex justify-center py-4">
+      <span class="loading loading-spinner loading-md"></span>
+    </div>
+  } @else if (rows().length === 0) {
+    <p class="text-sm text-base-content/50">{{ 'media_detail.no_subtitles' | translate }}</p>
+  } @else {
+    <div class="overflow-x-auto rounded-lg border border-base-200" [class.text-xs]="embedded()">
+      <table class="table table-sm" [class.table-xs]="embedded()">
+        <thead>
+          <tr>
+            <th>{{ 'media_detail.col_sub_language' | translate }}</th>
+            <th>{{ 'media_detail.col_sub_provider' | translate }}</th>
+            <th class="text-center">{{ 'media_detail.col_sub_score' | translate }}</th>
+            <th class="text-center">{{ 'media_detail.col_sub_status' | translate }}</th>
+            <th class="text-center">{{ 'media_detail.col_sub_flags' | translate }}</th>
+            <th class="text-end w-32"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.missing ? row.language : row.sub!.id) {
+            @if (row.missing) {
+              <tr class="opacity-40">
+                <td class="font-medium">{{ row.language }}</td>
+                <td class="text-sm">—</td>
+                <td class="text-center">—</td>
+                <td class="text-center">
+                  <span class="badge badge-sm badge-ghost">{{ 'media_detail.subtitle_missing' | translate }}</span>
+                </td>
+                <td></td>
+                <td></td>
+              </tr>
+            } @else {
+              @let sub = row.sub!;
+              <tr>
+                <td class="font-medium">{{ sub.language }}</td>
+                <td class="text-sm">
+                  @if (sub.providerType === 'embedded') {
+                    <span class="badge badge-sm badge-neutral">embedded</span>
+                  } @else {
+                    {{ sub.providerType }}
+                  }
+                </td>
+                <td class="text-center tabular-nums">
+                  @if (sub.providerType === 'embedded') {
+                    <span class="text-base-content/30">—</span>
+                  } @else {
+                    {{ sub.score }}
+                  }
+                </td>
+                <td class="text-center">
+                  <span class="badge badge-sm"
+                    [class.badge-neutral]="sub.status === 'embedded'"
+                    [class.badge-success]="sub.status === 'downloaded' || sub.status === 'synced'"
+                    [class.badge-warning]="sub.status === 'upgraded'"
+                    [class.badge-error]="sub.status === 'failed'"
+                  >{{ sub.status }}</span>
+                </td>
+                <td class="text-center text-xs">
+                  @if (sub.forced) { <span class="badge badge-xs badge-outline mr-1">F</span> }
+                  @if (sub.hearingImpaired) { <span class="badge badge-xs badge-outline">HI</span> }
+                  @if (sub.synced) { <span class="badge badge-xs badge-info ml-1">Synced</span> }
+                  @if (sub.codec) { <span class="badge badge-xs badge-ghost ml-1">{{ sub.codec }}</span> }
+                </td>
+                <td class="text-end">
+                  @if (canGrab() && sub.providerType !== 'embedded') {
+                    <button type="button" class="btn btn-ghost btn-xs" (click)="syncSubtitle.emit(sub.id)" [disabled]="subtitleActionBusy()">
+                      Sync
+                    </button>
+                    <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteSubtitle.emit(sub.id)" [disabled]="subtitleActionBusy()">
+                      Del
+                    </button>
+                  }
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

@@ -15,6 +15,7 @@ import {
   queryRadarrMovies,
   rowMonitored,
 } from './pg-restore-import.util';
+import * as path from 'path';
 
 interface RadarrMovie {
   title?: string;
@@ -123,6 +124,9 @@ export class ImportRadarrService {
           await this.mediaRepo.remove(exists);
         }
 
+        const folderName = movie.path
+          ? path.basename(movie.path.replace(/\/+$/, ''))
+          : undefined;
         await this.mediaRepo.save(
           this.mediaRepo.create({
             title,
@@ -132,6 +136,7 @@ export class ImportRadarrService {
             status: MediaStatus.RELEASED,
             monitored: movie.monitored ?? true,
             path: movie.path || undefined,
+            folderName: folderName || undefined,
             imdbId: movie.imdbId || undefined,
             overview: movie.overview || undefined,
             qualityProfileId: localProfileId ?? undefined,
@@ -366,6 +371,9 @@ export class ImportRadarrService {
                 continue;
               }
 
+              const folderName = row.path
+                ? path.basename(row.path.replace(/\/+$/, ''))
+                : undefined;
               await this.mediaRepo.save(
                 this.mediaRepo.create({
                   title,
@@ -375,6 +383,7 @@ export class ImportRadarrService {
                   status: MediaStatus.RELEASED,
                   monitored: rowMonitored(row.monitored),
                   path: row.path || undefined,
+                  folderName: folderName || undefined,
                 }),
               );
               imported++;

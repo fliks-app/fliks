@@ -55,6 +55,9 @@ export class Media extends BaseEntity {
   path: string;
 
   @Column({ nullable: true })
+  folderName: string;
+
+  @Column({ nullable: true })
   posterUrl: string;
 
   @Column({ nullable: true })

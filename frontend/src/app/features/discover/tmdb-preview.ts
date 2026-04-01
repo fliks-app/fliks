@@ -17,6 +17,7 @@ import {
 } from '../../core/services/api/metadata.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { RootFoldersApiService, RootFolder } from '../../core/services/api/root-folders-api.service';
+import { SettingsApiService } from '../../core/services/api/settings-api.service';
 
 @Component({
   selector: 'app-tmdb-preview',
@@ -30,6 +31,7 @@ export class TmdbPreviewComponent implements OnInit {
   private readonly metadata = inject(MetadataService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly rootFoldersApi = inject(RootFoldersApiService);
+  private readonly settingsApi = inject(SettingsApiService);
   private readonly translate = inject(TranslateService);
   readonly auth = inject(AuthService);
 
@@ -59,14 +61,23 @@ export class TmdbPreviewComponent implements OnInit {
 
     const r = this.auth.user()?.role;
     if (r === 'admin' || r === 'user') {
-      const [profiles, folders] = await Promise.all([
+      const [profiles, folders, settings] = await Promise.all([
         this.profilesApi.getQualityProfiles(),
         this.rootFoldersApi.list(),
+        this.settingsApi.getAll(),
       ]);
       this.qualityProfiles.set(profiles.map((p) => ({ id: p.id, name: p.name })));
       if (profiles.length) this.selectedQualityProfileId.set(profiles[0].id);
       this.rootFolders.set(folders);
-      if (folders.length) this.selectedRootFolderId.set(folders[0].id);
+
+      // Use default root folder for this media type, or fallback to first folder
+      const defaultKey = type === 'series' ? 'default_root_folder_series' : 'default_root_folder_movie';
+      const defaultId = Number(settings[defaultKey]);
+      if (defaultId && folders.some((f) => f.id === defaultId)) {
+        this.selectedRootFolderId.set(defaultId);
+      } else if (folders.length) {
+        this.selectedRootFolderId.set(folders[0].id);
+      }
     }
 
     try {

@@ -1,0 +1,175 @@
+<div class="flex flex-col gap-6">
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (notFound()) {
+    <div class="text-center py-16 text-base-content/50">
+      <p class="text-lg">{{ 'media_detail.not_found' | translate }}</p>
+    </div>
+  } @else if (episode(); as ep) {
+    @let m = media()!;
+    @let s = season()!;
+
+    <!-- Hero with fanart background -->
+    <div class="relative">
+      @if (m.fanartUrl) {
+        <div class="absolute inset-0 -mx-4 -mt-6 lg:-mx-6 overflow-hidden">
+          <img [src]="m.fanartUrl" alt="" class="w-full h-full object-cover object-[50%_25%]" />
+          <div class="absolute inset-0 bg-base-100/80"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-base-100/30 to-base-100/50"></div>
+        </div>
+        <a [routerLink]="seriesRoute()" [queryParams]="seriesQueryParams()" class="relative z-10 btn btn-ghost btn-sm gap-1 mb-4 text-base-content/80 hover:text-base-content">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          </svg>
+          {{ m.title }}
+        </a>
+      } @else {
+        <a [routerLink]="seriesRoute()" [queryParams]="seriesQueryParams()" class="btn btn-ghost btn-sm gap-1 mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          </svg>
+          {{ m.title }}
+        </a>
+      }
+
+      <div class="flex flex-col md:flex-row gap-5 relative z-10">
+        <!-- Episode still -->
+        <div class="shrink-0 md:w-[35%] lg:w-[30%]">
+          @if (ep.stillUrl) {
+            <img
+              [src]="ep.stillUrl"
+              [alt]="ep.title ?? ''"
+              class="w-full rounded-xl object-cover aspect-video"
+            />
+          } @else if (m.fanartUrl) {
+            <img
+              [src]="m.fanartUrl"
+              [alt]="m.title"
+              class="w-full rounded-xl object-cover aspect-video opacity-60"
+            />
+          } @else {
+            <div class="w-full rounded-xl bg-base-300 aspect-video flex items-center justify-center text-5xl font-bold text-base-content/15">
+              {{ ep.episodeNumber }}
+            </div>
+          }
+        </div>
+
+        <!-- Info -->
+        <div class="flex flex-col gap-3 flex-1 min-w-0">
+          <div>
+            <h1 class="text-2xl font-bold leading-tight">{{ m.title }}</h1>
+            <p class="text-base text-base-content/70 mt-1">
+              <a [routerLink]="seriesRoute()" [queryParams]="{ season: s.seasonNumber }" class="hover:underline">
+                S{{ pad(s.seasonNumber) }}
+              </a>:E{{ pad(ep.episodeNumber) }}
+              <span class="mx-1">-</span>
+              {{ ep.title ?? ('media_detail.ep_no_title' | translate) }}
+            </p>
+          </div>
+
+          <div class="flex flex-wrap gap-2 text-sm text-base-content/50">
+            @if (ep.airDate) {
+              <span>{{ ep.airDate }}</span>
+            }
+            @if (ep.runtime) {
+              <span>{{ ep.runtime }} {{ 'common.min' | translate }}</span>
+            }
+          </div>
+
+          <!-- File info badges -->
+          @if (episodeFiles().length) {
+            <div class="flex flex-wrap gap-2 text-xs">
+              @for (f of episodeFiles(); track f.id) {
+                <span class="badge badge-sm badge-ghost">{{ f.quality }}</span>
+                <span class="badge badge-sm badge-ghost tabular-nums">{{ formatBytes(f.size) }}</span>
+              }
+            </div>
+          }
+
+          <!-- Actions -->
+          <div class="flex flex-wrap gap-2 pt-1">
+            @if (isAdmin()) {
+              <button type="button" class="btn btn-sm btn-ghost" [disabled]="episodeBusy()" (click)="toggleMonitored()">
+                @if (episodeBusy()) {
+                  <span class="loading loading-spinner loading-xs"></span>
+                } @else if (ep.monitored) {
+                  {{ 'media_detail.unmonitor' | translate }}
+                } @else {
+                  {{ 'media_detail.monitor' | translate }}
+                }
+              </button>
+            }
+            <button type="button" class="btn btn-sm btn-ghost" [disabled]="refreshLoading()" (click)="refreshMetadata()">
+              @if (refreshLoading()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+              {{ 'media_detail.refresh_metadata' | translate }}
+            </button>
+            @if (ep.hasFile) {
+              <span class="badge badge-success self-center">{{ 'media_detail.has_file' | translate }}</span>
+            }
+          </div>
+
+          <!-- Overview -->
+          @if (ep.overview) {
+            <p class="text-sm text-base-content/80 leading-relaxed whitespace-pre-line">{{ ep.overview }}</p>
+          } @else {
+            <p class="text-sm text-base-content/40 italic">{{ 'media_detail.ep_no_overview' | translate }}</p>
+          }
+        </div>
+      </div>
+    </div>
+
+    <app-media-detail-files
+      [files]="episodeFiles()"
+      [rootPath]="m.path ?? null"
+      [showGrabButtons]="true"
+      [canGrab]="canGrab()"
+      [releasesLoading]="epReleasesLoading()"
+      [grabBusy]="epGrabBusy()"
+      (deleteFile)="deleteFile($event.fileId, $event.deleteOnDisk)"
+      (loadReleases)="loadReleases()"
+      (grabBest)="grabBest()"
+    />
+
+    <!-- Subtitles -->
+    <app-media-detail-subtitles
+      [subtitles]="episodeSubtitles()"
+      [subtitlesLoading]="subtitlesLoading()"
+      [searchDisabled]="!ep.hasFile"
+      [canGrab]="canGrab()"
+      [subtitleActionBusy]="subtitleActionBusy()"
+      (openSubtitleSearch)="openSubtitleSearch()"
+      (autoSubtitle)="autoSubtitle()"
+      (syncSubtitle)="syncSubtitle($event)"
+      (deleteSubtitle)="deleteSubtitle($event)"
+    />
+
+    <!-- Modals -->
+    <app-media-detail-subtitle-search-modal
+      [subSearchLang]="subSearchLang()"
+      (subSearchLangChange)="subSearchLang.set($event)"
+      [subSearchLoading]="subSearchLoading()"
+      [subSearchSearched]="subSearchSearched()"
+      [subSearchResults]="subSearchResults()"
+      [subtitleActionBusy]="subtitleActionBusy()"
+      (search)="searchSubtitles()"
+      (download)="downloadSearchResult($event)"
+    />
+
+    <app-releases-modal #episodeReleasesModal
+      [title]="'media_detail.ep_releases_title' | translate"
+      [releases]="epReleases()"
+      [loading]="epReleasesLoading()"
+      [searched]="epReleasesSearched()"
+      [error]="epReleasesError()"
+      [grabBusy]="epGrabBusy()"
+      [grabState]="epGrabState()"
+      [canGrab]="canGrab()"
+      grabPrefix="ep"
+      (grab)="grabRelease($event.release, $event.index)"
+    />
+  }
+</div>

@@ -24,6 +24,7 @@
         (ngModelChange)="filterStatus.set($event); onFilterChange()"
       >
         <option value="">{{ 'series.filter_all_status' | translate }}</option>
+        <option value="downloaded">{{ 'series.filter_downloaded' | translate }}</option>
         <option value="missing">{{ 'series.filter_missing' | translate }}</option>
         <option value="cutoffUnmet">{{ 'series.filter_cutoff_unmet' | translate }}</option>
       </select>

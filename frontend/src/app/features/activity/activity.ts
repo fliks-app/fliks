@@ -19,14 +19,14 @@ import {
 import {
   MediaService,
   Media,
-  HistoryEntry,
 } from '../../core/services/api/media.service';
 import {
   SubtitlesApiService,
   SubtitleHistoryEntry,
 } from '../../core/services/api/subtitles-api.service';
+import { ConfirmationService } from '../../core/services/confirmation.service';
 
-type Tab = 'queue' | 'history' | 'subtitles';
+type Tab = 'queue' | 'subtitles';
 
 @Component({
   selector: 'app-activity',
@@ -39,6 +39,7 @@ export class ActivityComponent implements OnInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly tab = signal<Tab>('queue');
 
@@ -47,13 +48,6 @@ export class ActivityComponent implements OnInit, OnDestroy {
   readonly queueLoading = signal(true);
   readonly queueError = signal('');
   readonly importing = signal(false);
-
-  // History
-  readonly history = signal<HistoryEntry[]>([]);
-  readonly historyTotal = signal(0);
-  readonly historyPage = signal(1);
-  readonly historyLoading = signal(true);
-  readonly historyError = signal('');
 
   // Subtitles
   readonly subHistory = signal<SubtitleHistoryEntry[]>([]);
@@ -77,7 +71,6 @@ export class ActivityComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.refreshQueue();
-    this.loadHistory();
     this.intervalId = setInterval(() => {
       if (this.tab() === 'queue') this.refreshQueue();
     }, 10_000);
@@ -89,7 +82,6 @@ export class ActivityComponent implements OnInit, OnDestroy {
 
   switchTab(t: Tab) {
     this.tab.set(t);
-    if (t === 'history' && this.history().length === 0) this.loadHistory(1);
     if (t === 'subtitles' && this.subHistory().length === 0) this.loadSubHistory(1);
   }
 
@@ -112,11 +104,20 @@ export class ActivityComponent implements OnInit, OnDestroy {
     }
   }
 
+  async reimport(item: QueueItem) {
+    try {
+      await this.downloadApi.reimport(item.hash);
+      await this.refreshQueue();
+    } catch {
+      // ignore
+    }
+  }
+
   async removeTorrent(item: QueueItem, deleteFiles: boolean) {
     const msg = deleteFiles
       ? this.translate.instant('activity.confirm_delete_with_files')
       : this.translate.instant('activity.confirm_delete');
-    if (!confirm(msg)) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: msg, variant: 'danger' })) return;
     try {
       await this.downloadApi.removeTorrent(item.hash, item.clientId, deleteFiles);
       this.queue.update((q) => q.filter((i) => i.hash !== item.hash));
@@ -170,55 +171,6 @@ export class ActivityComponent implements OnInit, OnDestroy {
     } finally {
       this.queueLoading.set(false);
     }
-  }
-
-  async loadHistory(page = 1) {
-    this.historyPage.set(page);
-    this.historyLoading.set(true);
-    try {
-      const res = await this.mediaService.getHistory(page, 25);
-      this.history.set(res.data);
-      this.historyTotal.set(res.total);
-      this.historyError.set('');
-    } catch {
-      this.historyError.set(this.translate.instant('activity.history_error'));
-    } finally {
-      this.historyLoading.set(false);
-    }
-  }
-
-  async deleteHistory(entry: HistoryEntry) {
-    try {
-      await this.mediaService.deleteHistory(entry.id);
-      await this.loadHistory(this.historyPage());
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? 'Error');
-    }
-  }
-
-  async retryImport(entry: HistoryEntry) {
-    try {
-      await this.mediaService.retryImport(entry.id);
-      await this.loadHistory(this.historyPage());
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? 'Error');
-    }
-  }
-
-  historyStatusClass(status: string): string {
-    switch (status) {
-      case 'completed': return 'badge-success';
-      case 'grabbed': return 'badge-info';
-      case 'importing': return 'badge-warning';
-      case 'failed': return 'badge-error';
-      default: return 'badge-ghost';
-    }
-  }
-
-  get historyTotalPages(): number {
-    return Math.max(1, Math.ceil(this.historyTotal() / 25));
   }
 
   formatBytes(bytes: number): string {
@@ -284,8 +236,10 @@ export class ActivityComponent implements OnInit, OnDestroy {
       case 'Downloading metadata': return 'badge-info';
       case 'Stalled': return 'badge-warning';
       case 'Importing': return 'badge-warning';
+      case 'Quality not upgraded': return 'badge-warning';
       case 'Seeding':
       case 'Awaiting import': return 'badge-success';
+      case 'Imported': return 'badge-success';
       case 'Paused':
       case 'Stopped':
       case 'Queued': return 'badge-ghost';

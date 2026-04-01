@@ -16,6 +16,7 @@ export interface QueueEntry extends QbittorrentTorrent {
   mediaTitle?: string;
   mediaType?: 'movie' | 'series';
   status: string;
+  statusMessage?: string;
 }
 
 const QB_STATE_MAP: Record<string, string> = {
@@ -123,6 +124,33 @@ export class DownloadClientsService {
     await this.qbittorrent.deleteTorrent(client, hash, deleteFiles);
   }
 
+  async reimport(torrentHash: string): Promise<void> {
+    const entry = await this.historyRepo.findOne({
+      where: { torrentHash, status: 'completed' as any },
+    });
+    if (!entry) {
+      // Try matching by name
+      const entries = await this.historyRepo.find({
+        where: [{ status: 'completed' as any }, { status: 'warning' as any }],
+      });
+      const match = entries.find(
+        (h) => h.torrentHash === torrentHash,
+      );
+      if (match) {
+        await this.historyRepo.update(match.id, {
+          status: 'grabbed',
+          statusMessage: null as any,
+        });
+        return;
+      }
+      throw new NotFoundException('No completed history entry found for this torrent');
+    }
+    await this.historyRepo.update(entry.id, {
+      status: 'grabbed',
+      statusMessage: null as any,
+    });
+  }
+
   async getQueue(): Promise<QueueEntry[]> {
     const clients = await this.repo.find({ where: { enabled: true } });
     const results: QueueEntry[] = [];
@@ -145,33 +173,25 @@ export class DownloadClientsService {
     const historyEntries = await this.historyRepo.find({
       where: [
         { status: 'grabbed' },
-        { status: 'completed' },
         { status: 'failed' },
         { status: 'importing' },
+        { status: 'completed' },
+        { status: 'warning' },
       ],
       relations: ['media'],
     });
 
-    const completedTitles = new Set(
-      historyEntries
-        .filter((h) => h.status === 'completed')
-        .map((h) => h.sourceTitle.toLowerCase()),
-    );
-
-    // Filter out torrents that have already been imported
-    const filtered: QueueEntry[] = [];
     for (const entry of results) {
+      const hash = entry.hash?.toLowerCase();
       const name = entry.name.toLowerCase();
-      const isCompleted =
-        completedTitles.has(name) ||
-        [...completedTitles].some((t) => name.startsWith(t));
-      if (isCompleted) continue;
 
-      const match = historyEntries.find(
-        (h) =>
-          h.sourceTitle.toLowerCase() === name ||
-          name.startsWith(h.sourceTitle.toLowerCase()),
-      );
+      const match =
+        historyEntries.find((h) => h.torrentHash && h.torrentHash === hash) ??
+        historyEntries.find(
+          (h) =>
+            h.sourceTitle.toLowerCase() === name ||
+            name.startsWith(h.sourceTitle.toLowerCase()),
+        );
       if (match?.media) {
         entry.mediaId = match.mediaId;
         entry.mediaTitle = match.media.title;
@@ -181,14 +201,22 @@ export class DownloadClientsService {
       // Override status for seeding torrents waiting for import
       const isSeeding = entry.status === 'Seeding';
       if (isSeeding && match) {
-        if (match.status === 'failed') entry.status = 'Import failed';
-        else if (match.status === 'importing') entry.status = 'Importing';
-        else entry.status = 'Awaiting import';
+        if (match.status === 'warning') {
+          entry.status = 'Quality not upgraded';
+          entry.statusMessage = match.statusMessage ?? undefined;
+        } else if (match.status === 'failed') {
+          entry.status = 'Import failed';
+          entry.statusMessage = match.statusMessage ?? undefined;
+        } else if (match.status === 'importing') {
+          entry.status = 'Importing';
+        } else if (match.status === 'completed') {
+          entry.status = 'Imported';
+        } else {
+          entry.status = 'Awaiting import';
+        }
       }
-
-      filtered.push(entry);
     }
 
-    return filtered;
+    return results;
   }
 }

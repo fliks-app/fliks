@@ -8,4 +8,7 @@ export class RootFolder extends BaseEntity {
 
   @Column({ nullable: true })
   label: string;
+
+  @Column({ default: false })
+  system: boolean;
 }

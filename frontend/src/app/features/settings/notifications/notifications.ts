@@ -9,6 +9,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 
 interface NotificationConnection {
   id: number;
@@ -35,6 +36,7 @@ interface CreateNotificationBody {
 export class NotificationsSettingsComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly rows = signal<NotificationConnection[]>([]);
   readonly loading = signal(true);
@@ -190,13 +192,13 @@ export class NotificationsSettingsComponent implements OnInit {
   }
 
   async deleteRow(nc: NotificationConnection) {
-    if (!confirm(this.translate.instant('settings.notifications.confirm_delete', { name: nc.name }))) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('settings.notifications.confirm_delete', { name: nc.name }), variant: 'danger' })) return;
     try {
       await firstValueFrom(this.http.delete(`/api/notifications/${nc.id}`));
       await this.reloadAll();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? 'Error');
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Error', variant: 'danger' });
     }
   }
 }

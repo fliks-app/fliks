@@ -41,6 +41,8 @@ export interface EpisodeDetails {
   title: string;
   overview: string | null;
   airDate: string | null;
+  runtime: number | null;
+  stillUrl: string | null;
 }
 
 export interface IMetadataProvider {

@@ -4,4 +4,5 @@ export enum SubtitleStatus {
   UPGRADED = 'upgraded',
   SYNCED = 'synced',
   FAILED = 'failed',
+  EMBEDDED = 'embedded',
 }

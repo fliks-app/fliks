@@ -19,6 +19,10 @@ export class QualityDefinitionsApiService {
     return firstValueFrom(this.http.get<QualityDefinition[]>('/api/quality-definitions'));
   }
 
+  getDefaults(): Promise<QualityDefinition[]> {
+    return firstValueFrom(this.http.post<QualityDefinition[]>('/api/quality-definitions/reset', {}));
+  }
+
   updateAll(items: { qualityId: number; title: string; minSize: number; preferredSize: number; maxSize: number }[]): Promise<QualityDefinition[]> {
     return firstValueFrom(this.http.put<QualityDefinition[]>('/api/quality-definitions', { items }));
   }

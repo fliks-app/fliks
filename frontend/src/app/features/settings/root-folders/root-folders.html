@@ -29,6 +29,9 @@
                   @if (folder.label) {
                     <span class="badge badge-ghost badge-sm">{{ folder.label }}</span>
                   }
+                  @if (folder.system) {
+                    <span class="badge badge-info badge-sm">{{ 'settings.root_folders.system' | translate }}</span>
+                  }
                   @if (!folder.accessible) {
                     <span class="badge badge-error badge-sm">{{ 'settings.root_folders.inaccessible' | translate }}</span>
                   }
@@ -49,13 +52,15 @@
                   </div>
                 }
               </div>
-              <button
-                type="button"
-                class="btn btn-ghost btn-sm text-error shrink-0"
-                (click)="remove(folder)"
-              >
-                {{ 'settings.root_folders.delete' | translate }}
-              </button>
+              @if (!folder.system) {
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm text-error shrink-0"
+                  (click)="remove(folder)"
+                >
+                  {{ 'settings.root_folders.delete' | translate }}
+                </button>
+              }
             </div>
           </div>
         </div>

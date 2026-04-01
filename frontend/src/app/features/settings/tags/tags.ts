@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { TagsApiService, Tag } from '../../../core/services/api/tags-api.service';
 
 @Component({
@@ -18,6 +19,7 @@ import { TagsApiService, Tag } from '../../../core/services/api/tags-api.service
 export class TagsSettingsComponent implements OnInit {
   private readonly api = inject(TagsApiService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly tags = signal<Tag[]>([]);
   readonly loading = signal(true);
@@ -84,18 +86,18 @@ export class TagsSettingsComponent implements OnInit {
       this.editingId.set(null);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? this.translate.instant('settings.tags.save_error'));
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? this.translate.instant('settings.tags.save_error'), variant: 'danger' });
     }
   }
 
   async remove(tag: Tag) {
-    if (!confirm(this.translate.instant('settings.tags.confirm_delete', { label: tag.label }))) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('settings.tags.confirm_delete', { label: tag.label }), variant: 'danger' })) return;
     try {
       await this.api.remove(tag.id);
       this.tags.update((list) => list.filter((t) => t.id !== tag.id));
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? 'Error');
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Error', variant: 'danger' });
     }
   }
 }

@@ -12,6 +12,7 @@ import { HttpClient } from '@angular/common/http';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { SseService } from '../../core/services/sse.service';
+import { ConfirmationService } from '../../core/services/confirmation.service';
 
 interface CommandEntry {
   id: number;
@@ -45,6 +46,7 @@ interface HealthReport {
 export class SystemComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
   readonly sse = inject(SseService);
 
   readonly health = signal<HealthReport | null>(null);
@@ -138,7 +140,7 @@ export class SystemComponent implements OnInit, OnDestroy {
       await this.loadCommands();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? this.translate.instant('system.trigger_error'));
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? this.translate.instant('system.trigger_error'), variant: 'danger' });
     } finally {
       this.triggering.set(null);
     }
@@ -161,20 +163,20 @@ export class SystemComponent implements OnInit, OnDestroy {
       await this.loadBackups();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? 'Backup failed');
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Backup failed', variant: 'danger' });
     } finally {
       this.backupCreating.set(false);
     }
   }
 
   async restoreBackup(filename: string) {
-    if (!confirm(this.translate.instant('system.confirm_restore'))) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('system.confirm_restore'), variant: 'warning' })) return;
     try {
       await firstValueFrom(this.http.post('/api/system/restore', { filename }));
-      alert(this.translate.instant('system.restore_ok'));
+      void this.confirmation.alert({ title: this.translate.instant('common.success'), message: this.translate.instant('system.restore_ok'), variant: 'info' });
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? 'Restore failed');
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Restore failed', variant: 'danger' });
     }
   }
 

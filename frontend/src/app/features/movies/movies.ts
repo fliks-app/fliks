@@ -6,6 +6,7 @@ import {
   inject,
   OnInit,
 } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { MediaService, Media } from '../../core/services/api/media.service';
@@ -23,6 +24,8 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 export class MoviesComponent implements OnInit {
   private readonly mediaService = inject(MediaService);
   private readonly profilesService = inject(ProfilesService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
 
   readonly allMovies = signal<Media[]>([]);
   readonly total = signal(0);
@@ -30,7 +33,7 @@ export class MoviesComponent implements OnInit {
   readonly searchQuery = signal('');
   readonly sortBy = signal('title');
   readonly filterMonitored = signal<'' | 'true' | 'false'>('');
-  readonly filterStatus = signal<'' | 'missing' | 'cutoffUnmet'>('');
+  readonly filterStatus = signal('');
 
   readonly monitoredCount = computed(() => this.allMovies().filter((m) => m.monitored).length);
   readonly movieFileCount = computed(() => this.allMovies().filter((m) => (m.files?.length ?? 0) > 0).length);
@@ -47,6 +50,12 @@ export class MoviesComponent implements OnInit {
   readonly qualityProfiles = signal<QualityProfile[]>([]);
 
   ngOnInit() {
+    const qp = this.route.snapshot.queryParamMap;
+    if (qp.get('q')) this.searchQuery.set(qp.get('q')!);
+    if (qp.get('monitored')) this.filterMonitored.set(qp.get('monitored') as '' | 'true' | 'false');
+    if (qp.get('status')) this.filterStatus.set(qp.get('status')!);
+    if (qp.get('sortBy')) this.sortBy.set(qp.get('sortBy')!);
+
     this.load();
     this.profilesService.getQualityProfiles().then((p) => this.qualityProfiles.set(p));
   }
@@ -68,10 +77,12 @@ export class MoviesComponent implements OnInit {
 
   onSearch(query: string) {
     this.searchQuery.set(query);
+    this.syncQueryParams();
     this.load();
   }
 
   onFilterChange() {
+    this.syncQueryParams();
     this.load();
   }
 
@@ -126,17 +137,27 @@ export class MoviesComponent implements OnInit {
     }
   }
 
+  private syncQueryParams() {
+    const params: Record<string, string> = {};
+    if (this.searchQuery()) params['q'] = this.searchQuery();
+    if (this.filterMonitored()) params['monitored'] = this.filterMonitored();
+    if (this.filterStatus()) params['status'] = this.filterStatus();
+    if (this.sortBy() !== 'title') params['sortBy'] = this.sortBy();
+    void this.router.navigate([], { queryParams: params, replaceUrl: true });
+  }
+
   private async load() {
     this.loading.set(true);
     const monitored = this.filterMonitored();
     try {
+      const fs = this.filterStatus();
       const res = await this.mediaService.getAll({
         type: 'movie',
         q: this.searchQuery() || undefined,
         sortBy: this.sortBy(),
         monitored: monitored ? monitored === 'true' : undefined,
-        missing: this.filterStatus() === 'missing' ? true : undefined,
-        cutoffUnmet: this.filterStatus() === 'cutoffUnmet' ? true : undefined,
+        missing: fs === 'missing' ? true : fs === 'downloaded' ? false : undefined,
+        cutoffUnmet: fs === 'cutoffUnmet' ? true : undefined,
         limit: 0,
       });
       this.allMovies.set(res.data);

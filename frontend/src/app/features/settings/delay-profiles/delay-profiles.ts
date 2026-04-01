@@ -9,6 +9,7 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 
 interface DelayProfileRow {
   id: number;
@@ -26,6 +27,7 @@ interface DelayProfileRow {
 export class DelayProfilesComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly rows = signal<DelayProfileRow[]>([]);
   readonly loading = signal(true);
@@ -102,7 +104,7 @@ export class DelayProfilesComponent implements OnInit {
   }
 
   async deleteRow(row: DelayProfileRow) {
-    if (!confirm(this.translate.instant('settings.delay_profiles.confirm_delete'))) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('settings.delay_profiles.confirm_delete'), variant: 'danger' })) return;
     try {
       await firstValueFrom(this.http.delete(`/api/profiles/delay/${row.id}`));
       await this.reloadAll();

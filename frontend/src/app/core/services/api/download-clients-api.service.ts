@@ -56,6 +56,7 @@ export interface QueueItem {
   mediaId?: number;
   mediaTitle?: string;
   mediaType?: 'movie' | 'series';
+  statusMessage?: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -102,6 +103,10 @@ export class DownloadClientsApiService {
         { params: { clientId, deleteFiles } },
       ),
     );
+  }
+
+  reimport(hash: string) {
+    return firstValueFrom(this.http.post<void>(`/api/download-clients/queue/${hash}/reimport`, {}));
   }
 
   triggerImport() {

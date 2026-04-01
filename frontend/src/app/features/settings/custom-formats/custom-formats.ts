@@ -12,6 +12,7 @@ import {
   CustomFormat,
   CustomFormatSpec,
 } from '../../../core/services/api/custom-formats-api.service';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 
 @Component({
   selector: 'app-custom-formats-settings',
@@ -22,6 +23,7 @@ import {
 export class CustomFormatsSettingsComponent implements OnInit {
   private readonly api = inject(CustomFormatsApiService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly rows = signal<CustomFormat[]>([]);
   readonly loading = signal(true);
@@ -140,13 +142,13 @@ export class CustomFormatsSettingsComponent implements OnInit {
   }
 
   async deleteRow(cf: CustomFormat) {
-    if (!confirm(this.translate.instant('settings.custom_formats.confirm_delete', { name: cf.name }))) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('settings.custom_formats.confirm_delete', { name: cf.name }), variant: 'danger' })) return;
     try {
       await this.api.remove(cf.id);
       await this.reloadAll();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? 'Error');
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Error', variant: 'danger' });
     }
   }
 }

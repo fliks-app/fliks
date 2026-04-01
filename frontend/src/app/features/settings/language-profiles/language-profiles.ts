@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
   ProfilesService,
   LanguageProfile,
@@ -29,6 +30,7 @@ interface LangDef {
 export class LanguageProfilesComponent implements OnInit {
   private readonly api = inject(ProfilesService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly profiles = signal<LanguageProfile[]>([]);
   readonly definitions = signal<LangDef[]>([]);
@@ -194,13 +196,13 @@ export class LanguageProfilesComponent implements OnInit {
 
   async deleteProfile(p: LanguageProfile) {
     const msg = this.translate.instant('settings.language_profiles.confirm_delete', { name: p.name });
-    if (!confirm(msg)) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: msg, variant: 'danger' })) return;
     try {
       await this.api.deleteLanguageProfile(p.id);
       await this.reloadAll();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? this.translate.instant('settings.language_profiles.delete_error'));
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? this.translate.instant('settings.language_profiles.delete_error'), variant: 'danger' });
     }
   }
 }

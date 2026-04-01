@@ -38,8 +38,8 @@ export class SubtitleFile extends BaseEntity {
   @Column({ nullable: true })
   providerFileId: string;
 
-  @Column()
-  filePath: string;
+  @Column({ type: 'varchar', nullable: true })
+  filePath: string | null;
 
   @Column({
     type: 'enum',
@@ -47,6 +47,12 @@ export class SubtitleFile extends BaseEntity {
     default: SubtitleStatus.DOWNLOADED,
   })
   status: SubtitleStatus;
+
+  @Column({ type: 'int', nullable: true })
+  streamIndex: number | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  codec: string | null;
 
   @Column({ type: 'int', default: 0 })
   score: number;

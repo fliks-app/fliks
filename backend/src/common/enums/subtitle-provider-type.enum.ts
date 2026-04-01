@@ -6,4 +6,7 @@ export enum SubtitleProviderType {
   SUBSYNCHRO = 'subsynchro',
   SUPERSUBTITLES = 'supersubtitles',
   WHISPER = 'whisper',
+  YIFY = 'yify',
+  GESTDOWN = 'gestdown',
+  EMBEDDED = 'embedded',
 }

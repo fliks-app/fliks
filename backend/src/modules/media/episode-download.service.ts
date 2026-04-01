@@ -42,6 +42,7 @@ import {
   buildIndexerMinSeeders,
   buildAllowedQualityIds,
   computeRejections,
+  sortReleasesByRelevance,
   SizeLimits,
 } from './release-rejection.helper';
 
@@ -181,16 +182,12 @@ export class EpisodeDownloadService {
           allowedLangs,
           sizeByQuality,
           indexerMinSeeders,
+          media.runtime ?? 45,
         ),
       ),
     );
 
-    rows.sort((a, b) =>
-      b.rank !== a.rank
-        ? b.rank - a.rank
-        : b.customFormatScore - a.customFormatScore,
-    );
-    return rows;
+    return sortReleasesByRelevance(rows);
   }
 
   async grabEpisode(
@@ -202,6 +199,11 @@ export class EpisodeDownloadService {
       mediaId,
       episodeId,
     );
+    if (!media.path) {
+      throw new BadRequestException(
+        'Assign a root folder to this series before downloading',
+      );
+    }
 
     const allowed = this.allowedQualityIds(media.qualityProfile?.items);
     if (!allowed.size) {
@@ -259,13 +261,18 @@ export class EpisodeDownloadService {
     }
 
     this.log.log(`Sending to qBittorrent: "${sourceTitle}" — ${downloadUrl}`);
-    await this.qbittorrent.addTorrentUrl(qbit, downloadUrl!, 'series');
-    this.log.log(`Grab successful for "${sourceTitle}"`);
+    const torrentHash = await this.qbittorrent.addTorrentUrl(
+      qbit,
+      downloadUrl!,
+      'series',
+    );
+    this.log.log(`Grab successful for "${sourceTitle}" (hash=${torrentHash})`);
 
     const row = this.historyRepo.create({
       mediaId: media.id,
       downloadClientId: qbit.id,
       sourceTitle: sourceTitle!,
+      torrentHash: torrentHash || undefined,
       quality: parsed.quality.name,
       status: 'grabbed',
     });
@@ -290,6 +297,7 @@ export class EpisodeDownloadService {
     allowedLangs: Set<number>,
     sizeByQuality: Map<number, SizeLimits>,
     indexerMinSeeders: Map<number, number>,
+    runtimeMinutes: number,
   ): Promise<EpisodeReleaseRow> {
     const parsed = parseReleaseQuality(r.title);
     const lang = parseReleaseLanguage(r.title);
@@ -307,6 +315,7 @@ export class EpisodeDownloadService {
       allowedLangs,
       isBlocklisted,
       sizeBytes: r.size,
+      runtimeMinutes,
       sizeByQuality,
       seeders: r.seeders,
       indexerId: r.indexerId,
@@ -351,7 +360,10 @@ export class EpisodeDownloadService {
       );
     }
 
-    const season = await this.seasonRepo.findOne({ where: { id: seasonId } });
+    const season = await this.seasonRepo.findOne({
+      where: { id: seasonId },
+      relations: ['episodes'],
+    });
     if (!season || season.mediaId !== mediaId) {
       throw new NotFoundException(
         `Season #${seasonId} not found on this media`,
@@ -375,6 +387,12 @@ export class EpisodeDownloadService {
     );
     const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
     const indexerMinSeeders = buildIndexerMinSeeders(indexers);
+    const defaultEpRuntime = media.runtime ?? 45;
+    const seasonRuntime =
+      (season.episodes ?? []).reduce(
+        (sum, ep) => sum + (ep.runtime ?? defaultEpRuntime),
+        0,
+      ) || defaultEpRuntime;
 
     const searchTitle = customQuery?.trim() || media.title;
     const batches = await Promise.all(
@@ -393,16 +411,12 @@ export class EpisodeDownloadService {
             allowedLangs,
             sizeByQuality,
             indexerMinSeeders,
+            seasonRuntime,
           ),
         ),
     );
 
-    rows.sort((a, b) =>
-      b.rank !== a.rank
-        ? b.rank - a.rank
-        : b.customFormatScore - a.customFormatScore,
-    );
-    return rows;
+    return sortReleasesByRelevance(rows);
   }
 
   async grabSeason(
@@ -417,6 +431,11 @@ export class EpisodeDownloadService {
     if (!media) throw new NotFoundException(`Media #${mediaId} not found`);
     if (media.type !== MediaType.SERIES) {
       throw new BadRequestException('Season grab is only available for series');
+    }
+    if (!media.path) {
+      throw new BadRequestException(
+        'Assign a root folder to this series before downloading',
+      );
     }
 
     const season = await this.seasonRepo.findOne({
@@ -458,12 +477,21 @@ export class EpisodeDownloadService {
         throw new BadRequestException(`"${sourceTitle}" is in the blocklist`);
       }
       const parsed = parseReleaseQuality(sourceTitle);
-      await this.qbittorrent.addTorrentUrl(qbit, downloadUrl, 'series');
+      this.log.log(`Sending to qBittorrent: "${sourceTitle}" — ${downloadUrl}`);
+      const torrentHash = await this.qbittorrent.addTorrentUrl(
+        qbit,
+        downloadUrl,
+        'series',
+      );
+      this.log.log(
+        `Grab successful for "${sourceTitle}" (hash=${torrentHash})`,
+      );
       await this.historyRepo.save(
         this.historyRepo.create({
           mediaId,
           downloadClientId: qbit.id,
           sourceTitle,
+          torrentHash: torrentHash || undefined,
           quality: parsed.quality.name,
           status: 'grabbed',
         }),
@@ -493,6 +521,14 @@ export class EpisodeDownloadService {
         this.torznab.searchSeasonPack(ix, media.title, season.seasonNumber),
       ),
     );
+    // Season pack runtime = episode runtime × number of episodes
+    const defaultEpRuntime = media.runtime ?? 45;
+    const seasonRuntime =
+      (season.episodes ?? []).reduce(
+        (sum, ep) => sum + (ep.runtime ?? defaultEpRuntime),
+        0,
+      ) || defaultEpRuntime;
+
     const packRows = await Promise.all(
       packBatches
         .flat()
@@ -503,32 +539,33 @@ export class EpisodeDownloadService {
             allowedLangs,
             sizeByQuality,
             indexerMinSeeders,
+            seasonRuntime,
           ),
         ),
     );
-    packRows.sort((a, b) =>
-      b.rank !== a.rank
-        ? b.rank - a.rank
-        : b.customFormatScore - a.customFormatScore,
-    );
+    sortReleasesByRelevance(packRows);
 
     const bestPack = packRows.find(
       (r) => r.allowed && !r.blocklisted && r.rejections.length === 0,
     );
     if (bestPack) {
       this.log.log(
-        `Season pack found: "${bestPack.title}" — ${bestPack.downloadUrl}`,
+        `Season pack found: "${bestPack.title}" — sending to qBittorrent: ${bestPack.downloadUrl}`,
       );
-      await this.qbittorrent.addTorrentUrl(
+      const packHash = await this.qbittorrent.addTorrentUrl(
         qbit,
         bestPack.downloadUrl,
         'series',
+      );
+      this.log.log(
+        `Season pack grab successful for "${bestPack.title}" (hash=${packHash})`,
       );
       await this.historyRepo.save(
         this.historyRepo.create({
           mediaId,
           downloadClientId: qbit.id,
           sourceTitle: bestPack.title,
+          torrentHash: packHash || undefined,
           quality: bestPack.qualityName,
           status: 'grabbed',
         }),
@@ -573,26 +610,34 @@ export class EpisodeDownloadService {
                 allowedLangs,
                 sizeByQuality,
                 indexerMinSeeders,
+                media.runtime ?? 45,
               ),
             ),
         );
-        epRows.sort((a, b) =>
-          b.rank !== a.rank
-            ? b.rank - a.rank
-            : b.customFormatScore - a.customFormatScore,
-        );
+        sortReleasesByRelevance(epRows);
 
         const pick = epRows.find(
           (r) => r.allowed && !r.blocklisted && r.rejections.length === 0,
         );
         if (!pick) continue;
 
-        await this.qbittorrent.addTorrentUrl(qbit, pick.downloadUrl, 'series');
+        this.log.log(
+          `Sending episode to qBittorrent: "${pick.title}" — ${pick.downloadUrl}`,
+        );
+        const epHash = await this.qbittorrent.addTorrentUrl(
+          qbit,
+          pick.downloadUrl,
+          'series',
+        );
+        this.log.log(
+          `Episode grab successful for "${pick.title}" (hash=${epHash})`,
+        );
         await this.historyRepo.save(
           this.historyRepo.create({
             mediaId,
             downloadClientId: qbit.id,
             sourceTitle: pick.title,
+            torrentHash: epHash || undefined,
             quality: pick.qualityName,
             status: 'grabbed',
           }),

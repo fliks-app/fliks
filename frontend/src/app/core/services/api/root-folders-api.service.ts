@@ -6,6 +6,7 @@ export interface RootFolder {
   id: number;
   path: string;
   label?: string;
+  system: boolean;
   freeSpace: number;
   totalSpace: number;
   accessible: boolean;

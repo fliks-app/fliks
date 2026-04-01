@@ -52,6 +52,8 @@ export interface Episode {
   airDate: string | null;
   monitored: boolean;
   hasFile: boolean;
+  runtime?: number | null;
+  stillUrl?: string | null;
 }
 
 export interface Season {
@@ -107,18 +109,6 @@ export interface CalendarEntry {
   hasFile?: boolean;
 }
 
-export interface HistoryEntry {
-  id: number;
-  sourceTitle: string;
-  quality: string;
-  status: string;
-  date: string;
-  event: string;
-  mediaId: number;
-  mediaTitle: string;
-  mediaType: 'movie' | 'series' | null;
-}
-
 export interface MediaPage {
   data: Media[];
   total: number;
@@ -144,6 +134,10 @@ export interface SearchParams {
 @Injectable({ providedIn: 'root' })
 export class MediaService {
   private readonly http = inject(HttpClient);
+
+  getCounts() {
+    return firstValueFrom(this.http.get<{ movies: number; series: number }>('/api/media/counts'));
+  }
 
   getAll(params: SearchParams = {}) {
     let httpParams = new HttpParams();
@@ -223,23 +217,6 @@ export class MediaService {
         params: { start, end },
       }),
     );
-  }
-
-  getHistory(page = 1, limit = 20) {
-    return firstValueFrom(
-      this.http.get<{ data: HistoryEntry[]; total: number }>(
-        '/api/media/history',
-        { params: { page, limit } },
-      ),
-    );
-  }
-
-  deleteHistory(historyId: number) {
-    return firstValueFrom(this.http.delete<void>(`/api/media/history/${historyId}`));
-  }
-
-  retryImport(historyId: number) {
-    return firstValueFrom(this.http.post<void>(`/api/media/history/${historyId}/retry`, {}));
   }
 
   linkTorrent(mediaId: number, sourceTitle: string, clientId?: number) {

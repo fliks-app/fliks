@@ -8,6 +8,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
+import { RootFoldersApiService, RootFolder } from '../../../core/services/api/root-folders-api.service';
 
 @Component({
   selector: 'app-general-settings',
@@ -17,6 +18,7 @@ import { SettingsApiService } from '../../../core/services/api/settings-api.serv
 })
 export class GeneralSettingsComponent implements OnInit {
   private readonly api = inject(SettingsApiService);
+  private readonly rootFoldersApi = inject(RootFoldersApiService);
   private readonly translate = inject(TranslateService);
 
   readonly loading = signal(true);
@@ -28,14 +30,28 @@ export class GeneralSettingsComponent implements OnInit {
   readonly searchMissingAuto = signal('true');
   readonly rssSyncInterval = signal('15');
   readonly postImportScript = signal('');
+  readonly defaultRootFolderMovie = signal('');
+  readonly defaultRootFolderSeries = signal('');
+  readonly companionFileExtensions = signal('');
+  readonly rootFolders = signal<RootFolder[]>([]);
 
   async ngOnInit() {
     try {
-      const map = await this.api.getAll();
+      const [map, folders] = await Promise.all([
+        this.api.getAll(),
+        this.rootFoldersApi.list(),
+      ]);
       this.tmdbApiKey.set(map['tmdb_api_key'] ?? '');
       this.searchMissingAuto.set(map['search_missing_auto'] ?? 'true');
       this.rssSyncInterval.set(map['rss_sync_interval'] ?? '15');
       this.postImportScript.set(map['post_import_script'] ?? '');
+      this.defaultRootFolderMovie.set(map['default_root_folder_movie'] ?? '');
+      this.defaultRootFolderSeries.set(map['default_root_folder_series'] ?? '');
+      this.companionFileExtensions.set(
+        map['companion_file_extensions'] ??
+        '.nfo,.srt,.ass,.ssa,.sub,.idx,.vtt,.sup,.txt,.jpg,.jpeg,.png,.tbn,.nfo-orig',
+      );
+      this.rootFolders.set(folders);
     } catch {
       this.error.set(this.translate.instant('settings.general.load_error'));
     } finally {
@@ -53,6 +69,9 @@ export class GeneralSettingsComponent implements OnInit {
         search_missing_auto: this.searchMissingAuto(),
         rss_sync_interval: this.rssSyncInterval(),
         post_import_script: this.postImportScript(),
+        default_root_folder_movie: this.defaultRootFolderMovie(),
+        default_root_folder_series: this.defaultRootFolderSeries(),
+        companion_file_extensions: this.companionFileExtensions(),
       });
       this.saved.set(true);
       setTimeout(() => this.saved.set(false), 3000);

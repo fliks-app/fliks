@@ -12,11 +12,13 @@ export interface SubtitleFileRow {
   hearingImpaired: boolean;
   providerType: string;
   providerFileId: string;
-  filePath: string;
+  filePath?: string | null;
   status: string;
   score: number;
   synced: boolean;
   syncOffset?: number;
+  streamIndex?: number | null;
+  codec?: string | null;
 }
 
 export interface SubtitleSearchResult {
@@ -45,6 +47,12 @@ export class SubtitlesApiService {
     if (episodeId != null) params['episodeId'] = String(episodeId);
     return firstValueFrom(
       this.http.get<SubtitleSearchResult[]>(`/api/media/${mediaId}/subtitles/search`, { params }),
+    );
+  }
+
+  autoDownload(mediaId: number, body: { mediaFileId: number; episodeId?: number; language?: string }) {
+    return firstValueFrom(
+      this.http.post<SubtitleFileRow | null>(`/api/media/${mediaId}/subtitles/auto`, body),
     );
   }
 

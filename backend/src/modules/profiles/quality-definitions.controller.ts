@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, UseGuards } from '@nestjs/common';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
@@ -15,6 +15,12 @@ export class QualityDefinitionsController {
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   findAll() {
     return this.service.findAll();
+  }
+
+  @Post('reset')
+  @CheckPolicies((ability) => ability.can(Action.Update, 'Settings'))
+  getDefaults() {
+    return this.service.getDefaults();
   }
 
   @Put()

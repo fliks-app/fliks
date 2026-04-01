@@ -91,9 +91,7 @@ export function rowMonitored(v: unknown): boolean {
   return v === true || v === 1 || v === '1' || v === 't' || v === 'true';
 }
 
-export async function queryRadarrMovies(
-  client: Client,
-): Promise<
+export async function queryRadarrMovies(client: Client): Promise<
   Array<{
     title: string;
     tmdbId: number;
@@ -151,9 +149,7 @@ async function sonarrUsesTmdb(client: Client): Promise<boolean> {
   return false;
 }
 
-export async function querySonarrSeries(
-  client: Client,
-): Promise<
+export async function querySonarrSeries(client: Client): Promise<
   Array<{
     title: string;
     externalId: number;

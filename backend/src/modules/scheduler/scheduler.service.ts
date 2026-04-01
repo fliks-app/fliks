@@ -253,6 +253,9 @@ export class SchedulerService {
 
       const pick = results[0];
       try {
+        this.log.log(
+          `SearchMissing: sending movie "${pick.title}" to qBittorrent — ${pick.downloadUrl}`,
+        );
         await this.qbittorrent.addTorrentUrl(
           qbitClient,
           pick.downloadUrl,
@@ -366,6 +369,9 @@ export class SchedulerService {
 
       const pick = results[0];
       try {
+        this.log.log(
+          `SearchMissing: sending episode "${pick.title}" to qBittorrent — ${pick.downloadUrl}`,
+        );
         await this.qbittorrent.addTorrentUrl(
           qbitClient,
           pick.downloadUrl,
@@ -492,6 +498,9 @@ export class SchedulerService {
           if (alreadyGrabbed) continue;
 
           try {
+            this.log.log(
+              `RSS: sending "${release.title}" to qBittorrent — ${release.downloadUrl}`,
+            );
             await this.qbittorrent.addTorrentUrl(
               qbitClient,
               release.downloadUrl,

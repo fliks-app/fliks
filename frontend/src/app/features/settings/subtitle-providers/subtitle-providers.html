@@ -78,7 +78,7 @@
         <label class="form-control w-full">
           <span class="label-text">{{ 'settings.subtitle_providers.field_type' | translate }}</span>
           <select class="select select-bordered select-sm w-full"
-            [ngModel]="formType()" (ngModelChange)="formType.set($event)">
+            [ngModel]="formType()" (ngModelChange)="onTypeChange($event)">
             @for (pt of providerTypes; track pt.value) {
               <option [ngValue]="pt.value">{{ pt.label }}</option>
             }

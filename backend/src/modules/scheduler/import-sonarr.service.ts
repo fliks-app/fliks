@@ -15,6 +15,7 @@ import {
   querySonarrSeries,
   rowMonitored,
 } from './pg-restore-import.util';
+import * as path from 'path';
 
 interface SonarrSeries {
   title?: string;
@@ -124,6 +125,9 @@ export class ImportSonarrService {
           await this.mediaRepo.remove(exists);
         }
 
+        const folderName = s.path
+          ? path.basename(s.path.replace(/\/+$/, ''))
+          : undefined;
         await this.mediaRepo.save(
           this.mediaRepo.create({
             title,
@@ -133,6 +137,7 @@ export class ImportSonarrService {
             status: MediaStatus.CONTINUING,
             monitored: s.monitored ?? true,
             path: s.path || undefined,
+            folderName: folderName || undefined,
             imdbId: s.imdbId || undefined,
             overview: s.overview || undefined,
             qualityProfileId: localProfileId ?? undefined,
@@ -366,6 +371,9 @@ export class ImportSonarrService {
                 continue;
               }
 
+              const folderName = row.path
+                ? path.basename(row.path.replace(/\/+$/, ''))
+                : undefined;
               await this.mediaRepo.save(
                 this.mediaRepo.create({
                   title,
@@ -375,6 +383,7 @@ export class ImportSonarrService {
                   status: MediaStatus.CONTINUING,
                   monitored: rowMonitored(row.monitored),
                   path: row.path || undefined,
+                  folderName: folderName || undefined,
                 }),
               );
               imported++;

@@ -25,11 +25,17 @@ export class Episode extends BaseEntity {
   @Column({ type: 'date', nullable: true })
   airDate: string;
 
+  @Column({ type: 'int', nullable: true })
+  runtime: number | null;
+
   @Column({ default: true })
   monitored: boolean;
 
   @Column({ default: false })
   hasFile: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  stillUrl: string | null;
 
   @Column({
     type: 'tsvector',

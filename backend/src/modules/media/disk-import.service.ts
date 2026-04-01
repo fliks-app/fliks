@@ -104,6 +104,20 @@ export class DiskImportService {
           media.path = dir;
         }
 
+        // Derive folderName from the parent directory name if not set
+        if (!media.folderName && media.path) {
+          const folderName = path.basename(
+            path.dirname(entry.filePath) === media.path
+              ? entry.filePath
+              : path.dirname(entry.filePath),
+          );
+          // Only store if it looks like a real folder name (not just a filename)
+          if (folderName && path.dirname(entry.filePath) !== media.path) {
+            await this.mediaRepo.update(media.id, { folderName });
+            media.folderName = folderName;
+          }
+        }
+
         const relativePath = path.relative(media.path, entry.filePath);
 
         // Avoid duplicate

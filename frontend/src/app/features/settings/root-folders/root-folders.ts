@@ -11,6 +11,7 @@ import {
   RootFoldersApiService,
   RootFolder,
 } from '../../../core/services/api/root-folders-api.service';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 
 @Component({
   selector: 'app-root-folders-settings',
@@ -21,6 +22,7 @@ import {
 export class RootFoldersSettingsComponent implements OnInit {
   private readonly api = inject(RootFoldersApiService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly folders = signal<RootFolder[]>([]);
   readonly loading = signal(true);
@@ -83,13 +85,13 @@ export class RootFoldersSettingsComponent implements OnInit {
   }
 
   async remove(folder: RootFolder) {
-    if (!confirm(this.translate.instant('settings.root_folders.confirm_delete', { path: folder.path }))) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('settings.root_folders.confirm_delete', { path: folder.path }), variant: 'danger' })) return;
     try {
       await this.api.remove(folder.id);
       await this.reload();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? 'Error');
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Error', variant: 'danger' });
     }
   }
 

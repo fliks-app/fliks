@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
   AutoApprovalApiService,
   AutoApprovalRule,
@@ -28,6 +29,7 @@ const EMPTY_CONDITION = (): RuleCondition => ({
 export class AutoApprovalSettingsComponent implements OnInit {
   private readonly api = inject(AutoApprovalApiService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly rules = signal<AutoApprovalRule[]>([]);
   readonly loading = signal(true);
@@ -132,9 +134,11 @@ export class AutoApprovalSettingsComponent implements OnInit {
 
   async remove(rule: AutoApprovalRule) {
     if (
-      !confirm(
-        this.translate.instant('settings.auto_approval.confirm_delete', { name: rule.name }),
-      )
+      !await this.confirmation.confirm({
+        title: this.translate.instant('common.confirm'),
+        message: this.translate.instant('settings.auto_approval.confirm_delete', { name: rule.name }),
+        variant: 'danger',
+      })
     ) return;
     try {
       await this.api.remove(rule.id);

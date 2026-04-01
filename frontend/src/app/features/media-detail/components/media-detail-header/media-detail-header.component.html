@@ -1,0 +1,140 @@
+@let m = media();
+<div class="relative">
+  <!-- Fanart background: fixed behind everything, full height -->
+  @if (m.fanartUrl) {
+    <div class="absolute inset-0 -mx-4 -mt-6 lg:-mx-6 overflow-hidden">
+      <img [src]="m.fanartUrl" alt="" class="w-full h-full object-cover object-[50%_25%]" />
+      <div class="absolute inset-0 bg-base-100/80"></div>
+      <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-base-100/30 to-base-100/50"></div>
+    </div>
+    <a [routerLink]="backRoute()" class="relative z-10 btn btn-ghost btn-sm gap-1 mb-4 text-base-content/80 hover:text-base-content">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+      </svg>
+      {{ 'media_detail.back' | translate }}
+    </a>
+  }
+
+  <div class="flex flex-col lg:flex-row gap-6 lg:gap-10 relative z-10">
+    <div class="shrink-0 w-full max-w-[200px] sm:max-w-[220px] lg:max-w-[240px] mx-auto lg:mx-0">
+      @if (m.posterUrl) {
+        <img
+          [src]="m.posterUrl"
+          [alt]="m.title"
+          class="w-full rounded-xl aspect-2/3 object-cover bg-base-300"
+        />
+      } @else {
+        <div class="aspect-2/3 rounded-xl bg-base-300 flex items-center justify-center text-base-content/30">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-20 w-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+          </svg>
+        </div>
+      }
+    </div>
+
+    <div class="flex-1 min-w-0 lg:pt-2">
+      <div class="flex flex-wrap items-center gap-2 mb-2">
+        <span class="badge badge-lg badge-neutral">{{ m.status }}</span>
+        @if (!m.monitored) {
+          <span class="badge badge-lg badge-ghost">{{ 'media_detail.unmonitored' | translate }}</span>
+        }
+        @if (m.year) {
+          <span class="badge badge-lg badge-outline">{{ m.year }}</span>
+        }
+        @if (m.rating) {
+          <span class="badge badge-lg badge-warning gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            {{ m.rating | number:'1.1-1' }}
+          </span>
+        }
+        @if (m.runtime) {
+          <span class="badge badge-lg badge-outline">{{ m.runtime }} {{ 'common.min' | translate }}</span>
+        }
+      </div>
+
+      <h1 class="text-3xl sm:text-4xl font-bold tracking-tight">{{ m.title }}</h1>
+      @if (m.originalTitle && m.originalTitle !== m.title) {
+        <p class="text-base-content/60 mt-1 text-lg">{{ m.originalTitle }}</p>
+      }
+
+      @if (m.type === 'series' && m.episodeStats) {
+        <div class="mt-4 max-w-md">
+          <div class="flex justify-between text-sm mb-1">
+            <span class="text-base-content/70">{{ 'media_detail.episode_progress' | translate }}</span>
+            <span class="tabular-nums font-medium">
+              {{ m.episodeStats.downloadedEpisodes }} / {{ m.episodeStats.totalEpisodes }}
+            </span>
+          </div>
+          <progress
+            class="progress progress-primary w-full h-2"
+            [attr.value]="m.episodeStats.totalEpisodes ? (100 * m.episodeStats.downloadedEpisodes / m.episodeStats.totalEpisodes) : 0"
+            max="100"
+          ></progress>
+        </div>
+      }
+
+      @if (m.genres?.length) {
+        <div class="flex flex-wrap gap-1.5 mt-4">
+          @for (g of m.genres; track g) {
+            <span class="badge badge-ghost">{{ g }}</span>
+          }
+        </div>
+      }
+
+      @if (m.overview) {
+        <p class="mt-4 text-base-content/90 leading-relaxed whitespace-pre-line line-clamp-6 sm:line-clamp-none">{{ m.overview }}</p>
+      }
+
+      <div class="flex flex-wrap gap-2 mt-5">
+        @if (canEditProfiles()) {
+          <button type="button" class="btn btn-ghost btn-sm" (click)="openProfiles.emit()">
+            {{ 'media_detail.edit_profiles' | translate }}
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm" (click)="openRootFolder.emit()">
+            {{ 'media_detail.edit_root_folder' | translate }}
+          </button>
+        }
+        @if (isAdmin()) {
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            (click)="refreshMetadata.emit()"
+            [disabled]="refreshLoading()"
+          >
+            @if (refreshLoading()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'media_detail.refresh_metadata' | translate }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            (click)="toggleMonitored.emit()"
+            [disabled]="monitoredLoading()"
+          >
+            @if (monitoredLoading()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            @if (m.monitored) {
+              {{ 'media_detail.unmonitor' | translate }}
+            } @else {
+              {{ 'media_detail.monitor' | translate }}
+            }
+          </button>
+          <button
+            type="button"
+            class="btn btn-error btn-outline btn-sm"
+            (click)="deleteMedia.emit()"
+            [disabled]="deleteLoading()"
+          >
+            @if (deleteLoading()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'media_detail.delete' | translate }}
+          </button>
+        }
+      </div>
+
+    </div>
+  </div>
+</div>

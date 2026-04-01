@@ -37,6 +37,19 @@ export class CalendarComponent implements OnInit {
   readonly loading = signal(true);
   readonly error = signal('');
 
+  readonly showCinema = signal(this.loadFilter('cinema'));
+  readonly showDigital = signal(this.loadFilter('digital'));
+  readonly showPhysical = signal(this.loadFilter('physical'));
+  readonly showAiring = signal(this.loadFilter('airing'));
+  readonly filteredEntries = computed(() => {
+    let result = this.entries();
+    if (!this.showCinema()) result = result.filter((e) => e.event !== 'cinema');
+    if (!this.showDigital()) result = result.filter((e) => e.event !== 'digital');
+    if (!this.showPhysical()) result = result.filter((e) => e.event !== 'physical');
+    if (!this.showAiring()) result = result.filter((e) => e.event !== 'airing');
+    return result;
+  });
+
   readonly monthLabel = computed(() => {
     const d = this.currentDate();
     return d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
@@ -58,7 +71,7 @@ export class CalendarComponent implements OnInit {
     start.setDate(start.getDate() - startOffset);
 
     const entriesByDate = new Map<string, CalendarEntry[]>();
-    for (const entry of this.entries()) {
+    for (const entry of this.filteredEntries()) {
       const key = entry.date.substring(0, 10);
       if (!entriesByDate.has(key)) entriesByDate.set(key, []);
       entriesByDate.get(key)!.push(entry);
@@ -139,12 +152,45 @@ export class CalendarComponent implements OnInit {
     return `${e.title} ${ep}${epTitle}`;
   }
 
+  toggleFilter(event: string) {
+    const signalMap: Record<string, ReturnType<typeof signal<boolean>>> = {
+      cinema: this.showCinema,
+      digital: this.showDigital,
+      physical: this.showPhysical,
+      airing: this.showAiring,
+    };
+    const s = signalMap[event];
+    if (s) {
+      s.update((v) => !v);
+      this.saveFilter(event, s());
+    }
+  }
+
+  isFilterActive(event: string): boolean {
+    switch (event) {
+      case 'cinema': return this.showCinema();
+      case 'digital': return this.showDigital();
+      case 'physical': return this.showPhysical();
+      case 'airing': return this.showAiring();
+      default: return true;
+    }
+  }
+
+  private loadFilter(event: string): boolean {
+    const val = localStorage.getItem(`calendar_filter_${event}`);
+    return val === null ? true : val === '1';
+  }
+
+  private saveFilter(event: string, active: boolean) {
+    localStorage.setItem(`calendar_filter_${event}`, active ? '1' : '0');
+  }
+
   eventClass(e: CalendarEntry): string {
     switch (e.event) {
       case 'cinema': return 'bg-primary/15 text-primary';
       case 'digital': return 'bg-info/15 text-info';
       case 'physical': return 'bg-warning/15 text-warning';
-      case 'airing': return e.hasFile ? 'bg-success/15 text-success' : 'bg-secondary/15 text-secondary';
+      case 'airing': return 'bg-secondary/15 text-secondary';
       default: return 'bg-primary/15 text-primary';
     }
   }

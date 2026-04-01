@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
   BlocklistApiService,
   BlocklistEntry,
@@ -21,6 +22,7 @@ import {
 export class BlocklistSettingsComponent implements OnInit {
   private readonly api = inject(BlocklistApiService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly entries = signal<BlocklistEntry[]>([]);
   readonly total = signal(0);
@@ -53,18 +55,18 @@ export class BlocklistSettingsComponent implements OnInit {
       await this.load(this.page());
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? 'Error');
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Error', variant: 'danger' });
     }
   }
 
   async clearAll() {
-    if (!confirm(this.translate.instant('settings.blocklist.confirm_clear'))) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('settings.blocklist.confirm_clear'), variant: 'danger' })) return;
     try {
       await this.api.clear();
       await this.load(1);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? 'Error');
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Error', variant: 'danger' });
     }
   }
 

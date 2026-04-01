@@ -21,7 +21,6 @@ import { ImportTmdbDto } from './dto/import-tmdb.dto';
 import { UpdateMediaProfilesDto } from './dto/update-media-profiles.dto';
 import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
-import { HistoryQueryDto } from './dto/history-query.dto';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
 import {
   MetadataDetails,
@@ -90,18 +89,71 @@ export class MediaService {
       if (rf) rootPath = rf.path;
     }
 
+    // Fallback to default root folder setting if none specified
+    if (!rootPath) {
+      const defaultKey =
+        dto.type === MediaType.MOVIE
+          ? 'default_root_folder_movie'
+          : 'default_root_folder_series';
+      const [row] = await this.dataSource.query(
+        `SELECT value FROM app_settings WHERE key = $1 LIMIT 1`,
+        [defaultKey],
+      );
+      if (row?.value) {
+        const rfId = Number(row.value);
+        if (rfId) {
+          const rf = await this.rootFolderRepo.findOne({ where: { id: rfId } });
+          if (rf) rootPath = rf.path;
+        }
+      }
+    }
+
+    // Load folder format settings
+    const fmtKeys = [
+      'naming_movie_folder_format',
+      'naming_series_folder_format',
+    ];
+    const fmtRows: { key: string; value: string }[] =
+      await this.dataSource.query(
+        `SELECT key, value FROM app_settings WHERE key = ANY($1)`,
+        [fmtKeys],
+      );
+    const fmtMap = Object.fromEntries(fmtRows.map((r) => [r.key, r.value]));
+
     if (dto.type === MediaType.MOVIE) {
       const details = await this.tmdb.getMovieDetails(dto.tmdbId);
-      return this.persistImportedMovie(details, qualityProfileId, rootPath);
+      const movieFolderFormat =
+        fmtMap['naming_movie_folder_format'] ??
+        '{Movie Title} ({Release Year})';
+      const folderName = this.naming.applyMovieFolderFormat(movieFolderFormat, {
+        title: details.title,
+        originalTitle: details.originalTitle,
+        year: details.year,
+        tmdbId: details.tmdbId,
+      });
+      return this.persistImportedMovie(
+        details,
+        qualityProfileId,
+        rootPath,
+        folderName,
+      );
     }
 
     const details = await this.tmdb.getTvShowDetails(dto.tmdbId);
     const seasons = await this.tmdb.getTvShowSeasons(dto.tmdbId);
+    const seriesFolderFormat =
+      fmtMap['naming_series_folder_format'] ?? '{Series Title}';
+    const folderName = this.naming.applySeriesFolderFormat(seriesFolderFormat, {
+      seriesTitle: details.title,
+      year: details.year,
+      tmdbId: details.tmdbId,
+    });
     return this.persistImportedSeries(
       details,
       seasons,
       qualityProfileId,
       rootPath,
+      folderName,
     );
   }
 
@@ -116,6 +168,14 @@ export class MediaService {
     const saved = await this.mediaRepo.save(media);
     await this.updateSearchVector(saved.id);
     return this.findOne(saved.id);
+  }
+
+  async getCounts(): Promise<{ movies: number; series: number }> {
+    const [movies, series] = await Promise.all([
+      this.mediaRepo.count({ where: { type: 'movie' as MediaType } }),
+      this.mediaRepo.count({ where: { type: 'series' as MediaType } }),
+    ]);
+    return { movies, series };
   }
 
   async findAll(
@@ -222,6 +282,20 @@ export class MediaService {
       media.seasons.sort((a, b) => a.seasonNumber - b.seasonNumber);
       for (const s of media.seasons) {
         s.episodes?.sort((a, b) => a.episodeNumber - b.episodeNumber);
+      }
+    }
+    if (media.type === MediaType.SERIES && media.seasons?.length) {
+      const epIdsWithTrackedFile = new Set(
+        (media.files ?? [])
+          .map((f) => f.episodeId)
+          .filter((id): id is number => id != null && id > 0),
+      );
+      for (const s of media.seasons) {
+        for (const e of s.episodes ?? []) {
+          if (epIdsWithTrackedFile.has(e.id)) {
+            e.hasFile = true;
+          }
+        }
       }
     }
     return media;
@@ -466,44 +540,6 @@ export class MediaService {
   // History
   // ---------------------------------------------------------------------------
 
-  async getHistory(
-    dto: HistoryQueryDto,
-  ): Promise<{ data: Record<string, unknown>[]; total: number }> {
-    const page = dto.page ?? 1;
-    const limit = dto.limit ?? 25;
-
-    const where: Record<string, unknown> = {};
-    if (dto.mediaId) where.mediaId = dto.mediaId;
-
-    const [rows, total] = await this.historyRepo.findAndCount({
-      where,
-      relations: ['media'],
-      order: { createdAt: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
-
-    const data = rows.map((h) => ({
-      id: h.id,
-      sourceTitle: h.sourceTitle,
-      quality: h.quality,
-      status: h.status,
-      date: h.createdAt,
-      event: h.status,
-      mediaId: h.mediaId,
-      mediaTitle: h.media?.title ?? null,
-      mediaType: h.media?.type ?? null,
-    }));
-
-    return { data, total };
-  }
-
-  async retryImport(historyId: number): Promise<void> {
-    const entry = await this.historyRepo.findOne({ where: { id: historyId } });
-    if (!entry) return;
-    await this.historyRepo.update(historyId, { status: 'grabbed' });
-  }
-
   async linkTorrentToMedia(
     mediaId: number,
     sourceTitle: string,
@@ -587,13 +623,16 @@ export class MediaService {
       }
     }
 
+    const episodeId = file.episodeId;
     await this.mediaFileRepo.remove(file);
-  }
-
-  async deleteHistoryEntry(id: number): Promise<void> {
-    const entry = await this.historyRepo.findOne({ where: { id } });
-    if (!entry) throw new NotFoundException(`History entry #${id} not found`);
-    await this.historyRepo.remove(entry);
+    if (episodeId != null) {
+      const remaining = await this.mediaFileRepo.count({
+        where: { episodeId },
+      });
+      if (remaining === 0) {
+        await this.episodeRepo.update(episodeId, { hasFile: false });
+      }
+    }
   }
 
   async refreshMetadata(id: number): Promise<Media> {
@@ -656,6 +695,10 @@ export class MediaService {
             updates.overview = ep.overview;
           if (ep.airDate && ep.airDate !== existing.airDate)
             updates.airDate = ep.airDate;
+          if (ep.stillUrl != null && ep.stillUrl !== existing.stillUrl)
+            updates.stillUrl = ep.stillUrl ?? undefined;
+          if (ep.runtime != null && ep.runtime !== existing.runtime)
+            updates.runtime = ep.runtime;
           if (Object.keys(updates).length > 0) {
             await this.episodeRepo.update(existing.id, updates);
           }
@@ -666,6 +709,8 @@ export class MediaService {
             title: ep.title || undefined,
             overview: ep.overview || undefined,
             airDate: ep.airDate || undefined,
+            runtime: ep.runtime ?? undefined,
+            stillUrl: ep.stillUrl || undefined,
             monitored: true,
           });
         }
@@ -711,6 +756,8 @@ export class MediaService {
     }
     if (query.missing === true) {
       qb.andWhere('files.id IS NULL');
+    } else if (query.missing === false) {
+      qb.andWhere('files.id IS NOT NULL');
     }
     if (query.letter) {
       const letter = query.letter.toUpperCase();
@@ -821,11 +868,13 @@ export class MediaService {
     details: MetadataDetails,
     qualityProfileId: number | null,
     rootPath?: string,
+    folderName?: string,
   ): Promise<Media> {
     const row = this.mediaRepo.create({
       ...this.buildMediaFieldsFromTmdb(details, MediaType.MOVIE),
       ...(qualityProfileId != null ? { qualityProfileId } : {}),
       ...(rootPath ? { path: rootPath } : {}),
+      ...(folderName ? { folderName } : {}),
     });
     const saved = await this.mediaRepo.save(row);
     await this.updateSearchVector(saved.id);
@@ -837,11 +886,13 @@ export class MediaService {
     seasons: SeasonDetails[],
     qualityProfileId: number | null,
     rootPath?: string,
+    folderName?: string,
   ): Promise<Media> {
     const row = this.mediaRepo.create({
       ...this.buildMediaFieldsFromTmdb(details, MediaType.SERIES),
       ...(qualityProfileId != null ? { qualityProfileId } : {}),
       ...(rootPath ? { path: rootPath } : {}),
+      ...(folderName ? { folderName } : {}),
     });
     const saved = await this.mediaRepo.save(row);
 
@@ -860,6 +911,7 @@ export class MediaService {
             title: ep.title || undefined,
             overview: ep.overview || undefined,
             airDate: ep.airDate || undefined,
+            runtime: ep.runtime ?? undefined,
             monitored: true,
           })),
         );

@@ -1,16 +1,23 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { SubtitleFile } from './entities/subtitle-file.entity';
+import { Media } from '../media/entities/media.entity';
+import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleProviderService } from './subtitle-provider.service';
 import { SubtitleProviderFactory } from './providers/subtitle-provider.factory';
 import {
   SubtitleSearchParams,
   SubtitleSearchResult,
 } from './providers/subtitle-provider.interface';
-import { SubtitleStatus } from '../../common/enums';
+import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 
 @Injectable()
 export class SubtitlesService {
@@ -19,6 +26,10 @@ export class SubtitlesService {
   constructor(
     @InjectRepository(SubtitleFile)
     private readonly repo: Repository<SubtitleFile>,
+    @InjectRepository(Media)
+    private readonly mediaRepo: Repository<Media>,
+    @InjectRepository(MediaFile)
+    private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly providerService: SubtitleProviderService,
     private readonly factory: SubtitleProviderFactory,
   ) {}
@@ -31,8 +42,12 @@ export class SubtitlesService {
 
     for (const provider of providers) {
       try {
+        this.logger.log(
+          `Searching subtitles via ${provider.name} (${provider.type})…`,
+        );
         const impl = this.factory.create(provider.type, provider.settings);
         const results = await impl.search(params);
+        this.logger.log(`${provider.name}: ${results.length} result(s)`);
         allResults.push(...results);
       } catch (err) {
         this.logger.warn(`Search failed for provider ${provider.name}: ${err}`);
@@ -43,12 +58,31 @@ export class SubtitlesService {
     return allResults;
   }
 
+  async autoDownload(
+    mediaId: number,
+    mediaFileId: number,
+    episodeId: number | undefined,
+    params: SubtitleSearchParams,
+  ): Promise<SubtitleFile | null> {
+    const results = await this.searchSubtitles(params);
+    if (!results.length) {
+      this.logger.log(
+        `Auto subtitle: no results for "${params.title}" (${params.language})`,
+      );
+      return null;
+    }
+    const best = results[0];
+    this.logger.log(
+      `Auto subtitle: picking "${best.title}" (score=${best.score}, provider=${best.providerType})`,
+    );
+    return this.downloadSubtitle(mediaId, mediaFileId, episodeId, best);
+  }
+
   async downloadSubtitle(
     mediaId: number,
     mediaFileId: number,
     episodeId: number | undefined,
     searchResult: SubtitleSearchResult,
-    mediaFilePath: string,
   ): Promise<SubtitleFile> {
     const providers = await this.providerService.findEnabled();
     const provider = providers.find(
@@ -56,6 +90,12 @@ export class SubtitlesService {
     );
     if (!provider) throw new NotFoundException('No matching provider found');
 
+    // Resolve the absolute path of the media file
+    const absolutePath = await this.resolveMediaFilePath(mediaId, mediaFileId);
+
+    this.logger.log(
+      `Downloading subtitle "${searchResult.title}" via ${provider.name} (${provider.type})`,
+    );
     const impl = this.factory.create(provider.type, provider.settings);
     const buffer = await impl.download(searchResult);
 
@@ -65,13 +105,30 @@ export class SubtitlesService {
         ? `${searchResult.language}.hi`
         : searchResult.language;
 
-    const parsed = path.parse(mediaFilePath);
-    const subtitlePath = path.join(
+    const parsed = path.parse(absolutePath);
+    let subtitlePath = path.join(
       parsed.dir,
       `${parsed.name}.${langSuffix}.srt`,
     );
 
+    // Avoid overwriting existing subtitle files — append -1, -2, etc.
+    let counter = 0;
+    while (
+      await fs.access(subtitlePath).then(
+        () => true,
+        () => false,
+      )
+    ) {
+      counter++;
+      subtitlePath = path.join(
+        parsed.dir,
+        `${parsed.name}.${langSuffix}-${counter}.srt`,
+      );
+    }
+
+    await fs.mkdir(parsed.dir, { recursive: true });
     await fs.writeFile(subtitlePath, buffer);
+    this.logger.log(`Subtitle saved: ${subtitlePath}`);
 
     const subtitleFile = this.repo.create({
       mediaId,
@@ -91,6 +148,32 @@ export class SubtitlesService {
     return this.repo.save(subtitleFile);
   }
 
+  /**
+   * Resolves the absolute filesystem path of a media file
+   * by joining media.path (root folder) with mediaFile.relativePath.
+   */
+  private async resolveMediaFilePath(
+    mediaId: number,
+    mediaFileId: number,
+  ): Promise<string> {
+    const media = await this.mediaRepo.findOne({ where: { id: mediaId } });
+    if (!media) {
+      throw new NotFoundException(`Media #${mediaId} not found`);
+    }
+    if (!media.path) {
+      throw new BadRequestException(
+        'Assign a root folder to this media before downloading subtitles',
+      );
+    }
+    const mediaFile = await this.mediaFileRepo.findOne({
+      where: { id: mediaFileId },
+    });
+    if (!mediaFile) {
+      throw new NotFoundException(`MediaFile #${mediaFileId} not found`);
+    }
+    return path.join(media.path, mediaFile.relativePath);
+  }
+
   async getSubtitlesForMedia(mediaId: number): Promise<SubtitleFile[]> {
     return this.repo.find({
       where: { mediaId },
@@ -108,11 +191,16 @@ export class SubtitlesService {
   async deleteSubtitle(id: number): Promise<void> {
     const subtitle = await this.repo.findOne({ where: { id } });
     if (!subtitle) throw new NotFoundException(`SubtitleFile #${id} not found`);
+    if (subtitle.providerType === SubtitleProviderType.EMBEDDED) {
+      throw new BadRequestException('Cannot delete an embedded subtitle');
+    }
 
-    try {
-      await fs.unlink(subtitle.filePath);
-    } catch {
-      this.logger.warn(`Could not delete file: ${subtitle.filePath}`);
+    if (subtitle.filePath) {
+      try {
+        await fs.unlink(subtitle.filePath);
+      } catch {
+        this.logger.warn(`Could not delete file: ${subtitle.filePath}`);
+      }
     }
 
     await this.repo.remove(subtitle);
@@ -121,15 +209,19 @@ export class SubtitlesService {
   async upgradeSubtitle(
     id: number,
     newResult: SubtitleSearchResult,
-    mediaFilePath: string,
   ): Promise<SubtitleFile> {
     const existing = await this.repo.findOne({ where: { id } });
     if (!existing) throw new NotFoundException(`SubtitleFile #${id} not found`);
+    if (existing.providerType === SubtitleProviderType.EMBEDDED) {
+      throw new BadRequestException('Cannot upgrade an embedded subtitle');
+    }
 
-    try {
-      await fs.unlink(existing.filePath);
-    } catch {
-      this.logger.warn(`Could not delete old file: ${existing.filePath}`);
+    if (existing.filePath) {
+      try {
+        await fs.unlink(existing.filePath);
+      } catch {
+        this.logger.warn(`Could not delete old file: ${existing.filePath}`);
+      }
     }
 
     const updated = await this.downloadSubtitle(
@@ -137,7 +229,6 @@ export class SubtitlesService {
       existing.mediaFileId,
       existing.episodeId,
       newResult,
-      mediaFilePath,
     );
     updated.status = SubtitleStatus.UPGRADED;
     await this.repo.save(updated);

@@ -24,6 +24,7 @@
         (ngModelChange)="filterStatus.set($event); onFilterChange()"
       >
         <option value="">{{ 'movies.filter_all_status' | translate }}</option>
+        <option value="downloaded">{{ 'movies.filter_downloaded' | translate }}</option>
         <option value="missing">{{ 'movies.filter_missing' | translate }}</option>
         <option value="cutoffUnmet">{{ 'movies.filter_cutoff_unmet' | translate }}</option>
       </select>

@@ -9,8 +9,9 @@ import { SubtitlesService } from '../subtitles/subtitles.service';
 import { SubtitleSyncService } from '../subtitles/subtitle-sync.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SettingsService } from '../settings/settings.service';
-import { SubtitleStatus } from '../../common/enums';
+import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import { SubtitleLanguageItem } from '../profiles/entities/language-profile.entity';
+import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
 
 @Injectable()
 export class SubtitleSchedulerService {
@@ -27,6 +28,7 @@ export class SubtitleSchedulerService {
     private readonly subtitleSync: SubtitleSyncService,
     private readonly notifications: NotificationsService,
     private readonly settings: SettingsService,
+    private readonly embeddedSubtitle: EmbeddedSubtitleService,
   ) {}
 
   /** Search for missing subtitles — runs every 6 hours */
@@ -84,14 +86,13 @@ export class SubtitleSchedulerService {
               file.id,
               file.episodeId ?? undefined,
               best,
-              file.relativePath,
             );
 
             if (encodeUtf8) {
               await this.subtitleSync.reencodeToUtf8(sub.id);
             }
             if (autoSyncEnabled) {
-              await this.subtitleSync.syncSubtitle(sub.id, file.relativePath);
+              await this.subtitleSync.syncSubtitle(sub.id);
             }
 
             void this.notifications.dispatch('subtitle.downloaded', {
@@ -149,12 +150,7 @@ export class SubtitleSchedulerService {
         const better = results.find((r) => r.score > sub.score);
         if (!better) continue;
 
-        const mediaFilePath = sub.mediaFile?.relativePath ?? '';
-        await this.subtitlesService.upgradeSubtitle(
-          sub.id,
-          better,
-          mediaFilePath,
-        );
+        await this.subtitlesService.upgradeSubtitle(sub.id, better);
 
         void this.notifications.dispatch('subtitle.upgraded', {
           title: sub.media?.title,
@@ -197,6 +193,14 @@ export class SubtitleSchedulerService {
     });
     if (!mediaFile) return;
 
+    // Detect embedded subtitles before searching providers
+    const embeddedSubs = await this.embeddedSubtitle.detectAndStore(
+      mediaId,
+      mediaFileId,
+      episodeId,
+    );
+    const embeddedLangs = new Set(embeddedSubs.map((s) => s.language));
+
     const minScore = Number(
       (await this.settings.get('subtitle_min_score')) ?? '70',
     );
@@ -206,6 +210,12 @@ export class SubtitleSchedulerService {
       (await this.settings.get('subtitle_encode_utf8')) !== 'false';
 
     for (const langItem of subtitleLangs) {
+      if (embeddedLangs.has(langItem.isoCode)) {
+        this.log.log(
+          `PostImport: skipping ${langItem.isoCode} for "${media.title}" — embedded subtitle found`,
+        );
+        continue;
+      }
       try {
         const results = await this.subtitlesService.searchSubtitles({
           imdbId: media.imdbId ?? undefined,
@@ -223,14 +233,13 @@ export class SubtitleSchedulerService {
           mediaFileId,
           episodeId,
           best,
-          mediaFile.relativePath,
         );
 
         if (encodeUtf8) {
           await this.subtitleSync.reencodeToUtf8(sub.id);
         }
         if (autoSyncEnabled) {
-          await this.subtitleSync.syncSubtitle(sub.id, mediaFile.relativePath);
+          await this.subtitleSync.syncSubtitle(sub.id);
         }
 
         this.log.log(

@@ -50,6 +50,12 @@ export class DownloadClientsController {
     return this.service.getQueue();
   }
 
+  @Post('queue/:hash/reimport')
+  @CheckPolicies((ability) => ability.can(Action.Manage, DownloadClient))
+  reimport(@Param('hash') hash: string) {
+    return this.service.reimport(hash);
+  }
+
   @Delete('queue/:hash')
   @CheckPolicies((ability) => ability.can(Action.Delete, DownloadClient))
   removeTorrent(

@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
   SubtitleProvidersApiService,
   SubtitleProviderRow,
@@ -15,8 +16,10 @@ import {
 const PROVIDER_TYPES = [
   { value: 'opensubtitles', label: 'OpenSubtitles', fields: ['username', 'password'] },
   { value: 'subdl', label: 'Subdl', fields: ['apiKey'] },
-  { value: 'subsynchro', label: 'Subsynchro', fields: ['baseUrl'] },
-  { value: 'supersubtitles', label: 'Supersubtitles', fields: ['baseUrl'] },
+  { value: 'subsynchro', label: 'Subsynchro', fields: [] },
+  { value: 'supersubtitles', label: 'Supersubtitles', fields: [] },
+  { value: 'yify', label: 'YIFY (yts-subs.com)', fields: [] },
+  { value: 'gestdown', label: 'Gestdown (Addic7ed mirror)', fields: [] },
 ];
 
 @Component({
@@ -28,6 +31,7 @@ const PROVIDER_TYPES = [
 export class SubtitleProvidersSettingsComponent implements OnInit {
   private readonly api = inject(SubtitleProvidersApiService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly providerTypes = PROVIDER_TYPES;
   readonly rows = signal<SubtitleProviderRow[]>([]);
@@ -75,10 +79,18 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     return PROVIDER_TYPES.find((t) => t.value === type)?.label ?? type;
   }
 
+  onTypeChange(type: string) {
+    this.formType.set(type);
+    // Auto-fill name with provider label when creating
+    if (this.editingId() === null) {
+      this.formName.set(this.providerLabel(type));
+    }
+  }
+
   openCreate() {
     this.editingId.set(null);
-    this.formName.set('');
     this.formType.set('opensubtitles');
+    this.formName.set(this.providerLabel('opensubtitles'));
     this.formPriority.set(25);
     this.formEnabled.set(true);
     this.formApiKey.set('');
@@ -178,13 +190,13 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
 
   async deleteRow(row: SubtitleProviderRow) {
     const msg = this.translate.instant('settings.subtitle_providers.confirm_delete', { name: row.name });
-    if (!confirm(msg)) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: msg, variant: 'danger' })) return;
     try {
       await this.api.remove(row.id);
       await this.reloadAll();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? this.translate.instant('settings.subtitle_providers.delete_error'));
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? this.translate.instant('settings.subtitle_providers.delete_error'), variant: 'danger' });
     }
   }
 }

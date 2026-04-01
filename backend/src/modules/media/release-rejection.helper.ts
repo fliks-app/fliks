@@ -67,6 +67,8 @@ export function computeRejections(opts: {
   allowedLangs: Set<number>;
   isBlocklisted: boolean;
   sizeBytes: number;
+  /** Runtime of the media in minutes — needed to convert size to MB/h for comparison with quality limits. */
+  runtimeMinutes: number;
   sizeByQuality: Map<number, SizeLimits>;
   seeders: number;
   indexerId: number;
@@ -86,31 +88,38 @@ export function computeRejections(opts: {
     out.push({ code: 'BLOCKLISTED' });
   }
 
+  // Quality definition limits are in MB/h — convert file size to the same unit
+  const runtimeHours = opts.runtimeMinutes > 0 ? opts.runtimeMinutes / 60 : 0;
   const sizeMb = opts.sizeBytes > 0 ? opts.sizeBytes / (1024 * 1024) : 0;
+  const sizeMbPerHour = runtimeHours > 0 ? sizeMb / runtimeHours : 0;
   const limits = opts.sizeByQuality.get(opts.qualityId);
 
-  if (limits && sizeMb > 0) {
-    if (limits.min > 0 && sizeMb < limits.min) {
+  if (limits && sizeMbPerHour > 0) {
+    if (limits.min > 0 && sizeMbPerHour < limits.min) {
       out.push({
         code: 'SIZE_TOO_LOW',
-        params: { actual: Math.round(sizeMb), min: limits.min },
+        params: { actual: Math.round(sizeMbPerHour), min: limits.min },
       });
     }
-    if (limits.max > 0 && sizeMb > limits.max) {
+    if (limits.max > 0 && sizeMbPerHour > limits.max) {
       out.push({
         code: 'SIZE_TOO_HIGH',
-        params: { actual: Math.round(sizeMb), max: limits.max },
+        params: { actual: Math.round(sizeMbPerHour), max: limits.max },
       });
     }
     if (
       limits.preferred > 0 &&
       out.every((r) => r.code !== 'SIZE_TOO_LOW' && r.code !== 'SIZE_TOO_HIGH')
     ) {
-      const deviation = Math.abs(sizeMb - limits.preferred) / limits.preferred;
+      const deviation =
+        Math.abs(sizeMbPerHour - limits.preferred) / limits.preferred;
       if (deviation > 0.3) {
         out.push({
           code: 'SIZE_NOT_PREFERRED',
-          params: { actual: Math.round(sizeMb), preferred: limits.preferred },
+          params: {
+            actual: Math.round(sizeMbPerHour),
+            preferred: limits.preferred,
+          },
         });
       }
     }
@@ -125,4 +134,61 @@ export function computeRejections(opts: {
   }
 
   return out;
+}
+
+/**
+ * Sort releases by relevance. Best releases first.
+ *
+ * Priority order:
+ * 1. No rejections > has rejections
+ * 2. Not blocklisted > blocklisted
+ * 3. Language allowed > not allowed
+ * 4. Freeleech bonus
+ * 5. Quality rank (higher = better)
+ * 6. Custom format score (higher = better)
+ * 7. Seeders (more = better, log scale to avoid over-weighting)
+ * 8. Size closer to preferred (less deviation = better)
+ */
+export function sortReleasesByRelevance<
+  T extends {
+    rank: number;
+    allowed: boolean;
+    blocklisted: boolean;
+    languageAllowed: boolean;
+    rejections: ReleaseRejection[];
+    customFormatScore: number;
+    seeders: number;
+    freeleech: boolean;
+  },
+>(rows: T[]): T[] {
+  return rows.sort((a, b) => {
+    // 1. No rejections first
+    const aClean = a.rejections.length === 0 ? 1 : 0;
+    const bClean = b.rejections.length === 0 ? 1 : 0;
+    if (aClean !== bClean) return bClean - aClean;
+
+    // 2. Not blocklisted first
+    if (a.blocklisted !== b.blocklisted) return a.blocklisted ? 1 : -1;
+
+    // 3. Language allowed first
+    if (a.languageAllowed !== b.languageAllowed)
+      return a.languageAllowed ? -1 : 1;
+
+    // 4. Quality rank desc
+    if (a.rank !== b.rank) return b.rank - a.rank;
+
+    // 5. Freeleech bonus
+    if (a.freeleech !== b.freeleech) return a.freeleech ? -1 : 1;
+
+    // 6. Custom format score desc
+    if (a.customFormatScore !== b.customFormatScore)
+      return b.customFormatScore - a.customFormatScore;
+
+    // 7. Seeders desc (log scale)
+    const aSeed = Math.log2(a.seeders + 1);
+    const bSeed = Math.log2(b.seeders + 1);
+    if (Math.abs(aSeed - bSeed) > 0.5) return bSeed - aSeed;
+
+    return 0;
+  });
 }

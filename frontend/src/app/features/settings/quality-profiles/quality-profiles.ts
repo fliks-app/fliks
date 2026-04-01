@@ -8,6 +8,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
   ProfilesService,
   QualityProfile,
@@ -27,6 +28,7 @@ export class QualityProfilesComponent implements OnInit {
   private readonly profilesApi = inject(ProfilesService);
   private readonly mediaApi = inject(MediaService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly profiles = signal<QualityProfile[]>([]);
   readonly definitions = signal<SuitarrQualityDef[]>([]);
@@ -165,16 +167,18 @@ export class QualityProfilesComponent implements OnInit {
       'settings.quality_profiles.confirm_delete',
       { name: p.name },
     );
-    if (!confirm(msg)) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: msg, variant: 'danger' })) return;
     try {
       await this.profilesApi.deleteQualityProfile(p.id);
       await this.reloadAll();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(
-        httpErr.error?.message ??
+      void this.confirmation.alert({
+        title: this.translate.instant('common.error'),
+        message: httpErr.error?.message ??
           this.translate.instant('settings.quality_profiles.delete_error'),
-      );
+        variant: 'danger',
+      });
     }
   }
 }

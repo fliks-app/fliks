@@ -31,101 +31,74 @@
       <span class="loading loading-spinner loading-lg"></span>
     </div>
   } @else {
-    <div class="overflow-x-auto rounded-lg border border-base-200">
-      <table class="table table-sm">
-        <thead>
-          <tr>
-            <th class="w-40">{{ 'settings.quality_definitions.col_quality' | translate }}</th>
-            <th class="w-44">{{ 'settings.quality_definitions.col_title' | translate }}</th>
-            <th>{{ 'settings.quality_definitions.col_size_limit' | translate }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (def of definitions(); track def.qualityId) {
-            <tr>
-              <td class="font-medium text-sm align-middle">{{ def.title }}</td>
-              <td class="align-middle">
-                <input
-                  type="text"
-                  class="input input-bordered input-xs w-full"
-                  [ngModel]="def.title"
-                  (ngModelChange)="updateTitle(def, $event)"
-                />
-              </td>
-              <td class="align-middle">
-                <div class="flex items-center gap-3">
-                  <!-- Min label -->
-                  <span class="text-xs tabular-nums w-16 text-right font-mono"
-                    [class.text-info]="def.minSize > 0"
-                    [class.text-base-content/40]="def.minSize === 0"
-                  >
-                    {{ formatSize(def.minSize) }}
-                  </span>
+    <div class="flex flex-col gap-4">
+      @for (def of definitions(); track def.qualityId) {
+        <div class="card bg-base-100 border border-base-200 shadow-sm">
+          <div class="card-body p-4 gap-3">
+            <div class="flex items-center gap-3">
+              <span class="font-semibold text-sm w-40 shrink-0">{{ def.title }}</span>
+              <input
+                type="text"
+                class="input input-bordered input-xs flex-1 max-w-[12rem]"
+                [ngModel]="def.title"
+                (ngModelChange)="updateTitle(def, $event)"
+              />
+            </div>
 
-                  <!-- Range sliders -->
-                  <div class="flex-1 relative h-8 flex items-center">
-                    <div class="absolute inset-x-0 h-1 bg-base-300 rounded-full top-1/2 -translate-y-1/2"></div>
-                    <!-- Colored bar between min and max -->
-                    <div
-                      class="absolute h-1 bg-primary/40 rounded-full top-1/2 -translate-y-1/2"
-                      [style.left.%]="sliderPercent(def.minSize)"
-                      [style.right.%]="100 - sliderPercent(def.maxSize || maxSlider)"
-                    ></div>
-                    <!-- Preferred marker -->
-                    <div
-                      class="absolute w-1.5 h-3 bg-success rounded-sm top-1/2 -translate-y-1/2 -translate-x-1/2 z-10"
-                      [style.left.%]="sliderPercent(def.preferredSize)"
-                    ></div>
-                    <!-- Min slider -->
-                    <input
-                      type="range"
-                      class="range range-xs range-info absolute inset-x-0 opacity-0 cursor-pointer z-20"
-                      min="0"
-                      [max]="maxSlider"
-                      step="0.5"
-                      [ngModel]="def.minSize"
-                      (ngModelChange)="updateField(def, 'minSize', +$event)"
-                    />
-                    <!-- Preferred slider -->
-                    <input
-                      type="range"
-                      class="range range-xs range-success absolute inset-x-0 opacity-0 cursor-pointer z-30"
-                      min="0"
-                      [max]="maxSlider"
-                      step="0.5"
-                      [ngModel]="def.preferredSize"
-                      (ngModelChange)="updateField(def, 'preferredSize', +$event)"
-                    />
-                    <!-- Max slider -->
-                    <input
-                      type="range"
-                      class="range range-xs range-warning absolute inset-x-0 opacity-0 cursor-pointer z-20"
-                      min="0"
-                      [max]="maxSlider"
-                      step="0.5"
-                      [ngModel]="def.maxSize"
-                      (ngModelChange)="updateField(def, 'maxSize', +$event)"
-                    />
-                  </div>
+            <!-- Triple range slider -->
+            <div class="flex items-center gap-3">
+              <span class="text-xs tabular-nums w-20 text-right font-mono text-info">
+                {{ formatSize(def.minSize) }}
+              </span>
 
-                  <!-- Preferred label -->
-                  <span class="text-xs tabular-nums w-16 text-center font-mono text-success">
-                    {{ formatSize(def.preferredSize) }}
-                  </span>
+              <div
+                class="flex-1 relative h-10 select-none"
+                #track
+                (mousedown)="onTrackMouseDown($event, def, track)"
+                (touchstart)="onTrackTouchStart($event, def, track)"
+              >
+                <!-- Background track -->
+                <div class="absolute inset-x-0 h-1.5 bg-base-300 rounded-full top-1/2 -translate-y-1/2"></div>
+                <!-- Colored bar min→max -->
+                <div
+                  class="absolute h-1.5 bg-primary/30 rounded-full top-1/2 -translate-y-1/2"
+                  [style.left.%]="sliderPercent(def.minSize)"
+                  [style.right.%]="100 - sliderPercent(def.maxSize || maxSlider)"
+                ></div>
+                <!-- Colored bar min→preferred -->
+                <div
+                  class="absolute h-1.5 bg-info/40 rounded-full top-1/2 -translate-y-1/2"
+                  [style.left.%]="sliderPercent(def.minSize)"
+                  [style.right.%]="100 - sliderPercent(def.preferredSize)"
+                ></div>
 
-                  <!-- Max label -->
-                  <span class="text-xs tabular-nums w-16 text-left font-mono"
-                    [class.text-warning]="def.maxSize > 0"
-                    [class.text-base-content/40]="def.maxSize === 0"
-                  >
-                    {{ def.maxSize > 0 ? formatSize(def.maxSize) : ('settings.quality_definitions.unlimited' | translate) }}
-                  </span>
-                </div>
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
+                <!-- Min thumb -->
+                <div
+                  class="absolute w-4 h-4 rounded-full bg-info border-2 border-base-100 top-1/2 -translate-y-1/2 -translate-x-1/2 cursor-grab shadow"
+                  [style.left.%]="sliderPercent(def.minSize)"
+                ></div>
+                <!-- Preferred thumb -->
+                <div
+                  class="absolute w-4 h-4 rounded-full bg-success border-2 border-base-100 top-1/2 -translate-y-1/2 -translate-x-1/2 cursor-grab shadow z-10"
+                  [style.left.%]="sliderPercent(def.preferredSize)"
+                ></div>
+                <!-- Max thumb -->
+                <div
+                  class="absolute w-4 h-4 rounded-full bg-warning border-2 border-base-100 top-1/2 -translate-y-1/2 -translate-x-1/2 cursor-grab shadow"
+                  [style.left.%]="sliderPercent(def.maxSize || maxSlider)"
+                ></div>
+              </div>
+
+              <span class="text-xs tabular-nums w-20 text-center font-mono text-success">
+                {{ formatSize(def.preferredSize) }}
+              </span>
+              <span class="text-xs tabular-nums w-20 text-left font-mono text-warning">
+                {{ def.maxSize > 0 ? formatSize(def.maxSize) : ('settings.quality_definitions.unlimited' | translate) }}
+              </span>
+            </div>
+          </div>
+        </div>
+      }
     </div>
     <p class="text-xs text-base-content/50">{{ 'settings.quality_definitions.hint' | translate }}</p>
   }

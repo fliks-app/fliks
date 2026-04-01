@@ -171,6 +171,10 @@ export class TmdbProvider implements IMetadataProvider {
             title: e.name,
             overview: e.overview || null,
             airDate: e.air_date || null,
+            runtime: e.runtime ?? null,
+            stillUrl: e.still_path
+              ? `${TMDB_IMAGE_BASE}/w780${e.still_path}`
+              : null,
           })),
         });
       } catch (err) {

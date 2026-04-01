@@ -13,6 +13,7 @@ import {
   UpdateUserBody,
 } from '../../../core/services/api/users-api.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 
 @Component({
   selector: 'app-users-settings',
@@ -24,6 +25,7 @@ export class UsersSettingsComponent implements OnInit {
   private readonly api = inject(UsersApiService);
   private readonly translate = inject(TranslateService);
   readonly auth = inject(AuthService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly rows = signal<UserRow[]>([]);
   readonly loading = signal(true);
@@ -99,24 +101,24 @@ export class UsersSettingsComponent implements OnInit {
   }
 
   async regenerateApiKey(user: UserRow) {
-    if (!confirm(this.translate.instant('settings.users.confirm_regen_key'))) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('settings.users.confirm_regen_key'), variant: 'danger' })) return;
     try {
       const res = await this.api.regenerateApiKey(user.id);
       this.regeneratedKey.set(res.apiKey);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? 'Error');
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Error', variant: 'danger' });
     }
   }
 
   async deleteUser(user: UserRow) {
-    if (!confirm(this.translate.instant('settings.users.confirm_delete', { name: user.username }))) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('settings.users.confirm_delete', { name: user.username }), variant: 'danger' })) return;
     try {
       await this.api.remove(user.id);
       await this.reloadAll();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? 'Error');
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Error', variant: 'danger' });
     }
   }
 }
