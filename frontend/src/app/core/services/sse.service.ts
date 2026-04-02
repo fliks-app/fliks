@@ -72,15 +72,8 @@ export class SseService implements OnDestroy {
         break;
       }
       case 'subtitle.synced':
-        this.toast.success(this.translate.instant('sse.subtitle_synced'));
-        break;
       case 'subtitle.downloaded':
-        this.toast.success(
-          this.translate.instant('sse.subtitle_downloaded', {
-            title: event['title'] ?? '',
-            lang: event['language'] ?? '',
-          }),
-        );
+        // Handled by media-detail component (only shows toast if on the right page)
         break;
       case 'import.complete':
         this.toast.success(

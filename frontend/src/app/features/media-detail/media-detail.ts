@@ -4,6 +4,7 @@ import {
   signal,
   inject,
   computed,
+  effect,
   OnInit,
   viewChild,
 } from '@angular/core';
@@ -45,6 +46,7 @@ import {
 } from './media-detail.utils';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
+import { SseService } from '../../core/services/sse.service';
 import { MediaType } from '../../core/enums/media-type.enum';
 
 const LS_EPISODES_HAS_FILE_ONLY = 'suitarr.mediaDetail.episodesHasFileOnly';
@@ -87,6 +89,29 @@ export class MediaDetailComponent implements OnInit {
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
+  private readonly sse = inject(SseService);
+
+  /** React to SSE events for this media (subtitle sync/download) */
+  private readonly sseEffect = effect(() => {
+    const event = this.sse.lastEvent();
+    const m = this.media();
+    if (!event || !m) return;
+    const eventMediaId = event['mediaId'] as number | undefined;
+    if (eventMediaId !== m.id) return;
+
+    if (event.type === 'subtitle.synced') {
+      this.toast.success(this.translate.instant('sse.subtitle_synced'));
+      void this.loadSubtitles(m.id);
+    } else if (event.type === 'subtitle.downloaded') {
+      this.toast.success(
+        this.translate.instant('sse.subtitle_downloaded', {
+          title: event['title'] ?? '',
+          lang: event['language'] ?? '',
+        }),
+      );
+      void this.loadSubtitles(m.id);
+    }
+  });
 
   readonly media = signal<Media | null>(null);
   readonly mediaFiles = computed(() => {
