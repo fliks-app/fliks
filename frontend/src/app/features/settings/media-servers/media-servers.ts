@@ -1,8 +1,10 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
   signal,
   computed,
+  viewChild,
   inject,
   OnInit,
 } from '@angular/core';
@@ -25,13 +27,13 @@ export class MediaServersSettingsComponent implements OnInit {
   private readonly api = inject(MediaServersApiService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
   readonly serverTypes = signal<MediaServerTypeInfo[]>([]);
   readonly rows = signal<MediaServerRow[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
 
-  readonly editorOpen = signal(false);
   readonly saving = signal(false);
   readonly saveError = signal('');
   readonly editingId = signal<number | null>(null);
@@ -84,7 +86,7 @@ export class MediaServersSettingsComponent implements OnInit {
     this.formEvents.set([...(this.serverTypes()[0]?.supportedEvents ?? [])]);
     this.saveError.set('');
     this.testResult.set(null);
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   openEdit(row: MediaServerRow) {
@@ -97,11 +99,11 @@ export class MediaServersSettingsComponent implements OnInit {
     this.formEvents.set([...row.events]);
     this.saveError.set('');
     this.testResult.set(null);
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   closeEditor() {
-    this.editorOpen.set(false);
+    this.editorDialog()?.nativeElement.close();
   }
 
   onTypeChange(type: string) {

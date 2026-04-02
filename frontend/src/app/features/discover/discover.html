@@ -115,77 +115,7 @@
     } @else {
       <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-4">
         @for (row of results(); track row.tmdbId) {
-          <div
-            class="card bg-base-100 shadow-md border border-base-200 cursor-pointer hover:shadow-xl transition-shadow relative overflow-hidden"
-            [class.opacity-70]="!!row.existingMediaId"
-            (click)="onCardClick(row)"
-          >
-            <figure class="relative aspect-[2/3] bg-base-300">
-              @if (row.posterUrl) {
-                <img [src]="row.posterUrl" [alt]="row.title" class="w-full h-full object-cover" />
-              } @else {
-                <div class="flex items-center justify-center w-full h-full text-base-content/30">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-14 w-14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
-                  </svg>
-                </div>
-              }
-              @if (row.rating) {
-                <div class="absolute bottom-2 right-2">
-                  <span class="badge badge-sm badge-warning">{{ row.rating | number:'1.1-1' }}</span>
-                </div>
-              }
-            </figure>
-            <div class="card-body p-3 gap-2">
-              <h3 class="card-title text-sm line-clamp-2 min-h-[2.5rem]">{{ row.title }}</h3>
-              <p class="text-sm text-base-content/60">
-                @if (row.year) {
-                  {{ row.year }}
-                }
-              </p>
-              @if (row.existingMediaId && !requestedTmdbIds().has(row.tmdbId)) {
-                <p class="text-sm text-base-content/50 font-semibold text-center flex items-center justify-center gap-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                  </svg>
-                  {{ 'discover.already_added' | translate }}
-                </p>
-              } @else if (requestedTmdbIds().has(row.tmdbId)) {
-                <p class="text-sm text-base-content/50 font-semibold text-center flex items-center justify-center gap-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                  </svg>
-                  {{ 'discover.already_requested' | translate }}
-                </p>
-              } @else if (canImport()) {
-                <button
-                  type="button"
-                  class="btn btn-sm btn-block btn-primary"
-                  [disabled]="importingTmdbId() === row.tmdbId"
-                  (click)="importResult($event, row)"
-                >
-                  @if (importingTmdbId() === row.tmdbId) {
-                    <span class="loading loading-spinner loading-xs"></span>
-                  } @else {
-                    {{ 'discover.add_to_library' | translate }}
-                  }
-                </button>
-              } @else if (canRequest()) {
-                <button
-                  type="button"
-                  class="btn btn-sm btn-block btn-secondary"
-                  [disabled]="requestingTmdbId() === row.tmdbId"
-                  (click)="openRequestModal($event, row)"
-                >
-                  @if (requestingTmdbId() === row.tmdbId) {
-                    <span class="loading loading-spinner loading-xs"></span>
-                  } @else {
-                    {{ 'discover.request' | translate }}
-                  }
-                </button>
-              }
-            </div>
-          </div>
+          <app-discover-card [row]="row" [status]="cardStatus(row)" (clicked)="onCardClick($event)" />
         }
       </div>
     }
@@ -199,145 +129,16 @@
     } @else {
       <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-4">
         @for (row of discoverResults(); track row.tmdbId) {
-          <div
-            class="card bg-base-100 shadow-md border border-base-200 cursor-pointer hover:shadow-xl transition-shadow relative overflow-hidden"
-            [class.opacity-70]="!!row.existingMediaId"
-            (click)="onCardClick(row)"
-          >
-            <figure class="relative aspect-[2/3] bg-base-300">
-              @if (row.posterUrl) {
-                <img [src]="row.posterUrl" [alt]="row.title" class="w-full h-full object-cover" />
-              } @else {
-                <div class="flex items-center justify-center w-full h-full text-base-content/30">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-14 w-14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
-                  </svg>
-                </div>
-              }
-              @if (row.rating) {
-                <div class="absolute bottom-2 right-2">
-                  <span class="badge badge-sm badge-warning">{{ row.rating | number:'1.1-1' }}</span>
-                </div>
-              }
-            </figure>
-            <div class="card-body p-3 gap-2">
-              <h3 class="card-title text-sm line-clamp-2 min-h-[2.5rem]">{{ row.title }}</h3>
-              <p class="text-sm text-base-content/60">
-                @if (row.year) {
-                  {{ row.year }}
-                }
-              </p>
-              @if (row.existingMediaId && !requestedTmdbIds().has(row.tmdbId)) {
-                <p class="text-sm text-base-content/50 font-semibold text-center flex items-center justify-center gap-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                  </svg>
-                  {{ 'discover.already_added' | translate }}
-                </p>
-              } @else if (requestedTmdbIds().has(row.tmdbId)) {
-                <p class="text-sm text-base-content/50 font-semibold text-center flex items-center justify-center gap-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                  </svg>
-                  {{ 'discover.already_requested' | translate }}
-                </p>
-              } @else if (canImport()) {
-                <button
-                  type="button"
-                  class="btn btn-sm btn-block btn-primary"
-                  [disabled]="importingTmdbId() === row.tmdbId"
-                  (click)="importResult($event, row)"
-                >
-                  @if (importingTmdbId() === row.tmdbId) {
-                    <span class="loading loading-spinner loading-xs"></span>
-                  } @else {
-                    {{ 'discover.add_to_library' | translate }}
-                  }
-                </button>
-              } @else if (canRequest()) {
-                <button
-                  type="button"
-                  class="btn btn-sm btn-block btn-secondary"
-                  [disabled]="requestingTmdbId() === row.tmdbId"
-                  (click)="openRequestModal($event, row)"
-                >
-                  @if (requestingTmdbId() === row.tmdbId) {
-                    <span class="loading loading-spinner loading-xs"></span>
-                  } @else {
-                    {{ 'discover.request' | translate }}
-                  }
-                </button>
-              }
-            </div>
-          </div>
+          <app-discover-card [row]="row" [status]="cardStatus(row)" (clicked)="onCardClick($event)" />
         }
       </div>
     }
   }
 </div>
 
-<!-- Request modal -->
-@if (requestModalRow(); as reqRow) {
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-    (click)="closeRequestModal()"
-    role="presentation"
-  >
-    <div
-      class="bg-base-100 rounded-lg shadow-xl max-w-md w-full p-6 border border-base-200"
-      (click)="$event.stopPropagation()"
-      role="dialog"
-    >
-      <h2 class="text-lg font-semibold">{{ 'discover.request_modal_title' | translate }}</h2>
-      <p class="text-sm text-base-content/60 mt-1">{{ reqRow.title }}</p>
-
-      <div class="flex flex-col gap-4 mt-4">
-        @if (qualityProfiles().length) {
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'discover.quality_profile' | translate }}</span>
-            <select
-              class="select select-bordered select-sm w-full"
-              [ngModel]="requestQualityProfileId()"
-              (ngModelChange)="requestQualityProfileId.set(+$event)"
-            >
-              @for (p of qualityProfiles(); track p.id) {
-                <option [ngValue]="p.id">{{ p.name }}</option>
-              }
-            </select>
-          </label>
-        }
-        @if (languageProfiles().length) {
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'discover.language_profile' | translate }}</span>
-            <select
-              class="select select-bordered select-sm w-full"
-              [ngModel]="requestLanguageProfileId()"
-              (ngModelChange)="requestLanguageProfileId.set(+$event)"
-            >
-              @for (p of languageProfiles(); track p.id) {
-                <option [ngValue]="p.id">{{ p.name }}</option>
-              }
-            </select>
-          </label>
-        }
-      </div>
-
-      <div class="flex justify-end gap-2 mt-6">
-        <button type="button" class="btn btn-ghost btn-sm" (click)="closeRequestModal()">
-          {{ 'common.cancel' | translate }}
-        </button>
-        <button
-          type="button"
-          class="btn btn-secondary btn-sm"
-          [disabled]="requestingTmdbId() === reqRow.tmdbId"
-          (click)="confirmRequest()"
-        >
-          @if (requestingTmdbId() === reqRow.tmdbId) {
-            <span class="loading loading-spinner loading-xs"></span>
-          }
-          {{ 'discover.request' | translate }}
-        </button>
-      </div>
-    </div>
-  </div>
-}
+<app-request-modal
+  [qualityProfiles]="qualityProfiles()"
+  [languageProfiles]="languageProfiles()"
+  [rootFolders]="requestRootFolders()"
+  (requested)="onRequested()"
+/>

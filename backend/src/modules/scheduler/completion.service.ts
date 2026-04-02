@@ -20,7 +20,7 @@ import {
 import { NotificationsService } from '../notifications/notifications.service';
 import { NamingService } from './naming.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
-import { RemotePathMapping } from '../settings/entities/remote-path-mapping.entity';
+import { SettingsService } from '../settings/settings.service';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
 
@@ -48,16 +48,13 @@ export class CompletionService {
     private readonly notifications: NotificationsService,
     private readonly naming: NamingService,
     private readonly blocklist: BlocklistService,
-    @InjectRepository(RemotePathMapping)
-    private readonly pathMappingRepo: Repository<RemotePathMapping>,
+    private readonly settings: SettingsService,
     private readonly subtitleScheduler: SubtitleSchedulerService,
     private readonly mediaServers: MediaServersService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
   async processCompleted(): Promise<void> {
-    const mappings = await this.pathMappingRepo.find();
-
     const grabbed = await this.historyRepo.find({
       where: [
         { status: 'grabbed' },
@@ -183,7 +180,6 @@ export class CompletionService {
           seriesFolderFormat,
           seasonFolderFormat,
           rootFolders,
-          mappings,
         );
       } catch (e) {
         this.log.error(
@@ -210,20 +206,6 @@ export class CompletionService {
     }
   }
 
-  private translatePath(
-    savePath: string,
-    clientId: number | undefined,
-    mappings: RemotePathMapping[],
-  ): string {
-    for (const m of mappings) {
-      if (m.downloadClientId && m.downloadClientId !== clientId) continue;
-      if (savePath.startsWith(m.remotePath)) {
-        return m.localPath + savePath.slice(m.remotePath.length);
-      }
-    }
-    return savePath;
-  }
-
   private async processOne(
     history: DownloadHistory,
     torrent: QbittorrentTorrent & { _clientId?: number },
@@ -233,20 +215,12 @@ export class CompletionService {
     seriesFolderFormat: string,
     seasonFolderFormat: string,
     rootFolders: RootFolder[],
-    mappings: RemotePathMapping[],
   ): Promise<void> {
-    // Apply remote path mapping
-    const translatedSavePath = this.translatePath(
-      torrent.save_path,
-      torrent._clientId,
-      mappings,
-    );
-
     // Locate video file — torrent may be a folder or a single file
-    const saveDir = path.join(translatedSavePath, torrent.name);
+    const saveDir = path.join(torrent.save_path, torrent.name);
     const isDirTorrent =
       fs.existsSync(saveDir) && fs.statSync(saveDir).isDirectory();
-    const searchDir = isDirTorrent ? saveDir : translatedSavePath;
+    const searchDir = isDirTorrent ? saveDir : torrent.save_path;
     this.log.log(
       `Import[${history.sourceTitle}]: searching for video in "${searchDir}" (isDir=${isDirTorrent})`,
     );
@@ -257,7 +231,7 @@ export class CompletionService {
     // Fallback: single-file torrent sitting directly at save_path
     if (!videoFiles.length) {
       for (const ext of ['.mkv', '.mp4', '.avi', '.mov', '.ts']) {
-        const candidate = path.join(translatedSavePath, torrent.name + ext);
+        const candidate = path.join(torrent.save_path, torrent.name + ext);
         if (fs.existsSync(candidate)) {
           const stat = fs.statSync(candidate);
           videoFiles = [{ filePath: candidate, size: stat.size }];
@@ -677,6 +651,90 @@ export class CompletionService {
           `Import[${sourceTitle}]: failed to copy companion "${entry.name}": ${(e as Error).message}`,
         );
       }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Stalled torrent cleanup
+  // ---------------------------------------------------------------------------
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async cleanStalledTorrents(): Promise<void> {
+    const enabled = await this.settings.get('stalled_delete_enabled');
+    if (enabled !== 'true') return;
+
+    const thresholdMinutes = Number(
+      (await this.settings.get('stalled_delete_after_minutes')) ?? '60',
+    );
+    const searchAfter =
+      (await this.settings.get('stalled_search_after_delete')) !== 'false';
+
+    const clients = await this.clientRepo.find({ where: { enabled: true } });
+    const qbitClients = clients.filter((c) => this.qbittorrent.supports(c));
+    if (!qbitClients.length) return;
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    let needsSearch = false;
+
+    for (const client of qbitClients) {
+      let torrents: Awaited<ReturnType<typeof this.qbittorrent.getTorrents>>;
+      try {
+        torrents = await this.qbittorrent.getTorrents(client);
+      } catch {
+        continue;
+      }
+
+      const stalled = torrents.filter(
+        (t) =>
+          t.state === 'stalledDL' &&
+          t.added_on > 0 &&
+          nowSec - t.added_on > thresholdMinutes * 60,
+      );
+
+      for (const t of stalled) {
+        this.log.warn(
+          `StalledCleanup: removing "${t.name}" (stalled ${Math.round((nowSec - t.added_on) / 60)} min, threshold ${thresholdMinutes} min)`,
+        );
+
+        try {
+          await this.qbittorrent.deleteTorrent(client, t.hash, true);
+        } catch (e) {
+          this.log.error(
+            `StalledCleanup: failed to delete "${t.name}": ${(e as Error).message}`,
+          );
+          continue;
+        }
+
+        // Find matching download history
+        const history = await this.historyRepo.findOne({
+          where: { torrentHash: t.hash },
+        });
+
+        // Blocklist the release
+        await this.blocklist.create({
+          sourceTitle: history?.sourceTitle ?? t.name,
+          quality: history?.quality ?? undefined,
+          mediaId: history?.mediaId ?? undefined,
+          note: `Auto-blocklist: stalled torrent removed after ${thresholdMinutes} min`,
+        });
+
+        // Mark history as failed
+        if (history) {
+          history.status = 'failed';
+          history.statusMessage = `Stalled torrent removed after ${thresholdMinutes} min`;
+          await this.historyRepo.save(history);
+          if (history.mediaId) needsSearch = true;
+        }
+      }
+    }
+
+    // Re-trigger search for missing media if configured
+    if (searchAfter && needsSearch) {
+      this.log.log('StalledCleanup: triggering SearchMissing after stalled removal');
+      // Use dataSource to create a command directly (avoid circular dep with SchedulerService)
+      await this.dataSource.query(
+        `INSERT INTO commands (name, status, trigger, body) VALUES ('SearchMissing', 'queued', 'scheduled', '{}')`,
+      );
     }
   }
 }

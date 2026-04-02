@@ -34,10 +34,21 @@
 
       <!-- Info -->
       <div class="flex-1 space-y-4">
-        <div>
-          <h1 class="text-3xl font-bold">{{ m.title }}</h1>
-          @if (m.originalTitle && m.originalTitle !== m.title) {
-            <p class="text-base-content/60 text-lg">{{ m.originalTitle }}</p>
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h1 class="text-3xl font-bold">{{ m.title }}</h1>
+            @if (m.originalTitle && m.originalTitle !== m.title) {
+              <p class="text-base-content/60 text-lg">{{ m.originalTitle }}</p>
+            }
+          </div>
+          @if (canRequest()) {
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm shrink-0"
+              (click)="openRequestModal()"
+            >
+              {{ 'discover.request' | translate }}
+            </button>
           }
         </div>
 
@@ -174,7 +185,7 @@
                 </select>
               </div>
             }
-            @if (rootFolders().length) {
+            @if (compatibleRootFolders().length > 1) {
               <div class="form-control">
                 <label class="label py-1">
                   <span class="label-text">{{ 'discover.root_folder' | translate }}</span>
@@ -184,8 +195,8 @@
                   [ngModel]="selectedRootFolderId()"
                   (ngModelChange)="selectedRootFolderId.set(+$event)"
                 >
-                  @for (f of rootFolders(); track f.id) {
-                    <option [ngValue]="f.id">{{ f.path }}</option>
+                  @for (f of compatibleRootFolders(); track f.id) {
+                    <option [ngValue]="f.id">{{ f.label || f.path }}</option>
                   }
                 </select>
               </div>
@@ -207,3 +218,9 @@
     </div>
   </div>
 }
+
+<app-request-modal
+  [qualityProfiles]="qualityProfiles()"
+  [languageProfiles]="languageProfiles()"
+  [rootFolders]="rootFolders()"
+/>

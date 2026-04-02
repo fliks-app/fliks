@@ -84,13 +84,6 @@
           <span class="label-text">{{ 'settings.subtitles.encode_utf8' | translate }}</span>
         </label>
 
-        @if (error()) {
-          <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
-        }
-        @if (saved()) {
-          <div role="alert" class="alert alert-success text-sm">{{ 'settings.subtitles.saved' | translate }}</div>
-        }
-
         <div class="card-actions justify-end">
           <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
             @if (saving()) {

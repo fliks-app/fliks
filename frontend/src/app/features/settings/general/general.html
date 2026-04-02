@@ -30,35 +30,6 @@
         </label>
 
         <div class="divider my-0"></div>
-        <h2 class="card-title text-base">{{ 'settings.general.section_root_folders' | translate }}</h2>
-
-        <label class="form-control w-full max-w-md">
-          <div class="label">
-            <span class="label-text">{{ 'settings.general.default_root_folder_movie' | translate }}</span>
-          </div>
-          <select class="select select-bordered select-sm w-full"
-            [ngModel]="defaultRootFolderMovie()" (ngModelChange)="defaultRootFolderMovie.set($event)">
-            <option value="">{{ 'settings.general.no_default' | translate }}</option>
-            @for (rf of rootFolders(); track rf.id) {
-              <option [value]="rf.id">{{ rf.label || rf.path }}</option>
-            }
-          </select>
-        </label>
-
-        <label class="form-control w-full max-w-md">
-          <div class="label">
-            <span class="label-text">{{ 'settings.general.default_root_folder_series' | translate }}</span>
-          </div>
-          <select class="select select-bordered select-sm w-full"
-            [ngModel]="defaultRootFolderSeries()" (ngModelChange)="defaultRootFolderSeries.set($event)">
-            <option value="">{{ 'settings.general.no_default' | translate }}</option>
-            @for (rf of rootFolders(); track rf.id) {
-              <option [value]="rf.id">{{ rf.label || rf.path }}</option>
-            }
-          </select>
-        </label>
-
-        <div class="divider my-0"></div>
         <h2 class="card-title text-base">{{ 'settings.general.section_automation' | translate }}</h2>
 
         <label class="form-control w-full max-w-xs">
@@ -99,6 +70,42 @@
             <span class="label-text-alt text-base-content/50">{{ 'settings.general.companion_extensions_hint' | translate }}</span>
           </div>
         </label>
+
+        <div class="divider my-0"></div>
+        <h2 class="card-title text-base">{{ 'settings.general.section_stalled' | translate }}</h2>
+
+        <label class="label cursor-pointer justify-start gap-3">
+          <input
+            type="checkbox"
+            class="toggle toggle-sm"
+            [ngModel]="stalledDeleteEnabled() === 'true'"
+            (ngModelChange)="stalledDeleteEnabled.set($event ? 'true' : 'false')"
+          />
+          <span class="label-text">{{ 'settings.general.stalled_delete_enabled' | translate }}</span>
+        </label>
+
+        @if (stalledDeleteEnabled() === 'true') {
+          <label class="form-control w-full max-w-xs">
+            <div class="label">
+              <span class="label-text">{{ 'settings.general.stalled_delete_after_minutes' | translate }}</span>
+            </div>
+            <input type="number" class="input input-bordered input-sm w-full" min="1"
+              [ngModel]="stalledDeleteAfterMinutes()" (ngModelChange)="stalledDeleteAfterMinutes.set($event)" />
+            <div class="label">
+              <span class="label-text-alt text-base-content/50">{{ 'settings.general.stalled_delete_hint' | translate }}</span>
+            </div>
+          </label>
+
+          <label class="label cursor-pointer justify-start gap-3">
+            <input
+              type="checkbox"
+              class="toggle toggle-sm"
+              [ngModel]="stalledSearchAfterDelete() === 'true'"
+              (ngModelChange)="stalledSearchAfterDelete.set($event ? 'true' : 'false')"
+            />
+            <span class="label-text">{{ 'settings.general.stalled_search_after_delete' | translate }}</span>
+          </label>
+        }
 
         <div class="divider my-0"></div>
         <h2 class="card-title text-base">{{ 'settings.general.section_post_import' | translate }}</h2>

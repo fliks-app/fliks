@@ -22,8 +22,8 @@ services:
       CHOKIDAR_INTERVAL: "1000"
     volumes:
       - ./backend:/app
-      - ./volumes/downloads:/downloads
-      - ./volumes/medias:/medias
+      - /mnt/data/suitarr/volumes/downloads:/downloads
+      - /mnt/data/suitarr/volumes/medias:/medias
     depends_on:
       - postgres
 
@@ -50,7 +50,7 @@ services:
       - "6881:6881/udp"
     volumes:
       - qbittorrent_config:/config
-      - ./volumes/downloads:/downloads
+      - /mnt/data/suitarr/volumes/downloads:/downloads
     restart: unless-stopped
 
   jackett:
@@ -77,7 +77,7 @@ services:
       - "8096:8096"
     volumes:
       - emby_config:/config
-      - ./volumes/medias:/medias
+      - /mnt/data/suitarr/volumes/medias:/medias
     restart: unless-stopped
 
 volumes:

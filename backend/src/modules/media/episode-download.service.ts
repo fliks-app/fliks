@@ -15,7 +15,7 @@ import { DownloadClient } from '../download-clients/entities/download-client.ent
 import { TorznabService } from '../indexers/torznab.service';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { parseReleaseQuality } from './release-quality.parser';
-import { parseReleaseLanguage } from './release-language.parser';
+import { parseReleaseLanguage, resolveUnknownLanguage } from './release-language.parser';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
 import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
@@ -151,6 +151,9 @@ export class EpisodeDownloadService {
     );
     const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
     const indexerMinSeeders = buildIndexerMinSeeders(indexers);
+    const indexerUnknownLang = new Map(
+      indexers.map((ix) => [ix.id, (ix.settings as Record<string, unknown>)?.unknownLanguageIsoCode as string | undefined]),
+    );
 
     const searchQuery = customQuery?.trim();
     const batches = await Promise.all(
@@ -183,6 +186,7 @@ export class EpisodeDownloadService {
           sizeByQuality,
           indexerMinSeeders,
           media.runtime ?? 45,
+          indexerUnknownLang,
         ),
       ),
     );
@@ -298,9 +302,10 @@ export class EpisodeDownloadService {
     sizeByQuality: Map<number, SizeLimits>,
     indexerMinSeeders: Map<number, number>,
     runtimeMinutes: number,
+    indexerUnknownLang: Map<number, string | undefined>,
   ): Promise<EpisodeReleaseRow> {
     const parsed = parseReleaseQuality(r.title);
-    const lang = parseReleaseLanguage(r.title);
+    const lang = resolveUnknownLanguage(parseReleaseLanguage(r.title), indexerUnknownLang.get(r.indexerId));
     const [cfScore, isBlocklisted] = await Promise.all([
       this.customFormats.scoreRelease(r.title, {
         freeleech: r.freeleech,
@@ -387,6 +392,9 @@ export class EpisodeDownloadService {
     );
     const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
     const indexerMinSeeders = buildIndexerMinSeeders(indexers);
+    const indexerUnknownLang = new Map(
+      indexers.map((ix) => [ix.id, (ix.settings as Record<string, unknown>)?.unknownLanguageIsoCode as string | undefined]),
+    );
     const defaultEpRuntime = media.runtime ?? 45;
     const seasonRuntime =
       (season.episodes ?? []).reduce(
@@ -412,6 +420,7 @@ export class EpisodeDownloadService {
             sizeByQuality,
             indexerMinSeeders,
             seasonRuntime,
+            indexerUnknownLang,
           ),
         ),
     );
@@ -515,6 +524,9 @@ export class EpisodeDownloadService {
     );
     const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
     const indexerMinSeeders = buildIndexerMinSeeders(indexers);
+    const indexerUnknownLang = new Map(
+      indexers.map((ix) => [ix.id, (ix.settings as Record<string, unknown>)?.unknownLanguageIsoCode as string | undefined]),
+    );
 
     const packBatches = await Promise.all(
       indexers.map((ix) =>
@@ -540,6 +552,7 @@ export class EpisodeDownloadService {
             sizeByQuality,
             indexerMinSeeders,
             seasonRuntime,
+            indexerUnknownLang,
           ),
         ),
     );
@@ -611,6 +624,7 @@ export class EpisodeDownloadService {
                 sizeByQuality,
                 indexerMinSeeders,
                 media.runtime ?? 45,
+                indexerUnknownLang,
               ),
             ),
         );

@@ -10,7 +10,6 @@ import { Episode } from '../media/entities/episode.entity';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
-import { RemotePathMapping } from '../settings/entities/remote-path-mapping.entity';
 import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { SchedulerService } from './scheduler.service';
 import { CompletionService } from './completion.service';
@@ -50,7 +49,6 @@ import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
       DownloadClient,
       RootFolder,
       DelayProfile,
-      RemotePathMapping,
       QualityProfile,
       SubtitleFile,
     ]),

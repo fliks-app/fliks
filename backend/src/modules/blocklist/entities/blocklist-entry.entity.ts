@@ -23,4 +23,7 @@ export class BlocklistEntry extends BaseEntity {
 
   @Column({ nullable: true })
   note: string;
+
+  @Column({ type: 'int', nullable: true })
+  userId: number | null;
 }

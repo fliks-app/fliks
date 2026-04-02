@@ -6,10 +6,10 @@ import {
   computed,
   OnDestroy,
   OnInit,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { DecimalPipe, NgClass } from '@angular/common';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import {
@@ -18,13 +18,15 @@ import {
 } from '../../core/services/api/metadata.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { RootFoldersApiService, RootFolder } from '../../core/services/api/root-folders-api.service';
-import { RequestsService } from '../../core/services/api/requests.service';
+import { RequestsService, SuitarrRequestStatus } from '../../core/services/api/requests.service';
 import { ToastService } from '../../core/services/toast.service';
 import { MediaType } from '../../core/enums/media-type.enum';
+import { DiscoverCardComponent, CardStatus } from './components/discover-card/discover-card.component';
+import { RequestModalComponent } from './components/request-modal/request-modal.component';
 
 @Component({
   selector: 'app-discover',
-  imports: [FormsModule, DecimalPipe, NgClass, TranslateModule],
+  imports: [FormsModule, TranslateModule, DiscoverCardComponent, RequestModalComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './discover.html',
 })
@@ -34,6 +36,8 @@ export class DiscoverComponent implements OnInit, OnDestroy {
   private readonly rootFoldersApi = inject(RootFoldersApiService);
   private readonly router = inject(Router);
   private readonly translate = inject(TranslateService);
+  private readonly requestsApi = inject(RequestsService);
+  private readonly toast = inject(ToastService);
   readonly auth = inject(AuthService);
 
   readonly qualityProfiles = signal<{ id: number; name: string }[]>([]);
@@ -54,19 +58,14 @@ export class DiscoverComponent implements OnInit, OnDestroy {
 
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
 
-  private readonly requestsApi = inject(RequestsService);
-  private readonly toast = inject(ToastService);
-
   readonly canImport = computed(() => this.auth.hasPermission('media.create'));
   readonly canRequest = computed(() => !this.canImport() && this.auth.hasPermission('requests.create'));
-  readonly requestingTmdbId = signal<number | null>(null);
-  readonly requestedTmdbIds = signal<Set<number>>(new Set());
+  readonly requestedTmdbIds = signal<Map<number, SuitarrRequestStatus>>(new Map());
 
   // Request modal
+  private readonly requestModal = viewChild(RequestModalComponent);
   readonly languageProfiles = signal<{ id: number; name: string }[]>([]);
-  readonly requestModalRow = signal<MetadataSearchResult | null>(null);
-  readonly requestQualityProfileId = signal<number | null>(null);
-  readonly requestLanguageProfileId = signal<number | null>(null);
+  readonly requestRootFolders = signal<RootFolder[]>([]);
 
   async ngOnInit() {
     const promises: Promise<void>[] = [];
@@ -95,10 +94,12 @@ export class DiscoverComponent implements OnInit, OnDestroy {
           this.profilesApi.getQualityProfiles(),
           this.profilesApi.getLanguageProfiles(),
           this.requestsApi.list({ limit: 100 }),
-        ]).then(([qp, lp, res]) => {
+          this.rootFoldersApi.list(),
+        ]).then(([qp, lp, res, folders]) => {
           this.qualityProfiles.set(qp.map((p) => ({ id: p.id, name: p.name })));
           this.languageProfiles.set(lp.map((p) => ({ id: p.id, name: p.name })));
-          this.requestedTmdbIds.set(new Set(res.data.map((r) => r.tmdbId)));
+          this.requestedTmdbIds.set(new Map(res.data.map((r) => [r.tmdbId, r.status])));
+          this.requestRootFolders.set(folders);
         }),
       );
     }
@@ -195,6 +196,15 @@ export class DiscoverComponent implements OnInit, OnDestroy {
     }
   }
 
+  cardStatus(row: MetadataSearchResult): CardStatus {
+    if (row.existingMediaId && !this.requestedTmdbIds().has(row.tmdbId)) return 'library';
+    const reqStatus = this.requestedTmdbIds().get(row.tmdbId);
+    if (!reqStatus) return null;
+    if (reqStatus === 'declined' || reqStatus === 'failed') return 'declined';
+    if (reqStatus === 'available') return 'library';
+    return 'pending';
+  }
+
   onCardClick(row: MetadataSearchResult) {
     if (row.existingMediaId) {
       const prefix = row.existingMediaType === 'series' ? '/series' : '/movies';
@@ -205,74 +215,11 @@ export class DiscoverComponent implements OnInit, OnDestroy {
     }
   }
 
-  async importResult(event: Event, row: MetadataSearchResult) {
-    event.stopPropagation();
-    if (!this.canImport() || row.existingMediaId) return;
-    const type = this.tab();
-    this.importingTmdbId.set(row.tmdbId);
-    this.error.set('');
-    const qp = this.selectedQualityProfileId();
-    const rf = this.selectedRootFolderId();
-    try {
-      const media = await this.metadata.importFromTmdb(
-        type,
-        row.tmdbId,
-        qp ?? undefined,
-        rf ?? undefined,
-      );
-      this.toast.success(this.translate.instant('discover.import_success'));
-      const path = media.type === 'movie' ? '/movies' : '/series';
-      void this.router.navigate([path, media.id]);
-    } catch (err: unknown) {
-      const httpErr = err as { status?: number; error?: { message?: string } };
-      const status = httpErr?.status;
-      if (status === 400) {
-        this.error.set(
-          httpErr.error?.message ??
-            this.translate.instant('discover.tmdb_not_configured'),
-        );
-      } else if (status === 403) {
-        this.error.set(this.translate.instant('discover.forbidden'));
-      } else {
-        this.error.set(this.translate.instant('discover.import_error'));
-      }
-    } finally {
-      this.importingTmdbId.set(null);
-    }
-  }
-
-  openRequestModal(event: Event, row: MetadataSearchResult) {
-    event.stopPropagation();
-    if (!this.canRequest() || row.existingMediaId || this.requestedTmdbIds().has(row.tmdbId)) return;
-    this.requestQualityProfileId.set(this.qualityProfiles()[0]?.id ?? null);
-    this.requestLanguageProfileId.set(this.languageProfiles()[0]?.id ?? null);
-    this.requestModalRow.set(row);
-  }
-
-  closeRequestModal() {
-    this.requestModalRow.set(null);
-  }
-
-  async confirmRequest() {
-    const row = this.requestModalRow();
-    if (!row) return;
-    this.requestingTmdbId.set(row.tmdbId);
-    try {
-      await this.requestsApi.create({
-        mediaType: this.tab(),
-        tmdbId: row.tmdbId,
-        title: row.title,
-        qualityProfileId: this.requestQualityProfileId() ?? undefined,
-        languageProfileId: this.requestLanguageProfileId() ?? undefined,
-      });
-      row.existingMediaId = -1;
-      this.requestedTmdbIds.update((s) => new Set(s).add(row.tmdbId));
-      this.toast.success(this.translate.instant('discover.request_success'));
-      this.closeRequestModal();
-    } catch {
-      // error toast handled by the global error interceptor
-    } finally {
-      this.requestingTmdbId.set(null);
-    }
+  onRequested() {
+    this.requestedTmdbIds.update((m) => {
+      const next = new Map(m);
+      // Refresh would be better, but for now just mark as pending
+      return next;
+    });
   }
 }

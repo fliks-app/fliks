@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsString } from 'class-validator';
+import { IsInt, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UpdateRequestDto {
@@ -13,6 +13,7 @@ export class UpdateRequestDto {
   languageProfileId?: number;
 
   @IsOptional()
-  @IsString()
-  rootFolder?: string;
+  @IsInt()
+  @Type(() => Number)
+  rootFolderId?: number;
 }

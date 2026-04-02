@@ -8,6 +8,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
+import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-subtitles-settings',
@@ -18,11 +19,10 @@ import { SettingsApiService } from '../../../core/services/api/settings-api.serv
 export class SubtitlesSettingsComponent implements OnInit {
   private readonly api = inject(SettingsApiService);
   private readonly translate = inject(TranslateService);
+  private readonly toast = inject(ToastService);
 
   readonly loading = signal(true);
   readonly saving = signal(false);
-  readonly error = signal('');
-  readonly saved = signal(false);
 
   readonly autoSearch = signal('true');
   readonly searchInterval = signal('360');
@@ -43,7 +43,7 @@ export class SubtitlesSettingsComponent implements OnInit {
       this.autoSync.set(map['subtitle_auto_sync'] ?? 'false');
       this.encodeUtf8.set(map['subtitle_encode_utf8'] ?? 'true');
     } catch {
-      this.error.set(this.translate.instant('settings.subtitles.load_error'));
+      this.toast.error(this.translate.instant('settings.subtitles.load_error'));
     } finally {
       this.loading.set(false);
     }
@@ -51,8 +51,6 @@ export class SubtitlesSettingsComponent implements OnInit {
 
   async save() {
     this.saving.set(true);
-    this.error.set('');
-    this.saved.set(false);
     try {
       await this.api.setBulk({
         subtitle_auto_search: this.autoSearch(),
@@ -63,10 +61,9 @@ export class SubtitlesSettingsComponent implements OnInit {
         subtitle_auto_sync: this.autoSync(),
         subtitle_encode_utf8: this.encodeUtf8(),
       });
-      this.saved.set(true);
-      setTimeout(() => this.saved.set(false), 3000);
+      this.toast.success(this.translate.instant('settings.subtitles.saved'));
     } catch {
-      this.error.set(this.translate.instant('settings.subtitles.save_error'));
+      // handled by global interceptor
     } finally {
       this.saving.set(false);
     }

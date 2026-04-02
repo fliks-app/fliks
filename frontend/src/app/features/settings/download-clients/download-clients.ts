@@ -1,9 +1,11 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
   signal,
   inject,
   OnInit,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -23,12 +25,11 @@ export class DownloadClientsSettingsComponent implements OnInit {
   private readonly api = inject(DownloadClientsApiService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
   readonly rows = signal<DownloadClientRow[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
-
-  readonly editorOpen = signal(false);
   readonly saving = signal(false);
   readonly saveError = signal('');
   readonly editingId = signal<number | null>(null);
@@ -84,7 +85,7 @@ export class DownloadClientsSettingsComponent implements OnInit {
     this.formEnabled.set(true);
     this.saveError.set('');
     this.testResult.set(null);
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   openEdit(dc: DownloadClientRow) {
@@ -103,11 +104,11 @@ export class DownloadClientsSettingsComponent implements OnInit {
     this.formEnabled.set(dc.enabled);
     this.saveError.set('');
     this.testResult.set(null);
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   closeEditor() {
-    this.editorOpen.set(false);
+    this.editorDialog()?.nativeElement.close();
   }
 
   private buildBody() {

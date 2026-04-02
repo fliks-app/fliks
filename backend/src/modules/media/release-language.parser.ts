@@ -82,3 +82,15 @@ function lang(isoCode: string): SuitarrLanguageDefinition {
     SUITARR_LANGUAGES.find((l) => l.isoCode === isoCode) ?? UNKNOWN_LANGUAGE
   );
 }
+
+/**
+ * If parsed language is UNKNOWN and the indexer has an unknownLanguageIsoCode mapping,
+ * remap to that language.
+ */
+export function resolveUnknownLanguage(
+  parsed: SuitarrLanguageDefinition,
+  unknownLanguageIsoCode: string | undefined,
+): SuitarrLanguageDefinition {
+  if (parsed.id !== UNKNOWN_LANGUAGE.id || !unknownLanguageIsoCode) return parsed;
+  return SUITARR_LANGUAGES.find((l) => l.isoCode === unknownLanguageIsoCode) ?? parsed;
+}

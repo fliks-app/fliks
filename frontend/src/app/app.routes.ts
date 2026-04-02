@@ -281,13 +281,6 @@ export const routes: Routes = [
               ),
           },
           {
-            path: 'remote-path-mappings',
-            loadComponent: () =>
-              import(
-                './features/settings/remote-path-mappings/remote-path-mappings'
-              ).then((m) => m.RemotePathMappingsSettingsComponent),
-          },
-          {
             path: 'subtitle-providers',
             loadComponent: () =>
               import(

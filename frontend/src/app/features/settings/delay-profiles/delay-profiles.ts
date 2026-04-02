@@ -1,9 +1,11 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
   signal,
   inject,
   OnInit,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -28,12 +30,11 @@ export class DelayProfilesComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
   readonly rows = signal<DelayProfileRow[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
-
-  readonly editorOpen = signal(false);
   readonly saving = signal(false);
   readonly saveError = signal('');
   readonly editingId = signal<number | null>(null);
@@ -63,7 +64,7 @@ export class DelayProfilesComponent implements OnInit {
     this.formDelay.set(6);
     this.formOrder.set(1);
     this.saveError.set('');
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   openEdit(row: DelayProfileRow) {
@@ -71,11 +72,11 @@ export class DelayProfilesComponent implements OnInit {
     this.formDelay.set(row.torrentDelay);
     this.formOrder.set(row.order);
     this.saveError.set('');
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   closeEditor() {
-    this.editorOpen.set(false);
+    this.editorDialog()?.nativeElement.close();
   }
 
   async save() {

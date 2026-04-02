@@ -1,9 +1,11 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
   signal,
   inject,
   OnInit,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -35,7 +37,7 @@ export class AutoApprovalSettingsComponent implements OnInit {
   readonly loading = signal(true);
   readonly listError = signal('');
 
-  readonly editorOpen = signal(false);
+  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
   readonly saving = signal(false);
   readonly saveError = signal('');
   readonly editingId = signal<number | null>(null);
@@ -72,7 +74,7 @@ export class AutoApprovalSettingsComponent implements OnInit {
     this.formPriority.set(0);
     this.formConditions.set([EMPTY_CONDITION()]);
     this.saveError.set('');
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   openEdit(rule: AutoApprovalRule) {
@@ -82,11 +84,11 @@ export class AutoApprovalSettingsComponent implements OnInit {
     this.formPriority.set(rule.priority);
     this.formConditions.set(rule.conditions.map((c) => ({ ...c })));
     this.saveError.set('');
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   closeEditor() {
-    this.editorOpen.set(false);
+    this.editorDialog()?.nativeElement.close();
   }
 
   addCondition() {
@@ -120,7 +122,7 @@ export class AutoApprovalSettingsComponent implements OnInit {
     const id = this.editingId();
     try {
       await (id != null ? this.api.update(id, body) : this.api.create(body));
-      this.editorOpen.set(false);
+      this.closeEditor();
       await this.reload();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };

@@ -36,6 +36,11 @@ export interface MetadataDetails extends MetadataSearchResult {
   popularity: number | null;
 }
 
+export interface SeasonStub {
+  seasonNumber: number;
+  episodeCount: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class MetadataService {
   private readonly http = inject(HttpClient);
@@ -76,6 +81,12 @@ export class MetadataService {
   getTvDetails(tmdbId: number) {
     return firstValueFrom(
       this.http.get<MetadataDetails>(`/api/metadata/tv/${tmdbId}`),
+    );
+  }
+
+  getTvSeasons(tmdbId: number) {
+    return firstValueFrom(
+      this.http.get<SeasonStub[]>(`/api/metadata/tv/${tmdbId}/seasons`),
     );
   }
 

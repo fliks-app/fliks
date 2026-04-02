@@ -147,9 +147,20 @@ export class RequestsService {
       },
     });
     if (dup) {
-      throw new ConflictException(
-        'A pending request already exists for this title',
-      );
+      // For series, allow new requests if seasons don't overlap
+      if (dto.mediaType === 'series' && dto.seasons?.length && dup.seasons?.length) {
+        const overlap = dto.seasons.filter((s) => dup.seasons!.includes(s));
+        if (overlap.length > 0) {
+          throw new ConflictException(
+            `Seasons ${overlap.join(', ')} are already requested`,
+          );
+        }
+        // No overlap — allow the new request
+      } else {
+        throw new ConflictException(
+          'A pending request already exists for this title',
+        );
+      }
     }
 
     const autoApprove = await this.shouldAutoApprove(user, dto);
@@ -162,7 +173,7 @@ export class RequestsService {
       seasons: dto.seasons ?? null,
       qualityProfileId: dto.qualityProfileId ?? null,
       languageProfileId: dto.languageProfileId ?? null,
-      rootFolder: dto.rootFolder ?? null,
+      rootFolderId: dto.rootFolderId ?? null,
       status: autoApprove ? RequestStatus.APPROVED : RequestStatus.PENDING,
       approvedById: autoApprove ? user.id : null,
     };
@@ -233,7 +244,7 @@ export class RequestsService {
     }
     if (dto.qualityProfileId !== undefined) row.qualityProfileId = dto.qualityProfileId;
     if (dto.languageProfileId !== undefined) row.languageProfileId = dto.languageProfileId;
-    if (dto.rootFolder !== undefined) row.rootFolder = dto.rootFolder;
+    if (dto.rootFolderId !== undefined) row.rootFolderId = dto.rootFolderId;
     return this.requestRepo.save(row);
   }
 
@@ -272,7 +283,7 @@ export class RequestsService {
         tmdbId: row.tmdbId,
         qualityProfileId: row.qualityProfileId ?? undefined,
         languageProfileId: row.languageProfileId ?? undefined,
-        rootFolderId: undefined,
+        rootFolderId: row.rootFolderId ?? undefined,
       });
       row.mediaId = media.id;
     } catch (err) {
@@ -283,6 +294,8 @@ export class RequestsService {
           row.mediaType,
         );
         if (existing) row.mediaId = existing.id;
+      } else {
+        throw err;
       }
     }
 

@@ -5,6 +5,7 @@ import {
   inject,
   computed,
   OnInit,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
@@ -46,6 +47,10 @@ export class RequestsComponent implements OnInit {
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   readonly auth = inject(AuthService);
+
+  private readonly declineModal = viewChild(RequestDeclineModalComponent);
+  private readonly viewDeclineModal = viewChild(RequestViewDeclineModalComponent);
+  private readonly editModal = viewChild(RequestEditModalComponent);
 
   readonly rows = signal<SuitarrRequestRow[]>([]);
   readonly total = signal(0);
@@ -137,9 +142,11 @@ export class RequestsComponent implements OnInit {
   openDecline(id: number) {
     this.declineForId.set(id);
     this.declineReasonText.set('');
+    this.declineModal()?.showModal();
   }
 
   closeDecline() {
+    this.declineModal()?.close();
     this.declineForId.set(null);
   }
 
@@ -147,9 +154,11 @@ export class RequestsComponent implements OnInit {
     const reason = row.declinedReason?.trim();
     if (row.status !== 'declined' || !reason) return;
     this.viewDeclineReasonModal.set({ mediaTitle: row.title, reason });
+    this.viewDeclineModal()?.showModal();
   }
 
   closeViewDeclineReason() {
+    this.viewDeclineModal()?.close();
     this.viewDeclineReasonModal.set(null);
   }
 
@@ -206,9 +215,11 @@ export class RequestsComponent implements OnInit {
     this.editingRequest.set(row);
     this.editQualityProfileId.set(row.qualityProfileId);
     this.editLanguageProfileId.set(row.languageProfileId);
+    this.editModal()?.showModal();
   }
 
   closeEdit() {
+    this.editModal()?.close();
     this.editingRequest.set(null);
   }
 

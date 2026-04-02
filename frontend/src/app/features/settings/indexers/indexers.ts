@@ -1,9 +1,11 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
   signal,
   inject,
   OnInit,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -12,6 +14,7 @@ import {
   IndexersApiService,
   IndexerRow,
 } from '../../../core/services/api/indexers-api.service';
+import { ProfilesService } from '../../../core/services/api/profiles.service';
 
 @Component({
   selector: 'app-indexers-settings',
@@ -21,14 +24,15 @@ import {
 })
 export class IndexersSettingsComponent implements OnInit {
   private readonly api = inject(IndexersApiService);
+  private readonly profilesApi = inject(ProfilesService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
+  private readonly statsDialog = viewChild<ElementRef<HTMLDialogElement>>('statsDialog');
 
   readonly rows = signal<IndexerRow[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
-
-  readonly editorOpen = signal(false);
   readonly saving = signal(false);
   readonly saveError = signal('');
   readonly editingId = signal<number | null>(null);
@@ -40,14 +44,14 @@ export class IndexersSettingsComponent implements OnInit {
   readonly formTorznabBase = signal('');
   readonly formTorznabKey = signal('');
   readonly formMinSeeders = signal(0);
+  readonly formUnknownLanguage = signal('');
 
   readonly testLoading = signal(false);
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
-
-  readonly statsOpen = signal(false);
   readonly statsLoading = signal(false);
   readonly statsData = signal<{ date: string; queries: number; avgResponseMs: number; totalResults: number; errors: number }[]>([]);
   readonly statsIndexerName = signal('');
+  readonly languages = signal<{ id: number; name: string; isoCode: string }[]>([]);
 
   ngOnInit() {
     this.reloadAll();
@@ -57,8 +61,12 @@ export class IndexersSettingsComponent implements OnInit {
     this.loading.set(true);
     this.listError.set('');
     try {
-      const list = await this.api.list();
+      const [list, langs] = await Promise.all([
+        this.api.list(),
+        this.profilesApi.getLanguageDefinitions(),
+      ]);
       this.rows.set(list);
+      this.languages.set(langs);
     } catch {
       this.listError.set(
         this.translate.instant('settings.indexers.load_error'),
@@ -77,9 +85,10 @@ export class IndexersSettingsComponent implements OnInit {
     this.formTorznabBase.set('');
     this.formTorznabKey.set('');
     this.formMinSeeders.set(0);
+    this.formUnknownLanguage.set('');
     this.saveError.set('');
     this.testResult.set(null);
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   openEdit(ix: IndexerRow) {
@@ -92,13 +101,14 @@ export class IndexersSettingsComponent implements OnInit {
     this.formTorznabBase.set(String(s['baseUrl'] ?? ''));
     this.formTorznabKey.set(String(s['apiKey'] ?? ''));
     this.formMinSeeders.set(Number(s['minSeeders'] ?? 0));
+    this.formUnknownLanguage.set(String(s['unknownLanguageIsoCode'] ?? ''));
     this.saveError.set('');
     this.testResult.set(null);
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   closeEditor() {
-    this.editorOpen.set(false);
+    this.editorDialog()?.nativeElement.close();
   }
 
   async testConnection() {
@@ -157,6 +167,7 @@ export class IndexersSettingsComponent implements OnInit {
         baseUrl: base.replace(/\/$/, ''),
         apiKey: this.formTorznabKey().trim(),
         minSeeders: this.formMinSeeders(),
+        unknownLanguageIsoCode: this.formUnknownLanguage() || undefined,
       },
     };
 
@@ -182,14 +193,18 @@ export class IndexersSettingsComponent implements OnInit {
 
   async openStats(ix: IndexerRow) {
     this.statsIndexerName.set(ix.name);
-    this.statsOpen.set(true);
     this.statsLoading.set(true);
+    this.statsDialog()?.nativeElement.showModal();
     try {
       const data = await this.api.getStats(ix.id);
       this.statsData.set(data);
     } finally {
       this.statsLoading.set(false);
     }
+  }
+
+  closeStats() {
+    this.statsDialog()?.nativeElement.close();
   }
 
   async deleteRow(ix: IndexerRow) {

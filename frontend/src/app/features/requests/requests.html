@@ -102,6 +102,12 @@
                   <span class="text-base-content/50">{{ 'discover.language_profile' | translate }} · </span>
                   {{ languageProfileDisplay(row.languageProfileId) }}
                 </p>
+                @if (row.mediaType === 'series' && row.seasons && row.seasons.length) {
+                  <p>
+                    <span class="text-base-content/50">{{ 'requests.seasons_label' | translate }} · </span>
+                    {{ row.seasons.join(', ') }}
+                  </p>
+                }
               </div>
             </div>
 

@@ -1,9 +1,11 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
   signal,
   inject,
   OnInit,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -33,12 +35,14 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
 
+  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
+  private readonly statsDialog = viewChild<ElementRef<HTMLDialogElement>>('statsDialog');
+
   readonly providerTypes = PROVIDER_TYPES;
   readonly rows = signal<SubtitleProviderRow[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
 
-  readonly editorOpen = signal(false);
   readonly saving = signal(false);
   readonly saveError = signal('');
   readonly editingId = signal<number | null>(null);
@@ -55,7 +59,6 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly testLoading = signal(false);
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
 
-  readonly statsOpen = signal(false);
   readonly statsLoading = signal(false);
   readonly statsData = signal<{ date: string; queries: number; avgResponseMs: number; totalResults: number; errors: number }[]>([]);
   readonly statsProviderName = signal('');
@@ -104,7 +107,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     this.formBaseUrl.set('');
     this.saveError.set('');
     this.testResult.set(null);
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   openEdit(row: SubtitleProviderRow) {
@@ -120,11 +123,11 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     this.formBaseUrl.set(String(s['baseUrl'] ?? ''));
     this.saveError.set('');
     this.testResult.set(null);
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   closeEditor() {
-    this.editorOpen.set(false);
+    this.editorDialog()?.nativeElement.close();
   }
 
   private buildSettings(): Record<string, unknown> {
@@ -195,14 +198,18 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
 
   async openStats(row: SubtitleProviderRow) {
     this.statsProviderName.set(row.name);
-    this.statsOpen.set(true);
     this.statsLoading.set(true);
+    this.statsDialog()?.nativeElement.showModal();
     try {
       const data = await this.api.getStats(row.id);
       this.statsData.set(data);
     } finally {
       this.statsLoading.set(false);
     }
+  }
+
+  closeStats() {
+    this.statsDialog()?.nativeElement.close();
   }
 
   async deleteRow(row: SubtitleProviderRow) {

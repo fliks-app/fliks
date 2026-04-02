@@ -1,9 +1,11 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
   signal,
   inject,
   OnInit,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -29,13 +31,12 @@ export class QualityProfilesComponent implements OnInit {
   private readonly mediaApi = inject(MediaService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
   readonly profiles = signal<QualityProfile[]>([]);
   readonly definitions = signal<SuitarrQualityDef[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
-
-  readonly editorOpen = signal(false);
   readonly saving = signal(false);
   readonly saveError = signal('');
   readonly editingId = signal<number | null>(null);
@@ -84,7 +85,7 @@ export class QualityProfilesComponent implements OnInit {
     this.formUpgrade.set(true);
     this.allowedIds.set(new Set());
     this.saveError.set('');
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   openEdit(p: QualityProfile) {
@@ -97,11 +98,11 @@ export class QualityProfilesComponent implements OnInit {
     );
     this.allowedIds.set(allowed);
     this.saveError.set('');
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   closeEditor() {
-    this.editorOpen.set(false);
+    this.editorDialog()?.nativeElement.close();
   }
 
   isAllowed(id: number): boolean {

@@ -22,13 +22,14 @@ export interface CreateRequestBody {
   title: string;
   qualityProfileId?: number;
   languageProfileId?: number;
-  rootFolder?: string;
+  rootFolderId?: number;
+  seasons?: number[];
 }
 
 export interface UpdateRequestBody {
   qualityProfileId?: number;
   languageProfileId?: number;
-  rootFolder?: string;
+  rootFolderId?: number;
 }
 
 export interface SuitarrRequestRow {
@@ -44,7 +45,7 @@ export interface SuitarrRequestRow {
   declinedReason: string | null;
   qualityProfileId: number | null;
   languageProfileId: number | null;
-  rootFolder: string | null;
+  rootFolderId: number | null;
   mediaId: number | null;
   seasons: number[] | null;
   createdAt: string;

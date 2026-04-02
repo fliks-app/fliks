@@ -5,6 +5,7 @@ import {
   inject,
   computed,
   OnInit,
+  viewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
@@ -19,10 +20,11 @@ import { ProfilesService } from '../../core/services/api/profiles.service';
 import { RootFoldersApiService, RootFolder } from '../../core/services/api/root-folders-api.service';
 import { SettingsApiService } from '../../core/services/api/settings-api.service';
 import { ToastService } from '../../core/services/toast.service';
+import { RequestModalComponent } from './components/request-modal/request-modal.component';
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule],
+  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, RequestModalComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tmdb-preview.html',
 })
@@ -52,7 +54,15 @@ export class TmdbPreviewComponent implements OnInit {
     return url.startsWith('/add/tv') ? 'series' : 'movie';
   });
 
+  readonly compatibleRootFolders = computed(() =>
+    this.rootFolders().filter((f) => f.mediaTypes.includes(this.type())),
+  );
+
   readonly canImport = computed(() => this.auth.hasPermission('media.create'));
+  readonly canRequest = computed(() => !this.canImport() && this.auth.hasPermission('requests.create'));
+
+  private readonly requestModal = viewChild(RequestModalComponent);
+  readonly languageProfiles = signal<{ id: number; name: string }[]>([]);
 
   async ngOnInit() {
     const tmdbId = Number(this.route.snapshot.paramMap.get('tmdbId'));
@@ -69,14 +79,24 @@ export class TmdbPreviewComponent implements OnInit {
       if (profiles.length) this.selectedQualityProfileId.set(profiles[0].id);
       this.rootFolders.set(folders);
 
-      // Use default root folder for this media type, or fallback to first folder
+      // Use default root folder for this media type, or fallback to first compatible folder
+      const compatible = folders.filter((f) => f.mediaTypes.includes(type));
       const defaultKey = type === 'series' ? 'default_root_folder_series' : 'default_root_folder_movie';
       const defaultId = Number(settings[defaultKey]);
-      if (defaultId && folders.some((f) => f.id === defaultId)) {
+      if (defaultId && compatible.some((f) => f.id === defaultId)) {
         this.selectedRootFolderId.set(defaultId);
-      } else if (folders.length) {
-        this.selectedRootFolderId.set(folders[0].id);
+      } else if (compatible.length) {
+        this.selectedRootFolderId.set(compatible[0].id);
       }
+    } else if (this.canRequest()) {
+      const [qp, lp, folders] = await Promise.all([
+        this.profilesApi.getQualityProfiles(),
+        this.profilesApi.getLanguageProfiles(),
+        this.rootFoldersApi.list(),
+      ]);
+      this.qualityProfiles.set(qp.map((p) => ({ id: p.id, name: p.name })));
+      this.languageProfiles.set(lp.map((p) => ({ id: p.id, name: p.name })));
+      this.rootFolders.set(folders);
     }
 
     try {
@@ -118,5 +138,15 @@ export class TmdbPreviewComponent implements OnInit {
     } finally {
       this.importing.set(false);
     }
+  }
+
+  openRequestModal() {
+    const m = this.media();
+    if (!m) return;
+    this.requestModal()?.open({
+      title: m.title,
+      mediaType: this.type() as 'movie' | 'series',
+      tmdbId: m.tmdbId,
+    });
   }
 }

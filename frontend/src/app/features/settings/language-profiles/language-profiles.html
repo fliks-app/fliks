@@ -50,8 +50,7 @@
   }
 </div>
 
-@if (editorOpen()) {
-  <div class="modal modal-open z-50" role="dialog" aria-modal="true">
+  <dialog #editorDialog class="modal">
     <div class="modal-box max-w-2xl max-h-[90vh] flex flex-col">
       <h2 class="text-lg font-bold shrink-0">
         @if (editingId() === null) {
@@ -151,13 +150,9 @@
         </button>
       </div>
     </div>
-    <div
-      role="button"
-      tabindex="0"
-      class="modal-backdrop bg-black/50"
-      (click)="closeEditor()"
-      (keydown.enter)="closeEditor()"
-      [attr.aria-label]="'common.close' | translate"
-    ></div>
-  </div>
-}
+    <form method="dialog" class="modal-backdrop">
+      <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">
+        {{ 'common.close' | translate }}
+      </button>
+    </form>
+  </dialog>

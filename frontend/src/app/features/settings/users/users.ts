@@ -1,7 +1,9 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
   signal,
+  viewChild,
   inject,
   OnInit,
 } from '@angular/core';
@@ -32,13 +34,13 @@ export class UsersSettingsComponent implements OnInit {
   readonly auth = inject(AuthService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
+  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
   readonly rows = signal<UserRow[]>([]);
   readonly roles = signal<RoleRow[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
 
-  readonly editorOpen = signal(false);
   readonly isCreating = signal(false);
   readonly saving = signal(false);
   readonly saveError = signal('');
@@ -80,7 +82,7 @@ export class UsersSettingsComponent implements OnInit {
     this.formRoleId.set(defaultRole?.id ?? this.roles()[0]?.id ?? null);
     this.formEnabled.set(true);
     this.saveError.set('');
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   openEdit(user: UserRow) {
@@ -92,11 +94,11 @@ export class UsersSettingsComponent implements OnInit {
     this.formRoleId.set(user.roleId);
     this.formEnabled.set(user.enabled);
     this.saveError.set('');
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   closeEditor() {
-    this.editorOpen.set(false);
+    this.editorDialog()?.nativeElement.close();
   }
 
   async save() {

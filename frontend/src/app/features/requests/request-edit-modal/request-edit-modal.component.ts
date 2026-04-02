@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, input, output, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { SuitarrRequestRow } from '../../../core/services/api/requests.service';
@@ -21,4 +21,14 @@ export class RequestEditModalComponent {
   readonly languageProfileIdChange = output<number | null>();
   readonly dismissed = output<void>();
   readonly save = output<void>();
+
+  private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+
+  showModal() {
+    this.dialogEl()?.nativeElement.showModal();
+  }
+
+  close() {
+    this.dialogEl()?.nativeElement.close();
+  }
 }

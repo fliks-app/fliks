@@ -91,10 +91,12 @@ export class MediaService {
       const rf = await this.rootFolderRepo.findOne({
         where: { id: dto.rootFolderId },
       });
-      if (rf) rootPath = rf.path;
+      if (rf && rf.mediaTypes?.includes(dto.type)) {
+        rootPath = rf.path;
+      }
     }
 
-    // Fallback to default root folder setting if none specified
+    // Fallback to default root folder setting only
     if (!rootPath) {
       const defaultKey =
         dto.type === MediaType.MOVIE
@@ -108,9 +110,17 @@ export class MediaService {
         const rfId = Number(row.value);
         if (rfId) {
           const rf = await this.rootFolderRepo.findOne({ where: { id: rfId } });
-          if (rf) rootPath = rf.path;
+          if (rf && rf.mediaTypes?.includes(dto.type)) {
+            rootPath = rf.path;
+          }
         }
       }
+    }
+
+    if (!rootPath) {
+      throw new BadRequestException(
+        'No compatible root folder found. Set a default root folder for this media type in settings.',
+      );
     }
 
     // Load folder format settings
@@ -272,6 +282,10 @@ export class MediaService {
 
   async findByTmdbId(tmdbId: number, type: MediaType): Promise<Media | null> {
     return this.mediaRepo.findOne({ where: { tmdbId, type } });
+  }
+
+  async findRootFolderByPath(path: string): Promise<RootFolder | null> {
+    return this.rootFolderRepo.findOne({ where: { path } });
   }
 
   async findOne(id: number): Promise<Media> {

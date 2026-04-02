@@ -1,9 +1,12 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
+  computed,
   signal,
   inject,
   OnInit,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -11,6 +14,7 @@ import {
   RootFoldersApiService,
   RootFolder,
 } from '../../../core/services/api/root-folders-api.service';
+import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 
 @Component({
@@ -21,16 +25,31 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 })
 export class RootFoldersSettingsComponent implements OnInit {
   private readonly api = inject(RootFoldersApiService);
+  private readonly settingsApi = inject(SettingsApiService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
+
+  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
   readonly folders = signal<RootFolder[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
 
-  readonly formOpen = signal(false);
+  // Default root folder settings
+  readonly defaultRootFolderMovie = signal('');
+  readonly defaultRootFolderSeries = signal('');
+  readonly savingDefaults = signal(false);
+  readonly defaultsSaved = signal(false);
+
+  readonly movieFolders = computed(() => this.folders().filter((f) => f.mediaTypes.includes('movie')));
+  readonly seriesFolders = computed(() => this.folders().filter((f) => f.mediaTypes.includes('series')));
+
+  // Editor modal
+  readonly editingId = signal<number | null>(null);
   readonly formPath = signal('');
   readonly formLabel = signal('');
+  readonly formMovies = signal(true);
+  readonly formSeries = signal(true);
   readonly saving = signal(false);
   readonly saveError = signal('');
 
@@ -41,8 +60,13 @@ export class RootFoldersSettingsComponent implements OnInit {
   async reload() {
     this.loading.set(true);
     try {
-      const list = await this.api.list();
+      const [list, settings] = await Promise.all([
+        this.api.list(),
+        this.settingsApi.getAll(),
+      ]);
       this.folders.set(list);
+      this.defaultRootFolderMovie.set(settings['default_root_folder_movie'] ?? '');
+      this.defaultRootFolderSeries.set(settings['default_root_folder_series'] ?? '');
     } catch {
       this.listError.set(this.translate.instant('settings.root_folders.load_error'));
     } finally {
@@ -50,15 +74,44 @@ export class RootFoldersSettingsComponent implements OnInit {
     }
   }
 
-  openForm() {
+  async saveDefaults() {
+    this.savingDefaults.set(true);
+    try {
+      await this.settingsApi.setBulk({
+        default_root_folder_movie: this.defaultRootFolderMovie(),
+        default_root_folder_series: this.defaultRootFolderSeries(),
+      });
+      this.defaultsSaved.set(true);
+      setTimeout(() => this.defaultsSaved.set(false), 3000);
+    } catch {
+      // error handled by interceptor
+    } finally {
+      this.savingDefaults.set(false);
+    }
+  }
+
+  openCreate() {
+    this.editingId.set(null);
     this.formPath.set('');
     this.formLabel.set('');
+    this.formMovies.set(true);
+    this.formSeries.set(true);
     this.saveError.set('');
-    this.formOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
+  }
+
+  openEdit(folder: RootFolder) {
+    this.editingId.set(folder.id);
+    this.formPath.set(folder.path);
+    this.formLabel.set(folder.label ?? '');
+    this.formMovies.set(folder.mediaTypes.includes('movie'));
+    this.formSeries.set(folder.mediaTypes.includes('series'));
+    this.saveError.set('');
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   closeForm() {
-    this.formOpen.set(false);
+    this.editorDialog()?.nativeElement.close();
   }
 
   async save() {
@@ -67,10 +120,23 @@ export class RootFoldersSettingsComponent implements OnInit {
       this.saveError.set(this.translate.instant('settings.root_folders.path_required'));
       return;
     }
+    const mediaTypes: ('movie' | 'series')[] = [];
+    if (this.formMovies()) mediaTypes.push('movie');
+    if (this.formSeries()) mediaTypes.push('series');
+    if (mediaTypes.length === 0) {
+      this.saveError.set(this.translate.instant('settings.root_folders.media_type_required'));
+      return;
+    }
+
     this.saving.set(true);
     this.saveError.set('');
     try {
-      await this.api.create({ path, label: this.formLabel().trim() || undefined });
+      const id = this.editingId();
+      if (id !== null) {
+        await this.api.update(id, { path, label: this.formLabel().trim() || undefined, mediaTypes });
+      } else {
+        await this.api.create({ path, label: this.formLabel().trim() || undefined, mediaTypes });
+      }
       this.closeForm();
       await this.reload();
     } catch (err: unknown) {

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, input, output, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 
@@ -16,4 +16,14 @@ export class RequestDeclineModalComponent {
   readonly reasonTextChange = output<string>();
   readonly dismissed = output<void>();
   readonly submitted = output<void>();
+
+  private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+
+  showModal() {
+    this.dialogEl()?.nativeElement.showModal();
+  }
+
+  close() {
+    this.dialogEl()?.nativeElement.close();
+  }
 }

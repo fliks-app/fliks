@@ -27,4 +27,8 @@ export class CreateBlocklistEntryDto {
   @IsString()
   @IsOptional()
   note?: string;
+
+  @IsNumber()
+  @IsOptional()
+  userId?: number;
 }

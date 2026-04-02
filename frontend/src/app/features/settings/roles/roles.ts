@@ -1,7 +1,9 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
   signal,
+  viewChild,
   inject,
   OnInit,
 } from '@angular/core';
@@ -25,13 +27,13 @@ export class RolesSettingsComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
+  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
   readonly rows = signal<RoleRow[]>([]);
   readonly availablePermissions = signal<string[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
 
-  readonly editorOpen = signal(false);
   readonly isCreating = signal(false);
   readonly saving = signal(false);
   readonly saveError = signal('');
@@ -68,7 +70,7 @@ export class RolesSettingsComponent implements OnInit {
     this.formPermissions.set(new Set());
     this.formIsDefault.set(false);
     this.saveError.set('');
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   openEdit(role: RoleRow) {
@@ -78,11 +80,11 @@ export class RolesSettingsComponent implements OnInit {
     this.formPermissions.set(new Set(role.permissions));
     this.formIsDefault.set(role.isDefault);
     this.saveError.set('');
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   closeEditor() {
-    this.editorOpen.set(false);
+    this.editorDialog()?.nativeElement.close();
   }
 
   togglePermission(perm: string) {

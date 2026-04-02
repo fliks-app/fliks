@@ -1,10 +1,5 @@
-@if (payload(); as declineView) {
-  <div
-    class="modal modal-open z-50"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="request-view-decline-title"
-  >
+<dialog #dialog class="modal" aria-labelledby="request-view-decline-title">
+  @if (payload(); as declineView) {
     <div class="modal-box max-w-md">
       <h2 id="request-view-decline-title" class="text-lg font-semibold">
         {{ 'requests.view_decline_title' | translate }}
@@ -14,18 +9,15 @@
         {{ declineView.reason }}
       </p>
       <div class="modal-action mt-2">
-        <button type="button" class="btn btn-primary btn-sm" (click)="dismissed.emit()">
+        <button type="button" class="btn btn-primary btn-sm" (click)="close(); dismissed.emit()">
           {{ 'common.close' | translate }}
         </button>
       </div>
     </div>
-    <div
-      role="button"
-      tabindex="0"
-      class="modal-backdrop bg-black/50"
-      (click)="dismissed.emit()"
-      (keydown.enter)="dismissed.emit()"
-      [attr.aria-label]="'common.close' | translate"
-    ></div>
-  </div>
-}
+  }
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="close(); dismissed.emit()" [attr.aria-label]="'common.close' | translate">
+      {{ 'common.close' | translate }}
+    </button>
+  </form>
+</dialog>

@@ -1,4 +1,5 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsArray } from 'class-validator';
+import { MediaType } from '../../../common/enums/media-type.enum';
 
 export class UpdateRootFolderDto {
   @IsString()
@@ -8,4 +9,9 @@ export class UpdateRootFolderDto {
   @IsString()
   @IsOptional()
   label?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsEnum(MediaType, { each: true })
+  mediaTypes?: MediaType[];
 }
