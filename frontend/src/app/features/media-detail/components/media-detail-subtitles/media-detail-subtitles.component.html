@@ -180,6 +180,22 @@
                             {{ 'media_detail.action_convert_srt' | translate }}
                           </a>
                         </li>
+                        <li>
+                          <a class="flex items-center gap-3" (click)="openAdjustModal(sub.id)">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {{ 'media_detail.action_adjust_times' | translate }}
+                          </a>
+                        </li>
+                        <li>
+                          <a class="flex items-center gap-3" (click)="openFpsModal(sub.id)">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                            </svg>
+                            {{ 'media_detail.action_change_fps' | translate }}
+                          </a>
+                        </li>
                         <li class="border-t border-base-300 mt-1 pt-1">
                           <a class="flex items-center gap-3 text-warning" (click)="blacklistSubtitle.emit(sub)">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -316,5 +332,92 @@
   </div>
   <form method="dialog" class="modal-backdrop">
     <button type="button" (click)="closeSyncModal()">close</button>
+  </form>
+</dialog>
+
+<!-- Adjust Times modal -->
+<dialog #adjustDialog class="modal">
+  <div class="modal-box max-w-md">
+    <h3 class="text-lg font-bold">{{ 'media_detail.adjust_times_title' | translate }}</h3>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'media_detail.adjust_times_subtitle' | translate }}</p>
+
+    <div class="flex flex-col gap-4 mt-4">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'media_detail.adjust_offset_ms' | translate }}</span>
+        <input
+          type="number"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="adjustOffsetMs()"
+          (ngModelChange)="adjustOffsetMs.set($event)"
+          placeholder="0"
+        />
+        <div class="label">
+          <span class="label-text-alt text-base-content/50">{{ 'media_detail.adjust_offset_hint' | translate }}</span>
+        </div>
+      </label>
+    </div>
+
+    <div class="modal-action">
+      <button type="button" class="btn btn-ghost" (click)="closeAdjustModal()">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button type="button" class="btn btn-primary" (click)="confirmAdjust()">
+        {{ 'media_detail.action_adjust_times' | translate }}
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeAdjustModal()">close</button>
+  </form>
+</dialog>
+
+<!-- Change Frame Rate modal -->
+<dialog #fpsDialog class="modal">
+  <div class="modal-box max-w-md">
+    <h3 class="text-lg font-bold">{{ 'media_detail.change_fps_title' | translate }}</h3>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'media_detail.change_fps_subtitle' | translate }}</p>
+
+    <div class="flex gap-4 mt-4">
+      <label class="form-control flex-1">
+        <span class="label-text">{{ 'media_detail.fps_from' | translate }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          [ngModel]="fpsFrom()"
+          (ngModelChange)="fpsFrom.set($event)"
+        >
+          <option value="23.976">23.976</option>
+          <option value="24">24</option>
+          <option value="25">25</option>
+          <option value="29.97">29.97</option>
+          <option value="30">30</option>
+        </select>
+      </label>
+      <label class="form-control flex-1">
+        <span class="label-text">{{ 'media_detail.fps_to' | translate }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          [ngModel]="fpsTo()"
+          (ngModelChange)="fpsTo.set($event)"
+        >
+          <option value="23.976">23.976</option>
+          <option value="24">24</option>
+          <option value="25">25</option>
+          <option value="29.97">29.97</option>
+          <option value="30">30</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="modal-action">
+      <button type="button" class="btn btn-ghost" (click)="closeFpsModal()">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button type="button" class="btn btn-primary" [disabled]="fpsFrom() === fpsTo()" (click)="confirmFps()">
+        {{ 'media_detail.action_change_fps' | translate }}
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeFpsModal()">close</button>
   </form>
 </dialog>

@@ -89,6 +89,52 @@ export class MediaDetailSubtitlesComponent {
     this.syncDialog()?.nativeElement.close();
   }
 
+  // Adjust Times modal
+  private readonly adjustDialog = viewChild<ElementRef<HTMLDialogElement>>('adjustDialog');
+  readonly adjustSubtitleId = signal<number | null>(null);
+  readonly adjustOffsetMs = signal('0');
+
+  openAdjustModal(subtitleId: number) {
+    this.adjustSubtitleId.set(subtitleId);
+    this.adjustOffsetMs.set('0');
+    this.adjustDialog()?.nativeElement.showModal();
+  }
+
+  closeAdjustModal() {
+    this.adjustDialog()?.nativeElement.close();
+  }
+
+  confirmAdjust() {
+    const id = this.adjustSubtitleId();
+    if (id == null) return;
+    this.postProcess.emit({ subtitleId: id, action: 'adjustTimes', params: { offsetMs: Number(this.adjustOffsetMs()) } });
+    this.closeAdjustModal();
+  }
+
+  // Change Frame Rate modal
+  private readonly fpsDialog = viewChild<ElementRef<HTMLDialogElement>>('fpsDialog');
+  readonly fpsSubtitleId = signal<number | null>(null);
+  readonly fpsFrom = signal('23.976');
+  readonly fpsTo = signal('25');
+
+  openFpsModal(subtitleId: number) {
+    this.fpsSubtitleId.set(subtitleId);
+    this.fpsFrom.set('23.976');
+    this.fpsTo.set('25');
+    this.fpsDialog()?.nativeElement.showModal();
+  }
+
+  closeFpsModal() {
+    this.fpsDialog()?.nativeElement.close();
+  }
+
+  confirmFps() {
+    const id = this.fpsSubtitleId();
+    if (id == null) return;
+    this.postProcess.emit({ subtitleId: id, action: 'changeFrameRate', params: { fromFps: Number(this.fpsFrom()), toFps: Number(this.fpsTo()) } });
+    this.closeFpsModal();
+  }
+
   confirmSync() {
     const id = this.syncSubtitleId();
     if (id == null) return;
