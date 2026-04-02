@@ -28,6 +28,7 @@ export class SubtitleActivityController {
     @Query('status') status?: string,
     @Query('language') language?: string,
     @Query('providerType') providerType?: string,
+    @Query('excludeEmbedded') excludeEmbedded?: string,
   ) {
     const p = Math.max(1, Number(page) || 1);
     const l = Math.min(100, Math.max(1, Number(limit) || 25));
@@ -37,6 +38,11 @@ export class SubtitleActivityController {
       .leftJoinAndSelect('sf.media', 'media')
       .orderBy('sf.createdAt', 'DESC');
 
+    if (excludeEmbedded === 'true') {
+      qb.andWhere('sf.providerType != :emb', {
+        emb: SubtitleProviderType.EMBEDDED,
+      });
+    }
     if (status) qb.andWhere('sf.status = :status', { status });
     if (language) qb.andWhere('sf.language = :language', { language });
     if (providerType)
@@ -52,6 +58,7 @@ export class SubtitleActivityController {
         id: sf.id,
         mediaId: sf.mediaId,
         mediaTitle: sf.media?.title ?? '?',
+        mediaType: sf.media?.type ?? null,
         language: sf.language,
         providerType: sf.providerType,
         score: sf.score,

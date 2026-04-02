@@ -12,6 +12,7 @@ import { HttpClient } from '@angular/common/http';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { MediaService } from '../../core/services/api/media.service';
+import { MediaType } from '../../core/enums/media-type.enum';
 
 export interface ScanCandidate {
   filePath: string;
@@ -34,7 +35,7 @@ interface MediaOption {
   id: number;
   title: string;
   year: number;
-  type: 'movie' | 'series';
+  type: MediaType;
 }
 
 interface RowState {

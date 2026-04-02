@@ -108,11 +108,16 @@ export class SchedulerService {
     return cmd;
   }
 
-  getRecentCommands(limit = 50): Promise<Command[]> {
-    return this.commandRepo.find({
+  async getRecentCommands(
+    page = 1,
+    limit = 25,
+  ): Promise<{ data: Command[]; total: number }> {
+    const [data, total] = await this.commandRepo.findAndCount({
       order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
       take: limit,
     });
+    return { data, total };
   }
 
   // ---------------------------------------------------------------------------

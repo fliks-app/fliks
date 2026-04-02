@@ -77,6 +77,22 @@ export const routes: Routes = [
         path: 'activity',
         loadComponent: () =>
           import('./features/activity/activity').then((m) => m.ActivityComponent),
+        children: [
+          {
+            path: '',
+            loadComponent: () =>
+              import('./features/activity/queue/queue').then(
+                (m) => m.ActivityQueueComponent,
+              ),
+          },
+          {
+            path: 'subtitles',
+            loadComponent: () =>
+              import('./features/activity/subtitles/subtitles').then(
+                (m) => m.ActivitySubtitlesComponent,
+              ),
+          },
+        ],
       },
       {
         path: 'calendar',
@@ -100,6 +116,28 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/system/system').then((m) => m.SystemComponent),
         canActivate: [adminGuard],
+        children: [
+          {
+            path: '',
+            loadComponent: () =>
+              import('./features/system/status/status').then((m) => m.SystemStatusComponent),
+          },
+          {
+            path: 'backups',
+            loadComponent: () =>
+              import('./features/system/backups/backups').then((m) => m.SystemBackupsComponent),
+          },
+          {
+            path: 'logs',
+            loadComponent: () =>
+              import('./features/system/logs/logs').then((m) => m.SystemLogsComponent),
+          },
+          {
+            path: 'import',
+            loadComponent: () =>
+              import('./features/system/import/import').then((m) => m.SystemImportComponent),
+          },
+        ],
       },
       {
         path: 'settings',

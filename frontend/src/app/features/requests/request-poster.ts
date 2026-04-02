@@ -7,6 +7,7 @@ import {
   OnInit,
 } from '@angular/core';
 import { MetadataService } from '../../core/services/api/metadata.service';
+import { MediaType } from '../../core/enums/media-type.enum';
 
 @Component({
   selector: 'app-request-poster',
@@ -49,7 +50,7 @@ export class RequestPosterComponent implements OnInit {
   private readonly metadata = inject(MetadataService);
 
   readonly tmdbId = input.required<number>();
-  readonly mediaType = input.required<'movie' | 'series'>();
+  readonly mediaType = input.required<MediaType>();
   readonly titleText = input<string>('');
 
   readonly posterUrl = signal<string | null>(null);

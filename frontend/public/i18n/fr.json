@@ -363,7 +363,7 @@
   "activity": {
     "title": "Activité",
     "subtitle": "File de téléchargement et historique.",
-    "tab_queue": "File d'attente",
+    "tab_queue": "Téléchargements",
     "tab_history": "Historique",
     "import_now": "Importer maintenant",
     "remove_torrent": "Supprimer le torrent",
@@ -409,6 +409,10 @@
   "system": {
     "title": "Système",
     "subtitle": "Commandes manuelles et historique des tâches.",
+    "tab_status": "Statut",
+    "tab_backups": "Sauvegardes",
+    "tab_logs": "Journaux",
+    "tab_import": "Import",
     "commands_title": "Déclencher une tâche",
     "cmd_rss_sync": "Synchronisation RSS",
     "cmd_search_missing": "Rechercher les manquants",

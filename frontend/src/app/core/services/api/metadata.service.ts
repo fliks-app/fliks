@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { MediaType } from '../../enums/media-type.enum';
 import { Media } from './media.service';
 
 export interface MetadataSearchResult {
@@ -12,9 +13,9 @@ export interface MetadataSearchResult {
   posterUrl: string | null;
   rating: number;
   genres: string[];
-  mediaType: 'movie' | 'series';
+  mediaType: MediaType;
   existingMediaId: number | null;
-  existingMediaType: 'movie' | 'series' | null;
+  existingMediaType: MediaType | null;
 }
 
 export interface MetadataDetails extends MetadataSearchResult {
@@ -79,7 +80,7 @@ export class MetadataService {
   }
 
   importFromTmdb(
-    type: 'movie' | 'series',
+    type: MediaType,
     tmdbId: number,
     qualityProfileId?: number,
     rootFolderId?: number,

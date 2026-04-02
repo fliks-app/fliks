@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { MediaType } from '../../enums/media-type.enum';
 
 export interface QualityProfileBrief {
   id: number;
@@ -68,7 +69,7 @@ export interface Media {
   title: string;
   originalTitle: string;
   year: number;
-  type: 'movie' | 'series';
+  type: MediaType;
   tmdbId: number;
   overview: string;
   status: string;
@@ -97,7 +98,7 @@ export interface CalendarEntry {
   id: number;
   mediaId: number;
   title: string;
-  type: 'movie' | 'series';
+  type: MediaType;
   event: string;
   date: string;
   posterUrl: string | null;
@@ -116,7 +117,7 @@ export interface MediaPage {
 
 export interface SearchParams {
   q?: string;
-  type?: 'movie' | 'series';
+  type?: MediaType;
   status?: string;
   monitored?: boolean;
   year?: number;

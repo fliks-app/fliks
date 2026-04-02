@@ -45,6 +45,7 @@ import {
 } from './media-detail.utils';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
+import { MediaType } from '../../core/enums/media-type.enum';
 
 const LS_EPISODES_HAS_FILE_ONLY = 'suitarr.mediaDetail.episodesHasFileOnly';
 
@@ -97,7 +98,7 @@ export class MediaDetailComponent implements OnInit {
   });
   readonly loading = signal(true);
   readonly notFound = signal(false);
-  readonly expectedKind = signal<'movie' | 'series'>('movie');
+  readonly expectedKind = signal<MediaType>('movie');
 
   readonly customSearchQuery = signal('');
 
@@ -211,7 +212,7 @@ export class MediaDetailComponent implements OnInit {
   });
 
   async ngOnInit() {
-    const kind = this.route.snapshot.data['kind'] as 'movie' | 'series';
+    const kind = this.route.snapshot.data['kind'] as MediaType;
     this.expectedKind.set(kind);
     const idParam = this.route.snapshot.paramMap.get('id');
     const id = idParam ? Number(idParam) : NaN;

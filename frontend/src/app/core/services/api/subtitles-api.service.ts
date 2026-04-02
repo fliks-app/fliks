@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { MediaType } from '../../enums/media-type.enum';
 
 export interface SubtitleFileRow {
   id: number;
@@ -99,6 +100,7 @@ export interface SubtitleHistoryEntry {
   id: number;
   mediaId: number;
   mediaTitle: string;
+  mediaType: MediaType | null;
   language: string;
   providerType: string;
   score: number;

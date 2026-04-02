@@ -1,0 +1,38 @@
+<div class="flex justify-end mb-3">
+  <button type="button" class="btn btn-primary btn-sm" (click)="create()" [disabled]="creating()">
+    @if (creating()) { <span class="loading loading-spinner loading-xs"></span> }
+    {{ 'system.create_backup' | translate }}
+  </button>
+</div>
+
+@if (loading()) {
+  <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+} @else if (backups().length === 0) {
+  <p class="text-center py-6 text-base-content/50">{{ 'system.no_backups' | translate }}</p>
+} @else {
+  <div class="overflow-x-auto rounded-lg border border-base-200">
+    <table class="table table-sm">
+      <thead>
+        <tr>
+          <th>{{ 'system.col_backup_name' | translate }}</th>
+          <th class="text-right">{{ 'system.col_backup_size' | translate }}</th>
+          <th>{{ 'system.col_backup_date' | translate }}</th>
+          <th class="w-32"></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (b of backups(); track b.filename) {
+          <tr>
+            <td class="font-mono text-sm">{{ b.filename }}</td>
+            <td class="text-right tabular-nums text-sm">{{ formatBytes(b.size) }}</td>
+            <td class="text-sm">{{ b.date | date:'dd/MM/yyyy HH:mm' }}</td>
+            <td class="text-end">
+              <a class="btn btn-ghost btn-xs" [href]="'/api/system/backups/' + b.filename" target="_blank">{{ 'system.download_backup' | translate }}</a>
+              <button type="button" class="btn btn-ghost btn-xs text-warning" (click)="restore(b.filename)">{{ 'system.restore_backup' | translate }}</button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}

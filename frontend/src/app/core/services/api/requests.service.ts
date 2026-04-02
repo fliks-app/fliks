@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { MediaType } from '../../enums/media-type.enum';
 
 export interface RequestUser {
   id: number;
@@ -16,7 +17,7 @@ export type SuitarrRequestStatus =
   | 'failed';
 
 export interface CreateRequestBody {
-  mediaType: 'movie' | 'series';
+  mediaType: MediaType;
   tmdbId: number;
   title: string;
   qualityProfileId?: number;
@@ -34,7 +35,7 @@ export interface SuitarrRequestRow {
   id: number;
   userId: number;
   user: RequestUser;
-  mediaType: 'movie' | 'series';
+  mediaType: MediaType;
   tmdbId: number;
   title: string;
   status: SuitarrRequestStatus;

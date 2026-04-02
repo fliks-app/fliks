@@ -20,8 +20,7 @@ import { ProfilesService } from '../../core/services/api/profiles.service';
 import { RootFoldersApiService, RootFolder } from '../../core/services/api/root-folders-api.service';
 import { RequestsService } from '../../core/services/api/requests.service';
 import { ToastService } from '../../core/services/toast.service';
-
-type DiscoverTab = 'movie' | 'series';
+import { MediaType } from '../../core/enums/media-type.enum';
 
 @Component({
   selector: 'app-discover',
@@ -43,7 +42,7 @@ export class DiscoverComponent implements OnInit, OnDestroy {
   readonly rootFolders = signal<RootFolder[]>([]);
   readonly selectedRootFolderId = signal<number | null>(null);
 
-  readonly tab = signal<DiscoverTab>('movie');
+  readonly tab = signal<MediaType>('movie');
   readonly discoverMode = signal<'search' | 'trending' | 'popular' | 'upcoming'>('trending');
   readonly discoverResults = signal<MetadataSearchResult[]>([]);
   readonly discoverLoading = signal(false);
@@ -112,7 +111,7 @@ export class DiscoverComponent implements OnInit, OnDestroy {
     if (this.searchTimer) clearTimeout(this.searchTimer);
   }
 
-  setTab(t: DiscoverTab) {
+  setTab(t: MediaType) {
     this.tab.set(t);
     this.results.set([]);
     this.error.set('');

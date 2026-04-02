@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { MediaType } from '../../enums/media-type.enum';
 
 export interface QbittorrentSettings {
   host: string;
@@ -55,7 +56,7 @@ export interface QueueItem {
   clientName: string;
   mediaId?: number;
   mediaTitle?: string;
-  mediaType?: 'movie' | 'series';
+  mediaType?: MediaType;
   statusMessage?: string;
 }
 
