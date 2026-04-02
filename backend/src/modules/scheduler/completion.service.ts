@@ -235,37 +235,6 @@ export class CompletionService {
       );
     }
 
-    // Fallback: filesystem scan if API returned nothing
-    if (!videoFiles.length) {
-      const saveDir = path.join(torrent.save_path, torrent.name);
-      if (fs.existsSync(saveDir) && fs.statSync(saveDir).isDirectory()) {
-        videoFiles = this.naming.findAllVideoFiles(saveDir);
-      } else {
-        // Single file: try exact name, then with extensions
-        const singleFile = path.join(torrent.save_path, torrent.name);
-        if (fs.existsSync(singleFile) && fs.statSync(singleFile).isFile()) {
-          const ext = path.extname(singleFile).toLowerCase();
-          if (VIDEO_EXTS.includes(ext)) {
-            videoFiles = [{ filePath: singleFile, size: fs.statSync(singleFile).size }];
-          }
-        }
-        if (!videoFiles.length) {
-          for (const ext of VIDEO_EXTS) {
-            const candidate = singleFile + ext;
-            if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-              videoFiles = [{ filePath: candidate, size: fs.statSync(candidate).size }];
-              break;
-            }
-          }
-        }
-      }
-      if (videoFiles.length) {
-        this.log.log(
-          `Import[${history.sourceTitle}]: filesystem fallback found ${videoFiles.length} video file(s)`,
-        );
-      }
-    }
-
     if (!videoFiles.length) {
       const statusMessage = `Import blocked: no valid video file found for "${torrent.name}"`;
       this.log.warn(`Import[${history.sourceTitle}]: ${statusMessage}`);
@@ -563,31 +532,6 @@ export class CompletionService {
       }
     } catch (e) {
       this.log.warn(`Post-import script failed: ${(e as Error).message}`);
-    }
-  }
-
-  /** Find the largest file in a directory (any extension) for suspicious content detection. */
-  private findLargestFile(
-    dirPath: string,
-  ): { filePath: string; size: number } | null {
-    try {
-      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-      let best: { filePath: string; size: number } | null = null;
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name);
-        if (entry.isDirectory()) {
-          const sub = this.findLargestFile(fullPath);
-          if (sub && (!best || sub.size > best.size)) best = sub;
-        } else if (entry.isFile()) {
-          const stat = fs.statSync(fullPath);
-          if (!best || stat.size > best.size) {
-            best = { filePath: fullPath, size: stat.size };
-          }
-        }
-      }
-      return best;
-    } catch {
-      return null;
     }
   }
 
