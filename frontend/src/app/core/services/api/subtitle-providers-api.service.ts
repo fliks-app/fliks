@@ -61,4 +61,12 @@ export class SubtitleProvidersApiService {
       this.http.post<boolean>(`/api/subtitles/providers/${id}/test`, {}),
     );
   }
+
+  getStats(id: number) {
+    return firstValueFrom(
+      this.http.get<{ date: string; queries: number; avgResponseMs: number; totalResults: number; errors: number }[]>(
+        `/api/subtitles/providers/${id}/stats`,
+      ),
+    );
+  }
 }

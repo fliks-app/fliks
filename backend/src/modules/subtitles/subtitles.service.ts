@@ -9,6 +9,7 @@ import { Repository } from 'typeorm';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { SubtitleFile } from './entities/subtitle-file.entity';
+import { SubtitleProviderStat } from './entities/subtitle-provider-stat.entity';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleProviderService } from './subtitle-provider.service';
@@ -26,6 +27,8 @@ export class SubtitlesService {
   constructor(
     @InjectRepository(SubtitleFile)
     private readonly repo: Repository<SubtitleFile>,
+    @InjectRepository(SubtitleProviderStat)
+    private readonly statRepo: Repository<SubtitleProviderStat>,
     @InjectRepository(Media)
     private readonly mediaRepo: Repository<Media>,
     @InjectRepository(MediaFile)
@@ -41,6 +44,7 @@ export class SubtitlesService {
     const allResults: SubtitleSearchResult[] = [];
 
     for (const provider of providers) {
+      const start = Date.now();
       try {
         this.logger.log(
           `Searching subtitles via ${provider.name} (${provider.type})…`,
@@ -48,8 +52,26 @@ export class SubtitlesService {
         const impl = this.factory.create(provider.type, provider.settings);
         const results = await impl.search(params);
         this.logger.log(`${provider.name}: ${results.length} result(s)`);
+        void this.statRepo.save(
+          this.statRepo.create({
+            providerId: provider.id,
+            queryType: 'search',
+            responseTimeMs: Date.now() - start,
+            resultCount: results.length,
+            errorMessage: null,
+          }),
+        );
         allResults.push(...results);
       } catch (err) {
+        void this.statRepo.save(
+          this.statRepo.create({
+            providerId: provider.id,
+            queryType: 'search',
+            responseTimeMs: Date.now() - start,
+            resultCount: 0,
+            errorMessage: (err as Error).message,
+          }),
+        );
         this.logger.warn(`Search failed for provider ${provider.name}: ${err}`);
       }
     }
@@ -97,7 +119,31 @@ export class SubtitlesService {
       `Downloading subtitle "${searchResult.title}" via ${provider.name} (${provider.type})`,
     );
     const impl = this.factory.create(provider.type, provider.settings);
-    const buffer = await impl.download(searchResult);
+    const dlStart = Date.now();
+    let buffer: Buffer;
+    try {
+      buffer = await impl.download(searchResult);
+      void this.statRepo.save(
+        this.statRepo.create({
+          providerId: provider.id,
+          queryType: 'download',
+          responseTimeMs: Date.now() - dlStart,
+          resultCount: 1,
+          errorMessage: null,
+        }),
+      );
+    } catch (err) {
+      void this.statRepo.save(
+        this.statRepo.create({
+          providerId: provider.id,
+          queryType: 'download',
+          responseTimeMs: Date.now() - dlStart,
+          resultCount: 0,
+          errorMessage: (err as Error).message,
+        }),
+      );
+      throw err;
+    }
 
     const langSuffix = searchResult.forced
       ? `${searchResult.language}.forced`

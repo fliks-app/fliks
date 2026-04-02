@@ -18,6 +18,7 @@ import {
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { RootFoldersApiService, RootFolder } from '../../core/services/api/root-folders-api.service';
 import { SettingsApiService } from '../../core/services/api/settings-api.service';
+import { ToastService } from '../../core/services/toast.service';
 
 @Component({
   selector: 'app-tmdb-preview',
@@ -33,6 +34,7 @@ export class TmdbPreviewComponent implements OnInit {
   private readonly rootFoldersApi = inject(RootFoldersApiService);
   private readonly settingsApi = inject(SettingsApiService);
   private readonly translate = inject(TranslateService);
+  private readonly toast = inject(ToastService);
   readonly auth = inject(AuthService);
 
   readonly media = signal<MetadataDetails | null>(null);
@@ -50,10 +52,7 @@ export class TmdbPreviewComponent implements OnInit {
     return url.startsWith('/add/tv') ? 'series' : 'movie';
   });
 
-  readonly canImport = computed(() => {
-    const r = this.auth.user()?.role;
-    return r === 'admin' || r === 'user';
-  });
+  readonly canImport = computed(() => this.auth.hasPermission('media.create'));
 
   async ngOnInit() {
     const tmdbId = Number(this.route.snapshot.paramMap.get('tmdbId'));
@@ -104,6 +103,7 @@ export class TmdbPreviewComponent implements OnInit {
         this.selectedQualityProfileId() ?? undefined,
         this.selectedRootFolderId() ?? undefined,
       );
+      this.toast.success(this.translate.instant('discover.import_success'));
       const prefix = saved.type === 'movie' ? '/movies' : '/series';
       void this.router.navigate([prefix, saved.id]);
     } catch (err: unknown) {

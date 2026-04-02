@@ -1,0 +1,31 @@
+@if (payload(); as declineView) {
+  <div
+    class="modal modal-open z-50"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="request-view-decline-title"
+  >
+    <div class="modal-box max-w-md">
+      <h2 id="request-view-decline-title" class="text-lg font-semibold">
+        {{ 'requests.view_decline_title' | translate }}
+      </h2>
+      <p class="text-sm text-base-content/60 mt-1 line-clamp-2">{{ declineView.mediaTitle }}</p>
+      <p class="mt-4 text-sm text-base-content whitespace-pre-wrap wrap-break-word">
+        {{ declineView.reason }}
+      </p>
+      <div class="modal-action mt-2">
+        <button type="button" class="btn btn-primary btn-sm" (click)="dismissed.emit()">
+          {{ 'common.close' | translate }}
+        </button>
+      </div>
+    </div>
+    <div
+      role="button"
+      tabindex="0"
+      class="modal-backdrop bg-black/50"
+      (click)="dismissed.emit()"
+      (keydown.enter)="dismissed.emit()"
+      [attr.aria-label]="'common.close' | translate"
+    ></div>
+  </div>
+}

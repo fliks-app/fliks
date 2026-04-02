@@ -102,7 +102,7 @@
             {{ 'nav.calendar' | translate }}
           </a>
         </li>
-        @if (auth.isAdmin()) {
+        @if (auth.canAccessSettings()) {
           <li>
             <a routerLink="/import-disk" routerLinkActive="active">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -120,7 +120,7 @@
             </a>
           </li>
         }
-        @if (auth.isAdmin()) {
+        @if (auth.canAccessSettings()) {
           <li>
             <a routerLink="/system" routerLinkActive="active">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -132,7 +132,7 @@
         }
 
         <!-- Settings — collapsible dropdown (admin only) -->
-        @if (auth.isAdmin()) {
+        @if (auth.canAccessSettings()) {
           <li>
             <details [open]="isSettingsOpen()">
               <summary>
@@ -155,10 +155,12 @@
                 <li><a routerLink="/settings/subtitle-providers" routerLinkActive="active">{{ 'settings.nav.subtitle_providers' | translate }}</a></li>
                 <li><a routerLink="/settings/subtitles" routerLinkActive="active">{{ 'settings.nav.subtitles' | translate }}</a></li>
                 <li><a routerLink="/settings/notifications" routerLinkActive="active">{{ 'settings.nav.notifications' | translate }}</a></li>
+                <li><a routerLink="/settings/media-servers" routerLinkActive="active">{{ 'settings.nav.media_servers' | translate }}</a></li>
                 <li><a routerLink="/settings/root-folders" routerLinkActive="active">{{ 'settings.nav.root_folders' | translate }}</a></li>
                 <li><a routerLink="/settings/remote-path-mappings" routerLinkActive="active">{{ 'settings.nav.remote_path_mappings' | translate }}</a></li>
                 <li><a routerLink="/settings/tags" routerLinkActive="active">{{ 'settings.nav.tags' | translate }}</a></li>
                 <li><a routerLink="/settings/users" routerLinkActive="active">{{ 'settings.nav.users' | translate }}</a></li>
+                <li><a routerLink="/settings/roles" routerLinkActive="active">{{ 'settings.nav.roles' | translate }}</a></li>
                 <li><a routerLink="/settings/auto-approval" routerLinkActive="active">{{ 'settings.nav.auto_approval' | translate }}</a></li>
               </ul>
             </details>
@@ -169,14 +171,14 @@
       <div class="p-4 border-t border-base-200">
         @if (auth.user(); as user) {
           <div class="flex items-center gap-3">
-            <div class="avatar placeholder">
-              <div class="bg-neutral text-neutral-content w-8 rounded-full">
-                <span class="text-sm">{{ user.username[0].toUpperCase() }}</span>
-              </div>
+            <div class="w-8 h-8 rounded-full bg-base-300 flex items-center justify-center shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-base-content/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
             </div>
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium truncate">{{ user.username }}</p>
-              <p class="text-sm text-base-content/50">{{ ('roles.' + user.role) | translate }}</p>
+              <p class="text-sm text-base-content/50">{{ user.role }}</p>
             </div>
             <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="toggleTheme()">
               @if (theme() === 'dark') {

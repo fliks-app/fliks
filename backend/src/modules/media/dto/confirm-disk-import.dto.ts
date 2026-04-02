@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsInt,
   IsOptional,
   IsString,
@@ -20,6 +21,10 @@ export class ImportFileEntry {
 
   @IsString()
   quality: string;
+
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
 }
 
 export class ConfirmDiskImportDto {

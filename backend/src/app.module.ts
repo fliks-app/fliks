@@ -16,6 +16,8 @@ import { BlocklistModule } from './modules/blocklist/blocklist.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { SubtitlesModule } from './modules/subtitles/subtitles.module';
+import { MediaServersModule } from './modules/media-servers/media-servers.module';
+import { RolesModule } from './modules/roles/roles.module';
 
 @Module({
   imports: [
@@ -49,6 +51,8 @@ import { SubtitlesModule } from './modules/subtitles/subtitles.module';
     NotificationsModule,
     SettingsModule,
     SubtitlesModule,
+    MediaServersModule,
+    RolesModule,
   ],
 })
 export class AppModule {}

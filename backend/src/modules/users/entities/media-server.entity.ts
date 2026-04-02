@@ -16,6 +16,9 @@ export class MediaServer extends BaseEntity {
   @Column({ nullable: true })
   apiKey: string;
 
+  @Column({ type: 'jsonb', default: [] })
+  events: string[];
+
   @Column({ default: true })
   enabled: boolean;
 }

@@ -24,5 +24,12 @@ export class ImportTmdbDto {
   @IsNumber()
   @IsInt()
   @Min(1)
+  languageProfileId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @IsInt()
+  @Min(1)
   rootFolderId?: number;
 }

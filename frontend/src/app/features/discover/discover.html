@@ -4,7 +4,7 @@
     <p class="text-sm text-base-content/60 mt-1">{{ 'discover.subtitle' | translate }}</p>
   </div>
 
-  @if (!canImport()) {
+  @if (!canImport() && !canRequest()) {
     <div role="alert" class="alert alert-warning">
       <span>{{ 'discover.readonly_hint' | translate }}</span>
     </div>
@@ -113,7 +113,7 @@
     } @else if (results().length === 0) {
       <p class="text-base-content/50 text-center py-8">{{ 'discover.no_results' | translate }}</p>
     } @else {
-      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-4">
         @for (row of results(); track row.tmdbId) {
           <div
             class="card bg-base-100 shadow-md border border-base-200 cursor-pointer hover:shadow-xl transition-shadow relative overflow-hidden"
@@ -130,16 +130,6 @@
                   </svg>
                 </div>
               }
-              @if (row.existingMediaId) {
-                <div class="absolute top-1.5 left-1.5">
-                  <span class="badge badge-sm badge-success gap-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-                    </svg>
-                    {{ 'discover.in_library' | translate }}
-                  </span>
-                </div>
-              }
               @if (row.rating) {
                 <div class="absolute bottom-2 right-2">
                   <span class="badge badge-sm badge-warning">{{ row.rating | number:'1.1-1' }}</span>
@@ -153,20 +143,44 @@
                   {{ row.year }}
                 }
               </p>
-              @if (canImport()) {
+              @if (row.existingMediaId && !requestedTmdbIds().has(row.tmdbId)) {
+                <p class="text-sm text-base-content/50 font-semibold text-center flex items-center justify-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  {{ 'discover.already_added' | translate }}
+                </p>
+              } @else if (requestedTmdbIds().has(row.tmdbId)) {
+                <p class="text-sm text-base-content/50 font-semibold text-center flex items-center justify-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  {{ 'discover.already_requested' | translate }}
+                </p>
+              } @else if (canImport()) {
                 <button
                   type="button"
-                  class="btn btn-sm btn-block"
-                  [ngClass]="row.existingMediaId ? 'btn-ghost' : 'btn-primary'"
-                  [disabled]="!!row.existingMediaId || importingTmdbId() === row.tmdbId"
+                  class="btn btn-sm btn-block btn-primary"
+                  [disabled]="importingTmdbId() === row.tmdbId"
                   (click)="importResult($event, row)"
                 >
                   @if (importingTmdbId() === row.tmdbId) {
                     <span class="loading loading-spinner loading-xs"></span>
-                  } @else if (row.existingMediaId) {
-                    {{ 'discover.already_added' | translate }}
                   } @else {
                     {{ 'discover.add_to_library' | translate }}
+                  }
+                </button>
+              } @else if (canRequest()) {
+                <button
+                  type="button"
+                  class="btn btn-sm btn-block btn-secondary"
+                  [disabled]="requestingTmdbId() === row.tmdbId"
+                  (click)="openRequestModal($event, row)"
+                >
+                  @if (requestingTmdbId() === row.tmdbId) {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  } @else {
+                    {{ 'discover.request' | translate }}
                   }
                 </button>
               }
@@ -183,7 +197,7 @@
     } @else if (discoverResults().length === 0) {
       <p class="text-base-content/50 text-center py-8">{{ 'discover.no_results' | translate }}</p>
     } @else {
-      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-4">
         @for (row of discoverResults(); track row.tmdbId) {
           <div
             class="card bg-base-100 shadow-md border border-base-200 cursor-pointer hover:shadow-xl transition-shadow relative overflow-hidden"
@@ -200,16 +214,6 @@
                   </svg>
                 </div>
               }
-              @if (row.existingMediaId) {
-                <div class="absolute top-1.5 left-1.5">
-                  <span class="badge badge-sm badge-success gap-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-                    </svg>
-                    {{ 'discover.in_library' | translate }}
-                  </span>
-                </div>
-              }
               @if (row.rating) {
                 <div class="absolute bottom-2 right-2">
                   <span class="badge badge-sm badge-warning">{{ row.rating | number:'1.1-1' }}</span>
@@ -223,20 +227,44 @@
                   {{ row.year }}
                 }
               </p>
-              @if (canImport()) {
+              @if (row.existingMediaId && !requestedTmdbIds().has(row.tmdbId)) {
+                <p class="text-sm text-base-content/50 font-semibold text-center flex items-center justify-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  {{ 'discover.already_added' | translate }}
+                </p>
+              } @else if (requestedTmdbIds().has(row.tmdbId)) {
+                <p class="text-sm text-base-content/50 font-semibold text-center flex items-center justify-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  {{ 'discover.already_requested' | translate }}
+                </p>
+              } @else if (canImport()) {
                 <button
                   type="button"
-                  class="btn btn-sm btn-block"
-                  [ngClass]="row.existingMediaId ? 'btn-ghost' : 'btn-primary'"
-                  [disabled]="!!row.existingMediaId || importingTmdbId() === row.tmdbId"
+                  class="btn btn-sm btn-block btn-primary"
+                  [disabled]="importingTmdbId() === row.tmdbId"
                   (click)="importResult($event, row)"
                 >
                   @if (importingTmdbId() === row.tmdbId) {
                     <span class="loading loading-spinner loading-xs"></span>
-                  } @else if (row.existingMediaId) {
-                    {{ 'discover.already_added' | translate }}
                   } @else {
                     {{ 'discover.add_to_library' | translate }}
+                  }
+                </button>
+              } @else if (canRequest()) {
+                <button
+                  type="button"
+                  class="btn btn-sm btn-block btn-secondary"
+                  [disabled]="requestingTmdbId() === row.tmdbId"
+                  (click)="openRequestModal($event, row)"
+                >
+                  @if (requestingTmdbId() === row.tmdbId) {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  } @else {
+                    {{ 'discover.request' | translate }}
                   }
                 </button>
               }
@@ -247,3 +275,69 @@
     }
   }
 </div>
+
+<!-- Request modal -->
+@if (requestModalRow(); as reqRow) {
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+    (click)="closeRequestModal()"
+    role="presentation"
+  >
+    <div
+      class="bg-base-100 rounded-lg shadow-xl max-w-md w-full p-6 border border-base-200"
+      (click)="$event.stopPropagation()"
+      role="dialog"
+    >
+      <h2 class="text-lg font-semibold">{{ 'discover.request_modal_title' | translate }}</h2>
+      <p class="text-sm text-base-content/60 mt-1">{{ reqRow.title }}</p>
+
+      <div class="flex flex-col gap-4 mt-4">
+        @if (qualityProfiles().length) {
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'discover.quality_profile' | translate }}</span>
+            <select
+              class="select select-bordered select-sm w-full"
+              [ngModel]="requestQualityProfileId()"
+              (ngModelChange)="requestQualityProfileId.set(+$event)"
+            >
+              @for (p of qualityProfiles(); track p.id) {
+                <option [ngValue]="p.id">{{ p.name }}</option>
+              }
+            </select>
+          </label>
+        }
+        @if (languageProfiles().length) {
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'discover.language_profile' | translate }}</span>
+            <select
+              class="select select-bordered select-sm w-full"
+              [ngModel]="requestLanguageProfileId()"
+              (ngModelChange)="requestLanguageProfileId.set(+$event)"
+            >
+              @for (p of languageProfiles(); track p.id) {
+                <option [ngValue]="p.id">{{ p.name }}</option>
+              }
+            </select>
+          </label>
+        }
+      </div>
+
+      <div class="flex justify-end gap-2 mt-6">
+        <button type="button" class="btn btn-ghost btn-sm" (click)="closeRequestModal()">
+          {{ 'common.cancel' | translate }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm"
+          [disabled]="requestingTmdbId() === reqRow.tmdbId"
+          (click)="confirmRequest()"
+        >
+          @if (requestingTmdbId() === reqRow.tmdbId) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'discover.request' | translate }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

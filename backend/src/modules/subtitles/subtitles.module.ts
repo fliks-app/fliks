@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SubtitleProvider } from './entities/subtitle-provider.entity';
+import { SubtitleProviderStat } from './entities/subtitle-provider-stat.entity';
 import { SubtitleFile } from './entities/subtitle-file.entity';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
@@ -19,6 +20,7 @@ import { SubtitleActivityController } from './subtitle-activity.controller';
   imports: [
     TypeOrmModule.forFeature([
       SubtitleProvider,
+      SubtitleProviderStat,
       SubtitleFile,
       Media,
       MediaFile,

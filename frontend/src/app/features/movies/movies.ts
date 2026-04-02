@@ -4,7 +4,9 @@ import {
   signal,
   computed,
   inject,
+  Injector,
   OnInit,
+  OnDestroy,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -12,6 +14,7 @@ import { TranslateModule } from '@ngx-translate/core';
 import { MediaService, Media } from '../../core/services/api/media.service';
 import { ProfilesService, QualityProfile } from '../../core/services/api/profiles.service';
 import { MediaCardComponent } from '../../shared/components/media-card';
+import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
@@ -21,11 +24,14 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './movies.html',
 })
-export class MoviesComponent implements OnInit {
+export class MoviesComponent implements OnInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly profilesService = inject(ProfilesService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly scrollMemory = inject(ScrollMemoryService);
+  private readonly injector = inject(Injector);
+  private readonly scrollKey = 'movies';
 
   readonly allMovies = signal<Media[]>([]);
   readonly total = signal(0);
@@ -51,13 +57,20 @@ export class MoviesComponent implements OnInit {
 
   ngOnInit() {
     const qp = this.route.snapshot.queryParamMap;
-    if (qp.get('q')) this.searchQuery.set(qp.get('q')!);
-    if (qp.get('monitored')) this.filterMonitored.set(qp.get('monitored') as '' | 'true' | 'false');
-    if (qp.get('status')) this.filterStatus.set(qp.get('status')!);
-    if (qp.get('sortBy')) this.sortBy.set(qp.get('sortBy')!);
+    const stored = this.loadFilters();
+    this.searchQuery.set(qp.get('q') ?? stored['q'] ?? '');
+    this.filterMonitored.set((qp.get('monitored') ?? stored['monitored'] ?? '') as '' | 'true' | 'false');
+    this.filterStatus.set(qp.get('status') ?? stored['status'] ?? '');
+    this.sortBy.set(qp.get('sortBy') ?? stored['sortBy'] ?? 'title');
 
-    this.load();
+    this.scrollMemory.activate(this.scrollKey);
+    this.syncQueryParams();
+    this.load().then(() => this.scrollMemory.restore(this.scrollKey, this.injector));
     this.profilesService.getQualityProfiles().then((p) => this.qualityProfiles.set(p));
+  }
+
+  ngOnDestroy() {
+    this.scrollMemory.deactivate();
   }
 
   scrollToLetter(letter: string) {
@@ -144,6 +157,26 @@ export class MoviesComponent implements OnInit {
     if (this.filterStatus()) params['status'] = this.filterStatus();
     if (this.sortBy() !== 'title') params['sortBy'] = this.sortBy();
     void this.router.navigate([], { queryParams: params, replaceUrl: true });
+    this.saveFilters();
+  }
+
+  private readonly storageKey = 'suitarr.filters.movies';
+
+  private saveFilters() {
+    const data: Record<string, string> = {};
+    if (this.searchQuery()) data['q'] = this.searchQuery();
+    if (this.filterMonitored()) data['monitored'] = this.filterMonitored();
+    if (this.filterStatus()) data['status'] = this.filterStatus();
+    if (this.sortBy() !== 'title') data['sortBy'] = this.sortBy();
+    localStorage.setItem(this.storageKey, JSON.stringify(data));
+  }
+
+  private loadFilters(): Record<string, string> {
+    try {
+      return JSON.parse(localStorage.getItem(this.storageKey) ?? '{}');
+    } catch {
+      return {};
+    }
   }
 
   private async load() {

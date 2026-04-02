@@ -1,7 +1,12 @@
 <div class="flex flex-col gap-6">
-  <div>
-    <h1 class="text-2xl font-bold">{{ 'settings.users.title' | translate }}</h1>
-    <p class="text-sm text-base-content/60 mt-1">{{ 'settings.users.subtitle' | translate }}</p>
+  <div class="flex items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'settings.users.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.users.subtitle' | translate }}</p>
+    </div>
+    <button type="button" class="btn btn-primary btn-sm shrink-0" (click)="openCreate()">
+      {{ 'settings.users.add' | translate }}
+    </button>
   </div>
 
   @if (loading()) {
@@ -25,20 +30,13 @@
           @for (user of rows(); track user.id) {
             <tr>
               <td class="font-medium">
-                {{ user.username }}
+                <a [routerLink]="['/settings/users', user.id]" class="link link-hover">{{ user.username }}</a>
                 @if (auth.user()?.id === user.id) {
                   <span class="badge badge-primary badge-xs ml-2">{{ 'settings.users.you' | translate }}</span>
                 }
               </td>
               <td>
-                <span
-                  class="badge badge-sm"
-                  [class.badge-error]="user.role === 'admin'"
-                  [class.badge-info]="user.role === 'user'"
-                  [class.badge-ghost]="user.role === 'readonly'"
-                >
-                  {{ ('roles.' + user.role) | translate }}
-                </span>
+                <span class="badge badge-sm badge-ghost">{{ user.role ?? '—' }}</span>
               </td>
               <td>
                 @if (user.enabled) {
@@ -69,7 +67,7 @@
   <div class="modal modal-open z-50" role="dialog" aria-modal="true">
     <div class="modal-box max-w-md max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
       <div class="px-5 sm:px-6 pt-4 pb-3 border-b border-base-200 flex justify-between items-center shrink-0 bg-base-100">
-        <h2 class="text-lg font-bold">{{ 'settings.users.editor_edit' | translate }}</h2>
+        <h2 class="text-lg font-bold">{{ (isCreating() ? 'settings.users.editor_create' : 'settings.users.editor_edit') | translate }}</h2>
         <button
           type="button"
           class="btn btn-sm btn-ghost btn-circle"
@@ -94,7 +92,18 @@
         </label>
 
         <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.users.field_password' | translate }}</span>
+          <span class="label-text">{{ 'settings.users.field_email' | translate }}</span>
+          <input
+            type="email"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formEmail()"
+            (ngModelChange)="formEmail.set($event)"
+            placeholder="email@example.com"
+          />
+        </label>
+
+        <label class="form-control w-full">
+          <span class="label-text">{{ (isCreating() ? 'settings.users.field_password' : 'settings.users.field_new_password') | translate }}</span>
           <input
             type="password"
             class="input input-bordered input-sm w-full"
@@ -102,21 +111,23 @@
             (ngModelChange)="formPassword.set($event)"
             placeholder="••••••••"
           />
-          <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.users.password_hint' | translate }}</span>
-          </div>
+          @if (!isCreating()) {
+            <div class="label">
+              <span class="label-text-alt text-base-content/50">{{ 'settings.users.password_hint' | translate }}</span>
+            </div>
+          }
         </label>
 
         <label class="form-control w-full">
           <span class="label-text">{{ 'settings.users.field_role' | translate }}</span>
           <select
             class="select select-bordered select-sm w-full"
-            [ngModel]="formRole()"
-            (ngModelChange)="formRole.set($event)"
+            [ngModel]="formRoleId()"
+            (ngModelChange)="formRoleId.set($event)"
           >
-            <option value="admin">{{ 'roles.admin' | translate }}</option>
-            <option value="user">{{ 'roles.user' | translate }}</option>
-            <option value="readonly">{{ 'roles.readonly' | translate }}</option>
+            @for (role of roles(); track role.id) {
+              <option [ngValue]="role.id">{{ role.name }}</option>
+            }
           </select>
         </label>
 
@@ -129,21 +140,6 @@
           />
           <span class="label-text">{{ 'settings.users.field_enabled' | translate }}</span>
         </label>
-
-        <div class="pt-2 border-t border-base-200">
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm"
-            (click)="regenerateApiKey(editingUser()!)"
-          >
-            {{ 'settings.users.regen_api_key' | translate }}
-          </button>
-          @if (regeneratedKey()) {
-            <div class="mt-2 p-2 rounded bg-base-200 font-mono text-sm break-all">
-              {{ regeneratedKey() }}
-            </div>
-          }
-        </div>
 
         @if (saveError()) {
           <div role="alert" class="alert alert-error text-sm">{{ saveError() }}</div>

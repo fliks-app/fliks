@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
 import { SubtitleFileRow } from '../../../../core/services/api/subtitles-api.service';
 import { SubtitleLanguageItem } from '../../../../core/services/api/profiles.service';
@@ -42,6 +42,20 @@ export class MediaDetailSubtitlesComponent {
 
     return rows;
   });
+
+  readonly hasMissing = computed(() => this.rows().some((r) => r.missing));
+
+  readonly pageSize = 10;
+  readonly page = signal(0);
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.rows().length / this.pageSize)));
+  readonly pagedRows = computed(() => {
+    const start = this.page() * this.pageSize;
+    return this.rows().slice(start, start + this.pageSize);
+  });
+
+  goToPage(p: number) {
+    this.page.set(Math.max(0, Math.min(p, this.totalPages() - 1)));
+  }
 
   readonly openSubtitleSearch = output<void>();
   readonly autoSubtitle = output<void>();

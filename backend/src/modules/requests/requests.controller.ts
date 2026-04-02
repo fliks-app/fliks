@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
@@ -11,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { RequestsService } from './requests.service';
 import { CreateRequestDto } from './dto/create-request.dto';
+import { UpdateRequestDto } from './dto/update-request.dto';
 import { ListRequestsDto } from './dto/list-requests.dto';
 import { DeclineRequestDto } from './dto/decline-request.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
@@ -43,6 +45,16 @@ export class RequestsController {
   @CheckPolicies((ability) => ability.can(Action.Read, SuitarrRequest))
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: User) {
     return this.requestsService.findOne(id, user);
+  }
+
+  @Patch(':id')
+  @CheckPolicies((ability) => ability.can(Action.Update, SuitarrRequest))
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateRequestDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.requestsService.update(id, dto, user);
   }
 
   @Delete(':id')

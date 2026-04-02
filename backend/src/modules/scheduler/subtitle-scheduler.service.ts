@@ -12,6 +12,7 @@ import { SettingsService } from '../settings/settings.service';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import { SubtitleLanguageItem } from '../profiles/entities/language-profile.entity';
 import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
+import { MediaServersService } from '../media-servers/media-servers.service';
 
 @Injectable()
 export class SubtitleSchedulerService {
@@ -29,6 +30,7 @@ export class SubtitleSchedulerService {
     private readonly notifications: NotificationsService,
     private readonly settings: SettingsService,
     private readonly embeddedSubtitle: EmbeddedSubtitleService,
+    private readonly mediaServers: MediaServersService,
   ) {}
 
   /** Search for missing subtitles — runs every 6 hours */
@@ -102,6 +104,11 @@ export class SubtitleSchedulerService {
               score: best.score,
             });
 
+            void this.mediaServers.dispatch('subtitle.downloaded', {
+              title: media.title,
+              path: media.path,
+            });
+
             this.log.log(
               `SubtitleSearch: downloaded ${langItem.isoCode} sub for "${media.title}" (score: ${best.score})`,
             );
@@ -158,6 +165,11 @@ export class SubtitleSchedulerService {
           oldScore: sub.score,
           newScore: better.score,
           provider: better.providerName,
+        });
+
+        void this.mediaServers.dispatch('subtitle.upgraded', {
+          title: sub.media?.title,
+          path: sub.media?.path,
         });
 
         this.log.log(

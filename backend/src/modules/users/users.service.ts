@@ -7,31 +7,76 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { randomBytes } from 'crypto';
 import { User } from './entities/user.entity';
+import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { UserRole } from '../../common/enums';
+import { Role } from '../roles/entities/role.entity';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(Role)
+    private readonly roleRepo: Repository<Role>,
   ) {}
 
-  findAll(): Promise<User[]> {
-    return this.userRepo.find({ order: { username: 'ASC' } });
+  async findAll() {
+    const users = await this.userRepo.find({
+      order: { username: 'ASC' },
+      relations: ['userRole'],
+    });
+    return users.map((u) => this.serialize(u));
   }
 
-  async findOne(id: number): Promise<User> {
-    const user = await this.userRepo.findOne({ where: { id } });
+  async findOne(id: number) {
+    const user = await this.userRepo.findOne({
+      where: { id },
+      relations: ['userRole'],
+    });
     if (!user) throw new NotFoundException(`User #${id} not found`);
-    return user;
+    return this.serialize(user);
+  }
+
+  /** Flatten userRole into a role name + strip passwordHash. */
+  private serialize(user: User) {
+    const { passwordHash, userRole, ...rest } = user as any;
+    return {
+      ...rest,
+      role: user.userRole?.name ?? null,
+      permissions: user.permissions,
+    };
+  }
+
+  async create(dto: CreateUserDto): Promise<User> {
+    const existing = await this.userRepo.findOne({
+      where: { username: dto.username },
+    });
+    if (existing) throw new ConflictException('Username already taken');
+
+    let roleId = dto.roleId;
+    if (!roleId) {
+      const defaultRole = await this.roleRepo.findOne({
+        where: { isDefault: true },
+      });
+      roleId = defaultRole?.id;
+    }
+
+    const user = this.userRepo.create({
+      username: dto.username,
+      passwordHash: await bcrypt.hash(dto.password, 12),
+      email: dto.email,
+      roleId,
+      isAdmin: dto.isAdmin ?? false,
+      enabled: dto.enabled ?? true,
+    });
+    const saved = await this.userRepo.save(user);
+    return this.findOne(saved.id);
   }
 
   /**
    * Admin can update any user.
-   * Regular users can only update themselves (no role/enabled changes).
+   * Regular users can only update themselves (no roleId/enabled changes).
    */
   async update(
     targetId: number,
@@ -40,9 +85,9 @@ export class UsersService {
   ): Promise<User> {
     const target = await this.findOne(targetId);
     const isSelf = requester.id === targetId;
-    const isAdmin = requester.role === UserRole.ADMIN;
+    const isManager = requester.permissions.includes('users.manage');
 
-    if (!isSelf && !isAdmin) throw new ForbiddenException();
+    if (!isSelf && !isManager) throw new ForbiddenException();
 
     if (dto.username !== undefined) {
       const dup = await this.userRepo.findOne({
@@ -58,13 +103,14 @@ export class UsersService {
       target.passwordHash = await bcrypt.hash(dto.password, 12);
     }
 
-    // Admin-only fields
-    if (isAdmin) {
-      if (dto.role !== undefined) target.role = dto.role as UserRole;
+    // Manager-only fields
+    if (isManager) {
+      if (dto.roleId !== undefined) target.roleId = dto.roleId;
+      if (dto.isAdmin !== undefined) target.isAdmin = dto.isAdmin;
       if (dto.enabled !== undefined) target.enabled = dto.enabled;
-    } else if (dto.role !== undefined || dto.enabled !== undefined) {
+    } else if (dto.roleId !== undefined || dto.enabled !== undefined || dto.isAdmin !== undefined) {
       throw new ForbiddenException(
-        'Only admins can change role or enabled status',
+        'Only users with users.manage permission can change role or enabled status',
       );
     }
 
@@ -75,7 +121,8 @@ export class UsersService {
     if (dto.quotaPeriodDays !== undefined)
       target.quotaPeriodDays = dto.quotaPeriodDays;
 
-    return this.userRepo.save(target);
+    await this.userRepo.save(target);
+    return this.findOne(targetId);
   }
 
   async remove(id: number): Promise<void> {
@@ -83,12 +130,4 @@ export class UsersService {
     await this.userRepo.remove(user);
   }
 
-  async regenerateApiKey(id: number, requester: User): Promise<User> {
-    const target = await this.findOne(id);
-    if (requester.id !== id && requester.role !== UserRole.ADMIN) {
-      throw new ForbiddenException();
-    }
-    target.apiKey = randomBytes(32).toString('hex');
-    return this.userRepo.save(target);
-  }
 }

@@ -5,15 +5,26 @@ import { firstValueFrom } from 'rxjs';
 export interface UserRow {
   id: number;
   username: string;
-  role: 'admin' | 'user' | 'readonly';
+  roleId: number | null;
+  role: string | null;
+  isAdmin: boolean;
   enabled: boolean;
   createdAt: string;
+}
+
+export interface CreateUserBody {
+  username: string;
+  password: string;
+  email?: string;
+  roleId?: number;
+  enabled?: boolean;
 }
 
 export interface UpdateUserBody {
   username?: string;
   password?: string;
-  role?: 'admin' | 'user' | 'readonly';
+  roleId?: number;
+  isAdmin?: boolean;
   enabled?: boolean;
 }
 
@@ -23,6 +34,10 @@ export class UsersApiService {
 
   list() {
     return firstValueFrom(this.http.get<UserRow[]>('/api/users'));
+  }
+
+  create(body: CreateUserBody) {
+    return firstValueFrom(this.http.post<UserRow>('/api/users', body));
   }
 
   get(id: number) {
@@ -37,12 +52,4 @@ export class UsersApiService {
     return firstValueFrom(this.http.delete<void>(`/api/users/${id}`));
   }
 
-  regenerateApiKey(id: number) {
-    return firstValueFrom(
-      this.http.post<{ apiKey: string }>(
-        `/api/users/${id}/api-key/regenerate`,
-        {},
-      ),
-    );
-  }
 }

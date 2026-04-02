@@ -33,6 +33,7 @@ import { DelayProfile } from '../profiles/entities/delay-profile.entity';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { SubtitlesModule } from '../subtitles/subtitles.module';
 import { SettingsModule } from '../settings/settings.module';
+import { MediaServersModule } from '../media-servers/media-servers.module';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 
 @Module({
@@ -62,6 +63,7 @@ import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
     BlocklistModule,
     SubtitlesModule,
     SettingsModule,
+    MediaServersModule,
   ],
   controllers: [CommandsController, SystemController],
   providers: [

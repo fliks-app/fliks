@@ -55,6 +55,11 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly testLoading = signal(false);
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
 
+  readonly statsOpen = signal(false);
+  readonly statsLoading = signal(false);
+  readonly statsData = signal<{ date: string; queries: number; avgResponseMs: number; totalResults: number; errors: number }[]>([]);
+  readonly statsProviderName = signal('');
+
   ngOnInit() {
     this.reloadAll();
   }
@@ -185,6 +190,18 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
       this.saveError.set(msg ?? this.translate.instant('settings.subtitle_providers.save_error'));
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  async openStats(row: SubtitleProviderRow) {
+    this.statsProviderName.set(row.name);
+    this.statsOpen.set(true);
+    this.statsLoading.set(true);
+    try {
+      const data = await this.api.getStats(row.id);
+      this.statsData.set(data);
+    } finally {
+      this.statsLoading.set(false);
     }
   }
 

@@ -15,9 +15,11 @@ import {
 import { User } from '../users/entities/user.entity';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { ListRequestsDto } from './dto/list-requests.dto';
+import { UpdateRequestDto } from './dto/update-request.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
-import { MediaType, RequestStatus, UserRole } from '../../common/enums';
+import { MediaType, RequestStatus } from '../../common/enums';
 import { NotificationsService } from '../notifications/notifications.service';
+import { MediaService } from '../media/media.service';
 
 @Injectable()
 export class RequestsService {
@@ -29,6 +31,7 @@ export class RequestsService {
     @InjectRepository(AutoApprovalRule)
     private readonly ruleRepo: Repository<AutoApprovalRule>,
     private readonly notifications: NotificationsService,
+    private readonly mediaService: MediaService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -83,7 +86,7 @@ export class RequestsService {
     if (!rules.length) return false;
 
     const context = {
-      role: user.role,
+      role: user.userRole?.name?.toLowerCase() ?? 'user',
       userId: user.id,
       mediaType: dto.mediaType,
       tmdbId: dto.tmdbId,
@@ -158,6 +161,7 @@ export class RequestsService {
       title: dto.title,
       seasons: dto.seasons ?? null,
       qualityProfileId: dto.qualityProfileId ?? null,
+      languageProfileId: dto.languageProfileId ?? null,
       rootFolder: dto.rootFolder ?? null,
       status: autoApprove ? RequestStatus.APPROVED : RequestStatus.PENDING,
       approvedById: autoApprove ? user.id : null,
@@ -186,8 +190,10 @@ export class RequestsService {
       .leftJoinAndSelect('r.approvedBy', 'approvedBy')
       .orderBy('r.createdAt', 'DESC');
 
-    if (user.role !== UserRole.ADMIN) {
+    if (!user.permissions.includes('requests.manage')) {
       qb.andWhere('r.userId = :uid', { uid: user.id });
+    } else if (query.userId) {
+      qb.andWhere('r.userId = :uid', { uid: query.userId });
     }
     if (query.status) {
       qb.andWhere('r.status = :st', { st: query.status });
@@ -207,33 +213,79 @@ export class RequestsService {
       relations: ['user', 'approvedBy', 'comments', 'comments.user'],
     });
     if (!row) throw new NotFoundException(`Request #${id} not found`);
-    if (user.role !== UserRole.ADMIN && row.userId !== user.id) {
+    if (!user.permissions.includes('requests.manage') && row.userId !== user.id) {
       throw new ForbiddenException();
     }
     return row;
   }
 
+  async update(
+    id: number,
+    dto: UpdateRequestDto,
+    user: User,
+  ): Promise<SuitarrRequest> {
+    const row = await this.findOne(id, user);
+    if (row.status !== RequestStatus.PENDING) {
+      throw new ForbiddenException('Only pending requests can be updated');
+    }
+    if (!user.permissions.includes('requests.manage') && row.userId !== user.id) {
+      throw new ForbiddenException();
+    }
+    if (dto.qualityProfileId !== undefined) row.qualityProfileId = dto.qualityProfileId;
+    if (dto.languageProfileId !== undefined) row.languageProfileId = dto.languageProfileId;
+    if (dto.rootFolder !== undefined) row.rootFolder = dto.rootFolder;
+    return this.requestRepo.save(row);
+  }
+
   async remove(id: number, user: User): Promise<void> {
     const row = await this.findOne(id, user);
+    const isManager = user.permissions.includes('requests.manage');
+    if (isManager) {
+      await this.requestRepo.remove(row);
+      return;
+    }
     if (row.status !== RequestStatus.PENDING) {
       throw new ForbiddenException('Only pending requests can be cancelled');
     }
-    if (user.role !== UserRole.ADMIN && row.userId !== user.id) {
+    if (row.userId !== user.id) {
       throw new ForbiddenException();
     }
     await this.requestRepo.remove(row);
   }
 
   async approve(id: number, admin: User): Promise<SuitarrRequest> {
-    if (admin.role !== UserRole.ADMIN) throw new ForbiddenException();
+    if (!admin.permissions.includes('requests.manage')) throw new ForbiddenException();
     const row = await this.requestRepo.findOne({ where: { id } });
     if (!row) throw new NotFoundException(`Request #${id} not found`);
     if (row.status !== RequestStatus.PENDING) {
       throw new ConflictException('Request is not pending');
     }
+
     row.status = RequestStatus.APPROVED;
     row.approvedById = admin.id;
     row.declinedReason = null;
+
+    // Import the media into the library
+    try {
+      const media = await this.mediaService.importFromTmdb({
+        type: row.mediaType,
+        tmdbId: row.tmdbId,
+        qualityProfileId: row.qualityProfileId ?? undefined,
+        languageProfileId: row.languageProfileId ?? undefined,
+        rootFolderId: undefined,
+      });
+      row.mediaId = media.id;
+    } catch (err) {
+      // If already in library, resolve the existing media ID
+      if ((err as any)?.status === 409) {
+        const existing = await this.mediaService.findByTmdbId(
+          row.tmdbId,
+          row.mediaType,
+        );
+        if (existing) row.mediaId = existing.id;
+      }
+    }
+
     const saved = await this.requestRepo.save(row);
     void this.notifications.dispatch('request.approved', {
       title: saved.title,
@@ -246,7 +298,7 @@ export class RequestsService {
     admin: User,
     reason?: string,
   ): Promise<SuitarrRequest> {
-    if (admin.role !== UserRole.ADMIN) throw new ForbiddenException();
+    if (!admin.permissions.includes('requests.manage')) throw new ForbiddenException();
     const row = await this.requestRepo.findOne({ where: { id } });
     if (!row) throw new NotFoundException(`Request #${id} not found`);
     if (row.status !== RequestStatus.PENDING) {
@@ -277,7 +329,7 @@ export class RequestsService {
     });
     if (!request)
       throw new NotFoundException(`Request #${requestId} not found`);
-    if (user.role !== UserRole.ADMIN && request.userId !== user.id) {
+    if (!user.permissions.includes('requests.manage') && request.userId !== user.id) {
       throw new ForbiddenException();
     }
     const comment = this.commentRepo.create({
@@ -294,7 +346,7 @@ export class RequestsService {
     });
     if (!request)
       throw new NotFoundException(`Request #${requestId} not found`);
-    if (user.role !== UserRole.ADMIN && request.userId !== user.id) {
+    if (!user.permissions.includes('requests.manage') && request.userId !== user.id) {
       throw new ForbiddenException();
     }
     return this.commentRepo.find({
@@ -311,7 +363,7 @@ export class RequestsService {
     });
     if (!comment)
       throw new NotFoundException(`Comment #${commentId} not found`);
-    if (user.role !== UserRole.ADMIN && comment.userId !== user.id) {
+    if (!user.permissions.includes('requests.manage') && comment.userId !== user.id) {
       throw new ForbiddenException();
     }
     await this.commentRepo.remove(comment);

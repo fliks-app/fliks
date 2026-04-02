@@ -18,6 +18,8 @@ import {
 } from '../../core/services/api/metadata.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { RootFoldersApiService, RootFolder } from '../../core/services/api/root-folders-api.service';
+import { RequestsService } from '../../core/services/api/requests.service';
+import { ToastService } from '../../core/services/toast.service';
 
 type DiscoverTab = 'movie' | 'series';
 
@@ -53,27 +55,56 @@ export class DiscoverComponent implements OnInit, OnDestroy {
 
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
 
-  readonly canImport = computed(() => {
-    const r = this.auth.user()?.role;
-    return r === 'admin' || r === 'user';
-  });
+  private readonly requestsApi = inject(RequestsService);
+  private readonly toast = inject(ToastService);
+
+  readonly canImport = computed(() => this.auth.hasPermission('media.create'));
+  readonly canRequest = computed(() => !this.canImport() && this.auth.hasPermission('requests.create'));
+  readonly requestingTmdbId = signal<number | null>(null);
+  readonly requestedTmdbIds = signal<Set<number>>(new Set());
+
+  // Request modal
+  readonly languageProfiles = signal<{ id: number; name: string }[]>([]);
+  readonly requestModalRow = signal<MetadataSearchResult | null>(null);
+  readonly requestQualityProfileId = signal<number | null>(null);
+  readonly requestLanguageProfileId = signal<number | null>(null);
 
   async ngOnInit() {
-    const r = this.auth.user()?.role;
-    if (r === 'admin' || r === 'user') {
-      const [profiles, folders] = await Promise.all([
-        this.profilesApi.getQualityProfiles(),
-        this.rootFoldersApi.list(),
-      ]);
-      this.qualityProfiles.set(profiles.map((p) => ({ id: p.id, name: p.name })));
-      if (profiles.length && this.selectedQualityProfileId() == null) {
-        this.selectedQualityProfileId.set(profiles[0].id);
-      }
-      this.rootFolders.set(folders);
-      if (folders.length && this.selectedRootFolderId() == null) {
-        this.selectedRootFolderId.set(folders[0].id);
-      }
+    const promises: Promise<void>[] = [];
+
+    if (this.canImport()) {
+      promises.push(
+        Promise.all([
+          this.profilesApi.getQualityProfiles(),
+          this.rootFoldersApi.list(),
+        ]).then(([profiles, folders]) => {
+          this.qualityProfiles.set(profiles.map((p) => ({ id: p.id, name: p.name })));
+          if (profiles.length && this.selectedQualityProfileId() == null) {
+            this.selectedQualityProfileId.set(profiles[0].id);
+          }
+          this.rootFolders.set(folders);
+          if (folders.length && this.selectedRootFolderId() == null) {
+            this.selectedRootFolderId.set(folders[0].id);
+          }
+        }),
+      );
     }
+
+    if (this.canRequest()) {
+      promises.push(
+        Promise.all([
+          this.profilesApi.getQualityProfiles(),
+          this.profilesApi.getLanguageProfiles(),
+          this.requestsApi.list({ limit: 100 }),
+        ]).then(([qp, lp, res]) => {
+          this.qualityProfiles.set(qp.map((p) => ({ id: p.id, name: p.name })));
+          this.languageProfiles.set(lp.map((p) => ({ id: p.id, name: p.name })));
+          this.requestedTmdbIds.set(new Set(res.data.map((r) => r.tmdbId)));
+        }),
+      );
+    }
+
+    await Promise.all(promises);
     this.loadDiscover();
   }
 
@@ -190,6 +221,7 @@ export class DiscoverComponent implements OnInit, OnDestroy {
         qp ?? undefined,
         rf ?? undefined,
       );
+      this.toast.success(this.translate.instant('discover.import_success'));
       const path = media.type === 'movie' ? '/movies' : '/series';
       void this.router.navigate([path, media.id]);
     } catch (err: unknown) {
@@ -207,6 +239,41 @@ export class DiscoverComponent implements OnInit, OnDestroy {
       }
     } finally {
       this.importingTmdbId.set(null);
+    }
+  }
+
+  openRequestModal(event: Event, row: MetadataSearchResult) {
+    event.stopPropagation();
+    if (!this.canRequest() || row.existingMediaId || this.requestedTmdbIds().has(row.tmdbId)) return;
+    this.requestQualityProfileId.set(this.qualityProfiles()[0]?.id ?? null);
+    this.requestLanguageProfileId.set(this.languageProfiles()[0]?.id ?? null);
+    this.requestModalRow.set(row);
+  }
+
+  closeRequestModal() {
+    this.requestModalRow.set(null);
+  }
+
+  async confirmRequest() {
+    const row = this.requestModalRow();
+    if (!row) return;
+    this.requestingTmdbId.set(row.tmdbId);
+    try {
+      await this.requestsApi.create({
+        mediaType: this.tab(),
+        tmdbId: row.tmdbId,
+        title: row.title,
+        qualityProfileId: this.requestQualityProfileId() ?? undefined,
+        languageProfileId: this.requestLanguageProfileId() ?? undefined,
+      });
+      row.existingMediaId = -1;
+      this.requestedTmdbIds.update((s) => new Set(s).add(row.tmdbId));
+      this.toast.success(this.translate.instant('discover.request_success'));
+      this.closeRequestModal();
+    } catch {
+      // error toast handled by the global error interceptor
+    } finally {
+      this.requestingTmdbId.set(null);
     }
   }
 }

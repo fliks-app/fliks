@@ -1,7 +1,8 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { SubtitleFile } from './entities/subtitle-file.entity';
+import { SubtitleProviderType } from '../../common/enums/subtitle-provider-type.enum';
 import { SubtitleProviderService } from './subtitle-provider.service';
 import { SubtitleProviderFactory } from './providers/subtitle-provider.factory';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
@@ -69,21 +70,25 @@ export class SubtitleActivityController {
   @Get('stats')
   @CheckPolicies((ability) => ability.can(Action.Read, SubtitleFile))
   async stats() {
+    const notEmbedded = { providerType: Not(SubtitleProviderType.EMBEDDED) };
     const [totalSubs, byStatus, byProvider, recent] = await Promise.all([
-      this.subtitleFileRepo.count(),
+      this.subtitleFileRepo.count({ where: notEmbedded }),
       this.subtitleFileRepo
         .createQueryBuilder('sf')
         .select('sf.status', 'status')
         .addSelect('COUNT(*)::int', 'count')
+        .where('sf.providerType != :emb', { emb: SubtitleProviderType.EMBEDDED })
         .groupBy('sf.status')
         .getRawMany(),
       this.subtitleFileRepo
         .createQueryBuilder('sf')
         .select('sf.providerType', 'providerType')
         .addSelect('COUNT(*)::int', 'count')
+        .where('sf.providerType != :emb', { emb: SubtitleProviderType.EMBEDDED })
         .groupBy('sf.providerType')
         .getRawMany(),
       this.subtitleFileRepo.find({
+        where: notEmbedded,
         relations: ['media'],
         order: { createdAt: 'DESC' },
         take: 10,

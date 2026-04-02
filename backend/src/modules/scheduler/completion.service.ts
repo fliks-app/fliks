@@ -22,6 +22,7 @@ import { NamingService } from './naming.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
 import { RemotePathMapping } from '../settings/entities/remote-path-mapping.entity';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
+import { MediaServersService } from '../media-servers/media-servers.service';
 
 @Injectable()
 export class CompletionService {
@@ -50,6 +51,7 @@ export class CompletionService {
     @InjectRepository(RemotePathMapping)
     private readonly pathMappingRepo: Repository<RemotePathMapping>,
     private readonly subtitleScheduler: SubtitleSchedulerService,
+    private readonly mediaServers: MediaServersService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -83,7 +85,10 @@ export class CompletionService {
 
     const completedTorrents = allTorrents.filter(
       (t) =>
-        t.progress >= 1 || t.state === 'seeding' || t.state === 'stalledUP',
+        t.progress >= 1 ||
+        t.state === 'seeding' ||
+        t.state === 'stalledUP' ||
+        t.state === 'stoppedUP',
     );
 
     // Purge grabbed/failed entries that have no matching torrent in any client
@@ -494,15 +499,28 @@ export class CompletionService {
       );
 
       const relativePath = path.relative(libraryRoot, path.normalize(destPath));
-      const savedFile = await this.mediaFileRepo.save(
-        this.mediaFileRepo.create({
-          mediaId: media.id,
-          episodeId,
-          relativePath,
-          size: videoFile.size,
-          quality: history.quality,
-        }),
-      );
+
+      // Avoid duplicate: update existing record if same path already tracked
+      const existingFile = await this.mediaFileRepo.findOne({
+        where: { mediaId: media.id, relativePath },
+      });
+      const savedFile = existingFile
+        ? await this.mediaFileRepo.save(
+            Object.assign(existingFile, {
+              episodeId,
+              size: videoFile.size,
+              quality: history.quality,
+            }),
+          )
+        : await this.mediaFileRepo.save(
+            this.mediaFileRepo.create({
+              mediaId: media.id,
+              episodeId,
+              relativePath,
+              size: videoFile.size,
+              quality: history.quality,
+            }),
+          );
 
       if (episodeId != null) {
         await this.episodeRepo.update(episodeId, { hasFile: true });
@@ -520,6 +538,11 @@ export class CompletionService {
       title: media.title,
       quality: history.quality,
       sourceTitle: history.sourceTitle,
+    });
+
+    void this.mediaServers.dispatch('download.complete', {
+      title: media.title,
+      path: media.path,
     });
 
     // Trigger subtitle search for each imported file (sequential to avoid rate limits)

@@ -42,6 +42,21 @@ export class ProfilesService {
     return first?.id ?? null;
   }
 
+  async resolveLanguageProfileIdForImport(
+    requested?: number,
+  ): Promise<number | null> {
+    if (requested != null) {
+      const p = await this.lpRepo.findOne({ where: { id: requested } });
+      if (!p) {
+        throw new BadRequestException(
+          `Language profile #${requested} not found`,
+        );
+      }
+      return p.id;
+    }
+    return null;
+  }
+
   async createQualityProfile(
     dto: CreateQualityProfileDto,
   ): Promise<QualityProfile> {

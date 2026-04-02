@@ -70,11 +70,8 @@ export class EpisodeDetailComponent implements OnInit {
   readonly subSearchSearched = signal(false);
   readonly subSearchResults = signal<any[]>([]);
 
-  readonly isAdmin = computed(() => this.auth.isAdmin());
-  readonly canGrab = computed(() => {
-    const r = this.auth.user()?.role;
-    return r === 'admin' || r === 'user';
-  });
+  readonly isAdmin = computed(() => this.auth.hasPermission('settings.access'));
+  readonly canGrab = computed(() => this.auth.hasPermission('media.grab'));
 
   readonly episodeFiles = computed<MediaFileRow[]>(() => {
     const m = this.media();

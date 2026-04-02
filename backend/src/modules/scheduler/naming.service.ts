@@ -270,14 +270,17 @@ export class NamingService {
   }
 
   private sanitize(name: string): string {
-    return name
-      .replace(/\{[^}]*\}/g, '') // remove unreplaced tokens
-      .replace(/undefined/g, '') // remove stray "undefined"
-      .replace(/[<>:"/\\|?*\x00-\x1f]/g, '')
-      .replace(/\s{2,}/g, ' ')
-      .replace(/\(\s*\)/g, '') // remove empty parentheses
-      .replace(/\[\s*\]/g, '') // remove empty brackets
-      .replace(/\s{2,}/g, ' ')
-      .trim();
+    return (
+      name
+        .replace(/\{[^}]*\}/g, '') // remove unreplaced tokens
+        .replace(/undefined/g, '') // remove stray "undefined"
+        // eslint-disable-next-line no-control-regex
+        .replace(/[<>:"/\\|?*\x00-\x1f]/g, '')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/\(\s*\)/g, '') // remove empty parentheses
+        .replace(/\[\s*\]/g, '') // remove empty brackets
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+    );
   }
 }

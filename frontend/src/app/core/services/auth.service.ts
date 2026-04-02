@@ -7,8 +7,10 @@ export interface User {
   id: number;
   username: string;
   email: string;
-  role: string;
-  apiKey: string;
+  role: string | null;
+  roleId: number | null;
+  isAdmin: boolean;
+  permissions: string[];
   avatar: string | null;
 }
 
@@ -25,7 +27,21 @@ export class AuthService {
 
   readonly user = this._user.asReadonly();
   readonly isAuthenticated = computed(() => !!this._user());
-  readonly isAdmin = computed(() => this._user()?.role === 'admin');
+
+  /** Check if the current user has a specific permission. */
+  hasPermission(perm: string): boolean {
+    return this._user()?.permissions?.includes(perm) ?? false;
+  }
+
+  /** Convenience: true if the user has settings.access permission. */
+  readonly canAccessSettings = computed(() =>
+    this._user()?.permissions?.includes('settings.access') ?? false,
+  );
+
+  /** Convenience: true if the user can manage users. */
+  readonly canManageUsers = computed(() =>
+    this._user()?.permissions?.includes('users.manage') ?? false,
+  );
 
   async login(username: string, password: string): Promise<LoginResponse> {
     const res = await firstValueFrom(

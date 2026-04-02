@@ -8,6 +8,7 @@ import { MediaFile } from './entities/media-file.entity';
 import { Season } from './entities/season.entity';
 import { Episode } from './entities/episode.entity';
 import { parseReleaseQuality } from './release-quality.parser';
+import { getSuitarrQualityById } from '../../common/constants/suitarr-qualities';
 import { ImportFileEntry } from './dto/confirm-disk-import.dto';
 
 const VIDEO_EXTS = new Set([
@@ -35,6 +36,7 @@ export interface ScanCandidate {
   mediaType: string | null;
   episodeId: number | null;
   episodeTitle: string | null;
+  existingQuality: string | null;
 }
 
 @Injectable()
@@ -120,11 +122,30 @@ export class DiskImportService {
 
         const relativePath = path.relative(media.path, entry.filePath);
 
-        // Avoid duplicate
+        // Avoid duplicate path
         const existing = await this.fileRepo.findOne({
           where: { mediaId: media.id, relativePath },
         });
         if (existing) continue;
+
+        // Block import if a file of equivalent or better quality already exists
+        if (!entry.force) {
+          const candidateQuality = parseReleaseQuality(entry.quality);
+          const candidateRank = candidateQuality.quality.rank;
+          const where: Record<string, unknown> = { mediaId: media.id };
+          if (entry.episodeId) where['episodeId'] = entry.episodeId;
+          const existingFiles = await this.fileRepo.find({ where });
+          const hasBetterOrEqual = existingFiles.some((ef) => {
+            const parsed = parseReleaseQuality(ef.quality);
+            return parsed.quality.rank >= candidateRank;
+          });
+          if (hasBetterOrEqual) {
+            errors.push(
+              `${path.basename(entry.filePath)}: qualité équivalente ou supérieure déjà présente`,
+            );
+            continue;
+          }
+        }
 
         await this.fileRepo.save(
           this.fileRepo.create({
@@ -209,6 +230,22 @@ export class DiskImportService {
       }
     }
 
+    // Check if a file of equivalent or better quality already exists
+    let existingQuality: string | null = null;
+    if (matched) {
+      const where: Record<string, unknown> = { mediaId: matched.id };
+      if (episodeId) where['episodeId'] = episodeId;
+      const existingFiles = await this.fileRepo.find({ where });
+      const candidateRank = quality.rank;
+      for (const ef of existingFiles) {
+        const parsed = parseReleaseQuality(ef.quality);
+        if (parsed.quality.rank >= candidateRank) {
+          existingQuality = ef.quality;
+          break;
+        }
+      }
+    }
+
     return {
       filePath,
       filename,
@@ -223,6 +260,7 @@ export class DiskImportService {
       mediaType: matched?.type ?? null,
       episodeId,
       episodeTitle,
+      existingQuality,
     };
   }
 

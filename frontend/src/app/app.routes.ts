@@ -185,6 +185,13 @@ export const routes: Routes = [
               ).then((m) => m.NotificationsSettingsComponent),
           },
           {
+            path: 'media-servers',
+            loadComponent: () =>
+              import(
+                './features/settings/media-servers/media-servers'
+              ).then((m) => m.MediaServersSettingsComponent),
+          },
+          {
             path: 'root-folders',
             loadComponent: () =>
               import(
@@ -203,6 +210,36 @@ export const routes: Routes = [
             loadComponent: () =>
               import('./features/settings/users/users').then(
                 (m) => m.UsersSettingsComponent,
+              ),
+          },
+          {
+            path: 'users/:id',
+            loadComponent: () =>
+              import(
+                './features/settings/users/user-detail/user-detail'
+              ).then((m) => m.UserDetailComponent),
+            children: [
+              {
+                path: '',
+                loadComponent: () =>
+                  import(
+                    './features/settings/users/user-detail/user-general'
+                  ).then((m) => m.UserGeneralComponent),
+              },
+              {
+                path: 'requests',
+                loadComponent: () =>
+                  import(
+                    './features/settings/users/user-detail/user-requests'
+                  ).then((m) => m.UserRequestsComponent),
+              },
+            ],
+          },
+          {
+            path: 'roles',
+            loadComponent: () =>
+              import('./features/settings/roles/roles').then(
+                (m) => m.RolesSettingsComponent,
               ),
           },
           {

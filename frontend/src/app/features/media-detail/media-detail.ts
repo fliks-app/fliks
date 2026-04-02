@@ -131,17 +131,9 @@ export class MediaDetailComponent implements OnInit {
   readonly pathSaving = signal(false);
   readonly pathOk = signal(false);
 
-  readonly canGrab = computed(() => {
-    const r = this.auth.user()?.role;
-    return r === 'admin' || r === 'user';
-  });
-
-  readonly canEditProfiles = computed(() => {
-    const r = this.auth.user()?.role;
-    return r === 'admin' || r === 'user';
-  });
-
-  readonly isAdmin = computed(() => this.auth.user()?.role === 'admin');
+  readonly canGrab = computed(() => this.auth.hasPermission('media.grab'));
+  readonly canEditProfiles = computed(() => this.auth.hasPermission('media.edit'));
+  readonly isAdmin = computed(() => this.auth.hasPermission('settings.access'));
   readonly deleteLoading = signal(false);
   readonly renameLoading = signal(false);
   readonly renameToast = signal('');
@@ -229,9 +221,8 @@ export class MediaDetailComponent implements OnInit {
       return;
     }
 
-    const role = this.auth.user()?.role;
     const loadProfiles = async () => {
-      if (role !== 'admin' && role !== 'user') return;
+      if (!this.auth.hasPermission('media.edit')) return;
       this.profilesOptionsLoading.set(true);
       try {
         const [q, l, rf] = await Promise.all([

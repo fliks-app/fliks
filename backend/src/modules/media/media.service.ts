@@ -81,6 +81,11 @@ export class MediaService {
         dto.qualityProfileId,
       );
 
+    const languageProfileId =
+      await this.profiles.resolveLanguageProfileIdForImport(
+        dto.languageProfileId,
+      );
+
     let rootPath: string | undefined;
     if (dto.rootFolderId) {
       const rf = await this.rootFolderRepo.findOne({
@@ -134,6 +139,7 @@ export class MediaService {
       return this.persistImportedMovie(
         details,
         qualityProfileId,
+        languageProfileId,
         rootPath,
         folderName,
       );
@@ -152,6 +158,7 @@ export class MediaService {
       details,
       seasons,
       qualityProfileId,
+      languageProfileId,
       rootPath,
       folderName,
     );
@@ -261,6 +268,10 @@ export class MediaService {
     }
 
     return { data: enriched, total };
+  }
+
+  async findByTmdbId(tmdbId: number, type: MediaType): Promise<Media | null> {
+    return this.mediaRepo.findOne({ where: { tmdbId, type } });
   }
 
   async findOne(id: number): Promise<Media> {
@@ -867,12 +878,14 @@ export class MediaService {
   private async persistImportedMovie(
     details: MetadataDetails,
     qualityProfileId: number | null,
+    languageProfileId: number | null,
     rootPath?: string,
     folderName?: string,
   ): Promise<Media> {
     const row = this.mediaRepo.create({
       ...this.buildMediaFieldsFromTmdb(details, MediaType.MOVIE),
       ...(qualityProfileId != null ? { qualityProfileId } : {}),
+      ...(languageProfileId != null ? { languageProfileId } : {}),
       ...(rootPath ? { path: rootPath } : {}),
       ...(folderName ? { folderName } : {}),
     });
@@ -885,12 +898,14 @@ export class MediaService {
     details: MetadataDetails,
     seasons: SeasonDetails[],
     qualityProfileId: number | null,
+    languageProfileId: number | null,
     rootPath?: string,
     folderName?: string,
   ): Promise<Media> {
     const row = this.mediaRepo.create({
       ...this.buildMediaFieldsFromTmdb(details, MediaType.SERIES),
       ...(qualityProfileId != null ? { qualityProfileId } : {}),
+      ...(languageProfileId != null ? { languageProfileId } : {}),
       ...(rootPath ? { path: rootPath } : {}),
       ...(folderName ? { folderName } : {}),
     });

@@ -32,6 +32,11 @@ export class CreateRequestDto {
   qualityProfileId?: number;
 
   @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  languageProfileId?: number;
+
+  @IsOptional()
   @IsString()
   rootFolder?: string;
 }

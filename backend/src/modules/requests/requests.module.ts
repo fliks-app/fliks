@@ -5,6 +5,7 @@ import { RequestComment } from './entities/request-comment.entity';
 import { AutoApprovalRule } from './entities/auto-approval-rule.entity';
 import { AuthModule } from '../auth/auth.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { MediaModule } from '../media/media.module';
 import { RequestsService } from './requests.service';
 import { RequestsController } from './requests.controller';
 import { AutoApprovalRulesController } from './auto-approval-rules.controller';
@@ -18,6 +19,7 @@ import { AutoApprovalRulesController } from './auto-approval-rules.controller';
     ]),
     AuthModule,
     NotificationsModule,
+    MediaModule,
   ],
   controllers: [RequestsController, AutoApprovalRulesController],
   providers: [RequestsService],

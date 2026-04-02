@@ -1,0 +1,83 @@
+<!-- Stats -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+  <div class="stat bg-base-200 rounded-lg p-4">
+    <div class="stat-title text-xs">{{ 'settings.user_detail.stat_total_requests' | translate }}</div>
+    <div class="stat-value text-xl">{{ stats().total }}</div>
+  </div>
+  <div class="stat bg-base-200 rounded-lg p-4">
+    <div class="stat-title text-xs">{{ 'settings.user_detail.stat_pending' | translate }}</div>
+    <div class="stat-value text-xl text-warning">{{ stats().pending }}</div>
+  </div>
+  <div class="stat bg-base-200 rounded-lg p-4">
+    <div class="stat-title text-xs">{{ 'settings.user_detail.stat_approved' | translate }}</div>
+    <div class="stat-value text-xl text-success">{{ stats().approved }}</div>
+  </div>
+  <div class="stat bg-base-200 rounded-lg p-4">
+    <div class="stat-title text-xs">{{ 'settings.user_detail.stat_declined' | translate }}</div>
+    <div class="stat-value text-xl text-error">{{ stats().declined }}</div>
+  </div>
+</div>
+
+<!-- Table -->
+@if (loading() && requests().length === 0) {
+  <div class="flex justify-center py-8">
+    <span class="loading loading-spinner loading-md"></span>
+  </div>
+} @else if (requests().length === 0) {
+  <p class="text-sm text-base-content/50 py-4">{{ 'settings.user_detail.no_requests' | translate }}</p>
+} @else {
+  <div class="overflow-x-auto rounded-lg border border-base-200">
+    <table class="table table-sm">
+      <thead>
+        <tr>
+          <th>{{ 'settings.user_detail.col_title' | translate }}</th>
+          <th>{{ 'settings.user_detail.col_type' | translate }}</th>
+          <th>{{ 'settings.user_detail.col_status' | translate }}</th>
+          <th>{{ 'settings.user_detail.col_date' | translate }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (req of requests(); track req.id) {
+          <tr>
+            <td class="font-medium max-w-xs truncate" [title]="req.title">{{ req.title }}</td>
+            <td>
+              <span class="badge badge-xs" [class.badge-info]="req.mediaType === 'movie'" [class.badge-accent]="req.mediaType === 'series'">
+                {{ req.mediaType }}
+              </span>
+            </td>
+            <td>
+              <span
+                class="badge badge-sm"
+                [class.badge-warning]="req.status === 'pending'"
+                [class.badge-success]="req.status === 'approved' || req.status === 'available'"
+                [class.badge-error]="req.status === 'declined' || req.status === 'failed'"
+                [class.badge-info]="req.status === 'processing'"
+              >
+                {{ req.status }}
+              </span>
+              @if (req.declinedReason) {
+                <span class="text-xs text-base-content/50 ml-1" [title]="req.declinedReason">— {{ req.declinedReason }}</span>
+              }
+            </td>
+            <td class="text-sm text-base-content/60">{{ req.createdAt | date:'dd/MM/yyyy' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+  @if (hasMore()) {
+    <div class="flex justify-center mt-3">
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm"
+        [disabled]="loading()"
+        (click)="loadMore()"
+      >
+        @if (loading()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ 'common.load_more' | translate }}
+      </button>
+    </div>
+  }
+}

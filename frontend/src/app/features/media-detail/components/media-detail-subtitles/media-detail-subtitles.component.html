@@ -10,18 +10,20 @@
     </h2>
     @if (canGrab()) {
       <div class="flex gap-2">
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm shrink-0"
-          [disabled]="searchDisabled() || subtitleActionBusy()"
-          [attr.title]="searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null"
-          (click)="autoSubtitle.emit()"
-        >
-          @if (subtitleActionBusy()) {
-            <span class="loading loading-spinner loading-xs"></span>
-          }
-          {{ 'media_detail.auto_subtitle' | translate }}
-        </button>
+        @if (hasMissing()) {
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm shrink-0"
+            [disabled]="searchDisabled() || subtitleActionBusy()"
+            [attr.title]="searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null"
+            (click)="autoSubtitle.emit()"
+          >
+            @if (subtitleActionBusy()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'media_detail.search_missing_subtitles' | translate }}
+          </button>
+        }
         <button
           type="button"
           class="btn btn-primary btn-sm shrink-0"
@@ -55,7 +57,7 @@
           </tr>
         </thead>
         <tbody>
-          @for (row of rows(); track row.missing ? row.language : row.sub!.id) {
+          @for (row of pagedRows(); track row.missing ? row.language : row.sub!.id) {
             @if (row.missing) {
               <tr class="opacity-40">
                 <td class="font-medium">{{ row.language }}</td>
@@ -115,5 +117,26 @@
         </tbody>
       </table>
     </div>
+    @if (totalPages() > 1) {
+      <div class="flex justify-center items-center gap-1 mt-2">
+        <button type="button" class="btn btn-ghost btn-xs" [disabled]="page() === 0" (click)="goToPage(page() - 1)">
+          {{ 'common.prev' | translate }}
+        </button>
+        @for (p of [].constructor(totalPages()); track $index) {
+          <button
+            type="button"
+            class="btn btn-xs"
+            [class.btn-primary]="$index === page()"
+            [class.btn-ghost]="$index !== page()"
+            (click)="goToPage($index)"
+          >
+            {{ $index + 1 }}
+          </button>
+        }
+        <button type="button" class="btn btn-ghost btn-xs" [disabled]="page() === totalPages() - 1" (click)="goToPage(page() + 1)">
+          {{ 'common.next' | translate }}
+        </button>
+      </div>
+    }
   }
 </section>

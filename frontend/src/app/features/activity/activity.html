@@ -99,7 +99,7 @@
                         {{ 'activity.link_media' | translate }}
                       </button>
                     }
-                    @if (item.mediaId && (item.status === 'Awaiting import' || item.status === 'Import failed')) {
+                    @if (item.mediaId && (item.status === 'Awaiting import' || item.status === 'Import failed' || (item.status === 'Stopped' && item.progress >= 1))) {
                       <button
                         type="button"
                         class="btn btn-success btn-xs gap-1"
@@ -129,7 +129,7 @@
                       </svg>
                     </label>
                     <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-200 rounded-box shadow-lg z-10 w-56 p-2">
-                      @if (item.status === 'Imported' || item.status === 'Quality not upgraded') {
+                      @if (item.status === 'Imported' || item.status === 'Quality not upgraded' || (item.status === 'Stopped' && item.progress >= 1)) {
                         <li>
                           <button (click)="reimport(item)">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -59,7 +59,6 @@ export class AuthController {
   @Get('me')
   @UseGuards(JwtOrApiKeyGuard)
   getProfile(@CurrentUser() user: User) {
-    const { passwordHash, ...safeUser } = user as any;
-    return safeUser;
+    return this.authService.safeUser(user);
   }
 }
