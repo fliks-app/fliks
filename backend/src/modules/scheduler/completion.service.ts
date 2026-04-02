@@ -20,6 +20,7 @@ import {
 import { NotificationsService } from '../notifications/notifications.service';
 import { NamingService } from './naming.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
+import { EventsService } from './events.service';
 import { SettingsService } from '../settings/settings.service';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
@@ -51,6 +52,7 @@ export class CompletionService {
     private readonly settings: SettingsService,
     private readonly subtitleScheduler: SubtitleSchedulerService,
     private readonly mediaServers: MediaServersService,
+    private readonly events: EventsService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -189,6 +191,8 @@ export class CompletionService {
           status: 'failed',
           statusMessage: (e as Error).message,
         });
+
+        this.events.emit({ type: 'import.failed', mediaId: history.mediaId, title: history.sourceTitle, error: (e as Error).message });
 
         // Auto-blocklist the failed release so it won't be grabbed again
         try {
@@ -481,6 +485,8 @@ export class CompletionService {
       quality: history.quality,
       sourceTitle: history.sourceTitle,
     });
+    this.events.emit({ type: 'import.complete', mediaId: media.id, title: media.title });
+    this.events.emit({ type: 'queue.updated' });
 
     void this.mediaServers.dispatch('download.complete', {
       title: media.title,
@@ -652,6 +658,9 @@ export class CompletionService {
         const history = await this.historyRepo.findOne({
           where: { torrentHash: t.hash },
         });
+
+        this.events.emit({ type: 'stalled.removed', title: history?.sourceTitle ?? t.name });
+        this.events.emit({ type: 'queue.updated' });
 
         // Blocklist the release
         await this.blocklist.create({
