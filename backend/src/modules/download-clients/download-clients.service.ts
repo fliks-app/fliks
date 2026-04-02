@@ -126,24 +126,11 @@ export class DownloadClientsService {
 
   async reimport(torrentHash: string): Promise<void> {
     const entry = await this.historyRepo.findOne({
-      where: { torrentHash, status: 'completed' as any },
+      where: { torrentHash },
+      order: { createdAt: 'DESC' },
     });
     if (!entry) {
-      // Try matching by name
-      const entries = await this.historyRepo.find({
-        where: [{ status: 'completed' as any }, { status: 'warning' as any }],
-      });
-      const match = entries.find(
-        (h) => h.torrentHash === torrentHash,
-      );
-      if (match) {
-        await this.historyRepo.update(match.id, {
-          status: 'grabbed',
-          statusMessage: null as any,
-        });
-        return;
-      }
-      throw new NotFoundException('No completed history entry found for this torrent');
+      throw new NotFoundException('No history entry found for this torrent');
     }
     await this.historyRepo.update(entry.id, {
       status: 'grabbed',
