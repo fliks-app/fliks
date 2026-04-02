@@ -5,6 +5,7 @@ import {
   SubtitleSearchResult,
 } from './subtitle-provider.interface';
 import { isRateLimited, rateLimitedFetch } from './rate-limiter';
+import { extractSubtitleFromZip } from './zip-utils';
 
 const PROVIDER_TYPE = 'subdl';
 
@@ -71,7 +72,7 @@ export class SubdlProvider implements SubtitleProviderInterface {
     }
 
     return (body.subtitles ?? []).map((item) => ({
-      providerFileId: String(item.sd_id),
+      providerFileId: item.url,
       title: item.release_name,
       language: item.language,
       forced: false,
@@ -87,10 +88,11 @@ export class SubdlProvider implements SubtitleProviderInterface {
       throw new Error('Subdl is rate-limited, try again later');
     }
 
-    const query = new URLSearchParams({ api_key: this.settings.apiKey });
+    // providerFileId contains the relative URL path from search results
+    const dlUrl = `https://dl.subdl.com${result.providerFileId}`;
     const res = await rateLimitedFetch(
       PROVIDER_TYPE,
-      `https://api.subdl.com/api/v1/subtitles/download/${result.providerFileId}?${query}`,
+      dlUrl,
       { headers: { 'User-Agent': 'Suitarr/1.0' } },
     );
 
@@ -98,7 +100,8 @@ export class SubdlProvider implements SubtitleProviderInterface {
       throw new Error(`Subdl download failed: ${res?.status ?? 'rate-limited'}`);
     }
 
-    return Buffer.from(await res.arrayBuffer());
+    const zipBuf = Buffer.from(await res.arrayBuffer());
+    return extractSubtitleFromZip(zipBuf);
   }
 
   async testConnection(settings: Record<string, unknown>): Promise<boolean> {

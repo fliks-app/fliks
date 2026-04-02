@@ -4,6 +4,7 @@ import {
   SubtitleSearchParams,
   SubtitleSearchResult,
 } from './subtitle-provider.interface';
+import { extractSubtitleFromZip } from './zip-utils';
 
 const BASE_URL = 'https://yifysubtitles.ch';
 const USER_AGENT =
@@ -96,7 +97,7 @@ export class YifyProvider implements SubtitleProviderInterface {
     const zipBuf = Buffer.from(await dlRes.arrayBuffer());
 
     // The response is a ZIP containing one or more .srt files
-    return this.extractSrtFromZip(zipBuf);
+    return extractSubtitleFromZip(zipBuf);
   }
 
   async testConnection(): Promise<boolean> {
@@ -191,43 +192,4 @@ export class YifyProvider implements SubtitleProviderInterface {
     return html.replace(/<[^>]+>/g, '');
   }
 
-  /**
-   * Extract the first .srt file from a ZIP buffer.
-   * Minimal ZIP parsing — no external dependency needed.
-   */
-  private extractSrtFromZip(zip: Buffer): Buffer {
-    // ZIP local file header signature: PK\x03\x04
-    let offset = 0;
-    while (offset + 30 <= zip.length) {
-      const sig = zip.readUInt32LE(offset);
-      if (sig !== 0x04034b50) break; // not a local file header
-
-      const compMethod = zip.readUInt16LE(offset + 8);
-      const compSize = zip.readUInt32LE(offset + 18);
-      const uncompSize = zip.readUInt32LE(offset + 22);
-      const nameLen = zip.readUInt16LE(offset + 26);
-      const extraLen = zip.readUInt16LE(offset + 28);
-      const name = zip
-        .subarray(offset + 30, offset + 30 + nameLen)
-        .toString('utf-8');
-      const dataStart = offset + 30 + nameLen + extraLen;
-
-      if (/\.srt$/i.test(name) && compMethod === 0) {
-        // Stored (not compressed) — return directly
-        return zip.subarray(dataStart, dataStart + uncompSize);
-      }
-
-      if (/\.srt$/i.test(name) && compMethod === 8) {
-        // Deflate — use zlib
-        const zlib = require('zlib') as typeof import('zlib');
-        return zlib.inflateRawSync(
-          zip.subarray(dataStart, dataStart + compSize),
-        );
-      }
-
-      offset = dataStart + compSize;
-    }
-
-    throw new Error('YIFY: no .srt file found in ZIP archive');
-  }
 }
