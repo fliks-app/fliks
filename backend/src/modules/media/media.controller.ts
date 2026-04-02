@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  NotFoundException,
 } from '@nestjs/common';
 import { MediaService } from './media.service';
 import { MovieDownloadService } from './movie-download.service';
@@ -36,6 +37,7 @@ import { Action } from '../auth/casl/actions.enum';
 import { Media } from './entities/media.entity';
 import { SubtitlesService } from '../subtitles/subtitles.service';
 import { SubtitleSyncService } from '../subtitles/subtitle-sync.service';
+import { FfprobeService } from '../subtitles/ffprobe.service';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 
 @Controller('media')
@@ -48,6 +50,7 @@ export class MediaController {
     private readonly diskImport: DiskImportService,
     private readonly subtitlesService: SubtitlesService,
     private readonly subtitleSync: SubtitleSyncService,
+    private readonly ffprobe: FfprobeService,
   ) {}
 
   @Post('import/tmdb')
@@ -352,6 +355,20 @@ export class MediaController {
     @Body() body?: { reference?: string; maxOffsetSeconds?: number; noFixFramerate?: boolean; goldenSectionSearch?: boolean },
   ) {
     return this.subtitleSync.enqueueSyncSubtitle(subtitleId, body ?? {});
+  }
+
+  @Get(':id/streams/:mediaFileId')
+  @CheckPolicies((ability) => ability.can(Action.Read, Media))
+  async getStreams(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+  ) {
+    const media = await this.mediaService.findOne(id);
+    const file = media.files?.find((f) => f.id === mediaFileId);
+    if (!file) throw new NotFoundException(`MediaFile #${mediaFileId} not found`);
+    const path = require('path');
+    const videoPath = path.join(media.path, file.relativePath);
+    return this.ffprobe.detectStreams(videoPath);
   }
 
   @Get('sync-queue')

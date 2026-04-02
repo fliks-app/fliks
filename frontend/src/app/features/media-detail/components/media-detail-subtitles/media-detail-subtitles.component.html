@@ -246,6 +246,20 @@
           (ngModelChange)="syncReference.set($event)"
         >
           <option value="auto">{{ 'media_detail.sync_reference_auto' | translate }}</option>
+          @if (audioStreams().length) {
+            <optgroup [label]="'media_detail.sync_audio_tracks' | translate">
+              @for (s of audioStreams(); track s.streamIndex) {
+                <option [value]="'audio:' + s.streamIndex">{{ s.language }} — {{ s.codec }}@if (s.title) { ({{ s.title }}) }</option>
+              }
+            </optgroup>
+          }
+          @if (subtitleStreams().length) {
+            <optgroup [label]="'media_detail.sync_subtitle_tracks' | translate">
+              @for (s of subtitleStreams(); track s.streamIndex) {
+                <option [value]="'subtitle:' + s.streamIndex">{{ s.language }} — {{ s.codec }}@if (s.title) { ({{ s.title }}) }</option>
+              }
+            </optgroup>
+          }
         </select>
       </label>
 

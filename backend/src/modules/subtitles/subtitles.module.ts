@@ -48,6 +48,7 @@ import { SubtitleActivityController } from './subtitle-activity.controller';
     SubtitleProviderService,
     SubtitleSyncService,
     EmbeddedSubtitleService,
+    FfprobeService,
   ],
 })
 export class SubtitlesModule {}

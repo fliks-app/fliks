@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, ElementRef, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
-import { SubtitleFileRow, SyncOptions } from '../../../../core/services/api/subtitles-api.service';
+import { SubtitleFileRow, SyncOptions, MediaStream } from '../../../../core/services/api/subtitles-api.service';
 import { SubtitleLanguageItem } from '../../../../core/services/api/profiles.service';
 
 interface SubtitleRow {
@@ -24,6 +24,7 @@ export class MediaDetailSubtitlesComponent {
   readonly subtitlesLoading = input(false);
   readonly canGrab = input(false);
   readonly subtitleActionBusy = input(false);
+  readonly streams = input<MediaStream[]>([]);
 
   readonly rows = computed<SubtitleRow[]>(() => {
     const subs = this.subtitles();
@@ -58,6 +59,9 @@ export class MediaDetailSubtitlesComponent {
   readonly deleteSubtitle = output<number>();
   readonly blacklistSubtitle = output<SubtitleFileRow>();
   readonly postProcess = output<{ subtitleId: number; action: string; params?: Record<string, unknown> }>();
+
+  readonly audioStreams = computed(() => this.streams().filter((s) => s.type === 'audio'));
+  readonly subtitleStreams = computed(() => this.streams().filter((s) => s.type === 'subtitle'));
 
   // Sync modal
   private readonly syncDialog = viewChild<ElementRef<HTMLDialogElement>>('syncDialog');

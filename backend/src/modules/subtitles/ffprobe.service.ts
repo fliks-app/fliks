@@ -12,6 +12,14 @@ export interface EmbeddedSubtitleStream {
   hearingImpaired: boolean;
 }
 
+export interface MediaStream {
+  streamIndex: number;
+  type: 'audio' | 'subtitle';
+  codec: string;
+  language: string;
+  title?: string;
+}
+
 interface FfprobeStream {
   index: number;
   codec_name?: string;
@@ -56,6 +64,41 @@ export class FfprobeService {
     } catch (err) {
       this.logger.warn(
         `ffprobe failed for "${videoPath}": ${(err as Error).message}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Detect all audio and subtitle streams from a video file.
+   * Used by the sync modal to let the user pick a reference track.
+   */
+  async detectStreams(videoPath: string): Promise<MediaStream[]> {
+    try {
+      const { stdout } = await execFileAsync(
+        'ffprobe',
+        [
+          '-v', 'quiet',
+          '-print_format', 'json',
+          '-show_streams',
+          videoPath,
+        ],
+        { timeout: 30_000 },
+      );
+
+      const parsed = JSON.parse(stdout) as { streams?: FfprobeStream[] };
+      return (parsed.streams ?? [])
+        .filter((s) => s.codec_type === 'audio' || s.codec_type === 'subtitle')
+        .map((s) => ({
+          streamIndex: s.index,
+          type: s.codec_type as 'audio' | 'subtitle',
+          codec: s.codec_name ?? 'unknown',
+          language: s.tags?.language ?? 'und',
+          title: s.tags?.title,
+        }));
+    } catch (err) {
+      this.logger.warn(
+        `ffprobe streams detection failed for "${videoPath}": ${(err as Error).message}`,
       );
       return [];
     }

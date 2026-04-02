@@ -134,12 +134,24 @@ export class SubtitleSyncService {
     );
 
     const subPath = subtitle.filePath!;
-    const refPath = options.reference && options.reference !== 'auto'
-      ? options.reference
-      : mediaFilePath;
+
+    // Parse reference: 'auto', 'audio:3', 'subtitle:5', or absolute path
+    let refPath = mediaFilePath;
+    let refStreamIndex: number | null = null;
+    if (options.reference && options.reference !== 'auto') {
+      const streamMatch = /^(audio|subtitle):(\d+)$/.exec(options.reference);
+      if (streamMatch) {
+        refStreamIndex = Number(streamMatch[2]);
+      } else {
+        refPath = options.reference;
+      }
+    }
 
     try {
       const args = [refPath, '-i', subPath, '-o', subPath];
+      if (refStreamIndex != null) {
+        args.push('--reference-stream', `stream:${refStreamIndex}`);
+      }
       if (options.maxOffsetSeconds != null) {
         args.push('--max-offset-seconds', String(options.maxOffsetSeconds));
       }

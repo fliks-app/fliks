@@ -38,6 +38,12 @@ export interface SubtitleSearchResult {
 export class SubtitlesApiService {
   private readonly http = inject(HttpClient);
 
+  getStreams(mediaId: number, mediaFileId: number) {
+    return firstValueFrom(
+      this.http.get<MediaStream[]>(`/api/media/${mediaId}/streams/${mediaFileId}`),
+    );
+  }
+
   getForMedia(mediaId: number) {
     return firstValueFrom(this.http.get<SubtitleFileRow[]>(`/api/media/${mediaId}/subtitles`));
   }
@@ -164,6 +170,14 @@ export interface SubtitleStats {
     status: string;
     createdAt: string;
   }[];
+}
+
+export interface MediaStream {
+  streamIndex: number;
+  type: 'audio' | 'subtitle';
+  codec: string;
+  language: string;
+  title?: string;
 }
 
 export interface SyncOptions {
