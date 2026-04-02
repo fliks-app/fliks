@@ -5,6 +5,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { MediaService } from '../../core/services/api/media.service';
 import { DownloadClientsApiService } from '../../core/services/api/download-clients-api.service';
 import { RequestsService } from '../../core/services/api/requests.service';
+import { ServerConfigService } from '../../core/services/server-config.service';
 
 function getInitialTheme(): 'dark' | 'light' {
   const stored = localStorage.getItem('suitarr-theme');
@@ -24,6 +25,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly downloadApi = inject(DownloadClientsApiService);
   private readonly requestsService = inject(RequestsService);
+  readonly serverConfig = inject(ServerConfigService);
 
   readonly theme = signal<'dark' | 'light'>(getInitialTheme());
 

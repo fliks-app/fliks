@@ -13,13 +13,23 @@ async function bootstrap() {
   const ds = app.get(DataSource);
   await ds.query('CREATE EXTENSION IF NOT EXISTS pg_trgm');
 
-  const parsed = process.env.CORS_ORIGIN?.split(',')
-    .map((o) => o.trim())
-    .filter(Boolean);
-  const corsOrigins =
-    parsed && parsed.length > 0
-      ? parsed
-      : ['http://localhost:4200', 'http://localhost:4500'];
+  const envOrigins =
+    process.env.CORS_ORIGIN?.split(',')
+      .map((o) => o.trim())
+      .filter(Boolean) ?? [];
+  /** Toujours autorisées : WebView Capacitor (origine ≠ URL de l’API LAN). */
+  const nativeAppOrigins = [
+    'https://localhost',
+    'capacitor://localhost',
+    'http://localhost',
+  ];
+  const defaultWebOrigins = ['http://localhost:4200', 'http://localhost:4500'];
+  const corsOrigins = [
+    ...new Set([
+      ...(envOrigins.length > 0 ? envOrigins : defaultWebOrigins),
+      ...nativeAppOrigins,
+    ]),
+  ];
   app.enableCors({
     origin: corsOrigins,
     credentials: true,

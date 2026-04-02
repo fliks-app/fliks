@@ -9,6 +9,7 @@ import { provideRouter } from '@angular/router';
 import { HttpBackend, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 import { routes } from './app.routes';
+import { serverUrlInterceptor } from './core/interceptors/server-url.interceptor';
 import { credentialsInterceptor } from './core/interceptors/credentials.interceptor';
 import { errorInterceptor } from './core/interceptors/error.interceptor';
 import { translateBrowserLoaderFactory } from './utils/translate-loader';
@@ -19,7 +20,7 @@ export const appConfig: ApplicationConfig = {
     provideZonelessChangeDetection(),
     provideRouter(routes),
     provideHttpClient(
-      withInterceptors([credentialsInterceptor, errorInterceptor]),
+      withInterceptors([serverUrlInterceptor, credentialsInterceptor, errorInterceptor]),
     ),
     provideTranslateService({
       loader: {

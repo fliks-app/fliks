@@ -21,6 +21,7 @@
     "sync-prowlarr-definitions": "bash scripts/sync-prowlarr-definitions.sh"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.0",
     "@casl/ability": "^6.8.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.3",

@@ -2,6 +2,7 @@ import { Injectable, signal, computed, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, catchError, firstValueFrom, map, of, tap } from 'rxjs';
+import { ServerConfigService } from './server-config.service';
 
 export interface User {
   id: number;
@@ -16,14 +17,21 @@ export interface User {
 
 interface LoginResponse {
   user: User;
+  accessToken?: string;
 }
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
+  private readonly serverConfig = inject(ServerConfigService);
 
   private readonly _user = signal<User | null>(null);
+  private _accessToken: string | null = null;
+
+  get accessToken(): string | null {
+    return this._accessToken;
+  }
 
   readonly user = this._user.asReadonly();
   readonly isAuthenticated = computed(() => !!this._user());
@@ -48,6 +56,10 @@ export class AuthService {
       this.http.post<LoginResponse>('/api/auth/login', { username, password }),
     );
     this._user.set(res.user);
+    if (this.serverConfig.isNative && res.accessToken) {
+      this._accessToken = res.accessToken;
+      localStorage.setItem('suitarr_access_token', res.accessToken);
+    }
     return res;
   }
 
@@ -57,18 +69,24 @@ export class AuthService {
     );
   }
 
-  /** Hydrate la session depuis le cookie (appelé au démarrage). */
+  /** Hydrate la session depuis le cookie ou token stocké (appelé au démarrage). */
   hydrateFromServer(): void {
     if (this._user()) return;
+    if (this.serverConfig.isNative) {
+      this._accessToken = localStorage.getItem('suitarr_access_token');
+    }
     firstValueFrom(this.http.get<User>('/api/auth/me')).then(
       (user) => this._user.set(user),
       () => this._user.set(null),
     );
   }
 
-  /** Pour le garde de route : vérifie le cookie et charge l'utilisateur si besoin. */
+  /** Pour le garde de route : vérifie le cookie/token et charge l'utilisateur si besoin. */
   ensureAuthenticated(): Observable<boolean> {
     if (this._user()) return of(true);
+    if (this.serverConfig.isNative && !this._accessToken) {
+      this._accessToken = localStorage.getItem('suitarr_access_token');
+    }
     return this.http.get<User>('/api/auth/me').pipe(
       tap((u) => this._user.set(u)),
       map(() => true),
@@ -84,6 +102,8 @@ export class AuthService {
       await firstValueFrom(this.http.post('/api/auth/logout', {}));
     } finally {
       this._user.set(null);
+      this._accessToken = null;
+      localStorage.removeItem('suitarr_access_token');
       void this.router.navigate(['/login']);
     }
   }

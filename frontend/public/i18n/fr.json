@@ -97,6 +97,15 @@
     "sub_col_score": "Score",
     "sub_col_date": "Date"
   },
+  "setup": {
+    "subtitle": "Configurez l'adresse de votre serveur Suitarr",
+    "server_url": "Adresse du serveur",
+    "server_url_hint": "L'adresse complète de votre serveur (ex: http://192.168.1.10:3000)",
+    "test": "Tester",
+    "save": "Enregistrer",
+    "test_success": "Connexion au serveur réussie.",
+    "test_error": "Impossible de se connecter au serveur."
+  },
   "login": {
     "username": "Nom d'utilisateur",
     "password": "Mot de passe",
@@ -508,6 +517,7 @@
       "roles": "Rôles",
       "delay_profiles": "Profils de délai",
       "auto_approval": "Approbation auto",
+      "server": "Serveur",
       "subtitle_providers": "Fournisseurs de sous-titres",
       "subtitles": "Sous-titres"
     },

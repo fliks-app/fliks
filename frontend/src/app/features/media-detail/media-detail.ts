@@ -7,7 +7,7 @@ import {
   OnInit,
   viewChild,
 } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   MediaService,
@@ -61,7 +61,6 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
 @Component({
   selector: 'app-media-detail',
   imports: [
-    RouterLink,
     TranslateModule,
     MediaDetailHeaderComponent,
     MediaDetailLibraryInfoComponent,

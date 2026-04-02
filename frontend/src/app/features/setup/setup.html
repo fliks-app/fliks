@@ -1,0 +1,58 @@
+<div class="min-h-screen flex items-center justify-center bg-base-200 p-4">
+  <div class="card bg-base-100 shadow-xl w-full max-w-md">
+    <div class="card-body gap-6">
+      <div class="text-center">
+        <h1 class="text-2xl font-bold">Suitarr</h1>
+        <p class="text-base-content/60 mt-1">{{ 'setup.subtitle' | translate }}</p>
+      </div>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'setup.server_url' | translate }}</span>
+        <input
+          type="url"
+          class="input input-bordered w-full"
+          [ngModel]="url()"
+          (ngModelChange)="url.set($event)"
+          (keydown.enter)="test()"
+          placeholder="http://192.168.1.x:3000"
+        />
+        <div class="label">
+          <span class="label-text-alt text-base-content/50">{{ 'setup.server_url_hint' | translate }}</span>
+        </div>
+      </label>
+
+      @if (testResult(); as result) {
+        <div
+          role="alert"
+          class="alert text-sm"
+          [class.alert-success]="result.ok"
+          [class.alert-error]="!result.ok"
+        >
+          {{ result.message | translate }}
+        </div>
+      }
+
+      <div class="flex gap-2">
+        <button
+          type="button"
+          class="btn btn-outline flex-1"
+          [disabled]="testing() || !url().trim()"
+          (click)="test()"
+        >
+          @if (testing()) {
+            <span class="loading loading-spinner loading-sm"></span>
+          }
+          {{ 'setup.test' | translate }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary flex-1"
+          [disabled]="!testResult()?.ok"
+          (click)="save()"
+        >
+          {{ 'setup.save' | translate }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

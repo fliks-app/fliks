@@ -161,6 +161,9 @@
                 <li><a routerLink="/settings/users" routerLinkActive="active">{{ 'settings.nav.users' | translate }}</a></li>
                 <li><a routerLink="/settings/roles" routerLinkActive="active">{{ 'settings.nav.roles' | translate }}</a></li>
                 <li><a routerLink="/settings/auto-approval" routerLinkActive="active">{{ 'settings.nav.auto_approval' | translate }}</a></li>
+                @if (serverConfig.isNative) {
+                  <li><a routerLink="/setup">{{ 'settings.nav.server' | translate }}</a></li>
+                }
               </ul>
             </details>
           </li>
