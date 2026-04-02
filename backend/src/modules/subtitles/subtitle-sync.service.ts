@@ -16,10 +16,33 @@ import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 
 const execFileAsync = promisify(execFile);
+const MAX_CONCURRENT = 2;
+
+export interface SyncOptions {
+  /** Reference track: 'auto' (default), or a path to an audio/subtitle file */
+  reference?: string;
+  /** Max offset in seconds (ffsubsync --max-offset-seconds) */
+  maxOffsetSeconds?: number;
+  /** Disable framerate correction (ffsubsync --no-fix-framerate) */
+  noFixFramerate?: boolean;
+  /** Use golden-section search algorithm (ffsubsync --gss) */
+  goldenSectionSearch?: boolean;
+}
+
+export interface SyncQueueItem {
+  subtitleId: number;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  error?: string;
+  queuedAt: number;
+  startedAt?: number;
+  completedAt?: number;
+}
 
 @Injectable()
 export class SubtitleSyncService {
   private readonly logger = new Logger(SubtitleSyncService.name);
+  private readonly queue: SyncQueueItem[] = [];
+  private running = 0;
 
   constructor(
     @InjectRepository(SubtitleFile)
@@ -30,7 +53,73 @@ export class SubtitleSyncService {
     private readonly mediaFileRepo: Repository<MediaFile>,
   ) {}
 
-  async syncSubtitle(id: number): Promise<SubtitleFile> {
+  /** Get current queue state */
+  getQueue(): SyncQueueItem[] {
+    return [...this.queue];
+  }
+
+  /** Add a sync job to the queue */
+  async enqueueSyncSubtitle(
+    id: number,
+    options: SyncOptions = {},
+  ): Promise<SyncQueueItem> {
+    const subtitle = await this.repo.findOne({ where: { id } });
+    if (!subtitle) throw new NotFoundException(`SubtitleFile #${id} not found`);
+    if (subtitle.providerType === SubtitleProviderType.EMBEDDED) {
+      throw new BadRequestException('Cannot sync an embedded subtitle');
+    }
+
+    // Don't queue duplicates
+    const existing = this.queue.find(
+      (q) => q.subtitleId === id && (q.status === 'queued' || q.status === 'running'),
+    );
+    if (existing) return existing;
+
+    const item: SyncQueueItem = {
+      subtitleId: id,
+      status: 'queued',
+      queuedAt: Date.now(),
+    };
+    this.queue.push(item);
+
+    // Trim old completed/failed entries (keep last 50)
+    while (this.queue.length > 50 && (this.queue[0].status === 'completed' || this.queue[0].status === 'failed')) {
+      this.queue.shift();
+    }
+
+    void this.processQueue(options);
+    return item;
+  }
+
+  private async processQueue(options: SyncOptions): Promise<void> {
+    if (this.running >= MAX_CONCURRENT) return;
+
+    const next = this.queue.find((q) => q.status === 'queued');
+    if (!next) return;
+
+    this.running++;
+    next.status = 'running';
+    next.startedAt = Date.now();
+
+    try {
+      await this.doSync(next.subtitleId, options);
+      next.status = 'completed';
+    } catch (err) {
+      next.status = 'failed';
+      next.error = (err as Error).message;
+    } finally {
+      next.completedAt = Date.now();
+      this.running--;
+      void this.processQueue(options);
+    }
+  }
+
+  /** Direct sync (called from queue or legacy) */
+  async syncSubtitle(id: number, options: SyncOptions = {}): Promise<SubtitleFile> {
+    return this.doSync(id, options);
+  }
+
+  private async doSync(id: number, options: SyncOptions): Promise<SubtitleFile> {
     const subtitle = await this.repo.findOne({ where: { id } });
     if (!subtitle) throw new NotFoundException(`SubtitleFile #${id} not found`);
     if (subtitle.providerType === SubtitleProviderType.EMBEDDED) {
@@ -43,25 +132,35 @@ export class SubtitleSyncService {
     );
 
     const subPath = subtitle.filePath!;
+    const refPath = options.reference && options.reference !== 'auto'
+      ? options.reference
+      : mediaFilePath;
+
     try {
-      await execFileAsync('ffsubsync', [
-        mediaFilePath,
-        '-i',
-        subPath,
-        '-o',
-        subPath,
-      ]);
+      const args = [refPath, '-i', subPath, '-o', subPath];
+      if (options.maxOffsetSeconds != null) {
+        args.push('--max-offset-seconds', String(options.maxOffsetSeconds));
+      }
+      if (options.noFixFramerate) {
+        args.push('--no-fix-framerate');
+      }
+      if (options.goldenSectionSearch) {
+        args.push('--gss');
+      }
+      await execFileAsync('ffsubsync', args);
       subtitle.synced = true;
       subtitle.status = SubtitleStatus.SYNCED;
     } catch (err) {
       this.logger.warn(`ffsubsync failed for ${subPath}, trying alass...`);
       try {
-        await execFileAsync('alass', [mediaFilePath, subPath, subPath]);
+        const alassArgs = [refPath, subPath, subPath];
+        await execFileAsync('alass', alassArgs);
         subtitle.synced = true;
         subtitle.status = SubtitleStatus.SYNCED;
       } catch (alassErr) {
         this.logger.error(`Subtitle sync failed for #${id}: ${alassErr}`);
         subtitle.status = SubtitleStatus.FAILED;
+        throw new Error(`Sync failed: ${(alassErr as Error).message}`);
       }
     }
 

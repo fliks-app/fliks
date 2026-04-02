@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { SubtitleProvider } from './entities/subtitle-provider.entity';
 import { SubtitleProviderStat } from './entities/subtitle-provider-stat.entity';
 import { SubtitleFile } from './entities/subtitle-file.entity';
+import { SubtitleBlacklist } from './entities/subtitle-blacklist.entity';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Tag } from '../tags/entities/tag.entity';
@@ -23,6 +24,7 @@ import { SubtitleActivityController } from './subtitle-activity.controller';
       SubtitleProvider,
       SubtitleProviderStat,
       SubtitleFile,
+      SubtitleBlacklist,
       Media,
       MediaFile,
       Tag,

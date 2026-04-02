@@ -60,11 +60,6 @@ Quand beaucoup de sous-titres sont téléchargés en même temps, les syncs ffsu
 - **No Fix Framerate** : checkbox — désactiver la correction de framerate (utile si le sub est déjà au bon FPS)
 - **Golden-Section Search** : checkbox — algorithme alternatif de recherche de décalage (plus lent, plus précis pour les cas difficiles)
 
-## 9. Détection de la langue du fichier vidéo
-Bazarr peut détecter la langue audio du fichier vidéo via ffprobe pour adapter la recherche.
-- Parser les streams audio de ffprobe pour extraire la langue
-- Utiliser cette info pour ne pas chercher des sous-titres dans la langue audio principale
-
 ## 10. Post-processing avancé
 - **Décalage manuel** : permettre à l'utilisateur d'ajuster le timing (+/- secondes) via l'UI
 - **Conversion de format** : SSA/ASS → SRT automatique
@@ -92,13 +87,12 @@ Actions disponibles par sous-titre téléchargé, accessibles via un menu contex
 ---
 
 ## Ordre d'implémentation recommandé
-1. Intervalle configurable (rapide, utile immédiatement)
-2. Hash fichier vidéo (améliore significativement la qualité des résultats)
-3. Rate-limiting (évite les bans provider)
-4. Blacklist sous-titres (UX critique)
-5. Anti-ads
-6. Détection langue audio
-7. File d'attente de sync (Redis/BullMQ ou in-memory)
-9. Post-processing avancé
-10. Actions sous-titres (menu contextuel)
-11. Notifications granulaires
+1. ~~Intervalle configurable~~ ✅
+2. ~~Hash fichier vidéo~~ ✅
+3. ~~Rate-limiting~~ ✅
+4. ~~Blacklist sous-titres~~ ✅
+5. ~~Anti-ads~~ ✅
+6. ~~File d'attente de sync~~ ✅
+7. Post-processing avancé
+8. Actions sous-titres (menu contextuel)
+9. Notifications granulaires

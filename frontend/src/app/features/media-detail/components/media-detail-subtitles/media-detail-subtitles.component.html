@@ -106,6 +106,9 @@
                     <button type="button" class="btn btn-ghost btn-xs" (click)="syncSubtitle.emit(sub.id)" [disabled]="subtitleActionBusy()">
                       Sync
                     </button>
+                    <button type="button" class="btn btn-ghost btn-xs text-warning" (click)="blacklistSubtitle.emit(sub)" [disabled]="subtitleActionBusy()" title="Blacklist">
+                      BL
+                    </button>
                     <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteSubtitle.emit(sub.id)" [disabled]="subtitleActionBusy()">
                       Del
                     </button>

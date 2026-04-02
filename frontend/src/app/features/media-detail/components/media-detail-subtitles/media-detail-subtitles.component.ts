@@ -61,4 +61,5 @@ export class MediaDetailSubtitlesComponent {
   readonly autoSubtitle = output<void>();
   readonly syncSubtitle = output<number>();
   readonly deleteSubtitle = output<number>();
+  readonly blacklistSubtitle = output<SubtitleFileRow>();
 }

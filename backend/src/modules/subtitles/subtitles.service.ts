@@ -19,6 +19,7 @@ import {
   SubtitleSearchResult,
 } from './providers/subtitle-provider.interface';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
+import { SubtitleBlacklist } from './entities/subtitle-blacklist.entity';
 import { computeMovieHash } from './moviehash';
 import { cleanSubtitle } from './subtitle-cleaner';
 import { SettingsService } from '../settings/settings.service';
@@ -36,6 +37,8 @@ export class SubtitlesService {
     private readonly mediaRepo: Repository<Media>,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
+    @InjectRepository(SubtitleBlacklist)
+    private readonly blacklistRepo: Repository<SubtitleBlacklist>,
     private readonly providerService: SubtitleProviderService,
     private readonly factory: SubtitleProviderFactory,
     private readonly settingsService: SettingsService,
@@ -90,8 +93,17 @@ export class SubtitlesService {
       }
     }
 
-    allResults.sort((a, b) => b.score - a.score);
-    return allResults;
+    // Filter out blacklisted subtitles
+    const blacklisted = await this.blacklistRepo.find();
+    const blacklistSet = new Set(
+      blacklisted.map((b) => `${b.providerType}:${b.providerFileId}`),
+    );
+    const filtered = allResults.filter(
+      (r) => !blacklistSet.has(`${r.providerType}:${r.providerFileId}`),
+    );
+
+    filtered.sort((a, b) => b.score - a.score);
+    return filtered;
   }
 
   async autoDownload(
@@ -306,5 +318,44 @@ export class SubtitlesService {
 
     await this.repo.remove(existing);
     return updated;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Subtitle blacklist
+  // ---------------------------------------------------------------------------
+
+  async blacklistSubtitle(dto: {
+    providerType: string;
+    providerFileId: string;
+    mediaId?: number;
+    language?: string;
+    sourceTitle?: string;
+    reason?: string;
+  }): Promise<SubtitleBlacklist> {
+    const entry = this.blacklistRepo.create(dto);
+    return this.blacklistRepo.save(entry);
+  }
+
+  async getBlacklist(
+    page = 1,
+    limit = 25,
+  ): Promise<{ data: SubtitleBlacklist[]; total: number }> {
+    const [data, total] = await this.blacklistRepo.findAndCount({
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return { data, total };
+  }
+
+  async removeFromBlacklist(id: number): Promise<void> {
+    const entry = await this.blacklistRepo.findOne({ where: { id } });
+    if (!entry) throw new NotFoundException(`Blacklist entry #${id} not found`);
+    await this.blacklistRepo.remove(entry);
+  }
+
+  async clearBlacklist(): Promise<{ deleted: number }> {
+    const result = await this.blacklistRepo.delete({});
+    return { deleted: result.affected ?? 0 };
   }
 }

@@ -349,8 +349,15 @@ export class MediaController {
   async syncSubtitle(
     @Param('id', ParseIntPipe) _id: number,
     @Param('subtitleId', ParseIntPipe) subtitleId: number,
+    @Body() body?: { reference?: string; maxOffsetSeconds?: number; noFixFramerate?: boolean; goldenSectionSearch?: boolean },
   ) {
-    return this.subtitleSync.syncSubtitle(subtitleId);
+    return this.subtitleSync.enqueueSyncSubtitle(subtitleId, body ?? {});
+  }
+
+  @Get('sync-queue')
+  @CheckPolicies((ability) => ability.can(Action.Read, SubtitleFile))
+  getSyncQueue() {
+    return this.subtitleSync.getQueue();
   }
 
   @Post(':id/subtitles/:subtitleId/upgrade')

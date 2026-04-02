@@ -1,10 +1,11 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Query, Param, Body, UseGuards, ParseIntPipe } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import { SubtitleFile } from './entities/subtitle-file.entity';
 import { SubtitleProviderType } from '../../common/enums/subtitle-provider-type.enum';
 import { SubtitleProviderService } from './subtitle-provider.service';
 import { SubtitleProviderFactory } from './providers/subtitle-provider.factory';
+import { SubtitlesService } from './subtitles.service';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
@@ -18,6 +19,7 @@ export class SubtitleActivityController {
     private readonly subtitleFileRepo: Repository<SubtitleFile>,
     private readonly providerService: SubtitleProviderService,
     private readonly factory: SubtitleProviderFactory,
+    private readonly subtitlesService: SubtitlesService,
   ) {}
 
   @Get('history')
@@ -151,5 +153,41 @@ export class SubtitleActivityController {
     }
 
     return results;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Subtitle blacklist
+  // ---------------------------------------------------------------------------
+
+  @Get('blacklist')
+  @CheckPolicies((ability) => ability.can(Action.Read, SubtitleFile))
+  getBlacklist(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.subtitlesService.getBlacklist(
+      Number(page) || 1,
+      Number(limit) || 25,
+    );
+  }
+
+  @Post('blacklist')
+  @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
+  addToBlacklist(
+    @Body() dto: { providerType: string; providerFileId: string; mediaId?: number; language?: string; sourceTitle?: string; reason?: string },
+  ) {
+    return this.subtitlesService.blacklistSubtitle(dto);
+  }
+
+  @Delete('blacklist/:id')
+  @CheckPolicies((ability) => ability.can(Action.Delete, SubtitleFile))
+  removeFromBlacklist(@Param('id', ParseIntPipe) id: number) {
+    return this.subtitlesService.removeFromBlacklist(id);
+  }
+
+  @Delete('blacklist')
+  @CheckPolicies((ability) => ability.can(Action.Delete, SubtitleFile))
+  clearBlacklist() {
+    return this.subtitlesService.clearBlacklist();
   }
 }

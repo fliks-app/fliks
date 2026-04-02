@@ -67,9 +67,15 @@ export class SubtitlesApiService {
     return firstValueFrom(this.http.delete<void>(`/api/media/${mediaId}/subtitles/${subtitleId}`));
   }
 
-  sync(mediaId: number, subtitleId: number) {
+  sync(mediaId: number, subtitleId: number, options?: SyncOptions) {
     return firstValueFrom(
-      this.http.post<SubtitleFileRow>(`/api/media/${mediaId}/subtitles/${subtitleId}/sync`, {}),
+      this.http.post<SyncQueueItem>(`/api/media/${mediaId}/subtitles/${subtitleId}/sync`, options ?? {}),
+    );
+  }
+
+  getSyncQueue() {
+    return firstValueFrom(
+      this.http.get<SyncQueueItem[]>('/api/media/sync-queue'),
     );
   }
 
@@ -93,6 +99,27 @@ export class SubtitlesApiService {
     return firstValueFrom(
       this.http.get<SubtitleHealthEntry[]>('/api/subtitles/health'),
     );
+  }
+
+  // Blacklist
+  getBlacklist(params?: { page?: number; limit?: number }) {
+    return firstValueFrom(
+      this.http.get<{ data: SubtitleBlacklistEntry[]; total: number }>('/api/subtitles/blacklist', { params: params as any }),
+    );
+  }
+
+  addToBlacklist(dto: { providerType: string; providerFileId: string; mediaId?: number; language?: string; sourceTitle?: string; reason?: string }) {
+    return firstValueFrom(
+      this.http.post<SubtitleBlacklistEntry>('/api/subtitles/blacklist', dto),
+    );
+  }
+
+  removeFromBlacklist(id: number) {
+    return firstValueFrom(this.http.delete<void>(`/api/subtitles/blacklist/${id}`));
+  }
+
+  clearBlacklist() {
+    return firstValueFrom(this.http.delete<{ deleted: number }>('/api/subtitles/blacklist'));
   }
 }
 
@@ -131,6 +158,33 @@ export interface SubtitleStats {
     status: string;
     createdAt: string;
   }[];
+}
+
+export interface SyncOptions {
+  reference?: string;
+  maxOffsetSeconds?: number;
+  noFixFramerate?: boolean;
+  goldenSectionSearch?: boolean;
+}
+
+export interface SyncQueueItem {
+  subtitleId: number;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  error?: string;
+  queuedAt: number;
+  startedAt?: number;
+  completedAt?: number;
+}
+
+export interface SubtitleBlacklistEntry {
+  id: number;
+  providerType: string;
+  providerFileId: string;
+  mediaId: number | null;
+  language: string | null;
+  sourceTitle: string | null;
+  reason: string | null;
+  createdAt: string;
 }
 
 export interface SubtitleHealthEntry {
