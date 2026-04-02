@@ -62,4 +62,5 @@ export class MediaDetailSubtitlesComponent {
   readonly syncSubtitle = output<number>();
   readonly deleteSubtitle = output<number>();
   readonly blacklistSubtitle = output<SubtitleFileRow>();
+  readonly postProcess = output<{ subtitleId: number; action: string; params?: Record<string, unknown> }>();
 }
