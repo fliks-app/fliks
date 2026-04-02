@@ -92,11 +92,15 @@ export class MediaDetailSubtitlesComponent {
   // Adjust Times modal
   private readonly adjustDialog = viewChild<ElementRef<HTMLDialogElement>>('adjustDialog');
   readonly adjustSubtitleId = signal<number | null>(null);
-  readonly adjustOffsetMs = signal('0');
+  readonly adjustMinutes = signal('0');
+  readonly adjustSeconds = signal('0');
+  readonly adjustMillis = signal('0');
 
   openAdjustModal(subtitleId: number) {
     this.adjustSubtitleId.set(subtitleId);
-    this.adjustOffsetMs.set('0');
+    this.adjustMinutes.set('0');
+    this.adjustSeconds.set('0');
+    this.adjustMillis.set('0');
     this.adjustDialog()?.nativeElement.showModal();
   }
 
@@ -107,7 +111,11 @@ export class MediaDetailSubtitlesComponent {
   confirmAdjust() {
     const id = this.adjustSubtitleId();
     if (id == null) return;
-    this.postProcess.emit({ subtitleId: id, action: 'adjustTimes', params: { offsetMs: Number(this.adjustOffsetMs()) } });
+    const offsetMs =
+      Number(this.adjustMinutes()) * 60000 +
+      Number(this.adjustSeconds()) * 1000 +
+      Number(this.adjustMillis());
+    this.postProcess.emit({ subtitleId: id, action: 'adjustTimes', params: { offsetMs } });
     this.closeAdjustModal();
   }
 

@@ -341,20 +341,37 @@
     <h3 class="text-lg font-bold">{{ 'media_detail.adjust_times_title' | translate }}</h3>
     <p class="text-sm text-base-content/60 mt-1">{{ 'media_detail.adjust_times_subtitle' | translate }}</p>
 
-    <div class="flex flex-col gap-4 mt-4">
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'media_detail.adjust_offset_ms' | translate }}</span>
+    <div class="flex gap-3 mt-4">
+      <label class="form-control flex-1">
+        <span class="label-text">{{ 'media_detail.adjust_minutes' | translate }}</span>
         <input
           type="number"
           class="input input-bordered input-sm w-full"
-          [ngModel]="adjustOffsetMs()"
-          (ngModelChange)="adjustOffsetMs.set($event)"
-          placeholder="0"
+          [ngModel]="adjustMinutes()"
+          (ngModelChange)="adjustMinutes.set($event)"
         />
-        <div class="label">
-          <span class="label-text-alt text-base-content/50">{{ 'media_detail.adjust_offset_hint' | translate }}</span>
-        </div>
       </label>
+      <label class="form-control flex-1">
+        <span class="label-text">{{ 'media_detail.adjust_seconds' | translate }}</span>
+        <input
+          type="number"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="adjustSeconds()"
+          (ngModelChange)="adjustSeconds.set($event)"
+        />
+      </label>
+      <label class="form-control flex-1">
+        <span class="label-text">{{ 'media_detail.adjust_millis' | translate }}</span>
+        <input
+          type="number"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="adjustMillis()"
+          (ngModelChange)="adjustMillis.set($event)"
+        />
+      </label>
+    </div>
+    <div class="label">
+      <span class="label-text-alt text-base-content/50">{{ 'media_detail.adjust_offset_hint' | translate }}</span>
     </div>
 
     <div class="modal-action">
