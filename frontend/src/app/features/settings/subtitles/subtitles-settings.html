@@ -84,6 +84,28 @@
           <span class="label-text">{{ 'settings.subtitles.encode_utf8' | translate }}</span>
         </label>
 
+        <div class="divider my-0"></div>
+        <h2 class="card-title text-base">{{ 'settings.subtitles.section_cleaning' | translate }}</h2>
+
+        <label class="label cursor-pointer justify-start gap-3 max-w-max">
+          <input type="checkbox" class="toggle toggle-sm"
+            [ngModel]="removeHiTags() === 'true'"
+            (ngModelChange)="removeHiTags.set($event ? 'true' : 'false')" />
+          <span class="label-text">{{ 'settings.subtitles.remove_hi_tags' | translate }}</span>
+        </label>
+
+        <label class="form-control w-full max-w-lg">
+          <div class="label">
+            <span class="label-text">{{ 'settings.subtitles.custom_exclusions' | translate }}</span>
+          </div>
+          <textarea class="textarea textarea-bordered w-full font-mono text-sm" rows="4"
+            [placeholder]="'settings.subtitles.custom_exclusions_placeholder' | translate"
+            [ngModel]="customExclusions()" (ngModelChange)="customExclusions.set($event)"></textarea>
+          <div class="label">
+            <span class="label-text-alt text-base-content/50">{{ 'settings.subtitles.custom_exclusions_hint' | translate }}</span>
+          </div>
+        </label>
+
         <div class="card-actions justify-end">
           <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
             @if (saving()) {

@@ -42,11 +42,6 @@ L'intervalle de recherche (6h) et d'upgrade (12h) sont hardcodés dans les cron 
 - Settings : `subtitle_upgrade_interval` (minutes, défaut 720)
 - Utiliser `@Interval()` au lieu de `@Cron()` pour les rendre dynamiques
 
-## 6. Score par langue différencié
-Bazarr permet un score minimum différent par langue. Ex : FR exige 80, EN accepte 60.
-- Étendre le profil de langue avec `minScore` par entrée `subtitleLanguages[]`
-- Le scheduler utilise le score spécifique au lieu du global
-
 ## 7. Blacklist de sous-titres
 Bazarr permet de blacklister un sous-titre (mauvais sync, mauvaise langue) pour ne pas le re-télécharger.
 - Nouvelle entité `SubtitleBlacklist` (providerType, providerFileId, mediaId, reason)
@@ -101,10 +96,9 @@ Actions disponibles par sous-titre téléchargé, accessibles via un menu contex
 2. Hash fichier vidéo (améliore significativement la qualité des résultats)
 3. Rate-limiting (évite les bans provider)
 4. Blacklist sous-titres (UX critique)
-5. Score par langue
-6. Anti-ads
-7. Détection langue audio
-8. File d'attente de sync (Redis/BullMQ ou in-memory)
+5. Anti-ads
+6. Détection langue audio
+7. File d'attente de sync (Redis/BullMQ ou in-memory)
 9. Post-processing avancé
 10. Actions sous-titres (menu contextuel)
 11. Notifications granulaires

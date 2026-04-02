@@ -4,6 +4,9 @@ import {
   SubtitleSearchParams,
   SubtitleSearchResult,
 } from './subtitle-provider.interface';
+import { isRateLimited, rateLimitedFetch } from './rate-limiter';
+
+const PROVIDER_TYPE = 'subdl';
 
 interface SubdlSettings {
   apiKey: string;
@@ -28,6 +31,8 @@ export class SubdlProvider implements SubtitleProviderInterface {
   constructor(private readonly settings: SubdlSettings) {}
 
   async search(params: SubtitleSearchParams): Promise<SubtitleSearchResult[]> {
+    if (isRateLimited(PROVIDER_TYPE)) return [];
+
     const query = new URLSearchParams();
     query.set('api_key', this.settings.apiKey);
     if (params.imdbId) query.set('imdb_id', params.imdbId);
@@ -40,9 +45,13 @@ export class SubdlProvider implements SubtitleProviderInterface {
       query.set('episode_number', String(params.episode));
     query.set('subs_per_page', '30');
 
-    const res = await fetch(`https://api.subdl.com/api/v1/subtitles?${query}`, {
-      headers: { 'User-Agent': 'Suitarr/1.0' },
-    });
+    const res = await rateLimitedFetch(
+      PROVIDER_TYPE,
+      `https://api.subdl.com/api/v1/subtitles?${query}`,
+      { headers: { 'User-Agent': 'Suitarr/1.0' } },
+    );
+
+    if (!res) return [];
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
@@ -53,7 +62,6 @@ export class SubdlProvider implements SubtitleProviderInterface {
     const body = (await res.json()) as SubdlResponse;
 
     if (!body.status) {
-      // "can't find movie or tv" is a normal not-found, not an error
       if (body.error && /can't find/i.test(body.error)) {
         this.logger.debug(`Subdl: ${body.error}`);
       } else {
@@ -70,17 +78,26 @@ export class SubdlProvider implements SubtitleProviderInterface {
       hearingImpaired: item.hi,
       score: Math.min(100, Math.round((item.rating ?? 5) * 10)),
       providerName: 'Subdl',
-      providerType: 'subdl',
+      providerType: PROVIDER_TYPE,
     }));
   }
 
   async download(result: SubtitleSearchResult): Promise<Buffer> {
+    if (isRateLimited(PROVIDER_TYPE)) {
+      throw new Error('Subdl is rate-limited, try again later');
+    }
+
     const query = new URLSearchParams({ api_key: this.settings.apiKey });
-    const res = await fetch(
+    const res = await rateLimitedFetch(
+      PROVIDER_TYPE,
       `https://api.subdl.com/api/v1/subtitles/download/${result.providerFileId}?${query}`,
       { headers: { 'User-Agent': 'Suitarr/1.0' } },
     );
-    if (!res.ok) throw new Error(`Subdl download failed: ${res.status}`);
+
+    if (!res || !res.ok) {
+      throw new Error(`Subdl download failed: ${res?.status ?? 'rate-limited'}`);
+    }
+
     return Buffer.from(await res.arrayBuffer());
   }
 

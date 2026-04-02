@@ -4,14 +4,10 @@ import {
   SubtitleSearchParams,
   SubtitleSearchResult,
 } from './subtitle-provider.interface';
+import { isRateLimited, rateLimitedFetch, markRateLimited } from './rate-limiter';
 
-/**
- * App-level consumer API key registered at opensubtitles.com/consumers.
- * Users only need to provide their username + password.
- * They can optionally override with their own key.
- */
+const PROVIDER_TYPE = 'opensubtitles';
 const DEFAULT_API_KEY = 's38zmzVlW7IlYruWi7mHwDYl2SfMQoC1';
-
 const USER_AGENT = 'Suitarr v1.0';
 
 interface OpenSubtitlesSettings {
@@ -41,9 +37,12 @@ export class OpenSubtitlesProvider implements SubtitleProviderInterface {
   }
 
   async search(params: SubtitleSearchParams): Promise<SubtitleSearchResult[]> {
+    if (isRateLimited(PROVIDER_TYPE)) return [];
+
     await this.ensureToken();
 
     const query = new URLSearchParams();
+    if (params.moviehash) query.set('moviehash', params.moviehash);
     if (params.imdbId) query.set('imdb_id', params.imdbId);
     if (params.tmdbId) query.set('tmdb_id', String(params.tmdbId));
     query.set('languages', params.language);
@@ -52,10 +51,14 @@ export class OpenSubtitlesProvider implements SubtitleProviderInterface {
     if (params.episode != null)
       query.set('episode_number', String(params.episode));
 
-    const res = await fetch(
+    const res = await rateLimitedFetch(
+      PROVIDER_TYPE,
       `https://api.opensubtitles.com/api/v1/subtitles?${query}`,
       { headers: this.headers },
+      { defaultBackoffSec: 5 },
     );
+
+    if (!res) return [];
 
     if (!res.ok) {
       const body = await res.text().catch(() => '');
@@ -73,44 +76,62 @@ export class OpenSubtitlesProvider implements SubtitleProviderInterface {
           foreign_parts_only: boolean;
           download_count: number;
           ratings: number;
+          moviehash_match: boolean;
           files: { file_id: number }[];
         };
       }[];
     };
 
-    return body.data.map((item) => ({
-      providerFileId: String(item.attributes.files[0]?.file_id ?? item.id),
-      title: item.attributes.release,
-      language: item.attributes.language,
-      forced: item.attributes.foreign_parts_only,
-      hearingImpaired: item.attributes.hearing_impaired,
-      score: Math.min(
-        100,
-        Math.round(
-          item.attributes.ratings * 10 + item.attributes.download_count / 100,
-        ),
-      ),
-      downloadCount: item.attributes.download_count,
-      providerName: 'OpenSubtitles',
-      providerType: 'opensubtitles',
-    }));
+    return body.data.map((item) => {
+      const baseScore = Math.round(
+        item.attributes.ratings * 10 + item.attributes.download_count / 100,
+      );
+      const hashBonus = item.attributes.moviehash_match ? 20 : 0;
+      return {
+        providerFileId: String(item.attributes.files[0]?.file_id ?? item.id),
+        title: item.attributes.release,
+        language: item.attributes.language,
+        forced: item.attributes.foreign_parts_only,
+        hearingImpaired: item.attributes.hearing_impaired,
+        score: Math.min(100, baseScore + hashBonus),
+        downloadCount: item.attributes.download_count,
+        providerName: 'OpenSubtitles',
+        providerType: PROVIDER_TYPE,
+      };
+    });
   }
 
   async download(result: SubtitleSearchResult): Promise<Buffer> {
-    await this.ensureToken();
-
-    const res = await fetch('https://api.opensubtitles.com/api/v1/download', {
-      method: 'POST',
-      headers: this.headers,
-      body: JSON.stringify({ file_id: Number(result.providerFileId) }),
-    });
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`OpenSubtitles download failed: ${res.status} ${body}`);
+    if (isRateLimited(PROVIDER_TYPE)) {
+      throw new Error('OpenSubtitles is rate-limited, try again later');
     }
 
-    const body = (await res.json()) as { link: string };
+    await this.ensureToken();
+
+    const res = await rateLimitedFetch(
+      PROVIDER_TYPE,
+      'https://api.opensubtitles.com/api/v1/download',
+      {
+        method: 'POST',
+        headers: this.headers,
+        body: JSON.stringify({ file_id: Number(result.providerFileId) }),
+      },
+      { defaultBackoffSec: 60 },
+    );
+
+    if (!res || !res.ok) {
+      const body = res ? await res.text().catch(() => '') : 'rate-limited';
+      throw new Error(`OpenSubtitles download failed: ${body}`);
+    }
+
+    const body = (await res.json()) as { link: string; remaining: number };
+
+    // Track remaining downloads quota
+    if (body.remaining != null && body.remaining <= 0) {
+      this.logger.warn(`OpenSubtitles download quota exhausted`);
+      markRateLimited(PROVIDER_TYPE, null, 3600); // 1h backoff when quota 0
+    }
+
     const fileRes = await fetch(body.link);
     if (!fileRes.ok)
       throw new Error(`Failed to fetch subtitle file: ${fileRes.status}`);
@@ -122,9 +143,7 @@ export class OpenSubtitlesProvider implements SubtitleProviderInterface {
     const username = (settings.username as string) || this.settings.username;
     const password = (settings.password as string) || this.settings.password;
 
-    if (!username || !password) {
-      return false;
-    }
+    if (!username || !password) return false;
 
     const res = await fetch('https://api.opensubtitles.com/api/v1/login', {
       method: 'POST',

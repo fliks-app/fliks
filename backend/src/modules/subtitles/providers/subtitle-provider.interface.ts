@@ -7,6 +7,8 @@ export interface SubtitleSearchParams {
   episode?: number;
   language: string;
   filePath?: string;
+  moviehash?: string;
+  moviebytesize?: number;
 }
 
 export interface SubtitleSearchResult {

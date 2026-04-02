@@ -31,6 +31,8 @@ export class SubtitlesSettingsComponent implements OnInit {
   readonly upgradeThreshold = signal('90');
   readonly autoSync = signal('false');
   readonly encodeUtf8 = signal('true');
+  readonly removeHiTags = signal('false');
+  readonly customExclusions = signal('');
 
   async ngOnInit() {
     try {
@@ -42,6 +44,8 @@ export class SubtitlesSettingsComponent implements OnInit {
       this.upgradeThreshold.set(map['subtitle_upgrade_threshold'] ?? '90');
       this.autoSync.set(map['subtitle_auto_sync'] ?? 'false');
       this.encodeUtf8.set(map['subtitle_encode_utf8'] ?? 'true');
+      this.removeHiTags.set(map['subtitle_remove_hi_tags'] ?? 'false');
+      this.customExclusions.set(map['subtitle_custom_exclusions'] ?? '');
     } catch {
       this.toast.error(this.translate.instant('settings.subtitles.load_error'));
     } finally {
@@ -60,6 +64,8 @@ export class SubtitlesSettingsComponent implements OnInit {
         subtitle_upgrade_threshold: this.upgradeThreshold(),
         subtitle_auto_sync: this.autoSync(),
         subtitle_encode_utf8: this.encodeUtf8(),
+        subtitle_remove_hi_tags: this.removeHiTags(),
+        subtitle_custom_exclusions: this.customExclusions(),
       });
       this.toast.success(this.translate.instant('settings.subtitles.saved'));
     } catch {

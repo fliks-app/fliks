@@ -19,6 +19,9 @@ import {
   SubtitleSearchResult,
 } from './providers/subtitle-provider.interface';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
+import { computeMovieHash } from './moviehash';
+import { cleanSubtitle } from './subtitle-cleaner';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class SubtitlesService {
@@ -35,11 +38,22 @@ export class SubtitlesService {
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly providerService: SubtitleProviderService,
     private readonly factory: SubtitleProviderFactory,
+    private readonly settingsService: SettingsService,
   ) {}
 
   async searchSubtitles(
     params: SubtitleSearchParams,
   ): Promise<SubtitleSearchResult[]> {
+    // Compute moviehash if filePath is provided and hash not yet set
+    if (params.filePath && !params.moviehash) {
+      const hashResult = computeMovieHash(params.filePath);
+      if (hashResult) {
+        params.moviehash = hashResult.hash;
+        params.moviebytesize = hashResult.bytesize;
+        this.logger.log(`Computed moviehash=${hashResult.hash} for ${params.filePath}`);
+      }
+    }
+
     const providers = await this.providerService.findEnabled();
     const allResults: SubtitleSearchResult[] = [];
 
@@ -171,6 +185,17 @@ export class SubtitlesService {
         `${parsed.name}.${langSuffix}-${counter}.srt`,
       );
     }
+
+    // Clean subtitle content (remove ads, optionally HI tags)
+    const removeHiTags = (await this.settingsService.get('subtitle_remove_hi_tags')) === 'true';
+    const customExclusions = ((await this.settingsService.get('subtitle_custom_exclusions')) ?? '')
+      .split('\n')
+      .filter((l) => l.trim());
+    buffer = cleanSubtitle(buffer, {
+      removeAds: true,
+      removeHiTags,
+      customExclusions,
+    });
 
     await fs.mkdir(parsed.dir, { recursive: true });
     await fs.writeFile(subtitlePath, buffer);

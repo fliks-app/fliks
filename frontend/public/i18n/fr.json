@@ -1032,6 +1032,11 @@
       "section_post_processing": "Post-traitement",
       "auto_sync": "Synchroniser automatiquement les sous-titres (ffsubsync/alass)",
       "encode_utf8": "Ré-encoder en UTF-8 après téléchargement",
+      "section_cleaning": "Nettoyage",
+      "remove_hi_tags": "Supprimer les tags HI ([musique], (soupir), ♪, etc.)",
+      "custom_exclusions": "Exclusions personnalisées (regex)",
+      "custom_exclusions_placeholder": "opensubtitles\nadvertise\nwww\\.example\\.com",
+      "custom_exclusions_hint": "Une regex par ligne. Les sous-titres contenant ces motifs seront supprimés.",
       "saved": "Paramètres de sous-titres enregistrés.",
       "save_error": "Impossible d'enregistrer.",
       "load_error": "Impossible de charger les paramètres."

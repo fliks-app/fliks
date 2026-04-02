@@ -17,6 +17,8 @@ import { MediaServersService } from '../media-servers/media-servers.service';
 @Injectable()
 export class SubtitleSchedulerService {
   private readonly log = new Logger(SubtitleSchedulerService.name);
+  private lastSearchRun = 0;
+  private lastUpgradeRun = 0;
 
   constructor(
     @InjectRepository(Media)
@@ -33,8 +35,27 @@ export class SubtitleSchedulerService {
     private readonly mediaServers: MediaServersService,
   ) {}
 
-  /** Search for missing subtitles — runs every 6 hours */
-  @Cron(CronExpression.EVERY_6_HOURS)
+  /** Check every minute if it's time to run search or upgrade */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async tick(): Promise<void> {
+    const now = Date.now();
+    const searchInterval = Number(
+      (await this.settings.get('subtitle_search_interval')) ?? '360',
+    ) * 60_000;
+    const upgradeInterval = Number(
+      (await this.settings.get('subtitle_upgrade_interval')) ?? '720',
+    ) * 60_000;
+
+    if (now - this.lastSearchRun >= searchInterval) {
+      this.lastSearchRun = now;
+      await this.searchMissingSubtitles();
+    }
+    if (now - this.lastUpgradeRun >= upgradeInterval) {
+      this.lastUpgradeRun = now;
+      await this.upgradeSubtitles();
+    }
+  }
+
   async searchMissingSubtitles(): Promise<void> {
     const autoSearch = await this.settings.get('subtitle_auto_search');
     if (autoSearch === 'false') return;
@@ -127,8 +148,6 @@ export class SubtitleSchedulerService {
     }
   }
 
-  /** Upgrade low-score subtitles — runs every 12 hours */
-  @Cron(CronExpression.EVERY_12_HOURS)
   async upgradeSubtitles(): Promise<void> {
     const autoSearch = await this.settings.get('subtitle_auto_search');
     if (autoSearch === 'false') return;
