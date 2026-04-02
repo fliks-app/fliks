@@ -74,9 +74,6 @@
       </label>
     </div>
 
-    @if (saveError()) {
-      <div role="alert" class="alert alert-error text-sm">{{ saveError() }}</div>
-    }
 
     <div class="card-actions justify-end">
       <button type="button" class="btn btn-primary btn-sm" (click)="save()" [disabled]="saving()">

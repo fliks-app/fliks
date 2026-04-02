@@ -45,7 +45,7 @@ export class NotificationsSettingsComponent implements OnInit {
   readonly loading = signal(true);
   readonly listError = signal('');
   readonly saving = signal(false);
-  readonly saveError = signal('');
+
   readonly editingId = signal<number | null>(null);
   readonly testLoading = signal(false);
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
@@ -96,7 +96,6 @@ export class NotificationsSettingsComponent implements OnInit {
     this.formToken.set('');
     this.formTopic.set('');
     this.formEvents.set([...this.allEvents]);
-    this.saveError.set('');
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -110,7 +109,6 @@ export class NotificationsSettingsComponent implements OnInit {
     this.formToken.set('');
     this.formTopic.set('');
     this.formEvents.set([...nc.events]);
-    this.saveError.set('');
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -161,12 +159,8 @@ export class NotificationsSettingsComponent implements OnInit {
 
   async save() {
     const name = this.formName().trim();
-    if (!name) {
-      this.saveError.set(this.translate.instant('settings.notifications.name_required'));
-      return;
-    }
+    if (!name) return;
     this.saving.set(true);
-    this.saveError.set('');
     const body: CreateNotificationBody = {
       name,
       type: this.formType(),
@@ -181,12 +175,8 @@ export class NotificationsSettingsComponent implements OnInit {
         : firstValueFrom(this.http.put<NotificationConnection>(`/api/notifications/${id}`, body)));
       this.closeEditor();
       await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string | string[] } };
-      const msg = Array.isArray(httpErr.error?.message)
-        ? httpErr.error.message.join(', ')
-        : httpErr.error?.message;
-      this.saveError.set(msg ?? this.translate.instant('settings.notifications.save_error'));
+    } catch {
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }

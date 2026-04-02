@@ -38,7 +38,7 @@ export class QualityProfilesComponent implements OnInit {
   readonly loading = signal(true);
   readonly listError = signal('');
   readonly saving = signal(false);
-  readonly saveError = signal('');
+
   readonly editingId = signal<number | null>(null);
 
   readonly formName = signal('');
@@ -84,7 +84,6 @@ export class QualityProfilesComponent implements OnInit {
     this.formCutoff.set(16);
     this.formUpgrade.set(true);
     this.allowedIds.set(new Set());
-    this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -97,7 +96,6 @@ export class QualityProfilesComponent implements OnInit {
       p.items.filter((i) => i.allowed).map((i) => i.quality.id),
     );
     this.allowedIds.set(allowed);
-    this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -136,14 +134,8 @@ export class QualityProfilesComponent implements OnInit {
 
   async save() {
     const name = this.formName().trim();
-    if (!name) {
-      this.saveError.set(
-        this.translate.instant('settings.quality_profiles.name_required'),
-      );
-      return;
-    }
+    if (!name) return;
     this.saving.set(true);
-    this.saveError.set('');
     const body = this.buildPayload();
     const id = this.editingId();
     try {
@@ -152,12 +144,8 @@ export class QualityProfilesComponent implements OnInit {
         : this.profilesApi.updateQualityProfile(id, body));
       this.closeEditor();
       await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      this.saveError.set(
-        httpErr.error?.message ??
-          this.translate.instant('settings.quality_profiles.save_error'),
-      );
+    } catch {
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }

@@ -36,7 +36,7 @@ export class RolesSettingsComponent implements OnInit {
 
   readonly isCreating = signal(false);
   readonly saving = signal(false);
-  readonly saveError = signal('');
+
   readonly editingRole = signal<RoleRow | null>(null);
 
   readonly formName = signal('');
@@ -69,7 +69,6 @@ export class RolesSettingsComponent implements OnInit {
     this.formName.set('');
     this.formPermissions.set(new Set());
     this.formIsDefault.set(false);
-    this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -79,7 +78,6 @@ export class RolesSettingsComponent implements OnInit {
     this.formName.set(role.name);
     this.formPermissions.set(new Set(role.permissions));
     this.formIsDefault.set(role.isDefault);
-    this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -98,7 +96,6 @@ export class RolesSettingsComponent implements OnInit {
 
   async save() {
     this.saving.set(true);
-    this.saveError.set('');
     const permissions = [...this.formPermissions()];
     try {
       if (this.isCreating()) {
@@ -119,12 +116,8 @@ export class RolesSettingsComponent implements OnInit {
       this.closeEditor();
       this.toast.success(this.translate.instant('settings.roles.save_success'));
       await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string | string[] } };
-      const msg = Array.isArray(httpErr.error?.message)
-        ? httpErr.error.message.join(', ')
-        : httpErr.error?.message;
-      this.saveError.set(msg ?? this.translate.instant('settings.roles.save_error'));
+    } catch {
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }

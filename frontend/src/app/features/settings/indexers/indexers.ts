@@ -34,7 +34,7 @@ export class IndexersSettingsComponent implements OnInit {
   readonly loading = signal(true);
   readonly listError = signal('');
   readonly saving = signal(false);
-  readonly saveError = signal('');
+
   readonly editingId = signal<number | null>(null);
 
   readonly formName = signal('');
@@ -86,7 +86,6 @@ export class IndexersSettingsComponent implements OnInit {
     this.formTorznabKey.set('');
     this.formMinSeeders.set(0);
     this.formUnknownLanguage.set('');
-    this.saveError.set('');
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -102,7 +101,6 @@ export class IndexersSettingsComponent implements OnInit {
     this.formTorznabKey.set(String(s['apiKey'] ?? ''));
     this.formMinSeeders.set(Number(s['minSeeders'] ?? 0));
     this.formUnknownLanguage.set(String(s['unknownLanguageIsoCode'] ?? ''));
-    this.saveError.set('');
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -143,19 +141,9 @@ export class IndexersSettingsComponent implements OnInit {
 
   async save() {
     const name = this.formName().trim();
-    if (!name) {
-      this.saveError.set(
-        this.translate.instant('settings.indexers.name_required'),
-      );
-      return;
-    }
+    if (!name) return;
     const base = this.formTorznabBase().trim();
-    if (!base) {
-      this.saveError.set(
-        this.translate.instant('settings.indexers.base_url_required'),
-      );
-      return;
-    }
+    if (!base) return;
 
     const body = {
       name,
@@ -172,20 +160,13 @@ export class IndexersSettingsComponent implements OnInit {
     };
 
     this.saving.set(true);
-    this.saveError.set('');
     const id = this.editingId();
     try {
       await (id == null ? this.api.create(body) : this.api.update(id, body));
       this.closeEditor();
       await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string | string[] } };
-      const msg = Array.isArray(httpErr.error?.message)
-        ? httpErr.error.message.join(', ')
-        : httpErr.error?.message;
-      this.saveError.set(
-        msg ?? this.translate.instant('settings.indexers.save_error'),
-      );
+    } catch {
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }

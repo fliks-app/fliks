@@ -136,9 +136,7 @@
           }
         </div>
 
-        @if (saveError()) {
-          <div role="alert" class="alert alert-error text-sm">{{ saveError() }}</div>
-        }
+
         <div class="modal-action">
           <button type="button" class="btn btn-ghost btn-sm" (click)="closeEditor()">
             {{ 'common.cancel' | translate }}

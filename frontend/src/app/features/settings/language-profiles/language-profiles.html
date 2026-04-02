@@ -134,9 +134,7 @@
           </div>
         </div>
 
-        @if (saveError()) {
-          <div role="alert" class="alert alert-error text-sm">{{ saveError() }}</div>
-        }
+
       </div>
       <div class="modal-action shrink-0">
         <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">

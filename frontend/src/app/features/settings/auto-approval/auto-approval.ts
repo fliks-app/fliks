@@ -39,7 +39,7 @@ export class AutoApprovalSettingsComponent implements OnInit {
 
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
   readonly saving = signal(false);
-  readonly saveError = signal('');
+
   readonly editingId = signal<number | null>(null);
 
   readonly formName = signal('');
@@ -73,7 +73,6 @@ export class AutoApprovalSettingsComponent implements OnInit {
     this.formEnabled.set(true);
     this.formPriority.set(0);
     this.formConditions.set([EMPTY_CONDITION()]);
-    this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -83,7 +82,6 @@ export class AutoApprovalSettingsComponent implements OnInit {
     this.formEnabled.set(rule.enabled);
     this.formPriority.set(rule.priority);
     this.formConditions.set(rule.conditions.map((c) => ({ ...c })));
-    this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -107,12 +105,8 @@ export class AutoApprovalSettingsComponent implements OnInit {
 
   async save() {
     const name = this.formName().trim();
-    if (!name) {
-      this.saveError.set(this.translate.instant('settings.auto_approval.name_required'));
-      return;
-    }
+    if (!name) return;
     this.saving.set(true);
-    this.saveError.set('');
     const body = {
       name,
       enabled: this.formEnabled(),
@@ -124,11 +118,8 @@ export class AutoApprovalSettingsComponent implements OnInit {
       await (id != null ? this.api.update(id, body) : this.api.create(body));
       this.closeEditor();
       await this.reload();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      this.saveError.set(
-        httpErr.error?.message ?? this.translate.instant('settings.auto_approval.save_error'),
-      );
+    } catch {
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }

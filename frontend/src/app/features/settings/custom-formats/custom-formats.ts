@@ -32,7 +32,7 @@ export class CustomFormatsSettingsComponent implements OnInit {
   readonly loading = signal(true);
   readonly listError = signal('');
   readonly saving = signal(false);
-  readonly saveError = signal('');
+
   readonly editingId = signal<number | null>(null);
 
   readonly formName = signal('');
@@ -67,7 +67,6 @@ export class CustomFormatsSettingsComponent implements OnInit {
     this.formName.set('');
     this.formScore.set(0);
     this.formSpecs.set([]);
-    this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -76,7 +75,6 @@ export class CustomFormatsSettingsComponent implements OnInit {
     this.formName.set(cf.name);
     this.formScore.set(cf.score);
     this.formSpecs.set(cf.specs.map((s) => ({ ...s })));
-    this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -103,12 +101,8 @@ export class CustomFormatsSettingsComponent implements OnInit {
 
   async save() {
     const name = this.formName().trim();
-    if (!name) {
-      this.saveError.set(this.translate.instant('settings.custom_formats.name_required'));
-      return;
-    }
+    if (!name) return;
     this.saving.set(true);
-    this.saveError.set('');
     const body = {
       name,
       score: this.formScore(),
@@ -119,12 +113,8 @@ export class CustomFormatsSettingsComponent implements OnInit {
       await (id == null ? this.api.create(body) : this.api.update(id, body));
       this.closeEditor();
       await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string | string[] } };
-      const msg = Array.isArray(httpErr.error?.message)
-        ? httpErr.error.message.join(', ')
-        : httpErr.error?.message;
-      this.saveError.set(msg ?? this.translate.instant('settings.custom_formats.save_error'));
+    } catch {
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }

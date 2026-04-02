@@ -12,6 +12,7 @@ import {
   QualityDefinition,
 } from '../../../core/services/api/quality-definitions-api.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { ToastService } from '../../../core/services/toast.service';
 
 const MAX_SLIDER = 60000; // MB/h max for slider
 
@@ -25,6 +26,7 @@ export class QualityDefinitionsComponent implements OnInit {
   private readonly api = inject(QualityDefinitionsApiService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly toast = inject(ToastService);
 
   readonly definitions = signal<QualityDefinition[]>([]);
   readonly loading = signal(true);
@@ -105,8 +107,9 @@ export class QualityDefinitionsComponent implements OnInit {
       }));
       this.definitions.set(await this.api.updateAll(items));
       this.dirty.set(false);
+      this.toast.success(this.translate.instant('settings.quality_definitions.saved'));
     } catch {
-      this.error.set(this.translate.instant('settings.quality_definitions.save_error'));
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }

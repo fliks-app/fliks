@@ -31,7 +31,7 @@ export class DownloadClientsSettingsComponent implements OnInit {
   readonly loading = signal(true);
   readonly listError = signal('');
   readonly saving = signal(false);
-  readonly saveError = signal('');
+
   readonly editingId = signal<number | null>(null);
 
   readonly formName = signal('');
@@ -83,7 +83,6 @@ export class DownloadClientsSettingsComponent implements OnInit {
     this.formSeriesCategory.set('');
     this.formPriority.set(1);
     this.formEnabled.set(true);
-    this.saveError.set('');
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -102,7 +101,6 @@ export class DownloadClientsSettingsComponent implements OnInit {
     this.formSeriesCategory.set(dc.settings.seriesCategory ?? '');
     this.formPriority.set(dc.priority);
     this.formEnabled.set(dc.enabled);
-    this.saveError.set('');
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -159,14 +157,8 @@ export class DownloadClientsSettingsComponent implements OnInit {
 
   async save() {
     const name = this.formName().trim();
-    if (!name) {
-      this.saveError.set(
-        this.translate.instant('settings.download_clients.name_required'),
-      );
-      return;
-    }
+    if (!name) return;
     this.saving.set(true);
-    this.saveError.set('');
     const id = this.editingId();
     try {
       await (id == null
@@ -174,14 +166,8 @@ export class DownloadClientsSettingsComponent implements OnInit {
         : this.api.update(id, this.buildBody()));
       this.closeEditor();
       await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string | string[] } };
-      const msg = Array.isArray(httpErr.error?.message)
-        ? httpErr.error.message.join(', ')
-        : httpErr.error?.message;
-      this.saveError.set(
-        msg ?? this.translate.instant('settings.download_clients.save_error'),
-      );
+    } catch {
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }

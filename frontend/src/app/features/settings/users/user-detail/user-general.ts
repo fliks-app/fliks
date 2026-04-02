@@ -27,7 +27,7 @@ export class UserGeneralComponent implements OnInit {
   private readonly toast = inject(ToastService);
 
   readonly saving = signal(false);
-  readonly saveError = signal('');
+
 
   readonly formUsername = signal('');
   readonly formPassword = signal('');
@@ -50,7 +50,6 @@ export class UserGeneralComponent implements OnInit {
     const user = this.state.user();
     if (!user) return;
     this.saving.set(true);
-    this.saveError.set('');
     const body: UpdateUserBody = {
       username: this.formUsername().trim() || undefined,
       roleId: this.formRoleId() ?? undefined,
@@ -63,14 +62,8 @@ export class UserGeneralComponent implements OnInit {
       this.state.user.set(updated);
       this.formPassword.set('');
       this.toast.success(this.translate.instant('settings.users.save_success'));
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string | string[] } };
-      const msg = Array.isArray(httpErr.error?.message)
-        ? httpErr.error.message.join(', ')
-        : httpErr.error?.message;
-      this.saveError.set(
-        msg ?? this.translate.instant('settings.users.save_error'),
-      );
+    } catch {
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }

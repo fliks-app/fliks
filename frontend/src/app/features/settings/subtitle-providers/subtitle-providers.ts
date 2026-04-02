@@ -44,7 +44,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly listError = signal('');
 
   readonly saving = signal(false);
-  readonly saveError = signal('');
+
   readonly editingId = signal<number | null>(null);
 
   readonly formName = signal('');
@@ -105,7 +105,6 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     this.formUsername.set('');
     this.formPassword.set('');
     this.formBaseUrl.set('');
-    this.saveError.set('');
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -121,7 +120,6 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     this.formUsername.set(String(s['username'] ?? ''));
     this.formPassword.set(String(s['password'] ?? ''));
     this.formBaseUrl.set(String(s['baseUrl'] ?? ''));
-    this.saveError.set('');
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -166,10 +164,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
 
   async save() {
     const name = this.formName().trim();
-    if (!name) {
-      this.saveError.set(this.translate.instant('settings.subtitle_providers.name_required'));
-      return;
-    }
+    if (!name) return;
     const body = {
       name,
       type: this.formType(),
@@ -179,18 +174,13 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     };
 
     this.saving.set(true);
-    this.saveError.set('');
     const id = this.editingId();
     try {
       await (id == null ? this.api.create(body) : this.api.update(id, body));
       this.closeEditor();
       await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string | string[] } };
-      const msg = Array.isArray(httpErr.error?.message)
-        ? httpErr.error.message.join(', ')
-        : httpErr.error?.message;
-      this.saveError.set(msg ?? this.translate.instant('settings.subtitle_providers.save_error'));
+    } catch {
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }

@@ -69,9 +69,7 @@
           <span class="label-text">{{ 'settings.delay_profiles.field_order' | translate }}</span>
           <input type="number" class="input input-bordered input-sm w-full" [ngModel]="formOrder()" (ngModelChange)="formOrder.set(+$event)" min="1" />
         </label>
-        @if (saveError()) {
-          <div role="alert" class="alert alert-error text-sm">{{ saveError() }}</div>
-        }
+
       </div>
       <div class="modal-action">
         <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">{{ 'common.cancel' | translate }}</button>

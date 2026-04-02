@@ -10,6 +10,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { ToastService } from '../../../core/services/toast.service';
 import {
   ProfilesService,
   LanguageProfile,
@@ -33,6 +34,7 @@ export class LanguageProfilesComponent implements OnInit {
   private readonly api = inject(ProfilesService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly toast = inject(ToastService);
 
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
@@ -42,7 +44,7 @@ export class LanguageProfilesComponent implements OnInit {
   readonly listError = signal('');
 
   readonly saving = signal(false);
-  readonly saveError = signal('');
+
   readonly editingId = signal<number | null>(null);
 
   readonly formName = signal('');
@@ -83,7 +85,6 @@ export class LanguageProfilesComponent implements OnInit {
     this.formName.set('');
     this.audioIsoCodes.set(new Set());
     this.subtitleEntries.set(new Map());
-    this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -96,7 +97,6 @@ export class LanguageProfilesComponent implements OnInit {
       subs.set(s.isoCode, { forced: s.forced, hi: s.hi });
     }
     this.subtitleEntries.set(subs);
-    this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -174,11 +174,10 @@ export class LanguageProfilesComponent implements OnInit {
   async save() {
     const name = this.formName().trim();
     if (!name) {
-      this.saveError.set(this.translate.instant('settings.language_profiles.name_required'));
+      this.toast.error(this.translate.instant('settings.language_profiles.name_required'));
       return;
     }
     this.saving.set(true);
-    this.saveError.set('');
     const body = this.buildPayload();
     const id = this.editingId();
     try {
@@ -187,11 +186,8 @@ export class LanguageProfilesComponent implements OnInit {
         : this.api.updateLanguageProfile(id, body));
       this.closeEditor();
       await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      this.saveError.set(
-        httpErr.error?.message ?? this.translate.instant('settings.language_profiles.save_error'),
-      );
+    } catch {
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }

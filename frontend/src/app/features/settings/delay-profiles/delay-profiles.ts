@@ -36,7 +36,7 @@ export class DelayProfilesComponent implements OnInit {
   readonly loading = signal(true);
   readonly listError = signal('');
   readonly saving = signal(false);
-  readonly saveError = signal('');
+
   readonly editingId = signal<number | null>(null);
 
   readonly formDelay = signal(6);
@@ -63,7 +63,6 @@ export class DelayProfilesComponent implements OnInit {
     this.editingId.set(null);
     this.formDelay.set(6);
     this.formOrder.set(1);
-    this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -71,7 +70,6 @@ export class DelayProfilesComponent implements OnInit {
     this.editingId.set(row.id);
     this.formDelay.set(row.torrentDelay);
     this.formOrder.set(row.order);
-    this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -81,7 +79,6 @@ export class DelayProfilesComponent implements OnInit {
 
   async save() {
     this.saving.set(true);
-    this.saveError.set('');
     const body = {
       torrentDelay: this.formDelay(),
       order: this.formOrder(),
@@ -96,9 +93,8 @@ export class DelayProfilesComponent implements OnInit {
       }
       this.closeEditor();
       await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      this.saveError.set(httpErr.error?.message ?? this.translate.instant('settings.delay_profiles.save_error'));
+    } catch {
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }

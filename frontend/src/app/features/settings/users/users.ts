@@ -43,7 +43,7 @@ export class UsersSettingsComponent implements OnInit {
 
   readonly isCreating = signal(false);
   readonly saving = signal(false);
-  readonly saveError = signal('');
+
   readonly editingUser = signal<UserRow | null>(null);
 
   readonly formUsername = signal('');
@@ -81,7 +81,6 @@ export class UsersSettingsComponent implements OnInit {
     const defaultRole = this.roles().find((r) => r.isDefault);
     this.formRoleId.set(defaultRole?.id ?? this.roles()[0]?.id ?? null);
     this.formEnabled.set(true);
-    this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -93,7 +92,6 @@ export class UsersSettingsComponent implements OnInit {
     this.formEmail.set('');
     this.formRoleId.set(user.roleId);
     this.formEnabled.set(user.enabled);
-    this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -103,7 +101,6 @@ export class UsersSettingsComponent implements OnInit {
 
   async save() {
     this.saving.set(true);
-    this.saveError.set('');
     try {
       if (this.isCreating()) {
         const body: CreateUserBody = {
@@ -128,12 +125,8 @@ export class UsersSettingsComponent implements OnInit {
       this.closeEditor();
       this.toast.success(this.translate.instant('settings.users.save_success'));
       await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string | string[] } };
-      const msg = Array.isArray(httpErr.error?.message)
-        ? httpErr.error.message.join(', ')
-        : httpErr.error?.message;
-      this.saveError.set(msg ?? this.translate.instant('settings.users.save_error'));
+    } catch {
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }

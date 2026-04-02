@@ -35,7 +35,7 @@ export class MediaServersSettingsComponent implements OnInit {
   readonly listError = signal('');
 
   readonly saving = signal(false);
-  readonly saveError = signal('');
+
   readonly editingId = signal<number | null>(null);
   readonly testLoading = signal(false);
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
@@ -84,7 +84,6 @@ export class MediaServersSettingsComponent implements OnInit {
     this.formApiKey.set('');
     this.formEnabled.set(true);
     this.formEvents.set([...(this.serverTypes()[0]?.supportedEvents ?? [])]);
-    this.saveError.set('');
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -97,7 +96,6 @@ export class MediaServersSettingsComponent implements OnInit {
     this.formApiKey.set(row.apiKey);
     this.formEnabled.set(row.enabled);
     this.formEvents.set([...row.events]);
-    this.saveError.set('');
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -139,15 +137,9 @@ export class MediaServersSettingsComponent implements OnInit {
 
   async save() {
     const name = this.formName().trim();
-    if (!name) {
-      this.saveError.set(this.translate.instant('settings.media_servers.name_required'));
-      return;
-    }
+    if (!name) return;
     const url = this.formUrl().trim();
-    if (!url) {
-      this.saveError.set(this.translate.instant('settings.media_servers.url_required'));
-      return;
-    }
+    if (!url) return;
 
     const body = {
       name,
@@ -159,18 +151,13 @@ export class MediaServersSettingsComponent implements OnInit {
     };
 
     this.saving.set(true);
-    this.saveError.set('');
     const id = this.editingId();
     try {
       await (id == null ? this.api.create(body) : this.api.update(id, body));
       this.closeEditor();
       await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string | string[] } };
-      const msg = Array.isArray(httpErr.error?.message)
-        ? httpErr.error.message.join(', ')
-        : httpErr.error?.message;
-      this.saveError.set(msg ?? this.translate.instant('settings.media_servers.save_error'));
+    } catch {
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }

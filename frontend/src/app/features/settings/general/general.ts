@@ -8,6 +8,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
+import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-general-settings',
@@ -18,11 +19,11 @@ import { SettingsApiService } from '../../../core/services/api/settings-api.serv
 export class GeneralSettingsComponent implements OnInit {
   private readonly api = inject(SettingsApiService);
   private readonly translate = inject(TranslateService);
+  private readonly toast = inject(ToastService);
 
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly error = signal('');
-  readonly saved = signal(false);
 
   readonly tmdbApiKey = signal('');
   readonly searchMissingAuto = signal('true');
@@ -57,7 +58,6 @@ export class GeneralSettingsComponent implements OnInit {
   async save() {
     this.saving.set(true);
     this.error.set('');
-    this.saved.set(false);
     try {
       await this.api.setBulk({
         tmdb_api_key: this.tmdbApiKey(),
@@ -69,10 +69,9 @@ export class GeneralSettingsComponent implements OnInit {
         stalled_delete_after_minutes: this.stalledDeleteAfterMinutes(),
         stalled_search_after_delete: this.stalledSearchAfterDelete(),
       });
-      this.saved.set(true);
-      setTimeout(() => this.saved.set(false), 3000);
+      this.toast.success(this.translate.instant('settings.general.saved'));
     } catch {
-      this.error.set(this.translate.instant('settings.general.save_error'));
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }
