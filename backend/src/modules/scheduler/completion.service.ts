@@ -75,7 +75,7 @@ export class CompletionService {
       await Promise.all(
         qbitClients.map(async (c) => {
           const torrents = await this.qbittorrent.getTorrents(c);
-          return torrents.map((t) => ({ ...t, _clientId: c.id }));
+          return torrents.map((t) => ({ ...t, _clientId: c.id, _client: c }));
         }),
       )
     ).flat();
@@ -208,7 +208,7 @@ export class CompletionService {
 
   private async processOne(
     history: DownloadHistory,
-    torrent: QbittorrentTorrent & { _clientId?: number },
+    torrent: QbittorrentTorrent & { _clientId?: number; _client?: import('../download-clients/entities/download-client.entity').DownloadClient },
     movieFormat: string,
     movieFolderFormat: string,
     seriesFormat: string,
@@ -216,66 +216,54 @@ export class CompletionService {
     seasonFolderFormat: string,
     rootFolders: RootFolder[],
   ): Promise<void> {
-    // Locate video file — torrent may be a folder or a single file
-    const saveDir = path.join(torrent.save_path, torrent.name);
-    const isDirTorrent =
-      fs.existsSync(saveDir) && fs.statSync(saveDir).isDirectory();
+    const VIDEO_EXTS = ['.mkv', '.mp4', '.avi', '.mov', '.ts', '.m2ts', '.wmv', '.flv'];
 
+    // Use qBittorrent API to get actual files of this torrent
     let videoFiles: { filePath: string; size: number }[] = [];
 
-    if (isDirTorrent) {
-      // Multi-file torrent: search inside the torrent folder only
-      videoFiles = this.naming.findAllVideoFiles(saveDir);
-      this.log.log(
-        `Import[${history.sourceTitle}]: folder torrent "${saveDir}" → ${videoFiles.length} video file(s)`,
-      );
-    } else {
-      // Not a directory — look for the file directly or with a video extension
-      const VIDEO_EXTS = ['.mkv', '.mp4', '.avi', '.mov', '.ts', '.m2ts', '.wmv', '.flv'];
-      const singleFile = path.join(torrent.save_path, torrent.name);
-
-      // Case 1: torrent.name already has an extension (e.g. "movie.mkv")
-      if (fs.existsSync(singleFile) && fs.statSync(singleFile).isFile()) {
-        const ext = path.extname(singleFile).toLowerCase();
-        if (VIDEO_EXTS.includes(ext)) {
-          videoFiles = [{ filePath: singleFile, size: fs.statSync(singleFile).size }];
+    if (torrent._client) {
+      const torrentFiles = await this.qbittorrent.getTorrentFiles(torrent._client, torrent.hash);
+      for (const f of torrentFiles) {
+        const ext = path.extname(f.name).toLowerCase();
+        if (VIDEO_EXTS.includes(ext) && f.progress >= 1) {
+          const filePath = path.join(torrent.save_path, f.name);
+          videoFiles.push({ filePath, size: f.size });
         }
       }
+      this.log.log(
+        `Import[${history.sourceTitle}]: qBittorrent API returned ${torrentFiles.length} file(s), ${videoFiles.length} video(s)`,
+      );
+    }
 
-      // Case 2: torrent.name has no extension — try appending video extensions
-      if (!videoFiles.length) {
-        for (const ext of VIDEO_EXTS) {
-          const candidate = singleFile + ext;
-          if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-            videoFiles = [{ filePath: candidate, size: fs.statSync(candidate).size }];
-            break;
+    // Fallback: filesystem scan if API returned nothing
+    if (!videoFiles.length) {
+      const saveDir = path.join(torrent.save_path, torrent.name);
+      if (fs.existsSync(saveDir) && fs.statSync(saveDir).isDirectory()) {
+        videoFiles = this.naming.findAllVideoFiles(saveDir);
+      } else {
+        // Single file: try exact name, then with extensions
+        const singleFile = path.join(torrent.save_path, torrent.name);
+        if (fs.existsSync(singleFile) && fs.statSync(singleFile).isFile()) {
+          const ext = path.extname(singleFile).toLowerCase();
+          if (VIDEO_EXTS.includes(ext)) {
+            videoFiles = [{ filePath: singleFile, size: fs.statSync(singleFile).size }];
           }
         }
-      }
-
-      // Case 3: scan save_path for files starting with torrent.name
-      if (!videoFiles.length) {
-        try {
-          const entries = fs.readdirSync(torrent.save_path);
-          for (const entry of entries) {
-            if (!entry.startsWith(torrent.name)) continue;
-            const fullPath = path.join(torrent.save_path, entry);
-            const stat = fs.statSync(fullPath);
-            if (stat.isFile() && VIDEO_EXTS.includes(path.extname(entry).toLowerCase())) {
-              videoFiles = [{ filePath: fullPath, size: stat.size }];
+        if (!videoFiles.length) {
+          for (const ext of VIDEO_EXTS) {
+            const candidate = singleFile + ext;
+            if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+              videoFiles = [{ filePath: candidate, size: fs.statSync(candidate).size }];
               break;
             }
-            if (stat.isDirectory()) {
-              videoFiles = this.naming.findAllVideoFiles(fullPath);
-              if (videoFiles.length) break;
-            }
           }
-        } catch { /* ignore read errors */ }
+        }
       }
-
-      this.log.log(
-        `Import[${history.sourceTitle}]: single-file torrent "${torrent.name}" → ${videoFiles.length > 0 ? videoFiles[0].filePath : 'not found'}`,
-      );
+      if (videoFiles.length) {
+        this.log.log(
+          `Import[${history.sourceTitle}]: filesystem fallback found ${videoFiles.length} video file(s)`,
+        );
+      }
     }
 
     if (!videoFiles.length) {

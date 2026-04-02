@@ -20,6 +20,14 @@ export interface QbittorrentTorrent {
   added_on: number; // unix timestamp
   completion_on: number;
   save_path: string;
+  content_path: string;
+}
+
+export interface QbittorrentTorrentFile {
+  name: string;      // relative path within torrent
+  size: number;
+  progress: number;  // 0–1
+  priority: number;
 }
 
 @Injectable()
@@ -157,6 +165,60 @@ export class QbittorrentService {
       this.log.warn(
         `getTorrents: error fetching torrents from "${client.name}": ${(e as Error).message}`,
       );
+      return [];
+    }
+  }
+
+  /**
+   * Get the list of files belonging to a specific torrent.
+   * Uses qBittorrent API /api/v2/torrents/files.
+   */
+  async getTorrentFiles(
+    client: DownloadClient,
+    hash: string,
+  ): Promise<QbittorrentTorrentFile[]> {
+    const s = client.settings as {
+      host?: string;
+      username?: string;
+      password?: string;
+      useSsl?: boolean;
+      port?: number;
+    };
+    const base = this.buildBaseUrl(s);
+    if (!base) return [];
+    const http = axios.create({
+      timeout: 15_000,
+      headers: { 'User-Agent': 'Suitarr/1.0' },
+    });
+
+    const formAuth = new URLSearchParams({
+      username: s.username ?? '',
+      password: s.password ?? '',
+    });
+    try {
+      const loginRes = await http.post(
+        `${base}/api/v2/auth/login`,
+        formAuth.toString(),
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          validateStatus: () => true,
+        },
+      );
+      const cookies = loginRes.headers['set-cookie'];
+      if (!cookies?.length || loginRes.data === 'Fails.') return [];
+      const cookieHeader = cookies.map((c: string) => c.split(';')[0]).join('; ');
+
+      const res = await http.get<QbittorrentTorrentFile[]>(
+        `${base}/api/v2/torrents/files`,
+        {
+          headers: { Cookie: cookieHeader },
+          params: { hash },
+          validateStatus: () => true,
+        },
+      );
+      return Array.isArray(res.data) ? res.data : [];
+    } catch (e) {
+      this.log.warn(`getTorrentFiles: error for hash ${hash}: ${(e as Error).message}`);
       return [];
     }
   }
