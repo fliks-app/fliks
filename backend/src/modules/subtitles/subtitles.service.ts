@@ -375,7 +375,11 @@ export class SubtitlesService {
     if (!sub) throw new NotFoundException(`SubtitleFile #${subtitleId} not found`);
     if (!sub.filePath) throw new BadRequestException('Subtitle has no file path');
 
+    const paramsStr = params ? JSON.stringify(params) : '';
+    this.logger.log(`PostProcess #${subtitleId}: ${action}${paramsStr ? ` ${paramsStr}` : ''} on "${sub.filePath}"`);
+
     let content = await fs.readFile(sub.filePath, 'utf-8');
+    const sizeBefore = content.length;
 
     switch (action) {
       case 'removeHiTags': {
@@ -419,6 +423,7 @@ export class SubtitlesService {
     }
 
     await fs.writeFile(sub.filePath, content, 'utf-8');
+    this.logger.log(`PostProcess #${subtitleId}: ${action} done (${sizeBefore} → ${content.length} chars)`);
     return sub;
   }
 }
