@@ -161,19 +161,27 @@ export class OpenSubtitlesProvider implements SubtitleProviderInterface {
   private async ensureToken(): Promise<void> {
     if (this.token) return;
     if (!this.settings.username || !this.settings.password) return;
+    if (isRateLimited(PROVIDER_TYPE)) return;
 
-    const res = await fetch('https://api.opensubtitles.com/api/v1/login', {
-      method: 'POST',
-      headers: {
-        'Api-Key': this.apiKey,
-        'Content-Type': 'application/json',
-        'User-Agent': USER_AGENT,
+    const res = await rateLimitedFetch(
+      PROVIDER_TYPE,
+      'https://api.opensubtitles.com/api/v1/login',
+      {
+        method: 'POST',
+        headers: {
+          'Api-Key': this.apiKey,
+          'Content-Type': 'application/json',
+          'User-Agent': USER_AGENT,
+        },
+        body: JSON.stringify({
+          username: this.settings.username,
+          password: this.settings.password,
+        }),
       },
-      body: JSON.stringify({
-        username: this.settings.username,
-        password: this.settings.password,
-      }),
-    });
+      { defaultBackoffSec: 60 },
+    );
+
+    if (!res) return;
 
     if (res.ok) {
       const body = (await res.json()) as { token: string };
