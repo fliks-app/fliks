@@ -260,6 +260,13 @@
               }
             </optgroup>
           }
+          @if (externalSubtitleRefs().length) {
+            <optgroup [label]="'media_detail.sync_external_subtitles' | translate">
+              @for (s of externalSubtitleRefs(); track s.id) {
+                <option [value]="'file:' + s.filePath">{{ s.language }} — {{ s.providerType }} ({{ s.status }})</option>
+              }
+            </optgroup>
+          }
         </select>
       </label>
 

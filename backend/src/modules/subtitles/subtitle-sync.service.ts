@@ -135,13 +135,17 @@ export class SubtitleSyncService {
 
     const subPath = subtitle.filePath!;
 
-    // Parse reference: 'auto', 'audio:3', 'subtitle:5', or absolute path
+    // Parse reference: 'auto', 'audio:3', 'subtitle:5', 'file:/path/to/sub.srt', or absolute path
     let refPath = mediaFilePath;
     let refStreamIndex: number | null = null;
     if (options.reference && options.reference !== 'auto') {
       const streamMatch = /^(audio|subtitle):(\d+)$/.exec(options.reference);
+      const fileMatch = /^file:(.+)$/.exec(options.reference);
       if (streamMatch) {
         refStreamIndex = Number(streamMatch[2]);
+      } else if (fileMatch) {
+        // External subtitle file as reference (sub-to-sub sync)
+        refPath = fileMatch[1];
       } else {
         refPath = options.reference;
       }
