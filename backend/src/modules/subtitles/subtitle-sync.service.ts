@@ -17,6 +17,7 @@ import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FfprobeService } from './ffprobe.service';
 import { EventsService } from '../scheduler/events.service';
+import { MediaServersService } from '../media-servers/media-servers.service';
 
 const execFileAsync = promisify(execFile);
 const MAX_CONCURRENT = 2;
@@ -57,6 +58,7 @@ export class SubtitleSyncService {
     private readonly notifications: NotificationsService,
     private readonly ffprobe: FfprobeService,
     private readonly events: EventsService,
+    private readonly mediaServers: MediaServersService,
   ) {}
 
   /** Get current queue state */
@@ -235,6 +237,14 @@ export class SubtitleSyncService {
         language: saved.language,
         mediaId: saved.mediaId,
       });
+      // Notify media servers (Emby/Plex) to refresh
+      const media = await this.mediaRepo.findOne({ where: { id: saved.mediaId } });
+      if (media) {
+        void this.mediaServers.dispatch('subtitle.synced', {
+          title: media.title,
+          path: media.path,
+        });
+      }
     }
 
     return saved;
