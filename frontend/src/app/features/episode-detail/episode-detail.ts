@@ -240,12 +240,12 @@ export class EpisodeDetailComponent implements OnInit {
     }
   }
 
-  async syncSubtitle(subtitleId: number) {
+  async syncSubtitle(event: { subtitleId: number; options: import('../../core/services/api/subtitles-api.service').SyncOptions }) {
     const m = this.media();
     if (!m) return;
     this.subtitleActionBusy.set(true);
     try {
-      await this.subtitlesApi.sync(m.id, subtitleId);
+      await this.subtitlesApi.sync(m.id, event.subtitleId, event.options);
     } finally {
       this.subtitleActionBusy.set(false);
     }

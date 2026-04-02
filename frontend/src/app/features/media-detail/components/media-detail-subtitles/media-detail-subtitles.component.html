@@ -110,7 +110,7 @@
                       </div>
                       <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-10 w-56 p-2 shadow-lg text-sm">
                         <li>
-                          <a class="flex items-center gap-3" (click)="syncSubtitle.emit(sub.id)">
+                          <a class="flex items-center gap-3" (click)="openSyncModal(sub.id)">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
                             </svg>
@@ -230,3 +230,71 @@
     }
   }
 </section>
+
+<!-- Sync options modal -->
+<dialog #syncDialog class="modal">
+  <div class="modal-box max-w-md">
+    <h3 class="text-lg font-bold">{{ 'media_detail.sync_modal_title' | translate }}</h3>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'media_detail.sync_modal_subtitle' | translate }}</p>
+
+    <div class="flex flex-col gap-4 mt-4">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'media_detail.sync_reference' | translate }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          [ngModel]="syncReference()"
+          (ngModelChange)="syncReference.set($event)"
+        >
+          <option value="auto">{{ 'media_detail.sync_reference_auto' | translate }}</option>
+        </select>
+      </label>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'media_detail.sync_max_offset' | translate }}</span>
+        <input
+          type="number"
+          class="input input-bordered input-sm w-full"
+          min="0"
+          placeholder="60"
+          [ngModel]="syncMaxOffset()"
+          (ngModelChange)="syncMaxOffset.set($event)"
+        />
+        <div class="label">
+          <span class="label-text-alt text-base-content/50">{{ 'media_detail.sync_max_offset_hint' | translate }}</span>
+        </div>
+      </label>
+
+      <label class="label cursor-pointer justify-start gap-3">
+        <input
+          type="checkbox"
+          class="checkbox checkbox-sm"
+          [ngModel]="syncNoFixFramerate()"
+          (ngModelChange)="syncNoFixFramerate.set($event)"
+        />
+        <span class="label-text">{{ 'media_detail.sync_no_fix_framerate' | translate }}</span>
+      </label>
+
+      <label class="label cursor-pointer justify-start gap-3">
+        <input
+          type="checkbox"
+          class="checkbox checkbox-sm"
+          [ngModel]="syncGoldenSection()"
+          (ngModelChange)="syncGoldenSection.set($event)"
+        />
+        <span class="label-text">{{ 'media_detail.sync_golden_section' | translate }}</span>
+      </label>
+    </div>
+
+    <div class="modal-action">
+      <button type="button" class="btn btn-ghost" (click)="closeSyncModal()">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button type="button" class="btn btn-primary" (click)="confirmSync()">
+        {{ 'media_detail.action_sync' | translate }}
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeSyncModal()">close</button>
+  </form>
+</dialog>
