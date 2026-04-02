@@ -206,6 +206,7 @@ export class SchedulerService {
 
     const today = new Date().toISOString().slice(0, 10);
     this.eventsService.emit({
+      type: 'task.progress',
       command: 'SearchMissing',
       current: 0,
       total: missing.length,
@@ -217,6 +218,7 @@ export class SchedulerService {
       // Skip if availability criteria not met
       if (!this.isAvailable(media, today)) {
         this.eventsService.emit({
+          type: 'task.progress',
           command: 'SearchMissing',
           current: i + 1,
           total: missing.length,
@@ -231,6 +233,7 @@ export class SchedulerService {
       });
       if (pending) {
         this.eventsService.emit({
+          type: 'task.progress',
           command: 'SearchMissing',
           current: i + 1,
           total: missing.length,
@@ -248,6 +251,7 @@ export class SchedulerService {
       );
       if (!results.length) {
         this.eventsService.emit({
+          type: 'task.progress',
           command: 'SearchMissing',
           current: i + 1,
           total: missing.length,
@@ -285,6 +289,7 @@ export class SchedulerService {
         );
       }
       this.eventsService.emit({
+        type: 'task.progress',
         command: 'SearchMissing',
         current: i + 1,
         total: missing.length,
@@ -319,6 +324,7 @@ export class SchedulerService {
     if (!episodes.length) return;
 
     this.eventsService.emit({
+      type: 'task.progress',
       command: 'SearchMissing',
       current: 0,
       total: episodes.length,
@@ -341,6 +347,7 @@ export class SchedulerService {
         .getOne();
       if (pending) {
         this.eventsService.emit({
+          type: 'task.progress',
           command: 'SearchMissing',
           current: i + 1,
           total: episodes.length,
@@ -364,6 +371,7 @@ export class SchedulerService {
       );
       if (!results.length) {
         this.eventsService.emit({
+          type: 'task.progress',
           command: 'SearchMissing',
           current: i + 1,
           total: episodes.length,
@@ -402,6 +410,7 @@ export class SchedulerService {
         );
       }
       this.eventsService.emit({
+        type: 'task.progress',
         command: 'SearchMissing',
         current: i + 1,
         total: episodes.length,
@@ -421,6 +430,7 @@ export class SchedulerService {
     let updated = 0;
 
     this.eventsService.emit({
+      type: 'task.progress',
       command: 'RefreshMetadata',
       current: 0,
       total: allMedia.length,
@@ -438,6 +448,7 @@ export class SchedulerService {
         );
       }
       this.eventsService.emit({
+        type: 'task.progress',
         command: 'RefreshMetadata',
         current: i + 1,
         total: allMedia.length,
@@ -473,6 +484,7 @@ export class SchedulerService {
     });
 
     this.eventsService.emit({
+      type: 'task.progress',
       command: 'RssSync',
       current: 0,
       total: indexers.length,
@@ -534,6 +546,7 @@ export class SchedulerService {
         );
       }
       this.eventsService.emit({
+        type: 'task.progress',
         command: 'RssSync',
         current: i + 1,
         total: indexers.length,

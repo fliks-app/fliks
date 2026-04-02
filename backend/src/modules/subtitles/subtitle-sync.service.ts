@@ -16,6 +16,7 @@ import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FfprobeService } from './ffprobe.service';
+import { EventsService } from '../scheduler/events.service';
 
 const execFileAsync = promisify(execFile);
 const MAX_CONCURRENT = 2;
@@ -55,6 +56,7 @@ export class SubtitleSyncService {
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly notifications: NotificationsService,
     private readonly ffprobe: FfprobeService,
+    private readonly events: EventsService,
   ) {}
 
   /** Get current queue state */
@@ -192,6 +194,7 @@ export class SubtitleSyncService {
             const saved = await this.repo.save(subtitle);
             if (saved.synced) {
               void this.notifications.dispatch('subtitle.synced', { language: saved.language, subtitleId: saved.id });
+              this.events.emit({ type: 'subtitle.synced', subtitleId: saved.id, language: saved.language, mediaId: saved.mediaId });
             }
             return saved;
           } catch (retryErr: any) {
@@ -220,6 +223,12 @@ export class SubtitleSyncService {
       void this.notifications.dispatch('subtitle.synced', {
         language: saved.language,
         subtitleId: saved.id,
+      });
+      this.events.emit({
+        type: 'subtitle.synced',
+        subtitleId: saved.id,
+        language: saved.language,
+        mediaId: saved.mediaId,
       });
     }
 

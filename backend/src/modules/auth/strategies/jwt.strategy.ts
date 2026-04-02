@@ -21,6 +21,10 @@ function jwtFromCookie(req: Request): string | null {
   return parseCookieValue(getRequestCookieHeader(req), ACCESS_TOKEN_COOKIE);
 }
 
+function jwtFromQueryParam(req: Request): string | null {
+  return (req.query?.token as string) ?? null;
+}
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
@@ -32,6 +36,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       jwtFromRequest: ExtractJwt.fromExtractors([
         jwtFromCookie,
         ExtractJwt.fromAuthHeaderAsBearerToken(),
+        jwtFromQueryParam,
       ]),
       ignoreExpiration: false,
       secretOrKey: config.getOrThrow<string>('JWT_SECRET'),

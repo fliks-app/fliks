@@ -2,6 +2,12 @@
   "app": {
     "name": "Suitarr"
   },
+  "sse": {
+    "subtitle_synced": "Sous-titre synchronisé avec succès.",
+    "subtitle_downloaded": "Sous-titre téléchargé : {{title}} [{{lang}}]",
+    "import_complete": "Import terminé : {{title}}",
+    "stalled_removed": "Torrent bloqué supprimé : {{title}}"
+  },
   "permissions": {
     "media.read": "Voir les médias",
     "media.create": "Ajouter des médias",

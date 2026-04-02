@@ -11,6 +11,7 @@ import { IndexersModule } from './modules/indexers/indexers.module';
 import { DownloadClientsModule } from './modules/download-clients/download-clients.module';
 import { RequestsModule } from './modules/requests/requests.module';
 import { SuitarrSchedulerModule } from './modules/scheduler/scheduler.module';
+import { EventsModule } from './modules/scheduler/events.module';
 import { RootFoldersModule } from './modules/root-folders/root-folders.module';
 import { BlocklistModule } from './modules/blocklist/blocklist.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -36,6 +37,7 @@ import { RolesModule } from './modules/roles/roles.module';
         extra: { max: 20 },
       }),
     }),
+    EventsModule,
     AuthModule,
     UsersModule,
     MediaModule,
