@@ -15,6 +15,7 @@ import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import { NotificationsService } from '../notifications/notifications.service';
+import { FfprobeService } from './ffprobe.service';
 
 const execFileAsync = promisify(execFile);
 const MAX_CONCURRENT = 2;
@@ -53,6 +54,7 @@ export class SubtitleSyncService {
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly notifications: NotificationsService,
+    private readonly ffprobe: FfprobeService,
   ) {}
 
   /** Get current queue state */
@@ -151,10 +153,10 @@ export class SubtitleSyncService {
       }
     }
 
-    try {
-      const args = [refPath, '-i', subPath, '-o', subPath];
-      if (refStreamIndex != null) {
-        args.push('--reference-stream', `stream:${refStreamIndex}`);
+    const buildFfsubsyncArgs = (ref: string, streamIdx: number | null) => {
+      const args = [ref, '-i', subPath, '-o', subPath];
+      if (streamIdx != null) {
+        args.push('--reference-stream', `stream:${streamIdx}`);
       }
       if (options.maxOffsetSeconds != null) {
         args.push('--max-offset-seconds', String(options.maxOffsetSeconds));
@@ -165,16 +167,42 @@ export class SubtitleSyncService {
       if (options.goldenSectionSearch) {
         args.push('--gss');
       }
-      await execFileAsync('ffsubsync', args);
+      return args;
+    };
+
+    try {
+      await execFileAsync('ffsubsync', buildFfsubsyncArgs(refPath, refStreamIndex));
       subtitle.synced = true;
       subtitle.status = SubtitleStatus.SYNCED;
     } catch (err: any) {
       this.logger.warn(
         `ffsubsync failed for ${subPath}: ${err.stderr || err.message || err}`,
       );
+
+      // If auto mode failed with "Unable to detect speech", retry with first audio stream
+      if (refStreamIndex == null && /unable to detect speech/i.test(err.stderr || '')) {
+        const streams = await this.ffprobe.detectStreams(mediaFilePath);
+        const firstAudio = streams.find((s) => s.type === 'audio');
+        if (firstAudio) {
+          this.logger.log(`Retrying ffsubsync with explicit audio stream:${firstAudio.streamIndex}`);
+          try {
+            await execFileAsync('ffsubsync', buildFfsubsyncArgs(refPath, firstAudio.streamIndex));
+            subtitle.synced = true;
+            subtitle.status = SubtitleStatus.SYNCED;
+            const saved = await this.repo.save(subtitle);
+            if (saved.synced) {
+              void this.notifications.dispatch('subtitle.synced', { language: saved.language, subtitleId: saved.id });
+            }
+            return saved;
+          } catch (retryErr: any) {
+            this.logger.warn(`ffsubsync retry also failed: ${retryErr.stderr || retryErr.message}`);
+          }
+        }
+      }
+
+      // Fallback to alass
       try {
-        const alassArgs = [refPath, subPath, subPath];
-        await execFileAsync('alass', alassArgs);
+        await execFileAsync('alass', [refPath, subPath, subPath]);
         subtitle.synced = true;
         subtitle.status = SubtitleStatus.SYNCED;
       } catch (alassErr: any) {
