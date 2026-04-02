@@ -75,11 +75,15 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
     }
   }
 
-  async reimport(item: QueueItem) {
+  async reimportAndTrigger(item: QueueItem) {
+    this.importing.set(true);
     try {
       await this.downloadApi.reimport(item.hash);
-      await this.refreshQueue();
-    } catch { /* ignore */ }
+      await this.downloadApi.triggerImport();
+      setTimeout(() => this.refreshQueue(), 3000);
+    } catch { /* ignore */ } finally {
+      this.importing.set(false);
+    }
   }
 
   async removeTorrent(item: QueueItem, deleteFiles: boolean) {
