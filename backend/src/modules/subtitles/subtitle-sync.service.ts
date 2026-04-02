@@ -14,6 +14,7 @@ import { SubtitleFile } from './entities/subtitle-file.entity';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const execFileAsync = promisify(execFile);
 const MAX_CONCURRENT = 2;
@@ -51,6 +52,7 @@ export class SubtitleSyncService {
     private readonly mediaRepo: Repository<Media>,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** Get current queue state */
@@ -164,7 +166,16 @@ export class SubtitleSyncService {
       }
     }
 
-    return this.repo.save(subtitle);
+    const saved = await this.repo.save(subtitle);
+
+    if (saved.synced) {
+      void this.notifications.dispatch('subtitle.synced', {
+        language: saved.language,
+        subtitleId: saved.id,
+      });
+    }
+
+    return saved;
   }
 
   private async resolveMediaFilePath(

@@ -9,6 +9,7 @@ import { MediaFile } from '../media/entities/media-file.entity';
 import { Tag } from '../tags/entities/tag.entity';
 import { AuthModule } from '../auth/auth.module';
 import { SettingsModule } from '../settings/settings.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { SubtitlesService } from './subtitles.service';
 import { SubtitleProviderService } from './subtitle-provider.service';
 import { SubtitleSyncService } from './subtitle-sync.service';
@@ -31,6 +32,7 @@ import { SubtitleActivityController } from './subtitle-activity.controller';
     ]),
     AuthModule,
     SettingsModule,
+    NotificationsModule,
   ],
   controllers: [SubtitlesController, SubtitleActivityController],
   providers: [

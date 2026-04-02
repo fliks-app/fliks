@@ -17,7 +17,8 @@ export type NotificationEvent =
   | 'health.issue'
   | 'subtitle.downloaded'
   | 'subtitle.upgraded'
-  | 'subtitle.failed';
+  | 'subtitle.failed'
+  | 'subtitle.synced';
 
 @Entity('notification_connections')
 export class NotificationConnection extends BaseEntity {
