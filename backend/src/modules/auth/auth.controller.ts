@@ -7,7 +7,6 @@ import {
   Res,
   Req,
   HttpCode,
-  Logger,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
@@ -40,8 +39,6 @@ function clearOpts(req: Request) {
 
 @Controller('auth')
 export class AuthController {
-  private readonly log = new Logger('AuthController');
-
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
@@ -50,14 +47,9 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const origin = req.headers.origin ?? '(none)';
-    const crossOrigin = isCrossOriginNative(req);
-    this.log.log(`LOGIN origin=${origin} crossOrigin=${crossOrigin} user=${dto.username}`);
     const { accessToken, user } = await this.authService.login(dto);
     const maxAgeMs = this.authService.getAccessCookieMaxAgeMs();
-    const opts = cookieOpts(req, maxAgeMs);
-    this.log.log(`LOGIN cookie opts: sameSite=${opts.sameSite} secure=${opts.secure} httpOnly=${opts.httpOnly} maxAge=${opts.maxAge}`);
-    res.cookie(ACCESS_TOKEN_COOKIE, accessToken, opts);
+    res.cookie(ACCESS_TOKEN_COOKIE, accessToken, cookieOpts(req, maxAgeMs));
     return { user, accessToken };
   }
 
@@ -77,10 +69,7 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(JwtOrApiKeyGuard)
-  getProfile(@CurrentUser() user: User, @Req() req: Request) {
-    const origin = req.headers.origin ?? '(none)';
-    const cookie = req.headers.cookie ? req.headers.cookie.substring(0, 80) + '...' : '(none)';
-    this.log.log(`GET /me origin=${origin} cookie=${cookie} userId=${user.id}`);
+  getProfile(@CurrentUser() user: User) {
     return this.authService.safeUser(user);
   }
 }

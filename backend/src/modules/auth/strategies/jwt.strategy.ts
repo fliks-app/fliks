@@ -1,4 +1,4 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
@@ -17,16 +17,8 @@ export interface JwtPayload {
   username: string;
 }
 
-const jwtLog = new Logger('JwtExtract');
-
 function jwtFromCookie(req: Request): string | null {
-  const cookieHeader = getRequestCookieHeader(req);
-  const token = parseCookieValue(cookieHeader, ACCESS_TOKEN_COOKIE);
-  const origin = req.headers.origin ?? '(none)';
-  jwtLog.debug(
-    `origin=${origin} hasCookie=${!!cookieHeader} tokenFound=${!!token} cookiePreview=${cookieHeader?.substring(0, 60) ?? '(empty)'}`,
-  );
-  return token;
+  return parseCookieValue(getRequestCookieHeader(req), ACCESS_TOKEN_COOKIE);
 }
 
 @Injectable()
