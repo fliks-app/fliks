@@ -22,6 +22,7 @@ import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import { SubtitleBlacklist } from './entities/subtitle-blacklist.entity';
 import { computeMovieHash } from './moviehash';
 import { cleanSubtitle } from './subtitle-cleaner';
+import * as postProcess from './subtitle-post-processor';
 import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
@@ -357,5 +358,65 @@ export class SubtitlesService {
   async clearBlacklist(): Promise<{ deleted: number }> {
     const result = await this.blacklistRepo.delete({});
     return { deleted: result.affected ?? 0 };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Post-processing actions
+  // ---------------------------------------------------------------------------
+
+  async applyPostProcessing(
+    subtitleId: number,
+    action: string,
+    params?: Record<string, unknown>,
+  ): Promise<SubtitleFile> {
+    const sub = await this.repo.findOne({ where: { id: subtitleId } });
+    if (!sub) throw new NotFoundException(`SubtitleFile #${subtitleId} not found`);
+    if (!sub.filePath) throw new BadRequestException('Subtitle has no file path');
+
+    let content = await fs.readFile(sub.filePath, 'utf-8');
+
+    switch (action) {
+      case 'removeHiTags': {
+        const buf = cleanSubtitle(Buffer.from(content, 'utf-8'), { removeAds: false, removeHiTags: true });
+        content = buf.toString('utf-8');
+        break;
+      }
+      case 'removeStyleTags':
+        content = postProcess.removeStyleTags(content);
+        break;
+      case 'removeEmoji':
+        content = postProcess.removeEmoji(content);
+        break;
+      case 'ocrFixes':
+        content = postProcess.fixOcr(content);
+        break;
+      case 'commonFixes':
+        content = postProcess.commonFixes(content);
+        break;
+      case 'fixUppercase':
+        content = postProcess.fixUppercase(content);
+        break;
+      case 'reverseRtl':
+        content = postProcess.reverseRtl(content);
+        break;
+      case 'adjustTimes':
+        content = postProcess.adjustTimes(content, Number(params?.offsetMs ?? 0));
+        break;
+      case 'changeFrameRate':
+        content = postProcess.changeFrameRate(
+          content,
+          Number(params?.fromFps ?? 23.976),
+          Number(params?.toFps ?? 25),
+        );
+        break;
+      case 'convertToSrt':
+        content = postProcess.assToSrt(content);
+        break;
+      default:
+        throw new BadRequestException(`Unknown post-processing action: ${action}`);
+    }
+
+    await fs.writeFile(sub.filePath, content, 'utf-8');
+    return sub;
   }
 }

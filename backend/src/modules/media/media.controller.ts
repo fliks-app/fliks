@@ -360,6 +360,16 @@ export class MediaController {
     return this.subtitleSync.getQueue();
   }
 
+  @Post(':id/subtitles/:subtitleId/post-process')
+  @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
+  async postProcessSubtitle(
+    @Param('id', ParseIntPipe) _id: number,
+    @Param('subtitleId', ParseIntPipe) subtitleId: number,
+    @Body() body: { action: string; params?: Record<string, unknown> },
+  ) {
+    return this.subtitlesService.applyPostProcessing(subtitleId, body.action, body.params);
+  }
+
   @Post(':id/subtitles/:subtitleId/upgrade')
   @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
   async upgradeSubtitle(

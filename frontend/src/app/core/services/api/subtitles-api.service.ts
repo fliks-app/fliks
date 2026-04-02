@@ -79,6 +79,12 @@ export class SubtitlesApiService {
     );
   }
 
+  postProcess(mediaId: number, subtitleId: number, action: string, params?: Record<string, unknown>) {
+    return firstValueFrom(
+      this.http.post<SubtitleFileRow>(`/api/media/${mediaId}/subtitles/${subtitleId}/post-process`, { action, params }),
+    );
+  }
+
   upgrade(mediaId: number, subtitleId: number, searchResult: SubtitleSearchResult) {
     return firstValueFrom(
       this.http.post<SubtitleFileRow>(`/api/media/${mediaId}/subtitles/${subtitleId}/upgrade`, { searchResult }),
