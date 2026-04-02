@@ -168,15 +168,19 @@ export class SubtitleSyncService {
       await execFileAsync('ffsubsync', args);
       subtitle.synced = true;
       subtitle.status = SubtitleStatus.SYNCED;
-    } catch (err) {
-      this.logger.warn(`ffsubsync failed for ${subPath}, trying alass...`);
+    } catch (err: any) {
+      this.logger.warn(
+        `ffsubsync failed for ${subPath}: ${err.stderr || err.message || err}`,
+      );
       try {
         const alassArgs = [refPath, subPath, subPath];
         await execFileAsync('alass', alassArgs);
         subtitle.synced = true;
         subtitle.status = SubtitleStatus.SYNCED;
-      } catch (alassErr) {
-        this.logger.error(`Subtitle sync failed for #${id}: ${alassErr}`);
+      } catch (alassErr: any) {
+        this.logger.error(
+          `Subtitle sync failed for #${id}:\n  ffsubsync stderr: ${err.stderr || '(none)'}\n  alass stderr: ${alassErr.stderr || '(none)'}\n  alass message: ${alassErr.message || alassErr}`,
+        );
         subtitle.status = SubtitleStatus.FAILED;
         throw new Error(`Sync failed: ${(alassErr as Error).message}`);
       }
