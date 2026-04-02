@@ -36,7 +36,7 @@ export class SubtitleSchedulerService {
   ) {}
 
   /** Check every minute if it's time to run search or upgrade */
-  @Cron(CronExpression.EVERY_MINUTE)
+  @Cron(CronExpression.EVERY_6_HOURS)
   async tick(): Promise<void> {
     const now = Date.now();
     const searchInterval = Number(

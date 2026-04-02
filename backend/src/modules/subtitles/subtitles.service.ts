@@ -64,12 +64,8 @@ export class SubtitlesService {
     for (const provider of providers) {
       const start = Date.now();
       try {
-        this.logger.log(
-          `Searching subtitles via ${provider.name} (${provider.type})…`,
-        );
         const impl = this.factory.create(provider.type, provider.settings);
         const results = await impl.search(params);
-        this.logger.log(`${provider.name}: ${results.length} result(s)`);
         void this.statRepo.save(
           this.statRepo.create({
             providerId: provider.id,
@@ -93,6 +89,10 @@ export class SubtitlesService {
         this.logger.warn(`Search failed for provider ${provider.name}: ${err}`);
       }
     }
+
+    this.logger.log(
+      `Subtitle search for "${params.title}" [${params.language}]: ${allResults.length} result(s) from ${providers.length} provider(s)`,
+    );
 
     // Filter out blacklisted subtitles
     const blacklisted = await this.blacklistRepo.find();

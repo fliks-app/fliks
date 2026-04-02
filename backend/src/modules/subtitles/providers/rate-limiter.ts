@@ -31,12 +31,7 @@ export function getRateLimitDelay(providerType: string): number {
  * Check if provider is rate-limited. If so, log a warning and return true.
  */
 export function isRateLimited(providerType: string): boolean {
-  const delay = getRateLimitDelay(providerType);
-  if (delay > 0) {
-    log.warn(`${providerType} is rate-limited, retry in ${delay}s`);
-    return true;
-  }
-  return false;
+  return getRateLimitDelay(providerType) > 0;
 }
 
 /**
@@ -119,7 +114,9 @@ export async function rateLimitedFetch(
       markRateLimited(providerType, res, defaultBackoff);
       if (attempt < maxRetries) {
         const delay = getRateLimitDelay(providerType);
-        log.warn(`${providerType} 429/423, waiting ${delay}s (attempt ${attempt + 1}/${maxRetries})`);
+        if (attempt === 0) {
+          log.warn(`${providerType} rate-limited (${res.status}), retrying ${maxRetries} time(s)...`);
+        }
         await new Promise((r) => setTimeout(r, Math.min(delay, 10) * 1000));
         continue;
       }
