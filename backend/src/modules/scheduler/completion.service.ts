@@ -220,28 +220,33 @@ export class CompletionService {
     const saveDir = path.join(torrent.save_path, torrent.name);
     const isDirTorrent =
       fs.existsSync(saveDir) && fs.statSync(saveDir).isDirectory();
-    const searchDir = isDirTorrent ? saveDir : torrent.save_path;
-    this.log.log(
-      `Import[${history.sourceTitle}]: searching for video in "${searchDir}" (isDir=${isDirTorrent})`,
-    );
 
-    // Find all video files in the torrent
-    let videoFiles = this.naming.findAllVideoFiles(searchDir);
+    let videoFiles: { filePath: string; size: number }[] = [];
 
-    // Fallback: single-file torrent sitting directly at save_path
-    if (!videoFiles.length) {
-      for (const ext of ['.mkv', '.mp4', '.avi', '.mov', '.ts']) {
-        const candidate = path.join(torrent.save_path, torrent.name + ext);
-        if (fs.existsSync(candidate)) {
-          const stat = fs.statSync(candidate);
-          videoFiles = [{ filePath: candidate, size: stat.size }];
-          break;
+    if (isDirTorrent) {
+      // Multi-file torrent: search inside the torrent folder only
+      this.log.log(
+        `Import[${history.sourceTitle}]: searching for video in "${saveDir}" (folder torrent)`,
+      );
+      videoFiles = this.naming.findAllVideoFiles(saveDir);
+    } else {
+      // Single-file torrent: the file IS save_path/torrent.name
+      const singleFile = path.join(torrent.save_path, torrent.name);
+      if (fs.existsSync(singleFile)) {
+        const ext = path.extname(singleFile).toLowerCase();
+        if (['.mkv', '.mp4', '.avi', '.mov', '.ts', '.m2ts', '.wmv', '.flv'].includes(ext)) {
+          const stat = fs.statSync(singleFile);
+          videoFiles = [{ filePath: singleFile, size: stat.size }];
         }
       }
+      this.log.log(
+        `Import[${history.sourceTitle}]: single-file torrent "${torrent.name}" (found=${videoFiles.length > 0})`,
+      );
     }
 
+    const torrentDir = isDirTorrent ? saveDir : torrent.save_path;
     if (!videoFiles.length) {
-      const largestAny = this.findLargestFile(searchDir);
+      const largestAny = this.findLargestFile(torrentDir);
       if (largestAny) {
         const suspectExt =
           path.extname(largestAny.filePath).toLowerCase() || '(no extension)';
@@ -267,7 +272,7 @@ export class CompletionService {
           /* ignore */
         }
       } else {
-        const statusMessage = `Import blocked: no files found in "${searchDir}"`;
+        const statusMessage = `Import blocked: no files found in "${torrentDir}"`;
         this.log.warn(`Import[${history.sourceTitle}]: ${statusMessage}`);
         await this.historyRepo.update(history.id, {
           status: 'failed',
