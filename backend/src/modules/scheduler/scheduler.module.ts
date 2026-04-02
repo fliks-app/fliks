@@ -70,7 +70,6 @@ import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
     NamingService,
     BackupService,
     LogBufferService,
-    EventsService,
     ImportRadarrService,
     ImportSonarrService,
     SubtitleSchedulerService,
@@ -80,7 +79,6 @@ import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
     CompletionService,
     NamingService,
     LogBufferService,
-    EventsService,
     SubtitleSchedulerService,
   ],
 })
