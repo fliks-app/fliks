@@ -207,7 +207,7 @@ export class SubtitleSyncService {
         subtitle.status = SubtitleStatus.SYNCED;
       } catch (alassErr: any) {
         this.logger.error(
-          `Subtitle sync failed for #${id}:\n  ffsubsync stderr: ${err.stderr || '(none)'}\n  alass stderr: ${alassErr.stderr || '(none)'}\n  alass message: ${alassErr.message || alassErr}`,
+          `Subtitle sync failed for #${id}:\n  ffsubsync stderr: ${err.stderr || '(none)'}\n  alass stderr: ${alassErr.stderr || '(none)'}\n  alass stdout: ${alassErr.stdout || '(none)'}\n  alass message: ${alassErr.message || alassErr}`,
         );
         subtitle.status = SubtitleStatus.FAILED;
         throw new Error(`Sync failed: ${(alassErr as Error).message}`);

@@ -78,7 +78,7 @@ export class FfprobeService {
       const { stdout } = await execFileAsync(
         'ffprobe',
         [
-          '-v', 'quiet',
+          '-v', 'error',
           '-print_format', 'json',
           '-show_streams',
           videoPath,
@@ -97,8 +97,9 @@ export class FfprobeService {
           title: s.tags?.title,
         }));
     } catch (err) {
+      const e = err as any;
       this.logger.warn(
-        `ffprobe streams detection failed for "${videoPath}": ${(err as Error).message}`,
+        `ffprobe streams detection failed for "${videoPath}": ${e.message}${e.stderr ? `\n  stderr: ${e.stderr}` : ''}`,
       );
       return [];
     }
