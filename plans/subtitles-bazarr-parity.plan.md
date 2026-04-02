@@ -94,5 +94,5 @@ Actions disponibles par sous-titre téléchargé, accessibles via un menu contex
 5. ~~Anti-ads~~ ✅
 6. ~~File d'attente de sync~~ ✅
 7. ~~Post-processing avancé~~ ✅
-8. Actions sous-titres (menu contextuel) — backend prêt, UI à connecter
+8. ~~Actions sous-titres (menu contextuel)~~ ✅
 9. ~~Notifications granulaires~~ ✅
