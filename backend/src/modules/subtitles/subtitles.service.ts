@@ -423,7 +423,9 @@ export class SubtitlesService {
     }
 
     await fs.writeFile(sub.filePath, content, 'utf-8');
-    this.logger.log(`PostProcess #${subtitleId}: ${action} done (${sizeBefore} → ${content.length} chars)`);
+    // Log a sample of the first timestamp to verify the change
+    const sampleMatch = content.match(/\d{2}:\d{2}:\d{2},\d{3}/);
+    this.logger.log(`PostProcess #${subtitleId}: ${action} done (${sizeBefore} → ${content.length} chars, first timestamp: ${sampleMatch?.[0] ?? 'none'})`);
     return sub;
   }
 }
