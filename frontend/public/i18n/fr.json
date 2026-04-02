@@ -356,6 +356,8 @@
     "sync_external_subtitles": "Sous-titres téléchargés",
     "sync_no_fix_framerate": "Ne pas corriger le framerate",
     "sync_golden_section": "Golden-Section Search (plus lent, plus précis)",
+    "sync_started": "Synchronisation en cours...",
+    "sync_success": "Sous-titre synchronisé avec succès.",
     "col_sub_title": "Titre",
     "search": "Rechercher",
     "no_subtitle_results": "Aucun résultat trouvé.",

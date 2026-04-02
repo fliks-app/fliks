@@ -878,9 +878,13 @@ export class MediaDetailComponent implements OnInit {
     const m = this.media();
     if (!m) return;
     this.subtitleActionBusy.set(true);
+    this.toast.info(this.translate.instant('media_detail.sync_started'));
     try {
       await this.subtitlesApi.sync(m.id, event.subtitleId, event.options);
+      this.toast.success(this.translate.instant('media_detail.sync_success'));
       await this.loadSubtitles(m.id);
+    } catch {
+      // handled by global interceptor
     } finally {
       this.subtitleActionBusy.set(false);
     }

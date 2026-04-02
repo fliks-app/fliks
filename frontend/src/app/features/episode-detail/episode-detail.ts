@@ -8,7 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Media, MediaService, Season, Episode } from '../../core/services/api/media.service';
 import { SubtitlesApiService, SubtitleFileRow } from '../../core/services/api/subtitles-api.service';
 import { MediaDetailSubtitlesComponent } from '../media-detail/components/media-detail-subtitles/media-detail-subtitles.component';
@@ -44,6 +44,7 @@ export class EpisodeDetailComponent implements OnInit {
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
+  private readonly translate = inject(TranslateService);
 
   readonly loading = signal(true);
   readonly notFound = signal(false);
@@ -244,8 +245,12 @@ export class EpisodeDetailComponent implements OnInit {
     const m = this.media();
     if (!m) return;
     this.subtitleActionBusy.set(true);
+    this.toast.info(this.translate.instant('media_detail.sync_started'));
     try {
       await this.subtitlesApi.sync(m.id, event.subtitleId, event.options);
+      this.toast.success(this.translate.instant('media_detail.sync_success'));
+    } catch {
+      // handled by global interceptor
     } finally {
       this.subtitleActionBusy.set(false);
     }
