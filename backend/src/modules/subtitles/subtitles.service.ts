@@ -169,7 +169,9 @@ export class SubtitlesService {
           errorMessage: (err as Error).message,
         }),
       );
-      throw err;
+      throw new BadRequestException(
+        `Download failed (${provider.name}): ${(err as Error).message}`,
+      );
     }
 
     const langSuffix = searchResult.forced
