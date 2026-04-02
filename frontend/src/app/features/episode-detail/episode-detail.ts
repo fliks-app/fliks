@@ -253,6 +253,37 @@ export class EpisodeDetailComponent implements OnInit {
     }
   }
 
+  async postProcessSubtitle(event: { subtitleId: number; action: string; params?: Record<string, unknown> }) {
+    const m = this.media();
+    if (!m) return;
+    try {
+      await this.subtitlesApi.postProcess(m.id, event.subtitleId, event.action, event.params);
+      this.toast.success(this.translate.instant('media_detail.post_process_success'));
+    } catch {
+      // handled by global interceptor
+    }
+  }
+
+  async blacklistSubtitle(sub: import('../../core/services/api/subtitles-api.service').SubtitleFileRow) {
+    const m = this.media();
+    if (!m) return;
+    try {
+      await this.subtitlesApi.addToBlacklist({
+        providerType: sub.providerType,
+        providerFileId: sub.providerFileId,
+        mediaId: m.id,
+        language: sub.language,
+        sourceTitle: sub.providerFileId,
+        reason: 'Manually blacklisted',
+      });
+      await this.subtitlesApi.delete(m.id, sub.id);
+      this.toast.success(this.translate.instant('media_detail.blacklist_success'));
+      this.subtitles.update((list) => list.filter((s) => s.id !== sub.id));
+    } catch {
+      // handled by global interceptor
+    }
+  }
+
   async deleteSubtitle(subtitleId: number) {
     const m = this.media();
     if (!m) return;
