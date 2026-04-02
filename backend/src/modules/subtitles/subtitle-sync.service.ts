@@ -87,6 +87,7 @@ export class SubtitleSyncService {
       queuedAt: Date.now(),
     };
     this.queue.push(item);
+    this.logger.log(`Sync queued for subtitle #${id} (queue size: ${this.queue.filter((q) => q.status === 'queued').length})`);
 
     // Trim old completed/failed entries (keep last 50)
     while (this.queue.length > 50 && (this.queue[0].status === 'completed' || this.queue[0].status === 'failed')) {
@@ -106,13 +107,17 @@ export class SubtitleSyncService {
     this.running++;
     next.status = 'running';
     next.startedAt = Date.now();
+    this.logger.log(`Sync starting for subtitle #${next.subtitleId}`);
 
     try {
       await this.doSync(next.subtitleId, options);
       next.status = 'completed';
+      const durationSec = ((Date.now() - next.startedAt) / 1000).toFixed(1);
+      this.logger.log(`Sync completed for subtitle #${next.subtitleId} in ${durationSec}s`);
     } catch (err) {
       next.status = 'failed';
       next.error = (err as Error).message;
+      this.logger.warn(`Sync failed for subtitle #${next.subtitleId}: ${next.error}`);
     } finally {
       next.completedAt = Date.now();
       this.running--;

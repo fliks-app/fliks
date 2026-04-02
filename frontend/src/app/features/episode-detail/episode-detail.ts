@@ -244,15 +244,12 @@ export class EpisodeDetailComponent implements OnInit {
   async syncSubtitle(event: { subtitleId: number; options: import('../../core/services/api/subtitles-api.service').SyncOptions }) {
     const m = this.media();
     if (!m) return;
-    this.subtitleActionBusy.set(true);
     this.toast.info(this.translate.instant('media_detail.sync_started'));
     try {
       await this.subtitlesApi.sync(m.id, event.subtitleId, event.options);
-      this.toast.success(this.translate.instant('media_detail.sync_success'));
+      // Success toast will come from SSE when sync actually completes
     } catch {
       // handled by global interceptor
-    } finally {
-      this.subtitleActionBusy.set(false);
     }
   }
 
