@@ -225,60 +225,66 @@ export class CompletionService {
 
     if (isDirTorrent) {
       // Multi-file torrent: search inside the torrent folder only
-      this.log.log(
-        `Import[${history.sourceTitle}]: searching for video in "${saveDir}" (folder torrent)`,
-      );
       videoFiles = this.naming.findAllVideoFiles(saveDir);
+      this.log.log(
+        `Import[${history.sourceTitle}]: folder torrent "${saveDir}" → ${videoFiles.length} video file(s)`,
+      );
     } else {
-      // Single-file torrent: the file IS save_path/torrent.name
+      // Not a directory — look for the file directly or with a video extension
+      const VIDEO_EXTS = ['.mkv', '.mp4', '.avi', '.mov', '.ts', '.m2ts', '.wmv', '.flv'];
       const singleFile = path.join(torrent.save_path, torrent.name);
-      if (fs.existsSync(singleFile)) {
+
+      // Case 1: torrent.name already has an extension (e.g. "movie.mkv")
+      if (fs.existsSync(singleFile) && fs.statSync(singleFile).isFile()) {
         const ext = path.extname(singleFile).toLowerCase();
-        if (['.mkv', '.mp4', '.avi', '.mov', '.ts', '.m2ts', '.wmv', '.flv'].includes(ext)) {
-          const stat = fs.statSync(singleFile);
-          videoFiles = [{ filePath: singleFile, size: stat.size }];
+        if (VIDEO_EXTS.includes(ext)) {
+          videoFiles = [{ filePath: singleFile, size: fs.statSync(singleFile).size }];
         }
       }
+
+      // Case 2: torrent.name has no extension — try appending video extensions
+      if (!videoFiles.length) {
+        for (const ext of VIDEO_EXTS) {
+          const candidate = singleFile + ext;
+          if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+            videoFiles = [{ filePath: candidate, size: fs.statSync(candidate).size }];
+            break;
+          }
+        }
+      }
+
+      // Case 3: scan save_path for files starting with torrent.name
+      if (!videoFiles.length) {
+        try {
+          const entries = fs.readdirSync(torrent.save_path);
+          for (const entry of entries) {
+            if (!entry.startsWith(torrent.name)) continue;
+            const fullPath = path.join(torrent.save_path, entry);
+            const stat = fs.statSync(fullPath);
+            if (stat.isFile() && VIDEO_EXTS.includes(path.extname(entry).toLowerCase())) {
+              videoFiles = [{ filePath: fullPath, size: stat.size }];
+              break;
+            }
+            if (stat.isDirectory()) {
+              videoFiles = this.naming.findAllVideoFiles(fullPath);
+              if (videoFiles.length) break;
+            }
+          }
+        } catch { /* ignore read errors */ }
+      }
+
       this.log.log(
-        `Import[${history.sourceTitle}]: single-file torrent "${torrent.name}" (found=${videoFiles.length > 0})`,
+        `Import[${history.sourceTitle}]: single-file torrent "${torrent.name}" → ${videoFiles.length > 0 ? videoFiles[0].filePath : 'not found'}`,
       );
     }
 
-    const torrentDir = isDirTorrent ? saveDir : torrent.save_path;
     if (!videoFiles.length) {
-      const largestAny = this.findLargestFile(torrentDir);
-      if (largestAny) {
-        const suspectExt =
-          path.extname(largestAny.filePath).toLowerCase() || '(no extension)';
-        const suspectFile = path.basename(largestAny.filePath);
-        const sizeMb = (largestAny.size / 1024 / 1024).toFixed(1);
-        const statusMessage =
-          `Import blocked: no valid video file found. ` +
-          `Largest file: "${suspectFile}" (${sizeMb} MB), extension: "${suspectExt}". ` +
-          `Allowed: .mkv, .mp4, .avi, .mov, .ts, .m2ts, .wmv, .flv`;
-        this.log.warn(`Import[${history.sourceTitle}]: ${statusMessage}`);
-        await this.historyRepo.update(history.id, {
-          status: 'failed',
-          statusMessage,
-        });
-        try {
-          await this.blocklist.create({
-            sourceTitle: history.sourceTitle,
-            quality: history.quality,
-            mediaId: history.mediaId,
-            note: `Blocked: no valid video file — largest file has extension "${suspectExt}"`,
-          });
-        } catch {
-          /* ignore */
-        }
-      } else {
-        const statusMessage = `Import blocked: no files found in "${torrentDir}"`;
-        this.log.warn(`Import[${history.sourceTitle}]: ${statusMessage}`);
-        await this.historyRepo.update(history.id, {
-          status: 'failed',
-          statusMessage,
-        });
-      }
+      const statusMessage = `Import blocked: no valid video file found for "${torrent.name}"`;
+      this.log.warn(`Import[${history.sourceTitle}]: ${statusMessage}`);
+      await this.historyRepo.update(history.id, {
+        status: 'warning',
+        statusMessage,
+      });
       return;
     }
 
