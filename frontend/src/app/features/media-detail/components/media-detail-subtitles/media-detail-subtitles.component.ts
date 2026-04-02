@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, ElementRef, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
+import { SubtitleFilenamePipe } from '../../../../shared/pipes/subtitle-filename.pipe';
 import { SubtitleFileRow, SyncOptions, MediaStream } from '../../../../core/services/api/subtitles-api.service';
 import { SubtitleLanguageItem } from '../../../../core/services/api/profiles.service';
 
@@ -12,7 +13,7 @@ interface SubtitleRow {
 
 @Component({
   selector: 'app-media-detail-subtitles',
-  imports: [FormsModule, TranslateModule],
+  imports: [FormsModule, TranslateModule, SubtitleFilenamePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-subtitles.component.html',
 })

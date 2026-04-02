@@ -49,9 +49,9 @@
         <thead>
           <tr>
             <th>{{ 'media_detail.col_sub_language' | translate }}</th>
+            <th>{{ 'media_detail.col_sub_path' | translate }}</th>
             <th>{{ 'media_detail.col_sub_provider' | translate }}</th>
             <th class="text-center">{{ 'media_detail.col_sub_score' | translate }}</th>
-            <th class="text-center">{{ 'media_detail.col_sub_status' | translate }}</th>
             <th class="text-center">{{ 'media_detail.col_sub_flags' | translate }}</th>
             <th class="text-end w-32"></th>
           </tr>
@@ -62,10 +62,8 @@
               <tr class="opacity-40">
                 <td class="font-medium">{{ row.language }}</td>
                 <td class="text-sm">—</td>
+                <td class="text-sm">—</td>
                 <td class="text-center">—</td>
-                <td class="text-center">
-                  <span class="badge badge-sm badge-ghost">{{ 'media_detail.subtitle_missing' | translate }}</span>
-                </td>
                 <td></td>
                 <td></td>
               </tr>
@@ -73,6 +71,15 @@
               @let sub = row.sub!;
               <tr>
                 <td class="font-medium">{{ sub.language }}</td>
+                <td class="text-sm text-base-content/60 truncate max-w-48" [title]="sub.filePath ?? ''">
+                  @if (sub.filePath) {
+                    {{ sub.filePath | subtitleFilename }}
+                  } @else if (sub.providerType === 'embedded') {
+                    <span class="text-base-content/30">{{ 'media_detail.embedded' | translate }}</span>
+                  } @else {
+                    —
+                  }
+                </td>
                 <td class="text-sm">
                   @if (sub.providerType === 'embedded') {
                     <span class="badge badge-sm badge-neutral">embedded</span>
@@ -86,14 +93,6 @@
                   } @else {
                     {{ sub.score }}
                   }
-                </td>
-                <td class="text-center">
-                  <span class="badge badge-sm"
-                    [class.badge-neutral]="sub.status === 'embedded'"
-                    [class.badge-success]="sub.status === 'downloaded' || sub.status === 'synced'"
-                    [class.badge-warning]="sub.status === 'upgraded'"
-                    [class.badge-error]="sub.status === 'failed'"
-                  >{{ sub.status }}</span>
                 </td>
                 <td class="text-center text-xs">
                   @if (sub.forced) { <span class="badge badge-xs badge-outline mr-1">F</span> }
