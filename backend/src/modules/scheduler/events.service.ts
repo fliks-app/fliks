@@ -12,9 +12,6 @@ export type SseEvent =
   | { type: 'stalled.removed'; title: string }
   | { type: 'queue.updated' };
 
-/** @deprecated Use SseEvent with type: 'task.progress' instead */
-export type TaskProgress = Extract<SseEvent, { type: 'task.progress' }>;
-
 @Injectable()
 export class EventsService {
   private readonly subject = new Subject<SseEvent>();
