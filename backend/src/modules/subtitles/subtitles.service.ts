@@ -423,6 +423,8 @@ export class SubtitlesService {
     }
 
     await fs.writeFile(sub.filePath, content, 'utf-8');
+    sub.locked = true;
+    await this.repo.save(sub);
     // Log a sample of the first timestamp to verify the change
     const sampleMatch = content.match(/\d{2}:\d{2}:\d{2},\d{3}/);
     this.logger.log(`PostProcess #${subtitleId}: ${action} done (${sizeBefore} → ${content.length} chars, first timestamp: ${sampleMatch?.[0] ?? 'none'})`);

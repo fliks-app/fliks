@@ -80,6 +80,13 @@ export class SubtitleSchedulerService {
       if (!media.files?.length) continue;
 
       for (const file of media.files) {
+        // Ensure embedded subtitles are detected before checking for missing ones
+        await this.embeddedSubtitle.detectAndStore(
+          media.id,
+          file.id,
+          file.episodeId ?? undefined,
+        );
+
         const existingSubs = await this.subtitleFileRepo.find({
           where: { mediaFileId: file.id },
         });
@@ -160,6 +167,7 @@ export class SubtitleSchedulerService {
       .createQueryBuilder('sf')
       .where('sf.score < :threshold', { threshold })
       .andWhere('sf.status != :failed', { failed: SubtitleStatus.FAILED })
+      .andWhere('sf.locked = false')
       .leftJoinAndSelect('sf.media', 'media')
       .leftJoinAndSelect('sf.mediaFile', 'mf')
       .getMany();

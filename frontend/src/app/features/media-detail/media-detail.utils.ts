@@ -18,10 +18,11 @@ export function displayMediaFilePath(
 }
 
 export function formatMediaDetailBytes(bytes: number): string {
-  if (!bytes) return '—';
+  const n = Number(bytes);
+  if (!n || n <= 0) return '0 GB';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  return `${(bytes / Math.pow(1024, i)).toFixed(i >= 3 ? 1 : 0)} ${units[i]}`;
+  const i = Math.min(Math.floor(Math.log(n) / Math.log(1024)), units.length - 1);
+  return `${(n / Math.pow(1024, i)).toFixed(i >= 3 ? 1 : 0)} ${units[i]}`;
 }
 
 /** Episodes with fichier (hasFile ou fichier tracké avec episodeId). */

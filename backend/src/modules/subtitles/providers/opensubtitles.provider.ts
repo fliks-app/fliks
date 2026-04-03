@@ -7,7 +7,7 @@ import {
 import { isRateLimited, rateLimitedFetch, markRateLimited } from './rate-limiter';
 
 const PROVIDER_TYPE = 'opensubtitles';
-const DEFAULT_API_KEY = 's38zmzVlW7IlYruWi7mHwDYl2SfMQoC1';
+const DEFAULT_API_KEY = 'KXXhBJcOUG9xTxmPzIIkE56obyHtyCyd';
 const USER_AGENT = 'Suitarr v1.0';
 
 interface OpenSubtitlesSettings {

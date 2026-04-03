@@ -1,7 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { In } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { CronExpressionParser } from 'cron-parser';
 import { Command } from './entities/command.entity';
 import { Media } from '../media/entities/media.entity';
 import { DownloadHistory } from '../media/entities/download-history.entity';
@@ -20,12 +22,13 @@ import {
 } from '../../common/enums';
 import { ConfigService } from '@nestjs/config';
 import { CompletionService } from './completion.service';
+import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { NamingService } from './naming.service';
 import { DelayProfile } from '../profiles/entities/delay-profile.entity';
 import { EventsService } from './events.service';
 
 @Injectable()
-export class SchedulerService {
+export class SchedulerService implements OnModuleInit {
   private readonly log = new Logger(SchedulerService.name);
 
   constructor(
@@ -53,7 +56,64 @@ export class SchedulerService {
     @InjectRepository(DelayProfile)
     private readonly delayProfileRepo: Repository<DelayProfile>,
     private readonly eventsService: EventsService,
+    private readonly subtitleScheduler: SubtitleSchedulerService,
   ) {}
+
+  // ---------------------------------------------------------------------------
+  // Scheduler definitions
+  // ---------------------------------------------------------------------------
+
+  private static readonly SCHEDULERS: {
+    name: string;
+    cron: string;
+    triggerable: boolean;
+  }[] = [
+    {
+      name: 'SearchMissing',
+      cron: CronExpression.EVERY_6_HOURS,
+      triggerable: true,
+    },
+    {
+      name: 'RefreshMetadata',
+      cron: CronExpression.EVERY_DAY_AT_4AM,
+      triggerable: true,
+    },
+    {
+      name: 'RssSync',
+      cron: '*/15 * * * *',
+      triggerable: true,
+    },
+    {
+      name: 'ImportCompleted',
+      cron: CronExpression.EVERY_MINUTE,
+      triggerable: true,
+    },
+    {
+      name: 'CleanStalled',
+      cron: CronExpression.EVERY_5_MINUTES,
+      triggerable: true,
+    },
+    {
+      name: 'SubtitleSearch',
+      cron: CronExpression.EVERY_6_HOURS,
+      triggerable: true,
+    },
+    {
+      name: 'SubtitleUpgrade',
+      cron: CronExpression.EVERY_6_HOURS,
+      triggerable: true,
+    },
+  ];
+
+  async onModuleInit() {
+    const stale = await this.commandRepo.update(
+      { status: In(['running', 'queued']) },
+      { status: 'failed', endedOn: new Date() },
+    );
+    if (stale.affected) {
+      this.log.warn(`Marked ${stale.affected} stale command(s) as failed on startup`);
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Scheduled jobs
@@ -85,12 +145,49 @@ export class SchedulerService {
   // Manual trigger
   // ---------------------------------------------------------------------------
 
+  async getSchedulers(): Promise<
+    {
+      name: string;
+      cron: string;
+      triggerable: boolean;
+      lastRun: Date | null;
+      lastStatus: string | null;
+      nextRun: Date;
+    }[]
+  > {
+    const names = SchedulerService.SCHEDULERS.map((s) => s.name);
+
+    // Get last command per scheduler name in one query
+    const lastCommands = await this.commandRepo
+      .createQueryBuilder('c')
+      .where('c.name IN (:...names)', { names })
+      .andWhere(
+        'c.id = (SELECT c2.id FROM commands c2 WHERE c2.name = c.name ORDER BY c2."createdAt" DESC LIMIT 1)',
+      )
+      .getMany();
+
+    const lastByName = new Map(lastCommands.map((c) => [c.name, c]));
+
+    return SchedulerService.SCHEDULERS.map((s) => {
+      const last = lastByName.get(s.name);
+      const interval = CronExpressionParser.parse(s.cron);
+      return {
+        name: s.name,
+        cron: s.cron,
+        triggerable: s.triggerable,
+        lastRun: last?.startedOn ?? null,
+        lastStatus: last?.status ?? null,
+        nextRun: interval.next().toDate(),
+      };
+    });
+  }
+
   async triggerCommand(name: string): Promise<Command> {
     const known = [
-      'SearchMissing',
-      'RefreshMetadata',
-      'RssSync',
-      'ImportCompleted',
+      ...SchedulerService.SCHEDULERS.filter((s) => s.triggerable).map(
+        (s) => s.name,
+      ),
+      'RescanAll',
     ];
     if (!known.includes(name)) {
       throw new Error(`Unknown command: ${name}. Valid: ${known.join(', ')}`);
@@ -137,6 +234,7 @@ export class SchedulerService {
         startedOn: new Date(),
       }),
     );
+    this.eventsService.emit({ type: 'command.started', name });
     try {
       await fn();
       cmd.status = 'completed';
@@ -146,6 +244,7 @@ export class SchedulerService {
     } finally {
       cmd.endedOn = new Date();
       await this.commandRepo.save(cmd);
+      this.eventsService.emit({ type: 'command.completed', name, status: cmd.status });
     }
   }
 
@@ -154,21 +253,31 @@ export class SchedulerService {
       status: 'running',
       startedOn: new Date(),
     });
+    this.eventsService.emit({ type: 'command.started', name });
     try {
       if (name === 'SearchMissing') await this.doSearchMissing();
       else if (name === 'RefreshMetadata') await this.doRefreshMetadata();
       else if (name === 'RssSync') await this.doRssSync();
       else if (name === 'ImportCompleted')
         await this.completion.processCompleted();
+      else if (name === 'CleanStalled')
+        await this.completion.cleanStalledTorrents();
+      else if (name === 'SubtitleSearch')
+        await this.subtitleScheduler.searchMissingSubtitles();
+      else if (name === 'SubtitleUpgrade')
+        await this.subtitleScheduler.upgradeSubtitles();
+      else if (name === 'RescanAll') await this.doRescanAll();
       await this.commandRepo.update(cmdId, {
         status: 'completed',
         endedOn: new Date(),
       });
+      this.eventsService.emit({ type: 'command.completed', name, status: 'completed' });
     } catch (e) {
       await this.commandRepo.update(cmdId, {
         status: 'failed',
         endedOn: new Date(),
       });
+      this.eventsService.emit({ type: 'command.completed', name, status: 'failed' });
       throw e;
     }
   }
@@ -181,9 +290,18 @@ export class SchedulerService {
     const clients = await this.clientRepo.find({ where: { enabled: true } });
     const qbitClient = clients.find((c) => this.qbittorrent.supports(c));
 
-    if (!indexers.length || !qbitClient) {
-      this.log.warn('SearchMissing: no enabled indexers or download client');
-      return;
+    if (!indexers.length) {
+      throw new Error('No enabled indexers configured');
+    }
+    if (!qbitClient) {
+      throw new Error('No enabled download client configured');
+    }
+
+    const connCheck = await this.qbittorrent.testConnection(
+      qbitClient.settings as Record<string, unknown>,
+    );
+    if (!connCheck.ok) {
+      throw new Error(`Download client unreachable — ${connCheck.message}`);
     }
 
     await this.searchMissingMovies(indexers, qbitClient);
@@ -477,7 +595,16 @@ export class SchedulerService {
     });
     const clients = await this.clientRepo.find({ where: { enabled: true } });
     const qbitClient = clients.find((c) => this.qbittorrent.supports(c));
-    if (!qbitClient) return;
+    if (!qbitClient) {
+      throw new Error('No enabled download client configured');
+    }
+
+    const connCheck = await this.qbittorrent.testConnection(
+      qbitClient.settings as Record<string, unknown>,
+    );
+    if (!connCheck.ok) {
+      throw new Error(`Download client unreachable — ${connCheck.message}`);
+    }
 
     const delayProfiles = await this.delayProfileRepo.find({
       order: { order: 'ASC' },
@@ -553,6 +680,47 @@ export class SchedulerService {
         message: indexer.name,
       });
     }
+  }
+
+  private async doRescanAll(): Promise<void> {
+    const allMedia = await this.mediaRepo.find({
+      where: { monitored: true },
+      select: ['id', 'title'],
+    });
+
+    this.eventsService.emit({
+      type: 'task.progress',
+      command: 'RescanAll',
+      current: 0,
+      total: allMedia.length,
+      message: 'Rescanning files...',
+    });
+
+    let totalUpdated = 0;
+    let skipped = 0;
+    for (let i = 0; i < allMedia.length; i++) {
+      const media = allMedia[i];
+      try {
+        const result = await this.mediaService.rescanFiles(media.id);
+        totalUpdated += result.added + result.removed + result.updated;
+      } catch (e) {
+        skipped++;
+        this.log.warn(
+          `RescanAll: skipped "${media.title}" — ${(e as Error).message}`,
+        );
+      }
+      this.eventsService.emit({
+        type: 'task.progress',
+        command: 'RescanAll',
+        current: i + 1,
+        total: allMedia.length,
+        message: media.title,
+      });
+    }
+
+    this.log.log(
+      `RescanAll: scanned ${allMedia.length - skipped}/${allMedia.length} media, ${totalUpdated} change(s), ${skipped} skipped`,
+    );
   }
 
   private isDelayed(

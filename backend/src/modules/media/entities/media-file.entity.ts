@@ -26,4 +26,7 @@ export class MediaFile extends BaseEntity {
 
   @Column({ nullable: true })
   language: string;
+
+  @Column({ type: 'jsonb', nullable: true, default: null })
+  streamInfo: any;
 }

@@ -24,6 +24,7 @@ import { EventsService } from './events.service';
 import { SettingsService } from '../settings/settings.service';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
+import { FfprobeService } from '../subtitles/ffprobe.service';
 
 @Injectable()
 export class CompletionService {
@@ -53,6 +54,7 @@ export class CompletionService {
     private readonly subtitleScheduler: SubtitleSchedulerService,
     private readonly mediaServers: MediaServersService,
     private readonly events: EventsService,
+    private readonly ffprobe: FfprobeService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -266,38 +268,6 @@ export class CompletionService {
       `Import[${history.sourceTitle}]: media="${media.title}" (${media.type}, id=${media.id})`,
     );
 
-    // Quality gate (checked once for the whole import)
-    const newParsed = parseReleaseQuality(history.sourceTitle);
-    const newRank = newParsed.quality.rank;
-
-    const existingFiles = await this.mediaFileRepo.find({
-      where: { mediaId: media.id },
-    });
-    if (existingFiles.length > 0) {
-      const bestExisting = Math.max(
-        ...existingFiles.map(
-          (f) => parseReleaseQuality(f.quality).quality.rank,
-        ),
-      );
-      if (newRank < bestExisting) {
-        const bestLabel = existingFiles
-          .map((f) => ({
-            f,
-            rank: parseReleaseQuality(f.quality).quality.rank,
-          }))
-          .sort((a, b) => b.rank - a.rank)[0].f.quality;
-        const msg =
-          `Quality not upgraded: existing "${bestLabel}" (rank ${bestExisting}) ` +
-          `> new "${newParsed.label}" (rank ${newRank})`;
-        this.log.warn(`Import[${history.sourceTitle}]: ${msg}`);
-        await this.historyRepo.update(history.id, {
-          status: 'warning',
-          statusMessage: msg,
-        });
-        return;
-      }
-    }
-
     const releaseGroup = this.naming.extractReleaseGroup(history.sourceTitle);
 
     // Destination root folder
@@ -314,6 +284,8 @@ export class CompletionService {
         `Import[${history.sourceTitle}]: no path on media, using root folder "${rootPath}"`,
       );
     }
+    // Resolve rootFolderId for media without one
+    const resolvedRf = rootFolders.find((rf) => rootPath.startsWith(rf.path));
 
     // Ensure folderName is set
     const folderName =
@@ -334,11 +306,11 @@ export class CompletionService {
       await this.mediaRepo.update(media.id, { folderName });
     }
 
-    // Store media path if not set
-    if (!media.path) {
-      await this.mediaRepo.update(media.id, { path: rootPath });
+    // Store rootFolderId if not set
+    if (!media.rootFolderId && resolvedRf) {
+      await this.mediaRepo.update(media.id, { rootFolderId: resolvedRf.id });
       this.log.log(
-        `Import[${history.sourceTitle}]: saved root path "${rootPath}" on media`,
+        `Import[${history.sourceTitle}]: saved rootFolderId=${resolvedRf.id} on media`,
       );
     }
 
@@ -445,6 +417,7 @@ export class CompletionService {
       );
 
       const relativePath = path.relative(libraryRoot, path.normalize(destPath));
+      const streamInfo = await this.ffprobe.detectMediaFileInfo(destPath);
 
       // Avoid duplicate: update existing record if same path already tracked
       const existingFile = await this.mediaFileRepo.findOne({
@@ -456,6 +429,7 @@ export class CompletionService {
               episodeId,
               size: videoFile.size,
               quality: history.quality,
+              streamInfo,
             }),
           )
         : await this.mediaFileRepo.save(
@@ -465,6 +439,7 @@ export class CompletionService {
               relativePath,
               size: videoFile.size,
               quality: history.quality,
+              streamInfo,
             }),
           );
 

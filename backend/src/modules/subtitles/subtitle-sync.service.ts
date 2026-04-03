@@ -77,6 +77,10 @@ export class SubtitleSyncService {
       throw new BadRequestException('Cannot sync an embedded subtitle');
     }
 
+    // Mark as locked since this is a manual action
+    subtitle.locked = true;
+    await this.repo.save(subtitle);
+
     // Don't queue duplicates
     const existing = this.queue.find(
       (q) => q.subtitleId === id && (q.status === 'queued' || q.status === 'running'),

@@ -75,6 +75,7 @@ export interface Media {
   status: string;
   monitored: boolean;
   path?: string | null;
+  rootFolderId?: number | null;
   posterUrl: string | null;
   fanartUrl: string | null;
   rating: number;
@@ -86,7 +87,7 @@ export interface Media {
   physicalRelease?: string | null;
   tags: { id: number; label: string }[];
   seasons?: Season[];
-  files?: { id: number; quality: string; relativePath: string; size: number; episodeId?: number | null }[];
+  files?: { id: number; quality: string; relativePath: string; size: number; episodeId?: number | null; streamInfo?: MediaFileInfo | null }[];
   qualityProfile?: QualityProfileBrief | null;
   languageProfile?: { id: number; name: string } | null;
   minimumAvailability?: 'announced' | 'inCinemas' | 'released';
@@ -130,6 +131,38 @@ export interface SearchParams {
   missing?: boolean;
   cutoffUnmet?: boolean;
   letter?: string;
+}
+
+export interface VideoStreamInfo {
+  streamIndex: number;
+  codec: string;
+  profile?: string;
+  level?: number;
+  width?: number;
+  height?: number;
+  displayAspectRatio?: string;
+  pixelFormat?: string;
+  frameRate?: string;
+  bitRate?: number;
+  bitDepth?: number;
+}
+
+export interface AudioStreamInfo {
+  streamIndex: number;
+  codec: string;
+  language: string;
+  title?: string;
+  channels?: number;
+  channelLayout?: string;
+  sampleRate?: number;
+  bitRate?: number;
+  isDefault?: boolean;
+}
+
+export interface MediaFileInfo {
+  video: VideoStreamInfo[];
+  audio: AudioStreamInfo[];
+  error?: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -197,8 +230,8 @@ export class MediaService {
     );
   }
 
-  patchPath(id: number, path: string) {
-    return firstValueFrom(this.http.patch<Media>(`/api/media/${id}/root-folder`, { path }));
+  patchRootFolder(id: number, rootFolderId: number) {
+    return firstValueFrom(this.http.patch<Media>(`/api/media/${id}/root-folder`, { rootFolderId }));
   }
 
   patchProfiles(
@@ -296,4 +329,9 @@ export class MediaService {
   refreshMetadata(id: number) {
     return firstValueFrom(this.http.post<Media>(`/api/media/${id}/refresh`, {}));
   }
+
+  rescanFiles(id: number) {
+    return firstValueFrom(this.http.post<{ added: number; removed: number; updated: number }>(`/api/media/${id}/rescan`, {}));
+  }
+
 }

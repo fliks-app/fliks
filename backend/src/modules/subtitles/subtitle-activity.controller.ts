@@ -2,7 +2,10 @@ import { Controller, Get, Post, Delete, Query, Param, Body, UseGuards, ParseIntP
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import { SubtitleFile } from './entities/subtitle-file.entity';
+import { Media } from '../media/entities/media.entity';
+import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleProviderType } from '../../common/enums/subtitle-provider-type.enum';
+import { SubtitleStatus } from '../../common/enums';
 import { SubtitleProviderService } from './subtitle-provider.service';
 import { SubtitleProviderFactory } from './providers/subtitle-provider.factory';
 import { SubtitlesService } from './subtitles.service';
@@ -17,6 +20,10 @@ export class SubtitleActivityController {
   constructor(
     @InjectRepository(SubtitleFile)
     private readonly subtitleFileRepo: Repository<SubtitleFile>,
+    @InjectRepository(Media)
+    private readonly mediaRepo: Repository<Media>,
+    @InjectRepository(MediaFile)
+    private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly providerService: SubtitleProviderService,
     private readonly factory: SubtitleProviderFactory,
     private readonly subtitlesService: SubtitlesService,
@@ -149,6 +156,71 @@ export class SubtitleActivityController {
           ok: false,
           error: String(err),
         });
+      }
+    }
+
+    return results;
+  }
+
+  @Get('missing')
+  @CheckPolicies((ability) => ability.can(Action.Read, SubtitleFile))
+  async missing() {
+    const mediaList = await this.mediaRepo.find({
+      where: { monitored: true },
+      relations: ['languageProfile', 'files', 'seasons', 'seasons.episodes'],
+    });
+
+    const results: {
+      mediaId: number;
+      mediaTitle: string;
+      mediaType: string;
+      fileId: number;
+      fileName: string;
+      episodeId: number | null;
+      episodeLabel: string | null;
+      language: string;
+    }[] = [];
+
+    for (const media of mediaList) {
+      const subtitleLangs = media.languageProfile?.subtitleLanguages ?? [];
+      if (!subtitleLangs.length || !media.files?.length) continue;
+
+      for (const file of media.files) {
+        const existingSubs = await this.subtitleFileRepo.find({
+          where: { mediaFileId: file.id },
+        });
+
+        for (const lang of subtitleLangs) {
+          const hasSub = existingSubs.some(
+            (s) =>
+              s.language === lang.isoCode &&
+              s.status !== SubtitleStatus.FAILED,
+          );
+          if (hasSub) continue;
+
+          // Build episode label
+          let episodeLabel: string | null = null;
+          if (file.episodeId) {
+            for (const season of media.seasons ?? []) {
+              const ep = season.episodes?.find((e) => e.id === file.episodeId);
+              if (ep) {
+                episodeLabel = `S${String(season.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
+                break;
+              }
+            }
+          }
+
+          results.push({
+            mediaId: media.id,
+            mediaTitle: media.title,
+            mediaType: media.type,
+            fileId: file.id,
+            fileName: file.relativePath.split('/').pop() ?? file.relativePath,
+            episodeId: file.episodeId ?? null,
+            episodeLabel,
+            language: lang.isoCode,
+          });
+        }
       }
     }
 

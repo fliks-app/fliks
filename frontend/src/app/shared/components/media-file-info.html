@@ -1,0 +1,86 @@
+@if (file(); as f) {
+  <div class="space-y-4">
+    <h2 class="text-lg font-bold">{{ 'file_info.title' | translate }}</h2>
+
+    <!-- File info from DB (always available) -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-1 text-sm">
+      @if (f.relativePath) {
+        <div class="col-span-full"><span class="text-base-content/50">{{ 'file_info.path' | translate }} :&nbsp;</span><span class="font-medium break-all">{{ f.relativePath }}</span></div>
+      }
+      @if (f.quality) {
+        <div><span class="text-base-content/50">{{ 'file_info.quality' | translate }} :&nbsp;</span><span class="font-medium">{{ f.quality }}</span></div>
+      }
+      <div><span class="text-base-content/50">{{ 'file_info.size' | translate }} :&nbsp;</span><span class="font-medium">{{ formatSize(f.size) }}</span></div>
+    </div>
+
+    @if (f.streamInfo?.error) {
+      <div class="text-sm text-warning pt-4">{{ 'file_info.probe_error' | translate }} : {{ f.streamInfo?.error }}</div>
+    }
+
+    <!-- Video (from ffprobe) -->
+    @if (videoStream(); as v) {
+      <div>
+        <h3 class="text-sm font-semibold mb-2 flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+          {{ 'file_info.video' | translate }}
+        </h3>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-1 text-sm">
+          @if (v.codec) {
+            <div><span class="text-base-content/50">{{ 'file_info.codec' | translate }} :&nbsp;</span><span class="font-medium">{{ v.codec }}</span></div>
+          }
+          @if (v.profile) {
+            <div><span class="text-base-content/50">{{ 'file_info.profile' | translate }} :&nbsp;</span><span class="font-medium">{{ v.profile }}</span></div>
+          }
+          @if (v.width && v.height) {
+            <div><span class="text-base-content/50">{{ 'file_info.resolution' | translate }} :&nbsp;</span><span class="font-medium">{{ formatResolution(v) }}</span></div>
+          }
+          @if (v.frameRate) {
+            <div><span class="text-base-content/50">{{ 'file_info.frame_rate' | translate }} :&nbsp;</span><span class="font-medium">{{ v.frameRate }} fps</span></div>
+          }
+          @if (v.bitRate) {
+            <div><span class="text-base-content/50">{{ 'file_info.bitrate' | translate }} :&nbsp;</span><span class="font-medium">{{ formatBitrate(v.bitRate) }}</span></div>
+          }
+          @if (v.pixelFormat) {
+            <div><span class="text-base-content/50">{{ 'file_info.pixel_format' | translate }} :&nbsp;</span><span class="font-medium">{{ v.pixelFormat }}</span></div>
+          }
+          @if (v.bitDepth) {
+            <div><span class="text-base-content/50">{{ 'file_info.bit_depth' | translate }} :&nbsp;</span><span class="font-medium">{{ v.bitDepth }} bit</span></div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Audio (from ffprobe) -->
+    @if (audioStreams().length) {
+      <div>
+        <h3 class="text-sm font-semibold mb-2 flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+          {{ 'file_info.audio' | translate }}
+        </h3>
+        <div class="space-y-3">
+          @for (a of audioStreams(); track a.streamIndex) {
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-1 text-sm">
+              @if (a.title || a.codec) {
+                <div><span class="text-base-content/50">{{ 'file_info.track_title' | translate }} :&nbsp;</span><span class="font-medium">{{ a.title ?? formatAudioTitle(a) }}</span></div>
+              }
+              <div><span class="text-base-content/50">{{ 'file_info.language' | translate }} :&nbsp;</span><span class="font-medium">{{ a.language }}</span></div>
+              <div><span class="text-base-content/50">{{ 'file_info.codec' | translate }} :&nbsp;</span><span class="font-medium">{{ a.codec }}</span></div>
+              @if (a.channels) {
+                <div><span class="text-base-content/50">{{ 'file_info.channels' | translate }} :&nbsp;</span><span class="font-medium">{{ formatChannels(a) }}</span></div>
+              }
+              @if (a.bitRate) {
+                <div><span class="text-base-content/50">{{ 'file_info.bitrate' | translate }} :&nbsp;</span><span class="font-medium">{{ formatBitrate(a.bitRate) }}</span></div>
+              }
+              @if (a.sampleRate) {
+                <div><span class="text-base-content/50">{{ 'file_info.sample_rate' | translate }} :&nbsp;</span><span class="font-medium">{{ formatSampleRate(a.sampleRate) }}</span></div>
+              }
+              @if (a.isDefault) {
+                <div><span class="badge badge-sm badge-ghost">{{ 'file_info.default_track' | translate }}</span></div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
+  </div>
+}

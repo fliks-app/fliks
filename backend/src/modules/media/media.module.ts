@@ -16,6 +16,7 @@ import { DownloadClientsModule } from '../download-clients/download-clients.modu
 import { BlocklistModule } from '../blocklist/blocklist.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { SubtitlesModule } from '../subtitles/subtitles.module';
+import { MediaServersModule } from '../media-servers/media-servers.module';
 import { MovieDownloadService } from './movie-download.service';
 import { EpisodeDownloadService } from './episode-download.service';
 import { DiskImportService } from './disk-import.service';
@@ -41,6 +42,7 @@ import { RootFolder } from '../root-folders/entities/root-folder.entity';
     BlocklistModule,
     NotificationsModule,
     SubtitlesModule,
+    MediaServersModule,
   ],
   controllers: [MediaController],
   providers: [

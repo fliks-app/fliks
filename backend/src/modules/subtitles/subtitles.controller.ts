@@ -15,6 +15,7 @@ import { SubtitleProviderService } from './subtitle-provider.service';
 import { CreateSubtitleProviderDto } from './dto/create-subtitle-provider.dto';
 import { UpdateSubtitleProviderDto } from './dto/update-subtitle-provider.dto';
 import { TestSubtitleProviderDto } from './dto/test-subtitle-provider.dto';
+import { getAllCooldowns } from './providers/rate-limiter';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
@@ -30,6 +31,12 @@ export class SubtitlesController {
     @InjectRepository(SubtitleProviderStat)
     private readonly statRepo: Repository<SubtitleProviderStat>,
   ) {}
+
+  @Get('rate-limits')
+  @CheckPolicies((ability) => ability.can(Action.Read, SubtitleProvider))
+  getRateLimits() {
+    return getAllCooldowns();
+  }
 
   @Post('test-connection')
   @CheckPolicies((ability) => ability.can(Action.Read, SubtitleProvider))

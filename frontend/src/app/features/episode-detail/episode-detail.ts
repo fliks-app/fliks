@@ -3,18 +3,21 @@ import {
   Component,
   OnInit,
   computed,
+  effect,
   inject,
   signal,
   viewChild,
 } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Media, MediaService, Season, Episode } from '../../core/services/api/media.service';
+import { ProfilesService, LanguageProfile } from '../../core/services/api/profiles.service';
 import { SubtitlesApiService, SubtitleFileRow } from '../../core/services/api/subtitles-api.service';
 import { MediaDetailSubtitlesComponent } from '../media-detail/components/media-detail-subtitles/media-detail-subtitles.component';
+import { MediaFileInfoComponent } from '../../shared/components/media-file-info';
 import { MediaDetailSubtitleSearchModalComponent } from '../media-detail/components/media-detail-subtitle-search-modal/media-detail-subtitle-search-modal.component';
 import { ReleasesModalComponent } from '../media-detail/components/releases-modal/releases-modal.component';
-import { MediaDetailFilesComponent } from '../media-detail/components/media-detail-files/media-detail-files.component';
 import {
   displayMediaFilePath,
   filesForEpisode,
@@ -23,17 +26,19 @@ import {
 } from '../media-detail/media-detail.utils';
 import type { MediaFileRow } from '../media-detail/media-detail.utils';
 import { AuthService } from '../../core/services/auth.service';
+import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
 
 @Component({
   selector: 'app-episode-detail',
   imports: [
     RouterLink,
+    FormsModule,
     TranslateModule,
     MediaDetailSubtitlesComponent,
+    MediaFileInfoComponent,
     MediaDetailSubtitleSearchModalComponent,
     ReleasesModalComponent,
-    MediaDetailFilesComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './episode-detail.html',
@@ -41,8 +46,10 @@ import { ToastService } from '../../core/services/toast.service';
 export class EpisodeDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly mediaService = inject(MediaService);
+  private readonly profilesApi = inject(ProfilesService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly auth = inject(AuthService);
+  private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
@@ -58,6 +65,7 @@ export class EpisodeDetailComponent implements OnInit {
 
   readonly episodeBusy = signal(false);
   readonly refreshLoading = signal(false);
+  readonly rescanLoading = signal(false);
 
   readonly epReleasesLoading = signal(false);
   readonly epReleases = signal<any[]>([]);
@@ -71,8 +79,20 @@ export class EpisodeDetailComponent implements OnInit {
   readonly subSearchSearched = signal(false);
   readonly subSearchResults = signal<any[]>([]);
 
+  readonly languageProfiles = signal<LanguageProfile[]>([]);
+  readonly requiredSubtitleLangs = computed(() => {
+    const m = this.media();
+    const lpId = m?.languageProfile?.id;
+    if (!lpId) return [];
+    const lp = this.languageProfiles().find((p) => p.id === lpId);
+    return lp?.subtitleLanguages ?? [];
+  });
+
   readonly isAdmin = computed(() => this.auth.hasPermission('settings.access'));
   readonly canGrab = computed(() => this.auth.hasPermission('media.grab'));
+
+  readonly selectedFileId = signal<number | null>(null);
+  readonly activeFileId = computed(() => this.selectedFileId() ?? this.episodeFiles()[0]?.id ?? null);
 
   readonly episodeFiles = computed<MediaFileRow[]>(() => {
     const m = this.media();
@@ -81,11 +101,34 @@ export class EpisodeDetailComponent implements OnInit {
     return filesForEpisode(m.files, ep.id);
   });
 
+  /** Auto-select first file when episodeFiles change */
+  private readonly autoSelectFileEffect = effect(() => {
+    const files = this.episodeFiles();
+    const current = this.selectedFileId();
+    if (files.length && (!current || !files.some((f) => f.id === current))) {
+      this.selectedFileId.set(files[0].id);
+    }
+  });
+
+  readonly selectedFile = computed(() => {
+    const files = this.episodeFiles();
+    const id = this.selectedFileId();
+    return files.find((f) => f.id === id) ?? files[0] ?? null;
+  });
+
   readonly episodeSubtitles = computed<SubtitleFileRow[]>(() => {
     const m = this.media();
     const ep = this.episode();
     if (!m || !ep) return [];
     return subtitlesForEpisode(this.subtitles(), ep.id, m.files);
+  });
+
+  /** Subtitles filtered by selected file when multiple files exist */
+  readonly selectedFileSubtitles = computed<SubtitleFileRow[]>(() => {
+    const all = this.episodeSubtitles();
+    const fileId = this.selectedFileId();
+    if (!fileId || this.episodeFiles().length <= 1) return all;
+    return all.filter((s) => s.mediaFileId === fileId);
   });
 
   readonly seriesRoute = computed(() => {
@@ -114,6 +157,12 @@ export class EpisodeDetailComponent implements OnInit {
       this.loading.set(false);
       return;
     }
+
+    // Load language profiles in parallel (non-blocking)
+    void this.profilesApi.getLanguageProfiles().then(
+      (lps) => this.languageProfiles.set(lps),
+      () => {},
+    );
 
     try {
       const [media, subs] = await Promise.all([
@@ -171,6 +220,44 @@ export class EpisodeDetailComponent implements OnInit {
       this.subtitles.set(subs);
     } finally {
       this.refreshLoading.set(false);
+    }
+  }
+
+  async rescanFiles() {
+    const m = this.media();
+    if (!m) return;
+    this.rescanLoading.set(true);
+    try {
+      const result = await this.mediaService.rescanFiles(m.id);
+      if (result.added || result.removed || result.updated) {
+        const updated = await this.mediaService.getOne(m.id);
+        this.media.set(updated);
+        // Re-resolve episode
+        const ep = this.episode();
+        if (ep) {
+          for (const s of updated.seasons ?? []) {
+            const freshEp = s.episodes?.find((e) => e.id === ep.id);
+            if (freshEp) {
+              this.season.set(s);
+              this.episode.set(freshEp);
+              break;
+            }
+          }
+        }
+        const subs = await this.subtitlesApi.getForMedia(m.id);
+        this.subtitles.set(subs);
+      }
+      this.toast.success(
+        this.translate.instant('media_detail.rescan_ok', {
+          added: result.added,
+          removed: result.removed,
+          updated: result.updated,
+        }),
+      );
+    } catch {
+      // handled by global interceptor
+    } finally {
+      this.rescanLoading.set(false);
     }
   }
 
@@ -296,6 +383,21 @@ export class EpisodeDetailComponent implements OnInit {
     }
   }
 
+  async onDeleteFileClick() {
+    const fileId = this.selectedFileId();
+    if (!fileId) return;
+    const result = await this.confirmation.choose({
+      title: this.translate.instant('common.confirm'),
+      message: this.translate.instant('media_detail.confirm_delete_file_disk'),
+      confirmLabel: this.translate.instant('media_detail.delete_file_disk'),
+      cancelLabel: this.translate.instant('media_detail.untrack_file'),
+      dismissLabel: this.translate.instant('common.cancel'),
+      variant: 'danger',
+    });
+    if (result === null) return;
+    await this.deleteFile(fileId, result);
+  }
+
   async deleteFile(fileId: number, deleteOnDisk: boolean) {
     const m = this.media();
     if (!m) return;
@@ -307,12 +409,12 @@ export class EpisodeDetailComponent implements OnInit {
     const m = this.media();
     const ep = this.episode();
     if (!m || !ep) return;
-    const file = this.episodeFiles()[0];
-    if (!file) return;
+    const fileId = this.activeFileId();
+    if (!fileId) return;
     this.subtitleActionBusy.set(true);
     try {
       await this.subtitlesApi.autoDownload(m.id, {
-        mediaFileId: file.id,
+        mediaFileId: fileId,
         episodeId: ep.id,
         language: this.subSearchLang(),
       });
@@ -346,13 +448,13 @@ export class EpisodeDetailComponent implements OnInit {
     const m = this.media();
     const ep = this.episode();
     if (!m || !ep) return;
-    const file = this.episodeFiles()[0];
-    if (!file) return;
+    const fileId = this.activeFileId();
+    if (!fileId) return;
     this.subtitleActionBusy.set(true);
     try {
       await this.subtitlesApi.download(m.id, {
         searchResult: result,
-        mediaFileId: file.id,
+        mediaFileId: fileId,
         episodeId: ep.id,
       });
       const subs = await this.subtitlesApi.getForMedia(m.id);

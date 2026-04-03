@@ -10,7 +10,9 @@ export type SseEvent =
   | { type: 'import.complete'; mediaId: number; title: string }
   | { type: 'import.failed'; mediaId: number; title: string; error: string }
   | { type: 'stalled.removed'; title: string }
-  | { type: 'queue.updated' };
+  | { type: 'queue.updated' }
+  | { type: 'command.started'; name: string }
+  | { type: 'command.completed'; name: string; status: string };
 
 @Injectable()
 export class EventsService {

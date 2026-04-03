@@ -29,8 +29,8 @@ import {
   SubtitleSearchResult,
 } from '../../core/services/api/subtitles-api.service';
 import { MediaDetailHeaderComponent } from './components/media-detail-header/media-detail-header.component';
-import { MediaDetailFilesComponent } from './components/media-detail-files/media-detail-files.component';
 import { MediaDetailSubtitlesComponent } from './components/media-detail-subtitles/media-detail-subtitles.component';
+import { MediaFileInfoComponent } from '../../shared/components/media-file-info';
 import { MediaDetailSeasonsComponent } from './components/media-detail-seasons/media-detail-seasons.component';
 import { MediaDetailMovieDownloadComponent } from './components/media-detail-movie-download/media-detail-movie-download.component';
 import { MediaDetailSubtitleSearchModalComponent } from './components/media-detail-subtitle-search-modal/media-detail-subtitle-search-modal.component';
@@ -66,8 +66,8 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     TranslateModule,
     MediaDetailHeaderComponent,
     MediaDetailLibraryInfoComponent,
-    MediaDetailFilesComponent,
     MediaDetailSubtitlesComponent,
+    MediaFileInfoComponent,
     MediaDetailSeasonsComponent,
     MediaDetailMovieDownloadComponent,
     MediaDetailSubtitleSearchModalComponent,
@@ -120,6 +120,22 @@ export class MediaDetailComponent implements OnInit {
     const list = m.files ?? [];
     return m.type === 'series' ? list.filter((f) => !f.episodeId) : list;
   });
+  readonly selectedFileId = signal<number | null>(null);
+  readonly activeFileId = computed(() => this.selectedFileId() ?? this.mediaFiles()[0]?.id ?? null);
+  readonly activeFile = computed(() => {
+    const id = this.activeFileId();
+    return this.mediaFiles().find((f) => f.id === id) ?? null;
+  });
+
+  /** Auto-select first file when mediaFiles change and no selection exists */
+  private readonly autoSelectFileEffect = effect(() => {
+    const files = this.mediaFiles();
+    const current = this.selectedFileId();
+    if (files.length && (!current || !files.some((f) => f.id === current))) {
+      this.selectedFileId.set(files[0].id);
+    }
+  });
+
   readonly loading = signal(true);
   readonly notFound = signal(false);
   readonly expectedKind = signal<MediaType>('movie');
@@ -165,6 +181,7 @@ export class MediaDetailComponent implements OnInit {
   readonly monitoredLoading = signal(false);
   readonly refreshLoading = signal(false);
   readonly refreshToast = signal('');
+  readonly rescanLoading = signal(false);
   /** Active season tab (series) — first season selected after load */
   readonly activeSeasonId = signal<number | null>(null);
   readonly seasonBusy = signal<number | null>(null);
@@ -212,6 +229,13 @@ export class MediaDetailComponent implements OnInit {
 
   // Subtitles
   readonly subtitles = signal<SubtitleFileRow[]>([]);
+  /** Subtitles filtered by selected file (for movies with multiple files). */
+  readonly selectedFileSubtitles = computed(() => {
+    const all = this.subtitles();
+    const fileId = this.selectedFileId();
+    if (!fileId || this.mediaFiles().length <= 1) return all;
+    return all.filter((s) => s.mediaFileId === fileId);
+  });
   readonly subtitlesLoading = signal(false);
   readonly subtitleActionBusy = signal(false);
   readonly subSearchLang = signal('en');
@@ -288,9 +312,7 @@ export class MediaDetailComponent implements OnInit {
       this.draftQualityProfileId.set(m.qualityProfile?.id ?? null);
       this.draftLanguageProfileId.set(m.languageProfile?.id ?? null);
       void this.loadSubtitles(m.id);
-      // Match current path to a root folder
-      const rf = this.rootFolders().find((r) => m.path?.startsWith(r.path));
-      this.selectedRootFolderId.set(rf?.id ?? null);
+      this.selectedRootFolderId.set(m.rootFolderId ?? null);
     } catch {
       this.notFound.set(true);
     } finally {
@@ -316,7 +338,7 @@ export class MediaDetailComponent implements OnInit {
     this.pathSaving.set(true);
     this.pathOk.set(false);
     try {
-      const updated = await this.mediaService.patchPath(m.id, rf.path);
+      const updated = await this.mediaService.patchRootFolder(m.id, rf.id);
       this.media.set(updated);
       if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
       this.pathOk.set(true);
@@ -444,6 +466,33 @@ export class MediaDetailComponent implements OnInit {
       );
     } finally {
       this.refreshLoading.set(false);
+    }
+  }
+
+  async rescanFiles() {
+    const m = this.media();
+    if (!m) return;
+    this.rescanLoading.set(true);
+    try {
+      const result = await this.mediaService.rescanFiles(m.id);
+      if (result.added || result.removed || result.updated) {
+        // Reload media to get updated file list
+        const updated = await this.mediaService.getOne(m.id);
+        this.media.set(updated);
+        if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
+        await this.loadSubtitles(updated.id);
+      }
+      this.toast.success(
+        this.translate.instant('media_detail.rescan_ok', {
+          added: result.added,
+          removed: result.removed,
+          updated: result.updated,
+        }),
+      );
+    } catch {
+      // handled by global interceptor
+    } finally {
+      this.rescanLoading.set(false);
     }
   }
 
@@ -822,12 +871,12 @@ export class MediaDetailComponent implements OnInit {
   async autoSubtitle() {
     const m = this.media();
     if (!m) return;
-    const file = m.files?.[0];
-    if (!file) return;
+    const fileId = this.activeFileId();
+    if (!fileId) return;
     this.subtitleActionBusy.set(true);
     try {
       await this.subtitlesApi.autoDownload(m.id, {
-        mediaFileId: file.id,
+        mediaFileId: fileId,
         language: this.subSearchLang(),
       });
       await this.loadSubtitles(m.id);
@@ -884,7 +933,7 @@ export class MediaDetailComponent implements OnInit {
       if (!file) return;
       mediaFileId = file.id;
     } else {
-      mediaFileId = m.files[0].id;
+      mediaFileId = this.activeFileId()!;
     }
     this.subtitleActionBusy.set(true);
     try {

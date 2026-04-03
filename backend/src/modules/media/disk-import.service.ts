@@ -7,6 +7,7 @@ import { Media } from './entities/media.entity';
 import { MediaFile } from './entities/media-file.entity';
 import { Season } from './entities/season.entity';
 import { Episode } from './entities/episode.entity';
+import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { parseReleaseQuality } from './release-quality.parser';
 import { getSuitarrQualityById } from '../../common/constants/suitarr-qualities';
 import { ImportFileEntry } from './dto/confirm-disk-import.dto';
@@ -50,6 +51,8 @@ export class DiskImportService {
     private readonly seasonRepo: Repository<Season>,
     @InjectRepository(Episode)
     private readonly episodeRepo: Repository<Episode>,
+    @InjectRepository(RootFolder)
+    private readonly rootFolderRepo: Repository<RootFolder>,
   ) {}
 
   async scanFolder(folderPath: string): Promise<ScanCandidate[]> {
@@ -99,27 +102,40 @@ export class DiskImportService {
           /* use 0 if file disappeared */
         }
 
-        // Ensure media.path is set
-        if (!media.path) {
+        // Ensure media.rootFolderId and folderName are set
+        if (!media.rootFolderId) {
           const dir = path.dirname(entry.filePath);
-          await this.mediaRepo.update(media.id, { path: dir });
-          media.path = dir;
-        }
-
-        // Derive folderName from the parent directory name if not set
-        if (!media.folderName && media.path) {
-          const folderName = path.basename(
-            path.dirname(entry.filePath) === media.path
-              ? entry.filePath
-              : path.dirname(entry.filePath),
-          );
-          // Only store if it looks like a real folder name (not just a filename)
-          if (folderName && path.dirname(entry.filePath) !== media.path) {
+          const rootFolders = await this.rootFolderRepo.find();
+          const rf = rootFolders
+            .filter((r) => dir.startsWith(r.path))
+            .sort((a, b) => b.path.length - a.path.length)[0];
+          if (rf) {
+            const remainder = dir
+              .slice(rf.path.length)
+              .replace(/^\/+/, '')
+              .split('/')[0];
+            const folderName = remainder || path.basename(dir);
+            await this.mediaRepo.update(media.id, {
+              rootFolderId: rf.id,
+              folderName,
+            });
+            media.rootFolderId = rf.id;
+            media.rootFolder = rf;
+            media.folderName = folderName;
+          }
+        } else if (!media.folderName) {
+          const dir = path.dirname(entry.filePath);
+          const folderName = media.rootFolder
+            ? dir.slice(media.rootFolder.path.length).replace(/^\/+/, '').split('/')[0]
+            : path.basename(dir);
+          if (folderName) {
             await this.mediaRepo.update(media.id, { folderName });
             media.folderName = folderName;
+
           }
         }
 
+        if (!media.path) continue; // Skip if we can't compute a path
         const relativePath = path.relative(media.path, entry.filePath);
 
         // Avoid duplicate path

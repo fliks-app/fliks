@@ -8,6 +8,7 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
+import * as nodePath from 'path';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import {
   MediaType,
@@ -16,6 +17,7 @@ import {
 } from '../../../common/enums';
 import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
+import { RootFolder } from '../../root-folders/entities/root-folder.entity';
 import { Tag } from '../../tags/entities/tag.entity';
 import { Season } from './season.entity';
 import { MediaFile } from './media-file.entity';
@@ -51,11 +53,22 @@ export class Media extends BaseEntity {
   @Column({ default: true })
   monitored: boolean;
 
+  @ManyToOne(() => RootFolder, { nullable: true, eager: true })
+  @JoinColumn({ name: 'rootFolderId' })
+  rootFolder: RootFolder;
+
   @Column({ nullable: true })
-  path: string;
+  rootFolderId: number;
 
   @Column({ nullable: true })
   folderName: string;
+
+  /** Virtual computed path: rootFolder.path + '/' + folderName */
+  get path(): string | null {
+    return this.rootFolder?.path && this.folderName
+      ? nodePath.join(this.rootFolder.path, this.folderName)
+      : null;
+  }
 
   @Column({ nullable: true })
   posterUrl: string;
@@ -117,4 +130,8 @@ export class Media extends BaseEntity {
 
   @OneToMany(() => MediaFile, (file) => file.media, { cascade: true })
   files: MediaFile[];
+
+  toJSON() {
+    return { ...this, path: this.path };
+  }
 }

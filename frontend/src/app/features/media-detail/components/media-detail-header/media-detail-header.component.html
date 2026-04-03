@@ -57,6 +57,25 @@
         <p class="text-base-content/60 mt-1 text-lg">{{ m.originalTitle }}</p>
       }
 
+      @if (files().length > 1) {
+        <div class="flex items-center gap-3 mt-3">
+          <select
+            class="select select-bordered select-sm"
+            [ngModel]="selectedFileId()"
+            (ngModelChange)="selectedFileIdChange.emit($event)"
+          >
+            @for (f of files(); track f.id) {
+              <option [ngValue]="f.id">{{ f.quality }} — {{ formatBytes(f.size) }}</option>
+            }
+          </select>
+        </div>
+      } @else if (files().length === 1) {
+        <div class="flex flex-wrap gap-2 mt-3 text-xs">
+          <span class="badge badge-sm badge-ghost">{{ files()[0].quality }}</span>
+          <span class="badge badge-sm badge-ghost tabular-nums">{{ formatBytes(files()[0].size) }}</span>
+        </div>
+      }
+
       @if (m.type === 'series' && m.episodeStats) {
         <div class="mt-4 max-w-md">
           <div class="flex justify-between text-sm mb-1">
@@ -85,54 +104,112 @@
         <p class="mt-4 text-base-content/90 leading-relaxed whitespace-pre-line line-clamp-6 sm:line-clamp-none">{{ m.overview }}</p>
       }
 
-      <div class="flex flex-wrap gap-2 mt-5">
-        @if (canEditProfiles()) {
-          <button type="button" class="btn btn-ghost btn-sm" (click)="openProfiles.emit()">
-            {{ 'media_detail.edit_profiles' | translate }}
-          </button>
-          <button type="button" class="btn btn-ghost btn-sm" (click)="openRootFolder.emit()">
-            {{ 'media_detail.edit_root_folder' | translate }}
+      <div class="flex flex-wrap items-center gap-2 mt-5">
+        @if (selectedFileId()) {
+          <button
+            type="button"
+            class="btn btn-error btn-outline btn-sm btn-square"
+            (click)="onDeleteFileClick()"
+            [title]="'media_detail.delete' | translate"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
           </button>
         }
-        @if (isAdmin()) {
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm"
-            (click)="refreshMetadata.emit()"
-            [disabled]="refreshLoading()"
-          >
-            @if (refreshLoading()) {
-              <span class="loading loading-spinner loading-xs"></span>
+        <div class="dropdown dropdown-end">
+          <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6h.01M12 12h.01M12 18h.01" />
+            </svg>
+          </div>
+          <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-56 p-2 shadow-lg">
+            @if (canGrab()) {
+              <li>
+                <a class="flex items-center gap-3" (click)="grabBest.emit()" [class.pointer-events-none]="grabBusy() !== null" [class.opacity-50]="grabBusy() !== null">
+                  @if (grabBusy() === 'best') {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  } @else {
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                  }
+                  {{ 'media_detail.grab_best' | translate }}
+                </a>
+              </li>
+              <li>
+                <a class="flex items-center gap-3" (click)="loadReleases.emit()" [class.pointer-events-none]="releasesLoading()" [class.opacity-50]="releasesLoading()">
+                  @if (releasesLoading()) {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  } @else {
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                  }
+                  {{ 'media_detail.search_releases' | translate }}
+                </a>
+              </li>
             }
-            {{ 'media_detail.refresh_metadata' | translate }}
-          </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm"
-            (click)="toggleMonitored.emit()"
-            [disabled]="monitoredLoading()"
-          >
-            @if (monitoredLoading()) {
-              <span class="loading loading-spinner loading-xs"></span>
+            @if (canEditProfiles()) {
+              <li>
+                <a class="flex items-center gap-3" (click)="openProfiles.emit()">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                  {{ 'media_detail.edit_profiles' | translate }}
+                </a>
+              </li>
+              <li>
+                <a class="flex items-center gap-3" (click)="openRootFolder.emit()">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
+                  {{ 'media_detail.edit_root_folder' | translate }}
+                </a>
+              </li>
             }
-            @if (m.monitored) {
-              {{ 'media_detail.unmonitor' | translate }}
-            } @else {
-              {{ 'media_detail.monitor' | translate }}
+            @if (isAdmin()) {
+              <li>
+                <a class="flex items-center gap-3" (click)="refreshMetadata.emit()" [class.pointer-events-none]="refreshLoading()" [class.opacity-50]="refreshLoading()">
+                  @if (refreshLoading()) {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  } @else {
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                  }
+                  {{ 'media_detail.refresh_metadata' | translate }}
+                </a>
+              </li>
+              <li>
+                <a class="flex items-center gap-3" (click)="rescanFiles.emit()" [class.pointer-events-none]="rescanLoading()" [class.opacity-50]="rescanLoading()">
+                  @if (rescanLoading()) {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  } @else {
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  }
+                  {{ 'media_detail.rescan_files' | translate }}
+                </a>
+              </li>
+              <li>
+                <a class="flex items-center gap-3" (click)="toggleMonitored.emit()" [class.pointer-events-none]="monitoredLoading()" [class.opacity-50]="monitoredLoading()">
+                  @if (monitoredLoading()) {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  } @else if (m.monitored) {
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                  } @else {
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  }
+                  @if (m.monitored) {
+                    {{ 'media_detail.unmonitor' | translate }}
+                  } @else {
+                    {{ 'media_detail.monitor' | translate }}
+                  }
+                </a>
+              </li>
+              <li>
+                <a class="flex items-center gap-3 text-error" (click)="deleteMedia.emit()" [class.pointer-events-none]="deleteLoading()" [class.opacity-50]="deleteLoading()">
+                  @if (deleteLoading()) {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  } @else {
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  }
+                  {{ 'media_detail.delete' | translate }}
+                </a>
+              </li>
             }
-          </button>
-          <button
-            type="button"
-            class="btn btn-error btn-outline btn-sm"
-            (click)="deleteMedia.emit()"
-            [disabled]="deleteLoading()"
-          >
-            @if (deleteLoading()) {
-              <span class="loading loading-spinner loading-xs"></span>
-            }
-            {{ 'media_detail.delete' | translate }}
-          </button>
-        }
+          </ul>
+        </div>
       </div>
 
     </div>

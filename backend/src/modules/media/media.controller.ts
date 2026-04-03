@@ -27,7 +27,7 @@ import { UpdateMediaProfilesDto } from './dto/update-media-profiles.dto';
 import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { PatchMonitoredDto } from './dto/patch-monitored.dto';
-import { UpdatePathDto } from './dto/update-path.dto';
+import { UpdateRootFolderDto } from './dto/update-path.dto';
 import { LinkTorrentDto } from './dto/link-torrent.dto';
 import { SUITARR_QUALITIES } from '../../common/constants/suitarr-qualities';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
@@ -216,11 +216,11 @@ export class MediaController {
 
   @Patch(':id/root-folder')
   @CheckPolicies((ability) => ability.can(Action.Update, Media))
-  updatePath(
+  updateRootFolder(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdatePathDto,
+    @Body() dto: UpdateRootFolderDto,
   ) {
-    return this.mediaService.updatePath(id, dto.path);
+    return this.mediaService.updateRootFolder(id, dto.rootFolderId);
   }
 
   @Patch(':id/profiles')
@@ -239,6 +239,12 @@ export class MediaController {
   @CheckPolicies((ability) => ability.can(Action.Update, Media))
   refreshMetadata(@Param('id', ParseIntPipe) id: number) {
     return this.mediaService.refreshMetadata(id);
+  }
+
+  @Post(':id/rescan')
+  @CheckPolicies((ability) => ability.can(Action.Update, Media))
+  rescanFiles(@Param('id', ParseIntPipe) id: number) {
+    return this.mediaService.rescanFiles(id);
   }
 
   @Get(':id/subtitles')

@@ -62,4 +62,7 @@ export class SubtitleFile extends BaseEntity {
 
   @Column({ type: 'int', nullable: true })
   syncOffset: number;
+
+  @Column({ default: false })
+  locked: boolean;
 }

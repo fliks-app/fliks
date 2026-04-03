@@ -133,6 +133,10 @@ export class SubtitlesApiService {
   clearBlacklist() {
     return firstValueFrom(this.http.delete<{ deleted: number }>('/api/subtitles/blacklist'));
   }
+
+  getMissing() {
+    return firstValueFrom(this.http.get<MissingSubtitleEntry[]>('/api/subtitles/missing'));
+  }
 }
 
 export interface SubtitleHistoryEntry {
@@ -213,4 +217,15 @@ export interface SubtitleHealthEntry {
   type: string;
   ok: boolean;
   error: string | null;
+}
+
+export interface MissingSubtitleEntry {
+  mediaId: number;
+  mediaTitle: string;
+  mediaType: string;
+  fileId: number;
+  fileName: string;
+  episodeId: number | null;
+  episodeLabel: string | null;
+  language: string;
 }

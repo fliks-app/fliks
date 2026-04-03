@@ -12,6 +12,10 @@ export class EmbyProvider implements MediaServerProvider {
     'download.complete',
     'subtitle.downloaded',
     'subtitle.upgraded',
+    'subtitle.synced',
+    'file.deleted',
+    'media.deleted',
+    'library.rescan',
   ];
 
   async refreshLibrary(url: string, apiKey: string): Promise<void> {

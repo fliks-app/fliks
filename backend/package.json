@@ -36,6 +36,7 @@
     "cheerio": "^1.2.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "cron-parser": "^5.5.0",
     "js-yaml": "^4.1.1",
     "passport": "^0.7.0",
     "passport-http-header-strategy": "^1.1.0",

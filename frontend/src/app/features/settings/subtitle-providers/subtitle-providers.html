@@ -25,7 +25,7 @@
             <th>{{ 'settings.subtitle_providers.col_name' | translate }}</th>
             <th>{{ 'settings.subtitle_providers.col_type' | translate }}</th>
             <th class="text-end">{{ 'settings.subtitle_providers.col_priority' | translate }}</th>
-            <th class="text-center">{{ 'settings.subtitle_providers.col_enabled' | translate }}</th>
+            <th class="text-center">{{ 'settings.subtitle_providers.col_status' | translate }}</th>
             <th class="text-end w-40">{{ 'settings.subtitle_providers.actions' | translate }}</th>
           </tr>
         </thead>
@@ -36,10 +36,14 @@
               <td class="text-sm">{{ providerLabel(row.type) }}</td>
               <td class="text-end">{{ row.priority }}</td>
               <td class="text-center">
-                @if (row.enabled) {
-                  <span class="badge badge-success badge-sm">ON</span>
-                } @else {
+                @if (!row.enabled) {
                   <span class="badge badge-ghost badge-sm">OFF</span>
+                } @else if (getRateLimit(row.type); as rl) {
+                  <span class="badge badge-warning badge-sm gap-1" [title]="'settings.subtitle_providers.rate_limited_hint' | translate">
+                    {{ 'settings.subtitle_providers.rate_limited' | translate }} — {{ formatDelay(rl.delaySec) }}
+                  </span>
+                } @else {
+                  <span class="badge badge-success badge-sm">OK</span>
                 }
               </td>
               <td class="text-end">

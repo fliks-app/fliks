@@ -242,7 +242,7 @@ export class MovieDownloadService {
         'Download grab is only available for movies',
       );
     }
-    if (!media.path) {
+    if (!media.rootFolderId) {
       throw new BadRequestException(
         'Assign a root folder to this movie before downloading',
       );
@@ -421,7 +421,7 @@ export class MovieDownloadService {
         'Upgrade grab is only available for movies',
       );
     }
-    if (!media.path) {
+    if (!media.rootFolderId) {
       throw new BadRequestException(
         'Assign a root folder to this movie before downloading',
       );

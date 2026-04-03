@@ -1,5 +1,5 @@
 import {
-  Component, ChangeDetectionStrategy, signal, inject, OnInit,
+  Component, ChangeDetectionStrategy, signal, inject, OnInit, effect,
 } from '@angular/core';
 import { DatePipe, NgClass, KeyValuePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
@@ -37,7 +37,17 @@ export class SystemStatusComponent implements OnInit {
     { name: 'SearchMissing', label: 'system.cmd_search_missing' },
     { name: 'RefreshMetadata', label: 'system.cmd_refresh_metadata' },
     { name: 'ImportCompleted', label: 'system.cmd_import_completed' },
+    { name: 'RescanAll', label: 'system.cmd_rescan_all' },
   ];
+
+  constructor() {
+    effect(() => {
+      const event = this.sse.lastEvent();
+      if (event?.type === 'command.started' || event?.type === 'command.completed') {
+        this.loadCommands(this.commandsPage());
+      }
+    });
+  }
 
   ngOnInit() {
     this.sse.connect();

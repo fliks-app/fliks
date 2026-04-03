@@ -13,6 +13,7 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import {
   SubtitleProvidersApiService,
   SubtitleProviderRow,
+  ProviderRateLimit,
 } from '../../../core/services/api/subtitle-providers-api.service';
 
 const PROVIDER_TYPES = [
@@ -59,6 +60,8 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly testLoading = signal(false);
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
 
+  readonly rateLimits = signal<Map<string, ProviderRateLimit>>(new Map());
+
   readonly statsLoading = signal(false);
   readonly statsData = signal<{ date: string; queries: number; avgResponseMs: number; totalResults: number; errors: number }[]>([]);
   readonly statsProviderName = signal('');
@@ -71,12 +74,35 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     this.loading.set(true);
     this.listError.set('');
     try {
-      this.rows.set(await this.api.list());
+      const [rows, limits] = await Promise.all([
+        this.api.list(),
+        this.api.getRateLimits(),
+      ]);
+      this.rows.set(rows);
+      this.rateLimits.set(new Map(limits.map((l) => [l.providerType, l])));
     } catch {
       this.listError.set(this.translate.instant('settings.subtitle_providers.load_error'));
     } finally {
       this.loading.set(false);
     }
+  }
+
+  getRateLimit(type: string): ProviderRateLimit | undefined {
+    return this.rateLimits().get(type);
+  }
+
+  formatDelay(seconds: number): string {
+    if (seconds >= 3600) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.ceil((seconds % 3600) / 60);
+      return m > 0 ? `${h}h${m.toString().padStart(2, '0')}` : `${h}h`;
+    }
+    if (seconds >= 60) {
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return s > 0 ? `${m}m${s.toString().padStart(2, '0')}s` : `${m}min`;
+    }
+    return `${seconds}s`;
   }
 
   currentFields(): string[] {

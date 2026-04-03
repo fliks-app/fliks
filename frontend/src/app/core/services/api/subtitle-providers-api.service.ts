@@ -26,6 +26,13 @@ export interface TestSubtitleProviderBody {
   settings?: Record<string, unknown>;
 }
 
+export interface ProviderRateLimit {
+  providerType: string;
+  retryAfter: number;
+  remaining: number | null;
+  delaySec: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class SubtitleProvidersApiService {
   private readonly http = inject(HttpClient);
@@ -59,6 +66,12 @@ export class SubtitleProvidersApiService {
   testProvider(id: number) {
     return firstValueFrom(
       this.http.post<boolean>(`/api/subtitles/providers/${id}/test`, {}),
+    );
+  }
+
+  getRateLimits() {
+    return firstValueFrom(
+      this.http.get<ProviderRateLimit[]>('/api/subtitles/providers/rate-limits'),
     );
   }
 

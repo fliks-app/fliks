@@ -298,8 +298,24 @@ export const routes: Routes = [
             path: 'subtitles',
             loadComponent: () =>
               import(
-                './features/settings/subtitles/subtitles-settings'
-              ).then((m) => m.SubtitlesSettingsComponent),
+                './features/settings/subtitles/subtitles-shell'
+              ).then((m) => m.SubtitlesShellComponent),
+            children: [
+              {
+                path: '',
+                loadComponent: () =>
+                  import(
+                    './features/settings/subtitles/subtitles-settings'
+                  ).then((m) => m.SubtitlesSettingsComponent),
+              },
+              {
+                path: 'stats',
+                loadComponent: () =>
+                  import(
+                    './features/settings/subtitles/subtitles-stats'
+                  ).then((m) => m.SubtitlesStatsComponent),
+              },
+            ],
           },
           {
             path: 'delay-profiles',
@@ -307,6 +323,13 @@ export const routes: Routes = [
               import(
                 './features/settings/delay-profiles/delay-profiles'
               ).then((m) => m.DelayProfilesComponent),
+          },
+          {
+            path: 'schedulers',
+            loadComponent: () =>
+              import(
+                './features/settings/schedulers/schedulers'
+              ).then((m) => m.SchedulersComponent),
           },
           {
             path: 'auto-approval',

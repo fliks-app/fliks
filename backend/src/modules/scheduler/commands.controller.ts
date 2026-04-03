@@ -16,6 +16,12 @@ class TriggerCommandDto {
 export class CommandsController {
   constructor(private readonly scheduler: SchedulerService) {}
 
+  @Get('schedulers')
+  @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
+  schedulers() {
+    return this.scheduler.getSchedulers();
+  }
+
   @Get()
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   list(@Query('page') page?: string, @Query('limit') limit?: string) {

@@ -34,6 +34,10 @@ import {
   getSuitarrQualityById,
   SUITARR_QUALITIES,
 } from '../../common/constants/suitarr-qualities';
+import { parseReleaseQuality } from './release-quality.parser';
+import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
+import { MediaServersService } from '../media-servers/media-servers.service';
+import { FfprobeService } from '../subtitles/ffprobe.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -61,6 +65,9 @@ export class MediaService {
     private readonly config: ConfigService,
     private readonly profiles: ProfilesService,
     private readonly naming: NamingService,
+    private readonly embeddedSubtitle: EmbeddedSubtitleService,
+    private readonly mediaServers: MediaServersService,
+    private readonly ffprobe: FfprobeService,
   ) {}
 
   async importFromTmdb(dto: ImportTmdbDto): Promise<Media> {
@@ -86,18 +93,18 @@ export class MediaService {
         dto.languageProfileId,
       );
 
-    let rootPath: string | undefined;
+    let resolvedRootFolderId: number | undefined;
     if (dto.rootFolderId) {
       const rf = await this.rootFolderRepo.findOne({
         where: { id: dto.rootFolderId },
       });
       if (rf && rf.mediaTypes?.includes(dto.type)) {
-        rootPath = rf.path;
+        resolvedRootFolderId = rf.id;
       }
     }
 
     // Fallback to default root folder setting only
-    if (!rootPath) {
+    if (!resolvedRootFolderId) {
       const defaultKey =
         dto.type === MediaType.MOVIE
           ? 'default_root_folder_movie'
@@ -111,13 +118,13 @@ export class MediaService {
         if (rfId) {
           const rf = await this.rootFolderRepo.findOne({ where: { id: rfId } });
           if (rf && rf.mediaTypes?.includes(dto.type)) {
-            rootPath = rf.path;
+            resolvedRootFolderId = rf.id;
           }
         }
       }
     }
 
-    if (!rootPath) {
+    if (!resolvedRootFolderId) {
       throw new BadRequestException(
         'No compatible root folder found. Set a default root folder for this media type in settings.',
       );
@@ -150,7 +157,7 @@ export class MediaService {
         details,
         qualityProfileId,
         languageProfileId,
-        rootPath,
+        resolvedRootFolderId,
         folderName,
       );
     }
@@ -169,7 +176,7 @@ export class MediaService {
       seasons,
       qualityProfileId,
       languageProfileId,
-      rootPath,
+      resolvedRootFolderId,
       folderName,
     );
   }
@@ -204,6 +211,7 @@ export class MediaService {
 
     const qb = this.mediaRepo
       .createQueryBuilder('media')
+      .leftJoinAndSelect('media.rootFolder', 'rootFolder')
       .leftJoinAndSelect('media.qualityProfile', 'qualityProfile')
       .leftJoinAndSelect('media.languageProfile', 'languageProfile')
       .leftJoinAndSelect('media.tags', 'tags')
@@ -257,11 +265,10 @@ export class MediaService {
 
     let enriched = data.map((m) => {
       const stats = episodeStatsMap.get(m.id);
-      return {
-        ...m,
+      return Object.assign(m, {
         sizeOnDisk: (m.files ?? []).reduce((sum, f) => sum + Number(f.size), 0),
         episodeStats: stats ?? undefined,
-      };
+      });
     });
 
     if (query.cutoffUnmet === true) {
@@ -282,10 +289,6 @@ export class MediaService {
 
   async findByTmdbId(tmdbId: number, type: MediaType): Promise<Media | null> {
     return this.mediaRepo.findOne({ where: { tmdbId, type } });
-  }
-
-  async findRootFolderByPath(path: string): Promise<RootFolder | null> {
-    return this.rootFolderRepo.findOne({ where: { path } });
   }
 
   async findOne(id: number): Promise<Media> {
@@ -341,9 +344,9 @@ export class MediaService {
     return this.findOne(saved.id);
   }
 
-  async updatePath(id: number, path: string): Promise<Media> {
+  async updateRootFolder(id: number, rootFolderId: number): Promise<Media> {
     await this.findOne(id);
-    await this.mediaRepo.update(id, { path });
+    await this.mediaRepo.update(id, { rootFolderId });
     return this.findOne(id);
   }
 
@@ -393,7 +396,7 @@ export class MediaService {
       patch.monitored = dto.monitored;
     }
     if (dto.rootFolder !== undefined) {
-      patch.path = dto.rootFolder;
+      patch.rootFolderId = dto.rootFolder;
     }
 
     if (Object.keys(patch).length === 0) {
@@ -412,7 +415,13 @@ export class MediaService {
 
   async remove(id: number): Promise<void> {
     const media = await this.findOne(id);
+    const title = media.title;
+    const mediaPath = media.path;
     await this.mediaRepo.remove(media);
+    void this.mediaServers.dispatch('media.deleted', {
+      title,
+      path: mediaPath,
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -658,6 +667,11 @@ export class MediaService {
         await this.episodeRepo.update(episodeId, { hasFile: false });
       }
     }
+
+    void this.mediaServers.dispatch('file.deleted', {
+      title: media.title,
+      path: media.path,
+    });
   }
 
   async refreshMetadata(id: number): Promise<Media> {
@@ -683,6 +697,17 @@ export class MediaService {
     }
 
     await this.updateSearchVector(media.id);
+
+    // Refresh embedded subtitles for all files
+    const files = await this.mediaFileRepo.find({ where: { mediaId: media.id } });
+    for (const file of files) {
+      await this.embeddedSubtitle.detectAndStore(
+        media.id,
+        file.id,
+        file.episodeId ?? undefined,
+      );
+    }
+
     return this.findOne(media.id);
   }
 
@@ -893,14 +918,14 @@ export class MediaService {
     details: MetadataDetails,
     qualityProfileId: number | null,
     languageProfileId: number | null,
-    rootPath?: string,
+    rootFolderId?: number,
     folderName?: string,
   ): Promise<Media> {
     const row = this.mediaRepo.create({
       ...this.buildMediaFieldsFromTmdb(details, MediaType.MOVIE),
       ...(qualityProfileId != null ? { qualityProfileId } : {}),
       ...(languageProfileId != null ? { languageProfileId } : {}),
-      ...(rootPath ? { path: rootPath } : {}),
+      ...(rootFolderId ? { rootFolderId } : {}),
       ...(folderName ? { folderName } : {}),
     });
     const saved = await this.mediaRepo.save(row);
@@ -913,14 +938,14 @@ export class MediaService {
     seasons: SeasonDetails[],
     qualityProfileId: number | null,
     languageProfileId: number | null,
-    rootPath?: string,
+    rootFolderId?: number,
     folderName?: string,
   ): Promise<Media> {
     const row = this.mediaRepo.create({
       ...this.buildMediaFieldsFromTmdb(details, MediaType.SERIES),
       ...(qualityProfileId != null ? { qualityProfileId } : {}),
       ...(languageProfileId != null ? { languageProfileId } : {}),
-      ...(rootPath ? { path: rootPath } : {}),
+      ...(rootFolderId ? { rootFolderId } : {}),
       ...(folderName ? { folderName } : {}),
     });
     const saved = await this.mediaRepo.save(row);
@@ -1017,5 +1042,193 @@ export class MediaService {
     }
 
     return { renamed };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rescan files on disk
+  // ---------------------------------------------------------------------------
+
+  private static readonly VIDEO_EXTS = new Set([
+    '.mkv', '.mp4', '.avi', '.mov', '.ts', '.m2ts', '.wmv', '.flv',
+  ]);
+
+  async rescanFiles(
+    mediaId: number,
+  ): Promise<{ added: number; removed: number; updated: number }> {
+    const media = await this.mediaRepo.findOne({
+      where: { id: mediaId },
+      relations: ['files'],
+    });
+    if (!media) throw new NotFoundException(`Media #${mediaId} not found`);
+    if (!media.path) {
+      throw new BadRequestException(
+        `Media #${mediaId} has no root path configured`,
+      );
+    }
+
+    const mediaDir = media.path;
+    if (!fs.existsSync(mediaDir)) {
+      throw new BadRequestException(`Path "${mediaDir}" does not exist`);
+    }
+
+    // 1. Collect all video files on disk
+    this.log.log(`Rescan: scanning "${mediaDir}" for media #${mediaId}`);
+    const diskFiles = this.collectVideoFilesRecursive(mediaDir, 0);
+    this.log.log(`Rescan: found ${diskFiles.length} file(s) on disk, ${(media.files ?? []).length} in DB`);
+    const diskRelPaths = new Set(
+      diskFiles.map((f) => path.relative(mediaDir, f).replace(/\\/g, '/')),
+    );
+
+    // 2. Existing DB records
+    const dbFiles = media.files ?? [];
+    const dbRelPaths = new Set(
+      dbFiles.map((f) => f.relativePath.replace(/\\/g, '/')),
+    );
+
+    let added = 0;
+    let removed = 0;
+
+    // 3. Remove DB records whose files no longer exist on disk
+    for (const dbFile of dbFiles) {
+      const normPath = dbFile.relativePath?.replace(/\\/g, '/');
+      if (!normPath || !diskRelPaths.has(normPath)) {
+        const episodeId = dbFile.episodeId;
+        await this.mediaFileRepo.remove(dbFile);
+        removed++;
+        this.log.log(`Rescan: removed missing file "${normPath}" for media #${mediaId}`);
+        // Update episode.hasFile if needed
+        if (episodeId != null) {
+          const remaining = await this.mediaFileRepo.count({
+            where: { episodeId },
+          });
+          if (remaining === 0) {
+            await this.episodeRepo.update(episodeId, { hasFile: false });
+          }
+        }
+      }
+    }
+
+    // 4. Refresh metadata for existing DB records from disk
+    let updated = 0;
+    for (const dbFile of dbFiles) {
+      const normPath = dbFile.relativePath?.replace(/\\/g, '/');
+      if (!normPath || !diskRelPaths.has(normPath)) continue;
+      const absPath = path.join(mediaDir, normPath);
+
+      let diskSize: number;
+      try {
+        diskSize = fs.statSync(absPath).size;
+      } catch {
+        continue;
+      }
+
+      const filename = path.basename(absPath);
+      const { quality } = parseReleaseQuality(filename);
+
+      const sizeChanged = Number(dbFile.size) !== diskSize;
+      const qualityChanged = dbFile.quality !== quality.name;
+      const si = dbFile.streamInfo as any;
+      const missingStreamInfo =
+        !si || si.error || (!si.video?.length && !si.audio?.length);
+
+      if (sizeChanged || qualityChanged || missingStreamInfo) {
+        dbFile.size = diskSize;
+        dbFile.quality = quality.name;
+        dbFile.streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
+        await this.mediaFileRepo.save(dbFile);
+        updated++;
+        this.log.log(`Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${quality.name})`);
+      }
+    }
+
+    // 5. Add new files found on disk but not in DB
+    for (const absPath of diskFiles) {
+      const relativePath = path.relative(mediaDir, absPath).replace(/\\/g, '/');
+      if (dbRelPaths.has(relativePath)) continue;
+
+      let size = 0;
+      try {
+        size = fs.statSync(absPath).size;
+      } catch {
+        continue;
+      }
+
+      const filename = path.basename(absPath);
+      const { quality } = parseReleaseQuality(filename);
+
+      // Try to match episode for series
+      let episodeId: number | undefined;
+      if (media.type === MediaType.SERIES) {
+        const epNums = this.parseEpisodeNumbers(filename);
+        if (epNums) {
+          const season = await this.seasonRepo.findOne({
+            where: { mediaId: media.id, seasonNumber: epNums.season },
+          });
+          if (season) {
+            const ep = await this.episodeRepo.findOne({
+              where: { seasonId: season.id, episodeNumber: epNums.episode },
+            });
+            if (ep) {
+              episodeId = ep.id;
+            }
+          }
+        }
+      }
+
+      const streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
+      await this.mediaFileRepo.save(
+        this.mediaFileRepo.create({
+          mediaId: media.id,
+          episodeId,
+          relativePath,
+          size,
+          quality: quality.name,
+          streamInfo,
+        }),
+      );
+      added++;
+      this.log.log(`Rescan: added new file "${relativePath}" for media #${mediaId}`);
+
+      if (episodeId != null) {
+        await this.episodeRepo.update(episodeId, { hasFile: true });
+      }
+    }
+
+    if (added || removed) {
+      void this.mediaServers.dispatch('library.rescan', {
+        title: media.title,
+        path: media.path,
+      });
+    }
+
+    return { added, removed, updated };
+  }
+
+  private collectVideoFilesRecursive(dir: string, depth: number): string[] {
+    if (depth > 3) return [];
+    const files: string[] = [];
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        files.push(...this.collectVideoFilesRecursive(fullPath, depth + 1));
+      } else if (MediaService.VIDEO_EXTS.has(path.extname(entry.name).toLowerCase())) {
+        files.push(fullPath);
+      }
+    }
+    return files;
+  }
+
+  private parseEpisodeNumbers(
+    filename: string,
+  ): { season: number; episode: number } | null {
+    const m = filename.match(/[Ss](\d{1,2})[Ee](\d{1,3})/);
+    if (!m) return null;
+    return { season: parseInt(m[1], 10), episode: parseInt(m[2], 10) };
   }
 }

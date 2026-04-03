@@ -93,6 +93,34 @@ export function trackQuota(providerType: string, response: Response): void {
 }
 
 /**
+ * Return current rate-limit state for all providers.
+ */
+export function getAllCooldowns(): {
+  providerType: string;
+  retryAfter: number;
+  remaining: number | null;
+  delaySec: number;
+}[] {
+  const now = Date.now();
+  const result: {
+    providerType: string;
+    retryAfter: number;
+    remaining: number | null;
+    delaySec: number;
+  }[] = [];
+  for (const [providerType, cd] of cooldowns) {
+    if (now >= cd.retryAfter) continue;
+    result.push({
+      providerType,
+      retryAfter: cd.retryAfter,
+      remaining: cd.remaining,
+      delaySec: Math.ceil((cd.retryAfter - now) / 1000),
+    });
+  }
+  return result;
+}
+
+/**
  * Wrapper for fetch that handles rate-limiting automatically.
  * Returns null if rate-limited (caller should return empty results).
  */

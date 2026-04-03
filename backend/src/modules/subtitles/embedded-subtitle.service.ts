@@ -63,19 +63,14 @@ export class EmbeddedSubtitleService {
       `Found ${streams.length} embedded subtitle(s) in "${path.basename(videoPath)}"`,
     );
 
-    // Check existing embedded subs to avoid duplicates
-    const existing = await this.subtitleFileRepo.find({
-      where: {
-        mediaFileId,
-        providerType: SubtitleProviderType.EMBEDDED,
-      },
+    // Remove all existing embedded subs for this file, then recreate
+    await this.subtitleFileRepo.delete({
+      mediaFileId,
+      providerType: SubtitleProviderType.EMBEDDED,
     });
-    const existingIndexes = new Set(existing.map((e) => e.streamIndex));
 
     const created: SubtitleFile[] = [];
     for (const stream of streams) {
-      if (existingIndexes.has(stream.streamIndex)) continue;
-
       const sub = this.subtitleFileRepo.create({
         mediaId,
         mediaFileId,
@@ -97,10 +92,10 @@ export class EmbeddedSubtitleService {
 
     if (created.length) {
       await this.subtitleFileRepo.save(created);
-      this.logger.log(
-        `Stored ${created.length} embedded subtitle(s) for mediaFile #${mediaFileId}`,
-      );
     }
+    this.logger.log(
+      `Refreshed embedded subtitles for mediaFile #${mediaFileId}: ${created.length} stored`,
+    );
 
     return created;
   }
