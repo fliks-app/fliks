@@ -46,9 +46,20 @@ export interface AudioStreamInfo {
   isDefault?: boolean;
 }
 
+export interface SubtitleStreamInfo {
+  streamIndex: number;
+  codec: string;
+  language: string;
+  title?: string;
+  forced: boolean;
+  hearingImpaired: boolean;
+}
+
 export interface MediaFileInfo {
   video: VideoStreamInfo[];
   audio: AudioStreamInfo[];
+  subtitles: SubtitleStreamInfo[];
+  durationSeconds?: number;
   error?: string;
 }
 
@@ -163,13 +174,20 @@ export class FfprobeService {
           '-print_format',
           'json',
           '-show_streams',
+          '-show_format',
           videoPath,
         ],
         { timeout: 30_000 },
       );
 
-      const parsed = JSON.parse(stdout) as { streams?: FfprobeStream[] };
+      const parsed = JSON.parse(stdout) as {
+        streams?: FfprobeStream[];
+        format?: { duration?: string };
+      };
       const streams = parsed.streams ?? [];
+      const durationSeconds = parsed.format?.duration
+        ? Number(parsed.format.duration)
+        : undefined;
 
       const video: VideoStreamInfo[] = streams
         .filter((s) => s.codec_type === 'video')
@@ -203,17 +221,28 @@ export class FfprobeService {
           isDefault: s.disposition?.default === 1,
         }));
 
+      const subtitles: SubtitleStreamInfo[] = streams
+        .filter((s) => s.codec_type === 'subtitle')
+        .map((s) => ({
+          streamIndex: s.index,
+          codec: s.codec_name ?? 'unknown',
+          language: s.tags?.language ?? 'und',
+          title: s.tags?.title,
+          forced: s.disposition?.forced === 1,
+          hearingImpaired: s.disposition?.hearing_impaired === 1,
+        }));
+
       if (!video.length && !audio.length) {
-        return { video: [], audio: [], error: 'No streams detected' };
+        return { video: [], audio: [], subtitles: [], durationSeconds, error: 'No streams detected' };
       }
-      return { video, audio };
+      return { video, audio, subtitles, durationSeconds };
     } catch (err) {
       const e = err as any;
       const message = e.stderr?.trim() || e.message || String(err);
       this.logger.warn(
         `ffprobe file info failed for "${videoPath}": ${message}`,
       );
-      return { video: [], audio: [], error: message };
+      return { video: [], audio: [], subtitles: [], error: message };
     }
   }
 

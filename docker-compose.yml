@@ -24,6 +24,8 @@ services:
       - ./backend:/app
       - /mnt/data/suitarr/volumes/downloads:/downloads
       - /mnt/data/suitarr/volumes/medias:/medias
+    devices:
+      - /dev/dri:/dev/dri
     depends_on:
       - postgres
 

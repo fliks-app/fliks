@@ -1129,7 +1129,8 @@ export class MediaService {
       const qualityChanged = dbFile.quality !== quality.name;
       const si = dbFile.streamInfo as any;
       const missingStreamInfo =
-        !si || si.error || (!si.video?.length && !si.audio?.length);
+        !si || si.error || (!si.video?.length && !si.audio?.length)
+        || !('subtitles' in si) || !('durationSeconds' in si);
 
       if (sizeChanged || qualityChanged || missingStreamInfo) {
         dbFile.size = diskSize;

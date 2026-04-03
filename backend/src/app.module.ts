@@ -19,6 +19,7 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { SubtitlesModule } from './modules/subtitles/subtitles.module';
 import { MediaServersModule } from './modules/media-servers/media-servers.module';
 import { RolesModule } from './modules/roles/roles.module';
+import { StreamingModule } from './modules/streaming/streaming.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { RolesModule } from './modules/roles/roles.module';
     SubtitlesModule,
     MediaServersModule,
     RolesModule,
+    StreamingModule,
   ],
 })
 export class AppModule {}

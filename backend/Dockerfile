@@ -7,6 +7,10 @@ RUN apk add --no-cache \
   python3 \
   py3-pip \
   ffmpeg \
+  intel-media-driver \
+  libva-intel-driver \
+  mesa-va-gallium \
+  libva-utils \
   && apk add --no-cache --virtual .ffsubsync-build \
   gcc \
   musl-dev \

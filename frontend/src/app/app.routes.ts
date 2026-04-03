@@ -16,6 +16,12 @@ export const routes: Routes = [
       import('./features/login/login').then((m) => m.LoginComponent),
   },
   {
+    path: 'watch/:mediaFileId',
+    canActivate: [serverConfigGuard, authGuard],
+    loadComponent: () =>
+      import('./features/player/player').then((m) => m.PlayerComponent),
+  },
+  {
     path: '',
     loadComponent: () =>
       import('./shared/layout/layout').then((m) => m.LayoutComponent),
