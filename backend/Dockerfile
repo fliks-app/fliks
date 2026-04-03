@@ -1,14 +1,28 @@
-FROM node:22-bookworm-slim
+FROM node:24.14.0-alpine
 
-# Nest CLI utilise `ps` pour tree-kill au reload ; absent sur slim, seul le shell
-# était tué et Node gardait le port → EADDRINUSE au save.
-RUN apt-get update && apt-get install -y --no-install-recommends procps \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache \
+  bash \
+  postgresql18-client \
+  procps \
+  python3 \
+  py3-pip \
+  ffmpeg \
+  && apk add --no-cache --virtual .ffsubsync-build \
+  gcc \
+  musl-dev \
+  python3-dev \
+  && python3 -m pip install --no-cache-dir --break-system-packages ffsubsync \
+  && apk del .ffsubsync-build \
+  && wget -q -O /usr/local/bin/alass https://github.com/kaegi/alass/releases/download/v2.0.0/alass-linux64 \
+  && chmod +x /usr/local/bin/alass \
+  && ffsubsync --version \
+  && alass --help >/dev/null \
+  && pg_dump --version \
+  && psql --version
 
 WORKDIR /app
 
 ENV NODE_ENV=development
-# Avec un volume monté sur le code source, le watch fonctionne mieux avec le polling
 ENV CHOKIDAR_USEPOLLING=true
 
 COPY package.json package-lock.json ./

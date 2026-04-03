@@ -27,6 +27,12 @@ export class CustomFormatsController {
     return this.service.create(dto);
   }
 
+  @Post('test')
+  @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
+  testRelease(@Body() body: { title: string }) {
+    return this.service.testRelease(body.title);
+  }
+
   @Get()
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   findAll() {
@@ -41,7 +47,10 @@ export class CustomFormatsController {
 
   @Put(':id')
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateCustomFormatDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateCustomFormatDto,
+  ) {
     return this.service.update(id, dto);
   }
 

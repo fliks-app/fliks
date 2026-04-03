@@ -1,13 +1,16 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
   signal,
   inject,
   OnInit,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
   ProfilesService,
   QualityProfile,
@@ -27,15 +30,15 @@ export class QualityProfilesComponent implements OnInit {
   private readonly profilesApi = inject(ProfilesService);
   private readonly mediaApi = inject(MediaService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
+  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
   readonly profiles = signal<QualityProfile[]>([]);
   readonly definitions = signal<SuitarrQualityDef[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
-
-  readonly editorOpen = signal(false);
   readonly saving = signal(false);
-  readonly saveError = signal('');
+
   readonly editingId = signal<number | null>(null);
 
   readonly formName = signal('');
@@ -81,8 +84,7 @@ export class QualityProfilesComponent implements OnInit {
     this.formCutoff.set(16);
     this.formUpgrade.set(true);
     this.allowedIds.set(new Set());
-    this.saveError.set('');
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   openEdit(p: QualityProfile) {
@@ -94,12 +96,11 @@ export class QualityProfilesComponent implements OnInit {
       p.items.filter((i) => i.allowed).map((i) => i.quality.id),
     );
     this.allowedIds.set(allowed);
-    this.saveError.set('');
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   closeEditor() {
-    this.editorOpen.set(false);
+    this.editorDialog()?.nativeElement.close();
   }
 
   isAllowed(id: number): boolean {
@@ -133,14 +134,8 @@ export class QualityProfilesComponent implements OnInit {
 
   async save() {
     const name = this.formName().trim();
-    if (!name) {
-      this.saveError.set(
-        this.translate.instant('settings.quality_profiles.name_required'),
-      );
-      return;
-    }
+    if (!name) return;
     this.saving.set(true);
-    this.saveError.set('');
     const body = this.buildPayload();
     const id = this.editingId();
     try {
@@ -149,12 +144,8 @@ export class QualityProfilesComponent implements OnInit {
         : this.profilesApi.updateQualityProfile(id, body));
       this.closeEditor();
       await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      this.saveError.set(
-        httpErr.error?.message ??
-          this.translate.instant('settings.quality_profiles.save_error'),
-      );
+    } catch {
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }
@@ -165,16 +156,18 @@ export class QualityProfilesComponent implements OnInit {
       'settings.quality_profiles.confirm_delete',
       { name: p.name },
     );
-    if (!confirm(msg)) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: msg, variant: 'danger' })) return;
     try {
       await this.profilesApi.deleteQualityProfile(p.id);
       await this.reloadAll();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(
-        httpErr.error?.message ??
+      void this.confirmation.alert({
+        title: this.translate.instant('common.error'),
+        message: httpErr.error?.message ??
           this.translate.instant('settings.quality_profiles.delete_error'),
-      );
+        variant: 'danger',
+      });
     }
   }
 }

@@ -7,10 +7,21 @@ import { Media } from './entities/media.entity';
 import { MediaFile } from './entities/media-file.entity';
 import { Season } from './entities/season.entity';
 import { Episode } from './entities/episode.entity';
+import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { parseReleaseQuality } from './release-quality.parser';
+import { getSuitarrQualityById } from '../../common/constants/suitarr-qualities';
 import { ImportFileEntry } from './dto/confirm-disk-import.dto';
 
-const VIDEO_EXTS = new Set(['.mkv', '.mp4', '.avi', '.mov', '.ts', '.m2ts', '.wmv', '.flv']);
+const VIDEO_EXTS = new Set([
+  '.mkv',
+  '.mp4',
+  '.avi',
+  '.mov',
+  '.ts',
+  '.m2ts',
+  '.wmv',
+  '.flv',
+]);
 
 export interface ScanCandidate {
   filePath: string;
@@ -26,6 +37,7 @@ export interface ScanCandidate {
   mediaType: string | null;
   episodeId: number | null;
   episodeTitle: string | null;
+  existingQuality: string | null;
 }
 
 @Injectable()
@@ -39,6 +51,8 @@ export class DiskImportService {
     private readonly seasonRepo: Repository<Season>,
     @InjectRepository(Episode)
     private readonly episodeRepo: Repository<Episode>,
+    @InjectRepository(RootFolder)
+    private readonly rootFolderRepo: Repository<RootFolder>,
   ) {}
 
   async scanFolder(folderPath: string): Promise<ScanCandidate[]> {
@@ -47,7 +61,9 @@ export class DiskImportService {
     try {
       stat = fs.statSync(resolved);
     } catch {
-      throw new BadRequestException(`Path "${resolved}" does not exist or is not accessible`);
+      throw new BadRequestException(
+        `Path "${resolved}" does not exist or is not accessible`,
+      );
     }
     if (!stat.isDirectory()) {
       throw new BadRequestException(`Path "${resolved}" is not a directory`);
@@ -71,7 +87,9 @@ export class DiskImportService {
 
     for (const entry of imports) {
       try {
-        const media = await this.mediaRepo.findOne({ where: { id: entry.mediaId } });
+        const media = await this.mediaRepo.findOne({
+          where: { id: entry.mediaId },
+        });
         if (!media) {
           errors.push(`Media #${entry.mediaId} not found`);
           continue;
@@ -84,20 +102,66 @@ export class DiskImportService {
           /* use 0 if file disappeared */
         }
 
-        // Ensure media.path is set
-        if (!media.path) {
+        // Ensure media.rootFolderId and folderName are set
+        if (!media.rootFolderId) {
           const dir = path.dirname(entry.filePath);
-          await this.mediaRepo.update(media.id, { path: dir });
-          media.path = dir;
+          const rootFolders = await this.rootFolderRepo.find();
+          const rf = rootFolders
+            .filter((r) => dir.startsWith(r.path))
+            .sort((a, b) => b.path.length - a.path.length)[0];
+          if (rf) {
+            const remainder = dir
+              .slice(rf.path.length)
+              .replace(/^\/+/, '')
+              .split('/')[0];
+            const folderName = remainder || path.basename(dir);
+            await this.mediaRepo.update(media.id, {
+              rootFolderId: rf.id,
+              folderName,
+            });
+            media.rootFolderId = rf.id;
+            media.rootFolder = rf;
+            media.folderName = folderName;
+          }
+        } else if (!media.folderName) {
+          const dir = path.dirname(entry.filePath);
+          const folderName = media.rootFolder
+            ? dir.slice(media.rootFolder.path.length).replace(/^\/+/, '').split('/')[0]
+            : path.basename(dir);
+          if (folderName) {
+            await this.mediaRepo.update(media.id, { folderName });
+            media.folderName = folderName;
+
+          }
         }
 
+        if (!media.path) continue; // Skip if we can't compute a path
         const relativePath = path.relative(media.path, entry.filePath);
 
-        // Avoid duplicate
+        // Avoid duplicate path
         const existing = await this.fileRepo.findOne({
           where: { mediaId: media.id, relativePath },
         });
         if (existing) continue;
+
+        // Block import if a file of equivalent or better quality already exists
+        if (!entry.force) {
+          const candidateQuality = parseReleaseQuality(entry.quality);
+          const candidateRank = candidateQuality.quality.rank;
+          const where: Record<string, unknown> = { mediaId: media.id };
+          if (entry.episodeId) where['episodeId'] = entry.episodeId;
+          const existingFiles = await this.fileRepo.find({ where });
+          const hasBetterOrEqual = existingFiles.some((ef) => {
+            const parsed = parseReleaseQuality(ef.quality);
+            return parsed.quality.rank >= candidateRank;
+          });
+          if (hasBetterOrEqual) {
+            errors.push(
+              `${path.basename(entry.filePath)}: qualité équivalente ou supérieure déjà présente`,
+            );
+            continue;
+          }
+        }
 
         await this.fileRepo.save(
           this.fileRepo.create({
@@ -116,7 +180,9 @@ export class DiskImportService {
 
         imported++;
       } catch (e) {
-        errors.push(`${path.basename(entry.filePath)}: ${(e as Error).message}`);
+        errors.push(
+          `${path.basename(entry.filePath)}: ${(e as Error).message}`,
+        );
       }
     }
 
@@ -180,6 +246,22 @@ export class DiskImportService {
       }
     }
 
+    // Check if a file of equivalent or better quality already exists
+    let existingQuality: string | null = null;
+    if (matched) {
+      const where: Record<string, unknown> = { mediaId: matched.id };
+      if (episodeId) where['episodeId'] = episodeId;
+      const existingFiles = await this.fileRepo.find({ where });
+      const candidateRank = quality.rank;
+      for (const ef of existingFiles) {
+        const parsed = parseReleaseQuality(ef.quality);
+        if (parsed.quality.rank >= candidateRank) {
+          existingQuality = ef.quality;
+          break;
+        }
+      }
+    }
+
     return {
       filePath,
       filename,
@@ -194,6 +276,7 @@ export class DiskImportService {
       mediaType: matched?.type ?? null,
       episodeId,
       episodeTitle,
+      existingQuality,
     };
   }
 
@@ -202,7 +285,10 @@ export class DiskImportService {
     name = name.replace(/[._]/g, ' ');
     // Cut off at quality markers or episode pattern
     name = name.replace(/\s*\b(2160|4k|uhd|1080|720|480p?)\b.*/i, '');
-    name = name.replace(/\s*\b(bluray|blu.?ray|web.?dl|web.?rip|hdtv|dvdrip|bdrip|remux)\b.*/i, '');
+    name = name.replace(
+      /\s*\b(bluray|blu.?ray|web.?dl|web.?rip|hdtv|dvdrip|bdrip|remux)\b.*/i,
+      '',
+    );
     name = name.replace(/\s*\b(x264|x265|xvid|h264|h265|hevc|avc)\b.*/i, '');
     name = name.replace(/\s*[Ss]\d{1,2}[Ee]\d{1,3}.*/i, '');
     // Remove trailing year
@@ -245,7 +331,9 @@ export class DiskImportService {
     return match ?? null;
   }
 
-  private parseEpisodeNumbers(filename: string): { season: number; episode: number } | null {
+  private parseEpisodeNumbers(
+    filename: string,
+  ): { season: number; episode: number } | null {
     const m = filename.match(/[Ss](\d{1,2})[Ee](\d{1,3})/);
     if (!m) return null;
     return { season: parseInt(m[1], 10), episode: parseInt(m[2], 10) };

@@ -1,4 +1,11 @@
-import { IsString, IsNumber, IsBoolean, IsOptional, IsArray, ValidateNested } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsBoolean,
+  IsOptional,
+  IsArray,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class QualityItemDto {
@@ -19,6 +26,10 @@ export class QualityItemDto {
 
   @IsNumber()
   sortOrder: number;
+
+  @IsNumber()
+  @IsOptional()
+  groupId?: number;
 }
 
 export class CreateQualityProfileDto {

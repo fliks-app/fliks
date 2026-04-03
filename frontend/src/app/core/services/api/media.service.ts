@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { MediaType } from '../../enums/media-type.enum';
 
 export interface QualityProfileBrief {
   id: number;
@@ -39,6 +40,9 @@ export interface MovieRelease {
   size: number;
   seeders: number;
   leechers: number;
+  rejections: { code: string; params?: Record<string, number | string> }[];
+  freeleech: boolean;
+  downloadVolumeFactor: number;
 }
 
 export interface Episode {
@@ -49,6 +53,8 @@ export interface Episode {
   airDate: string | null;
   monitored: boolean;
   hasFile: boolean;
+  runtime?: number | null;
+  stillUrl?: string | null;
 }
 
 export interface Season {
@@ -63,16 +69,17 @@ export interface Media {
   title: string;
   originalTitle: string;
   year: number;
-  type: 'movie' | 'series';
+  type: MediaType;
   tmdbId: number;
   overview: string;
   status: string;
   monitored: boolean;
   path?: string | null;
+  rootFolderId?: number | null;
   posterUrl: string | null;
   fanartUrl: string | null;
   rating: number;
-  genres: string[];
+  genres?: string[];
   runtime: number;
   releaseDate?: string | null;
   inCinemas?: string | null;
@@ -80,9 +87,10 @@ export interface Media {
   physicalRelease?: string | null;
   tags: { id: number; label: string }[];
   seasons?: Season[];
-  files?: { id: number; quality: string; relativePath: string; size: number; episodeId?: number | null }[];
+  files?: { id: number; quality: string; relativePath: string; size: number; episodeId?: number | null; streamInfo?: MediaFileInfo | null }[];
   qualityProfile?: QualityProfileBrief | null;
   languageProfile?: { id: number; name: string } | null;
+  minimumAvailability?: 'announced' | 'inCinemas' | 'released';
   sizeOnDisk?: number;
   episodeStats?: { totalEpisodes: number; downloadedEpisodes: number };
 }
@@ -91,7 +99,7 @@ export interface CalendarEntry {
   id: number;
   mediaId: number;
   title: string;
-  type: 'movie' | 'series';
+  type: MediaType;
   event: string;
   date: string;
   posterUrl: string | null;
@@ -103,18 +111,6 @@ export interface CalendarEntry {
   hasFile?: boolean;
 }
 
-export interface HistoryEntry {
-  id: number;
-  sourceTitle: string;
-  quality: string;
-  status: string;
-  date: string;
-  event: string;
-  mediaId: number;
-  mediaTitle: string;
-  mediaType: 'movie' | 'series' | null;
-}
-
 export interface MediaPage {
   data: Media[];
   total: number;
@@ -122,7 +118,7 @@ export interface MediaPage {
 
 export interface SearchParams {
   q?: string;
-  type?: 'movie' | 'series';
+  type?: MediaType;
   status?: string;
   monitored?: boolean;
   year?: number;
@@ -132,11 +128,50 @@ export interface SearchParams {
   sortOrder?: 'ASC' | 'DESC';
   page?: number;
   limit?: number;
+  missing?: boolean;
+  cutoffUnmet?: boolean;
+  letter?: string;
+}
+
+export interface VideoStreamInfo {
+  streamIndex: number;
+  codec: string;
+  profile?: string;
+  level?: number;
+  width?: number;
+  height?: number;
+  displayAspectRatio?: string;
+  pixelFormat?: string;
+  frameRate?: string;
+  bitRate?: number;
+  bitDepth?: number;
+}
+
+export interface AudioStreamInfo {
+  streamIndex: number;
+  codec: string;
+  language: string;
+  title?: string;
+  channels?: number;
+  channelLayout?: string;
+  sampleRate?: number;
+  bitRate?: number;
+  isDefault?: boolean;
+}
+
+export interface MediaFileInfo {
+  video: VideoStreamInfo[];
+  audio: AudioStreamInfo[];
+  error?: string;
 }
 
 @Injectable({ providedIn: 'root' })
 export class MediaService {
   private readonly http = inject(HttpClient);
+
+  getCounts() {
+    return firstValueFrom(this.http.get<{ movies: number; series: number }>('/api/media/counts'));
+  }
 
   getAll(params: SearchParams = {}) {
     let httpParams = new HttpParams();
@@ -168,8 +203,14 @@ export class MediaService {
     return firstValueFrom(this.http.delete(`/api/media/${id}`));
   }
 
-  getMovieReleases(id: number) {
-    return firstValueFrom(this.http.get<MovieRelease[]>(`/api/media/${id}/releases`));
+  renameFiles(id: number) {
+    return firstValueFrom(this.http.post<{ renamed: number }>(`/api/media/${id}/rename`, {}));
+  }
+
+  getMovieReleases(id: number, q?: string) {
+    const params: Record<string, string> = {};
+    if (q?.trim()) params['q'] = q.trim();
+    return firstValueFrom(this.http.get<MovieRelease[]>(`/api/media/${id}/releases`, { params }));
   }
 
   grabMovie(id: number, body?: { downloadUrl?: string; sourceTitle?: string }) {
@@ -189,8 +230,8 @@ export class MediaService {
     );
   }
 
-  patchPath(id: number, path: string) {
-    return firstValueFrom(this.http.patch<Media>(`/api/media/${id}/root-folder`, { path }));
+  patchRootFolder(id: number, rootFolderId: number) {
+    return firstValueFrom(this.http.patch<Media>(`/api/media/${id}/root-folder`, { rootFolderId }));
   }
 
   patchProfiles(
@@ -212,32 +253,17 @@ export class MediaService {
     );
   }
 
-  getHistory(page = 1, limit = 20) {
-    return firstValueFrom(
-      this.http.get<{ data: HistoryEntry[]; total: number }>(
-        '/api/media/history',
-        { params: { page, limit } },
-      ),
-    );
-  }
-
-  deleteHistory(historyId: number) {
-    return firstValueFrom(this.http.delete<void>(`/api/media/history/${historyId}`));
-  }
-
-  retryImport(historyId: number) {
-    return firstValueFrom(this.http.post<void>(`/api/media/history/${historyId}/retry`, {}));
-  }
-
   linkTorrent(mediaId: number, sourceTitle: string, clientId?: number) {
     return firstValueFrom(
       this.http.post('/api/media/history/link', { mediaId, sourceTitle, clientId }),
     );
   }
 
-  getSeasonReleases(mediaId: number, seasonId: number) {
+  getSeasonReleases(mediaId: number, seasonId: number, q?: string) {
+    const params: Record<string, string> = {};
+    if (q?.trim()) params['q'] = q.trim();
     return firstValueFrom(
-      this.http.get<MovieRelease[]>(`/api/media/${mediaId}/seasons/${seasonId}/releases`),
+      this.http.get<MovieRelease[]>(`/api/media/${mediaId}/seasons/${seasonId}/releases`, { params }),
     );
   }
 
@@ -250,9 +276,11 @@ export class MediaService {
     );
   }
 
-  getEpisodeReleases(mediaId: number, episodeId: number) {
+  getEpisodeReleases(mediaId: number, episodeId: number, q?: string) {
+    const params: Record<string, string> = {};
+    if (q?.trim()) params['q'] = q.trim();
     return firstValueFrom(
-      this.http.get<MovieRelease[]>(`/api/media/${mediaId}/episodes/${episodeId}/releases`),
+      this.http.get<MovieRelease[]>(`/api/media/${mediaId}/episodes/${episodeId}/releases`, { params }),
     );
   }
 
@@ -265,9 +293,11 @@ export class MediaService {
     );
   }
 
-  getUpgradeReleases(mediaId: number) {
+  getUpgradeReleases(mediaId: number, q?: string) {
+    const params: Record<string, string> = {};
+    if (q?.trim()) params['q'] = q.trim();
     return firstValueFrom(
-      this.http.get<MovieRelease[]>(`/api/media/${mediaId}/upgrade-releases`),
+      this.http.get<MovieRelease[]>(`/api/media/${mediaId}/upgrade-releases`, { params }),
     );
   }
 
@@ -292,7 +322,16 @@ export class MediaService {
     );
   }
 
+  bulkUpdate(body: { ids: number[]; qualityProfileId?: number; languageProfileId?: number; monitored?: boolean; rootFolder?: string }) {
+    return firstValueFrom(this.http.patch<{ updated: number }>('/api/media/bulk', body));
+  }
+
   refreshMetadata(id: number) {
     return firstValueFrom(this.http.post<Media>(`/api/media/${id}/refresh`, {}));
   }
+
+  rescanFiles(id: number) {
+    return firstValueFrom(this.http.post<{ added: number; removed: number; updated: number }>(`/api/media/${id}/rescan`, {}));
+  }
+
 }

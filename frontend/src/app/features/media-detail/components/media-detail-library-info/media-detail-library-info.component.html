@@ -1,0 +1,77 @@
+@let m = media();
+<div class="my-6"></div>
+<section class="space-y-3">
+  <h2 class="text-xl font-semibold">{{ 'media_detail.library_details' | translate }}</h2>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-sm">
+    <div class="flex justify-between gap-4">
+      <span class="text-base-content/60 shrink-0">{{ 'media_detail.quality_profile_label' | translate }}</span>
+      <span class="font-medium text-end">{{ m.qualityProfile?.name ?? ('media_detail.profile_none' | translate) }}</span>
+    </div>
+    <div class="flex justify-between gap-4">
+      <span class="text-base-content/60 shrink-0">{{ 'media_detail.language_profile_label' | translate }}</span>
+      <span class="font-medium text-end">{{ m.languageProfile?.name ?? ('media_detail.profile_none' | translate) }}</span>
+    </div>
+    @if (m.inCinemas) {
+      <div class="flex justify-between gap-4">
+        <span class="text-base-content/60 shrink-0">{{ 'media_detail.in_cinemas_label' | translate }}</span>
+        <span class="font-medium text-end">{{ m.inCinemas }}</span>
+      </div>
+    }
+    @if (m.digitalRelease) {
+      <div class="flex justify-between gap-4">
+        <span class="text-base-content/60 shrink-0">{{ 'media_detail.digital_release_label' | translate }}</span>
+        <span class="font-medium text-end">{{ m.digitalRelease }}</span>
+      </div>
+    }
+    @if (m.physicalRelease) {
+      <div class="flex justify-between gap-4">
+        <span class="text-base-content/60 shrink-0">{{ 'media_detail.physical_release_label' | translate }}</span>
+        <span class="font-medium text-end">{{ m.physicalRelease }}</span>
+      </div>
+    }
+    @if (m.releaseDate && !m.inCinemas && !m.digitalRelease && !m.physicalRelease) {
+      <div class="flex justify-between gap-4">
+        <span class="text-base-content/60 shrink-0">{{ 'media_detail.release_date_label' | translate }}</span>
+        <span class="font-medium text-end">{{ m.releaseDate }}</span>
+      </div>
+    }
+    @if (m.runtime) {
+      <div class="flex justify-between gap-4">
+        <span class="text-base-content/60 shrink-0">{{ 'media_detail.runtime_label' | translate }}</span>
+        <span class="font-medium text-end">{{ m.runtime }} {{ 'common.min' | translate }}</span>
+      </div>
+    }
+    @if (m.rating) {
+      <div class="flex justify-between gap-4">
+        <span class="text-base-content/60 shrink-0">{{ 'media_detail.rating_label' | translate }}</span>
+        <span class="font-medium text-end">{{ m.rating | number:'1.1-1' }} / 10</span>
+      </div>
+    }
+    @if (m.status) {
+      <div class="flex justify-between gap-4">
+        <span class="text-base-content/60 shrink-0">{{ 'media_detail.status_label' | translate }}</span>
+        <span class="font-medium text-end">{{ m.status }}</span>
+      </div>
+    }
+    @if (m.type === 'movie') {
+      <div class="flex justify-between gap-4">
+        <span class="text-base-content/60 shrink-0">{{ 'media_detail.availability_label' | translate }}</span>
+        <span class="font-medium text-end">{{ 'media_detail.availability_' + (m.minimumAvailability ?? 'released') | translate }}</span>
+      </div>
+    }
+    <div class="flex justify-between gap-4 sm:col-span-2">
+      <span class="text-base-content/60 shrink-0">{{ 'media_detail.root_folder_label' | translate }}</span>
+      <span class="font-mono text-xs text-end break-all">{{ m.path || ('media_detail.no_root_folder' | translate) }}</span>
+    </div>
+    @if (m.tags.length) {
+      <div class="flex flex-col gap-1 sm:col-span-2">
+        <span class="text-base-content/60">{{ 'media_detail.tags_label' | translate }}</span>
+        <span class="flex flex-wrap gap-1">
+          @for (t of m.tags; track t.id) {
+            <span class="badge badge-xs badge-outline">{{ t.label }}</span>
+          }
+        </span>
+      </div>
+    }
+  </div>
+</section>

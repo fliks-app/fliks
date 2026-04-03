@@ -1,7 +1,6 @@
 <a
   [routerLink]="['/', media().type === 'movie' ? 'movies' : 'series', media().id]"
   class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow cursor-pointer relative overflow-hidden"
-  [class.opacity-60]="!media().monitored"
 >
   <figure class="relative aspect-[2/3] bg-base-300">
     @if (media().posterUrl) {
@@ -17,19 +16,14 @@
         </svg>
       </div>
     }
-    @if (!media().monitored) {
-      <div class="absolute top-1.5 left-1.5">
-        <span class="badge badge-xs badge-neutral opacity-80">✕</span>
-      </div>
-    }
   </figure>
 
-  <div class="px-3 py-2 text-center">
+  <div class="px-3 py-2 text-center h-14">
     <h3 class="text-sm font-medium line-clamp-1">{{ media().title }}</h3>
-    <p class="text-xs text-base-content/60">
+    <p class="text-xs text-base-content/60 line-clamp-1">
       {{ statusLabel() | translate }}
       @if (qualityLabel()) {
-        <br />{{ qualityLabel() }}
+        — {{ qualityLabel() }}
       }
     </p>
   </div>

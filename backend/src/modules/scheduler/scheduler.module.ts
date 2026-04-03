@@ -10,9 +10,15 @@ import { Episode } from '../media/entities/episode.entity';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
+import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { SchedulerService } from './scheduler.service';
 import { CompletionService } from './completion.service';
 import { NamingService } from './naming.service';
+import { BackupService } from './backup.service';
+import { LogBufferService } from './log-buffer.service';
+import { EventsService } from './events.service';
+import { ImportRadarrService } from './import-radarr.service';
+import { ImportSonarrService } from './import-sonarr.service';
 import { CommandsController } from './commands.controller';
 import { SystemController } from './system.controller';
 import { IndexersModule } from '../indexers/indexers.module';
@@ -21,6 +27,13 @@ import { MetadataProvidersModule } from '../metadata-providers/metadata-provider
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MediaModule } from '../media/media.module';
 import { AuthModule } from '../auth/auth.module';
+import { BlocklistModule } from '../blocklist/blocklist.module';
+import { DelayProfile } from '../profiles/entities/delay-profile.entity';
+import { SubtitleSchedulerService } from './subtitle-scheduler.service';
+import { SubtitlesModule } from '../subtitles/subtitles.module';
+import { SettingsModule } from '../settings/settings.module';
+import { MediaServersModule } from '../media-servers/media-servers.module';
+import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 
 @Module({
   imports: [
@@ -35,6 +48,9 @@ import { AuthModule } from '../auth/auth.module';
       Indexer,
       DownloadClient,
       RootFolder,
+      DelayProfile,
+      QualityProfile,
+      SubtitleFile,
     ]),
     IndexersModule,
     DownloadClientsModule,
@@ -42,9 +58,28 @@ import { AuthModule } from '../auth/auth.module';
     NotificationsModule,
     MediaModule,
     AuthModule,
+    BlocklistModule,
+    SubtitlesModule,
+    SettingsModule,
+    MediaServersModule,
   ],
   controllers: [CommandsController, SystemController],
-  providers: [SchedulerService, CompletionService, NamingService],
-  exports: [SchedulerService, CompletionService],
+  providers: [
+    SchedulerService,
+    CompletionService,
+    NamingService,
+    BackupService,
+    LogBufferService,
+    ImportRadarrService,
+    ImportSonarrService,
+    SubtitleSchedulerService,
+  ],
+  exports: [
+    SchedulerService,
+    CompletionService,
+    NamingService,
+    LogBufferService,
+    SubtitleSchedulerService,
+  ],
 })
 export class SuitarrSchedulerModule {}

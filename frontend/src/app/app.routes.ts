@@ -1,10 +1,17 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard';
+import { serverConfigGuard } from './core/guards/server-config.guard';
 
 export const routes: Routes = [
   {
+    path: 'setup',
+    loadComponent: () =>
+      import('./features/setup/setup').then((m) => m.SetupComponent),
+  },
+  {
     path: 'login',
+    canActivate: [serverConfigGuard],
     loadComponent: () =>
       import('./features/login/login').then((m) => m.LoginComponent),
   },
@@ -12,7 +19,7 @@ export const routes: Routes = [
     path: '',
     loadComponent: () =>
       import('./shared/layout/layout').then((m) => m.LayoutComponent),
-    canActivate: [authGuard],
+    canActivate: [serverConfigGuard, authGuard],
     children: [
       {
         path: '',
@@ -62,6 +69,13 @@ export const routes: Routes = [
         data: { kind: 'series' },
       },
       {
+        path: 'series/:id/episode/:episodeId',
+        loadComponent: () =>
+          import('./features/episode-detail/episode-detail').then(
+            (m) => m.EpisodeDetailComponent,
+          ),
+      },
+      {
         path: 'requests',
         loadComponent: () =>
           import('./features/requests/requests').then((m) => m.RequestsComponent),
@@ -70,6 +84,22 @@ export const routes: Routes = [
         path: 'activity',
         loadComponent: () =>
           import('./features/activity/activity').then((m) => m.ActivityComponent),
+        children: [
+          {
+            path: '',
+            loadComponent: () =>
+              import('./features/activity/queue/queue').then(
+                (m) => m.ActivityQueueComponent,
+              ),
+          },
+          {
+            path: 'subtitles',
+            loadComponent: () =>
+              import('./features/activity/subtitles/subtitles').then(
+                (m) => m.ActivitySubtitlesComponent,
+              ),
+          },
+        ],
       },
       {
         path: 'calendar',
@@ -83,10 +113,38 @@ export const routes: Routes = [
         canActivate: [adminGuard],
       },
       {
+        path: 'import',
+        loadComponent: () =>
+          import('./features/import/import').then((m) => m.ImportComponent),
+        canActivate: [adminGuard],
+      },
+      {
         path: 'system',
         loadComponent: () =>
           import('./features/system/system').then((m) => m.SystemComponent),
         canActivate: [adminGuard],
+        children: [
+          {
+            path: '',
+            loadComponent: () =>
+              import('./features/system/status/status').then((m) => m.SystemStatusComponent),
+          },
+          {
+            path: 'backups',
+            loadComponent: () =>
+              import('./features/system/backups/backups').then((m) => m.SystemBackupsComponent),
+          },
+          {
+            path: 'logs',
+            loadComponent: () =>
+              import('./features/system/logs/logs').then((m) => m.SystemLogsComponent),
+          },
+          {
+            path: 'import',
+            loadComponent: () =>
+              import('./features/system/import/import').then((m) => m.SystemImportComponent),
+          },
+        ],
       },
       {
         path: 'settings',
@@ -114,6 +172,20 @@ export const routes: Routes = [
               import(
                 './features/settings/quality-profiles/quality-profiles'
               ).then((m) => m.QualityProfilesComponent),
+          },
+          {
+            path: 'language-profiles',
+            loadComponent: () =>
+              import(
+                './features/settings/language-profiles/language-profiles'
+              ).then((m) => m.LanguageProfilesComponent),
+          },
+          {
+            path: 'quality-definitions',
+            loadComponent: () =>
+              import(
+                './features/settings/quality-definitions/quality-definitions'
+              ).then((m) => m.QualityDefinitionsComponent),
           },
           {
             path: 'custom-formats',
@@ -158,6 +230,13 @@ export const routes: Routes = [
               ).then((m) => m.NotificationsSettingsComponent),
           },
           {
+            path: 'media-servers',
+            loadComponent: () =>
+              import(
+                './features/settings/media-servers/media-servers'
+              ).then((m) => m.MediaServersSettingsComponent),
+          },
+          {
             path: 'root-folders',
             loadComponent: () =>
               import(
@@ -177,6 +256,80 @@ export const routes: Routes = [
               import('./features/settings/users/users').then(
                 (m) => m.UsersSettingsComponent,
               ),
+          },
+          {
+            path: 'users/:id',
+            loadComponent: () =>
+              import(
+                './features/settings/users/user-detail/user-detail'
+              ).then((m) => m.UserDetailComponent),
+            children: [
+              {
+                path: '',
+                loadComponent: () =>
+                  import(
+                    './features/settings/users/user-detail/user-general'
+                  ).then((m) => m.UserGeneralComponent),
+              },
+              {
+                path: 'requests',
+                loadComponent: () =>
+                  import(
+                    './features/settings/users/user-detail/user-requests'
+                  ).then((m) => m.UserRequestsComponent),
+              },
+            ],
+          },
+          {
+            path: 'roles',
+            loadComponent: () =>
+              import('./features/settings/roles/roles').then(
+                (m) => m.RolesSettingsComponent,
+              ),
+          },
+          {
+            path: 'subtitle-providers',
+            loadComponent: () =>
+              import(
+                './features/settings/subtitle-providers/subtitle-providers'
+              ).then((m) => m.SubtitleProvidersSettingsComponent),
+          },
+          {
+            path: 'subtitles',
+            loadComponent: () =>
+              import(
+                './features/settings/subtitles/subtitles-shell'
+              ).then((m) => m.SubtitlesShellComponent),
+            children: [
+              {
+                path: '',
+                loadComponent: () =>
+                  import(
+                    './features/settings/subtitles/subtitles-settings'
+                  ).then((m) => m.SubtitlesSettingsComponent),
+              },
+              {
+                path: 'stats',
+                loadComponent: () =>
+                  import(
+                    './features/settings/subtitles/subtitles-stats'
+                  ).then((m) => m.SubtitlesStatsComponent),
+              },
+            ],
+          },
+          {
+            path: 'delay-profiles',
+            loadComponent: () =>
+              import(
+                './features/settings/delay-profiles/delay-profiles'
+              ).then((m) => m.DelayProfilesComponent),
+          },
+          {
+            path: 'schedulers',
+            loadComponent: () =>
+              import(
+                './features/settings/schedulers/schedulers'
+              ).then((m) => m.SchedulersComponent),
           },
           {
             path: 'auto-approval',

@@ -1,14 +1,17 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
   signal,
   inject,
   OnInit,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 
 interface NotificationConnection {
   id: number;
@@ -35,14 +38,14 @@ interface CreateNotificationBody {
 export class NotificationsSettingsComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
+  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
   readonly rows = signal<NotificationConnection[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
-
-  readonly editorOpen = signal(false);
   readonly saving = signal(false);
-  readonly saveError = signal('');
+
   readonly editingId = signal<number | null>(null);
   readonly testLoading = signal(false);
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
@@ -93,9 +96,8 @@ export class NotificationsSettingsComponent implements OnInit {
     this.formToken.set('');
     this.formTopic.set('');
     this.formEvents.set([...this.allEvents]);
-    this.saveError.set('');
     this.testResult.set(null);
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   openEdit(nc: NotificationConnection) {
@@ -107,13 +109,12 @@ export class NotificationsSettingsComponent implements OnInit {
     this.formToken.set('');
     this.formTopic.set('');
     this.formEvents.set([...nc.events]);
-    this.saveError.set('');
     this.testResult.set(null);
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   closeEditor() {
-    this.editorOpen.set(false);
+    this.editorDialog()?.nativeElement.close();
   }
 
   toggleEvent(event: string) {
@@ -158,12 +159,8 @@ export class NotificationsSettingsComponent implements OnInit {
 
   async save() {
     const name = this.formName().trim();
-    if (!name) {
-      this.saveError.set(this.translate.instant('settings.notifications.name_required'));
-      return;
-    }
+    if (!name) return;
     this.saving.set(true);
-    this.saveError.set('');
     const body: CreateNotificationBody = {
       name,
       type: this.formType(),
@@ -178,25 +175,21 @@ export class NotificationsSettingsComponent implements OnInit {
         : firstValueFrom(this.http.put<NotificationConnection>(`/api/notifications/${id}`, body)));
       this.closeEditor();
       await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string | string[] } };
-      const msg = Array.isArray(httpErr.error?.message)
-        ? httpErr.error.message.join(', ')
-        : httpErr.error?.message;
-      this.saveError.set(msg ?? this.translate.instant('settings.notifications.save_error'));
+    } catch {
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }
   }
 
   async deleteRow(nc: NotificationConnection) {
-    if (!confirm(this.translate.instant('settings.notifications.confirm_delete', { name: nc.name }))) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('settings.notifications.confirm_delete', { name: nc.name }), variant: 'danger' })) return;
     try {
       await firstValueFrom(this.http.delete(`/api/notifications/${nc.id}`));
       await this.reloadAll();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(httpErr.error?.message ?? 'Error');
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Error', variant: 'danger' });
     }
   }
 }

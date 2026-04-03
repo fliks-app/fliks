@@ -42,8 +42,15 @@ export class SuitarrRequest extends BaseEntity {
   @Column({ type: 'int', nullable: true })
   qualityProfileId: number | null;
 
-  @Column({ type: 'varchar', nullable: true })
-  rootFolder: string | null;
+  @Column({ type: 'int', nullable: true })
+  languageProfileId: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  rootFolderId: number | null;
+
+  /** ID of the imported media in the library (set on approval). */
+  @Column({ type: 'int', nullable: true })
+  mediaId: number | null;
 
   @Column({ type: 'jsonb', nullable: true })
   seasons: number[] | null;

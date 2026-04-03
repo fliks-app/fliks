@@ -1,0 +1,23 @@
+<p class="text-sm text-base-content/60 mb-4">{{ 'system.import_subtitle' | translate }}</p>
+
+<div class="flex flex-wrap gap-4">
+  <label class="btn btn-outline btn-sm">
+    @if (radarrLoading()) { <span class="loading loading-spinner loading-xs"></span> }
+    {{ 'system.import_radarr' | translate }}
+    <input type="file" class="hidden" accept=".sql,.dump" (change)="importRadarr($event)" [disabled]="radarrLoading()" />
+  </label>
+  <label class="btn btn-outline btn-sm">
+    @if (sonarrLoading()) { <span class="loading loading-spinner loading-xs"></span> }
+    {{ 'system.import_sonarr' | translate }}
+    <input type="file" class="hidden" accept=".sql,.dump" (change)="importSonarr($event)" [disabled]="sonarrLoading()" />
+  </label>
+</div>
+
+@if (result(); as ir) {
+  <div role="alert" class="alert text-sm mt-3" [class.alert-success]="ir.errors.length === 0" [class.alert-warning]="ir.errors.length > 0">
+    {{ ir.imported }} importé(s), {{ ir.skipped }} ignoré(s).
+    @if (ir.errors.length) {
+      <br>{{ ir.errors.length }} erreur(s): {{ ir.errors.slice(0, 3).join(', ') }}
+    }
+  </div>
+}

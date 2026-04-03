@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { MediaType } from '../../enums/media-type.enum';
 
 export interface QbittorrentSettings {
   host: string;
@@ -9,6 +10,8 @@ export interface QbittorrentSettings {
   password?: string;
   useSsl?: boolean;
   category?: string;
+  movieCategory?: string;
+  seriesCategory?: string;
 }
 
 export interface DownloadClientRow {
@@ -53,7 +56,8 @@ export interface QueueItem {
   clientName: string;
   mediaId?: number;
   mediaTitle?: string;
-  mediaType?: 'movie' | 'series';
+  mediaType?: MediaType;
+  statusMessage?: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -100,6 +104,10 @@ export class DownloadClientsApiService {
         { params: { clientId, deleteFiles } },
       ),
     );
+  }
+
+  reimport(hash: string) {
+    return firstValueFrom(this.http.post<void>(`/api/download-clients/queue/${hash}/reimport`, {}));
   }
 
   triggerImport() {

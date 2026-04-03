@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { MediaType } from '../../enums/media-type.enum';
 
 export interface RequestUser {
   id: number;
@@ -15,11 +16,27 @@ export type SuitarrRequestStatus =
   | 'available'
   | 'failed';
 
+export interface CreateRequestBody {
+  mediaType: MediaType;
+  tmdbId: number;
+  title: string;
+  qualityProfileId?: number;
+  languageProfileId?: number;
+  rootFolderId?: number;
+  seasons?: number[];
+}
+
+export interface UpdateRequestBody {
+  qualityProfileId?: number;
+  languageProfileId?: number;
+  rootFolderId?: number;
+}
+
 export interface SuitarrRequestRow {
   id: number;
   userId: number;
   user: RequestUser;
-  mediaType: 'movie' | 'series';
+  mediaType: MediaType;
   tmdbId: number;
   title: string;
   status: SuitarrRequestStatus;
@@ -27,7 +44,9 @@ export interface SuitarrRequestRow {
   approvedBy: RequestUser | null;
   declinedReason: string | null;
   qualityProfileId: number | null;
-  rootFolder: string | null;
+  languageProfileId: number | null;
+  rootFolderId: number | null;
+  mediaId: number | null;
   seasons: number[] | null;
   createdAt: string;
   updatedAt: string;
@@ -40,6 +59,7 @@ export interface RequestsPage {
 
 export interface ListRequestsParams {
   status?: SuitarrRequestStatus;
+  userId?: number;
   page?: number;
   limit?: number;
 }
@@ -47,6 +67,14 @@ export interface ListRequestsParams {
 @Injectable({ providedIn: 'root' })
 export class RequestsService {
   private readonly http = inject(HttpClient);
+
+  create(body: CreateRequestBody) {
+    return firstValueFrom(this.http.post<SuitarrRequestRow>('/api/requests', body));
+  }
+
+  update(id: number, body: UpdateRequestBody) {
+    return firstValueFrom(this.http.patch<SuitarrRequestRow>(`/api/requests/${id}`, body));
+  }
 
   list(params: ListRequestsParams = {}) {
     let httpParams = new HttpParams();

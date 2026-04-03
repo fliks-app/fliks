@@ -1,8 +1,22 @@
-import { Component, ChangeDetectionStrategy, signal, computed, inject, OnInit } from '@angular/core';
+import {
+  Component,
+  ChangeDetectionStrategy,
+  signal,
+  computed,
+  inject,
+  Injector,
+  OnInit,
+  OnDestroy,
+} from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { MediaService, Media } from '../../core/services/api/media.service';
+import { ProfilesService, QualityProfile } from '../../core/services/api/profiles.service';
 import { MediaCardComponent } from '../../shared/components/media-card';
+import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
+
+const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 @Component({
   selector: 'app-movies',
@@ -10,59 +24,176 @@ import { MediaCardComponent } from '../../shared/components/media-card';
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './movies.html',
 })
-export class MoviesComponent implements OnInit {
+export class MoviesComponent implements OnInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
+  private readonly profilesService = inject(ProfilesService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly scrollMemory = inject(ScrollMemoryService);
+  private readonly injector = inject(Injector);
+  private readonly scrollKey = 'movies';
 
-  readonly movies = signal<Media[]>([]);
+  readonly allMovies = signal<Media[]>([]);
   readonly total = signal(0);
   readonly loading = signal(false);
   readonly searchQuery = signal('');
   readonly sortBy = signal('title');
   readonly filterMonitored = signal<'' | 'true' | 'false'>('');
-  private page = 1;
+  readonly filterStatus = signal('');
 
-  readonly monitoredCount = computed(() => this.movies().filter((m) => m.monitored).length);
-  readonly movieFileCount = computed(() => this.movies().filter((m) => (m.files?.length ?? 0) > 0).length);
+  readonly monitoredCount = computed(() => this.allMovies().filter((m) => m.monitored).length);
+  readonly movieFileCount = computed(() => this.allMovies().filter((m) => (m.files?.length ?? 0) > 0).length);
+
+  readonly alphabet = ALPHABET;
+  readonly activeLetter = signal('');
+
+  // Bulk editing
+  readonly selectedIds = signal<Set<number>>(new Set());
+  readonly bulkMode = signal(false);
+  readonly bulkSaving = signal(false);
+  readonly bulkQualityProfileId = signal<number | null>(null);
+  readonly bulkMonitored = signal<'' | 'true' | 'false'>('');
+  readonly qualityProfiles = signal<QualityProfile[]>([]);
 
   ngOnInit() {
-    this.load();
+    const qp = this.route.snapshot.queryParamMap;
+    const stored = this.loadFilters();
+    this.searchQuery.set(qp.get('q') ?? stored['q'] ?? '');
+    this.filterMonitored.set((qp.get('monitored') ?? stored['monitored'] ?? '') as '' | 'true' | 'false');
+    this.filterStatus.set(qp.get('status') ?? stored['status'] ?? '');
+    this.sortBy.set(qp.get('sortBy') ?? stored['sortBy'] ?? 'title');
+
+    this.scrollMemory.activate(this.scrollKey);
+    this.syncQueryParams();
+    this.load().then(() => this.scrollMemory.restore(this.scrollKey, this.injector));
+    this.profilesService.getQualityProfiles().then((p) => this.qualityProfiles.set(p));
+  }
+
+  ngOnDestroy() {
+    this.scrollMemory.deactivate();
+  }
+
+  scrollToLetter(letter: string) {
+    this.activeLetter.set(letter);
+    const items = this.allMovies();
+    const index = items.findIndex((m) => {
+      const firstChar = (m.title || '').charAt(0).toUpperCase();
+      if (letter === '#') return !/[A-Z]/.test(firstChar);
+      return firstChar === letter;
+    });
+    if (index < 0) return;
+    const target = document.getElementById(`movie-${items[index].id}`);
+    if (!target) return;
+    const top = target.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo({ top, behavior: 'smooth' });
   }
 
   onSearch(query: string) {
     this.searchQuery.set(query);
-    this.reset();
-  }
-
-  onFilterChange() {
-    this.reset();
-  }
-
-  loadMore() {
-    this.page++;
-    this.load(true);
-  }
-
-  private reset() {
-    this.page = 1;
-    this.movies.set([]);
+    this.syncQueryParams();
     this.load();
   }
 
-  private async load(append = false) {
+  onFilterChange() {
+    this.syncQueryParams();
+    this.load();
+  }
+
+  toggleSelect(id: number) {
+    this.selectedIds.update((set) => {
+      const next = new Set(set);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  selectAll() {
+    this.selectedIds.set(new Set(this.allMovies().map((m) => m.id)));
+  }
+
+  deselectAll() {
+    this.selectedIds.set(new Set());
+  }
+
+  toggleBulkMode() {
+    this.bulkMode.update((v) => !v);
+    if (!this.bulkMode()) {
+      this.selectedIds.set(new Set());
+      this.bulkQualityProfileId.set(null);
+      this.bulkMonitored.set('');
+    }
+  }
+
+  async applyBulk() {
+    const ids = [...this.selectedIds()];
+    if (!ids.length) return;
+
+    const body: Parameters<MediaService['bulkUpdate']>[0] = { ids };
+    if (this.bulkQualityProfileId() !== null) {
+      body.qualityProfileId = this.bulkQualityProfileId()!;
+    }
+    if (this.bulkMonitored() !== '') {
+      body.monitored = this.bulkMonitored() === 'true';
+    }
+
+    this.bulkSaving.set(true);
+    try {
+      await this.mediaService.bulkUpdate(body);
+      this.selectedIds.set(new Set());
+      this.bulkQualityProfileId.set(null);
+      this.bulkMonitored.set('');
+      this.bulkMode.set(false);
+      await this.load();
+    } finally {
+      this.bulkSaving.set(false);
+    }
+  }
+
+  private syncQueryParams() {
+    const params: Record<string, string> = {};
+    if (this.searchQuery()) params['q'] = this.searchQuery();
+    if (this.filterMonitored()) params['monitored'] = this.filterMonitored();
+    if (this.filterStatus()) params['status'] = this.filterStatus();
+    if (this.sortBy() !== 'title') params['sortBy'] = this.sortBy();
+    void this.router.navigate([], { queryParams: params, replaceUrl: true });
+    this.saveFilters();
+  }
+
+  private readonly storageKey = 'suitarr.filters.movies';
+
+  private saveFilters() {
+    const data: Record<string, string> = {};
+    if (this.searchQuery()) data['q'] = this.searchQuery();
+    if (this.filterMonitored()) data['monitored'] = this.filterMonitored();
+    if (this.filterStatus()) data['status'] = this.filterStatus();
+    if (this.sortBy() !== 'title') data['sortBy'] = this.sortBy();
+    localStorage.setItem(this.storageKey, JSON.stringify(data));
+  }
+
+  private loadFilters(): Record<string, string> {
+    try {
+      return JSON.parse(localStorage.getItem(this.storageKey) ?? '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  private async load() {
     this.loading.set(true);
     const monitored = this.filterMonitored();
     try {
+      const fs = this.filterStatus();
       const res = await this.mediaService.getAll({
         type: 'movie',
         q: this.searchQuery() || undefined,
         sortBy: this.sortBy(),
         monitored: monitored ? monitored === 'true' : undefined,
-        page: this.page,
-        limit: 24,
+        missing: fs === 'missing' ? true : fs === 'downloaded' ? false : undefined,
+        cutoffUnmet: fs === 'cutoffUnmet' ? true : undefined,
+        limit: 0,
       });
-      this.movies.update((prev) =>
-        append ? [...prev, ...res.data] : res.data,
-      );
+      this.allMovies.set(res.data);
       this.total.set(res.total);
     } finally {
       this.loading.set(false);

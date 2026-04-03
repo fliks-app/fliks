@@ -1,12 +1,15 @@
 import {
   ApplicationConfig,
+  isDevMode,
   provideBrowserGlobalErrorListeners,
   provideZonelessChangeDetection,
 } from '@angular/core';
+import { provideServiceWorker } from '@angular/service-worker';
 import { provideRouter } from '@angular/router';
 import { HttpBackend, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 import { routes } from './app.routes';
+import { serverUrlInterceptor } from './core/interceptors/server-url.interceptor';
 import { credentialsInterceptor } from './core/interceptors/credentials.interceptor';
 import { errorInterceptor } from './core/interceptors/error.interceptor';
 import { translateBrowserLoaderFactory } from './utils/translate-loader';
@@ -17,7 +20,7 @@ export const appConfig: ApplicationConfig = {
     provideZonelessChangeDetection(),
     provideRouter(routes),
     provideHttpClient(
-      withInterceptors([credentialsInterceptor, errorInterceptor]),
+      withInterceptors([serverUrlInterceptor, credentialsInterceptor, errorInterceptor]),
     ),
     provideTranslateService({
       loader: {
@@ -27,6 +30,10 @@ export const appConfig: ApplicationConfig = {
       },
       lang: 'fr',
       fallbackLang: 'fr',
+    }),
+    provideServiceWorker('ngsw-worker.js', {
+      enabled: !isDevMode(),
+      registrationStrategy: 'registerWhenStable:30000',
     }),
   ],
 };

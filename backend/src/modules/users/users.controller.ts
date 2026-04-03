@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
+import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
@@ -28,6 +29,13 @@ export class UsersController {
   @CheckPolicies((ability) => ability.can(Action.Manage, User))
   findAll() {
     return this.usersService.findAll();
+  }
+
+  /** Admin: create a new user */
+  @Post()
+  @CheckPolicies((ability) => ability.can(Action.Manage, User))
+  create(@Body() dto: CreateUserDto) {
+    return this.usersService.create(dto);
   }
 
   /** Admin or self */
@@ -55,13 +63,4 @@ export class UsersController {
     return this.usersService.remove(id);
   }
 
-  /** Admin or self: regenerate API key */
-  @Post(':id/api-key/regenerate')
-  @CheckPolicies((ability) => ability.can(Action.Update, User))
-  regenerateApiKey(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() requester: User,
-  ) {
-    return this.usersService.regenerateApiKey(id, requester);
-  }
 }

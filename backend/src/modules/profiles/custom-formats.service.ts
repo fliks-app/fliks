@@ -1,7 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CustomFormat, CustomFormatSpecification } from './entities/custom-format.entity';
+import {
+  CustomFormat,
+  CustomFormatSpecification,
+} from './entities/custom-format.entity';
 import { CreateCustomFormatDto } from './dto/create-custom-format.dto';
 
 @Injectable()
@@ -45,28 +48,53 @@ export class CustomFormatsService {
   }
 
   /**
+   * Test a release title against all custom formats and return a breakdown.
+   */
+  async testRelease(
+    title: string,
+    meta?: { freeleech?: boolean; downloadVolumeFactor?: number },
+  ): Promise<
+    { formatId: number; formatName: string; matched: boolean; score: number }[]
+  > {
+    const formats = await this.repo.find();
+    return formats.map((cf) => ({
+      formatId: cf.id,
+      formatName: cf.name,
+      matched: this.matchesFormat(title, cf, meta),
+      score: this.matchesFormat(title, cf, meta) ? cf.score : 0,
+    }));
+  }
+
+  /**
    * Compute the total custom-format score for a release title.
    * Used in the grab flow to rank releases beyond basic quality.
    */
-  async scoreRelease(releaseTitle: string): Promise<number> {
+  async scoreRelease(
+    releaseTitle: string,
+    meta?: { freeleech?: boolean; downloadVolumeFactor?: number },
+  ): Promise<number> {
     const formats = await this.findAll();
     let total = 0;
     for (const fmt of formats) {
-      if (this.matchesFormat(releaseTitle, fmt)) {
+      if (this.matchesFormat(releaseTitle, fmt, meta)) {
         total += fmt.score;
       }
     }
     return total;
   }
 
-  private matchesFormat(title: string, fmt: CustomFormat): boolean {
+  private matchesFormat(
+    title: string,
+    fmt: CustomFormat,
+    meta?: { freeleech?: boolean; downloadVolumeFactor?: number },
+  ): boolean {
     const titleLower = title.toLowerCase();
     let allRequiredMet = true;
     let anyNonRequiredMet = false;
     let hasNonRequired = false;
 
     for (const spec of fmt.specifications) {
-      const match = this.evalSpec(titleLower, spec);
+      const match = this.evalSpec(titleLower, spec, meta);
       const result = spec.negate ? !match : match;
 
       if (spec.required) {
@@ -82,7 +110,11 @@ export class CustomFormatsService {
     return true;
   }
 
-  private evalSpec(titleLower: string, spec: CustomFormatSpecification): boolean {
+  private evalSpec(
+    titleLower: string,
+    spec: CustomFormatSpecification,
+    meta?: { freeleech?: boolean; downloadVolumeFactor?: number },
+  ): boolean {
     const val = (spec.value || '').toLowerCase();
     switch (spec.implementation) {
       case 'title_regex':
@@ -97,6 +129,10 @@ export class CustomFormatsService {
         return titleLower.includes(val);
       case 'language':
         return titleLower.includes(val);
+      case 'indexer_flag':
+        if (val === 'freeleech') return meta?.freeleech === true;
+        if (val === 'halfleech') return meta?.downloadVolumeFactor === 0.5;
+        return false;
       default:
         return false;
     }

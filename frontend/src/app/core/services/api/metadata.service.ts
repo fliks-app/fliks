@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { MediaType } from '../../enums/media-type.enum';
 import { Media } from './media.service';
 
 export interface MetadataSearchResult {
@@ -12,9 +13,9 @@ export interface MetadataSearchResult {
   posterUrl: string | null;
   rating: number;
   genres: string[];
-  mediaType: 'movie' | 'series';
+  mediaType: MediaType;
   existingMediaId: number | null;
-  existingMediaType: 'movie' | 'series' | null;
+  existingMediaType: MediaType | null;
 }
 
 export interface MetadataDetails extends MetadataSearchResult {
@@ -33,6 +34,11 @@ export interface MetadataDetails extends MetadataSearchResult {
   productionCompanies: string[];
   voteCount: number | null;
   popularity: number | null;
+}
+
+export interface SeasonStub {
+  seasonNumber: number;
+  episodeCount: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -59,6 +65,13 @@ export class MetadataService {
     );
   }
 
+  getTrendingMovies() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/trending/movie')); }
+  getPopularMovies() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/popular/movie')); }
+  getUpcomingMovies() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/upcoming/movie')); }
+  getTrendingTv() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/trending/tv')); }
+  getPopularTv() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/popular/tv')); }
+  getUpcomingTv() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/upcoming/tv')); }
+
   getMovieDetails(tmdbId: number) {
     return firstValueFrom(
       this.http.get<MetadataDetails>(`/api/metadata/movie/${tmdbId}`),
@@ -71,8 +84,14 @@ export class MetadataService {
     );
   }
 
+  getTvSeasons(tmdbId: number) {
+    return firstValueFrom(
+      this.http.get<SeasonStub[]>(`/api/metadata/tv/${tmdbId}/seasons`),
+    );
+  }
+
   importFromTmdb(
-    type: 'movie' | 'series',
+    type: MediaType,
     tmdbId: number,
     qualityProfileId?: number,
     rootFolderId?: number,

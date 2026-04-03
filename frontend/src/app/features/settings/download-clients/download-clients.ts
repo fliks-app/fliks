@@ -1,12 +1,15 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
   signal,
   inject,
   OnInit,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
   DownloadClientsApiService,
   DownloadClientRow,
@@ -21,14 +24,14 @@ import {
 export class DownloadClientsSettingsComponent implements OnInit {
   private readonly api = inject(DownloadClientsApiService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
+  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
   readonly rows = signal<DownloadClientRow[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
-
-  readonly editorOpen = signal(false);
   readonly saving = signal(false);
-  readonly saveError = signal('');
+
   readonly editingId = signal<number | null>(null);
 
   readonly formName = signal('');
@@ -39,6 +42,8 @@ export class DownloadClientsSettingsComponent implements OnInit {
   readonly formPassword = signal('');
   readonly formUseSsl = signal(false);
   readonly formCategory = signal('suitarr');
+  readonly formMovieCategory = signal('');
+  readonly formSeriesCategory = signal('');
   readonly formPriority = signal(1);
   readonly formEnabled = signal(true);
 
@@ -74,11 +79,12 @@ export class DownloadClientsSettingsComponent implements OnInit {
     this.formPassword.set('');
     this.formUseSsl.set(false);
     this.formCategory.set('suitarr');
+    this.formMovieCategory.set('');
+    this.formSeriesCategory.set('');
     this.formPriority.set(1);
     this.formEnabled.set(true);
-    this.saveError.set('');
     this.testResult.set(null);
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   openEdit(dc: DownloadClientRow) {
@@ -91,15 +97,16 @@ export class DownloadClientsSettingsComponent implements OnInit {
     this.formPassword.set('');
     this.formUseSsl.set(dc.settings.useSsl ?? false);
     this.formCategory.set(dc.settings.category ?? 'suitarr');
+    this.formMovieCategory.set(dc.settings.movieCategory ?? '');
+    this.formSeriesCategory.set(dc.settings.seriesCategory ?? '');
     this.formPriority.set(dc.priority);
     this.formEnabled.set(dc.enabled);
-    this.saveError.set('');
     this.testResult.set(null);
-    this.editorOpen.set(true);
+    this.editorDialog()?.nativeElement.showModal();
   }
 
   closeEditor() {
-    this.editorOpen.set(false);
+    this.editorDialog()?.nativeElement.close();
   }
 
   private buildBody() {
@@ -113,6 +120,8 @@ export class DownloadClientsSettingsComponent implements OnInit {
         password: this.formPassword() || undefined,
         useSsl: this.formUseSsl(),
         category: this.formCategory().trim() || undefined,
+        movieCategory: this.formMovieCategory().trim() || undefined,
+        seriesCategory: this.formSeriesCategory().trim() || undefined,
       },
       priority: this.formPriority(),
       enabled: this.formEnabled(),
@@ -148,14 +157,8 @@ export class DownloadClientsSettingsComponent implements OnInit {
 
   async save() {
     const name = this.formName().trim();
-    if (!name) {
-      this.saveError.set(
-        this.translate.instant('settings.download_clients.name_required'),
-      );
-      return;
-    }
+    if (!name) return;
     this.saving.set(true);
-    this.saveError.set('');
     const id = this.editingId();
     try {
       await (id == null
@@ -163,14 +166,8 @@ export class DownloadClientsSettingsComponent implements OnInit {
         : this.api.update(id, this.buildBody()));
       this.closeEditor();
       await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string | string[] } };
-      const msg = Array.isArray(httpErr.error?.message)
-        ? httpErr.error.message.join(', ')
-        : httpErr.error?.message;
-      this.saveError.set(
-        msg ?? this.translate.instant('settings.download_clients.save_error'),
-      );
+    } catch {
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }
@@ -178,11 +175,13 @@ export class DownloadClientsSettingsComponent implements OnInit {
 
   async deleteRow(dc: DownloadClientRow) {
     if (
-      !confirm(
-        this.translate.instant('settings.download_clients.confirm_delete', {
+      !await this.confirmation.confirm({
+        title: this.translate.instant('common.confirm'),
+        message: this.translate.instant('settings.download_clients.confirm_delete', {
           name: dc.name,
         }),
-      )
+        variant: 'danger',
+      })
     )
       return;
     try {
@@ -190,10 +189,12 @@ export class DownloadClientsSettingsComponent implements OnInit {
       await this.reloadAll();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      alert(
-        httpErr.error?.message ??
+      void this.confirmation.alert({
+        title: this.translate.instant('common.error'),
+        message: httpErr.error?.message ??
           this.translate.instant('settings.download_clients.delete_error'),
-      );
+        variant: 'danger',
+      });
     }
   }
 }

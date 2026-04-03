@@ -3,7 +3,6 @@ import {
   IsBoolean,
   IsNumber,
   IsOptional,
-  IsIn,
   IsEmail,
   MinLength,
   Min,
@@ -23,12 +22,14 @@ export class UpdateUserDto {
   @IsOptional()
   password?: string;
 
-  /** Admin-only */
-  @IsIn(['admin', 'user', 'readonly'])
+  @IsNumber()
   @IsOptional()
-  role?: string;
+  roleId?: number;
 
-  /** Admin-only */
+  @IsBoolean()
+  @IsOptional()
+  isAdmin?: boolean;
+
   @IsBoolean()
   @IsOptional()
   enabled?: boolean;

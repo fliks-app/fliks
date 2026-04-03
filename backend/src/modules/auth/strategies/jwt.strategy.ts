@@ -18,10 +18,11 @@ export interface JwtPayload {
 }
 
 function jwtFromCookie(req: Request): string | null {
-  return parseCookieValue(
-    getRequestCookieHeader(req),
-    ACCESS_TOKEN_COOKIE,
-  );
+  return parseCookieValue(getRequestCookieHeader(req), ACCESS_TOKEN_COOKIE);
+}
+
+function jwtFromQueryParam(req: Request): string | null {
+  return (req.query?.token as string) ?? null;
 }
 
 @Injectable()
@@ -32,7 +33,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly userRepo: Repository<User>,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromExtractors([jwtFromCookie]),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        jwtFromCookie,
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+        jwtFromQueryParam,
+      ]),
       ignoreExpiration: false,
       secretOrKey: config.getOrThrow<string>('JWT_SECRET'),
     });
@@ -41,6 +46,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload): Promise<User> {
     const user = await this.userRepo.findOne({
       where: { id: payload.sub, enabled: true },
+      relations: ['userRole'],
     });
     if (!user) {
       throw new UnauthorizedException();

@@ -42,7 +42,7 @@
                   {{ cf.score > 0 ? '+' : '' }}{{ cf.score }}
                 </span>
               </td>
-              <td class="text-sm text-base-content/60">{{ cf.specs?.length ?? 0 }} spec(s)</td>
+              <td class="text-sm text-base-content/60">{{ cf.specs.length }} spec(s)</td>
               <td class="text-end">
                 <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(cf)">
                   {{ 'settings.custom_formats.edit' | translate }}
@@ -57,10 +57,42 @@
       </table>
     </div>
   }
+
+  <div class="divider"></div>
+  <h2 class="text-lg font-semibold mb-2">{{ 'settings.custom_formats.test_title' | translate }}</h2>
+  <div class="flex gap-2 items-end">
+    <input type="text" class="input input-bordered input-sm flex-1"
+      [placeholder]="'settings.custom_formats.test_placeholder' | translate"
+      [ngModel]="testTitle()" (ngModelChange)="testTitle.set($event)" />
+    <button type="button" class="btn btn-sm btn-outline" (click)="runTest()" [disabled]="testLoading() || !testTitle().trim()">
+      @if (testLoading()) { <span class="loading loading-spinner loading-xs"></span> }
+      {{ 'settings.custom_formats.test_btn' | translate }}
+    </button>
+  </div>
+  @if (testResults().length) {
+    <div class="overflow-x-auto mt-3 rounded-lg border border-base-200">
+      <table class="table table-sm">
+        <thead><tr><th>Format</th><th>Match</th><th class="text-right">Score</th></tr></thead>
+        <tbody>
+          @for (r of testResults(); track r.formatId) {
+            <tr [class.opacity-40]="!r.matched">
+              <td>{{ r.formatName }}</td>
+              <td>
+                @if (r.matched) { <span class="badge badge-success badge-sm">Oui</span> }
+                @else { <span class="badge badge-ghost badge-sm">Non</span> }
+              </td>
+              <td class="text-right tabular-nums" [class.text-success]="r.score > 0" [class.text-error]="r.score < 0">
+                {{ r.score > 0 ? '+' : '' }}{{ r.score }}
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
 </div>
 
-@if (editorOpen()) {
-  <div class="modal modal-open z-50" role="dialog" aria-modal="true">
+  <dialog #editorDialog class="modal">
     <div class="modal-box max-w-xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
       <div class="px-5 sm:px-6 pt-4 pb-3 border-b border-base-200 flex justify-between items-center shrink-0 bg-base-100">
         <h2 class="text-lg font-bold">
@@ -82,7 +114,7 @@
         </button>
       </div>
 
-      <div class="px-5 sm:px-6 py-4 space-y-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+      <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
         <div class="grid grid-cols-3 gap-3">
           <label class="form-control col-span-2">
             <span class="label-text">{{ 'settings.custom_formats.field_name' | translate }}</span>
@@ -123,13 +155,25 @@
                   <option [value]="t">{{ t }}</option>
                 }
               </select>
-              <input
-                type="text"
-                class="input input-bordered input-xs flex-1 min-w-32"
-                [ngModel]="spec.value"
-                (ngModelChange)="updateSpec($index, { value: $event })"
-                placeholder="{{ spec.type === 'title_regex' ? '/regex/' : 'value' }}"
-              />
+              @if (spec.type === 'indexer_flag') {
+                <select
+                  class="select select-bordered select-xs flex-1 min-w-32"
+                  [ngModel]="spec.value"
+                  (ngModelChange)="updateSpec($index, { value: $event })"
+                >
+                  @for (v of indexerFlagValues; track v) {
+                    <option [value]="v">{{ v }}</option>
+                  }
+                </select>
+              } @else {
+                <input
+                  type="text"
+                  class="input input-bordered input-xs flex-1 min-w-32"
+                  [ngModel]="spec.value"
+                  (ngModelChange)="updateSpec($index, { value: $event })"
+                  placeholder="{{ spec.type === 'title_regex' ? '/regex/' : 'value' }}"
+                />
+              }
               <label class="label cursor-pointer gap-1.5 px-1">
                 <input
                   type="checkbox"
@@ -163,9 +207,7 @@
           }
         </div>
 
-        @if (saveError()) {
-          <div role="alert" class="alert alert-error text-sm">{{ saveError() }}</div>
-        }
+
       </div>
 
       <div class="modal-action shrink-0 px-5 sm:px-6 pb-4 pt-2 border-t border-base-200 bg-base-100">
@@ -180,13 +222,7 @@
         </button>
       </div>
     </div>
-    <div
-      role="button"
-      tabindex="0"
-      class="modal-backdrop bg-black/50"
-      (click)="closeEditor()"
-      (keydown.enter)="closeEditor()"
-      [attr.aria-label]="'common.close' | translate"
-    ></div>
-  </div>
-}
+    <form method="dialog" class="modal-backdrop">
+      <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">close</button>
+    </form>
+  </dialog>

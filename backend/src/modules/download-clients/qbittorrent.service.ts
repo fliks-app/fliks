@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import axios from 'axios';
+import * as crypto from 'crypto';
 import FormData from 'form-data';
 import { DownloadClient } from './entities/download-client.entity';
 
@@ -19,6 +20,14 @@ export interface QbittorrentTorrent {
   added_on: number; // unix timestamp
   completion_on: number;
   save_path: string;
+  content_path: string;
+}
+
+export interface QbittorrentTorrentFile {
+  name: string;      // relative path within torrent
+  size: number;
+  progress: number;  // 0–1
+  priority: number;
 }
 
 @Injectable()
@@ -160,6 +169,60 @@ export class QbittorrentService {
     }
   }
 
+  /**
+   * Get the list of files belonging to a specific torrent.
+   * Uses qBittorrent API /api/v2/torrents/files.
+   */
+  async getTorrentFiles(
+    client: DownloadClient,
+    hash: string,
+  ): Promise<QbittorrentTorrentFile[]> {
+    const s = client.settings as {
+      host?: string;
+      username?: string;
+      password?: string;
+      useSsl?: boolean;
+      port?: number;
+    };
+    const base = this.buildBaseUrl(s);
+    if (!base) return [];
+    const http = axios.create({
+      timeout: 15_000,
+      headers: { 'User-Agent': 'Suitarr/1.0' },
+    });
+
+    const formAuth = new URLSearchParams({
+      username: s.username ?? '',
+      password: s.password ?? '',
+    });
+    try {
+      const loginRes = await http.post(
+        `${base}/api/v2/auth/login`,
+        formAuth.toString(),
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          validateStatus: () => true,
+        },
+      );
+      const cookies = loginRes.headers['set-cookie'];
+      if (!cookies?.length || loginRes.data === 'Fails.') return [];
+      const cookieHeader = cookies.map((c: string) => c.split(';')[0]).join('; ');
+
+      const res = await http.get<QbittorrentTorrentFile[]>(
+        `${base}/api/v2/torrents/files`,
+        {
+          headers: { Cookie: cookieHeader },
+          params: { hash },
+          validateStatus: () => true,
+        },
+      );
+      return Array.isArray(res.data) ? res.data : [];
+    } catch (e) {
+      this.log.warn(`getTorrentFiles: error for hash ${hash}: ${(e as Error).message}`);
+      return [];
+    }
+  }
+
   async deleteTorrent(
     client: DownloadClient,
     hash: string,
@@ -234,27 +297,34 @@ export class QbittorrentService {
     return url.replace(/&amp;/g, '&');
   }
 
+  /**
+   * Add a torrent to qBittorrent and return the info hash (lowercase hex).
+   */
   async addTorrentUrl(
     client: DownloadClient,
     torrentUrl: string,
-  ): Promise<void> {
+    mediaType?: 'movie' | 'series',
+  ): Promise<string> {
     torrentUrl = this.sanitizeUrl(torrentUrl);
-    const s = client.settings as {
-      host?: string;
-      username?: string;
-      password?: string;
-      useSsl?: boolean;
-      port?: number;
-      category?: string;
-    };
-    const base = this.buildBaseUrl(s);
+    const s = client.settings as Record<string, unknown>;
+    const base = this.buildBaseUrl(
+      s as {
+        host?: string;
+        port?: number;
+        useSsl?: boolean;
+      },
+    );
     if (!base) {
       throw new BadRequestException(
         'qBittorrent client has no host configured',
       );
     }
 
-    const category = s.category?.trim() ?? '';
+    let category = String(s.category ?? '').trim();
+    if (mediaType === 'movie' && s.movieCategory)
+      category = String(s.movieCategory).trim();
+    if (mediaType === 'series' && s.seriesCategory)
+      category = String(s.seriesCategory).trim();
 
     const http = axios.create({
       timeout: 60_000,
@@ -263,8 +333,8 @@ export class QbittorrentService {
 
     // --- Authenticate ---
     const formAuth = new URLSearchParams({
-      username: s.username ?? '',
-      password: s.password ?? '',
+      username: String(s.username ?? ''),
+      password: String(s.password ?? ''),
     });
 
     let cookieHeader = '';
@@ -296,8 +366,13 @@ export class QbittorrentService {
     //   1. qBittorrent gets metadata immediately (proper name shown at once)
     //   2. qBittorrent does not need network access to the indexer
     let addRes: { status: number; data: unknown };
+    let infoHash: string | undefined;
 
     if (torrentUrl.startsWith('magnet:')) {
+      // Extract info hash from magnet URI
+      const btih = torrentUrl.match(/xt=urn:btih:([a-fA-F0-9]{40})/)?.[1];
+      if (btih) infoHash = btih.toLowerCase();
+
       const formAdd = new URLSearchParams({ urls: torrentUrl });
       if (category) formAdd.set('category', category);
       addRes = await http.post(
@@ -341,6 +416,9 @@ export class QbittorrentService {
         );
       }
 
+      // Compute info hash from the raw bencoded "info" dictionary
+      infoHash = this.computeInfoHash(torrentBuffer);
+
       // Upload the .torrent file to qBittorrent via multipart
       const fd = new FormData();
       fd.append('torrents', torrentBuffer, {
@@ -360,5 +438,63 @@ export class QbittorrentService {
         `qBittorrent refused the torrent (HTTP ${addRes.status})`,
       );
     }
+
+    return infoHash ?? '';
+  }
+
+  /**
+   * Extract the SHA1 info hash from a raw .torrent file buffer.
+   * Locates the bencoded "info" dict and hashes its raw bytes.
+   */
+  private computeInfoHash(buf: Buffer): string | undefined {
+    // Find "4:info" key in the top-level dict
+    const marker = Buffer.from('4:info');
+    const idx = buf.indexOf(marker);
+    if (idx === -1) return undefined;
+
+    const start = idx + marker.length;
+    // The value must be a dict starting with 'd'
+    if (start >= buf.length || buf[start] !== 0x64 /* 'd' */) return undefined;
+
+    // Walk the bencoded value to find its end
+    const end = this.bencodedEnd(buf, start);
+    if (end === -1) return undefined;
+
+    return crypto
+      .createHash('sha1')
+      .update(buf.subarray(start, end))
+      .digest('hex');
+  }
+
+  /** Return the byte position just past the bencoded value starting at `pos`. */
+  private bencodedEnd(buf: Buffer, pos: number): number {
+    if (pos >= buf.length) return -1;
+    const ch = buf[pos];
+
+    // Integer: i<digits>e
+    if (ch === 0x69 /* 'i' */) {
+      const e = buf.indexOf(0x65 /* 'e' */, pos + 1);
+      return e === -1 ? -1 : e + 1;
+    }
+
+    // List (l...e) or Dict (d...e)
+    if (ch === 0x6c /* 'l' */ || ch === 0x64 /* 'd' */) {
+      let cur = pos + 1;
+      while (cur < buf.length && buf[cur] !== 0x65 /* 'e' */) {
+        cur = this.bencodedEnd(buf, cur);
+        if (cur === -1) return -1;
+      }
+      return cur < buf.length ? cur + 1 : -1;
+    }
+
+    // Byte string: <length>:<data>
+    if (ch >= 0x30 && ch <= 0x39 /* '0'-'9' */) {
+      const colon = buf.indexOf(0x3a /* ':' */, pos);
+      if (colon === -1) return -1;
+      const len = parseInt(buf.subarray(pos, colon).toString('ascii'), 10);
+      return colon + 1 + len;
+    }
+
+    return -1;
   }
 }

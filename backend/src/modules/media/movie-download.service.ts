@@ -13,15 +13,24 @@ import { DownloadClient } from '../download-clients/entities/download-client.ent
 import { TorznabService, TorznabRelease } from '../indexers/torznab.service';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { parseReleaseQuality } from './release-quality.parser';
-import { parseReleaseLanguage } from './release-language.parser';
+import { parseReleaseLanguage, resolveUnknownLanguage } from './release-language.parser';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
+import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MediaType } from '../../common/enums';
 import { GrabMovieDto } from './dto/grab-movie.dto';
 import { QualityProfileItem } from '../profiles/entities/quality-profile.entity';
-import { LanguageProfileItem } from '../profiles/entities/language-profile.entity';
+import { AudioLanguageItem } from '../profiles/entities/language-profile.entity';
+import { SUITARR_LANGUAGES } from '../../common/constants/suitarr-languages';
 import { getSuitarrQualityById } from '../../common/constants/suitarr-qualities';
+import {
+  ReleaseRejection,
+  buildIndexerMinSeeders,
+  buildAllowedQualityIds,
+  computeRejections,
+  sortReleasesByRelevance,
+} from './release-rejection.helper';
 
 function inferTitleFromTorrentUrl(url: string): string {
   if (url.startsWith('magnet:')) {
@@ -37,11 +46,14 @@ function inferTitleFromTorrentUrl(url: string): string {
   return url.slice(0, 240);
 }
 
-function allowedLanguageIds(items: LanguageProfileItem[] | undefined): Set<number> {
+function allowedAudioLanguageIds(
+  audioLangs: AudioLanguageItem[] | undefined,
+): Set<number> {
   const set = new Set<number>();
-  if (!items?.length) return set;
-  for (const row of items) {
-    if (row.allowed) set.add(row.language.id);
+  if (!audioLangs?.length) return set;
+  for (const item of audioLangs) {
+    const lang = SUITARR_LANGUAGES.find((l) => l.isoCode === item.isoCode);
+    if (lang) set.add(lang.id);
   }
   return set;
 }
@@ -63,6 +75,9 @@ export interface MovieReleaseRow {
   size: number;
   seeders: number;
   leechers: number;
+  rejections: ReleaseRejection[];
+  freeleech: boolean;
+  downloadVolumeFactor: number;
 }
 
 @Injectable()
@@ -83,67 +98,52 @@ export class MovieDownloadService {
     private readonly customFormats: CustomFormatsService,
     private readonly blocklist: BlocklistService,
     private readonly notifications: NotificationsService,
+    private readonly qualityDefs: QualityDefinitionsService,
   ) {}
 
-  private allowedQualityIds(items: QualityProfileItem[] | undefined): Set<number> {
-    const set = new Set<number>();
-    if (!items?.length) return set;
-    for (const row of items) {
-      if (row.allowed) set.add(row.quality.id);
-    }
-    return set;
+  private allowedQualityIds(
+    items: QualityProfileItem[] | undefined,
+  ): Set<number> {
+    return buildAllowedQualityIds(items);
   }
 
-  private searchIndexer(
-    indexer: Indexer,
-    query: string,
-  ): Promise<TorznabRelease[]> {
-    return this.torznab.searchMovie(indexer, query);
-  }
-
-  private searchQueryForMedia(media: Media): string {
-    const parts = [media.title];
-    if (media.year) parts.push(String(media.year));
-    return parts.join(' ');
-  }
-
-  async searchMovieReleases(mediaId: number): Promise<MovieReleaseRow[]> {
-    const media = await this.mediaRepo.findOne({
-      where: { id: mediaId },
-      relations: ['qualityProfile', 'languageProfile'],
-    });
-    if (!media) throw new NotFoundException(`Media #${mediaId} not found`);
-    if (media.type !== MediaType.MOVIE) {
-      throw new BadRequestException('Release search is only available for movies');
-    }
-
-    const allowed = this.allowedQualityIds(media.qualityProfile?.items);
-    if (!allowed.size) {
-      throw new BadRequestException(
-        'Assign a quality profile with at least one allowed quality to this movie',
-      );
-    }
-
-    const allowedLangs = allowedLanguageIds(media.languageProfile?.languages);
-
-    const indexers = await this.indexerRepo.find({
-      where: { enabled: true },
-      order: { priority: 'ASC', id: 'ASC' },
-    });
-    const query = this.searchQueryForMedia(media);
-    const batches = await Promise.all(
-      indexers.map((ix) => this.searchIndexer(ix, query)),
+  private async buildMovieReleaseRows(
+    releases: TorznabRelease[],
+    media: Media,
+    indexers: Indexer[],
+    allowed: Set<number>,
+    allowedLangs: Set<number>,
+  ): Promise<MovieReleaseRow[]> {
+    const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
+    const indexerMinSeeders = buildIndexerMinSeeders(indexers);
+    const indexerUnknownLang = new Map(
+      indexers.map((ix) => [ix.id, (ix.settings as Record<string, unknown>)?.unknownLanguageIsoCode as string | undefined]),
     );
-    const flat = batches.flat();
 
-    const rows: MovieReleaseRow[] = await Promise.all(
-      flat.map(async (r) => {
+    return Promise.all(
+      releases.map(async (r) => {
         const parsed = parseReleaseQuality(r.title);
-        const lang = parseReleaseLanguage(r.title);
+        const lang = resolveUnknownLanguage(parseReleaseLanguage(r.title), indexerUnknownLang.get(r.indexerId));
         const [cfScore, isBlocklisted] = await Promise.all([
-          this.customFormats.scoreRelease(r.title),
+          this.customFormats.scoreRelease(r.title, {
+            freeleech: r.freeleech,
+            downloadVolumeFactor: r.downloadVolumeFactor,
+          }),
           this.blocklist.isBlocked(r.title),
         ]);
+        const rejections = computeRejections({
+          qualityId: parsed.quality.id,
+          allowed,
+          languageId: lang.id,
+          allowedLangs,
+          isBlocklisted,
+          sizeBytes: r.size,
+          runtimeMinutes: media.runtime ?? 0,
+          sizeByQuality,
+          seeders: r.seeders,
+          indexerId: r.indexerId,
+          indexerMinSeeders,
+        });
         return {
           title: r.title,
           downloadUrl: r.downloadUrl,
@@ -161,25 +161,91 @@ export class MovieDownloadService {
           size: r.size,
           seeders: r.seeders,
           leechers: r.leechers,
+          rejections,
+          freeleech: r.freeleech,
+          downloadVolumeFactor: r.downloadVolumeFactor,
         };
       }),
     );
-
-    // Sort: quality rank desc, then custom format score desc
-    rows.sort((a, b) =>
-      b.rank !== a.rank ? b.rank - a.rank : b.customFormatScore - a.customFormatScore,
-    );
-    return rows;
   }
 
-  async grabMovie(mediaId: number, dto: GrabMovieDto): Promise<DownloadHistory> {
+  private searchIndexer(
+    indexer: Indexer,
+    query: string,
+  ): Promise<TorznabRelease[]> {
+    return this.torznab.searchMovie(indexer, query);
+  }
+
+  private searchQueryForMedia(media: Media): string {
+    const parts = [media.title];
+    if (media.year) parts.push(String(media.year));
+    return parts.join(' ');
+  }
+
+  async searchMovieReleases(
+    mediaId: number,
+    customQuery?: string,
+  ): Promise<MovieReleaseRow[]> {
     const media = await this.mediaRepo.findOne({
       where: { id: mediaId },
       relations: ['qualityProfile', 'languageProfile'],
     });
     if (!media) throw new NotFoundException(`Media #${mediaId} not found`);
     if (media.type !== MediaType.MOVIE) {
-      throw new BadRequestException('Download grab is only available for movies');
+      throw new BadRequestException(
+        'Release search is only available for movies',
+      );
+    }
+
+    const allowed = this.allowedQualityIds(media.qualityProfile?.items);
+    if (!allowed.size) {
+      throw new BadRequestException(
+        'Assign a quality profile with at least one allowed quality to this movie',
+      );
+    }
+
+    const indexers = await this.indexerRepo.find({
+      where: { enabled: true },
+      order: { priority: 'ASC', id: 'ASC' },
+    });
+    const query = customQuery?.trim() || this.searchQueryForMedia(media);
+    const batches = await Promise.all(
+      indexers.map((ix) => this.searchIndexer(ix, query)),
+    );
+    const flat = batches.flat();
+    const allowedLangs = allowedAudioLanguageIds(
+      media.languageProfile?.audioLanguages,
+    );
+
+    const rows = await this.buildMovieReleaseRows(
+      flat,
+      media,
+      indexers,
+      allowed,
+      allowedLangs,
+    );
+
+    return sortReleasesByRelevance(rows);
+  }
+
+  async grabMovie(
+    mediaId: number,
+    dto: GrabMovieDto,
+  ): Promise<DownloadHistory> {
+    const media = await this.mediaRepo.findOne({
+      where: { id: mediaId },
+      relations: ['qualityProfile', 'languageProfile'],
+    });
+    if (!media) throw new NotFoundException(`Media #${mediaId} not found`);
+    if (media.type !== MediaType.MOVIE) {
+      throw new BadRequestException(
+        'Download grab is only available for movies',
+      );
+    }
+    if (!media.rootFolderId) {
+      throw new BadRequestException(
+        'Assign a root folder to this movie before downloading',
+      );
     }
 
     const allowed = this.allowedQualityIds(media.qualityProfile?.items);
@@ -192,13 +258,20 @@ export class MovieDownloadService {
     let downloadUrl = dto.downloadUrl?.trim();
     let sourceTitle = dto.sourceTitle?.trim();
 
-    this.log.log(`grabMovie #${mediaId} "${media.title}" — manual URL: ${downloadUrl || '(auto)'}`);
-
-    const allowedLangs = allowedLanguageIds(media.languageProfile?.languages);
+    this.log.log(
+      `grabMovie #${mediaId} "${media.title}" — manual URL: ${downloadUrl || '(auto)'}`,
+    );
 
     if (!downloadUrl) {
       const rows = await this.searchMovieReleases(mediaId);
-      const pick = rows.find((r) => r.allowed && !r.blocklisted && r.languageAllowed);
+      const pick =
+        rows.find(
+          (r) =>
+            r.allowed &&
+            !r.blocklisted &&
+            r.languageAllowed &&
+            r.rejections.length === 0,
+        ) ?? rows.find((r) => r.allowed && !r.blocklisted && r.languageAllowed);
       if (!pick) {
         throw new BadRequestException(
           'No release matches the quality and language profiles. Add indexers or widen the profiles.',
@@ -224,15 +297,6 @@ export class MovieDownloadService {
       );
     }
 
-    if (allowedLangs.size > 0) {
-      const lang = parseReleaseLanguage(sourceTitle);
-      if (!allowedLangs.has(lang.id)) {
-        throw new BadRequestException(
-          `This release language (${lang.name}) is not allowed by the language profile`,
-        );
-      }
-    }
-
     const clients = await this.clientRepo.find({
       order: { priority: 'ASC', id: 'ASC' },
     });
@@ -244,13 +308,18 @@ export class MovieDownloadService {
     }
 
     this.log.log(`Sending to qBittorrent: "${sourceTitle}" — ${downloadUrl}`);
-    await this.qbittorrent.addTorrentUrl(qbit, downloadUrl);
-    this.log.log(`Grab successful for "${sourceTitle}"`);
+    const torrentHash = await this.qbittorrent.addTorrentUrl(
+      qbit,
+      downloadUrl,
+      'movie',
+    );
+    this.log.log(`Grab successful for "${sourceTitle}" (hash=${torrentHash})`);
 
     const row = this.historyRepo.create({
       mediaId: media.id,
       downloadClientId: qbit.id,
       sourceTitle,
+      torrentHash: torrentHash || undefined,
       quality: parsed.quality.name,
       status: 'grabbed',
     });
@@ -265,24 +334,33 @@ export class MovieDownloadService {
     return saved;
   }
 
-  async searchUpgradeReleases(mediaId: number): Promise<MovieReleaseRow[]> {
+  async searchUpgradeReleases(
+    mediaId: number,
+    customQuery?: string,
+  ): Promise<MovieReleaseRow[]> {
     const media = await this.mediaRepo.findOne({
       where: { id: mediaId },
       relations: ['qualityProfile', 'languageProfile', 'files'],
     });
     if (!media) throw new NotFoundException(`Media #${mediaId} not found`);
     if (media.type !== MediaType.MOVIE) {
-      throw new BadRequestException('Upgrade search is only available for movies');
+      throw new BadRequestException(
+        'Upgrade search is only available for movies',
+      );
     }
 
     const profile = media.qualityProfile;
     if (!profile?.upgradeAllowed) {
-      throw new BadRequestException('Upgrade is not enabled for this quality profile');
+      throw new BadRequestException(
+        'Upgrade is not enabled for this quality profile',
+      );
     }
 
     const files: { quality: string }[] = (media as any).files ?? [];
     if (!files.length) {
-      throw new BadRequestException('No file on disk — use the standard grab instead');
+      throw new BadRequestException(
+        'No file on disk — use the standard grab instead',
+      );
     }
 
     // Determine current best quality rank among all files
@@ -301,73 +379,66 @@ export class MovieDownloadService {
     }
 
     const allowed = this.allowedQualityIds(profile.items);
-    const allowedLangs = allowedLanguageIds(media.languageProfile?.languages);
 
     const indexers = await this.indexerRepo.find({
       where: { enabled: true },
       order: { priority: 'ASC', id: 'ASC' },
     });
-    const query = this.searchQueryForMedia(media);
+    const query = customQuery?.trim() || this.searchQueryForMedia(media);
     const batches = await Promise.all(
       indexers.map((ix) => this.searchIndexer(ix, query)),
     );
     const flat = batches.flat();
+    const allowedLangs = allowedAudioLanguageIds(
+      media.languageProfile?.audioLanguages,
+    );
 
-    const rows: MovieReleaseRow[] = await Promise.all(
-      flat.map(async (r) => {
-        const parsed = parseReleaseQuality(r.title);
-        const lang = parseReleaseLanguage(r.title);
-        const [cfScore, isBlocklisted] = await Promise.all([
-          this.customFormats.scoreRelease(r.title),
-          this.blocklist.isBlocked(r.title),
-        ]);
-        return {
-          title: r.title,
-          downloadUrl: r.downloadUrl,
-          qualityId: parsed.quality.id,
-          qualityName: parsed.quality.name,
-          rank: parsed.quality.rank,
-          allowed: allowed.has(parsed.quality.id),
-          customFormatScore: cfScore,
-          blocklisted: isBlocklisted,
-          indexerId: r.indexerId,
-          indexerName: r.indexerName,
-          languageId: lang.id,
-          languageName: lang.name,
-          languageAllowed: allowedLangs.size === 0 || allowedLangs.has(lang.id),
-          size: r.size,
-          seeders: r.seeders,
-          leechers: r.leechers,
-        };
-      }),
+    const rows = await this.buildMovieReleaseRows(
+      flat,
+      media,
+      indexers,
+      allowed,
+      allowedLangs,
     );
 
     // Only keep releases that are strictly better than current AND within cutoff
-    return rows
-      .filter((r) => r.rank > currentRank && r.rank <= cutoffRank)
-      .sort((a, b) =>
-        b.rank !== a.rank ? b.rank - a.rank : b.customFormatScore - a.customFormatScore,
-      );
+    return sortReleasesByRelevance(
+      rows.filter((r) => r.rank > currentRank && r.rank <= cutoffRank),
+    );
   }
 
-  async grabUpgrade(mediaId: number, dto: GrabMovieDto): Promise<DownloadHistory> {
+  async grabUpgrade(
+    mediaId: number,
+    dto: GrabMovieDto,
+  ): Promise<DownloadHistory> {
     const media = await this.mediaRepo.findOne({
       where: { id: mediaId },
       relations: ['qualityProfile', 'languageProfile', 'files'],
     });
     if (!media) throw new NotFoundException(`Media #${mediaId} not found`);
     if (media.type !== MediaType.MOVIE) {
-      throw new BadRequestException('Upgrade grab is only available for movies');
+      throw new BadRequestException(
+        'Upgrade grab is only available for movies',
+      );
+    }
+    if (!media.rootFolderId) {
+      throw new BadRequestException(
+        'Assign a root folder to this movie before downloading',
+      );
     }
 
     const profile = media.qualityProfile;
     if (!profile?.upgradeAllowed) {
-      throw new BadRequestException('Upgrade is not enabled for this quality profile');
+      throw new BadRequestException(
+        'Upgrade is not enabled for this quality profile',
+      );
     }
 
     const files: { quality: string }[] = (media as any).files ?? [];
     if (!files.length) {
-      throw new BadRequestException('No file on disk — use the standard grab instead');
+      throw new BadRequestException(
+        'No file on disk — use the standard grab instead',
+      );
     }
 
     let currentRank = 0;
@@ -379,16 +450,25 @@ export class MovieDownloadService {
     const cutoffQuality = getSuitarrQualityById(profile.cutoff);
     const cutoffRank = cutoffQuality?.rank ?? 999;
     const allowed = this.allowedQualityIds(profile.items);
-    const allowedLangs = allowedLanguageIds(media.languageProfile?.languages);
 
     let downloadUrl = dto.downloadUrl?.trim();
     let sourceTitle = dto.sourceTitle?.trim();
 
-    this.log.log(`grabUpgrade #${mediaId} "${media.title}" — manual URL: ${downloadUrl || '(auto)'}`);
+    this.log.log(
+      `grabUpgrade #${mediaId} "${media.title}" — manual URL: ${downloadUrl || '(auto)'}`,
+    );
 
     if (!downloadUrl) {
       const upgrades = await this.searchUpgradeReleases(mediaId);
-      const pick = upgrades.find((r) => r.allowed && !r.blocklisted && r.languageAllowed);
+      const pick =
+        upgrades.find(
+          (r) =>
+            r.allowed &&
+            !r.blocklisted &&
+            r.languageAllowed &&
+            r.rejections.length === 0,
+        ) ??
+        upgrades.find((r) => r.allowed && !r.blocklisted && r.languageAllowed);
       if (!pick) {
         throw new BadRequestException(
           'No upgrade release found that matches the quality and language profiles',
@@ -423,31 +503,33 @@ export class MovieDownloadService {
       );
     }
 
-    if (allowedLangs.size > 0) {
-      const lang = parseReleaseLanguage(sourceTitle);
-      if (!allowedLangs.has(lang.id)) {
-        throw new BadRequestException(
-          `This release language (${lang.name}) is not allowed by the language profile`,
-        );
-      }
-    }
-
     const clients = await this.clientRepo.find({
       order: { priority: 'ASC', id: 'ASC' },
     });
     const qbit = clients.find((c) => this.qbittorrent.supports(c));
     if (!qbit) {
-      throw new BadRequestException('No enabled qBittorrent download client configured');
+      throw new BadRequestException(
+        'No enabled qBittorrent download client configured',
+      );
     }
 
-    this.log.log(`Sending upgrade to qBittorrent: "${sourceTitle}" — ${downloadUrl}`);
-    await this.qbittorrent.addTorrentUrl(qbit, downloadUrl);
-    this.log.log(`Upgrade grab successful for "${sourceTitle}"`);
+    this.log.log(
+      `Sending upgrade to qBittorrent: "${sourceTitle}" — ${downloadUrl}`,
+    );
+    const torrentHash = await this.qbittorrent.addTorrentUrl(
+      qbit,
+      downloadUrl,
+      'movie',
+    );
+    this.log.log(
+      `Upgrade grab successful for "${sourceTitle}" (hash=${torrentHash})`,
+    );
 
     const row = this.historyRepo.create({
       mediaId: media.id,
       downloadClientId: qbit.id,
       sourceTitle,
+      torrentHash: torrentHash || undefined,
       quality: parsed.quality.name,
       status: 'grabbed',
     });

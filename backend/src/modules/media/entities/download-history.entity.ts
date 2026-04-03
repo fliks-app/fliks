@@ -26,6 +26,12 @@ export class DownloadHistory extends BaseEntity {
   @Column({ nullable: true })
   language: string;
 
+  @Column({ nullable: true })
+  torrentHash: string;
+
   @Column({ default: 'grabbed' })
   status: string;
+
+  @Column({ type: 'text', nullable: true })
+  statusMessage: string;
 }

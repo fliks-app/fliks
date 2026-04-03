@@ -21,7 +21,9 @@ export class NotificationsService {
   // CRUD
   // ---------------------------------------------------------------------------
 
-  create(dto: CreateNotificationConnectionDto): Promise<NotificationConnection> {
+  create(
+    dto: CreateNotificationConnectionDto,
+  ): Promise<NotificationConnection> {
     const row = this.repo.create({
       name: dto.name,
       type: dto.type as any,
@@ -38,7 +40,8 @@ export class NotificationsService {
 
   async findOne(id: number): Promise<NotificationConnection> {
     const conn = await this.repo.findOne({ where: { id } });
-    if (!conn) throw new NotFoundException(`Notification connection #${id} not found`);
+    if (!conn)
+      throw new NotFoundException(`Notification connection #${id} not found`);
     return conn;
   }
 
@@ -50,7 +53,8 @@ export class NotificationsService {
     if (dto.name !== undefined) conn.name = dto.name;
     if (dto.type !== undefined) conn.type = dto.type as any;
     if (dto.settings !== undefined) conn.settings = dto.settings;
-    if (dto.events !== undefined) conn.events = dto.events as NotificationEvent[];
+    if (dto.events !== undefined)
+      conn.events = dto.events as NotificationEvent[];
     if (dto.enabled !== undefined) conn.enabled = dto.enabled;
     return this.repo.save(conn);
   }
@@ -64,19 +68,23 @@ export class NotificationsService {
   // Dispatch
   // ---------------------------------------------------------------------------
 
-  async dispatch(event: NotificationEvent, payload: Record<string, unknown>): Promise<void> {
+  async dispatch(
+    event: NotificationEvent,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
     const connections = await this.repo.find({ where: { enabled: true } });
     const relevant = connections.filter((c) => c.events.includes(event));
 
-    await Promise.allSettled(
-      relevant.map((c) => this.send(c, event, payload)),
-    );
+    await Promise.allSettled(relevant.map((c) => this.send(c, event, payload)));
   }
 
   async testConnection(id: number): Promise<{ ok: boolean; message: string }> {
     const conn = await this.findOne(id);
     try {
-      await this.send(conn, 'health.issue', { test: true, message: 'Test notification from Suitarr' });
+      await this.send(conn, 'health.issue', {
+        test: true,
+        message: 'Test notification from Suitarr',
+      });
       return { ok: true, message: 'Test notification sent' };
     } catch (e) {
       return { ok: false, message: (e as Error).message };
@@ -103,15 +111,21 @@ export class NotificationsService {
         case 'slack': {
           const webhookUrl = String(s.webhookUrl ?? '');
           if (!webhookUrl) throw new Error('webhookUrl not configured');
-          await axios.post(webhookUrl, { text: this.formatMessage(event, payload) });
+          await axios.post(webhookUrl, {
+            text: this.formatMessage(event, payload),
+          });
           break;
         }
         case 'webhook': {
           const url = String(s.url ?? '');
           if (!url) throw new Error('url not configured');
-          await axios.post(url, { event, ...payload }, {
-            headers: s.token ? { Authorization: `Bearer ${s.token}` } : {},
-          });
+          await axios.post(
+            url,
+            { event, ...payload },
+            {
+              headers: s.token ? { Authorization: `Bearer ${s.token}` } : {},
+            },
+          );
           break;
         }
         case 'gotify': {
@@ -128,30 +142,46 @@ export class NotificationsService {
         case 'ntfy': {
           const url = String(s.url ?? '').replace(/\/$/, '');
           const topic = String(s.topic ?? 'suitarr');
-          await axios.post(`${url}/${topic}`, this.formatMessage(event, payload), {
-            headers: { Title: `Suitarr — ${event}` },
-          });
+          await axios.post(
+            `${url}/${topic}`,
+            this.formatMessage(event, payload),
+            {
+              headers: { Title: `Suitarr — ${event}` },
+            },
+          );
           break;
         }
         default:
           this.log.warn(`Unknown notification type: ${conn.type}`);
       }
     } catch (e) {
-      this.log.warn(`Failed to send notification via ${conn.name}: ${(e as Error).message}`);
+      this.log.warn(
+        `Failed to send notification via ${conn.name}: ${(e as Error).message}`,
+      );
       throw e;
     }
   }
 
-  private formatMessage(event: NotificationEvent, payload: Record<string, unknown>): string {
+  private formatMessage(
+    event: NotificationEvent,
+    payload: Record<string, unknown>,
+  ): string {
     const title = (payload.title as string) ?? '';
     switch (event) {
-      case 'request.created':   return `New request: ${title}`;
-      case 'request.approved':  return `Request approved: ${title}`;
-      case 'request.declined':  return `Request declined: ${title}`;
-      case 'grab.started':      return `Grabbing: ${title}`;
-      case 'download.complete': return `Download complete: ${title}`;
-      case 'health.issue':      return String(payload.message ?? 'Health issue detected');
-      default:                  return `${event}: ${JSON.stringify(payload)}`;
+      case 'request.created':
+        return `New request: ${title}`;
+      case 'request.approved':
+        return `Request approved: ${title}`;
+      case 'request.declined':
+        return `Request declined: ${title}`;
+      case 'grab.started':
+        return `Grabbing: ${title}`;
+      case 'download.complete':
+        return `Download complete: ${title}`;
+      case 'health.issue':
+        return String(payload.message ?? 'Health issue detected');
+      default:
+        return `${event}: ${JSON.stringify(payload)}`;
     }
   }
 }

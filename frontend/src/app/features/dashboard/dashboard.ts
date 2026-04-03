@@ -9,6 +9,8 @@ import { RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { TranslateModule } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
+import { SubtitlesApiService, SubtitleStats } from '../../core/services/api/subtitles-api.service';
+import { DatePipe } from '@angular/common';
 
 interface DiskSpaceEntry {
   path: string;
@@ -26,20 +28,26 @@ interface StatsReport {
 
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, TranslateModule],
+  imports: [RouterLink, TranslateModule, DatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dashboard.html',
 })
 export class DashboardComponent implements OnInit {
   private readonly http = inject(HttpClient);
+  private readonly subtitlesApi = inject(SubtitlesApiService);
 
   readonly stats = signal<StatsReport | null>(null);
+  readonly subStats = signal<SubtitleStats | null>(null);
   readonly loading = signal(true);
 
   async ngOnInit() {
     try {
-      const data = await firstValueFrom(this.http.get<StatsReport>('/api/system/stats'));
+      const [data, subData] = await Promise.all([
+        firstValueFrom(this.http.get<StatsReport>('/api/system/stats')),
+        this.subtitlesApi.getStats().catch(() => null),
+      ]);
       this.stats.set(data);
+      this.subStats.set(subData);
     } finally {
       this.loading.set(false);
     }

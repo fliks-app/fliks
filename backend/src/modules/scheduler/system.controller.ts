@@ -1,4 +1,19 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  Res,
+  Sse,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import * as fs from 'fs';
@@ -10,6 +25,13 @@ import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
+import { BackupService } from './backup.service';
+import { LogBufferService } from './log-buffer.service';
+import { EventsService } from './events.service';
+import { ImportRadarrService, ApiImportResult } from './import-radarr.service';
+import { ImportSonarrService } from './import-sonarr.service';
+import { ImportApiDto } from './dto/import-api.dto';
+import { Observable } from 'rxjs';
 
 export interface ServiceStatus {
   name: string;
@@ -51,7 +73,17 @@ export class SystemController {
     @InjectRepository(RootFolder)
     private readonly rootFolderRepo: Repository<RootFolder>,
     private readonly qbittorrent: QbittorrentService,
+    private readonly backup: BackupService,
+    private readonly logBuffer: LogBufferService,
+    private readonly eventsService: EventsService,
+    private readonly importRadarrService: ImportRadarrService,
+    private readonly importSonarrService: ImportSonarrService,
   ) {}
+
+  @Sse('events')
+  events(): Observable<MessageEvent> {
+    return this.eventsService.getStream();
+  }
 
   @Get('health')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
@@ -91,12 +123,19 @@ export class SystemController {
   @Get('stats')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   async stats(): Promise<StatsReport> {
-    const [[moviesRow], [seriesRow], [pendingRow], rootFolders] = await Promise.all([
-      this.dataSource.query(`SELECT COUNT(*)::int AS count FROM media WHERE type = 'movie'`),
-      this.dataSource.query(`SELECT COUNT(*)::int AS count FROM media WHERE type = 'series'`),
-      this.dataSource.query(`SELECT COUNT(*)::int AS count FROM requests WHERE status = 'pending'`),
-      this.rootFolderRepo.find({ order: { path: 'ASC' } }),
-    ]);
+    const [[moviesRow], [seriesRow], [pendingRow], rootFolders] =
+      await Promise.all([
+        this.dataSource.query(
+          `SELECT COUNT(*)::int AS count FROM media WHERE type = 'movie'`,
+        ),
+        this.dataSource.query(
+          `SELECT COUNT(*)::int AS count FROM media WHERE type = 'series'`,
+        ),
+        this.dataSource.query(
+          `SELECT COUNT(*)::int AS count FROM requests WHERE status = 'pending'`,
+        ),
+        this.rootFolderRepo.find({ order: { path: 'ASC' } }),
+      ]);
 
     const diskSpace: DiskSpaceEntry[] = rootFolders.map((f) => {
       try {
@@ -108,7 +147,12 @@ export class SystemController {
           totalSpace: stat.blocks * stat.bsize,
         };
       } catch {
-        return { path: f.path, label: f.label ?? null, freeSpace: -1, totalSpace: -1 };
+        return {
+          path: f.path,
+          label: f.label ?? null,
+          freeSpace: -1,
+          totalSpace: -1,
+        };
       }
     });
 
@@ -120,12 +164,87 @@ export class SystemController {
     };
   }
 
+  @Post('backup')
+  @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
+  createBackup() {
+    return this.backup.createBackup();
+  }
+
+  @Get('backups')
+  @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
+  listBackups() {
+    return this.backup.listBackups();
+  }
+
+  @Post('restore')
+  @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
+  restore(@Body() body: { filename: string }) {
+    return this.backup.restore(body.filename);
+  }
+
+  @Get('backups/:name')
+  @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
+  downloadBackup(@Param('name') name: string, @Res() res: Response) {
+    const filePath = this.backup.getBackupPath(name);
+    res.download(filePath, name);
+  }
+
+  @Get('logs')
+  @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
+  getLogs(
+    @Query('level') level?: string,
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.logBuffer.getEntries({
+      level: level || undefined,
+      q: q || undefined,
+      limit: limit ? parseInt(limit, 10) : 200,
+    });
+  }
+
+  @Post('import-radarr')
+  @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
+  @UseInterceptors(FileInterceptor('file'))
+  importRadarr(@UploadedFile() file: Express.Multer.File) {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('No file uploaded');
+    }
+    return this.importRadarrService.importFromDump(file.buffer);
+  }
+
+  @Post('import-sonarr')
+  @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
+  @UseInterceptors(FileInterceptor('file'))
+  importSonarr(@UploadedFile() file: Express.Multer.File) {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('No file uploaded');
+    }
+    return this.importSonarrService.importFromDump(file.buffer);
+  }
+
+  @Post('import-radarr-api')
+  @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
+  importRadarrApi(@Body() dto: ImportApiDto): Promise<ApiImportResult> {
+    return this.importRadarrService.importFromApi(dto.url, dto.apiKey);
+  }
+
+  @Post('import-sonarr-api')
+  @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
+  importSonarrApi(@Body() dto: ImportApiDto): Promise<ApiImportResult> {
+    return this.importSonarrService.importFromApi(dto.url, dto.apiKey);
+  }
+
   private async checkClients(): Promise<ServiceStatus[]> {
     const clients = await this.clientRepo.find({ where: { enabled: true } });
     return Promise.all(
       clients.map(async (c) => {
         const result = await this.qbittorrent.testConnection(c.settings);
-        return { name: c.name, ok: result.ok, message: result.ok ? undefined : result.message };
+        return {
+          name: c.name,
+          ok: result.ok,
+          message: result.ok ? undefined : result.message,
+        };
       }),
     );
   }

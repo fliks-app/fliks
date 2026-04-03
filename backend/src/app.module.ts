@@ -11,10 +11,14 @@ import { IndexersModule } from './modules/indexers/indexers.module';
 import { DownloadClientsModule } from './modules/download-clients/download-clients.module';
 import { RequestsModule } from './modules/requests/requests.module';
 import { SuitarrSchedulerModule } from './modules/scheduler/scheduler.module';
+import { EventsModule } from './modules/scheduler/events.module';
 import { RootFoldersModule } from './modules/root-folders/root-folders.module';
 import { BlocklistModule } from './modules/blocklist/blocklist.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { SubtitlesModule } from './modules/subtitles/subtitles.module';
+import { MediaServersModule } from './modules/media-servers/media-servers.module';
+import { RolesModule } from './modules/roles/roles.module';
 
 @Module({
   imports: [
@@ -33,6 +37,7 @@ import { SettingsModule } from './modules/settings/settings.module';
         extra: { max: 20 },
       }),
     }),
+    EventsModule,
     AuthModule,
     UsersModule,
     MediaModule,
@@ -47,6 +52,9 @@ import { SettingsModule } from './modules/settings/settings.module';
     BlocklistModule,
     NotificationsModule,
     SettingsModule,
+    SubtitlesModule,
+    MediaServersModule,
+    RolesModule,
   ],
 })
 export class AppModule {}

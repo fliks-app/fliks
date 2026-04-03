@@ -17,7 +17,8 @@ export function parseReleaseLanguage(title: string): SuitarrLanguageDefinition {
   const t = norm(title);
 
   // French markers (must check before generic patterns)
-  if (/\b(french|vff|vfi|vf\b|truefrench|vostfr|vost)\b/.test(t)) return lang('fr');
+  if (/\b(french|vff|vfi|vf\b|truefrench|vostfr|vost)\b/.test(t))
+    return lang('fr');
 
   // German
   if (/\b(german|deutsch)\b/.test(t)) return lang('de');
@@ -29,7 +30,8 @@ export function parseReleaseLanguage(title: string): SuitarrLanguageDefinition {
   if (/\b(italian|italiano|ita\b)\b/.test(t)) return lang('it');
 
   // Portuguese
-  if (/\b(portuguese|portugu[eê]s|pt[\- ]br|ptbr|por\b)\b/.test(t)) return lang('pt');
+  if (/\b(portuguese|portugu[eê]s|pt[\- ]br|ptbr|por\b)\b/.test(t))
+    return lang('pt');
 
   // Japanese
   if (/\b(japanese|japon[ae]s|jap\b|jpn\b)\b/.test(t)) return lang('ja');
@@ -38,7 +40,8 @@ export function parseReleaseLanguage(title: string): SuitarrLanguageDefinition {
   if (/\b(korean|cor[eé]en|kor\b)\b/.test(t)) return lang('ko');
 
   // Chinese
-  if (/\b(chinese|chinois|chi\b|chn\b|mandarin|cantonese)\b/.test(t)) return lang('zh');
+  if (/\b(chinese|chinois|chi\b|chn\b|mandarin|cantonese)\b/.test(t))
+    return lang('zh');
 
   // Russian
   if (/\b(russian|russe|rus\b)\b/.test(t)) return lang('ru');
@@ -75,5 +78,19 @@ export function parseReleaseLanguage(title: string): SuitarrLanguageDefinition {
 }
 
 function lang(isoCode: string): SuitarrLanguageDefinition {
-  return SUITARR_LANGUAGES.find((l) => l.isoCode === isoCode) ?? UNKNOWN_LANGUAGE;
+  return (
+    SUITARR_LANGUAGES.find((l) => l.isoCode === isoCode) ?? UNKNOWN_LANGUAGE
+  );
+}
+
+/**
+ * If parsed language is UNKNOWN and the indexer has an unknownLanguageIsoCode mapping,
+ * remap to that language.
+ */
+export function resolveUnknownLanguage(
+  parsed: SuitarrLanguageDefinition,
+  unknownLanguageIsoCode: string | undefined,
+): SuitarrLanguageDefinition {
+  if (parsed.id !== UNKNOWN_LANGUAGE.id || !unknownLanguageIsoCode) return parsed;
+  return SUITARR_LANGUAGES.find((l) => l.isoCode === unknownLanguageIsoCode) ?? parsed;
 }

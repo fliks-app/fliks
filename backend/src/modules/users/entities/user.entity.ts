@@ -1,6 +1,7 @@
-import { Entity, Column, OneToMany, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
-import { UserRole, MediaServerType } from '../../../common/enums';
+import { MediaServerType } from '../../../common/enums';
+import { Role } from '../../roles/entities/role.entity';
 
 @Entity('users')
 export class User extends BaseEntity {
@@ -13,11 +14,12 @@ export class User extends BaseEntity {
   @Column({ nullable: true })
   passwordHash: string;
 
-  @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
-  role: UserRole;
+  @Column({ nullable: true })
+  roleId: number;
 
-  @Column({ nullable: true, unique: true })
-  apiKey: string;
+  @ManyToOne(() => Role, { eager: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'roleId' })
+  userRole: Role;
 
   @Column({
     type: 'enum',
@@ -35,6 +37,9 @@ export class User extends BaseEntity {
   @Column({ type: 'timestamptz', nullable: true })
   lastLogin: Date;
 
+  @Column({ default: false })
+  isAdmin: boolean;
+
   @Column({ default: true })
   enabled: boolean;
 
@@ -46,4 +51,19 @@ export class User extends BaseEntity {
 
   @Column({ type: 'int', default: 7 })
   quotaPeriodDays: number;
+
+  /** Computed permissions from the linked role (isAdmin overrides with all). */
+  get permissions(): string[] {
+    if (this.isAdmin) {
+      // Dynamic import would be circular; just return a known superset
+      return [
+        'media.read', 'media.create', 'media.edit', 'media.delete', 'media.grab',
+        'requests.create', 'requests.manage',
+        'subtitles.manage',
+        'settings.access',
+        'users.manage',
+      ];
+    }
+    return this.userRole?.permissions ?? [];
+  }
 }

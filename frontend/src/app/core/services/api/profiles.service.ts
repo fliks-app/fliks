@@ -11,6 +11,7 @@ export interface QualityProfile {
     quality: { id: number; name: string; resolution: number; source: string };
     allowed: boolean;
     sortOrder: number;
+    groupId?: number;
   }[];
 }
 
@@ -25,18 +26,33 @@ export interface CreateQualityProfilePayload {
     source: string;
     allowed: boolean;
     sortOrder: number;
+    groupId?: number;
   }[];
+}
+
+export interface AudioLanguageItem {
+  isoCode: string;
+  name: string;
+}
+
+export interface SubtitleLanguageItem {
+  isoCode: string;
+  name: string;
+  forced: boolean;
+  hi: boolean;
 }
 
 export interface LanguageProfile {
   id: number;
   name: string;
-  cutoff: number;
-  languages: {
-    language: { id: number; name: string; isoCode: string };
-    allowed: boolean;
-    sortOrder: number;
-  }[];
+  audioLanguages: AudioLanguageItem[];
+  subtitleLanguages: SubtitleLanguageItem[];
+}
+
+export interface CreateLanguageProfilePayload {
+  name: string;
+  audioLanguages: AudioLanguageItem[];
+  subtitleLanguages: SubtitleLanguageItem[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -65,5 +81,23 @@ export class ProfilesService {
 
   getLanguageProfiles() {
     return firstValueFrom(this.http.get<LanguageProfile[]>('/api/profiles/language'));
+  }
+
+  getLanguageDefinitions() {
+    return firstValueFrom(
+      this.http.get<{ id: number; name: string; isoCode: string }[]>('/api/profiles/language-definitions'),
+    );
+  }
+
+  createLanguageProfile(body: CreateLanguageProfilePayload) {
+    return firstValueFrom(this.http.post<LanguageProfile>('/api/profiles/language', body));
+  }
+
+  updateLanguageProfile(id: number, body: CreateLanguageProfilePayload) {
+    return firstValueFrom(this.http.put<LanguageProfile>(`/api/profiles/language/${id}`, body));
+  }
+
+  deleteLanguageProfile(id: number) {
+    return firstValueFrom(this.http.delete<void>(`/api/profiles/language/${id}`));
   }
 }

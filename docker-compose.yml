@@ -22,9 +22,8 @@ services:
       CHOKIDAR_INTERVAL: "1000"
     volumes:
       - ./backend:/app
-      - backend_node_modules:/app/node_modules
-      - ./volumes/downloads:/downloads
-      - ./volumes/medias:/app/medias
+      - /mnt/data/suitarr/volumes/downloads:/downloads
+      - /mnt/data/suitarr/volumes/medias:/medias
     depends_on:
       - postgres
 
@@ -34,8 +33,6 @@ services:
       - "4500:4500"
     volumes:
       - ./frontend:/app
-      - frontend_node_modules:/app/node_modules
-      - frontend_angular_cache:/app/.angular
     depends_on:
       - backend
 
@@ -53,12 +50,38 @@ services:
       - "6881:6881/udp"
     volumes:
       - qbittorrent_config:/config
-      - ./volumes/downloads:/downloads
+      - /mnt/data/suitarr/volumes/downloads:/downloads
+    restart: unless-stopped
+
+  jackett:
+    image: lscr.io/linuxserver/jackett:latest
+    container_name: suitarr-jackett
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Paris
+    ports:
+      - "9117:9117"
+    volumes:
+      - jackett_config:/config
+    restart: unless-stopped
+
+  emby:
+    image: lscr.io/linuxserver/emby:latest
+    container_name: suitarr-emby
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Paris
+    ports:
+      - "8096:8096"
+    volumes:
+      - emby_config:/config
+      - /mnt/data/suitarr/volumes/medias:/medias
     restart: unless-stopped
 
 volumes:
   suitarr_pgdata:
-  backend_node_modules:
-  frontend_node_modules:
-  frontend_angular_cache:
   qbittorrent_config:
+  jackett_config:
+  emby_config:

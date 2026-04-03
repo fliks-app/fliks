@@ -35,19 +35,29 @@
           </a>
         </li>
         <li>
-          <a routerLink="/movies" routerLinkActive="active">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
-            </svg>
-            {{ 'nav.movies' | translate }}
+          <a routerLink="/movies" routerLinkActive="active" class="justify-between">
+            <span class="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+              </svg>
+              {{ 'nav.movies' | translate }}
+            </span>
+            @if (movieCount() > 0) {
+              <span class="badge badge-sm badge-ghost">{{ movieCount() }}</span>
+            }
           </a>
         </li>
         <li>
-          <a routerLink="/series" routerLinkActive="active">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-            {{ 'nav.series' | translate }}
+          <a routerLink="/series" routerLinkActive="active" class="justify-between">
+            <span class="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              {{ 'nav.series' | translate }}
+            </span>
+            @if (seriesCount() > 0) {
+              <span class="badge badge-sm badge-ghost">{{ seriesCount() }}</span>
+            }
           </a>
         </li>
         <li>
@@ -59,19 +69,29 @@
           </a>
         </li>
         <li>
-          <a routerLink="/requests" routerLinkActive="active">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            {{ 'nav.requests' | translate }}
+          <a routerLink="/requests" routerLinkActive="active" class="justify-between">
+            <span class="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              {{ 'nav.requests' | translate }}
+            </span>
+            @if (pendingRequestCount() > 0) {
+              <span class="badge badge-sm badge-warning">{{ pendingRequestCount() }}</span>
+            }
           </a>
         </li>
         <li>
-          <a routerLink="/activity" routerLinkActive="active">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            {{ 'nav.activity' | translate }}
+          <a routerLink="/activity" routerLinkActive="active" class="justify-between">
+            <span class="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              {{ 'nav.activity' | translate }}
+            </span>
+            @if (queueCount() > 0) {
+              <span class="badge badge-sm badge-primary">{{ queueCount() }}</span>
+            }
           </a>
         </li>
         <li>
@@ -82,7 +102,7 @@
             {{ 'nav.calendar' | translate }}
           </a>
         </li>
-        @if (auth.isAdmin()) {
+        @if (auth.canAccessSettings()) {
           <li>
             <a routerLink="/import-disk" routerLinkActive="active">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -91,8 +111,16 @@
               {{ 'nav.import_disk' | translate }}
             </a>
           </li>
+          <li>
+            <a routerLink="/import" routerLinkActive="active">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              {{ 'nav.import' | translate }}
+            </a>
+          </li>
         }
-        @if (auth.isAdmin()) {
+        @if (auth.canAccessSettings()) {
           <li>
             <a routerLink="/system" routerLinkActive="active">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -104,7 +132,7 @@
         }
 
         <!-- Settings — collapsible dropdown (admin only) -->
-        @if (auth.isAdmin()) {
+        @if (auth.canAccessSettings()) {
           <li>
             <details [open]="isSettingsOpen()">
               <summary>
@@ -117,16 +145,26 @@
               <ul>
                 <li><a routerLink="/settings/general" routerLinkActive="active">{{ 'settings.nav.general' | translate }}</a></li>
                 <li><a routerLink="/settings/quality-profiles" routerLinkActive="active">{{ 'settings.nav.quality_profiles' | translate }}</a></li>
+                <li><a routerLink="/settings/language-profiles" routerLinkActive="active">{{ 'settings.nav.language_profiles' | translate }}</a></li>
+                <li><a routerLink="/settings/quality-definitions" routerLinkActive="active">{{ 'settings.nav.quality_definitions' | translate }}</a></li>
                 <li><a routerLink="/settings/custom-formats" routerLinkActive="active">{{ 'settings.nav.custom_formats' | translate }}</a></li>
                 <li><a routerLink="/settings/indexers" routerLinkActive="active">{{ 'settings.nav.indexers' | translate }}</a></li>
                 <li><a routerLink="/settings/download-clients" routerLinkActive="active">{{ 'settings.nav.download_clients' | translate }}</a></li>
                 <li><a routerLink="/settings/naming" routerLinkActive="active">{{ 'settings.nav.naming' | translate }}</a></li>
                 <li><a routerLink="/settings/blocklist" routerLinkActive="active">{{ 'settings.nav.blocklist' | translate }}</a></li>
+                <li><a routerLink="/settings/subtitle-providers" routerLinkActive="active">{{ 'settings.nav.subtitle_providers' | translate }}</a></li>
+                <li><a routerLink="/settings/subtitles" routerLinkActive="active">{{ 'settings.nav.subtitles' | translate }}</a></li>
                 <li><a routerLink="/settings/notifications" routerLinkActive="active">{{ 'settings.nav.notifications' | translate }}</a></li>
+                <li><a routerLink="/settings/media-servers" routerLinkActive="active">{{ 'settings.nav.media_servers' | translate }}</a></li>
                 <li><a routerLink="/settings/root-folders" routerLinkActive="active">{{ 'settings.nav.root_folders' | translate }}</a></li>
                 <li><a routerLink="/settings/tags" routerLinkActive="active">{{ 'settings.nav.tags' | translate }}</a></li>
                 <li><a routerLink="/settings/users" routerLinkActive="active">{{ 'settings.nav.users' | translate }}</a></li>
+                <li><a routerLink="/settings/roles" routerLinkActive="active">{{ 'settings.nav.roles' | translate }}</a></li>
+                <li><a routerLink="/settings/schedulers" routerLinkActive="active">{{ 'settings.nav.schedulers' | translate }}</a></li>
                 <li><a routerLink="/settings/auto-approval" routerLinkActive="active">{{ 'settings.nav.auto_approval' | translate }}</a></li>
+                @if (serverConfig.isNative) {
+                  <li><a routerLink="/setup">{{ 'settings.nav.server' | translate }}</a></li>
+                }
               </ul>
             </details>
           </li>
@@ -136,15 +174,22 @@
       <div class="p-4 border-t border-base-200">
         @if (auth.user(); as user) {
           <div class="flex items-center gap-3">
-            <div class="avatar placeholder">
-              <div class="bg-neutral text-neutral-content w-8 rounded-full">
-                <span class="text-sm">{{ user.username[0].toUpperCase() }}</span>
-              </div>
+            <div class="w-8 h-8 rounded-full bg-base-300 flex items-center justify-center shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-base-content/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
             </div>
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium truncate">{{ user.username }}</p>
-              <p class="text-sm text-base-content/50">{{ ('roles.' + user.role) | translate }}</p>
+              <p class="text-sm text-base-content/50">{{ user.role }}</p>
             </div>
+            <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="toggleTheme()">
+              @if (theme() === 'dark') {
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m8.66-13.66l-.71.71M4.05 19.95l-.71.71M21 12h-1M4 12H3m16.66 7.66l-.71-.71M4.05 4.05l-.71-.71M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+              } @else {
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.005 9.005 0 0012 21a9.005 9.005 0 008.354-5.646z" /></svg>
+              }
+            </button>
             <button class="btn btn-ghost btn-sm btn-square" (click)="auth.logout()" [attr.aria-label]="'nav.logout' | translate">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />

@@ -1,5 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsInt, IsOptional, IsString, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 
 export class ImportFileEntry {
   @IsString()
@@ -14,6 +21,10 @@ export class ImportFileEntry {
 
   @IsString()
   quality: string;
+
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
 }
 
 export class ConfirmDiskImportDto {

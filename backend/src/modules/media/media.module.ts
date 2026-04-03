@@ -15,9 +15,12 @@ import { IndexersModule } from '../indexers/indexers.module';
 import { DownloadClientsModule } from '../download-clients/download-clients.module';
 import { BlocklistModule } from '../blocklist/blocklist.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { SubtitlesModule } from '../subtitles/subtitles.module';
+import { MediaServersModule } from '../media-servers/media-servers.module';
 import { MovieDownloadService } from './movie-download.service';
 import { EpisodeDownloadService } from './episode-download.service';
 import { DiskImportService } from './disk-import.service';
+import { NamingService } from '../scheduler/naming.service';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
 
 @Module({
@@ -38,9 +41,17 @@ import { RootFolder } from '../root-folders/entities/root-folder.entity';
     DownloadClientsModule,
     BlocklistModule,
     NotificationsModule,
+    SubtitlesModule,
+    MediaServersModule,
   ],
   controllers: [MediaController],
-  providers: [MediaService, MovieDownloadService, EpisodeDownloadService, DiskImportService],
+  providers: [
+    MediaService,
+    MovieDownloadService,
+    EpisodeDownloadService,
+    DiskImportService,
+    NamingService,
+  ],
   exports: [MediaService],
 })
 export class MediaModule {}

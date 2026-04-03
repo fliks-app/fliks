@@ -9,6 +9,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
+import { ToastService } from '../../../core/services/toast.service';
 
 function applyMovieFormat(format: string): string {
   return format
@@ -67,11 +68,11 @@ function applySeasonFolderFormat(format: string): string {
 export class NamingSettingsComponent implements OnInit {
   private readonly api = inject(SettingsApiService);
   private readonly translate = inject(TranslateService);
+  private readonly toast = inject(ToastService);
 
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly error = signal('');
-  readonly saved = signal(false);
 
   readonly movieFormat = signal('{Movie Title} ({Release Year}) {Quality Full}');
   readonly seriesFolderFormat = signal('{Series Title}');
@@ -135,7 +136,6 @@ export class NamingSettingsComponent implements OnInit {
   async save() {
     this.saving.set(true);
     this.error.set('');
-    this.saved.set(false);
     try {
       await this.api.setBulk({
         naming_movie_format: this.movieFormat(),
@@ -143,10 +143,9 @@ export class NamingSettingsComponent implements OnInit {
         naming_season_folder_format: this.seasonFolderFormat(),
         naming_series_format: this.seriesFormat(),
       });
-      this.saved.set(true);
-      setTimeout(() => this.saved.set(false), 3000);
+      this.toast.success(this.translate.instant('settings.naming.saved'));
     } catch {
-      this.error.set(this.translate.instant('settings.naming.save_error'));
+      // handled by global error interceptor
     } finally {
       this.saving.set(false);
     }

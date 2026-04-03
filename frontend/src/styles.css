@@ -1,6 +1,12 @@
 @import "tailwindcss";
 @plugin "daisyui";
 
+@theme {
+  --breakpoint-3xl: 120rem;
+  --breakpoint-4xl: 160rem;
+  --breakpoint-5xl: 240rem;
+}
+
 @keyframes slide-in-right {
   from {
     opacity: 0;
@@ -15,3 +21,5 @@
 .animate-slide-in {
   animation: slide-in-right 0.3s ease-out;
 }
+
+

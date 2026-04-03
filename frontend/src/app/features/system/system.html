@@ -1,141 +1,23 @@
-<div class="flex flex-col gap-6">
-  <div class="flex items-center justify-between">
-    <div>
-      <h1 class="text-2xl font-bold">{{ 'system.title' | translate }}</h1>
-      <p class="text-sm text-base-content/60 mt-1">{{ 'system.subtitle' | translate }}</p>
-    </div>
-    <button type="button" class="btn btn-ghost btn-sm" (click)="loadHealth()">
-      {{ 'common.refresh' | translate }}
-    </button>
-  </div>
-
-  <!-- Health status -->
-  @if (healthLoading()) {
-    <div class="flex justify-center py-6">
-      <span class="loading loading-spinner loading-md"></span>
-    </div>
-  } @else if (health(); as h) {
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-      <!-- Version & uptime -->
-      <div class="card bg-base-100 border border-base-200">
-        <div class="card-body py-4 px-5 gap-1">
-          <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'system.health_app' | translate }}</p>
-          <p class="text-lg font-bold">v{{ h.version }}</p>
-          <p class="text-sm text-base-content/60">{{ 'system.uptime' | translate }}: {{ formatUptime(h.uptimeSeconds) }}</p>
-        </div>
-      </div>
-
-      <!-- Database -->
-      <div class="card bg-base-100 border" [class.border-base-200]="h.database.ok" [class.border-error]="!h.database.ok">
-        <div class="card-body py-4 px-5 gap-1">
-          <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'system.health_db' | translate }}</p>
-          <div class="flex items-center gap-2">
-            <span class="inline-block w-2 h-2 rounded-full" [class.bg-success]="h.database.ok" [class.bg-error]="!h.database.ok"></span>
-            <span class="font-medium">{{ h.database.name }}</span>
-          </div>
-          @if (!h.database.ok) {
-            <p class="text-sm text-error">{{ h.database.message }}</p>
-          }
-        </div>
-      </div>
-
-      <!-- Indexers -->
-      <div class="card bg-base-100 border border-base-200">
-        <div class="card-body py-4 px-5 gap-1">
-          <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'system.health_indexers' | translate }}</p>
-          <p class="text-lg font-bold">{{ h.indexers.enabled }}<span class="text-base-content/40 text-sm font-normal"> / {{ h.indexers.total }}</span></p>
-          <p class="text-sm text-base-content/60">{{ 'system.health_indexers_enabled' | translate }}</p>
-        </div>
-      </div>
-
-      <!-- Download clients -->
-      <div class="card bg-base-100 border border-base-200">
-        <div class="card-body py-4 px-5 gap-2">
-          <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'system.health_clients' | translate }}</p>
-          @if (h.downloadClients.length === 0) {
-            <p class="text-sm text-base-content/50">{{ 'system.health_no_clients' | translate }}</p>
-          }
-          @for (dc of h.downloadClients; track dc.name) {
-            <div class="flex items-center gap-2 text-sm">
-              <span class="inline-block w-2 h-2 rounded-full shrink-0" [class.bg-success]="dc.ok" [class.bg-error]="!dc.ok"></span>
-              <span class="truncate">{{ dc.name }}</span>
-            </div>
-          }
-        </div>
-      </div>
-    </div>
-  }
-
-  <!-- Manual commands -->
-  <div class="card bg-base-100 border border-base-200">
-    <div class="card-body gap-4">
-      <h2 class="card-title text-base">{{ 'system.commands_title' | translate }}</h2>
-      <div class="flex flex-wrap gap-2">
-        @for (cmd of availableCommands; track cmd.name) {
-          <button
-            type="button"
-            class="btn btn-outline btn-sm"
-            (click)="trigger(cmd.name)"
-            [disabled]="triggering() !== null"
-          >
-            @if (triggering() === cmd.name) {
-              <span class="loading loading-spinner loading-xs"></span>
-            }
-            {{ cmd.label | translate }}
-          </button>
-        }
-      </div>
-    </div>
-  </div>
-
-  <!-- Recent command history -->
+<div class="flex flex-col gap-4">
   <div>
-    <div class="flex items-center justify-between mb-3">
-      <h2 class="text-lg font-semibold">{{ 'system.recent_commands' | translate }}</h2>
-      <button type="button" class="btn btn-ghost btn-xs" (click)="loadCommands()">
-        {{ 'common.refresh' | translate }}
-      </button>
-    </div>
-
-    @if (loading()) {
-      <div class="flex justify-center py-8">
-        <span class="loading loading-spinner loading-md"></span>
-      </div>
-    } @else if (commands().length === 0) {
-      <p class="text-center py-8 text-base-content/50">{{ 'system.no_commands' | translate }}</p>
-    } @else {
-      <div class="overflow-x-auto rounded-lg border border-base-200">
-        <table class="table table-sm">
-          <thead>
-            <tr>
-              <th>{{ 'system.col_command' | translate }}</th>
-              <th>{{ 'system.col_trigger' | translate }}</th>
-              <th>{{ 'system.col_status' | translate }}</th>
-              <th>{{ 'system.col_started' | translate }}</th>
-              <th>{{ 'system.col_ended' | translate }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (cmd of commands(); track cmd.id) {
-              <tr>
-                <td class="font-medium">{{ cmd.name }}</td>
-                <td class="text-sm text-base-content/60">{{ cmd.trigger }}</td>
-                <td>
-                  <span class="badge badge-sm" [ngClass]="statusClass(cmd.status)">
-                    {{ cmd.status }}
-                  </span>
-                </td>
-                <td class="text-sm text-base-content/60 tabular-nums">
-                  {{ cmd.startedOn | date:'dd/MM HH:mm:ss' }}
-                </td>
-                <td class="text-sm text-base-content/60 tabular-nums">
-                  {{ cmd.endedOn ? (cmd.endedOn | date:'dd/MM HH:mm:ss') : '—' }}
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-    }
+    <h1 class="text-2xl font-bold">{{ 'system.title' | translate }}</h1>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'system.subtitle' | translate }}</p>
   </div>
+
+  <div role="tablist" class="tabs tabs-bordered">
+    <a role="tab" class="tab" routerLink="/system" routerLinkActive="tab-active" [routerLinkActiveOptions]="{ exact: true }">
+      {{ 'system.tab_status' | translate }}
+    </a>
+    <a role="tab" class="tab" routerLink="/system/backups" routerLinkActive="tab-active">
+      {{ 'system.tab_backups' | translate }}
+    </a>
+    <a role="tab" class="tab" routerLink="/system/logs" routerLinkActive="tab-active">
+      {{ 'system.tab_logs' | translate }}
+    </a>
+    <a role="tab" class="tab" routerLink="/system/import" routerLinkActive="tab-active">
+      {{ 'system.tab_import' | translate }}
+    </a>
+  </div>
+
+  <router-outlet />
 </div>

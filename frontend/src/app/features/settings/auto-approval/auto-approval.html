@@ -58,17 +58,8 @@
   }
 </div>
 
-@if (editorOpen()) {
-  <div
-    class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto"
-    (click)="closeEditor()"
-    role="presentation"
-  >
-    <div
-      class="bg-base-100 rounded-lg shadow-xl w-full max-w-lg mt-8 p-6 border border-base-200"
-      (click)="$event.stopPropagation()"
-      role="dialog"
-    >
+<dialog #editorDialog class="modal">
+  <div class="modal-box max-w-lg">
       <h3 class="text-lg font-semibold mb-4">
         {{ (editingId() != null ? 'settings.auto_approval.editor_edit' : 'settings.auto_approval.editor_create') | translate }}
       </h3>
@@ -145,10 +136,8 @@
           }
         </div>
 
-        @if (saveError()) {
-          <div role="alert" class="alert alert-error text-sm">{{ saveError() }}</div>
-        }
-        <div class="flex justify-end gap-2 pt-2">
+
+        <div class="modal-action">
           <button type="button" class="btn btn-ghost btn-sm" (click)="closeEditor()">
             {{ 'common.cancel' | translate }}
           </button>
@@ -161,5 +150,7 @@
         </div>
       </div>
     </div>
-  </div>
-}
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeEditor()">close</button>
+  </form>
+</dialog>

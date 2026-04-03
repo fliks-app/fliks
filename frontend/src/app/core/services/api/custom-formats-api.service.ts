@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
 export interface CustomFormatSpec {
-  type: 'title_regex' | 'source' | 'resolution' | 'language';
+  type: 'title_regex' | 'source' | 'resolution' | 'language' | 'indexer_flag';
   value: string;
   negate?: boolean;
   required?: boolean;
@@ -44,5 +44,9 @@ export class CustomFormatsApiService {
 
   remove(id: number) {
     return firstValueFrom(this.http.delete<void>(`/api/custom-formats/${id}`));
+  }
+
+  testTitle(title: string) {
+    return firstValueFrom(this.http.post<{ formatId: number; formatName: string; matched: boolean; score: number }[]>('/api/custom-formats/test', { title }));
   }
 }

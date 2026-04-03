@@ -50,8 +50,14 @@ export function parseReleaseQuality(title: string): ParsedReleaseQuality {
     return { quality: q, label: q.name };
   }
 
-  let source: 'remux' | 'bluray' | 'web' | 'hdtv' | 'dvd' | 'sdtv' | 'workprint' =
-    'hdtv';
+  let source:
+    | 'remux'
+    | 'bluray'
+    | 'web'
+    | 'hdtv'
+    | 'dvd'
+    | 'sdtv'
+    | 'workprint' = 'hdtv';
   if (isRemux) source = 'remux';
   else if (isBluray) source = 'bluray';
   else if (isWebDl || isWebRip) source = 'web';

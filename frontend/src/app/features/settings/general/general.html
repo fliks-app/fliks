@@ -59,11 +59,67 @@
           <span class="label-text">{{ 'settings.general.search_missing_auto' | translate }}</span>
         </label>
 
+        <label class="form-control w-full">
+          <div class="label">
+            <span class="label-text">{{ 'settings.general.companion_extensions' | translate }}</span>
+          </div>
+          <input type="text" class="input input-bordered input-sm w-full font-mono"
+            [ngModel]="companionFileExtensions()" (ngModelChange)="companionFileExtensions.set($event)"
+            placeholder=".nfo,.srt,.ass,.sub,.jpg,.png" />
+          <div class="label">
+            <span class="label-text-alt text-base-content/50">{{ 'settings.general.companion_extensions_hint' | translate }}</span>
+          </div>
+        </label>
+
+        <div class="divider my-0"></div>
+        <h2 class="card-title text-base">{{ 'settings.general.section_stalled' | translate }}</h2>
+
+        <label class="label cursor-pointer justify-start gap-3">
+          <input
+            type="checkbox"
+            class="toggle toggle-sm"
+            [ngModel]="stalledDeleteEnabled() === 'true'"
+            (ngModelChange)="stalledDeleteEnabled.set($event ? 'true' : 'false')"
+          />
+          <span class="label-text">{{ 'settings.general.stalled_delete_enabled' | translate }}</span>
+        </label>
+
+        @if (stalledDeleteEnabled() === 'true') {
+          <label class="form-control w-full max-w-xs">
+            <div class="label">
+              <span class="label-text">{{ 'settings.general.stalled_delete_after_minutes' | translate }}</span>
+            </div>
+            <input type="number" class="input input-bordered input-sm w-full" min="1"
+              [ngModel]="stalledDeleteAfterMinutes()" (ngModelChange)="stalledDeleteAfterMinutes.set($event)" />
+            <div class="label">
+              <span class="label-text-alt text-base-content/50">{{ 'settings.general.stalled_delete_hint' | translate }}</span>
+            </div>
+          </label>
+
+          <label class="label cursor-pointer justify-start gap-3">
+            <input
+              type="checkbox"
+              class="toggle toggle-sm"
+              [ngModel]="stalledSearchAfterDelete() === 'true'"
+              (ngModelChange)="stalledSearchAfterDelete.set($event ? 'true' : 'false')"
+            />
+            <span class="label-text">{{ 'settings.general.stalled_search_after_delete' | translate }}</span>
+          </label>
+        }
+
+        <div class="divider my-0"></div>
+        <h2 class="card-title text-base">{{ 'settings.general.section_post_import' | translate }}</h2>
+
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.general.post_import_script' | translate }}</span>
+          <input type="text" class="input input-bordered input-sm w-full"
+            [ngModel]="postImportScript()" (ngModelChange)="postImportScript.set($event)"
+            [placeholder]="'settings.general.post_import_script_hint' | translate" />
+          <span class="label-text-alt text-base-content/50">{{ 'settings.general.post_import_script_vars' | translate }}</span>
+        </label>
+
         @if (error()) {
           <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
-        }
-        @if (saved()) {
-          <div role="alert" class="alert alert-success text-sm">{{ 'settings.general.saved' | translate }}</div>
         }
 
         <div class="card-actions justify-end">

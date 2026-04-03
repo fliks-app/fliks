@@ -1,5 +1,11 @@
-import { IsString, IsOptional, IsEnum, IsNumber, IsBoolean } from 'class-validator';
-import { Type } from 'class-transformer';
+import {
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsNumber,
+  IsBoolean,
+} from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 import { MediaType, MediaStatus } from '../../../common/enums';
 
 export class SearchMediaDto {
@@ -17,7 +23,7 @@ export class SearchMediaDto {
 
   @IsBoolean()
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => value === 'true' || value === true)
   monitored?: boolean;
 
   @IsNumber()
@@ -61,4 +67,18 @@ export class SearchMediaDto {
   @IsOptional()
   @Type(() => Number)
   limit?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  missing?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  cutoffUnmet?: boolean;
+
+  @IsString()
+  @IsOptional()
+  letter?: string;
 }

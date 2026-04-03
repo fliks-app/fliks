@@ -12,6 +12,7 @@ import { HttpClient } from '@angular/common/http';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { MediaService } from '../../core/services/api/media.service';
+import { MediaType } from '../../core/enums/media-type.enum';
 
 export interface ScanCandidate {
   filePath: string;
@@ -27,19 +28,21 @@ export interface ScanCandidate {
   mediaType: string | null;
   episodeId: number | null;
   episodeTitle: string | null;
+  existingQuality: string | null;
 }
 
 interface MediaOption {
   id: number;
   title: string;
   year: number;
-  type: 'movie' | 'series';
+  type: MediaType;
 }
 
 interface RowState {
   candidate: ScanCandidate;
   selected: boolean;
   mediaId: number | null;
+  force: boolean;
 }
 
 @Component({
@@ -93,8 +96,9 @@ export class ImportDiskComponent implements OnInit {
       this.rows.set(
         candidates.map((c) => ({
           candidate: c,
-          selected: c.mediaId !== null,
+          selected: c.mediaId !== null && !c.existingQuality,
           mediaId: c.mediaId,
+          force: false,
         })),
       );
       this.scanned.set(true);
@@ -109,7 +113,12 @@ export class ImportDiskComponent implements OnInit {
   }
 
   toggleAll(checked: boolean) {
-    this.rows.update((rows) => rows.map((r) => ({ ...r, selected: checked })));
+    this.rows.update((rows) =>
+      rows.map((r) => ({
+        ...r,
+        selected: checked && (!r.candidate.existingQuality || r.force),
+      })),
+    );
   }
 
   setRowMedia(index: number, mediaId: number | null) {
@@ -124,6 +133,12 @@ export class ImportDiskComponent implements OnInit {
     );
   }
 
+  forceImportRow(index: number) {
+    this.rows.update((rows) =>
+      rows.map((r, i) => (i === index ? { ...r, force: true, selected: true } : r)),
+    );
+  }
+
   async confirmImport() {
     const toImport = this.rows()
       .filter((r) => r.selected && r.mediaId !== null)
@@ -132,6 +147,7 @@ export class ImportDiskComponent implements OnInit {
         mediaId: r.mediaId!,
         episodeId: r.candidate.episodeId ?? undefined,
         quality: r.candidate.qualityName,
+        ...(r.force ? { force: true } : {}),
       }));
 
     if (!toImport.length) return;

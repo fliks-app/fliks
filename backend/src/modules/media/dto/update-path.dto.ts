@@ -1,6 +1,6 @@
-import { IsString } from 'class-validator';
+import { IsInt } from 'class-validator';
 
-export class UpdatePathDto {
-  @IsString()
-  path: string;
+export class UpdateRootFolderDto {
+  @IsInt()
+  rootFolderId: number;
 }

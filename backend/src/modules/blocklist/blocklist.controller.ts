@@ -29,11 +29,11 @@ export class BlocklistController {
 
   @Get()
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
-  findAll(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
-    return this.service.findAll(page ? Number(page) : 1, limit ? Number(limit) : 25);
+  findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.service.findAll(
+      page ? Number(page) : 1,
+      limit ? Number(limit) : 25,
+    );
   }
 
   @Delete('all')

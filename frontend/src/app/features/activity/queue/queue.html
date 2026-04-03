@@ -1,0 +1,268 @@
+<div class="flex justify-end gap-2">
+  @if (hasImportable) {
+    <button
+      type="button"
+      class="btn btn-primary btn-sm"
+      [disabled]="importing()"
+      (click)="triggerImport()"
+    >
+      @if (importing()) {
+        <span class="loading loading-spinner loading-xs"></span>
+      } @else {
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+        </svg>
+      }
+      {{ 'activity.import_now' | translate }}
+    </button>
+  }
+  <button type="button" class="btn btn-ghost btn-sm" (click)="refreshQueue()">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+    </svg>
+    {{ 'common.refresh' | translate }}
+  </button>
+</div>
+
+@if (queueLoading() && queue().length === 0) {
+  <div class="flex justify-center py-16">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+} @else if (queueError()) {
+  <div role="alert" class="alert alert-error">{{ queueError() }}</div>
+} @else if (queue().length === 0) {
+  <div class="text-center py-16 text-base-content/50">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+    </svg>
+    <p>{{ 'activity.queue_empty' | translate }}</p>
+  </div>
+} @else {
+  <div class="flex flex-col gap-3">
+    @for (item of queue(); track item.hash) {
+      <div class="card bg-base-100 border border-base-200 shadow-sm">
+        <div class="card-body py-3 px-4 gap-2">
+          <div class="flex flex-wrap items-start justify-between gap-2">
+            <div class="flex-1 min-w-0">
+              @if (item.mediaId) {
+                <a
+                  [routerLink]="['/' + (item.mediaType === 'series' ? 'series' : 'movies'), item.mediaId]"
+                  class="font-medium text-sm leading-tight truncate text-primary hover:underline"
+                  [title]="item.name"
+                >{{ item.name }}</a>
+              } @else {
+                <p class="font-medium text-sm leading-tight truncate" [title]="item.name">
+                  {{ item.name }}
+                </p>
+              }
+              <div class="flex items-center gap-2">
+                @if (!item.mediaId) {
+                  <button
+                    type="button"
+                    class="btn btn-outline btn-xs gap-1"
+                    (click)="openLinkModal(item)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                    {{ 'activity.link_media' | translate }}
+                  </button>
+                }
+                @if (item.mediaId && (item.status === 'Awaiting import' || item.status === 'Import failed' || (item.status === 'Stopped' && item.progress >= 1))) {
+                  <button
+                    type="button"
+                    class="btn btn-success btn-xs gap-1"
+                    [disabled]="importing()"
+                    (click)="reimportAndTrigger(item)"
+                  >
+                    @if (importing()) {
+                      <span class="loading loading-spinner loading-xs"></span>
+                    } @else {
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                      </svg>
+                    }
+                    {{ 'activity.import_now' | translate }}
+                  </button>
+                }
+              </div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <span class="badge badge-sm" [ngClass]="stateClass(item.status)">
+                {{ item.status }}
+              </span>
+              <div class="dropdown dropdown-end">
+                <label tabindex="0" class="btn btn-ghost btn-xs btn-circle">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01" />
+                  </svg>
+                </label>
+                <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-200 rounded-box shadow-lg z-10 w-56 p-2">
+                  @if (item.status === 'Imported' || item.status === 'Quality not upgraded' || (item.status === 'Stopped' && item.progress >= 1)) {
+                    <li>
+                      <button (click)="reimportAndTrigger(item)">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {{ 'activity.reimport' | translate }}
+                      </button>
+                    </li>
+                  }
+                  <li>
+                    <button (click)="removeTorrent(item, false)">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      {{ 'activity.remove_torrent' | translate }}
+                    </button>
+                  </li>
+                  <li>
+                    <button class="text-error" (click)="removeTorrent(item, true)">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      {{ 'activity.remove_torrent_with_files' | translate }}
+                    </button>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="w-full bg-base-300 rounded-full h-1.5 overflow-hidden">
+            <div
+              class="h-1.5 rounded-full transition-all duration-500"
+              [class.bg-primary]="item.status === 'Downloading' || item.status === 'Downloading metadata'"
+              [class.bg-success]="item.status === 'Seeding' || item.status === 'Awaiting import' || item.status === 'Imported'"
+              [class.bg-warning]="item.status === 'Stalled' || item.status === 'Importing' || item.status === 'Quality not upgraded'"
+              [class.bg-error]="item.status === 'Import failed'"
+              [class.bg-base-content/20]="item.status === 'Paused' || item.status === 'Stopped'"
+              [style.width.%]="item.progress * 100"
+            ></div>
+          </div>
+
+          <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-base-content/60">
+            <span>{{ (item.progress * 100) | number:'1.1-1' }}%</span>
+            <span>{{ formatBytes(item.downloaded) }} / {{ formatBytes(item.size) }}</span>
+            @if (item.dlspeed > 0) {
+              <span>↓ {{ formatSpeed(item.dlspeed) }}</span>
+            }
+            @if (item.upspeed > 0) {
+              <span>↑ {{ formatSpeed(item.upspeed) }}</span>
+            }
+            @if (item.eta > 0 && item.status === 'Downloading') {
+              <span>{{ 'activity.eta' | translate }}: {{ formatEta(item.eta) }}</span>
+            }
+            @if (item.num_seeds > 0 || item.num_leechs > 0) {
+              <span>S:{{ item.num_seeds }} L:{{ item.num_leechs }}</span>
+            }
+            @if (item.category) {
+              <span class="badge badge-ghost badge-xs">{{ item.category }}</span>
+            }
+            @if (item.clientName) {
+              <span class="badge badge-outline badge-xs">{{ item.clientName }}</span>
+            }
+            @if (item.statusMessage) {
+              <div class="flex items-start gap-2 text-xs text-warning bg-warning/10 rounded px-2 py-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.87A1 1 0 002.57 20h18.86a1 1 0 00.86-1.27L13.71 3.86a1 1 0 00-1.42 0z" />
+                </svg>
+                <span>{{ item.statusMessage }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    }
+  </div>
+}
+
+<!-- Link torrent to media modal -->
+<dialog #linkModal class="modal">
+  <div class="modal-box max-w-lg">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+    </form>
+    <h3 class="text-lg font-bold mb-1">{{ 'activity.link_media' | translate }}</h3>
+    @if (linkItem(); as li) {
+      <p class="text-sm text-base-content/60 mb-4 truncate" [title]="li.name">{{ li.name }}</p>
+    }
+
+    <div class="flex gap-2 mb-4">
+      <input
+        type="text"
+        class="input input-bordered input-sm flex-1"
+        [ngModel]="linkSearch()"
+        (ngModelChange)="linkSearch.set($event)"
+        (keydown.enter)="searchMediaForLink()"
+        [placeholder]="'activity.link_search_placeholder' | translate"
+      />
+      <button
+        type="button"
+        class="btn btn-sm btn-primary"
+        [disabled]="linkSearching()"
+        (click)="searchMediaForLink()"
+      >
+        @if (linkSearching()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        } @else {
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        }
+      </button>
+    </div>
+
+    @if (linkResults().length > 0) {
+      <div class="flex flex-col gap-1 max-h-64 overflow-y-auto">
+        @for (m of linkResults(); track m.id) {
+          <label
+            class="flex items-center gap-3 p-2 rounded-lg cursor-pointer hover:bg-base-200 transition-colors"
+            [class.bg-primary/10]="linkSelectedMediaId() === m.id"
+            [class.ring-1]="linkSelectedMediaId() === m.id"
+            [class.ring-primary]="linkSelectedMediaId() === m.id"
+          >
+            <input
+              type="radio"
+              class="radio radio-sm radio-primary"
+              name="linkMedia"
+              [value]="m.id"
+              [checked]="linkSelectedMediaId() === m.id"
+              (change)="linkSelectedMediaId.set(m.id)"
+            />
+            @if (m.posterUrl) {
+              <img [src]="m.posterUrl" class="w-8 h-12 rounded object-cover bg-base-300" />
+            } @else {
+              <div class="w-8 h-12 rounded bg-base-300"></div>
+            }
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium truncate">{{ m.title }}</p>
+              <p class="text-xs text-base-content/50">{{ m.year }} · {{ m.type === 'movie' ? 'Film' : 'Série' }}</p>
+            </div>
+          </label>
+        }
+      </div>
+    } @else if (!linkSearching() && linkSearch()) {
+      <p class="text-sm text-base-content/50 text-center py-4">{{ 'activity.link_no_results' | translate }}</p>
+    }
+
+    <div class="modal-action">
+      <button
+        type="button"
+        class="btn btn-primary btn-sm"
+        [disabled]="linkSaving() || linkSelectedMediaId() === null"
+        (click)="confirmLink()"
+      >
+        @if (linkSaving()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ 'activity.link_confirm' | translate }}
+      </button>
+      <button type="button" class="btn btn-sm" onclick="this.closest('dialog').close()">
+        {{ 'common.close' | translate }}
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>

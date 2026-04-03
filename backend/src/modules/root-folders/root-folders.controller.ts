@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
@@ -10,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { RootFoldersService } from './root-folders.service';
 import { CreateRootFolderDto } from './dto/create-root-folder.dto';
+import { UpdateRootFolderDto } from './dto/update-root-folder.dto';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
@@ -37,6 +39,15 @@ export class RootFoldersController {
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id);
+  }
+
+  @Patch(':id')
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateRootFolderDto,
+  ) {
+    return this.service.update(id, dto);
   }
 
   @Delete(':id')

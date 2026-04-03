@@ -147,9 +147,6 @@
       @if (error()) {
         <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
       }
-      @if (saved()) {
-        <div role="alert" class="alert alert-success text-sm">{{ 'settings.naming.saved' | translate }}</div>
-      }
 
       <div class="flex justify-end">
         <button

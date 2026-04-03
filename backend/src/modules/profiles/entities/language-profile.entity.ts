@@ -6,19 +6,21 @@ export class LanguageProfile extends BaseEntity {
   @Column()
   name: string;
 
-  @Column()
-  cutoff: number;
+  @Column({ type: 'jsonb', default: [] })
+  audioLanguages: AudioLanguageItem[];
 
-  @Column({ type: 'jsonb' })
-  languages: LanguageProfileItem[];
+  @Column({ type: 'jsonb', default: [] })
+  subtitleLanguages: SubtitleLanguageItem[];
 }
 
-export interface LanguageProfileItem {
-  language: {
-    id: number;
-    name: string;
-    isoCode: string;
-  };
-  allowed: boolean;
-  sortOrder: number;
+export interface AudioLanguageItem {
+  isoCode: string;
+  name: string;
+}
+
+export interface SubtitleLanguageItem {
+  isoCode: string;
+  name: string;
+  forced: boolean;
+  hi: boolean;
 }

@@ -8,8 +8,8 @@ export class UpdateMediaProfilesDto {
   qualityProfileId?: number | null;
 
   @IsOptional()
-  @ValidateIf((_, v) => v !== null && v !== undefined)
   @IsInt()
   @Min(1)
+  @ValidateIf((o) => o.languageProfileId !== null)
   languageProfileId?: number | null;
 }

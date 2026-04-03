@@ -21,6 +21,7 @@
     "sync-prowlarr-definitions": "bash scripts/sync-prowlarr-definitions.sh"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.0",
     "@casl/ability": "^6.8.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.3",
@@ -35,6 +36,7 @@
     "cheerio": "^1.2.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "cron-parser": "^5.5.0",
     "js-yaml": "^4.1.1",
     "passport": "^0.7.0",
     "passport-http-header-strategy": "^1.1.0",
@@ -54,8 +56,10 @@
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.9",
+    "@types/multer": "^2.1.0",
     "@types/node": "^22.10.7",
     "@types/passport-jwt": "^4.0.1",
+    "@types/pg": "^8.20.0",
     "@types/supertest": "^6.0.2",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",

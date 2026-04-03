@@ -13,8 +13,9 @@ import { DownloadClient } from '../../download-clients/entities/download-client.
 import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
 import { Tag } from '../../tags/entities/tag.entity';
+import { SubtitleProvider } from '../../subtitles/entities/subtitle-provider.entity';
+import { SubtitleFile } from '../../subtitles/entities/subtitle-file.entity';
 import { Action } from './actions.enum';
-import { UserRole } from '../../../common/enums';
 
 type Subjects =
   | InferSubjects<
@@ -26,6 +27,8 @@ type Subjects =
       | typeof QualityProfile
       | typeof LanguageProfile
       | typeof Tag
+      | typeof SubtitleProvider
+      | typeof SubtitleFile
     >
   | 'Settings'
   | 'all';
@@ -37,43 +40,76 @@ export class CaslAbilityFactory {
   createForUser(user: User): AppAbility {
     const { can, build } = new AbilityBuilder<AppAbility>(createMongoAbility);
 
-    switch (user.role) {
-      case UserRole.ADMIN:
-        can(Action.Manage, 'all');
-        can(Action.Grab, Media);
-        break;
+    // Super-admin: full access
+    if (user.isAdmin) {
+      can(Action.Manage, 'all');
+      return build();
+    }
 
-      case UserRole.USER:
-        can(Action.Read, Media);
-        can(Action.Create, Media);
-        can(Action.Grab, Media);
-        can(Action.Read, Tag);
-        can(Action.Read, QualityProfile);
-        can(Action.Read, LanguageProfile);
+    const perms = new Set(user.permissions);
 
-        can(Action.Create, SuitarrRequest);
-        can(Action.Read, SuitarrRequest, { userId: user.id } as any);
-        can(Action.Delete, SuitarrRequest, {
-          userId: user.id,
-          status: 'pending',
-        } as any);
-        can(Action.Update, SuitarrRequest, {
-          userId: user.id,
-          status: 'pending',
-        } as any);
+    // Every authenticated user can read/update themselves
+    can(Action.Read, User, { id: user.id } as any);
+    can(Action.Update, User, { id: user.id } as any);
 
-        can(Action.Read, User, { id: user.id } as any);
-        can(Action.Update, User, { id: user.id } as any);
-        break;
+    // --- media ---
+    if (perms.has('media.read')) {
+      can(Action.Read, Media);
+      can(Action.Read, Tag);
+      can(Action.Read, QualityProfile);
+      can(Action.Read, LanguageProfile);
+      can(Action.Read, SubtitleFile);
+      can(Action.Read, SubtitleProvider);
+    }
+    if (perms.has('media.create')) can(Action.Create, Media);
+    if (perms.has('media.edit')) can(Action.Update, Media);
+    if (perms.has('media.delete')) can(Action.Delete, Media);
+    if (perms.has('media.grab')) can(Action.Grab, Media);
 
-      case UserRole.READONLY:
-        can(Action.Read, Media);
-        can(Action.Read, Tag);
-        can(Action.Read, QualityProfile);
-        can(Action.Read, LanguageProfile);
-        can(Action.Read, SuitarrRequest, { userId: user.id } as any);
-        can(Action.Read, User, { id: user.id } as any);
-        break;
+    // --- read-only access to root folders & queue for users who can add/request media ---
+    if (perms.has('media.create') || perms.has('requests.create')) {
+      can(Action.Read, 'Settings');
+      can(Action.Read, DownloadClient);
+    }
+
+    // --- requests ---
+    if (perms.has('requests.create')) {
+      can(Action.Create, SuitarrRequest);
+      can(Action.Read, SuitarrRequest, { userId: user.id } as any);
+      can(Action.Delete, SuitarrRequest, {
+        userId: user.id,
+        status: 'pending',
+      } as any);
+      can(Action.Update, SuitarrRequest, {
+        userId: user.id,
+        status: 'pending',
+      } as any);
+    }
+    if (perms.has('requests.manage')) {
+      can(Action.Manage, SuitarrRequest);
+    }
+
+    // --- subtitles ---
+    if (perms.has('subtitles.manage')) {
+      can(Action.Create, SubtitleFile);
+      can(Action.Delete, SubtitleFile);
+    }
+
+    // --- settings ---
+    if (perms.has('settings.access')) {
+      can(Action.Read, 'Settings');
+      can(Action.Manage, 'Settings');
+      can(Action.Manage, Indexer);
+      can(Action.Manage, DownloadClient);
+      can(Action.Manage, QualityProfile);
+      can(Action.Manage, LanguageProfile);
+      can(Action.Manage, Tag);
+      can(Action.Manage, SubtitleProvider);
+    }
+
+    // --- users ---
+    if (perms.has('users.manage')) {
+      can(Action.Manage, User);
     }
 
     return build();

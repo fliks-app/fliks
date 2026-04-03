@@ -10,6 +10,11 @@ export class ListRequestsDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
+  userId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
   @Min(1)
   page?: number;
 

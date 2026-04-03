@@ -1,0 +1,87 @@
+<div class="card bg-base-100 border border-base-200">
+  <div class="card-body gap-4">
+    <h2 class="card-title text-base">{{ 'settings.users.editor_edit' | translate }}</h2>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.users.field_username' | translate }}</span>
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="formUsername()"
+          (ngModelChange)="formUsername.set($event)"
+        />
+      </label>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.users.field_email' | translate }}</span>
+        <input
+          type="email"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="formEmail()"
+          (ngModelChange)="formEmail.set($event)"
+          placeholder="email@example.com"
+        />
+      </label>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.users.field_new_password' | translate }}</span>
+        <input
+          type="password"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="formPassword()"
+          (ngModelChange)="formPassword.set($event)"
+          placeholder="••••••••"
+        />
+        <div class="label">
+          <span class="label-text-alt text-base-content/50">{{ 'settings.users.password_hint' | translate }}</span>
+        </div>
+      </label>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.users.field_role' | translate }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          [ngModel]="formRoleId()"
+          (ngModelChange)="formRoleId.set($event)"
+        >
+          @for (role of state.roles(); track role.id) {
+            <option [ngValue]="role.id">{{ role.name }}</option>
+          }
+        </select>
+      </label>
+    </div>
+
+    <div class="flex flex-wrap gap-4">
+      <label class="label cursor-pointer gap-2">
+        <input
+          type="checkbox"
+          class="toggle toggle-sm"
+          [ngModel]="formEnabled()"
+          (ngModelChange)="formEnabled.set($event)"
+        />
+        <span class="label-text">{{ 'settings.users.field_enabled' | translate }}</span>
+      </label>
+
+      <label class="label cursor-pointer gap-2">
+        <input
+          type="checkbox"
+          class="toggle toggle-sm toggle-error"
+          [ngModel]="formIsAdmin()"
+          (ngModelChange)="formIsAdmin.set($event)"
+        />
+        <span class="label-text">{{ 'settings.user_detail.field_is_admin' | translate }}</span>
+      </label>
+    </div>
+
+
+    <div class="card-actions justify-end">
+      <button type="button" class="btn btn-primary btn-sm" (click)="save()" [disabled]="saving()">
+        @if (saving()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ 'settings.users.save' | translate }}
+      </button>
+    </div>
+  </div>
+</div>

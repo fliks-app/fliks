@@ -4,13 +4,11 @@ import {
   signal,
   inject,
   computed,
+  effect,
   OnInit,
   viewChild,
-  ElementRef,
 } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { DecimalPipe } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   MediaService,
@@ -20,15 +18,63 @@ import {
   MovieRelease,
 } from '../../core/services/api/media.service';
 import { AuthService } from '../../core/services/auth.service';
-import { ProfilesService } from '../../core/services/api/profiles.service';
+import { ProfilesService, LanguageProfile } from '../../core/services/api/profiles.service';
 import {
   RootFoldersApiService,
   RootFolder,
 } from '../../core/services/api/root-folders-api.service';
+import {
+  SubtitlesApiService,
+  SubtitleFileRow,
+  SubtitleSearchResult,
+} from '../../core/services/api/subtitles-api.service';
+import { MediaDetailHeaderComponent } from './components/media-detail-header/media-detail-header.component';
+import { MediaDetailSubtitlesComponent } from './components/media-detail-subtitles/media-detail-subtitles.component';
+import { MediaFileInfoComponent } from '../../shared/components/media-file-info';
+import { MediaDetailSeasonsComponent } from './components/media-detail-seasons/media-detail-seasons.component';
+import { MediaDetailMovieDownloadComponent } from './components/media-detail-movie-download/media-detail-movie-download.component';
+import { MediaDetailSubtitleSearchModalComponent } from './components/media-detail-subtitle-search-modal/media-detail-subtitle-search-modal.component';
+import { ReleasesModalComponent } from './components/releases-modal/releases-modal.component';
+import { MediaDetailProfilesModalComponent } from './components/media-detail-profiles-modal/media-detail-profiles-modal.component';
+import { MediaDetailRootFolderModalComponent } from './components/media-detail-root-folder-modal/media-detail-root-folder-modal.component';
+import { MediaDetailLibraryInfoComponent } from './components/media-detail-library-info/media-detail-library-info.component';
+import {
+  filesForEpisode,
+  filterSeasonEpisodesOnDisk,
+  seasonsVisibleWithDiskFilter,
+  subtitlesForEpisode,
+} from './media-detail.utils';
+import { ConfirmationService } from '../../core/services/confirmation.service';
+import { ToastService } from '../../core/services/toast.service';
+import { SseService } from '../../core/services/sse.service';
+import { MediaType } from '../../core/enums/media-type.enum';
+
+const LS_EPISODES_HAS_FILE_ONLY = 'suitarr.mediaDetail.episodesHasFileOnly';
+
+function readEpisodesHasFileOnlyFromStorage(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    return localStorage.getItem(LS_EPISODES_HAS_FILE_ONLY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 @Component({
   selector: 'app-media-detail',
-  imports: [RouterLink, DecimalPipe, TranslateModule, FormsModule],
+  imports: [
+    TranslateModule,
+    MediaDetailHeaderComponent,
+    MediaDetailLibraryInfoComponent,
+    MediaDetailSubtitlesComponent,
+    MediaFileInfoComponent,
+    MediaDetailSeasonsComponent,
+    MediaDetailMovieDownloadComponent,
+    MediaDetailSubtitleSearchModalComponent,
+    ReleasesModalComponent,
+    MediaDetailProfilesModalComponent,
+    MediaDetailRootFolderModalComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail.html',
 })
@@ -40,11 +86,61 @@ export class MediaDetailComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly translate = inject(TranslateService);
   private readonly rootFoldersApi = inject(RootFoldersApiService);
+  private readonly subtitlesApi = inject(SubtitlesApiService);
+  private readonly confirmation = inject(ConfirmationService);
+  private readonly toast = inject(ToastService);
+  private readonly sse = inject(SseService);
+
+  /** React to SSE events for this media (subtitle sync/download) */
+  private readonly sseEffect = effect(() => {
+    const event = this.sse.lastEvent();
+    const m = this.media();
+    if (!event || !m) return;
+    const eventMediaId = event['mediaId'] as number | undefined;
+    if (eventMediaId !== m.id) return;
+
+    if (event.type === 'subtitle.synced') {
+      this.toast.success(this.translate.instant('sse.subtitle_synced'));
+      void this.loadSubtitles(m.id);
+    } else if (event.type === 'subtitle.downloaded') {
+      this.toast.success(
+        this.translate.instant('sse.subtitle_downloaded', {
+          title: event['title'] ?? '',
+          lang: event['language'] ?? '',
+        }),
+      );
+      void this.loadSubtitles(m.id);
+    }
+  });
 
   readonly media = signal<Media | null>(null);
+  readonly mediaFiles = computed(() => {
+    const m = this.media();
+    if (!m) return [];
+    const list = m.files ?? [];
+    return m.type === 'series' ? list.filter((f) => !f.episodeId) : list;
+  });
+  readonly selectedFileId = signal<number | null>(null);
+  readonly activeFileId = computed(() => this.selectedFileId() ?? this.mediaFiles()[0]?.id ?? null);
+  readonly activeFile = computed(() => {
+    const id = this.activeFileId();
+    return this.mediaFiles().find((f) => f.id === id) ?? null;
+  });
+
+  /** Auto-select first file when mediaFiles change and no selection exists */
+  private readonly autoSelectFileEffect = effect(() => {
+    const files = this.mediaFiles();
+    const current = this.selectedFileId();
+    if (files.length && (!current || !files.some((f) => f.id === current))) {
+      this.selectedFileId.set(files[0].id);
+    }
+  });
+
   readonly loading = signal(true);
   readonly notFound = signal(false);
-  readonly expectedKind = signal<'movie' | 'series'>('movie');
+  readonly expectedKind = signal<MediaType>('movie');
+
+  readonly customSearchQuery = signal('');
 
   readonly releases = signal<MovieRelease[]>([]);
   readonly releasesLoading = signal(false);
@@ -55,11 +151,19 @@ export class MediaDetailComponent implements OnInit {
   readonly grabState = signal<Map<string, 'ok' | 'error'>>(new Map());
 
   readonly qualityProfileOptions = signal<{ id: number; name: string }[]>([]);
+  readonly languageProfiles = signal<LanguageProfile[]>([]);
   readonly languageProfileOptions = signal<{ id: number; name: string }[]>([]);
   readonly profilesOptionsLoading = signal(false);
   readonly draftQualityProfileId = signal<number | null>(null);
   readonly draftLanguageProfileId = signal<number | null>(null);
   readonly profilesSaveLoading = signal(false);
+  readonly requiredSubtitleLangs = computed(() => {
+    const m = this.media();
+    const lpId = m?.languageProfile?.id;
+    if (!lpId) return [];
+    const lp = this.languageProfiles().find((p) => p.id === lpId);
+    return lp?.subtitleLanguages ?? [];
+  });
   readonly profilesOk = signal('');
   readonly profilesErr = signal('');
 
@@ -68,24 +172,25 @@ export class MediaDetailComponent implements OnInit {
   readonly pathSaving = signal(false);
   readonly pathOk = signal(false);
 
-  readonly canGrab = computed(() => {
-    const r = this.auth.user()?.role;
-    return r === 'admin' || r === 'user';
-  });
-
-  readonly canEditProfiles = computed(() => {
-    const r = this.auth.user()?.role;
-    return r === 'admin' || r === 'user';
-  });
-
-  readonly isAdmin = computed(() => this.auth.user()?.role === 'admin');
+  readonly canGrab = computed(() => this.auth.hasPermission('media.grab'));
+  readonly canEditProfiles = computed(() => this.auth.hasPermission('media.edit'));
+  readonly isAdmin = computed(() => this.auth.hasPermission('settings.access'));
   readonly deleteLoading = signal(false);
+  readonly renameLoading = signal(false);
+  readonly renameToast = signal('');
   readonly monitoredLoading = signal(false);
   readonly refreshLoading = signal(false);
   readonly refreshToast = signal('');
-  readonly expandedSeasonId = signal<number | null>(null);
+  readonly rescanLoading = signal(false);
+  /** Active season tab (series) — first season selected after load */
+  readonly activeSeasonId = signal<number | null>(null);
   readonly seasonBusy = signal<number | null>(null);
   readonly episodeBusy = signal<number | null>(null);
+
+  readonly episodeDrawerContext = signal<{ season: Season; episode: Episode } | null>(null);
+
+  /** Series: show only episodes with a file on disk (persisted in localStorage) */
+  readonly episodesHasFileOnly = signal(readEpisodesHasFileOnlyFromStorage());
 
   readonly selectedEpisodeId = signal<number | null>(null);
   readonly selectedEpisodeSeasonId = signal<number | null>(null);
@@ -106,25 +211,56 @@ export class MediaDetailComponent implements OnInit {
   readonly upgradeGrabState = signal<Map<string, 'ok' | 'error'>>(new Map());
 
   // Season grab
-  readonly seasonGrabBusy = signal<number | null>(null);
+  readonly seasonGrabBusy = signal<string | null>(null);
   readonly seasonReleaseGrabState = signal<Map<string, 'ok' | 'error'>>(new Map());
-  readonly seasonGrabResults = signal<Map<number, { grabbed: number; errors: string[] }>>(new Map());
   readonly seasonReleasesOpen = signal<number | null>(null);
   readonly seasonForReleases = signal<Season | null>(null);
   readonly seasonReleases = signal<MovieRelease[]>([]);
   readonly seasonReleasesLoading = signal(false);
   readonly seasonReleasesError = signal('');
 
-  // Modal dialog refs
-  readonly movieReleasesDialog = viewChild<ElementRef<HTMLDialogElement>>('movieReleasesModal');
-  readonly upgradeReleasesDialog = viewChild<ElementRef<HTMLDialogElement>>('upgradeReleasesModal');
-  readonly episodeReleasesDialog = viewChild<ElementRef<HTMLDialogElement>>('episodeReleasesModal');
-  readonly seasonReleasesDialog = viewChild<ElementRef<HTMLDialogElement>>('seasonReleasesModal');
-  readonly profilesDialog = viewChild<ElementRef<HTMLDialogElement>>('profilesModal');
-  readonly rootFolderDialog = viewChild<ElementRef<HTMLDialogElement>>('rootFolderModal');
+  readonly movieReleasesModal = viewChild<ReleasesModalComponent>('movieReleasesModal');
+  readonly upgradeReleasesModal = viewChild<ReleasesModalComponent>('upgradeReleasesModal');
+  readonly episodeReleasesModal = viewChild<ReleasesModalComponent>('episodeReleasesModal');
+  readonly seasonReleasesModal = viewChild<ReleasesModalComponent>('seasonReleasesModal');
+  readonly profilesModal = viewChild(MediaDetailProfilesModalComponent);
+  readonly rootFolderModal = viewChild(MediaDetailRootFolderModalComponent);
+  readonly subtitleSearchModal = viewChild(MediaDetailSubtitleSearchModalComponent);
+
+  // Subtitles
+  readonly subtitles = signal<SubtitleFileRow[]>([]);
+  /** Subtitles filtered by selected file (for movies with multiple files). */
+  readonly selectedFileSubtitles = computed(() => {
+    const all = this.subtitles();
+    const fileId = this.selectedFileId();
+    if (!fileId || this.mediaFiles().length <= 1) return all;
+    return all.filter((s) => s.mediaFileId === fileId);
+  });
+  readonly subtitlesLoading = signal(false);
+  readonly subtitleActionBusy = signal(false);
+  readonly subSearchLang = signal('en');
+  readonly subSearchResults = signal<SubtitleSearchResult[]>([]);
+  readonly subSearchLoading = signal(false);
+  readonly subSearchSearched = signal(false);
+  /** `null` = recherche depuis la fiche film ; sinon id épisode (drawer série). */
+  readonly subtitleSearchEpisodeId = signal<number | null>(null);
+
+  readonly episodeDialogSubtitles = computed(() => {
+    const c = this.episodeDrawerContext();
+    const m = this.media();
+    if (!c || !m || m.type !== 'series') return [];
+    return subtitlesForEpisode(this.subtitles(), c.episode.id, m.files);
+  });
+
+  readonly episodeDialogFiles = computed(() => {
+    const c = this.episodeDrawerContext();
+    const m = this.media();
+    if (!c || !m?.files) return [];
+    return filesForEpisode(m.files, c.episode.id);
+  });
 
   async ngOnInit() {
-    const kind = this.route.snapshot.data['kind'] as 'movie' | 'series';
+    const kind = this.route.snapshot.data['kind'] as MediaType;
     this.expectedKind.set(kind);
     const idParam = this.route.snapshot.paramMap.get('id');
     const id = idParam ? Number(idParam) : NaN;
@@ -134,8 +270,8 @@ export class MediaDetailComponent implements OnInit {
       return;
     }
 
-    const role = this.auth.user()?.role;
-    if (role === 'admin' || role === 'user') {
+    const loadProfiles = async () => {
+      if (!this.auth.hasPermission('media.edit')) return;
       this.profilesOptionsLoading.set(true);
       try {
         const [q, l, rf] = await Promise.all([
@@ -144,12 +280,18 @@ export class MediaDetailComponent implements OnInit {
           this.rootFoldersApi.list(),
         ]);
         this.qualityProfileOptions.set(q.map((p) => ({ id: p.id, name: p.name })));
+        this.languageProfiles.set(l);
         this.languageProfileOptions.set(l.map((p) => ({ id: p.id, name: p.name })));
         this.rootFolders.set(rf);
+      } catch {
+        // Profiles will just be empty — the page still works
       } finally {
         this.profilesOptionsLoading.set(false);
       }
-    }
+    };
+
+    // Load profiles in parallel with media — neither blocks the other
+    void loadProfiles();
 
     try {
       const m = await this.mediaService.getOne(id);
@@ -162,11 +304,15 @@ export class MediaDetailComponent implements OnInit {
         return;
       }
       this.media.set(m);
+      if (m.type === 'series' && m.seasons?.length) {
+        this.syncActiveSeasonForSeriesFilter();
+      } else {
+        this.activeSeasonId.set(null);
+      }
       this.draftQualityProfileId.set(m.qualityProfile?.id ?? null);
       this.draftLanguageProfileId.set(m.languageProfile?.id ?? null);
-      // Match current path to a root folder
-      const rf = this.rootFolders().find((r) => m.path?.startsWith(r.path));
-      this.selectedRootFolderId.set(rf?.id ?? null);
+      void this.loadSubtitles(m.id);
+      this.selectedRootFolderId.set(m.rootFolderId ?? null);
     } catch {
       this.notFound.set(true);
     } finally {
@@ -180,7 +326,7 @@ export class MediaDetailComponent implements OnInit {
 
   openRootFolderModal() {
     this.pathOk.set(false);
-    this.rootFolderDialog()?.nativeElement.showModal();
+    this.rootFolderModal()?.showModal();
   }
 
   async saveRootFolder() {
@@ -192,8 +338,9 @@ export class MediaDetailComponent implements OnInit {
     this.pathSaving.set(true);
     this.pathOk.set(false);
     try {
-      const updated = await this.mediaService.patchPath(m.id, rf.path);
+      const updated = await this.mediaService.patchRootFolder(m.id, rf.id);
       this.media.set(updated);
+      if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
       this.pathOk.set(true);
       setTimeout(() => this.pathOk.set(false), 3000);
     } finally {
@@ -213,6 +360,7 @@ export class MediaDetailComponent implements OnInit {
         languageProfileId: this.draftLanguageProfileId(),
       });
       this.media.set(updated);
+      if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
       this.draftQualityProfileId.set(updated.qualityProfile?.id ?? null);
       this.draftLanguageProfileId.set(updated.languageProfile?.id ?? null);
       this.profilesOk.set(this.translate.instant('media_detail.profiles_saved'));
@@ -235,9 +383,9 @@ export class MediaDetailComponent implements OnInit {
     this.grabToast.set('');
     this.releases.set([]);
     this.releasesSearched.set(false);
-    this.movieReleasesDialog()?.nativeElement.showModal();
+    this.movieReleasesModal()?.showModal();
     try {
-      const rows = await this.mediaService.getMovieReleases(m.id);
+      const rows = await this.mediaService.getMovieReleases(m.id, this.customSearchQuery());
       this.releases.set(rows);
       this.releasesSearched.set(true);
     } catch (err: unknown) {
@@ -260,8 +408,10 @@ export class MediaDetailComponent implements OnInit {
     try {
       await this.mediaService.grabMovie(m.id, {});
       this.grabState.update((s) => new Map(s).set('best', 'ok'));
+      this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       this.grabState.update((s) => new Map(s).set('best', 'error'));
+      this.toast.error(this.translate.instant('media_detail.grab_error'));
     } finally {
       this.grabBusy.set(null);
     }
@@ -274,6 +424,7 @@ export class MediaDetailComponent implements OnInit {
     try {
       const updated = await this.mediaService.toggleMonitored(m.id, !m.monitored);
       this.media.set(updated);
+      if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
     } finally {
       this.monitoredLoading.set(false);
     }
@@ -282,7 +433,7 @@ export class MediaDetailComponent implements OnInit {
   async deleteMedia() {
     const m = this.media();
     if (!m) return;
-    if (!confirm(this.translate.instant('media_detail.confirm_delete', { title: m.title }))) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('media_detail.confirm_delete', { title: m.title }), variant: 'danger' })) return;
     this.deleteLoading.set(true);
     try {
       await this.mediaService.delete(m.id);
@@ -295,7 +446,7 @@ export class MediaDetailComponent implements OnInit {
   openProfilesModal() {
     this.profilesOk.set('');
     this.profilesErr.set('');
-    this.profilesDialog()?.nativeElement.showModal();
+    this.profilesModal()?.showModal();
   }
 
   async refreshMetadata() {
@@ -306,6 +457,7 @@ export class MediaDetailComponent implements OnInit {
     try {
       const updated = await this.mediaService.refreshMetadata(m.id);
       this.media.set(updated);
+      if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
       this.refreshToast.set(this.translate.instant('media_detail.refresh_ok'));
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
@@ -317,11 +469,142 @@ export class MediaDetailComponent implements OnInit {
     }
   }
 
-  toggleSeasonExpanded(seasonId: number) {
-    this.expandedSeasonId.set(
-      this.expandedSeasonId() === seasonId ? null : seasonId,
-    );
+  async rescanFiles() {
+    const m = this.media();
+    if (!m) return;
+    this.rescanLoading.set(true);
+    try {
+      const result = await this.mediaService.rescanFiles(m.id);
+      if (result.added || result.removed || result.updated) {
+        // Reload media to get updated file list
+        const updated = await this.mediaService.getOne(m.id);
+        this.media.set(updated);
+        if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
+        await this.loadSubtitles(updated.id);
+      }
+      this.toast.success(
+        this.translate.instant('media_detail.rescan_ok', {
+          added: result.added,
+          removed: result.removed,
+          updated: result.updated,
+        }),
+      );
+    } catch {
+      // handled by global interceptor
+    } finally {
+      this.rescanLoading.set(false);
+    }
   }
+
+  selectSeason(seasonId: number) {
+    this.activeSeasonId.set(seasonId);
+    this.persistActiveSeason(seasonId);
+  }
+
+  private persistActiveSeason(seasonId: number | null) {
+    const m = this.media();
+    if (!m) return;
+    try {
+      if (seasonId != null) {
+        sessionStorage.setItem(`suitarr.season.${m.id}`, String(seasonId));
+      } else {
+        sessionStorage.removeItem(`suitarr.season.${m.id}`);
+      }
+    } catch { /* private mode */ }
+  }
+
+  private restoreActiveSeason(): number | null {
+    const m = this.media();
+    if (!m) return null;
+    try {
+      const v = sessionStorage.getItem(`suitarr.season.${m.id}`);
+      return v ? Number(v) : null;
+    } catch { return null; }
+  }
+
+  setEpisodesHasFileOnly(value: boolean) {
+    this.episodesHasFileOnly.set(value);
+    try {
+      localStorage.setItem(LS_EPISODES_HAS_FILE_ONLY, value ? '1' : '0');
+    } catch {
+      /* private mode / quota */
+    }
+    this.syncActiveSeasonForSeriesFilter();
+  }
+
+  /** Garde activeSeasonId sur une saison visible (onglets) quand le filtre disque est actif. */
+  private syncActiveSeasonForSeriesFilter() {
+    const m = this.media();
+    if (m?.type !== 'series' || !m.seasons?.length) return;
+    const visible = seasonsVisibleWithDiskFilter(m, this.episodesHasFileOnly());
+    if (!visible.length) {
+      this.activeSeasonId.set(null);
+      return;
+    }
+
+    // Check query param ?season=NUMBER for deep-link from episode page
+    const qpSeason = Number(this.route.snapshot.queryParamMap.get('season'));
+    if (qpSeason) {
+      const match = visible.find((s) => s.seasonNumber === qpSeason);
+      if (match) {
+        this.activeSeasonId.set(match.id);
+        this.persistActiveSeason(match.id);
+        return;
+      }
+    }
+
+    // Restore from sessionStorage (browser back button)
+    const stored = this.restoreActiveSeason();
+    if (stored != null && visible.some((s) => s.id === stored)) {
+      this.activeSeasonId.set(stored);
+      return;
+    }
+
+    const cur = this.activeSeasonId();
+    if (cur == null || !visible.some((s) => s.id === cur)) {
+      this.activeSeasonId.set(visible[0].id);
+    }
+  }
+
+  filteredSeasonEpisodes(season: Season): Episode[] {
+    const m = this.media();
+    if (!m) return season.episodes;
+    return filterSeasonEpisodesOnDisk(season, m, this.episodesHasFileOnly());
+  }
+
+  activeSeason(m: Media): Season | null {
+    const id = this.activeSeasonId();
+    if (!m.seasons?.length || id == null) return null;
+    return m.seasons.find((s) => s.id === id) ?? null;
+  }
+
+  openEpisodeDetailDrawer(season: Season, episode: Episode) {
+    const current = this.episodeDrawerContext();
+    // Toggle: close if clicking the same episode
+    if (current?.episode.id === episode.id) {
+      this.episodeDrawerContext.set(null);
+    } else {
+      this.episodeDrawerContext.set({ season, episode });
+    }
+  }
+
+  closeEpisodeInline() {
+    this.episodeDrawerContext.set(null);
+  }
+
+  onEpisodeDialogToggleMonitored() {
+    const c = this.episodeDrawerContext();
+    if (c) void this.toggleEpisodeMonitored(c.season.id, c.episode);
+  }
+
+  onEpisodeDialogLoadReleases() {
+    const c = this.episodeDrawerContext();
+    const media = this.media();
+    if (c && media) {
+      void this.loadEpisodeReleases(media.id, c.season.id, c.episode.id);
+    }
+  }
+
 
   async toggleSeasonMonitored(season: Season) {
     if (!this.isAdmin()) return;
@@ -336,6 +619,7 @@ export class MediaDetailComponent implements OnInit {
           s.id === updated.id ? { ...s, monitored: updated.monitored } : s,
         ),
       });
+      this.syncActiveSeasonForSeriesFilter();
     } finally {
       this.seasonBusy.set(null);
     }
@@ -348,21 +632,24 @@ export class MediaDetailComponent implements OnInit {
       const updated = await this.mediaService.updateEpisodeMonitored(episode.id, !episode.monitored);
       const m = this.media();
       if (!m?.seasons) return;
-      this.media.set({
-        ...m,
-        seasons: m.seasons.map((s) =>
-          s.id === seasonId
-            ? {
-                ...s,
-                episodes: s.episodes.map((e) =>
-                  e.id === updated.id
-                    ? { ...e, monitored: updated.monitored }
-                    : e,
-                ),
-              }
-            : s,
-        ),
-      });
+      const nextSeasons = m.seasons.map((s) =>
+        s.id === seasonId
+          ? {
+              ...s,
+              episodes: s.episodes.map((e) =>
+                e.id === updated.id ? { ...e, monitored: updated.monitored } : e,
+              ),
+            }
+          : s,
+      );
+      this.media.set({ ...m, seasons: nextSeasons });
+      this.syncActiveSeasonForSeriesFilter();
+      const open = this.episodeDrawerContext();
+      if (open?.episode.id === updated.id) {
+        const s = nextSeasons.find((x) => x.id === open.season.id);
+        const e = s?.episodes.find((x) => x.id === updated.id);
+        if (s && e) this.episodeDrawerContext.set({ season: s, episode: e });
+      }
     } finally {
       this.episodeBusy.set(null);
     }
@@ -376,9 +663,9 @@ export class MediaDetailComponent implements OnInit {
     this.epReleasesError.set('');
     this.epGrabToast.set('');
     this.epReleasesLoading.set(true);
-    this.episodeReleasesDialog()?.nativeElement.showModal();
+    this.episodeReleasesModal()?.showModal();
     try {
-      const rows = await this.mediaService.getEpisodeReleases(mediaId, episodeId);
+      const rows = await this.mediaService.getEpisodeReleases(mediaId, episodeId, this.customSearchQuery());
       this.epReleases.set(rows);
       this.epReleasesSearched.set(true);
     } catch (err: unknown) {
@@ -397,8 +684,10 @@ export class MediaDetailComponent implements OnInit {
     try {
       await this.mediaService.grabEpisode(mediaId, episodeId, {});
       this.epGrabState.update((s) => new Map(s).set('best', 'ok'));
+      this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       this.epGrabState.update((s) => new Map(s).set('best', 'error'));
+      this.toast.error(this.translate.instant('media_detail.grab_error'));
     } finally {
       this.epGrabBusy.set(null);
     }
@@ -410,8 +699,10 @@ export class MediaDetailComponent implements OnInit {
     try {
       await this.mediaService.grabEpisode(mediaId, episodeId, { downloadUrl: r.downloadUrl, sourceTitle: r.title });
       this.epGrabState.update((s) => new Map(s).set(key, 'ok'));
+      this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       this.epGrabState.update((s) => new Map(s).set(key, 'error'));
+      this.toast.error(this.translate.instant('media_detail.grab_error'));
     } finally {
       this.epGrabBusy.set(null);
     }
@@ -425,9 +716,9 @@ export class MediaDetailComponent implements OnInit {
     this.upgradeGrabToast.set('');
     this.upgradeReleases.set([]);
     this.upgradeReleasesSearched.set(false);
-    this.upgradeReleasesDialog()?.nativeElement.showModal();
+    this.upgradeReleasesModal()?.showModal();
     try {
-      const rows = await this.mediaService.getUpgradeReleases(m.id);
+      const rows = await this.mediaService.getUpgradeReleases(m.id, this.customSearchQuery());
       this.upgradeReleases.set(rows);
       this.upgradeReleasesSearched.set(true);
     } catch (err: unknown) {
@@ -449,8 +740,10 @@ export class MediaDetailComponent implements OnInit {
     try {
       await this.mediaService.grabUpgrade(m.id, {});
       this.upgradeGrabState.update((s) => new Map(s).set('best', 'ok'));
+      this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       this.upgradeGrabState.update((s) => new Map(s).set('best', 'error'));
+      this.toast.error(this.translate.instant('media_detail.grab_error'));
     } finally {
       this.upgradeGrabBusy.set(null);
     }
@@ -464,8 +757,10 @@ export class MediaDetailComponent implements OnInit {
     try {
       await this.mediaService.grabUpgrade(m.id, { downloadUrl: r.downloadUrl, sourceTitle: r.title });
       this.upgradeGrabState.update((s) => new Map(s).set(key, 'ok'));
+      this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       this.upgradeGrabState.update((s) => new Map(s).set(key, 'error'));
+      this.toast.error(this.translate.instant('media_detail.grab_error'));
     } finally {
       this.upgradeGrabBusy.set(null);
     }
@@ -477,9 +772,9 @@ export class MediaDetailComponent implements OnInit {
     this.seasonReleases.set([]);
     this.seasonReleasesError.set('');
     this.seasonReleasesLoading.set(true);
-    this.seasonReleasesDialog()?.nativeElement.showModal();
+    this.seasonReleasesModal()?.showModal();
     try {
-      const rows = await this.mediaService.getSeasonReleases(mediaId, season.id);
+      const rows = await this.mediaService.getSeasonReleases(mediaId, season.id, this.customSearchQuery());
       this.seasonReleases.set(rows);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
@@ -492,73 +787,222 @@ export class MediaDetailComponent implements OnInit {
   }
 
   async grabSeasonAuto(mediaId: number, season: Season) {
-    this.seasonGrabBusy.set(season.id);
+    this.seasonGrabBusy.set('best');
     try {
-      const result = await this.mediaService.grabSeason(mediaId, season.id, {});
-      this.seasonGrabResults.update((m) => new Map(m).set(season.id, result));
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      this.seasonGrabResults.update((m) =>
-        new Map(m).set(season.id, {
-          grabbed: 0,
-          errors: [httpErr.error?.message ?? this.translate.instant('media_detail.grab_error')],
-        }),
-      );
+      await this.mediaService.grabSeason(mediaId, season.id, {});
+      this.toast.success(this.translate.instant('media_detail.grab_success'));
+    } catch {
+      this.toast.error(this.translate.instant('media_detail.grab_error'));
     } finally {
       this.seasonGrabBusy.set(null);
     }
+  }
+
+  onGrabSeasonReleaseFromModal(mediaId: number, r: MovieRelease, index: number) {
+    const season = this.seasonForReleases();
+    if (!season) return;
+    void this.grabSeasonRelease(mediaId, season, r, index);
   }
 
   async grabSeasonRelease(mediaId: number, season: Season, r: MovieRelease, index: number) {
     const key = `s-${index}`;
-    this.seasonGrabBusy.set(season.id);
+    this.seasonGrabBusy.set(key);
     try {
-      const result = await this.mediaService.grabSeason(mediaId, season.id, {
+      await this.mediaService.grabSeason(mediaId, season.id, {
         downloadUrl: r.downloadUrl,
         sourceTitle: r.title,
       });
-      this.seasonGrabResults.update((m) => new Map(m).set(season.id, result));
       this.seasonReleaseGrabState.update((s) => new Map(s).set(key, 'ok'));
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      this.seasonGrabResults.update((m) =>
-        new Map(m).set(season.id, {
-          grabbed: 0,
-          errors: [httpErr.error?.message ?? this.translate.instant('media_detail.grab_error')],
-        }),
-      );
+      this.toast.success(this.translate.instant('media_detail.grab_success'));
+    } catch {
       this.seasonReleaseGrabState.update((s) => new Map(s).set(key, 'error'));
+      this.toast.error(this.translate.instant('media_detail.grab_error'));
     } finally {
       this.seasonGrabBusy.set(null);
     }
   }
 
-  seasonGrabResult(seasonId: number) {
-    return this.seasonGrabResults().get(seasonId) ?? null;
+  async renameFiles() {
+    const m = this.media();
+    if (!m) return;
+    this.renameLoading.set(true);
+    this.renameToast.set('');
+    try {
+      const result = await this.mediaService.renameFiles(m.id);
+      this.renameToast.set(this.translate.instant('media_detail.rename_ok', { count: result.renamed }));
+      const updated = await this.mediaService.getOne(m.id);
+      this.media.set(updated);
+      if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
+    } catch (err: unknown) {
+      const httpErr = err as { error?: { message?: string } };
+      this.renameToast.set(httpErr.error?.message ?? this.translate.instant('media_detail.rename_error'));
+    } finally {
+      this.renameLoading.set(false);
+    }
   }
 
   async deleteFile(fileId: number, deleteOnDisk: boolean) {
     const m = this.media();
     if (!m) return;
-    const msg = deleteOnDisk
-      ? this.translate.instant('media_detail.confirm_delete_file_disk')
-      : this.translate.instant('media_detail.confirm_delete_file');
-    if (!confirm(msg)) return;
     try {
       await this.mediaService.deleteFile(m.id, fileId, deleteOnDisk);
       this.media.update((media) =>
         media ? { ...media, files: media.files?.filter((f) => f.id !== fileId) } : media,
       );
+      this.syncActiveSeasonForSeriesFilter();
     } catch {
       // ignore
     }
   }
 
-  formatBytes(bytes: number): string {
-    if (!bytes) return '—';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-    return `${(bytes / Math.pow(1024, i)).toFixed(i >= 3 ? 1 : 0)} ${units[i]}`;
+  // ── Subtitles ──────────────────────────────────────────────────────
+
+  async loadSubtitles(mediaId: number) {
+    this.subtitlesLoading.set(true);
+    try {
+      this.subtitles.set(await this.subtitlesApi.getForMedia(mediaId));
+    } catch {
+      this.subtitles.set([]);
+    } finally {
+      this.subtitlesLoading.set(false);
+    }
+  }
+
+  async autoSubtitle() {
+    const m = this.media();
+    if (!m) return;
+    const fileId = this.activeFileId();
+    if (!fileId) return;
+    this.subtitleActionBusy.set(true);
+    try {
+      await this.subtitlesApi.autoDownload(m.id, {
+        mediaFileId: fileId,
+        language: this.subSearchLang(),
+      });
+      await this.loadSubtitles(m.id);
+    } finally {
+      this.subtitleActionBusy.set(false);
+    }
+  }
+
+  openSubtitleSearch() {
+    this.subtitleSearchEpisodeId.set(null);
+    this.subSearchResults.set([]);
+    this.subSearchSearched.set(false);
+    this.subtitleSearchModal()?.showModal();
+  }
+
+  onEpisodeOpenSubtitleSearch() {
+    const c = this.episodeDrawerContext();
+    if (!c) return;
+    this.subtitleSearchEpisodeId.set(c.episode.id);
+    this.subSearchResults.set([]);
+    this.subSearchSearched.set(false);
+    this.subtitleSearchModal()?.showModal();
+  }
+
+  async searchSubtitles() {
+    const m = this.media();
+    if (!m) return;
+    const epId = this.subtitleSearchEpisodeId();
+    this.subSearchLoading.set(true);
+    this.subSearchSearched.set(false);
+    this.subSearchResults.set([]);
+    try {
+      const results = await this.subtitlesApi.search(
+        m.id,
+        this.subSearchLang(),
+        epId ?? undefined,
+      );
+      this.subSearchResults.set(results);
+    } catch {
+      this.subSearchResults.set([]);
+    } finally {
+      this.subSearchLoading.set(false);
+      this.subSearchSearched.set(true);
+    }
+  }
+
+  async downloadSearchResult(r: SubtitleSearchResult) {
+    const m = this.media();
+    if (!m?.files?.length) return;
+    const epId = this.subtitleSearchEpisodeId();
+    let mediaFileId: number;
+    if (epId != null) {
+      const file = m.files.find((f) => f.episodeId === epId);
+      if (!file) return;
+      mediaFileId = file.id;
+    } else {
+      mediaFileId = this.activeFileId()!;
+    }
+    this.subtitleActionBusy.set(true);
+    try {
+      await this.subtitlesApi.download(m.id, {
+        searchResult: r,
+        mediaFileId,
+        episodeId: epId ?? undefined,
+      });
+      await this.loadSubtitles(m.id);
+    } finally {
+      this.subtitleActionBusy.set(false);
+    }
+  }
+
+  async syncSubtitle(event: { subtitleId: number; options: import('./../../core/services/api/subtitles-api.service').SyncOptions }) {
+    const m = this.media();
+    if (!m) return;
+    this.toast.info(this.translate.instant('media_detail.sync_started'));
+    try {
+      await this.subtitlesApi.sync(m.id, event.subtitleId, event.options);
+      // Success toast will come from SSE when sync actually completes
+    } catch {
+      // handled by global interceptor
+    }
+  }
+
+  async postProcessSubtitle(event: { subtitleId: number; action: string; params?: Record<string, unknown> }) {
+    const m = this.media();
+    if (!m) return;
+    try {
+      await this.subtitlesApi.postProcess(m.id, event.subtitleId, event.action, event.params);
+      this.toast.success(this.translate.instant('media_detail.post_process_success'));
+      await this.loadSubtitles(m.id);
+    } catch {
+      // handled by global interceptor
+    }
+  }
+
+  async blacklistSubtitle(sub: import('../../core/services/api/subtitles-api.service').SubtitleFileRow) {
+    const m = this.media();
+    if (!m) return;
+    try {
+      await this.subtitlesApi.addToBlacklist({
+        providerType: sub.providerType,
+        providerFileId: sub.providerFileId,
+        mediaId: m.id,
+        language: sub.language,
+        sourceTitle: sub.providerFileId,
+        reason: 'Manually blacklisted',
+      });
+      await this.subtitlesApi.delete(m.id, sub.id);
+      this.toast.success(this.translate.instant('media_detail.blacklist_success'));
+      await this.loadSubtitles(m.id);
+    } catch {
+      // handled by global interceptor
+    }
+  }
+
+  async deleteSubtitle(subtitleId: number) {
+    const m = this.media();
+    if (!m) return;
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('media_detail.confirm_delete_subtitle'), variant: 'danger' })) return;
+    this.subtitleActionBusy.set(true);
+    try {
+      await this.subtitlesApi.delete(m.id, subtitleId);
+      await this.loadSubtitles(m.id);
+    } finally {
+      this.subtitleActionBusy.set(false);
+    }
   }
 
   async grabRelease(r: MovieRelease, index: number) {
@@ -569,8 +1013,10 @@ export class MediaDetailComponent implements OnInit {
     try {
       await this.mediaService.grabMovie(m.id, { downloadUrl: r.downloadUrl, sourceTitle: r.title });
       this.grabState.update((s) => new Map(s).set(key, 'ok'));
+      this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       this.grabState.update((s) => new Map(s).set(key, 'error'));
+      this.toast.error(this.translate.instant('media_detail.grab_error'));
     } finally {
       this.grabBusy.set(null);
     }

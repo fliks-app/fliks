@@ -76,19 +76,34 @@
             </thead>
             <tbody>
               @for (row of rows(); track row.candidate.filePath; let i = $index) {
-                <tr [class.opacity-40]="!row.selected">
+                <tr [class.opacity-40]="!row.selected" [class.bg-warning/10]="row.candidate.existingQuality && !row.force">
                   <td>
                     <input
                       type="checkbox"
                       class="checkbox checkbox-sm"
                       [ngModel]="row.selected"
                       (ngModelChange)="setRowSelected(i, $event)"
+                      [disabled]="!!row.candidate.existingQuality && !row.force"
                     />
                   </td>
                   <td class="max-w-[16rem] xl:max-w-xs">
                     <p class="truncate text-sm font-mono" [title]="row.candidate.filePath">
                       {{ row.candidate.filename }}
                     </p>
+                    @if (row.candidate.existingQuality && !row.force) {
+                      <div class="flex items-center gap-2 mt-1">
+                        <span class="text-xs text-warning">
+                          {{ 'import_disk.existing_quality' | translate:{ quality: row.candidate.existingQuality } }}
+                        </span>
+                        <button
+                          type="button"
+                          class="btn btn-warning btn-outline btn-xs"
+                          (click)="forceImportRow(i)"
+                        >
+                          {{ 'import_disk.force_import' | translate }}
+                        </button>
+                      </div>
+                    }
                   </td>
                   <td class="text-sm text-base-content/60 tabular-nums">
                     {{ formatBytes(row.candidate.size) }}

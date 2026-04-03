@@ -24,7 +24,10 @@ export class TmdbProvider implements IMetadataProvider {
     });
   }
 
-  async searchMovie(query: string, year?: number): Promise<MetadataSearchResult[]> {
+  async searchMovie(
+    query: string,
+    year?: number,
+  ): Promise<MetadataSearchResult[]> {
     const params: Record<string, unknown> = { query, language: 'fr-FR' };
     if (year) params.year = year;
 
@@ -32,7 +35,10 @@ export class TmdbProvider implements IMetadataProvider {
     return data.results.map((r: any) => this.mapMovieResult(r));
   }
 
-  async searchTvShow(query: string, year?: number): Promise<MetadataSearchResult[]> {
+  async searchTvShow(
+    query: string,
+    year?: number,
+  ): Promise<MetadataSearchResult[]> {
     const params: Record<string, unknown> = { query, language: 'fr-FR' };
     if (year) params.first_air_date_year = year;
 
@@ -56,8 +62,12 @@ export class TmdbProvider implements IMetadataProvider {
       originalTitle: data.original_title,
       overview: data.overview,
       year: data.release_date ? parseInt(data.release_date) : null,
-      posterUrl: data.poster_path ? `${TMDB_IMAGE_BASE}/w500${data.poster_path}` : null,
-      fanartUrl: data.backdrop_path ? `${TMDB_IMAGE_BASE}/original${data.backdrop_path}` : null,
+      posterUrl: data.poster_path
+        ? `${TMDB_IMAGE_BASE}/w500${data.poster_path}`
+        : null,
+      fanartUrl: data.backdrop_path
+        ? `${TMDB_IMAGE_BASE}/original${data.backdrop_path}`
+        : null,
       rating: data.vote_average,
       genres: data.genres?.map((g: any) => g.name) ?? [],
       mediaType: 'movie',
@@ -71,8 +81,12 @@ export class TmdbProvider implements IMetadataProvider {
       budget: data.budget || null,
       revenue: data.revenue || null,
       originalLanguage: data.original_language ?? null,
-      productionCountries: (data.production_countries ?? []).map((c: any) => c.name),
-      productionCompanies: (data.production_companies ?? []).map((c: any) => c.name),
+      productionCountries: (data.production_countries ?? []).map(
+        (c: any) => c.name,
+      ),
+      productionCompanies: (data.production_companies ?? []).map(
+        (c: any) => c.name,
+      ),
       voteCount: data.vote_count ?? null,
       popularity: data.popularity ?? null,
     };
@@ -88,8 +102,12 @@ export class TmdbProvider implements IMetadataProvider {
       originalTitle: data.original_name,
       overview: data.overview,
       year: data.first_air_date ? parseInt(data.first_air_date) : null,
-      posterUrl: data.poster_path ? `${TMDB_IMAGE_BASE}/w500${data.poster_path}` : null,
-      fanartUrl: data.backdrop_path ? `${TMDB_IMAGE_BASE}/original${data.backdrop_path}` : null,
+      posterUrl: data.poster_path
+        ? `${TMDB_IMAGE_BASE}/w500${data.poster_path}`
+        : null,
+      fanartUrl: data.backdrop_path
+        ? `${TMDB_IMAGE_BASE}/original${data.backdrop_path}`
+        : null,
       rating: data.vote_average,
       genres: data.genres?.map((g: any) => g.name) ?? [],
       mediaType: 'series',
@@ -105,8 +123,8 @@ export class TmdbProvider implements IMetadataProvider {
       originalLanguage: data.original_language ?? null,
       productionCountries: (data.origin_country ?? []) as string[],
       productionCompanies: [
-        ...((data.networks ?? []).map((n: any) => n.name)),
-        ...((data.production_companies ?? []).map((c: any) => c.name)),
+        ...(data.networks ?? []).map((n: any) => n.name),
+        ...(data.production_companies ?? []).map((c: any) => c.name),
       ],
       voteCount: data.vote_count ?? null,
       popularity: data.popularity ?? null,
@@ -153,13 +171,61 @@ export class TmdbProvider implements IMetadataProvider {
             title: e.name,
             overview: e.overview || null,
             airDate: e.air_date || null,
+            runtime: e.runtime ?? null,
+            stillUrl: e.still_path
+              ? `${TMDB_IMAGE_BASE}/w780${e.still_path}`
+              : null,
           })),
         });
       } catch (err) {
-        this.logger.warn(`Failed to fetch season ${s.season_number} for TV ${tmdbId}`);
+        this.logger.warn(
+          `Failed to fetch season ${s.season_number} for TV ${tmdbId}`,
+        );
       }
     }
     return seasons;
+  }
+
+  async getTrendingMovies(): Promise<MetadataSearchResult[]> {
+    const { data } = await this.client.get('/trending/movie/week', {
+      params: { language: 'fr-FR' },
+    });
+    return data.results.map((r: any) => this.mapMovieResult(r));
+  }
+
+  async getPopularMovies(): Promise<MetadataSearchResult[]> {
+    const { data } = await this.client.get('/movie/popular', {
+      params: { language: 'fr-FR' },
+    });
+    return data.results.map((r: any) => this.mapMovieResult(r));
+  }
+
+  async getUpcomingMovies(): Promise<MetadataSearchResult[]> {
+    const { data } = await this.client.get('/movie/upcoming', {
+      params: { language: 'fr-FR', region: 'FR' },
+    });
+    return data.results.map((r: any) => this.mapMovieResult(r));
+  }
+
+  async getTrendingTvShows(): Promise<MetadataSearchResult[]> {
+    const { data } = await this.client.get('/trending/tv/week', {
+      params: { language: 'fr-FR' },
+    });
+    return data.results.map((r: any) => this.mapTvResult(r));
+  }
+
+  async getPopularTvShows(): Promise<MetadataSearchResult[]> {
+    const { data } = await this.client.get('/tv/popular', {
+      params: { language: 'fr-FR' },
+    });
+    return data.results.map((r: any) => this.mapTvResult(r));
+  }
+
+  async getUpcomingTvShows(): Promise<MetadataSearchResult[]> {
+    const { data } = await this.client.get('/tv/on_the_air', {
+      params: { language: 'fr-FR' },
+    });
+    return data.results.map((r: any) => this.mapTvResult(r));
   }
 
   private mapMovieResult(r: any): MetadataSearchResult {
@@ -169,7 +235,9 @@ export class TmdbProvider implements IMetadataProvider {
       originalTitle: r.original_title,
       overview: r.overview,
       year: r.release_date ? parseInt(r.release_date) : null,
-      posterUrl: r.poster_path ? `${TMDB_IMAGE_BASE}/w500${r.poster_path}` : null,
+      posterUrl: r.poster_path
+        ? `${TMDB_IMAGE_BASE}/w500${r.poster_path}`
+        : null,
       rating: r.vote_average,
       genres: [],
       mediaType: 'movie',
@@ -183,7 +251,9 @@ export class TmdbProvider implements IMetadataProvider {
       originalTitle: r.original_name,
       overview: r.overview,
       year: r.first_air_date ? parseInt(r.first_air_date) : null,
-      posterUrl: r.poster_path ? `${TMDB_IMAGE_BASE}/w500${r.poster_path}` : null,
+      posterUrl: r.poster_path
+        ? `${TMDB_IMAGE_BASE}/w500${r.poster_path}`
+        : null,
       rating: r.vote_average,
       genres: [],
       mediaType: 'series',
@@ -196,8 +266,15 @@ export class TmdbProvider implements IMetadataProvider {
    * Priority: FR → US → any country. Earliest date per type wins.
    */
   private extractReleaseDates(
-    results: { iso_3166_1: string; release_dates: { type: number; release_date: string }[] }[],
-  ): { inCinemas: string | null; digitalRelease: string | null; physicalRelease: string | null } {
+    results: {
+      iso_3166_1: string;
+      release_dates: { type: number; release_date: string }[];
+    }[],
+  ): {
+    inCinemas: string | null;
+    digitalRelease: string | null;
+    physicalRelease: string | null;
+  } {
     const dates: Record<number, string> = {};
 
     // Priority order for countries

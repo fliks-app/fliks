@@ -32,7 +32,9 @@ export class ProfilesService {
     if (requested != null) {
       const p = await this.qpRepo.findOne({ where: { id: requested } });
       if (!p) {
-        throw new BadRequestException(`Quality profile #${requested} not found`);
+        throw new BadRequestException(
+          `Quality profile #${requested} not found`,
+        );
       }
       return p.id;
     }
@@ -40,7 +42,24 @@ export class ProfilesService {
     return first?.id ?? null;
   }
 
-  async createQualityProfile(dto: CreateQualityProfileDto): Promise<QualityProfile> {
+  async resolveLanguageProfileIdForImport(
+    requested?: number,
+  ): Promise<number | null> {
+    if (requested != null) {
+      const p = await this.lpRepo.findOne({ where: { id: requested } });
+      if (!p) {
+        throw new BadRequestException(
+          `Language profile #${requested} not found`,
+        );
+      }
+      return p.id;
+    }
+    return null;
+  }
+
+  async createQualityProfile(
+    dto: CreateQualityProfileDto,
+  ): Promise<QualityProfile> {
     const profile = this.qpRepo.create({
       name: dto.name,
       cutoff: dto.cutoff,
@@ -54,6 +73,7 @@ export class ProfilesService {
         },
         allowed: i.allowed,
         sortOrder: i.sortOrder,
+        groupId: i.groupId ?? undefined,
       })),
     });
     return this.qpRepo.save(profile);
@@ -65,11 +85,15 @@ export class ProfilesService {
 
   async findOneQualityProfile(id: number): Promise<QualityProfile> {
     const profile = await this.qpRepo.findOne({ where: { id } });
-    if (!profile) throw new NotFoundException(`QualityProfile #${id} not found`);
+    if (!profile)
+      throw new NotFoundException(`QualityProfile #${id} not found`);
     return profile;
   }
 
-  async updateQualityProfile(id: number, dto: CreateQualityProfileDto): Promise<QualityProfile> {
+  async updateQualityProfile(
+    id: number,
+    dto: CreateQualityProfileDto,
+  ): Promise<QualityProfile> {
     const profile = await this.findOneQualityProfile(id);
     profile.name = dto.name;
     profile.cutoff = dto.cutoff;
@@ -83,6 +107,7 @@ export class ProfilesService {
       },
       allowed: i.allowed,
       sortOrder: i.sortOrder,
+      groupId: i.groupId ?? undefined,
     }));
     return this.qpRepo.save(profile);
   }
@@ -92,19 +117,13 @@ export class ProfilesService {
     await this.qpRepo.remove(profile);
   }
 
-  async createLanguageProfile(dto: CreateLanguageProfileDto): Promise<LanguageProfile> {
+  async createLanguageProfile(
+    dto: CreateLanguageProfileDto,
+  ): Promise<LanguageProfile> {
     const profile = this.lpRepo.create({
       name: dto.name,
-      cutoff: dto.cutoff,
-      languages: dto.languages.map((l) => ({
-        language: {
-          id: l.languageId,
-          name: l.languageName,
-          isoCode: l.isoCode,
-        },
-        allowed: l.allowed,
-        sortOrder: l.sortOrder,
-      })),
+      audioLanguages: dto.audioLanguages ?? [],
+      subtitleLanguages: dto.subtitleLanguages ?? [],
     });
     return this.lpRepo.save(profile);
   }
@@ -115,23 +134,19 @@ export class ProfilesService {
 
   async findOneLanguageProfile(id: number): Promise<LanguageProfile> {
     const profile = await this.lpRepo.findOne({ where: { id } });
-    if (!profile) throw new NotFoundException(`LanguageProfile #${id} not found`);
+    if (!profile)
+      throw new NotFoundException(`LanguageProfile #${id} not found`);
     return profile;
   }
 
-  async updateLanguageProfile(id: number, dto: CreateLanguageProfileDto): Promise<LanguageProfile> {
+  async updateLanguageProfile(
+    id: number,
+    dto: CreateLanguageProfileDto,
+  ): Promise<LanguageProfile> {
     const profile = await this.findOneLanguageProfile(id);
     profile.name = dto.name;
-    profile.cutoff = dto.cutoff;
-    profile.languages = dto.languages.map((l) => ({
-      language: {
-        id: l.languageId,
-        name: l.languageName,
-        isoCode: l.isoCode,
-      },
-      allowed: l.allowed,
-      sortOrder: l.sortOrder,
-    }));
+    profile.audioLanguages = dto.audioLanguages ?? [];
+    profile.subtitleLanguages = dto.subtitleLanguages ?? [];
     return this.lpRepo.save(profile);
   }
 

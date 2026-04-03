@@ -29,6 +29,9 @@ export class ConfirmationModalComponent {
     () => this.confirmService.state()?.variant ?? 'default',
   );
 
+  readonly alertOnly = computed(() => this.confirmService.state()?.alertOnly ?? false);
+  readonly dismissLabel = computed(() => this.confirmService.state()?.dismissLabel ?? null);
+
   readonly confirmBtnClass = computed(() => {
     const map: Record<string, string> = {
       danger: 'btn-error',

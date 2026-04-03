@@ -1,0 +1,241 @@
+<div class="flex flex-col gap-6">
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (notFound()) {
+    <div class="text-center py-16 text-base-content/50">
+      <p class="text-lg">{{ 'media_detail.not_found' | translate }}</p>
+    </div>
+  } @else if (episode(); as ep) {
+    @let m = media()!;
+    @let s = season()!;
+
+    <!-- Hero with fanart background -->
+    <div class="relative">
+      @if (m.fanartUrl) {
+        <div class="absolute inset-0 -mx-4 -mt-6 lg:-mx-6 overflow-hidden">
+          <img [src]="m.fanartUrl" alt="" class="w-full h-full object-cover object-[50%_25%]" />
+          <div class="absolute inset-0 bg-base-100/80"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-base-100/30 to-base-100/50"></div>
+        </div>
+        <a [routerLink]="seriesRoute()" [queryParams]="seriesQueryParams()" class="relative z-10 btn btn-ghost btn-sm gap-1 mb-4 text-base-content/80 hover:text-base-content">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          </svg>
+          {{ m.title }}
+        </a>
+      } @else {
+        <a [routerLink]="seriesRoute()" [queryParams]="seriesQueryParams()" class="btn btn-ghost btn-sm gap-1 mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          </svg>
+          {{ m.title }}
+        </a>
+      }
+
+      <div class="flex flex-col md:flex-row gap-5 relative z-10">
+        <!-- Episode still -->
+        <div class="shrink-0 md:w-[35%] lg:w-[30%]">
+          @if (ep.stillUrl) {
+            <img
+              [src]="ep.stillUrl"
+              [alt]="ep.title ?? ''"
+              class="w-full rounded-xl object-cover aspect-video"
+            />
+          } @else if (m.fanartUrl) {
+            <img
+              [src]="m.fanartUrl"
+              [alt]="m.title"
+              class="w-full rounded-xl object-cover aspect-video opacity-60"
+            />
+          } @else {
+            <div class="w-full rounded-xl bg-base-300 aspect-video flex items-center justify-center text-5xl font-bold text-base-content/15">
+              {{ ep.episodeNumber }}
+            </div>
+          }
+        </div>
+
+        <!-- Info -->
+        <div class="flex flex-col gap-3 flex-1 min-w-0">
+          <div>
+            <h1 class="text-2xl font-bold leading-tight">{{ m.title }}</h1>
+            <p class="text-base text-base-content/70 mt-1">
+              <a [routerLink]="seriesRoute()" [queryParams]="{ season: s.seasonNumber }" class="hover:underline">
+                S{{ pad(s.seasonNumber) }}
+              </a>:E{{ pad(ep.episodeNumber) }}
+              <span class="mx-1">-</span>
+              {{ ep.title ?? ('media_detail.ep_no_title' | translate) }}
+            </p>
+          </div>
+
+          <div class="flex flex-wrap gap-2 text-sm text-base-content/50">
+            @if (ep.airDate) {
+              <span>{{ ep.airDate }}</span>
+            }
+            @if (ep.runtime) {
+              <span>{{ ep.runtime }} {{ 'common.min' | translate }}</span>
+            }
+          </div>
+
+          <!-- File info -->
+          @if (episodeFiles().length > 1) {
+            <div class="flex items-center gap-3">
+              <select
+                class="select select-bordered select-sm"
+                [ngModel]="selectedFileId()"
+                (ngModelChange)="selectedFileId.set($event)"
+              >
+                @for (f of episodeFiles(); track f.id) {
+                  <option [ngValue]="f.id">{{ f.quality }} — {{ formatBytes(f.size) }}</option>
+                }
+              </select>
+            </div>
+          } @else if (episodeFiles().length === 1) {
+            <div class="flex flex-wrap gap-2 text-xs">
+              <span class="badge badge-sm badge-ghost">{{ episodeFiles()[0].quality }}</span>
+              <span class="badge badge-sm badge-ghost tabular-nums">{{ formatBytes(episodeFiles()[0].size) }}</span>
+            </div>
+          }
+
+          <!-- Actions -->
+          <div class="flex flex-wrap items-center gap-2 pt-1">
+            @if (selectedFileId()) {
+              <button
+                type="button"
+                class="btn btn-error btn-outline btn-sm btn-square"
+                (click)="onDeleteFileClick()"
+                [title]="'media_detail.delete' | translate"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            }
+            <div class="dropdown dropdown-end">
+              <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6h.01M12 12h.01M12 18h.01" />
+                </svg>
+              </div>
+              <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-56 p-2 shadow-lg">
+                @if (canGrab()) {
+                  <li>
+                    <a class="flex items-center gap-3" (click)="grabBest()" [class.pointer-events-none]="epGrabBusy() !== null" [class.opacity-50]="epGrabBusy() !== null">
+                      @if (epGrabBusy() === 'best') {
+                        <span class="loading loading-spinner loading-xs"></span>
+                      } @else {
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                      }
+                      {{ 'media_detail.grab_best' | translate }}
+                    </a>
+                  </li>
+                  <li>
+                    <a class="flex items-center gap-3" (click)="loadReleases()" [class.pointer-events-none]="epReleasesLoading()" [class.opacity-50]="epReleasesLoading()">
+                      @if (epReleasesLoading()) {
+                        <span class="loading loading-spinner loading-xs"></span>
+                      } @else {
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                      }
+                      {{ 'media_detail.search_releases' | translate }}
+                    </a>
+                  </li>
+                }
+                @if (isAdmin()) {
+                  <li>
+                    <a class="flex items-center gap-3" (click)="toggleMonitored()" [class.pointer-events-none]="episodeBusy()" [class.opacity-50]="episodeBusy()">
+                      @if (episodeBusy()) {
+                        <span class="loading loading-spinner loading-xs"></span>
+                      } @else if (ep.monitored) {
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                      } @else {
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                      }
+                      @if (ep.monitored) {
+                        {{ 'media_detail.unmonitor' | translate }}
+                      } @else {
+                        {{ 'media_detail.monitor' | translate }}
+                      }
+                    </a>
+                  </li>
+                }
+                <li>
+                  <a class="flex items-center gap-3" (click)="refreshMetadata()" [class.pointer-events-none]="refreshLoading()" [class.opacity-50]="refreshLoading()">
+                    @if (refreshLoading()) {
+                      <span class="loading loading-spinner loading-xs"></span>
+                    } @else {
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                    }
+                    {{ 'media_detail.refresh_metadata' | translate }}
+                  </a>
+                </li>
+                <li>
+                  <a class="flex items-center gap-3" (click)="rescanFiles()" [class.pointer-events-none]="rescanLoading()" [class.opacity-50]="rescanLoading()">
+                    @if (rescanLoading()) {
+                      <span class="loading loading-spinner loading-xs"></span>
+                    } @else {
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    }
+                    {{ 'media_detail.rescan_files' | translate }}
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Overview -->
+          @if (ep.overview) {
+            <p class="text-sm text-base-content/80 leading-relaxed whitespace-pre-line">{{ ep.overview }}</p>
+          } @else {
+            <p class="text-sm text-base-content/40 italic">{{ 'media_detail.ep_no_overview' | translate }}</p>
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- Subtitles -->
+    <app-media-detail-subtitles
+      [subtitles]="selectedFileSubtitles()"
+      [requiredLanguages]="requiredSubtitleLangs()"
+      [subtitlesLoading]="subtitlesLoading()"
+      [searchDisabled]="!ep.hasFile"
+      [canGrab]="canGrab()"
+      [subtitleActionBusy]="subtitleActionBusy()"
+      (openSubtitleSearch)="openSubtitleSearch()"
+      (autoSubtitle)="autoSubtitle()"
+      (syncSubtitle)="syncSubtitle($event)"
+      (deleteSubtitle)="deleteSubtitle($event)"
+      (postProcess)="postProcessSubtitle($event)"
+      (blacklistSubtitle)="blacklistSubtitle($event)"
+    />
+
+    @if (selectedFile(); as sf) {
+      <app-media-file-info [file]="sf" />
+    }
+
+    <!-- Modals -->
+    <app-media-detail-subtitle-search-modal
+      [subSearchLang]="subSearchLang()"
+      (subSearchLangChange)="subSearchLang.set($event)"
+      [subSearchLoading]="subSearchLoading()"
+      [subSearchSearched]="subSearchSearched()"
+      [subSearchResults]="subSearchResults()"
+      [subtitleActionBusy]="subtitleActionBusy()"
+      (search)="searchSubtitles()"
+      (download)="downloadSearchResult($event)"
+    />
+
+    <app-releases-modal #episodeReleasesModal
+      [title]="'media_detail.ep_releases_title' | translate"
+      [releases]="epReleases()"
+      [loading]="epReleasesLoading()"
+      [searched]="epReleasesSearched()"
+      [error]="epReleasesError()"
+      [grabBusy]="epGrabBusy()"
+      [grabState]="epGrabState()"
+      [canGrab]="canGrab()"
+      grabPrefix="ep"
+      (grab)="grabRelease($event.release, $event.index)"
+    />
+  }
+</div>

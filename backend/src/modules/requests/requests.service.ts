@@ -8,13 +8,18 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
 import { SuitarrRequest } from './entities/request.entity';
 import { RequestComment } from './entities/request-comment.entity';
-import { AutoApprovalRule, AutoApprovalCondition } from './entities/auto-approval-rule.entity';
+import {
+  AutoApprovalRule,
+  AutoApprovalCondition,
+} from './entities/auto-approval-rule.entity';
 import { User } from '../users/entities/user.entity';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { ListRequestsDto } from './dto/list-requests.dto';
+import { UpdateRequestDto } from './dto/update-request.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
-import { RequestStatus, UserRole } from '../../common/enums';
+import { MediaType, RequestStatus } from '../../common/enums';
 import { NotificationsService } from '../notifications/notifications.service';
+import { MediaService } from '../media/media.service';
 
 @Injectable()
 export class RequestsService {
@@ -26,6 +31,7 @@ export class RequestsService {
     @InjectRepository(AutoApprovalRule)
     private readonly ruleRepo: Repository<AutoApprovalRule>,
     private readonly notifications: NotificationsService,
+    private readonly mediaService: MediaService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -34,21 +40,38 @@ export class RequestsService {
 
   private evalCondition(
     cond: AutoApprovalCondition,
-    context: { role: string; userId: number; mediaType: string; tmdbId: number; title: string },
+    context: {
+      role: string;
+      userId: number;
+      mediaType: string;
+      tmdbId: number;
+      title: string;
+    },
   ): boolean {
     let actual: string | number;
     switch (cond.field) {
-      case 'role':   actual = context.role; break;
-      case 'userId': actual = context.userId; break;
-      default:       return true; // genre/year/seasons require metadata lookup — skip for now
+      case 'role':
+        actual = context.role;
+        break;
+      case 'userId':
+        actual = context.userId;
+        break;
+      default:
+        return true; // genre/year/seasons require metadata lookup — skip for now
     }
     switch (cond.operator) {
-      case 'equals':      return String(actual) === String(cond.value);
-      case 'notEquals':   return String(actual) !== String(cond.value);
-      case 'greaterThan': return Number(actual) > Number(cond.value);
-      case 'lessThan':    return Number(actual) < Number(cond.value);
-      case 'contains':    return String(actual).includes(String(cond.value));
-      default:            return false;
+      case 'equals':
+        return String(actual) === String(cond.value);
+      case 'notEquals':
+        return String(actual) !== String(cond.value);
+      case 'greaterThan':
+        return Number(actual) > Number(cond.value);
+      case 'lessThan':
+        return Number(actual) < Number(cond.value);
+      case 'contains':
+        return String(actual).includes(String(cond.value));
+      default:
+        return false;
     }
   }
 
@@ -63,7 +86,7 @@ export class RequestsService {
     if (!rules.length) return false;
 
     const context = {
-      role: user.role,
+      role: user.userRole?.name?.toLowerCase() ?? 'user',
       userId: user.id,
       mediaType: dto.mediaType,
       tmdbId: dto.tmdbId,
@@ -76,10 +99,45 @@ export class RequestsService {
   }
 
   // ---------------------------------------------------------------------------
+  // Quota enforcement
+  // ---------------------------------------------------------------------------
+
+  private async checkQuota(user: User, mediaType: MediaType): Promise<void> {
+    const limit =
+      mediaType === MediaType.MOVIE
+        ? user.movieQuotaLimit
+        : user.seriesQuotaLimit;
+
+    if (!limit) return; // 0 or undefined = unlimited
+
+    const periodDays = user.quotaPeriodDays || 7;
+    const since = new Date();
+    since.setDate(since.getDate() - periodDays);
+
+    const count = await this.requestRepo
+      .createQueryBuilder('r')
+      .where('r.userId = :userId', { userId: user.id })
+      .andWhere('r.mediaType = :mediaType', { mediaType })
+      .andWhere('r.status IN (:...statuses)', {
+        statuses: [RequestStatus.PENDING, RequestStatus.APPROVED],
+      })
+      .andWhere('r.createdAt >= :since', { since })
+      .getCount();
+
+    if (count >= limit) {
+      throw new ForbiddenException(
+        `Quota exceeded: ${count}/${limit} ${mediaType} requests in last ${periodDays} days`,
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Requests CRUD
   // ---------------------------------------------------------------------------
 
   async create(user: User, dto: CreateRequestDto): Promise<SuitarrRequest> {
+    await this.checkQuota(user, dto.mediaType);
+
     const dup = await this.requestRepo.findOne({
       where: {
         userId: user.id,
@@ -89,9 +147,20 @@ export class RequestsService {
       },
     });
     if (dup) {
-      throw new ConflictException(
-        'A pending request already exists for this title',
-      );
+      // For series, allow new requests if seasons don't overlap
+      if (dto.mediaType === 'series' && dto.seasons?.length && dup.seasons?.length) {
+        const overlap = dto.seasons.filter((s) => dup.seasons!.includes(s));
+        if (overlap.length > 0) {
+          throw new ConflictException(
+            `Seasons ${overlap.join(', ')} are already requested`,
+          );
+        }
+        // No overlap — allow the new request
+      } else {
+        throw new ConflictException(
+          'A pending request already exists for this title',
+        );
+      }
     }
 
     const autoApprove = await this.shouldAutoApprove(user, dto);
@@ -103,7 +172,8 @@ export class RequestsService {
       title: dto.title,
       seasons: dto.seasons ?? null,
       qualityProfileId: dto.qualityProfileId ?? null,
-      rootFolder: dto.rootFolder ?? null,
+      languageProfileId: dto.languageProfileId ?? null,
+      rootFolderId: dto.rootFolderId ?? null,
       status: autoApprove ? RequestStatus.APPROVED : RequestStatus.PENDING,
       approvedById: autoApprove ? user.id : null,
     };
@@ -111,7 +181,10 @@ export class RequestsService {
     const saved = await this.requestRepo.save(row);
 
     const event = autoApprove ? 'request.approved' : 'request.created';
-    void this.notifications.dispatch(event, { title: dto.title, mediaType: dto.mediaType });
+    void this.notifications.dispatch(event, {
+      title: dto.title,
+      mediaType: dto.mediaType,
+    });
 
     return saved;
   }
@@ -128,8 +201,10 @@ export class RequestsService {
       .leftJoinAndSelect('r.approvedBy', 'approvedBy')
       .orderBy('r.createdAt', 'DESC');
 
-    if (user.role !== UserRole.ADMIN) {
+    if (!user.permissions.includes('requests.manage')) {
       qb.andWhere('r.userId = :uid', { uid: user.id });
+    } else if (query.userId) {
+      qb.andWhere('r.userId = :uid', { uid: query.userId });
     }
     if (query.status) {
       qb.andWhere('r.status = :st', { st: query.status });
@@ -149,35 +224,85 @@ export class RequestsService {
       relations: ['user', 'approvedBy', 'comments', 'comments.user'],
     });
     if (!row) throw new NotFoundException(`Request #${id} not found`);
-    if (user.role !== UserRole.ADMIN && row.userId !== user.id) {
+    if (!user.permissions.includes('requests.manage') && row.userId !== user.id) {
       throw new ForbiddenException();
     }
     return row;
   }
 
+  async update(
+    id: number,
+    dto: UpdateRequestDto,
+    user: User,
+  ): Promise<SuitarrRequest> {
+    const row = await this.findOne(id, user);
+    if (row.status !== RequestStatus.PENDING) {
+      throw new ForbiddenException('Only pending requests can be updated');
+    }
+    if (!user.permissions.includes('requests.manage') && row.userId !== user.id) {
+      throw new ForbiddenException();
+    }
+    if (dto.qualityProfileId !== undefined) row.qualityProfileId = dto.qualityProfileId;
+    if (dto.languageProfileId !== undefined) row.languageProfileId = dto.languageProfileId;
+    if (dto.rootFolderId !== undefined) row.rootFolderId = dto.rootFolderId;
+    return this.requestRepo.save(row);
+  }
+
   async remove(id: number, user: User): Promise<void> {
     const row = await this.findOne(id, user);
+    const isManager = user.permissions.includes('requests.manage');
+    if (isManager) {
+      await this.requestRepo.remove(row);
+      return;
+    }
     if (row.status !== RequestStatus.PENDING) {
       throw new ForbiddenException('Only pending requests can be cancelled');
     }
-    if (user.role !== UserRole.ADMIN && row.userId !== user.id) {
+    if (row.userId !== user.id) {
       throw new ForbiddenException();
     }
     await this.requestRepo.remove(row);
   }
 
   async approve(id: number, admin: User): Promise<SuitarrRequest> {
-    if (admin.role !== UserRole.ADMIN) throw new ForbiddenException();
+    if (!admin.permissions.includes('requests.manage')) throw new ForbiddenException();
     const row = await this.requestRepo.findOne({ where: { id } });
     if (!row) throw new NotFoundException(`Request #${id} not found`);
     if (row.status !== RequestStatus.PENDING) {
       throw new ConflictException('Request is not pending');
     }
+
     row.status = RequestStatus.APPROVED;
     row.approvedById = admin.id;
     row.declinedReason = null;
+
+    // Import the media into the library
+    try {
+      const media = await this.mediaService.importFromTmdb({
+        type: row.mediaType,
+        tmdbId: row.tmdbId,
+        qualityProfileId: row.qualityProfileId ?? undefined,
+        languageProfileId: row.languageProfileId ?? undefined,
+        rootFolderId: row.rootFolderId ?? undefined,
+      });
+      row.mediaId = media.id;
+    } catch (err) {
+      // If already in library, resolve the existing media ID
+      if ((err as any)?.status === 409) {
+        const existing = await this.mediaService.findByTmdbId(
+          row.tmdbId,
+          row.mediaType,
+        );
+        if (existing) row.mediaId = existing.id;
+      } else {
+        throw err;
+      }
+    }
+
     const saved = await this.requestRepo.save(row);
-    void this.notifications.dispatch('request.approved', { title: saved.title });
+    void this.notifications.dispatch('request.approved', {
+      title: saved.title,
+    });
     return saved;
   }
 
@@ -186,7 +311,7 @@ export class RequestsService {
     admin: User,
     reason?: string,
   ): Promise<SuitarrRequest> {
-    if (admin.role !== UserRole.ADMIN) throw new ForbiddenException();
+    if (!admin.permissions.includes('requests.manage')) throw new ForbiddenException();
     const row = await this.requestRepo.findOne({ where: { id } });
     if (!row) throw new NotFoundException(`Request #${id} not found`);
     if (row.status !== RequestStatus.PENDING) {
@@ -196,7 +321,10 @@ export class RequestsService {
     row.approvedById = admin.id;
     row.declinedReason = reason ?? null;
     const saved = await this.requestRepo.save(row);
-    void this.notifications.dispatch('request.declined', { title: saved.title, reason: reason ?? '' });
+    void this.notifications.dispatch('request.declined', {
+      title: saved.title,
+      reason: reason ?? '',
+    });
     return saved;
   }
 
@@ -209,9 +337,12 @@ export class RequestsService {
     user: User,
     dto: CreateCommentDto,
   ): Promise<RequestComment> {
-    const request = await this.requestRepo.findOne({ where: { id: requestId } });
-    if (!request) throw new NotFoundException(`Request #${requestId} not found`);
-    if (user.role !== UserRole.ADMIN && request.userId !== user.id) {
+    const request = await this.requestRepo.findOne({
+      where: { id: requestId },
+    });
+    if (!request)
+      throw new NotFoundException(`Request #${requestId} not found`);
+    if (!user.permissions.includes('requests.manage') && request.userId !== user.id) {
       throw new ForbiddenException();
     }
     const comment = this.commentRepo.create({
@@ -223,9 +354,12 @@ export class RequestsService {
   }
 
   async getComments(requestId: number, user: User): Promise<RequestComment[]> {
-    const request = await this.requestRepo.findOne({ where: { id: requestId } });
-    if (!request) throw new NotFoundException(`Request #${requestId} not found`);
-    if (user.role !== UserRole.ADMIN && request.userId !== user.id) {
+    const request = await this.requestRepo.findOne({
+      where: { id: requestId },
+    });
+    if (!request)
+      throw new NotFoundException(`Request #${requestId} not found`);
+    if (!user.permissions.includes('requests.manage') && request.userId !== user.id) {
       throw new ForbiddenException();
     }
     return this.commentRepo.find({
@@ -240,8 +374,9 @@ export class RequestsService {
       where: { id: commentId },
       relations: ['request'],
     });
-    if (!comment) throw new NotFoundException(`Comment #${commentId} not found`);
-    if (user.role !== UserRole.ADMIN && comment.userId !== user.id) {
+    if (!comment)
+      throw new NotFoundException(`Comment #${commentId} not found`);
+    if (!user.permissions.includes('requests.manage') && comment.userId !== user.id) {
       throw new ForbiddenException();
     }
     await this.commentRepo.remove(comment);
