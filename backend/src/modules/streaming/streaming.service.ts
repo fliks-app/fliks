@@ -63,8 +63,6 @@ export class StreamingService {
       throw new NotFoundException(`Invalid file path`);
     }
 
-    this.log.log(`Resolve: media.path="${media.path}" + relative="${file.relativePath}" → "${absolutePath}"`);
-
     let stat: Awaited<ReturnType<typeof fs.stat>>;
     try {
       stat = await fs.stat(absolutePath);
