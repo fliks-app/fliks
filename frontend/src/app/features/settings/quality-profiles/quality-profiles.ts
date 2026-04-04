@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { LucideChevronLeft } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
@@ -22,7 +23,7 @@ import {
 
 @Component({
   selector: 'app-quality-profiles',
-  imports: [FormsModule, RouterLink, TranslateModule],
+  imports: [FormsModule, LucideChevronLeft, RouterLink, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quality-profiles.html',
 })

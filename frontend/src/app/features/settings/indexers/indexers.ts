@@ -8,6 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { LucideX } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
@@ -18,7 +19,7 @@ import { ProfilesService } from '../../../core/services/api/profiles.service';
 
 @Component({
   selector: 'app-indexers-settings',
-  imports: [FormsModule, TranslateModule],
+  imports: [FormsModule, LucideX, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './indexers.html',
 })

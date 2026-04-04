@@ -331,7 +331,7 @@ export class MediaService {
 
   async update(id: number, dto: UpdateMediaDto): Promise<Media> {
     const media = await this.findOne(id);
-    const { tagIds, ...rest } = dto;
+    const { tagIds, path, ...rest } = dto;
 
     Object.assign(media, rest);
 

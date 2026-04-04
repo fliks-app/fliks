@@ -3,6 +3,20 @@ import { DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
+import {
+  LucideChevronLeft,
+  LucideFilm,
+  LucideTrash2,
+  LucideEllipsisVertical,
+  LucideDownload,
+  LucideSearch,
+  LucideSettings,
+  LucideFolder,
+  LucideRotateCcw,
+  LucideFileText,
+  LucideEyeOff,
+  LucideEye,
+} from '@lucide/angular';
 import { Media } from '../../../../core/services/api/media.service';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
 import type { MediaFileRow } from '../../media-detail.utils';
@@ -10,7 +24,12 @@ import { formatMediaDetailBytes } from '../../media-detail.utils';
 
 @Component({
   selector: 'app-media-detail-header',
-  imports: [DecimalPipe, FormsModule, RouterLink, TranslateModule],
+  imports: [
+    DecimalPipe, FormsModule, RouterLink, TranslateModule,
+    LucideChevronLeft, LucideFilm, LucideTrash2, LucideEllipsisVertical,
+    LucideDownload, LucideSearch, LucideSettings, LucideFolder,
+    LucideRotateCcw, LucideFileText, LucideEyeOff, LucideEye,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-header.component.html',
 })

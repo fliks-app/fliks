@@ -7,6 +7,24 @@ import { DownloadClientsApiService } from '../../core/services/api/download-clie
 import { RequestsService } from '../../core/services/api/requests.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SseService } from '../../core/services/sse.service';
+import {
+  LucideMenu,
+  LucideHome,
+  LucideFilm,
+  LucideTv,
+  LucideSearch,
+  LucideClipboardList,
+  LucideDownload,
+  LucideCalendar,
+  LucideUpload,
+  LucideArrowRightLeft,
+  LucideLayoutGrid,
+  LucideSettings,
+  LucideUser,
+  LucideSun,
+  LucideMoon,
+  LucideLogOut,
+} from '@lucide/angular';
 
 function getInitialTheme(): 'dark' | 'light' {
   const stored = localStorage.getItem('suitarr-theme');
@@ -16,7 +34,13 @@ function getInitialTheme(): 'dark' | 'light' {
 
 @Component({
   selector: 'app-layout',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, TranslateModule],
+  imports: [
+    RouterOutlet, RouterLink, RouterLinkActive, TranslateModule,
+    LucideMenu, LucideHome, LucideFilm, LucideTv, LucideSearch,
+    LucideClipboardList, LucideDownload, LucideCalendar, LucideUpload,
+    LucideArrowRightLeft, LucideLayoutGrid, LucideSettings, LucideUser,
+    LucideSun, LucideMoon, LucideLogOut,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './layout.html',
 })

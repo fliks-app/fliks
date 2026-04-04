@@ -1,6 +1,7 @@
 import {
   Injectable,
   Logger,
+  BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -36,8 +37,16 @@ export class SubtitleStreamService {
       throw new NotFoundException(`Subtitle #${subtitleId} not found`);
     }
 
-    const content = await fs.readFile(sub.filePath, 'utf-8');
-    const ext = path.extname(sub.filePath).toLowerCase();
+    // Validate the subtitle path resolves to a real location (no traversal via symlinks)
+    let realSubPath: string;
+    try {
+      realSubPath = await fs.realpath(sub.filePath);
+    } catch {
+      throw new NotFoundException(`Subtitle file not found on disk`);
+    }
+
+    const content = await fs.readFile(realSubPath, 'utf-8');
+    const ext = path.extname(realSubPath).toLowerCase();
 
     if (ext === '.vtt') return content;
     if (ext === '.srt') return this.srtToVtt(content);
@@ -54,6 +63,10 @@ export class SubtitleStreamService {
     mediaFileId: number,
     streamIndex: number,
   ): Promise<Readable> {
+    if (!Number.isInteger(streamIndex) || streamIndex < 0 || streamIndex > 999) {
+      throw new BadRequestException(`Invalid stream index: ${streamIndex}`);
+    }
+
     const resolved = await this.streamingService.resolveFile(mediaFileId);
     const { spawn } = require('child_process');
 

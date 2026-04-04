@@ -7,13 +7,19 @@ import {
   output,
 } from '@angular/core';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import {
+  LucideTriangleAlert,
+  LucideCheck,
+  LucideCircleAlert,
+  LucideDownload,
+} from '@lucide/angular';
 import { MovieRelease } from '../../../../core/services/api/media.service';
 import { formatMediaDetailBytes } from '../../media-detail.utils';
 import { formatReleaseRejection } from '../../media-detail-release.utils';
 
 @Component({
   selector: 'app-releases-table',
-  imports: [TranslateModule],
+  imports: [TranslateModule, LucideTriangleAlert, LucideCheck, LucideCircleAlert, LucideDownload],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './releases-table.component.html',
 })

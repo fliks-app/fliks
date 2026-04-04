@@ -8,6 +8,7 @@ import {
   OnInit,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { LucideX } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   RolesApiService,
@@ -18,7 +19,7 @@ import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-roles-settings',
-  imports: [FormsModule, TranslateModule],
+  imports: [FormsModule, LucideX, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './roles.html',
 })

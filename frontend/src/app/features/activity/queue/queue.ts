@@ -21,10 +21,20 @@ import {
   Media,
 } from '../../../core/services/api/media.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import {
+  LucideSparkles,
+  LucideRotateCcw,
+  LucideLink2,
+  LucideEllipsisVertical,
+  LucideTriangleAlert,
+  LucideDownload,
+  LucideSearch,
+  LucideTrash2,
+} from '@lucide/angular';
 
 @Component({
   selector: 'app-activity-queue',
-  imports: [TranslateModule, DecimalPipe, NgClass, RouterLink, FormsModule],
+  imports: [TranslateModule, DecimalPipe, NgClass, RouterLink, FormsModule, LucideSparkles, LucideRotateCcw, LucideLink2, LucideEllipsisVertical, LucideTriangleAlert, LucideDownload, LucideSearch, LucideTrash2],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './queue.html',
 })

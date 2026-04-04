@@ -28,6 +28,17 @@ import type { MediaFileRow } from '../media-detail/media-detail.utils';
 import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
+import {
+  LucideChevronLeft,
+  LucideTrash2,
+  LucideEllipsisVertical,
+  LucideDownload,
+  LucideSearch,
+  LucideEyeOff,
+  LucideEye,
+  LucideRotateCcw,
+  LucideFileText,
+} from '@lucide/angular';
 
 @Component({
   selector: 'app-episode-detail',
@@ -39,6 +50,15 @@ import { ToastService } from '../../core/services/toast.service';
     MediaFileInfoComponent,
     MediaDetailSubtitleSearchModalComponent,
     ReleasesModalComponent,
+    LucideChevronLeft,
+    LucideTrash2,
+    LucideEllipsisVertical,
+    LucideDownload,
+    LucideSearch,
+    LucideEyeOff,
+    LucideEye,
+    LucideRotateCcw,
+    LucideFileText,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './episode-detail.html',

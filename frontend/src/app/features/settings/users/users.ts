@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { LucideX } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   UsersApiService,
@@ -23,7 +24,7 @@ import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-users-settings',
-  imports: [FormsModule, RouterLink, TranslateModule],
+  imports: [FormsModule, LucideX, RouterLink, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './users.html',
 })

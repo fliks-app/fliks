@@ -7,6 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { LucideSearch } from '@lucide/angular';
 import { TranslateModule } from '@ngx-translate/core';
 import {
   SubtitlesApiService,
@@ -18,7 +19,7 @@ import { TranslateService } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-subtitles-stats',
-  imports: [RouterLink, TranslateModule],
+  imports: [LucideSearch, RouterLink, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitles-stats.html',
 })

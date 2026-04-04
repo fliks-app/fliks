@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, catchError, firstValueFrom, map, of, tap } from 'rxjs';
 import { ServerConfigService } from './server-config.service';
+import { Preferences } from '@capacitor/preferences';
 
 export interface User {
   id: number;
@@ -25,6 +26,8 @@ export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly serverConfig = inject(ServerConfigService);
+
+  private static readonly TOKEN_KEY = 'suitarr_access_token';
 
   private readonly _user = signal<User | null>(null);
   private _accessToken: string | null = null;
@@ -58,7 +61,7 @@ export class AuthService {
     this._user.set(res.user);
     if (this.serverConfig.isNative && res.accessToken) {
       this._accessToken = res.accessToken;
-      localStorage.setItem('suitarr_access_token', res.accessToken);
+      await this.saveToken(res.accessToken);
     }
     return res;
   }
@@ -70,22 +73,37 @@ export class AuthService {
   }
 
   /** Hydrate la session depuis le cookie ou token stocké (appelé au démarrage). */
-  hydrateFromServer(): void {
+  async hydrateFromServer(): Promise<void> {
     if (this._user()) return;
     if (this.serverConfig.isNative) {
-      this._accessToken = localStorage.getItem('suitarr_access_token');
+      this._accessToken = await this.loadToken();
     }
-    firstValueFrom(this.http.get<User>('/api/auth/me')).then(
-      (user) => this._user.set(user),
-      () => this._user.set(null),
-    );
+    try {
+      const user = await firstValueFrom(this.http.get<User>('/api/auth/me'));
+      this._user.set(user);
+    } catch {
+      this._user.set(null);
+    }
   }
 
   /** Pour le garde de route : vérifie le cookie/token et charge l'utilisateur si besoin. */
   ensureAuthenticated(): Observable<boolean> {
     if (this._user()) return of(true);
     if (this.serverConfig.isNative && !this._accessToken) {
-      this._accessToken = localStorage.getItem('suitarr_access_token');
+      // Load token from persistent storage before making the API call
+      return new Observable<boolean>((subscriber) => {
+        this.loadToken().then((token) => {
+          this._accessToken = token;
+          this.http.get<User>('/api/auth/me').pipe(
+            tap((u) => this._user.set(u)),
+            map(() => true as boolean),
+            catchError(() => {
+              this._user.set(null);
+              return of(false);
+            }),
+          ).subscribe(subscriber);
+        });
+      });
     }
     return this.http.get<User>('/api/auth/me').pipe(
       tap((u) => this._user.set(u)),
@@ -103,8 +121,42 @@ export class AuthService {
     } finally {
       this._user.set(null);
       this._accessToken = null;
-      localStorage.removeItem('suitarr_access_token');
+      await this.removeToken();
       void this.router.navigate(['/login']);
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Token persistence — Preferences on native (survives app restarts reliably),
+  // localStorage as fallback on web or if Preferences fails.
+  // ---------------------------------------------------------------------------
+
+  private async saveToken(token: string): Promise<void> {
+    if (this.serverConfig.isNative) {
+      try {
+        await Preferences.set({ key: AuthService.TOKEN_KEY, value: token });
+        return;
+      } catch { /* fall through */ }
+    }
+    localStorage.setItem(AuthService.TOKEN_KEY, token);
+  }
+
+  private async loadToken(): Promise<string | null> {
+    if (this.serverConfig.isNative) {
+      try {
+        const { value } = await Preferences.get({ key: AuthService.TOKEN_KEY });
+        if (value) return value;
+      } catch { /* fall through */ }
+    }
+    return localStorage.getItem(AuthService.TOKEN_KEY);
+  }
+
+  private async removeToken(): Promise<void> {
+    if (this.serverConfig.isNative) {
+      try {
+        await Preferences.remove({ key: AuthService.TOKEN_KEY });
+      } catch { /* fall through */ }
+    }
+    localStorage.removeItem(AuthService.TOKEN_KEY);
   }
 }

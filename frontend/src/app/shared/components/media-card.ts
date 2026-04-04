@@ -2,6 +2,7 @@ import { Component, ChangeDetectionStrategy, input, computed } from '@angular/co
 import { RouterLink } from '@angular/router';
 import { NgClass } from '@angular/common';
 import { TranslateModule } from '@ngx-translate/core';
+import { LucideFilm } from '@lucide/angular';
 import { Media } from '../../core/services/api/media.service';
 
 export type MediaStatus =
@@ -14,7 +15,7 @@ export type MediaStatus =
 
 @Component({
   selector: 'app-media-card',
-  imports: [RouterLink, NgClass, TranslateModule],
+  imports: [RouterLink, NgClass, TranslateModule, LucideFilm],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-card.html',
 })

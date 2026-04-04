@@ -1,6 +1,22 @@
 import { ChangeDetectionStrategy, Component, computed, ElementRef, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
+import {
+  LucideChevronDown,
+  LucidePlay,
+  LucideVolume2,
+  LucideCode,
+  LucideSmile,
+  LucideImage,
+  LucideThermometer,
+  LucideMaximize2,
+  LucideArrowRightLeft,
+  LucideFileText,
+  LucideClock,
+  LucideZap,
+  LucideBan,
+  LucideTrash2,
+} from '@lucide/angular';
 import { SubtitleFilenamePipe } from '../../../../shared/pipes/subtitle-filename.pipe';
 import { SubtitleFileRow, SyncOptions, MediaStream } from '../../../../core/services/api/subtitles-api.service';
 import { SubtitleLanguageItem } from '../../../../core/services/api/profiles.service';
@@ -13,7 +29,12 @@ interface SubtitleRow {
 
 @Component({
   selector: 'app-media-detail-subtitles',
-  imports: [FormsModule, TranslateModule, SubtitleFilenamePipe],
+  imports: [
+    FormsModule, TranslateModule, SubtitleFilenamePipe,
+    LucideChevronDown, LucidePlay, LucideVolume2, LucideCode, LucideSmile,
+    LucideImage, LucideThermometer, LucideMaximize2, LucideArrowRightLeft,
+    LucideFileText, LucideClock, LucideZap, LucideBan, LucideTrash2,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-subtitles.component.html',
 })

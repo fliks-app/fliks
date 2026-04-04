@@ -105,110 +105,84 @@
                     <div class="dropdown dropdown-end dropdown-top">
                       <div tabindex="0" role="button" class="btn btn-ghost btn-xs" [class.btn-disabled]="subtitleActionBusy()">
                         {{ 'media_detail.subtitle_actions' | translate }}
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                        <svg lucideChevronDown class="h-3 w-3"></svg>
                       </div>
                       <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-10 w-56 p-2 shadow-lg text-sm">
                         <li>
                           <a class="flex items-center gap-3" (click)="openSyncModal(sub.id)">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-                            </svg>
+                            <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
                             {{ 'media_detail.action_sync' | translate }}
                           </a>
                         </li>
                         <li>
                           <a class="flex items-center gap-3" (click)="postProcess.emit({ subtitleId: sub.id, action: 'removeHiTags' })">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
-                            </svg>
+                            <svg lucideVolume2 class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
                             {{ 'media_detail.action_remove_hi' | translate }}
                           </a>
                         </li>
                         <li>
                           <a class="flex items-center gap-3" (click)="postProcess.emit({ subtitleId: sub.id, action: 'removeStyleTags' })">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
-                            </svg>
+                            <svg lucideCode class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
                             {{ 'media_detail.action_remove_style' | translate }}
                           </a>
                         </li>
                         <li>
                           <a class="flex items-center gap-3" (click)="postProcess.emit({ subtitleId: sub.id, action: 'removeEmoji' })">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75z" />
-                            </svg>
+                            <svg lucideSmile class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
                             {{ 'media_detail.action_remove_emoji' | translate }}
                           </a>
                         </li>
                         <li>
                           <a class="flex items-center gap-3" (click)="postProcess.emit({ subtitleId: sub.id, action: 'ocrFixes' })">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3A1.5 1.5 0 001.5 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-                            </svg>
+                            <svg lucideImage class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
                             {{ 'media_detail.action_ocr_fixes' | translate }}
                           </a>
                         </li>
                         <li>
                           <a class="flex items-center gap-3" (click)="postProcess.emit({ subtitleId: sub.id, action: 'commonFixes' })">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.431-.082-.86-.252-1.273M15.75 18.75a3 3 0 01-3 3h-3.75a3 3 0 01-3-3v-5.25m9-9.75a3 3 0 013 3v5.25m-9-9.75h9.75a3 3 0 013 3v5.25" />
-                            </svg>
+                            <svg lucideThermometer class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
                             {{ 'media_detail.action_common_fixes' | translate }}
                           </a>
                         </li>
                         <li>
                           <a class="flex items-center gap-3" (click)="postProcess.emit({ subtitleId: sub.id, action: 'fixUppercase' })">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4.5h14.25M3 9h9.75M3 13.5h5.25m4.5-4.5v12m0 0l-3.75-3.75M17.25 21L21 17.25" />
-                            </svg>
+                            <svg lucideMaximize2 class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
                             {{ 'media_detail.action_fix_uppercase' | translate }}
                           </a>
                         </li>
                         <li>
                           <a class="flex items-center gap-3" (click)="postProcess.emit({ subtitleId: sub.id, action: 'reverseRtl' })">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-                            </svg>
+                            <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
                             {{ 'media_detail.action_reverse_rtl' | translate }}
                           </a>
                         </li>
                         <li>
                           <a class="flex items-center gap-3" (click)="postProcess.emit({ subtitleId: sub.id, action: 'convertToSrt' })">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125V4.875a1.125 1.125 0 011.125-1.125h17.25a1.125 1.125 0 011.125 1.125v13.5a1.125 1.125 0 01-1.125 1.125zm-8.25-12h3.75m-3.75 3h3.75m-3.75 3h3.75m3.75-9h3.75m-3.75 3h3.75m-3.75 3h3.75" />
-                            </svg>
+                            <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
                             {{ 'media_detail.action_convert_srt' | translate }}
                           </a>
                         </li>
                         <li>
                           <a class="flex items-center gap-3" (click)="openAdjustModal(sub.id)">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+                            <svg lucideClock class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
                             {{ 'media_detail.action_adjust_times' | translate }}
                           </a>
                         </li>
                         <li>
                           <a class="flex items-center gap-3" (click)="openFpsModal(sub.id)">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                            </svg>
+                            <svg lucideZap class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
                             {{ 'media_detail.action_change_fps' | translate }}
                           </a>
                         </li>
                         <li class="border-t border-base-300 mt-1 pt-1">
                           <a class="flex items-center gap-3 text-warning" (click)="blacklistSubtitle.emit(sub)">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                            </svg>
+                            <svg lucideBan class="h-4 w-4 shrink-0 opacity-80" aria-hidden="true"></svg>
                             {{ 'media_detail.action_blacklist' | translate }}
                           </a>
                         </li>
                         <li>
                           <a class="flex items-center gap-3 text-error" (click)="deleteSubtitle.emit(sub.id)">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
+                            <svg lucideTrash2 class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
                             {{ 'media_detail.action_delete' | translate }}
                           </a>
                         </li>

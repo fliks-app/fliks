@@ -6,6 +6,7 @@ import {
   output,
 } from '@angular/core';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { LucideTrash2 } from '@lucide/angular';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
 import { formatMediaDetailBytes } from '../../media-detail.utils';
 import * as pathUtil from '../../media-detail.utils';
@@ -19,7 +20,7 @@ export interface FileRow {
 
 @Component({
   selector: 'app-media-detail-files',
-  imports: [TranslateModule],
+  imports: [TranslateModule, LucideTrash2],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-files.component.html',
 })

@@ -1,7 +1,11 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
+  Delete,
   Get,
   Param,
+  Post,
   Req,
   Res,
   ParseIntPipe,
@@ -13,7 +17,12 @@ import * as fs from 'fs';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { StreamingService } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
-import { TranscodingService } from './transcoding.service';
+import { TranscodingService, PROFILES } from './transcoding.service';
+import { StreamBuilderService } from './stream-builder.service';
+import { DeviceProfileDto } from './dto/device-profile.dto';
+
+const VALID_QUALITIES = new Set([...PROFILES.map((p) => p.name), 'remux']);
+const SEGMENT_RE = /^seg-\d{3}\.ts$/;
 
 @Controller('stream')
 @UseGuards(JwtOrApiKeyGuard)
@@ -24,12 +33,29 @@ export class StreamingController {
     private readonly streamingService: StreamingService,
     private readonly subtitleStreamService: SubtitleStreamService,
     private readonly transcodingService: TranscodingService,
+    private readonly streamBuilder: StreamBuilderService,
   ) {}
 
   /** Current hardware acceleration type detected by the server. */
   @Get('info/hw-accel')
   hwAccelInfo() {
     return { hwAccel: this.transcodingService.getDetectedHwAccel() };
+  }
+
+  /**
+   * PlaybackInfo — the client sends its DeviceProfile, the server decides
+   * how to play the file: DirectPlay, DirectStream (remux), or Transcode.
+   */
+  @Post(':mediaFileId/playback-info')
+  async playbackInfo(
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Body() deviceProfile: DeviceProfileDto,
+    @Req() req: Request,
+  ) {
+    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const token = (req.query as any).token;
+    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+    return this.streamBuilder.evaluate(resolved, deviceProfile, tokenParam);
   }
 
   // ---------------------------------------------------------------------------
@@ -52,8 +78,10 @@ export class StreamingController {
     const token = (req.query as any).token;
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
 
+    const includeRemux = (req.query as any).remux === '1';
+    const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
     const playlist = this.transcodingService.generateMasterPlaylist(
-      mediaFileId, w, h, tokenParam,
+      mediaFileId, w, h, tokenParam, includeRemux, sourceBitrate || undefined,
     );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -69,6 +97,9 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    if (!VALID_QUALITIES.has(quality)) {
+      throw new BadRequestException(`Invalid quality: ${quality}`);
+    }
     const resolved = await this.streamingService.resolveFile(mediaFileId);
     const si = resolved.mediaFile.streamInfo as any;
     let duration = si?.durationSeconds ?? 0;
@@ -84,7 +115,9 @@ export class StreamingController {
           '-of', 'csv=p=0', resolved.absolutePath,
         ], { timeout: 10_000 });
         duration = parseFloat(stdout.trim()) || 0;
-      } catch { /* ignore */ }
+      } catch (err) {
+        this.log.warn(`Failed to probe duration for MediaFile #${mediaFileId}: ${err}`);
+      }
     }
 
     if (!duration) {
@@ -92,10 +125,17 @@ export class StreamingController {
       return;
     }
 
-    // Start transcoding in the background (don't wait)
-    void this.transcodingService.getOrCreateSession(
-      mediaFileId, quality, resolved.absolutePath,
-    );
+    // Start transcoding/remuxing in the background (don't wait)
+    if (quality === 'remux') {
+      const copyAudio = (req.query as any).copyAudio !== 'false';
+      void this.transcodingService.getOrCreateRemuxSession(
+        mediaFileId, resolved.absolutePath, copyAudio,
+      );
+    } else {
+      void this.transcodingService.getOrCreateSession(
+        mediaFileId, quality, resolved.absolutePath,
+      );
+    }
 
     const token = (req.query as any).token;
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
@@ -132,15 +172,26 @@ export class StreamingController {
     @Param('segment') segment: string,
     @Res() res: Response,
   ) {
+    if (!VALID_QUALITIES.has(quality)) {
+      throw new BadRequestException(`Invalid quality: ${quality}`);
+    }
+    if (!SEGMENT_RE.test(segment)) {
+      throw new BadRequestException(`Invalid segment name: ${segment}`);
+    }
+
     const resolved = await this.streamingService.resolveFile(mediaFileId);
 
     // Parse segment index (seg-042.ts → 42)
     const segMatch = segment.match(/seg-(\d+)\.ts/);
     const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
 
-    const session = await this.transcodingService.getOrCreateSession(
-      mediaFileId, quality, resolved.absolutePath, segIndex,
-    );
+    const session = quality === 'remux'
+      ? await this.transcodingService.getOrCreateRemuxSession(
+          mediaFileId, resolved.absolutePath, true, segIndex,
+        )
+      : await this.transcodingService.getOrCreateSession(
+          mediaFileId, quality, resolved.absolutePath, segIndex,
+        );
 
     const segPath = await this.transcodingService.getSegmentPath(session, segment);
     if (!segPath) {
@@ -151,6 +202,19 @@ export class StreamingController {
     res.setHeader('Content-Type', 'video/mp2t');
     res.setHeader('Access-Control-Allow-Origin', '*');
     fs.createReadStream(segPath).pipe(res);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Session cleanup
+  // ---------------------------------------------------------------------------
+
+  /** Stop all transcoding sessions for a media file (called on player close / page unload). */
+  @Delete(':mediaFileId/sessions')
+  stopSessions(
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+  ) {
+    this.transcodingService.killAllSessionsForFile(mediaFileId);
+    return { ok: true };
   }
 
   // ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ChildProcess, spawn, execFile } from 'child_process';
 import { promisify } from 'util';
-import * as fs from 'fs';
+import { existsSync } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 
@@ -32,6 +32,8 @@ export interface TranscodeSession {
   cachePath: string;
   lastAccess: number;
   ready: Promise<void>;
+  /** If true, video is copied (remux), not re-encoded */
+  remux?: boolean;
 }
 
 export type HwAccelType = 'vaapi' | 'nvenc' | 'qsv' | 'none';
@@ -46,8 +48,12 @@ export const PROFILES: TranscodeProfile[] = [
   { name: '480p', maxWidth: 854, maxHeight: 480, videoBitrate: '2M', audioBitrate: '96k' },
 ];
 
+async function fileExists(p: string): Promise<boolean> {
+  try { await fsp.access(p); return true; } catch { return false; }
+}
+
 const SEGMENT_DURATION = 6;
-const SESSION_TIMEOUT_MS = 5 * 60 * 1000; // 5 min
+const SESSION_TIMEOUT_MS = 60 * 1000; // 60s (like Jellyfin HLS timeout)
 const MAX_SESSIONS = 3;
 
 @Injectable()
@@ -99,11 +105,24 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     sourceWidth: number,
     sourceHeight: number,
     tokenParam: string,
+    includeRemux = false,
+    sourceBitrate?: number,
   ): string {
+    const lines = ['#EXTM3U'];
+
+    // Add remux variant (original quality, no video re-encoding) as highest quality
+    if (includeRemux) {
+      const bw = sourceBitrate ?? 20_000_000; // fallback to 20 Mbps if unknown
+      lines.push(
+        `#EXT-X-STREAM-INF:BANDWIDTH=${bw},RESOLUTION=${sourceWidth}x${sourceHeight},NAME="remux"`,
+        `/api/stream/${mediaFileId}/remux/index.m3u8${tokenParam}`,
+      );
+    }
+
+    // Add transcode profiles
     const profiles = this.getAvailableProfiles(sourceWidth, sourceHeight);
     if (!profiles.length) profiles.push(PROFILES[PROFILES.length - 1]); // at least 480p
 
-    const lines = ['#EXTM3U'];
     for (const p of profiles) {
       const bw = parseInt(p.videoBitrate) * 1_000_000;
       const w = Math.min(p.maxWidth, sourceWidth);
@@ -128,24 +147,31 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const sessionId = `${mediaFileId}-${quality}`;
     const existing = this.sessions.get(sessionId);
     if (existing) {
-      existing.lastAccess = Date.now();
+      // If FFmpeg process has exited, clean up and start fresh
+      if (existing.process.exitCode !== null) {
+        this.log.warn(`Session [${sessionId}]: FFmpeg already exited (code ${existing.process.exitCode}), restarting`);
+        this.sessions.delete(sessionId);
+        await fsp.rm(existing.cachePath, { recursive: true, force: true });
+        // Fall through to create a new session below
+      } else {
+        existing.lastAccess = Date.now();
 
-      // If the requested segment is far ahead, restart FFmpeg with seek
-      if (requestedSegment > 0) {
-        const segFile = path.join(existing.cachePath, `seg-${String(requestedSegment).padStart(3, '0')}.ts`);
-        const nearbyExists = fs.existsSync(segFile) ||
-          fs.existsSync(path.join(existing.cachePath, `seg-${String(Math.max(0, requestedSegment - 1)).padStart(3, '0')}.ts`));
-        if (!nearbyExists) {
-          this.log.log(`Seek: restarting transcode [${sessionId}] from segment ${requestedSegment}`);
-          existing.process.kill('SIGTERM');
-          this.sessions.delete(sessionId);
-          await fsp.rm(existing.cachePath, { recursive: true, force: true });
-          await fsp.mkdir(existing.cachePath, { recursive: true });
-          return this.startSeekSession(sessionId, mediaFileId, quality, absolutePath, existing.cachePath, requestedSegment);
+        // If the requested segment is far ahead, restart FFmpeg with seek
+        if (requestedSegment > 0) {
+          const segFile = path.join(existing.cachePath, `seg-${String(requestedSegment).padStart(3, '0')}.ts`);
+          const nearbyExists = await fileExists(segFile) ||
+            await fileExists(path.join(existing.cachePath, `seg-${String(Math.max(0, requestedSegment - 1)).padStart(3, '0')}.ts`));
+          if (!nearbyExists) {
+            this.log.log(`Seek: restarting transcode [${sessionId}] from segment ${requestedSegment}`);
+            this.sessions.delete(sessionId);
+            await this.killAndClean(existing.process, existing.cachePath);
+            await fsp.mkdir(existing.cachePath, { recursive: true });
+            return this.startSeekSession(sessionId, mediaFileId, quality, absolutePath, existing.cachePath, requestedSegment);
+          }
         }
-      }
 
-      return existing;
+        return existing;
+      }
     }
 
     // Enforce max sessions
@@ -167,12 +193,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       // Give FFmpeg a moment to finish crashing
       await new Promise((r) => setTimeout(r, 1000));
       const hwFirstSeg = path.join(sessionDir, 'seg-000.ts');
-      if (!fs.existsSync(hwFirstSeg)) {
-        this.log.warn(`Transcode [${sessionId}]: HW accel (${this.detectedHwAccel}) failed, falling back to CPU`);
-        this.detectedHwAccel = 'none';
-        session.process.kill('SIGTERM');
+      if (!(await fileExists(hwFirstSeg))) {
+        this.log.warn(`Transcode [${sessionId}]: HW accel (${this.detectedHwAccel}) failed for this file, falling back to CPU`);
         this.sessions.delete(sessionId);
-        await fsp.rm(sessionDir, { recursive: true, force: true });
+        await this.killAndClean(session.process, sessionDir);
         await fsp.mkdir(sessionDir, { recursive: true });
         const cpuSession = await this.startFfmpeg(
           sessionId, mediaFileId, quality, absolutePath, profile, sessionDir, 'none', 0,
@@ -195,7 +219,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     // Wait up to 60s for the playlist to appear (CPU transcode can be slow to start)
     for (let i = 0; i < 120; i++) {
-      if (fs.existsSync(playlistPath)) {
+      if (await fileExists(playlistPath)) {
         const content = await fsp.readFile(playlistPath, 'utf-8');
         if (content.includes('.ts')) return content; // Wait until at least one segment is listed
       }
@@ -213,12 +237,22 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     // Wait up to 30s for the segment to appear
     for (let i = 0; i < 60; i++) {
-      if (fs.existsSync(segPath)) {
-        // Wait a bit more to ensure writing is complete
-        const size1 = fs.statSync(segPath).size;
-        await new Promise((r) => setTimeout(r, 200));
-        const size2 = fs.statSync(segPath).size;
-        if (size1 === size2 && size1 > 0) return segPath;
+      // If FFmpeg has exited, stop waiting immediately
+      if (session.process.exitCode !== null && !(await fileExists(segPath))) {
+        this.log.warn(`Segment ${segmentName} unavailable: FFmpeg exited with code ${session.process.exitCode}`);
+        return null;
+      }
+      if (await fileExists(segPath)) {
+        try {
+          // Wait a bit more to ensure writing is complete
+          const size1 = (await fsp.stat(segPath)).size;
+          await new Promise((r) => setTimeout(r, 200));
+          const size2 = (await fsp.stat(segPath)).size;
+          if (size1 === size2 && size1 > 0) return segPath;
+        } catch {
+          // File was removed between exists check and stat (session killed)
+          return null;
+        }
       }
       await new Promise((r) => setTimeout(r, 500));
     }
@@ -249,7 +283,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const firstSeg = path.join(sessionDir, `seg-${String(startSegment).padStart(3, '0')}.ts`);
 
     const checkReady = () => {
-      if (!resolved && fs.existsSync(firstSeg)) {
+      if (!resolved && existsSync(firstSeg)) {
         resolved = true;
         readyResolve();
       }
@@ -314,9 +348,19 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const sessionId = `${mediaFileId}-${quality}`;
     const session = this.sessions.get(sessionId);
     if (!session) return;
-    session.process.kill('SIGTERM');
     this.sessions.delete(sessionId);
-    fsp.rm(session.cachePath, { recursive: true, force: true }).catch(() => {});
+    this.gracefulKill(session);
+  }
+
+  /** Kill all sessions for a given media file (used on player close / page unload). */
+  killAllSessionsForFile(mediaFileId: number) {
+    for (const [id, session] of this.sessions) {
+      if (session.mediaFileId === mediaFileId) {
+        this.log.log(`Killing session ${id} for media file ${mediaFileId}`);
+        this.sessions.delete(id);
+        this.gracefulKill(session);
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -338,34 +382,58 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args.push('-ss', String(seekSeconds));
     }
 
+    const bitrateNum = parseInt(profile.videoBitrate) * 1_000_000; // e.g. "8M" -> 8000000
+
     // Hardware acceleration input decoding
-    if (hwAccel === 'vaapi') {
+    if (hwAccel === 'qsv') {
+      // Jellyfin approach on Linux: decode with VAAPI (native), scale with VAAPI,
+      // then map to QSV surfaces for encoding. More compatible than pure QSV pipeline.
+      args.push(
+        '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
+        '-init_hw_device', 'qsv=qs@va',
+        '-hwaccel', 'vaapi',
+        '-hwaccel_output_format', 'vaapi',
+        '-hwaccel_device', 'va',
+        '-noautorotate',
+      );
+    } else if (hwAccel === 'vaapi') {
       args.push(
         '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
         '-hwaccel', 'vaapi',
         '-hwaccel_output_format', 'vaapi',
         '-hwaccel_device', 'va',
+        '-noautorotate',
       );
     } else if (hwAccel === 'nvenc') {
-      args.push('-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda');
-    } else if (hwAccel === 'qsv') {
-      args.push(
-        '-init_hw_device', 'qsv=qsv:hw',
-        '-hwaccel', 'qsv',
-        '-hwaccel_output_format', 'qsv',
-      );
+      args.push('-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda', '-noautorotate');
     }
 
     args.push('-i', inputPath);
 
     // Video encoding
     switch (hwAccel) {
+      case 'qsv':
+        // VAAPI decode → VAAPI scale → map to QSV → QSV encode (Jellyfin Linux pipeline)
+        args.push(
+          '-c:v', 'h264_qsv',
+          '-mbbrc', '1',
+          '-b:v', String(bitrateNum),
+          '-maxrate', String(bitrateNum + 1),
+          '-rc_init_occupancy', String(bitrateNum * 2),
+          '-bufsize', String(bitrateNum * 4),
+          '-vf', `scale_vaapi=w=${profile.maxWidth}:h=-2:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
+          '-g', String(SEGMENT_DURATION * 24),
+          '-keyint_min', String(SEGMENT_DURATION * 24),
+        );
+        break;
       case 'vaapi':
         args.push(
           '-c:v', 'h264_vaapi',
           '-b:v', profile.videoBitrate,
           '-maxrate', profile.videoBitrate,
           '-vf', `scale_vaapi=w=${profile.maxWidth}:h=-2:format=nv12`,
+          '-g', String(SEGMENT_DURATION * 24),
+          '-keyint_min', String(SEGMENT_DURATION * 24),
         );
         break;
       case 'nvenc':
@@ -375,15 +443,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           '-b:v', profile.videoBitrate,
           '-maxrate', profile.videoBitrate,
           '-vf', `scale=${profile.maxWidth}:-2`,
-        );
-        break;
-      case 'qsv':
-        args.push(
-          '-c:v', 'h264_qsv',
-          '-preset', 'veryfast',
-          '-b:v', profile.videoBitrate,
-          '-maxrate', profile.videoBitrate,
-          '-vf', `scale=${profile.maxWidth}:-2`,
+          '-g', String(SEGMENT_DURATION * 24),
+          '-keyint_min', String(SEGMENT_DURATION * 24),
         );
         break;
       default:
@@ -394,6 +455,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           '-maxrate', profile.videoBitrate,
           '-bufsize', `${parseInt(profile.videoBitrate) * 2}M`,
           '-vf', `scale=${profile.maxWidth}:-2`,
+          // Force keyframes at segment boundaries + disable scene-change keyframes
+          '-force_key_frames', `expr:gte(t,n_forced*${SEGMENT_DURATION})`,
+          '-sc_threshold:v:0', '0',
         );
         break;
     }
@@ -415,9 +479,167 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return args;
   }
 
+  /**
+   * Build FFmpeg args for remux mode: copy video stream, optionally transcode audio.
+   * This is much cheaper than full transcoding — no video re-encoding.
+   */
+  buildRemuxArgs(
+    inputPath: string,
+    outputDir: string,
+    copyAudio: boolean,
+    audioBitrate = '192k',
+    startSegment = 0,
+  ): string[] {
+    const args = ['-hide_banner', '-loglevel', 'warning'];
+
+    if (startSegment > 0) {
+      args.push('-ss', String(startSegment * SEGMENT_DURATION));
+    }
+
+    args.push('-i', inputPath);
+
+    // Copy video stream as-is (no re-encoding)
+    args.push('-c:v', 'copy');
+
+    // Audio: copy or transcode to AAC
+    if (copyAudio) {
+      args.push('-c:a', 'copy');
+    } else {
+      args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
+    }
+
+    // HLS output with fMP4 segments (better for stream copy)
+    args.push(
+      '-f', 'hls',
+      '-hls_time', String(SEGMENT_DURATION),
+      '-hls_list_size', '0',
+      '-start_number', String(startSegment),
+      '-hls_segment_type', 'mpegts',
+      '-hls_segment_filename', path.join(outputDir, 'seg-%03d.ts'),
+      '-hls_flags', 'independent_segments',
+      path.join(outputDir, 'index.m3u8'),
+    );
+
+    return args;
+  }
+
+  /**
+   * Start a remux session (copy video, optionally transcode audio).
+   */
+  async getOrCreateRemuxSession(
+    mediaFileId: number,
+    absolutePath: string,
+    copyAudio: boolean,
+    requestedSegment = 0,
+  ): Promise<TranscodeSession> {
+    const sessionId = `${mediaFileId}-remux`;
+    const existing = this.sessions.get(sessionId);
+    if (existing) {
+      // If FFmpeg process has exited, clean up and start fresh
+      if (existing.process.exitCode !== null) {
+        this.log.warn(`Session [${sessionId}]: FFmpeg already exited (code ${existing.process.exitCode}), restarting`);
+        this.sessions.delete(sessionId);
+        await fsp.rm(existing.cachePath, { recursive: true, force: true });
+        // Fall through to create a new session below
+      } else {
+        existing.lastAccess = Date.now();
+
+        if (requestedSegment > 0) {
+          const segFile = path.join(existing.cachePath, `seg-${String(requestedSegment).padStart(3, '0')}.ts`);
+          const nearbyExists = await fileExists(segFile) ||
+            await fileExists(path.join(existing.cachePath, `seg-${String(Math.max(0, requestedSegment - 1)).padStart(3, '0')}.ts`));
+          if (!nearbyExists) {
+            this.log.log(`Seek: restarting remux [${sessionId}] from segment ${requestedSegment}`);
+            this.sessions.delete(sessionId);
+            await this.killAndClean(existing.process, existing.cachePath);
+          }
+        } else {
+          return existing;
+        }
+      }
+    }
+
+    if (this.sessions.size >= MAX_SESSIONS) {
+      this.evictOldestSession();
+    }
+
+    const sessionDir = path.join(this.cachePath, sessionId);
+    await fsp.mkdir(sessionDir, { recursive: true });
+
+    const { resolve: readyResolve, promise: readyPromise } = this.createDeferred();
+    const args = this.buildRemuxArgs(absolutePath, sessionDir, copyAudio, '192k', requestedSegment);
+    this.log.log(`Remux start [${sessionId}]: ffmpeg ${args.join(' ')}`);
+
+    const proc = spawn('ffmpeg', args, {
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+
+    let stderr = '';
+    let resolved = false;
+    const firstSeg = path.join(sessionDir, `seg-${String(requestedSegment).padStart(3, '0')}.ts`);
+
+    const checkReady = () => {
+      if (!resolved && existsSync(firstSeg)) {
+        resolved = true;
+        readyResolve();
+      }
+    };
+
+    proc.stderr!.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+      checkReady();
+    });
+
+    const pollTimer = setInterval(() => {
+      checkReady();
+      if (resolved) clearInterval(pollTimer);
+    }, 500);
+
+    proc.on('close', (code) => {
+      clearInterval(pollTimer);
+      if (!resolved) { resolved = true; readyResolve(); }
+      if (code && code !== 0 && code !== 255) {
+        this.log.error(`Remux [${sessionId}] exited ${code}:\n${stderr.slice(-500)}`);
+      }
+    });
+
+    proc.on('error', (err) => {
+      this.log.error(`Remux [${sessionId}] spawn error: ${err.message}`);
+      readyResolve();
+    });
+
+    const session: TranscodeSession = {
+      id: sessionId,
+      mediaFileId,
+      quality: 'remux',
+      process: proc,
+      cachePath: sessionDir,
+      lastAccess: Date.now(),
+      ready: readyPromise,
+      remux: true,
+    };
+
+    this.sessions.set(sessionId, session);
+    return session;
+  }
+
   private async detectHwAccel(): Promise<HwAccelType> {
-    // Test each accelerator with a real 1-frame encode
+    // Priority: QSV (Intel optimized) > VAAPI (generic Linux) > NVENC (NVIDIA) > none
+    // QSV is derived from VAAPI on Linux (like Jellyfin) for better compatibility
     const tests: { type: HwAccelType; args: string[] }[] = [
+      {
+        type: 'qsv',
+        args: [
+          '-hide_banner', '-loglevel', 'error',
+          '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
+          '-init_hw_device', 'qsv=qs@va',
+          '-filter_hw_device', 'qs',
+          '-f', 'lavfi', '-i', 'color=black:s=64x64:d=0.1',
+          '-vf', 'hwupload=extra_hw_frames=64,format=qsv',
+          '-c:v', 'h264_qsv', '-frames:v', '1',
+          '-f', 'null', '-',
+        ],
+      },
       {
         type: 'vaapi',
         args: [
@@ -436,16 +658,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           '-hwaccel', 'cuda',
           '-f', 'lavfi', '-i', 'color=black:s=64x64:d=0.1',
           '-c:v', 'h264_nvenc', '-frames:v', '1',
-          '-f', 'null', '-',
-        ],
-      },
-      {
-        type: 'qsv',
-        args: [
-          '-hide_banner', '-loglevel', 'error',
-          '-init_hw_device', 'qsv=qsv:hw',
-          '-f', 'lavfi', '-i', 'color=black:s=64x64:d=0.1',
-          '-c:v', 'h264_qsv', '-frames:v', '1',
           '-f', 'null', '-',
         ],
       },
@@ -469,9 +681,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     for (const [id, session] of this.sessions) {
       if (now - session.lastAccess > SESSION_TIMEOUT_MS) {
         this.log.log(`Cleanup stale session: ${id}`);
-        session.process.kill('SIGTERM');
         this.sessions.delete(id);
-        fsp.rm(session.cachePath, { recursive: true, force: true }).catch(() => {});
+        this.gracefulKill(session);
       }
     }
   }
@@ -485,10 +696,38 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     }
     if (oldest) {
       this.log.log(`Evicting session: ${oldest.id}`);
-      oldest.process.kill('SIGTERM');
       this.sessions.delete(oldest.id);
-      fsp.rm(oldest.cachePath, { recursive: true, force: true }).catch(() => {});
+      this.gracefulKill(oldest);
     }
+  }
+
+  /** Send SIGTERM, wait for exit, then remove cache directory. Fire-and-forget version. */
+  private gracefulKill(session: TranscodeSession) {
+    this.killAndClean(session.process, session.cachePath).catch(() => {});
+  }
+
+  /** Send SIGTERM, wait for the process to exit, then rm the directory. */
+  private killAndClean(proc: ChildProcess, dirPath: string): Promise<void> {
+    // Already exited — just clean up
+    if (proc.exitCode !== null) {
+      return fsp.rm(dirPath, { recursive: true, force: true });
+    }
+
+    return new Promise<void>((resolve) => {
+      const done = () => {
+        fsp.rm(dirPath, { recursive: true, force: true }).then(resolve, resolve);
+      };
+
+      proc.once('close', done);
+      proc.kill('SIGTERM');
+
+      // Safety net: force-kill if still alive after 5s
+      setTimeout(() => {
+        if (proc.exitCode === null) {
+          proc.kill('SIGKILL');
+        }
+      }, 5000);
+    });
   }
 
   private createDeferred(): { resolve: () => void; promise: Promise<void> } {

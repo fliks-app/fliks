@@ -29,10 +29,7 @@
               }
               @if (r.rejections.length > 0) {
                 <div class="tooltip tooltip-left" [attr.data-tip]="rejectionText(r.rejections)">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.87A1 1 0 002.57 20h18.86a1 1 0 00.86-1.27L13.71 3.86a1 1 0 00-1.42 0z" />
-                  </svg>
+                  <svg lucideTriangleAlert class="h-4 w-4 text-warning"></svg>
                 </div>
               }
             </div>
@@ -58,9 +55,7 @@
           <td class="w-10">
             @if (canGrab() && r.allowed && !r.blocklisted) {
               @if (grabState().get(grabKey(i)) === 'ok') {
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
+                <svg lucideCheck class="h-5 w-5 text-success"></svg>
               } @else {
                 <button type="button" class="btn btn-ghost btn-xs btn-square"
                   (click)="grab.emit({ release: r, index: i })"
@@ -68,15 +63,9 @@
                   @if (grabBusy() === grabKey(i)) {
                     <span class="loading loading-spinner loading-xs"></span>
                   } @else if (grabState().get(grabKey(i)) === 'error') {
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 9v2m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" />
-                    </svg>
+                    <svg lucideCircleAlert class="h-5 w-5 text-error"></svg>
                   } @else {
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
+                    <svg lucideDownload class="h-5 w-5"></svg>
                   }
                 </button>
               }

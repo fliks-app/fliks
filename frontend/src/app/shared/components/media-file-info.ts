@@ -5,6 +5,7 @@ import {
   input,
 } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
+import { LucideVideo, LucideVolume2 } from '@lucide/angular';
 import {
   MediaFileInfo,
   VideoStreamInfo,
@@ -20,7 +21,7 @@ type FileInput = {
 
 @Component({
   selector: 'app-media-file-info',
-  imports: [TranslateModule],
+  imports: [TranslateModule, LucideVideo, LucideVolume2],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-file-info.html',
 })

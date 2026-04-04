@@ -3,6 +3,41 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
+import { DeviceProfile } from '../browser-device-profile.service';
+
+export type PlayMethod = 'DirectPlay' | 'DirectStream' | 'Transcode';
+
+export interface PlaybackInfoResponse {
+  mediaFileId: number;
+  playMethod: PlayMethod;
+  playUrl: string;
+  contentType: string;
+  transcodeReasons: { flag: string; message: string }[];
+  videoCopyStream: boolean;
+  audioCopyStream: boolean;
+  outputVideoCodec: string;
+  outputAudioCodec: string;
+  outputContainer: string;
+  hwAccel: string;
+  source: {
+    container: string;
+    videoCodec: string;
+    videoProfile?: string;
+    videoLevel?: number;
+    videoBitRate?: number;
+    videoBitDepth?: number;
+    width?: number;
+    height?: number;
+    frameRate?: string;
+    audioCodec: string;
+    audioChannels?: number;
+    audioChannelLayout?: string;
+    audioBitRate?: number;
+    audioSampleRate?: number;
+    audioLanguage?: string;
+    durationSeconds?: number;
+  };
+}
 
 export interface PlaybackState {
   id: number;
@@ -75,6 +110,35 @@ export class StreamingApiService {
   getHwAccelInfo() {
     return firstValueFrom(
       this.http.get<{ hwAccel: string }>('/api/stream/info/hw-accel'),
+    );
+  }
+
+  /**
+   * Ask the backend to decide how to play this file based on client capabilities.
+   */
+  getPlaybackInfo(mediaFileId: number, deviceProfile: DeviceProfile): Promise<PlaybackInfoResponse> {
+    const token = this.auth.accessToken;
+    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+    return firstValueFrom(
+      this.http.post<PlaybackInfoResponse>(
+        `/api/stream/${mediaFileId}/playback-info${tokenParam}`,
+        deviceProfile,
+      ),
+    );
+  }
+
+  /** Build the URL for stopping sessions (used with sendBeacon on unload). */
+  getStopSessionsUrl(mediaFileId: number): string {
+    const base = this.serverConfig.isNative
+      ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/sessions`)
+      : `/api/stream/${mediaFileId}/sessions`;
+    const token = this.auth.accessToken;
+    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+  }
+
+  stopSessions(mediaFileId: number) {
+    return firstValueFrom(
+      this.http.delete(`/api/stream/${mediaFileId}/sessions`),
     );
   }
 
