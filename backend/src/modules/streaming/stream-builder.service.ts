@@ -87,11 +87,11 @@ export class StreamBuilderService {
     if (canCopyVideo) {
       const canCopyAudio = directPlayResult.audioSupported;
       const outputAudioCodec = canCopyAudio ? sourceAudioCodec : 'aac';
-      if (!canCopyAudio) {
-        reasons.push({ flag: 'AudioCodecNotSupported', message: `Audio codec "${sourceAudioCodec}" not supported, transcoding to AAC` });
+      if (!canCopyAudio && !reasons.some(r => r.flag.startsWith('Audio'))) {
+        reasons.push({ flag: 'AudioCodecNotSupported', message: `Codec "${sourceAudioCodec}" incompatible` });
       }
-      if (!directPlayResult.containerSupported) {
-        reasons.push({ flag: 'ContainerNotSupported', message: `Container "${sourceContainer}" not supported, remuxing to HLS` });
+      if (!directPlayResult.containerSupported && !reasons.some(r => r.flag === 'ContainerNotSupported')) {
+        reasons.push({ flag: 'ContainerNotSupported', message: `Conteneur "${sourceContainer}" incompatible` });
       }
 
       this.log.log(`DirectStream (remux) for file ${resolved.mediaFile.id}: copy video, ${canCopyAudio ? 'copy' : 'transcode'} audio`);
@@ -165,23 +165,23 @@ export class StreamBuilderService {
       if (cond) {
         if (cond.maxLevel && source.videoLevel && source.videoLevel > cond.maxLevel) {
           videoConditionsMet = false;
-          reasons.push({ flag: 'VideoLevelNotSupported', message: `Video level ${source.videoLevel} exceeds max ${cond.maxLevel}` });
+          reasons.push({ flag: 'VideoLevelNotSupported', message: `Niveau ${source.videoLevel} > max ${cond.maxLevel}` });
         }
         if (cond.profiles?.length && source.videoProfile && !cond.profiles.includes(source.videoProfile)) {
           videoConditionsMet = false;
-          reasons.push({ flag: 'VideoProfileNotSupported', message: `Video profile "${source.videoProfile}" not in [${cond.profiles.join(',')}]` });
+          reasons.push({ flag: 'VideoProfileNotSupported', message: `Profil "${source.videoProfile}" incompatible` });
         }
         if (cond.maxBitDepth && source.videoBitDepth && source.videoBitDepth > cond.maxBitDepth) {
           videoConditionsMet = false;
-          reasons.push({ flag: 'VideoBitDepthNotSupported', message: `Bit depth ${source.videoBitDepth} exceeds max ${cond.maxBitDepth}` });
+          reasons.push({ flag: 'VideoBitDepthNotSupported', message: `${source.videoBitDepth} bit > max ${cond.maxBitDepth} bit` });
         }
         if (cond.maxWidth && source.width && source.width > cond.maxWidth) {
           videoConditionsMet = false;
-          reasons.push({ flag: 'VideoResolutionNotSupported', message: `Width ${source.width} exceeds max ${cond.maxWidth}` });
+          reasons.push({ flag: 'VideoResolutionNotSupported', message: `Largeur ${source.width} > max ${cond.maxWidth}` });
         }
         if (cond.maxHeight && source.height && source.height > cond.maxHeight) {
           videoConditionsMet = false;
-          reasons.push({ flag: 'VideoResolutionNotSupported', message: `Height ${source.height} exceeds max ${cond.maxHeight}` });
+          reasons.push({ flag: 'VideoResolutionNotSupported', message: `Hauteur ${source.height} > max ${cond.maxHeight}` });
         }
       }
     }
@@ -190,7 +190,7 @@ export class StreamBuilderService {
     if (profile.maxStreamingBitrate && profile.maxStreamingBitrate > 0) {
       const totalBitrate = (source.videoBitRate ?? 0) + (source.audioBitRate ?? 0);
       if (totalBitrate > profile.maxStreamingBitrate) {
-        reasons.push({ flag: 'VideoBitrateNotSupported', message: `Bitrate ${totalBitrate} exceeds max ${profile.maxStreamingBitrate}` });
+        reasons.push({ flag: 'VideoBitrateNotSupported', message: `Débit trop élevé (${Math.round(totalBitrate / 1_000_000)} Mbps)` });
         videoConditionsMet = false;
       }
     }
@@ -198,17 +198,17 @@ export class StreamBuilderService {
     // Audio channels check
     if (profile.maxAudioChannels && source.audioChannels && source.audioChannels > profile.maxAudioChannels) {
       audioSupported = false;
-      reasons.push({ flag: 'AudioChannelsNotSupported', message: `${source.audioChannels} channels exceeds max ${profile.maxAudioChannels}` });
+      reasons.push({ flag: 'AudioChannelsNotSupported', message: `${source.audioChannels} canaux > max ${profile.maxAudioChannels}` });
     }
 
     if (!videoSupported) {
-      reasons.push({ flag: 'VideoCodecNotSupported', message: `Video codec "${source.videoCodec}" not supported by client` });
+      reasons.push({ flag: 'VideoCodecNotSupported', message: `Codec "${source.videoCodec}" incompatible` });
     }
     if (!audioSupported) {
-      reasons.push({ flag: 'AudioCodecNotSupported', message: `Audio codec "${source.audioCodec}" not supported by client` });
+      reasons.push({ flag: 'AudioCodecNotSupported', message: `Codec "${source.audioCodec}" incompatible` });
     }
     if (!containerSupported) {
-      reasons.push({ flag: 'ContainerNotSupported', message: `Container "${source.container}" not supported by client` });
+      reasons.push({ flag: 'ContainerNotSupported', message: `Conteneur "${source.container}" incompatible` });
     }
 
     const canDirectPlay = containerSupported && videoSupported && audioSupported && videoConditionsMet;

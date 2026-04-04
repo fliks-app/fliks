@@ -17,9 +17,11 @@ import * as fs from 'fs';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { StreamingService } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
-import { TranscodingService, PROFILES } from './transcoding.service';
+import { TranscodingService, PROFILES, SessionContext } from './transcoding.service';
 import { StreamBuilderService } from './stream-builder.service';
+import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
+import { User } from '../users/entities/user.entity';
 
 const VALID_QUALITIES = new Set([...PROFILES.map((p) => p.name), 'remux']);
 const SEGMENT_RE = /^seg-\d{3}\.ts$/;
@@ -34,7 +36,20 @@ export class StreamingController {
     private readonly subtitleStreamService: SubtitleStreamService,
     private readonly transcodingService: TranscodingService,
     private readonly streamBuilder: StreamBuilderService,
+    private readonly activeStreamTracker: ActiveStreamTracker,
   ) {}
+
+  private buildSessionContext(req: Request, resolved: { media: any }, mediaFileId: number): SessionContext {
+    const user = (req as any).user as User | undefined;
+    return {
+      userId: user?.id,
+      username: user?.username,
+      mediaTitle: resolved.media?.title,
+      mediaType: resolved.media?.type,
+      posterUrl: resolved.media?.posterUrl ?? null,
+      transcodeReasons: this.activeStreamTracker.getTranscodeReasons(mediaFileId),
+    };
+  }
 
   /** Current hardware acceleration type detected by the server. */
   @Get('info/hw-accel')
@@ -55,7 +70,12 @@ export class StreamingController {
     const resolved = await this.streamingService.resolveFile(mediaFileId);
     const token = (req.query as any).token;
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
-    return this.streamBuilder.evaluate(resolved, deviceProfile, tokenParam);
+    const result = this.streamBuilder.evaluate(resolved, deviceProfile, tokenParam);
+    // Cache transcode reasons for the admin dashboard
+    if (result.transcodeReasons.length) {
+      this.activeStreamTracker.setTranscodeReasons(mediaFileId, result.transcodeReasons);
+    }
+    return result;
   }
 
   // ---------------------------------------------------------------------------
@@ -126,14 +146,15 @@ export class StreamingController {
     }
 
     // Start transcoding/remuxing in the background (don't wait)
+    const ctx = this.buildSessionContext(req, resolved, mediaFileId);
     if (quality === 'remux') {
       const copyAudio = (req.query as any).copyAudio !== 'false';
       void this.transcodingService.getOrCreateRemuxSession(
-        mediaFileId, resolved.absolutePath, copyAudio,
+        mediaFileId, resolved.absolutePath, copyAudio, 0, ctx,
       );
     } else {
       void this.transcodingService.getOrCreateSession(
-        mediaFileId, quality, resolved.absolutePath,
+        mediaFileId, quality, resolved.absolutePath, 0, ctx,
       );
     }
 
@@ -170,6 +191,7 @@ export class StreamingController {
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
     @Param('quality') quality: string,
     @Param('segment') segment: string,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
     if (!VALID_QUALITIES.has(quality)) {
@@ -185,12 +207,13 @@ export class StreamingController {
     const segMatch = segment.match(/seg-(\d+)\.ts/);
     const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
 
+    const ctx = this.buildSessionContext(req, resolved, mediaFileId);
     const session = quality === 'remux'
       ? await this.transcodingService.getOrCreateRemuxSession(
-          mediaFileId, resolved.absolutePath, true, segIndex,
+          mediaFileId, resolved.absolutePath, true, segIndex, ctx,
         )
       : await this.transcodingService.getOrCreateSession(
-          mediaFileId, quality, resolved.absolutePath, segIndex,
+          mediaFileId, quality, resolved.absolutePath, segIndex, ctx,
         );
 
     const segPath = await this.transcodingService.getSegmentPath(session, segment);
@@ -212,8 +235,13 @@ export class StreamingController {
   @Delete(':mediaFileId/sessions')
   stopSessions(
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Req() req: Request,
   ) {
     this.transcodingService.killAllSessionsForFile(mediaFileId);
+    const user = (req as any).user as User | undefined;
+    if (user) {
+      this.activeStreamTracker.unregister(user.id, mediaFileId);
+    }
     return { ok: true };
   }
 
@@ -261,6 +289,16 @@ export class StreamingController {
     @Res() res: Response,
   ) {
     const resolved = await this.streamingService.resolveFile(mediaFileId);
+
+    // Track direct play session
+    const user = (req as any).user as User | undefined;
+    if (user) {
+      this.activeStreamTracker.register(
+        user.id, user.username, mediaFileId,
+        resolved.media?.title ?? '', resolved.media?.type ?? '',
+        resolved.media?.posterUrl ?? null,
+      );
+    }
 
     const duration = (resolved.mediaFile.streamInfo as any)?.durationSeconds;
     if (duration) {

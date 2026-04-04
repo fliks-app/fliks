@@ -1,6 +1,7 @@
 <div
   #playerContainer
   class="player-container"
+  [class.hide-cursor]="!controlsVisible()"
   (mousemove)="isNative ? null : showControls()"
 >
   <!-- Backdrop shown while video loads -->

@@ -6,6 +6,7 @@ import {
   OnDestroy,
   ViewEncapsulation,
   computed,
+  effect,
   inject,
   signal,
   viewChild,
@@ -16,6 +17,8 @@ import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/a
 import { SubtitlesApiService, SubtitleFileRow } from '../../core/services/api/subtitles-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
 import { BrowserDeviceProfileService } from '../../core/services/browser-device-profile.service';
+import { SseService } from '../../core/services/sse.service';
+import { AuthService } from '../../core/services/auth.service';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 interface ImmersivePlugin {
@@ -65,6 +68,9 @@ interface QualityOption {
       z-index: 100;
       overflow: hidden;
     }
+    .player-container.hide-cursor {
+      cursor: none;
+    }
     .player-video {
       width: 100%;
       height: 100%;
@@ -80,6 +86,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly mediaService = inject(MediaService);
   private readonly deviceProfileService = inject(BrowserDeviceProfileService);
+  private readonly sseService = inject(SseService);
+  private readonly authService = inject(AuthService);
 
   private readonly videoEl = viewChild<ElementRef<HTMLVideoElement>>('videoElement');
   private readonly containerEl = viewChild<ElementRef<HTMLDivElement>>('playerContainer');
@@ -109,6 +117,25 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly availableQualities = signal<QualityOption[]>([]);
 
   readonly isNative = Capacitor.isNativePlatform();
+
+  // Remote control: listen for admin commands via SSE
+  private readonly remoteCommandEffect = effect(() => {
+    const event = this.sseService.lastEvent();
+    if (!event || event.type !== 'player.command') return;
+    const cmd = event as any;
+    const currentUserId = this.authService.user()?.id;
+    if (cmd.mediaFileId !== this.mediaFileId || cmd.userId !== currentUserId) return;
+
+    if (cmd.action === 'pause') {
+      const video = this.videoEl()?.nativeElement;
+      if (video && !video.paused) video.pause();
+    } else if (cmd.action === 'play') {
+      const video = this.videoEl()?.nativeElement;
+      if (video && video.paused) video.play();
+    } else if (cmd.action === 'stop') {
+      this.onBack();
+    }
+  });
 
   // Media info
   private mediaFileId = 0;
@@ -283,7 +310,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     video.addEventListener('play', () => this.paused.set(false));
     video.addEventListener('pause', () => this.paused.set(true));
     video.addEventListener('waiting', () => this.buffering.set(true));
-    video.addEventListener('playing', () => this.buffering.set(false));
+    video.addEventListener('playing', () => { this.buffering.set(false); this.error.set(null); });
     video.addEventListener('canplay', () => this.buffering.set(false));
     video.addEventListener('volumechange', () => {
       this.volume.set(video.muted ? 0 : video.volume);
@@ -341,10 +368,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.playbackMode.set('transcode');
       }
 
-      // Fetch server's HW accel capability (used when switching to transcode quality)
-      this.streamingApi.getHwAccelInfo()
-        .then(info => this.hwAccel.set(info.hwAccel))
-        .catch(() => {});
+      // Use HW accel info from the playback decision
+      this.hwAccel.set(pi.hwAccel);
 
       // object-fit: contain handles aspect ratio via the video's intrinsic dimensions.
       // Do NOT set aspect-ratio CSS — it conflicts with width:100%/height:100% and
@@ -472,8 +497,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // Controls visibility
   toggleControls() {
     if (this.controlsVisible() && !this.isDropdownOpen()) {
-      if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
-      this.controlsVisible.set(false);
+      this.hideControls();
     } else {
       this.showControls();
     }
@@ -481,6 +505,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   showControls() {
     this.controlsVisible.set(true);
+    this.resetHideTimer();
+  }
+
+  private hideControls() {
+    if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
+    this.controlsVisible.set(false);
+  }
+
+  private resetHideTimer() {
     if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
     this.controlsTimeout = setTimeout(() => {
       if (!this.paused() && !this.isDropdownOpen()) this.controlsVisible.set(false);

@@ -150,6 +150,11 @@ export const routes: Routes = [
             loadComponent: () =>
               import('./features/system/import/import').then((m) => m.SystemImportComponent),
           },
+          {
+            path: 'streams',
+            loadComponent: () =>
+              import('./features/system/streams/streams').then((m) => m.SystemStreamsComponent),
+          },
         ],
       },
       {

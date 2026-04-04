@@ -24,6 +24,15 @@ export interface TranscodeProfile {
   audioBitrate: string;
 }
 
+export interface SessionContext {
+  userId?: number;
+  username?: string;
+  mediaTitle?: string;
+  mediaType?: string;
+  posterUrl?: string | null;
+  transcodeReasons?: { flag: string; message: string }[];
+}
+
 export interface TranscodeSession {
   id: string;
   mediaFileId: number;
@@ -34,6 +43,18 @@ export interface TranscodeSession {
   ready: Promise<void>;
   /** If true, video is copied (remux), not re-encoded */
   remux?: boolean;
+  /** User & media context for admin dashboard */
+  userId?: number;
+  username?: string;
+  mediaTitle?: string;
+  mediaType?: string;
+  posterUrl?: string | null;
+  startedAt?: Date;
+  transcodeReasons?: { flag: string; message: string }[];
+  /** Actual HW accel used (may differ from detected if fallback to CPU) */
+  actualHwAccel?: HwAccelType;
+  /** FFmpeg stderr output (for debugging HW accel failures) */
+  stderr?: string;
 }
 
 export type HwAccelType = 'vaapi' | 'nvenc' | 'qsv' | 'none';
@@ -86,6 +107,23 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
   getDetectedHwAccel(): HwAccelType {
     return this.detectedHwAccel;
+  }
+
+  getActiveSessions(): TranscodeSession[] {
+    return Array.from(this.sessions.values());
+  }
+
+  /** Estimate transcode progress as a percentage (0-100) by counting segments on disk. */
+  async getTranscodePercent(session: TranscodeSession, durationSeconds: number): Promise<number> {
+    if (!durationSeconds || durationSeconds <= 0) return 0;
+    try {
+      const files = await fsp.readdir(session.cachePath);
+      const segCount = files.filter((f) => f.endsWith('.ts')).length;
+      const transcodedSeconds = segCount * SEGMENT_DURATION;
+      return Math.min(100, (transcodedSeconds / durationSeconds) * 100);
+    } catch {
+      return 0;
+    }
   }
 
   /**
@@ -143,6 +181,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     quality: string,
     absolutePath: string,
     requestedSegment = 0,
+    ctx?: SessionContext,
   ): Promise<TranscodeSession> {
     const sessionId = `${mediaFileId}-${quality}`;
     const existing = this.sessions.get(sessionId);
@@ -166,7 +205,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             this.sessions.delete(sessionId);
             await this.killAndClean(existing.process, existing.cachePath);
             await fsp.mkdir(existing.cachePath, { recursive: true });
-            return this.startSeekSession(sessionId, mediaFileId, quality, absolutePath, existing.cachePath, requestedSegment);
+            return this.startSeekSession(sessionId, mediaFileId, quality, absolutePath, existing.cachePath, requestedSegment, ctx);
           }
         }
 
@@ -185,22 +224,32 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     const session = await this.startFfmpeg(
       sessionId, mediaFileId, quality, absolutePath, profile, sessionDir, this.detectedHwAccel,
+      requestedSegment,
     );
+    this.applyContext(session, ctx);
 
-    // If HW accel failed (no segments produced), retry with CPU
+    // If HW accel crashed (non-zero exit, no segments), retry with CPU.
+    // Only fallback on actual crash — a still-running process is just slow (e.g. QSV with seek).
     if (this.detectedHwAccel !== 'none') {
       await session.ready;
-      // Give FFmpeg a moment to finish crashing
-      await new Promise((r) => setTimeout(r, 1000));
-      const hwFirstSeg = path.join(sessionDir, 'seg-000.ts');
-      if (!(await fileExists(hwFirstSeg))) {
-        this.log.warn(`Transcode [${sessionId}]: HW accel (${this.detectedHwAccel}) failed for this file, falling back to CPU`);
+      // Wait up to 5s for the process to potentially crash
+      for (let i = 0; i < 10; i++) {
+        if (session.process.exitCode !== null) break;
+        const expectedSeg = path.join(sessionDir, `seg-${String(requestedSegment).padStart(3, '0')}.ts`);
+        if (await fileExists(expectedSeg)) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      const expectedSeg = path.join(sessionDir, `seg-${String(requestedSegment).padStart(3, '0')}.ts`);
+      const crashed = session.process.exitCode !== null && !(await fileExists(expectedSeg));
+      if (crashed) {
+        this.log.warn(`Transcode [${sessionId}]: HW accel (${this.detectedHwAccel}) crashed (exit=${session.process.exitCode}), falling back to CPU\n${(session.stderr ?? '').slice(-1000)}`);
         this.sessions.delete(sessionId);
         await this.killAndClean(session.process, sessionDir);
         await fsp.mkdir(sessionDir, { recursive: true });
         const cpuSession = await this.startFfmpeg(
-          sessionId, mediaFileId, quality, absolutePath, profile, sessionDir, 'none', 0,
+          sessionId, mediaFileId, quality, absolutePath, profile, sessionDir, 'none', requestedSegment,
         );
+        this.applyContext(cpuSession, ctx);
         this.sessions.set(sessionId, cpuSession);
         return cpuSession;
       }
@@ -321,7 +370,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       cachePath: sessionDir,
       lastAccess: Date.now(),
       ready: readyPromise,
+      actualHwAccel: hwAccel,
     };
+
+    // Keep stderr reference on session for debugging
+    proc.stderr!.on('data', () => { session.stderr = stderr; });
 
     this.sessions.set(sessionId, session);
     return session;
@@ -334,12 +387,14 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     absolutePath: string,
     sessionDir: string,
     startSegment: number,
+    ctx?: SessionContext,
   ): Promise<TranscodeSession> {
     const profile = PROFILES.find((p) => p.name === quality) ?? PROFILES[0];
     const session = await this.startFfmpeg(
       sessionId, mediaFileId, quality, absolutePath, profile, sessionDir,
       this.detectedHwAccel, startSegment,
     );
+    this.applyContext(session, ctx);
     this.sessions.set(sessionId, session);
     return session;
   }
@@ -531,6 +586,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     absolutePath: string,
     copyAudio: boolean,
     requestedSegment = 0,
+    ctx?: SessionContext,
   ): Promise<TranscodeSession> {
     const sessionId = `${mediaFileId}-remux`;
     const existing = this.sessions.get(sessionId);
@@ -619,6 +675,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       remux: true,
     };
 
+    this.applyContext(session, ctx);
     this.sessions.set(sessionId, session);
     return session;
   }
@@ -728,6 +785,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         }
       }, 5000);
     });
+  }
+
+  private applyContext(session: TranscodeSession, ctx?: SessionContext) {
+    if (!ctx) return;
+    session.userId = ctx.userId;
+    session.username = ctx.username;
+    session.mediaTitle = ctx.mediaTitle;
+    session.mediaType = ctx.mediaType;
+    session.posterUrl = ctx.posterUrl;
+    session.transcodeReasons = ctx.transcodeReasons;
+    if (!session.startedAt) session.startedAt = new Date();
   }
 
   private createDeferred(): { resolve: () => void; promise: Promise<void> } {

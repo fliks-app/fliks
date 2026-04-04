@@ -1,5 +1,44 @@
 # Plan : Serveur vidéo intégré à Suitarr
 
+## État d'avancement (mis à jour 2026-04-04)
+
+### Phase 1 : Direct Play + Player UI — ✅ TERMINÉE
+- ✅ Streaming direct (Range requests, MP4/MKV)
+- ✅ Endpoints sous-titres (externes + embarqués, conversion SRT/ASS → VTT)
+- ✅ Playback state (resume, continue watching, historique)
+- ✅ Player Shaka complet : controls custom, seek, volume, PiP, plein écran
+- ✅ Stats overlay (codec, bitrate, résolution, mode, HW accel)
+- ✅ Raccourcis clavier complets
+- ✅ Mobile Capacitor (Android) : immersive, PiP natif, orientation landscape
+- ✅ Dashboard "Continuer à regarder"
+
+### Phase 2 : Transcodage à la volée — ✅ TERMINÉE
+- ✅ HLS multi-qualité (master playlist, segments TS)
+- ✅ Détection hardware auto (QSV > VAAPI > NVENC > CPU)
+- ✅ Profils de qualité adaptatifs (1080p, 720p, 480p)
+- ✅ Remux mode (copy video, transcode audio si nécessaire)
+- ✅ Session management (timeout 60s, max 3 sessions, eviction LRU)
+- ✅ Seek : redémarrage FFmpeg à la position demandée
+- ✅ Graceful kill (attend la fin du process avant cleanup)
+- ✅ Device profile detection (frontend détecte codecs supportés)
+- ✅ ABR avec Shaka Player + sélecteur de qualité UI
+- ✅ Buffer 60s en avance
+- ✅ Barre de progression custom avec zone bufferisée
+- ✅ Mémorisation langue sous-titres (localStorage)
+- ⬜ Settings page streaming (HW accel, qualité par défaut, max sessions)
+
+### Phase 2.5 : Dashboard flux actifs — 🆕 À FAIRE
+- ⬜ Endpoint admin : sessions de transcodage en cours + qui regarde quoi
+- ⬜ Page admin : tableau temps réel des flux actifs (user, média, qualité, durée, HW accel)
+- ⬜ Actions admin : kill session, voir stats
+
+### Phase 3 : HDR Tone Mapping — ⬜ À FAIRE
+### Phase 4 : Chromecast + DLNA — ⬜ À FAIRE
+### Phase 5 : Sous-titres avancés (burn-in) — ⬜ À FAIRE
+### Phase 6 : Watch Together + Profils — ⬜ À FAIRE
+
+---
+
 ## Contexte
 Suitarr gère déjà l'acquisition et l'organisation des médias. L'objectif est d'intégrer un serveur vidéo complet (comparable à Jellyfin) pour éliminer la dépendance à un serveur externe. Le serveur doit supporter le direct play, le transcodage hardware (VA-API, NVENC, QSV), le HDR tone mapping, Chromecast, et les apps natives iOS/Android via Capacitor.
 
@@ -266,6 +305,70 @@ backend:
 
 ---
 
+## Phase 2.5 : Dashboard flux actifs (admin)
+
+**Objectif** : Permettre aux admins de voir en temps réel qui regarde quoi, avec quel mode de lecture, et pouvoir gérer les sessions.
+
+### Backend
+
+#### 2.5.1 Tracker les sessions de lecture actives
+**Enrichir** `TranscodingService` :
+- Exposer une méthode `getActiveSessions()` retournant pour chaque session :
+  - `sessionId`, `mediaFileId`, `quality`, `startedAt`, `lastAccess`, `hwAccel`
+- Associer le `userId` aux sessions (passé lors de la création de session)
+
+**Enrichir** `StreamingService` / nouveau `ActiveStreamService` :
+- Tracker aussi les sessions direct play (pas seulement transcode)
+- Stocker en mémoire (Map) : `userId`, `mediaFileId`, `mediaTitle`, `episodeLabel`, `mode` (direct/remux/transcode), `quality`, `startedAt`, `positionSeconds`
+- Mise à jour via les appels `PUT /api/playback` existants
+- Nettoyage automatique des sessions stale (> 2min sans mise à jour)
+
+#### 2.5.2 Endpoints admin
+```
+GET /api/admin/streams              → liste des flux actifs
+GET /api/admin/streams/stats        → statistiques (nb sessions, bande passante totale, usage HW)
+DELETE /api/admin/streams/:sessionId → kill une session de transcodage
+```
+
+**Réponse `GET /api/admin/streams`** :
+```typescript
+interface ActiveStream {
+  sessionId: string;
+  userId: number;
+  username: string;
+  mediaId: number;
+  mediaTitle: string;
+  episodeLabel: string | null;   // "S2:E3 - Titre" ou null
+  posterUrl: string | null;
+  mode: 'direct' | 'remux' | 'transcode';
+  quality: string;               // "original", "1080p", "720p"
+  hwAccel: string;               // "qsv", "vaapi", "none"
+  startedAt: string;             // ISO date
+  positionSeconds: number;
+  durationSeconds: number;
+  transcodeFps: number | null;   // vitesse de transcodage en temps réel
+}
+```
+
+### Frontend
+
+#### 2.5.3 Page admin "Flux actifs"
+**Route** : `/system/streams` ou section dans la page System existante
+
+**UI** :
+- Tableau avec colonnes : User (avatar+nom), Média (poster+titre), Mode (badge direct/remux/transcode), Qualité, HW Accel, Durée de session, Progression
+- Badge couleur par mode : vert (direct), bleu (remux), orange (transcode)
+- Bouton "Kill" par session (avec confirmation)
+- Header avec stats résumées : X flux actifs, Y en transcodage, Z utilisant le GPU
+- Auto-refresh toutes les 5s (ou SSE pour temps réel)
+
+### Vérification Phase 2.5
+- 2 utilisateurs regardent → 2 lignes dans le dashboard
+- Kill une session → le player de l'utilisateur reçoit une erreur
+- Session stale (onglet fermé) → disparaît après 2min
+
+---
+
 ## Phase 3 : HDR Tone Mapping
 
 **Objectif** : Convertir le contenu HDR (HDR10, HDR10+, Dolby Vision) en SDR pour les écrans non-HDR, ou préserver le HDR quand le client le supporte.
@@ -423,10 +526,12 @@ Si sous-titre PGS/VOBSUB → toujours burn-in (bitmap, pas de texte)
 ## Ordre d'implémentation recommandé
 
 ```
-Phase 1 (Direct Play)          ← Commencer ici
+Phase 1 (Direct Play)          ✅ TERMINÉE
   └─ Player fonctionnel, resume, sous-titres client-side
-Phase 2 (Transcodage)
+Phase 2 (Transcodage)          ✅ TERMINÉE (sauf settings page)
   └─ HLS adaptatif, GPU, multi-qualité
+Phase 2.5 (Dashboard flux)     ← PROCHAINE ÉTAPE
+  └─ Admin : voir qui regarde quoi, kill sessions
 Phase 3 (HDR Tone Mapping)
   └─ Détection HDR, conversion SDR automatique
 Phase 5 (Burn-in sous-titres)

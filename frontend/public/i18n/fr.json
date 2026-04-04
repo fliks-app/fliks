@@ -531,6 +531,7 @@
     "tab_backups": "Sauvegardes",
     "tab_logs": "Journaux",
     "tab_import": "Import",
+    "tab_streams": "Activités vidéos",
     "commands_title": "Déclencher une tâche",
     "cmd_rss_sync": "Synchronisation RSS",
     "cmd_search_missing": "Rechercher les manquants",
