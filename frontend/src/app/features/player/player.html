@@ -1,24 +1,4 @@
-<!-- Cast remote overlay (on top when casting) -->
-@if (castService.isConnected()) {
-  <app-cast-remote
-    [mediaTitle]="mediaTitle()"
-    [episodeTitle]="episodeTitle()"
-    [fanartUrl]="fanartUrl()"
-    [availableSubtitles]="castSubtitleOptions()"
-    [availableAudioTracks]="availableAudioTracks()"
-    [availableQualities]="castQualityOptions()"
-    [initialSubtitleId]="activeSubtitleId()"
-    [initialQualityId]="activeQualityId()"
-    [initialAudioTrackId]="activeAudioTrackId()"
-    (back)="onBack()"
-    (disconnect)="onDisconnectCast()"
-    (selectBurnIn)="onCastBurnIn($event)"
-    (qualityChange)="onCastQualityChange($event)"
-    (audioChange)="onCastAudioChange($event)"
-  />
-}
-
-<!-- Local player (always in DOM, hidden when casting) -->
+<!-- Local player (hidden when casting — Cast overlay is global in the layout) -->
 <div
   #playerContainer
   class="player-container"
@@ -96,6 +76,7 @@
     (back)="onBack()"
     [castAvailable]="castService.isAvailable()"
     [castConnected]="castService.isConnected()"
+    [castConnecting]="castService.connecting()"
     (toggleCast)="onToggleCast()"
   />
   }

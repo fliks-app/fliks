@@ -1,7 +1,11 @@
 <div class="drawer lg:drawer-open min-h-screen">
   <input id="sidebar" type="checkbox" class="drawer-toggle" />
   <div class="drawer-content flex flex-col relative">
-    <nav class="navbar bg-base-100 shadow-sm lg:hidden">
+    <nav
+      class="navbar bg-base-100 shadow-sm lg:hidden fixed top-0 left-0 right-0 z-30 transition-transform duration-300"
+      style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 + 8px)"
+      [class.-translate-y-full]="navbarHidden()"
+    >
       <div class="flex-none">
         <label for="sidebar" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate">
           <svg lucideMenu class="h-5 w-5"></svg>
@@ -11,25 +15,48 @@
         <a class="btn btn-ghost text-xl" routerLink="/">{{ 'app.name' | translate }}</a>
       </div>
       <div class="flex-none">
-        @if (castService.isAvailable()) {
-          <button class="btn btn-ghost btn-circle" (click)="onToggleCastConnection()">
-            <svg lucideCast class="h-6 w-6" [class.text-info]="castService.isConnected()"></svg>
+        @if (castPlayer.hasMedia()) {
+          <button class="btn btn-ghost btn-sm gap-1" (click)="toggleCastOverlay()">
+            <svg lucideCast class="h-5 w-5 text-info"></svg>
+            <span class="text-xs font-medium truncate max-w-24">{{ castPlayer.mediaTitle() }}</span>
+          </button>
+        } @else if (castService.isAvailable()) {
+          <button class="btn btn-ghost btn-circle" (click)="onToggleCastConnection()" [disabled]="castService.connecting()">
+            @if (castService.connecting()) {
+              <span class="loading loading-spinner loading-sm"></span>
+            } @else {
+              <svg lucideCast class="h-6 w-6" [class.text-info]="castService.isConnected()"></svg>
+            }
           </button>
         }
       </div>
     </nav>
-    <!-- Desktop Cast button (top-right, floating) -->
-    @if (castService.isAvailable()) {
-      <div class="hidden lg:block absolute top-3 right-4 z-10">
-        <button class="btn btn-ghost btn-circle" (click)="onToggleCastConnection()">
-          <svg lucideCast class="h-6 w-6" [class.text-info]="castService.isConnected()"></svg>
+    <!-- Spacer for fixed navbar on mobile -->
+    <div class="h-16 lg:hidden"></div>
+    <!-- Desktop top-right: Cast chip or Cast button -->
+    <div class="hidden lg:block absolute top-3 right-4 z-10">
+      @if (castPlayer.hasMedia()) {
+        <button class="btn btn-ghost btn-sm gap-2" (click)="toggleCastOverlay()">
+          <svg lucideCast class="h-5 w-5 text-info"></svg>
+          <span class="text-xs font-medium truncate max-w-32">{{ castPlayer.mediaTitle() }}</span>
         </button>
-      </div>
-    }
+      } @else if (castService.isAvailable()) {
+        <button class="btn btn-ghost btn-circle" (click)="onToggleCastConnection()" [disabled]="castService.connecting()">
+          @if (castService.connecting()) {
+            <span class="loading loading-spinner loading-sm"></span>
+          } @else {
+            <svg lucideCast class="h-6 w-6" [class.text-info]="castService.isConnected()"></svg>
+          }
+        </button>
+      }
+    </div>
     <main class="flex-1 p-4 lg:p-6">
       <router-outlet />
     </main>
   </div>
+
+  <!-- Cast overlay (chip + card) — global, persists across navigation -->
+  <app-cast-overlay />
 
   <div class="drawer-side z-40">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>

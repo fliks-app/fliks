@@ -72,6 +72,7 @@ export class PlayerControlsComponent {
   readonly activeAudioTrackId = input<string | null>(null);
   readonly castAvailable = input(false);
   readonly castConnected = input(false);
+  readonly castConnecting = input(false);
 
   readonly togglePlay = output<void>();
   readonly tapOverlay = output<void>();

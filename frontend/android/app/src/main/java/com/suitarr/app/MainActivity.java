@@ -1,10 +1,16 @@
 package com.suitarr.app;
 
 import android.content.res.Configuration;
+import android.graphics.Color;
 import android.os.Bundle;
+import android.view.Window;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+    private boolean immersiveMode = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(ImmersivePlugin.class);
@@ -12,6 +18,25 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(HdrPlugin.class);
         registerPlugin(CastPlugin.class);
         super.onCreate(savedInstanceState);
+
+        Window window = getWindow();
+        // Transparent system bars — CSS env(safe-area-inset-*) handles the offset
+        window.setStatusBarColor(Color.TRANSPARENT);
+        window.setNavigationBarColor(Color.TRANSPARENT);
+
+        // Force light (white) icons on status/nav bars — post to run after Capacitor setup
+        window.getDecorView().post(() -> {
+            WindowInsetsControllerCompat ic =
+                WindowCompat.getInsetsController(window, window.getDecorView());
+            ic.setAppearanceLightStatusBars(false);
+            ic.setAppearanceLightNavigationBars(false);
+        });
+
+    }
+
+    /** Called by ImmersivePlugin. */
+    public void setImmersiveMode(boolean enabled) {
+        this.immersiveMode = enabled;
     }
 
     @Override

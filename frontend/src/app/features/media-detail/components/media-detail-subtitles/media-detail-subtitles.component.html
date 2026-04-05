@@ -44,7 +44,7 @@
   } @else if (rows().length === 0) {
     <p class="text-sm text-base-content/50">{{ 'media_detail.no_subtitles' | translate }}</p>
   } @else {
-    <div class="rounded-lg border border-base-200" [class.text-xs]="embedded()">
+    <div class="rounded-lg border border-base-200 overflow-x-auto" [class.text-xs]="embedded()">
       <table class="table table-sm" [class.table-xs]="embedded()">
         <thead>
           <tr>

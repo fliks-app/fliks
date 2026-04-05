@@ -1,4 +1,4 @@
-<div class="toast toast-top toast-end z-[9999]" aria-live="polite">
+<div class="toast toast-top toast-end z-[9999]" aria-live="polite" style="top: env(safe-area-inset-top); right: env(safe-area-inset-right)">
   @for (toast of toastService.toasts(); track toast.id) {
     <div
       class="alert shadow-lg max-w-sm animate-slide-in"

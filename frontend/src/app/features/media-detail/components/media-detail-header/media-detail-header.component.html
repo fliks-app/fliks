@@ -102,22 +102,14 @@
 
       <div class="flex flex-wrap items-center gap-2 mt-5">
         @if (selectedFileId()) {
-          <a
-            class="btn btn-ghost btn-sm gap-1"
-            [routerLink]="['/watch', selectedFileId()]"
-            [queryParams]="{ mediaId: media().id, t: 0 }"
-          >
+          <button class="btn btn-ghost btn-sm gap-1" (click)="play(true)">
             <svg lucideRotateCcw class="h-4 w-4"></svg>
             {{ 'player.play_from_start' | translate }}
-          </a>
-          <a
-            class="btn btn-primary btn-sm gap-1"
-            [routerLink]="['/watch', selectedFileId()]"
-            [queryParams]="{ mediaId: media().id }"
-          >
+          </button>
+          <button class="btn btn-primary btn-sm gap-1" (click)="play(false)">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
             {{ 'player.play' | translate }}
-          </a>
+          </button>
           <button
             type="button"
             class="btn btn-error btn-outline btn-sm btn-square"

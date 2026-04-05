@@ -44,8 +44,12 @@
     </button>
     <!-- Cast -->
     @if (castAvailable()) {
-      <button type="button" class="btn btn-ghost btn-circle" [class]="isNative() ? 'btn-sm' : 'btn-md'" [class.text-info]="castConnected()" [class.text-white]="!castConnected()" (click)="toggleCast.emit()">
-        <svg lucideCast [class]="isNative() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+      <button type="button" class="btn btn-ghost btn-circle btn-sm lg:btn-md" [class.text-info]="castConnected()" [class.text-white]="!castConnected() && !castConnecting()" [disabled]="castConnecting()" (click)="toggleCast.emit()">
+        @if (castConnecting()) {
+          <span class="loading loading-spinner loading-sm lg:loading-md"></span>
+        } @else {
+          <svg lucideCast class="h-5 w-5 lg:h-6 lg:w-6"></svg>
+        }
       </button>
     }
   </div>

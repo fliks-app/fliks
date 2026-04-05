@@ -37,6 +37,8 @@ const CAST_APP_ID = 'CC1AD845';
 export class CastService implements OnDestroy {
   readonly isAvailable = signal(false);
   readonly isConnected = signal(false);
+  /** True while waiting for the Cast session to establish. */
+  readonly connecting = signal(false);
   readonly currentTime = signal(0);
   readonly duration = signal(0);
   readonly isPaused = signal(true);
@@ -77,6 +79,7 @@ export class CastService implements OnDestroy {
       // Listen for native Cast events
       window.addEventListener('castStateChanged', ((e: CustomEvent) => {
         this.isConnected.set(e.detail?.connected ?? false);
+        this.connecting.set(false);
       }) as EventListener);
 
       window.addEventListener('castMediaUpdate', ((e: CustomEvent) => {
@@ -141,6 +144,7 @@ export class CastService implements OnDestroy {
   private onWebConnectionChanged() {
     const connected = this.remotePlayer?.isConnected ?? false;
     this.isConnected.set(connected);
+    this.connecting.set(false);
     this.session = connected
       ? cast.framework.CastContext.getInstance().getCurrentSession()
       : null;
@@ -151,10 +155,11 @@ export class CastService implements OnDestroy {
   // ---------------------------------------------------------------------------
 
   requestSession() {
+    this.connecting.set(true);
     if (this.isNative) {
-      NativeCast.requestSession().catch(() => {});
+      NativeCast.requestSession().catch(() => this.connecting.set(false));
     } else {
-      cast.framework.CastContext.getInstance().requestSession().catch(() => {});
+      cast.framework.CastContext.getInstance().requestSession().catch(() => this.connecting.set(false));
     }
   }
 

@@ -20,7 +20,7 @@ import { BrowserDeviceProfileService } from '../../core/services/browser-device-
 import { SseService } from '../../core/services/sse.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
-import { CastSettingsService } from '../../core/services/cast-settings.service';
+import { CastPlayerService } from '../../core/services/cast-player.service';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 interface ImmersivePlugin {
@@ -35,7 +35,7 @@ interface PipPlugin {
 }
 const Pip = registerPlugin<PipPlugin>('Pip');
 import { LucideCircleAlert } from '@lucide/angular';
-import { CastRemoteComponent, CastSubtitleOption, CastAudioOption, CastQualityOption } from './cast-remote';
+import { CastAudioOption } from '../../core/services/cast-player.service';
 import { PlayerControlsComponent } from './player-controls';
 import { PlayerStatsOverlayComponent, PlayerStats } from './player-stats-overlay';
 import shaka from 'shaka-player';
@@ -60,7 +60,7 @@ interface QualityOption {
 }
 
 @Component({
-  imports: [TranslateModule, LucideCircleAlert, PlayerControlsComponent, PlayerStatsOverlayComponent, CastRemoteComponent],
+  imports: [TranslateModule, LucideCircleAlert, PlayerControlsComponent, PlayerStatsOverlayComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player.html',
   styles: [`
@@ -99,7 +99,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly sseService = inject(SseService);
   private readonly authService = inject(AuthService);
   readonly castService = inject(CastService);
-  private readonly castSettingsService = inject(CastSettingsService);
+  private readonly castPlayerService = inject(CastPlayerService);
 
   private readonly videoEl = viewChild<ElementRef<HTMLVideoElement>>('videoElement');
   private readonly containerEl = viewChild<ElementRef<HTMLDivElement>>('playerContainer');
@@ -131,18 +131,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly availableSubtitles = signal<SubtitleOption[]>([]);
   readonly availableQualities = signal<QualityOption[]>([]);
 
-  /** Subtitle options formatted for the Cast remote */
-  readonly castSubtitleOptions = computed<CastSubtitleOption[]>(() => {
-    let trackId = 1;
-    return this.availableSubtitles().map(s => ({
-      id: s.id,
-      label: s.label,
-      language: s.language,
-      burnIn: s.burnIn,
-      castTrackId: s.burnIn ? s.subtitleDbId : trackId++,
-    }));
-  });
-
   /** Audio tracks from streamInfo for the Cast remote */
   readonly castAudioOptions = computed<CastAudioOption[]>(() => {
     const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
@@ -152,14 +140,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       id: `audio-${i}`,
       label: `${a.language ?? 'und'}${a.title ? ' - ' + a.title : ''} (${(a.codec ?? '').toUpperCase()}${a.channels ? ' ' + a.channels + 'ch' : ''})`,
       language: a.language ?? 'und',
-    }));
-  });
-
-  /** Quality options for the Cast remote */
-  readonly castQualityOptions = computed<CastQualityOption[]>(() => {
-    return this.availableQualities().map(q => ({
-      id: q.id,
-      label: q.id === 'auto' ? 'Auto' : q.label,
     }));
   });
 
@@ -340,6 +320,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.isNative) {
       (screen.orientation as any)?.lock?.('landscape').catch(() => {});
       Immersive.enter({ displayBehindNotch: true }).catch(() => {});
+      document.body.classList.add('immersive');
     }
 
     shaka.polyfill.installAll();
@@ -522,7 +503,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // Unload Shaka so it stops requesting HLS segments (would conflict with Cast session)
         await this.player.unload();
         const startPos = resumeTime ?? video.currentTime;
-        await this.reloadCastStream(startPos);
+        await this.startCastFromPlayer(startPos);
       } else {
         video.play().catch(() => {
           // Autoplay may be blocked
@@ -579,6 +560,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.isNative) {
       screen.orientation?.unlock();
       Immersive.exit().catch(() => {});
+      document.body.classList.remove('immersive');
       Pip.setAutoEnter({ enabled: false }).catch(() => {});
       window.removeEventListener('pipModeChanged', this.onPipModeChanged as EventListener);
     }
@@ -615,7 +597,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return !!active && !!active.closest('.dropdown');
   }
 
-  // Player actions (local only — Cast uses CastRemoteComponent)
+  // Player actions (local playback)
   onTogglePlay() {
     const video = this.videoEl()?.nativeElement;
     if (!video) return;
@@ -667,132 +649,72 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   async onToggleCast() {
     if (this.castService.isConnected()) {
-      // The castSyncEffect handles resuming local playback
       this.castService.disconnect();
-    } else {
-      // Connect and transfer playback to Cast
-      this.castService.requestSession();
-
-      // Wait for connection (poll for up to 30s)
-      for (let i = 0; i < 60; i++) {
-        if (this.castService.isConnected()) break;
-        await new Promise(r => setTimeout(r, 500));
-      }
-      if (!this.castService.isConnected()) return;
-
-      // Stop local playback and unload Shaka (its HLS requests would conflict with Cast)
-      const video = this.videoEl()?.nativeElement;
-      const currentPos = video?.currentTime ?? 0;
-      if (video) {
-        video.pause();
-        video.muted = true;
-      }
-      if (this.player) await this.player.unload();
-
-      await this.reloadCastStream(currentPos);
+      return;
     }
+
+    // Pause video immediately while connecting
+    const video = this.videoEl()?.nativeElement;
+    const wasPlaying = video && !video.paused;
+    const currentPos = video?.currentTime ?? 0;
+    if (video) video.pause();
+
+    this.castService.requestSession();
+
+    // Wait for connection (poll for up to 30s)
+    for (let i = 0; i < 60; i++) {
+      if (this.castService.isConnected()) break;
+      if (!this.castService.connecting()) break; // user cancelled
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    if (!this.castService.isConnected()) {
+      // Connection failed or cancelled — restore playback
+      if (wasPlaying && video) video.play().catch(() => {});
+      return;
+    }
+
+    // Connected — unload Shaka and start Cast
+    if (video) video.muted = true;
+    if (this.player) await this.player.unload();
+    await this.startCastFromPlayer(currentPos);
   }
 
   onDisconnectCast() {
-    // The castSyncEffect handles resuming local playback when isConnected goes false
     this.castService.disconnect();
+    this.castPlayerService.clear();
   }
 
-  async onCastAudioChange(audioIndex: number) {
-    this.activeAudioStreamIndex = audioIndex;
-    this.stopStreamingSessions();
-    await this.reloadCastStream();
-  }
-
-  async onCastQualityChange(qualityId: string) {
-    this.activeQualityId.set(qualityId);
-    await this.reloadCastStream();
-  }
-
-  /** Handle burn-in subtitle selection from Cast remote */
-  async onCastBurnIn(subtitleDbId: number | null) {
-    this.activeBurnInId = subtitleDbId ?? null;
-    await this.reloadCastStream();
-  }
-
-  /**
-   * (Re)load media on Chromecast. Handles playbackInfo refresh (with HDR disabled),
-   * Cast URL building, subtitle list, and loadMedia call.
-   */
-  private async reloadCastStream(positionOverride?: number) {
-    // Apply Cast settings (user preferences override device detection)
-    const cs = this.castSettingsService.get();
-    const castProfile = {
-      ...this.deviceProfileService.getProfile(),
-      supportsHdr: cs.hdr,
-      maxAudioChannels: cs.audioChannels,
-    };
-    await this.streamingApi.getPlaybackInfo(
-      this.mediaFileId, castProfile, this.activeBurnInId ?? undefined, this.activeAudioStreamIndex,
-    );
-
-    const castToken = await this.authService.getCastToken();
-    const currentPos = positionOverride ?? this.castService.currentTime();
-    const qualityId = this.activeQualityId();
-    const lanUrl = this.castService.serverLanUrl() || window.location.origin;
-
-    // Build Cast URL — always use a fixed quality (no ABR master playlist).
-    // Chromecast ABR constantly switches qualities which kills/restarts FFmpeg each time.
-    let castUrl: string;
-    let contentType: string;
-    if (this.playbackMode() === 'direct' || qualityId === 'original') {
-      castUrl = this.streamingApi.getAbsoluteStreamUrl(this.mediaFileId, castToken);
-      contentType = 'video/mp4';
-    } else {
-      // Pick a fixed quality: user selection, or best available capped by maxQuality setting
-      let fixedQuality: string;
-      if (qualityId !== 'auto') {
-        fixedQuality = qualityId;
-      } else {
-        // Find the best quality that doesn't exceed the Cast max quality setting
-        const maxQ = cs.maxQuality;
-        const qualities = this.availableQualities().filter(q => q.id !== 'auto' && q.id !== 'original');
-        if (maxQ === 'original') {
-          fixedQuality = qualities[0]?.id ?? '1080p';
-        } else {
-          const maxOption = qualities.find(q => q.id === maxQ);
-          fixedQuality = maxOption?.id ?? qualities[0]?.id ?? '1080p';
-        }
-      }
-      castUrl = `${lanUrl}/api/stream/${this.mediaFileId}/${fixedQuality}/index.m3u8?token=${encodeURIComponent(castToken)}`;
-      contentType = 'application/x-mpegurl';
-    }
-
-    // Build subtitle list (only non-burn-in sidecar, absolute URLs)
-    const subtitles = this.availableSubtitles()
-      .filter(s => !s.burnIn && s.subtitleDbId)
-      .map(s => ({
-        url: s.id.startsWith('ext-')
-          ? this.streamingApi.getAbsoluteSubtitleUrl(this.mediaFileId, s.subtitleDbId!, castToken)
-          : this.streamingApi.getAbsoluteEmbeddedSubtitleUrl(this.mediaFileId, parseInt(s.id.replace('emb-', ''), 10), castToken),
-        language: s.language,
+  /** Push current player state to the CastPlayerService and start streaming. */
+  private async startCastFromPlayer(position?: number) {
+    this.castPlayerService.startCast({
+      mediaFileId: this.mediaFileId,
+      mediaId: this.mediaId,
+      episodeId: this.episodeId,
+      mediaTitle: this.mediaTitle(),
+      episodeTitle: this.episodeTitle(),
+      fanartUrl: this.fanartUrl(),
+      playbackMode: this.playbackMode(),
+      subtitles: this.availableSubtitles().map(s => ({
+        id: s.id,
         label: s.label,
-      }));
-
-    // Find active subtitle track ID for Cast (1-based)
-    const activeSubId = this.activeSubtitleId();
-    let activeSubtitleTrackId: number | undefined;
-    if (activeSubId) {
-      const allNonBurnIn = this.availableSubtitles().filter(s => !s.burnIn && s.subtitleDbId);
-      const idx = allNonBurnIn.findIndex(s => s.id === activeSubId);
-      if (idx >= 0) activeSubtitleTrackId = idx + 1;
-    }
-
-    await this.castService.loadMedia({
-      url: castUrl,
-      contentType,
-      title: this.mediaTitle(),
-      subtitle: this.episodeTitle() || undefined,
-      posterUrl: this.fanartUrl() ?? undefined,
-      currentTime: currentPos,
-      subtitles,
-      activeSubtitleTrackId,
+        language: s.language,
+        burnIn: s.burnIn,
+        subtitleDbId: s.subtitleDbId,
+        url: s.url,
+      })),
+      qualities: this.availableQualities().map(q => ({
+        id: q.id,
+        label: q.id === 'auto' ? 'Auto' : q.label,
+      })),
+      audioTracks: this.castAudioOptions(),
+      activeQualityId: this.activeQualityId(),
+      activeSubtitleId: this.activeSubtitleId(),
+      activeAudioTrackId: this.activeAudioTrackId(),
+      activeBurnInId: this.activeBurnInId,
+      activeAudioStreamIndex: this.activeAudioStreamIndex,
     });
+    await this.castPlayerService.reloadCastStream(position);
   }
 
   /** Reload Shaka and resume local playback after Cast disconnect. */
@@ -1128,6 +1050,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!isInPip) {
       // Exiting PiP: restore immersive mode
       Immersive.enter({ displayBehindNotch: true }).catch(() => {});
+      document.body.classList.add('immersive');
     }
   };
 

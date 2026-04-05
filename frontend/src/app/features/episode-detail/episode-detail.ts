@@ -8,7 +8,9 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { CastService } from '../../core/services/cast.service';
+import { CastPlayerService } from '../../core/services/cast-player.service';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Media, MediaService, Season, Episode } from '../../core/services/api/media.service';
@@ -65,6 +67,7 @@ import {
 })
 export class EpisodeDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly mediaService = inject(MediaService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
@@ -72,6 +75,8 @@ export class EpisodeDetailComponent implements OnInit {
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
+  readonly castService = inject(CastService);
+  private readonly castPlayer = inject(CastPlayerService);
 
   readonly loading = signal(true);
   readonly notFound = signal(false);
@@ -486,6 +491,32 @@ export class EpisodeDetailComponent implements OnInit {
 
   formatBytes(bytes: number): string {
     return formatMediaDetailBytes(bytes);
+  }
+
+  async play(fromStart: boolean) {
+    const fileId = this.selectedFileId();
+    if (!fileId) return;
+    const m = this.media();
+    const ep = this.episode();
+
+    if (this.castService.isConnected() && m) {
+      const file = this.episodeFiles().find(f => f.id === fileId);
+      await this.castPlayer.quickStart({
+        mediaFileId: fileId,
+        mediaId: m.id,
+        episodeId: ep?.id,
+        title: m.title,
+        episodeTitle: ep ? `S${String(this.season()?.seasonNumber ?? 0).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')} - ${ep.title}` : undefined,
+        fanartUrl: m.posterUrl ?? null,
+        streamInfo: file?.streamInfo,
+        startTime: fromStart ? 0 : undefined,
+      });
+      this.castPlayer.expanded.set(true);
+    } else {
+      const qp: any = { mediaId: m?.id, episodeId: ep?.id };
+      if (fromStart) qp.t = 0;
+      this.router.navigate(['/watch', fileId], { queryParams: qp });
+    }
   }
 
   fileDiskPath(relativePath: string): string {

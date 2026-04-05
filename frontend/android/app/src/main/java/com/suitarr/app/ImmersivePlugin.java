@@ -33,6 +33,11 @@ public class ImmersivePlugin extends Plugin {
             Window window = getActivity().getWindow();
             WindowCompat.setDecorFitsSystemWindows(window, false);
 
+            // Tell MainActivity to stop applying system bar padding
+            if (getActivity() instanceof MainActivity) {
+                ((MainActivity) getActivity()).setImmersiveMode(true);
+            }
+
             // Cutout / notch
             if (behindNotch && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 WindowManager.LayoutParams lp = window.getAttributes();
@@ -69,6 +74,11 @@ public class ImmersivePlugin extends Plugin {
         getActivity().runOnUiThread(() -> {
             Window window = getActivity().getWindow();
             WindowCompat.setDecorFitsSystemWindows(window, true);
+
+            // Tell MainActivity to re-apply system bar padding
+            if (getActivity() instanceof MainActivity) {
+                ((MainActivity) getActivity()).setImmersiveMode(false);
+            }
 
             // Reset cutout mode to default
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
