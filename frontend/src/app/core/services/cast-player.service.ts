@@ -4,7 +4,8 @@ import { CastSettingsService } from './cast-settings.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { AuthService } from './auth.service';
-import { BrowserDeviceProfileService } from './browser-device-profile.service';
+import { BrowserDeviceProfileService, DeviceProfile } from './browser-device-profile.service';
+import { ServerConfigService } from './server-config.service';
 
 export interface CastSubtitleOption {
   id: string;
@@ -47,6 +48,23 @@ export class CastPlayerService {
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly authService = inject(AuthService);
   private readonly deviceProfile = inject(BrowserDeviceProfileService);
+  private readonly serverConfig = inject(ServerConfigService);
+
+  /** Chromecast device profile — only H264 + AAC, forces transcode for incompatible codecs. */
+  /** Chromecast profile — force full transcode to guarantee H264+AAC HLS output. */
+  private getCastDeviceProfile(): DeviceProfile {
+    const cs = this.castSettings.get();
+    return {
+      // Empty direct play profiles → nothing can direct play or remux → always transcode
+      directPlayProfiles: [],
+      codecConditions: [],
+      maxStreamingBitrate: 20_000_000,
+      maxAudioChannels: cs.audioChannels ?? 2,
+      supportsHlsFmp4: true,
+      supportsHlsTs: true,
+      supportsHdr: cs.hdr ?? false,
+    };
+  }
 
   // Media info
   readonly mediaFileId = signal(0);
@@ -136,33 +154,50 @@ export class CastPlayerService {
 
   async reloadCastStream(positionOverride?: number) {
     const mfId = this.mediaFileId();
-    if (!mfId) return;
+    if (!mfId) { console.warn('[CastPlayer] reloadCastStream: no mediaFileId'); return; }
 
-    const cs = this.castSettings.get();
-    const castProfile = {
-      ...this.deviceProfile.getProfile(),
-      supportsHdr: cs.hdr,
-      maxAudioChannels: cs.audioChannels,
-    };
-    await this.streamingApi.getPlaybackInfo(
+    console.log('[CastPlayer] reloadCastStream start, mediaFileId:', mfId, 'positionOverride:', positionOverride);
+
+    const castProfile = this.getCastDeviceProfile();
+    console.log('[CastPlayer] castProfile:', JSON.stringify(castProfile));
+
+    const pi = await this.streamingApi.getPlaybackInfo(
       mfId, castProfile, this.activeBurnInId ?? undefined, this.activeAudioStreamIndex,
     );
+    console.log('[CastPlayer] playbackInfo:', pi.playMethod, 'videoCopy:', pi.videoCopyStream, 'audioCopy:', pi.audioCopyStream, 'reasons:', pi.transcodeReasons?.map((r: any) => r.flag));
+
+    // Update playback mode from backend decision (may differ from local player)
+    const castMode: 'direct' | 'remux' | 'transcode' =
+      pi.playMethod === 'DirectPlay' ? 'direct' :
+      pi.playMethod === 'DirectStream' ? 'remux' : 'transcode';
+    this.playbackMode.set(castMode);
 
     const castToken = await this.authService.getCastToken();
     const currentPos = positionOverride ?? this.cast.currentTime();
     const qualityId = this.activeQualityId();
-    const lanUrl = this.cast.serverLanUrl() || window.location.origin;
+    // On native, use the configured server URL (e.g. http://192.168.0.103:3001).
+    // On web, use the LAN URL from the backend, or fall back to current origin.
+    const lanUrl = this.serverConfig.isNative
+      ? this.serverConfig.serverUrl()
+      : (this.cast.serverLanUrl() || window.location.origin);
+
+    console.log('[CastPlayer] castMode:', castMode, 'qualityId:', qualityId, 'lanUrl:', lanUrl, 'currentPos:', currentPos);
 
     let castUrl: string;
     let contentType: string;
-    if (this.playbackMode() === 'direct' || qualityId === 'original') {
+    if (castMode === 'direct' || qualityId === 'original') {
       castUrl = this.streamingApi.getAbsoluteStreamUrl(mfId, castToken);
       contentType = 'video/mp4';
+    } else if (castMode === 'remux') {
+      // Always transcode audio for Cast (Chromecast only supports AAC)
+      castUrl = `${lanUrl}/api/stream/${mfId}/remux/index.m3u8?token=${encodeURIComponent(castToken)}&copyAudio=false`;
+      contentType = 'application/x-mpegurl';
     } else {
       let fixedQuality: string;
       if (qualityId !== 'auto') {
         fixedQuality = qualityId;
       } else {
+        const cs = this.castSettings.get();
         const maxQ = cs.maxQuality;
         const qualities = this.availableQualities().filter(q => q.id !== 'auto' && q.id !== 'original');
         if (maxQ === 'original') {
@@ -174,6 +209,8 @@ export class CastPlayerService {
       castUrl = `${lanUrl}/api/stream/${mfId}/${fixedQuality}/index.m3u8?token=${encodeURIComponent(castToken)}`;
       contentType = 'application/x-mpegurl';
     }
+
+    console.log('[CastPlayer] loadMedia url:', castUrl, 'contentType:', contentType);
 
     // Build subtitle list (only non-burn-in sidecar, absolute URLs)
     const subtitles = this.subtitleInfos
@@ -236,12 +273,7 @@ export class CastPlayerService {
     streamInfo?: any;
     startTime?: number;
   }) {
-    const cs = this.castSettings.get();
-    const castProfile = {
-      ...this.deviceProfile.getProfile(),
-      supportsHdr: cs.hdr,
-      maxAudioChannels: cs.audioChannels,
-    };
+    const castProfile = this.getCastDeviceProfile();
 
     // Fetch playback info
     const pi = await this.streamingApi.getPlaybackInfo(opts.mediaFileId, castProfile);

@@ -565,7 +565,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     this.savePosition();
-    this.stopStreamingSessions();
+    // Don't stop streaming sessions if handing off to Cast
+    if (!this.castService.isConnected()) {
+      this.stopStreamingSessions();
+    }
     this.player?.destroy();
     if (this.saveInterval) clearInterval(this.saveInterval);
     if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
@@ -690,10 +693,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    // Connected — unload Shaka and start Cast
+    // Connected — hand off to Cast and leave the player page
     if (video) video.muted = true;
     if (this.player) await this.player.unload();
     await this.startCastFromPlayer(currentPos);
+    this.castPlayerService.expanded.set(true);
+    this.onBack();
   }
 
   onDisconnectCast() {

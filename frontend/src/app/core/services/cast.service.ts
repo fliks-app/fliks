@@ -157,24 +157,32 @@ export class CastService implements OnDestroy {
   requestSession() {
     this.connecting.set(true);
     if (this.isNative) {
-      NativeCast.requestSession().catch(() => this.connecting.set(false));
+      NativeCast.requestSession()
+        .then(() => { if (!this.isConnected()) this.connecting.set(false); })
+        .catch(() => this.connecting.set(false));
     } else {
       cast.framework.CastContext.getInstance().requestSession().catch(() => this.connecting.set(false));
     }
   }
 
   async loadMedia(info: CastMediaInfo) {
+    console.log('[Cast] loadMedia:', info.url, 'contentType:', info.contentType, 'currentTime:', info.currentTime, 'native:', this.isNative);
     if (this.isNative) {
-      await NativeCast.loadMedia({
-        url: info.url,
-        contentType: info.contentType,
-        title: info.title,
-        subtitle: info.subtitle ?? '',
-        posterUrl: info.posterUrl ?? '',
-        currentTime: info.currentTime ?? 0,
-        subtitles: info.subtitles ?? [],
-        activeSubtitleTrackId: info.activeSubtitleTrackId ?? 0,
-      });
+      try {
+        await NativeCast.loadMedia({
+          url: info.url,
+          contentType: info.contentType,
+          title: info.title,
+          subtitle: info.subtitle ?? '',
+          posterUrl: info.posterUrl ?? '',
+          currentTime: info.currentTime ?? 0,
+          subtitles: info.subtitles ?? [],
+          activeSubtitleTrackId: info.activeSubtitleTrackId ?? 0,
+        });
+        console.log('[Cast] NativeCast.loadMedia succeeded');
+      } catch (err) {
+        console.error('[Cast] NativeCast.loadMedia failed:', err);
+      }
       this.isPaused.set(false);
       this.mediaTitle.set(info.title);
       return;
