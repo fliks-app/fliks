@@ -168,7 +168,6 @@ export class ImportRadarrService {
             title,
             year: movie.year ?? exists.year,
             monitored: movie.monitored ?? exists.monitored,
-            rootFolderId: resolved?.rootFolderId ?? exists.rootFolderId,
             folderName: folderName || exists.folderName,
             imdbId: movie.imdbId || exists.imdbId,
             overview: movie.overview || exists.overview,

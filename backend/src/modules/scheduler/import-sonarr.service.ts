@@ -147,7 +147,6 @@ export class ImportSonarrService {
             title,
             year: s.year ?? exists.year,
             monitored: s.monitored ?? exists.monitored,
-            rootFolderId: resolved?.rootFolderId ?? exists.rootFolderId,
             folderName: folderName || exists.folderName,
             imdbId: s.imdbId || exists.imdbId,
             overview: s.overview || exists.overview,
