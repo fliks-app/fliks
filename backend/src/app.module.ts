@@ -20,10 +20,17 @@ import { SubtitlesModule } from './modules/subtitles/subtitles.module';
 import { MediaServersModule } from './modules/media-servers/media-servers.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { StreamingModule } from './modules/streaming/streaming.module';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'public'),
+      serveRoot: '/cast',
+      serveStaticOptions: { index: false },
+    }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

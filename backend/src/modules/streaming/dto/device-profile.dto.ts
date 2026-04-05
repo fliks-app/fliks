@@ -75,4 +75,8 @@ export class DeviceProfileDto {
   @IsBoolean()
   @IsOptional()
   supportsHlsTs?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  supportsHdr?: boolean;
 }

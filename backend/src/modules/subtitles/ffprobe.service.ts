@@ -20,6 +20,8 @@ export interface MediaStream {
   title?: string;
 }
 
+export type HdrFormat = 'HDR10' | 'HLG';
+
 export interface VideoStreamInfo {
   streamIndex: number;
   codec: string;
@@ -32,6 +34,10 @@ export interface VideoStreamInfo {
   frameRate?: string;
   bitRate?: number;
   bitDepth?: number;
+  colorSpace?: string;
+  colorTransfer?: string;
+  colorPrimaries?: string;
+  hdrFormat?: HdrFormat;
 }
 
 export interface AudioStreamInfo {
@@ -46,6 +52,10 @@ export interface AudioStreamInfo {
   isDefault?: boolean;
 }
 
+const IMAGE_BASED_SUBTITLE_CODECS = new Set([
+  'hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle', 'xsub',
+]);
+
 export interface SubtitleStreamInfo {
   streamIndex: number;
   codec: string;
@@ -53,6 +63,8 @@ export interface SubtitleStreamInfo {
   title?: string;
   forced: boolean;
   hearingImpaired: boolean;
+  /** True for bitmap subtitles (PGS, VOBSUB, DVB) that need burn-in */
+  isImageBased: boolean;
 }
 
 export interface MediaFileInfo {
@@ -76,6 +88,9 @@ interface FfprobeStream {
   r_frame_rate?: string;
   bit_rate?: string;
   bits_per_raw_sample?: string;
+  color_space?: string;
+  color_transfer?: string;
+  color_primaries?: string;
   channels?: number;
   channel_layout?: string;
   sample_rate?: string;
@@ -119,6 +134,7 @@ export class FfprobeService {
         language: s.tags?.language ?? 'und',
         forced: s.disposition?.forced === 1,
         hearingImpaired: s.disposition?.hearing_impaired === 1,
+        isImageBased: IMAGE_BASED_SUBTITLE_CODECS.has(s.codec_name ?? ''),
       }));
     } catch (err) {
       this.logger.warn(
@@ -205,6 +221,14 @@ export class FfprobeService {
           bitDepth: s.bits_per_raw_sample
             ? Number(s.bits_per_raw_sample)
             : undefined,
+          colorSpace: s.color_space,
+          colorTransfer: s.color_transfer,
+          colorPrimaries: s.color_primaries,
+          hdrFormat: this.deriveHdrFormat(
+            s.color_transfer, s.color_primaries,
+            s.bits_per_raw_sample ? Number(s.bits_per_raw_sample) : undefined,
+            s.pix_fmt, s.profile,
+          ),
         }));
 
       const audio: AudioStreamInfo[] = streams
@@ -230,6 +254,7 @@ export class FfprobeService {
           title: s.tags?.title,
           forced: s.disposition?.forced === 1,
           hearingImpaired: s.disposition?.hearing_impaired === 1,
+          isImageBased: IMAGE_BASED_SUBTITLE_CODECS.has(s.codec_name ?? ''),
         }));
 
       if (!video.length && !audio.length) {
@@ -244,6 +269,25 @@ export class FfprobeService {
       );
       return { video: [], audio: [], subtitles: [], error: message };
     }
+  }
+
+  private deriveHdrFormat(
+    colorTransfer?: string,
+    colorPrimaries?: string,
+    bitDepth?: number,
+    pixelFormat?: string,
+    profile?: string,
+  ): HdrFormat | undefined {
+    if (!colorTransfer) return undefined;
+    // Determine if 10-bit from bitDepth, pixel format, or codec profile
+    const is10bit = (bitDepth && bitDepth >= 10)
+      || (pixelFormat && /10le|10be|p010/.test(pixelFormat))
+      || (profile && /main 10|main10/i.test(profile));
+    if (!is10bit) return undefined;
+    const isBt2020 = colorPrimaries === 'bt2020';
+    if (colorTransfer === 'smpte2084' && isBt2020) return 'HDR10';
+    if (colorTransfer === 'arib-std-b67' && isBt2020) return 'HLG';
+    return undefined;
   }
 
   private parseFrameRate(rate?: string): string | undefined {

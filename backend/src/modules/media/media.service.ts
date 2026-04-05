@@ -33,8 +33,9 @@ import { NamingService } from '../scheduler/naming.service';
 import {
   getSuitarrQualityById,
   SUITARR_QUALITIES,
+  SuitarrQualityDefinition,
 } from '../../common/constants/suitarr-qualities';
-import { parseReleaseQuality } from './release-quality.parser';
+
 import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
@@ -1123,22 +1124,32 @@ export class MediaService {
       }
 
       const filename = path.basename(absPath);
-      const { quality } = parseReleaseQuality(filename);
 
       const sizeChanged = Number(dbFile.size) !== diskSize;
-      const qualityChanged = dbFile.quality !== quality.name;
       const si = dbFile.streamInfo as any;
       const missingStreamInfo =
         !si || si.error || (!si.video?.length && !si.audio?.length)
         || !('subtitles' in si) || !('durationSeconds' in si);
+      const missingColorInfo = si?.video?.[0] && (
+        !('colorTransfer' in (si.video[0] ?? {}))
+        || (si.video[0].colorTransfer === 'smpte2084' && !si.video[0].hdrFormat)
+      );
+      // Check if quality needs correction (e.g. was parsed from filename, now use ffprobe)
+      const expectedQuality = this.resolveQuality(filename, si?.video?.[0]?.height, si?.video?.[0]?.width);
+      const qualityStale = dbFile.quality !== expectedQuality && si?.video?.[0]?.height;
 
-      if (sizeChanged || qualityChanged || missingStreamInfo) {
+      if (sizeChanged || missingStreamInfo || missingColorInfo || qualityStale) {
         dbFile.size = diskSize;
-        dbFile.quality = quality.name;
-        dbFile.streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
+        let streamInfo = si;
+        if (sizeChanged || missingStreamInfo || missingColorInfo) {
+          streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
+          dbFile.streamInfo = streamInfo;
+        }
+        const qualityName = this.resolveQuality(filename, streamInfo?.video?.[0]?.height, streamInfo?.video?.[0]?.width);
+        dbFile.quality = qualityName;
         await this.mediaFileRepo.save(dbFile);
         updated++;
-        this.log.log(`Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${quality.name})`);
+        this.log.log(`Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${qualityName})`);
       }
     }
 
@@ -1155,7 +1166,6 @@ export class MediaService {
       }
 
       const filename = path.basename(absPath);
-      const { quality } = parseReleaseQuality(filename);
 
       // Try to match episode for series
       let episodeId: number | undefined;
@@ -1177,13 +1187,14 @@ export class MediaService {
       }
 
       const streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
+      const qualityName = this.resolveQuality(filename, streamInfo.video?.[0]?.height, streamInfo.video?.[0]?.width);
       await this.mediaFileRepo.save(
         this.mediaFileRepo.create({
           mediaId: media.id,
           episodeId,
           relativePath,
           size,
-          quality: quality.name,
+          quality: qualityName,
           streamInfo,
         }),
       );
@@ -1231,5 +1242,35 @@ export class MediaService {
     const m = filename.match(/[Ss](\d{1,2})[Ee](\d{1,3})/);
     if (!m) return null;
     return { season: parseInt(m[1], 10), episode: parseInt(m[2], 10) };
+  }
+
+  /**
+   * Determine quality from ffprobe resolution (source of truth) + filename source tag.
+   */
+  private resolveQuality(filename: string, actualHeight?: number, actualWidth?: number): string {
+    // Use width to determine resolution (stable across aspect ratios, like Jellyfin)
+    let resolution: number;
+    if (actualWidth && actualWidth >= 3800) resolution = 2160;
+    else if (actualWidth && actualWidth >= 1900) resolution = 1080;
+    else if (actualWidth && actualWidth >= 1260) resolution = 720;
+    else resolution = 480;
+
+    // Determine source from filename (bluray, web, remux, etc.)
+    const t = filename.replace(/\./g, ' ').toLowerCase();
+    let source = 'hdtv';
+    if (/\bremux\b/.test(t)) source = 'remux';
+    else if (/\b(bluray|blu-?ray|bdrip|brrip)\b/.test(t)) source = 'bluray';
+    else if (/\bweb-?dl\b/.test(t)) source = 'web';
+    else if (/\bweb-?rip\b/.test(t)) source = 'web';
+    else if (/\b(dvd|dvdrip)\b/.test(t)) source = 'dvd';
+
+    const match = SUITARR_QUALITIES.find(
+      (q) => q.resolution === resolution && q.source === source,
+    );
+    if (match) return match.name;
+
+    // Fallback: any quality with correct resolution
+    const fallback = SUITARR_QUALITIES.find((q) => q.resolution === resolution);
+    return fallback?.name ?? `HDTV-${resolution}p`;
   }
 }

@@ -19,6 +19,7 @@ import { MediaService, Media } from '../../core/services/api/media.service';
 import { BrowserDeviceProfileService } from '../../core/services/browser-device-profile.service';
 import { SseService } from '../../core/services/sse.service';
 import { AuthService } from '../../core/services/auth.service';
+import { CastService } from '../../core/services/cast.service';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 interface ImmersivePlugin {
@@ -33,6 +34,7 @@ interface PipPlugin {
 }
 const Pip = registerPlugin<PipPlugin>('Pip');
 import { LucideCircleAlert } from '@lucide/angular';
+import { CastRemoteComponent, CastSubtitleOption, CastAudioOption, CastQualityOption } from './cast-remote';
 import { PlayerControlsComponent } from './player-controls';
 import { PlayerStatsOverlayComponent, PlayerStats } from './player-stats-overlay';
 import shaka from 'shaka-player';
@@ -42,6 +44,10 @@ interface SubtitleOption {
   label: string;
   url: string;
   language: string;
+  /** True for bitmap subs (PGS/VOBSUB) that need server-side burn-in */
+  burnIn: boolean;
+  /** Database subtitle ID (for burn-in request) */
+  subtitleDbId?: number;
 }
 
 interface QualityOption {
@@ -51,13 +57,14 @@ interface QualityOption {
 }
 
 @Component({
-  imports: [TranslateModule, LucideCircleAlert, PlayerControlsComponent, PlayerStatsOverlayComponent],
+  imports: [TranslateModule, LucideCircleAlert, PlayerControlsComponent, PlayerStatsOverlayComponent, CastRemoteComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player.html',
   styles: [`
     video::cue {
       font-size: 0.9em;
-      background: transparent;
+      background: transparent !important;
+      background-color: transparent !important;
       text-shadow: 0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7), 1px 1px 2px rgba(0,0,0,0.8);
       line-height: 1.4;
     }
@@ -88,6 +95,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly deviceProfileService = inject(BrowserDeviceProfileService);
   private readonly sseService = inject(SseService);
   private readonly authService = inject(AuthService);
+  readonly castService = inject(CastService);
 
   private readonly videoEl = viewChild<ElementRef<HTMLVideoElement>>('videoElement');
   private readonly containerEl = viewChild<ElementRef<HTMLDivElement>>('playerContainer');
@@ -113,10 +121,56 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly qualityPickerOpen = signal(false);
   readonly activeSubtitleId = signal<string | null>(null);
   readonly activeQualityId = signal('auto');
+  readonly activeResolution = signal('');
+  readonly activeAudioTrackId = signal<string | null>(null);
+  readonly availableAudioTracks = signal<{ id: string; label: string }[]>([]);
   readonly availableSubtitles = signal<SubtitleOption[]>([]);
   readonly availableQualities = signal<QualityOption[]>([]);
 
+  /** Subtitle options formatted for the Cast remote */
+  readonly castSubtitleOptions = computed<CastSubtitleOption[]>(() => {
+    let trackId = 1;
+    return this.availableSubtitles().map(s => ({
+      id: s.id,
+      label: s.label,
+      language: s.language,
+      burnIn: s.burnIn,
+      castTrackId: s.burnIn ? s.subtitleDbId : trackId++,
+    }));
+  });
+
+  /** Audio tracks from streamInfo for the Cast remote */
+  readonly castAudioOptions = computed<CastAudioOption[]>(() => {
+    const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
+    const si = file?.streamInfo as any;
+    if (!si?.audio?.length) return [];
+    return si.audio.map((a: any, i: number) => ({
+      id: `audio-${i}`,
+      label: `${a.language ?? 'und'}${a.title ? ' - ' + a.title : ''} (${(a.codec ?? '').toUpperCase()}${a.channels ? ' ' + a.channels + 'ch' : ''})`,
+      language: a.language ?? 'und',
+    }));
+  });
+
+  /** Quality options for the Cast remote */
+  readonly castQualityOptions = computed<CastQualityOption[]>(() => {
+    return this.availableQualities().map(q => ({
+      id: q.id,
+      label: q.id === 'auto' ? 'Auto' : q.id === 'original' ? `Original` : q.id,
+    }));
+  });
+
   readonly isNative = Capacitor.isNativePlatform();
+
+  // Mute/pause local video whenever Cast is connected
+  private readonly castSyncEffect = effect(() => {
+    const casting = this.castService.isConnected();
+    if (!casting) return;
+    try {
+      const video = this.videoEl()?.nativeElement;
+      if (video && !video.paused) video.pause();
+      if (video) video.muted = true;
+    } catch { /* video element may not be ready yet */ }
+  });
 
   // Remote control: listen for admin commands via SSE
   private readonly remoteCommandEffect = effect(() => {
@@ -142,6 +196,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private mediaId = 0;
   private episodeId: number | undefined;
   private media: Media | null = null;
+  private activeBurnInId: number | null = null;
 
   readonly mediaTitle = signal('');
   readonly episodeTitle = signal('');
@@ -198,7 +253,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const playingWidth = activeTrack?.width ?? src?.width;
     const playingHeight = activeTrack?.height ?? src?.height;
     const resLabel = this.resolutionLabel(playingWidth, playingHeight);
-    const hdrTag = src?.videoBitDepth && src.videoBitDepth >= 10 ? ' HDR' : '';
+    const hdrTag = src?.hdrFormat ? ` ${src.hdrFormat}` : '';
     const codecName = (src?.videoCodec ?? '?').toUpperCase();
     const videoLabel = `${resLabel}${hdrTag} ${codecName}`;
 
@@ -224,6 +279,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Show current resolution if transcoding to a lower quality
     if (activeTrack && playingHeight && src?.height && playingHeight < src.height) {
       videoPlaybackMode += ` → ${playingWidth}x${playingHeight}`;
+    }
+    // Tone mapping indicator
+    if (pi?.tonemapping) {
+      videoPlaybackMode += ' (HDR → SDR)';
     }
 
     // --- Audio ---
@@ -420,6 +479,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       // Load subtitles + auto-select last used language
       await this.loadSubtitles();
+      this.loadAudioTracks();
       const savedLang = localStorage.getItem('player.subtitleLang');
       if (savedLang) {
         const match = this.availableSubtitles().find(s => s.language === savedLang);
@@ -449,8 +509,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       // Update stats every second
       this.statsInterval = setInterval(() => {
+        // Update active resolution from Shaka's current variant track
+        const track = this.player?.getVariantTracks()?.find(t => t.active);
+        if (track?.height) {
+          this.activeResolution.set(this.resolutionLabel(track.width ?? undefined, track.height));
+        }
         if (this.statsVisible()) {
-          // Trigger recompute of playerStats
           this.currentTime.set(video.currentTime);
         }
       }, 1000);
@@ -525,7 +589,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return !!active && !!active.closest('.dropdown');
   }
 
-  // Player actions
+  // Player actions (local only — Cast uses CastRemoteComponent)
   onTogglePlay() {
     const video = this.videoEl()?.nativeElement;
     if (!video) return;
@@ -575,6 +639,240 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  async onToggleCast() {
+    if (this.castService.isConnected()) {
+      // Disconnect: resume local playback at Cast position
+      const castTime = this.castService.currentTime();
+      this.castService.disconnect();
+      const video = this.videoEl()?.nativeElement;
+      if (video) {
+        video.currentTime = castTime;
+        video.play().catch(() => {});
+      }
+    } else {
+      // Connect and transfer playback to Cast
+      this.castService.requestSession();
+
+      // Wait for connection (poll for up to 30s)
+      for (let i = 0; i < 60; i++) {
+        if (this.castService.isConnected()) break;
+        await new Promise(r => setTimeout(r, 500));
+      }
+      if (!this.castService.isConnected()) return;
+
+      // Capture current position BEFORE stopping local playback
+      const video = this.videoEl()?.nativeElement;
+      const currentPos = video?.currentTime ?? 0;
+
+      // Prepare everything BEFORE unloading (template may switch after unload)
+      const castToken = await this.authService.getCastToken();
+      const mode = this.playbackMode();
+      const qualityId = this.activeQualityId();
+      const subtitles = this.availableSubtitles()
+        .filter(s => !s.burnIn && s.subtitleDbId)
+        .map(s => ({
+          url: s.id.startsWith('ext-')
+            ? this.streamingApi.getAbsoluteSubtitleUrl(this.mediaFileId, s.subtitleDbId!, castToken)
+            : this.streamingApi.getAbsoluteEmbeddedSubtitleUrl(this.mediaFileId, parseInt(s.id.replace('emb-', ''), 10), castToken),
+          language: s.language,
+          label: s.label,
+        }));
+      // Find active subtitle track ID for Cast (1-based)
+      const activeSubId = this.activeSubtitleId();
+      let activeTrackId: number | undefined;
+      if (activeSubId) {
+        const allNonBurnIn = this.availableSubtitles().filter(s => !s.burnIn && s.subtitleDbId);
+        const idx = allNonBurnIn.findIndex(s => s.id === activeSubId);
+        if (idx >= 0) activeTrackId = idx + 1;
+      }
+
+      // Build Cast URL based on current quality selection
+      let castUrl: string;
+      let contentType: string;
+      const lanUrl = this.castService.serverLanUrl() || window.location.origin;
+      if (mode === 'direct' || qualityId === 'original') {
+        castUrl = this.streamingApi.getAbsoluteStreamUrl(this.mediaFileId, castToken);
+        contentType = 'video/mp4';
+      } else if (qualityId === 'auto') {
+        castUrl = this.streamingApi.getAbsoluteHlsUrl(this.mediaFileId, castToken);
+        contentType = 'application/x-mpegurl';
+      } else {
+        // Specific quality variant
+        castUrl = `${lanUrl}/api/stream/${this.mediaFileId}/${qualityId}/index.m3u8?token=${encodeURIComponent(castToken)}`;
+        contentType = 'application/x-mpegurl';
+      }
+
+      // Stop local playback (pause + mute, don't unload — keep Shaka alive for reconnect)
+      if (video) {
+        video.pause();
+        video.muted = true;
+      }
+
+      // Send to Chromecast
+      await this.castService.loadMedia({
+        url: castUrl,
+        contentType,
+        title: this.mediaTitle(),
+        subtitle: this.episodeTitle() || undefined,
+        posterUrl: this.fanartUrl() ?? undefined,
+        currentTime: currentPos,
+        subtitles,
+        activeSubtitleTrackId: activeTrackId,
+      });
+    }
+  }
+
+  onDisconnectCast() {
+    const castTime = this.castService.currentTime();
+    this.castService.disconnect();
+    // Resume local — Shaka is still loaded, just muted+paused
+    const video = this.videoEl()?.nativeElement;
+    if (video) {
+      video.muted = false;
+      video.currentTime = castTime;
+      video.play().catch(() => {});
+    }
+  }
+
+  /** Handle quality change from Cast remote — reload stream with specific variant URL */
+  /** Handle audio track change from Cast remote — reload stream with different audio */
+  async onCastAudioChange(audioIndex: number) {
+    // Tell backend to use this audio stream
+    const deviceProfile = this.deviceProfileService.getProfile();
+    await this.streamingApi.getPlaybackInfo(
+      this.mediaFileId, deviceProfile, this.activeBurnInId ?? undefined, audioIndex,
+    );
+    // Stop old sessions
+    this.stopStreamingSessions();
+
+    // Reload Cast with new stream
+    const castToken = await this.authService.getCastToken();
+    const currentPos = this.castService.currentTime();
+    const qualityId = this.activeQualityId();
+    const lanUrl = this.castService.serverLanUrl() || window.location.origin;
+
+    let castUrl: string;
+    let contentType: string;
+    if (qualityId === 'auto') {
+      castUrl = this.streamingApi.getAbsoluteHlsUrl(this.mediaFileId, castToken);
+      contentType = 'application/x-mpegurl';
+    } else if (qualityId === 'original') {
+      castUrl = this.streamingApi.getAbsoluteStreamUrl(this.mediaFileId, castToken);
+      contentType = 'video/mp4';
+    } else {
+      castUrl = `${lanUrl}/api/stream/${this.mediaFileId}/${qualityId}/index.m3u8?token=${encodeURIComponent(castToken)}`;
+      contentType = 'application/x-mpegurl';
+    }
+
+    const subtitles = this.availableSubtitles()
+      .filter(s => !s.burnIn && s.subtitleDbId)
+      .map(s => ({
+        url: s.id.startsWith('ext-')
+          ? this.streamingApi.getAbsoluteSubtitleUrl(this.mediaFileId, s.subtitleDbId!, castToken)
+          : this.streamingApi.getAbsoluteEmbeddedSubtitleUrl(this.mediaFileId, parseInt(s.id.replace('emb-', ''), 10), castToken),
+        language: s.language,
+        label: s.label,
+      }));
+
+    await this.castService.loadMedia({
+      url: castUrl,
+      contentType,
+      title: this.mediaTitle(),
+      subtitle: this.episodeTitle() || undefined,
+      posterUrl: this.fanartUrl() ?? undefined,
+      currentTime: currentPos,
+      subtitles,
+    });
+  }
+
+  async onCastQualityChange(qualityId: string) {
+    const castToken = await this.authService.getCastToken();
+    const currentPos = this.castService.currentTime();
+
+    let castUrl: string;
+    if (qualityId === 'auto') {
+      // Master playlist — let Chromecast ABR decide
+      castUrl = this.streamingApi.getAbsoluteHlsUrl(this.mediaFileId, castToken);
+    } else if (qualityId === 'original') {
+      // Direct stream
+      castUrl = this.streamingApi.getAbsoluteStreamUrl(this.mediaFileId, castToken);
+    } else {
+      // Specific quality variant — build the variant playlist URL directly
+      const lanUrl = this.castService.serverLanUrl() || window.location.origin;
+      castUrl = `${lanUrl}/api/stream/${this.mediaFileId}/${qualityId}/index.m3u8?token=${encodeURIComponent(castToken)}`;
+    }
+
+    const subtitles = this.availableSubtitles()
+      .filter(s => !s.burnIn && s.subtitleDbId)
+      .map(s => ({
+        url: s.id.startsWith('ext-')
+          ? this.streamingApi.getAbsoluteSubtitleUrl(this.mediaFileId, s.subtitleDbId!, castToken)
+          : this.streamingApi.getAbsoluteEmbeddedSubtitleUrl(this.mediaFileId, parseInt(s.id.replace('emb-', ''), 10), castToken),
+        language: s.language,
+        label: s.label,
+      }));
+
+    const contentType = qualityId === 'original' ? 'video/mp4' : 'application/x-mpegurl';
+
+    await this.castService.loadMedia({
+      url: castUrl,
+      contentType,
+      title: this.mediaTitle(),
+      subtitle: this.episodeTitle() || undefined,
+      posterUrl: this.fanartUrl() ?? undefined,
+      currentTime: currentPos,
+      subtitles,
+    });
+  }
+
+  /** Handle burn-in subtitle selection from Cast remote */
+  async onCastBurnIn(subtitleDbId: number | null) {
+    if (!subtitleDbId) {
+      // Disable burn-in: reload stream without subtitle
+      this.activeBurnInId = null;
+      await this.reloadCastStream();
+      return;
+    }
+    // Reload stream with burn-in subtitle
+    this.activeBurnInId = subtitleDbId;
+    await this.reloadCastStream();
+  }
+
+  private async reloadCastStream() {
+    const castToken = await this.authService.getCastToken();
+    const mode = this.playbackMode();
+    const hlsUrl = this.streamingApi.getAbsoluteHlsUrl(this.mediaFileId, castToken);
+    const streamUrl = this.streamingApi.getAbsoluteStreamUrl(this.mediaFileId, castToken);
+
+    // Re-fetch playback info with burn-in
+    const deviceProfile = this.deviceProfileService.getProfile();
+    await this.streamingApi.getPlaybackInfo(
+      this.mediaFileId, deviceProfile, this.activeBurnInId ?? undefined,
+    );
+
+    // Build subtitle list (only non-burn-in for sidecar, absolute URLs)
+    const subtitles = this.availableSubtitles()
+      .filter(s => !s.burnIn && s.subtitleDbId)
+      .map(s => ({
+        url: s.id.startsWith('ext-')
+          ? this.streamingApi.getAbsoluteSubtitleUrl(this.mediaFileId, s.subtitleDbId!, castToken)
+          : this.streamingApi.getAbsoluteEmbeddedSubtitleUrl(this.mediaFileId, parseInt(s.id.replace('emb-', ''), 10), castToken),
+        language: s.language,
+        label: s.label,
+      }));
+
+    const currentPos = this.castService.currentTime();
+    await this.castService.loadMedia({
+      url: mode === 'direct' ? streamUrl : hlsUrl,
+      contentType: mode === 'direct' ? 'video/mp4' : 'application/x-mpegurl',
+      title: this.mediaTitle(),
+      subtitle: this.episodeTitle() || undefined,
+      posterUrl: this.fanartUrl() ?? undefined,
+      currentTime: currentPos,
+      subtitles,
+    });
+  }
+
   onSpeedChange(rate: number) {
     const video = this.videoEl()?.nativeElement;
     if (!video) return;
@@ -595,13 +893,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       const subs = await this.subtitlesApi.getForMedia(this.mediaId);
       const bitmapCodecs = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle']);
-      const seen = new Set<string>(); // deduplicate by language+type
+      const seen = new Set<string>();
 
       for (const sub of subs) {
         if (sub.mediaFileId !== this.mediaFileId) continue;
+        const isBitmap = bitmapCodecs.has(sub.codec ?? '');
 
         if (sub.filePath) {
-          // External subtitle file (.srt, .ass)
           const key = `ext-${sub.language}-${sub.forced}-${sub.hearingImpaired}`;
           if (seen.has(key)) continue;
           seen.add(key);
@@ -610,17 +908,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             label: `${sub.language}${sub.hearingImpaired ? ' (HI)' : ''}${sub.forced ? ' (Forced)' : ''}`,
             url: this.streamingApi.getSubtitleUrl(this.mediaFileId, sub.id),
             language: sub.language,
+            burnIn: false,
+            subtitleDbId: sub.id,
           });
-        } else if (sub.streamIndex != null && !bitmapCodecs.has(sub.codec ?? '')) {
-          // Embedded text subtitle (from DB)
+        } else if (sub.streamIndex != null) {
           const key = `emb-${sub.streamIndex}`;
           if (seen.has(key)) continue;
           seen.add(key);
           options.push({
             id: key,
-            label: `${sub.language}${sub.hearingImpaired ? ' (HI)' : ''}${sub.forced ? ' (Forced)' : ''} [embedded]`,
-            url: this.streamingApi.getEmbeddedSubtitleUrl(this.mediaFileId, sub.streamIndex!),
+            label: `${sub.language}${sub.hearingImpaired ? ' (HI)' : ''}${sub.forced ? ' (Forced)' : ''}${isBitmap ? ' [PGS]' : ' [embedded]'}`,
+            url: isBitmap ? '' : this.streamingApi.getEmbeddedSubtitleUrl(this.mediaFileId, sub.streamIndex!),
             language: sub.language,
+            burnIn: isBitmap,
+            subtitleDbId: sub.id,
           });
         }
       }
@@ -630,15 +931,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const si = file?.streamInfo as any;
       if (si?.subtitles?.length) {
         for (const emb of si.subtitles) {
-          if (bitmapCodecs.has(emb.codec)) continue;
           const key = `emb-${emb.streamIndex}`;
           if (seen.has(key)) continue;
           seen.add(key);
+          const isBitmap = bitmapCodecs.has(emb.codec);
+          if (isBitmap) continue; // Bitmap from streamInfo only (no DB ID for burn-in)
           options.push({
             id: key,
             label: `${emb.language}${emb.hearingImpaired ? ' (HI)' : ''}${emb.forced ? ' (Forced)' : ''} [embedded]`,
             url: this.streamingApi.getEmbeddedSubtitleUrl(this.mediaFileId, emb.streamIndex),
             language: emb.language,
+            burnIn: false,
           });
         }
       }
@@ -649,19 +952,97 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  /** Load audio tracks from Shaka variant tracks (works in both direct play and HLS) */
+  private loadAudioTracks() {
+    if (!this.player) return;
+
+    // Wait a moment for Shaka to parse the manifest/file
+    setTimeout(() => {
+      if (!this.player) return;
+      const variants = this.player.getVariantTracks();
+
+      // Deduplicate by audioId (each audio track appears in multiple variants for different video qualities)
+      const seen = new Map<number, any>();
+      for (const v of variants) {
+        if (v.audioId != null && !seen.has(v.audioId)) {
+          seen.set(v.audioId, v);
+        }
+      }
+
+      if (seen.size <= 1) {
+        // Fallback: use streamInfo if Shaka only sees one audio track
+        const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
+        const si = file?.streamInfo as any;
+        if (si?.audio?.length > 1) {
+          const tracks = si.audio.map((a: any, i: number) => ({
+            id: `si-${i}`,
+            label: `${a.language ?? 'und'}${a.title ? ' - ' + a.title : ''} (${(a.codec ?? '').toUpperCase()}${a.channels ? ' ' + a.channels + 'ch' : ''})`,
+          }));
+          this.availableAudioTracks.set(tracks);
+          this.activeAudioTrackId.set(tracks[0].id);
+        }
+        return;
+      }
+
+      const tracks = Array.from(seen.entries()).map(([audioId, v]) => ({
+        id: `shaka-${audioId}`,
+        label: `${v.language ?? 'und'} (${v.audioCodec ?? '?'}${v.channelsCount ? ' ' + v.channelsCount + 'ch' : ''})`,
+      }));
+
+      this.availableAudioTracks.set(tracks);
+      // Set active to the currently playing one
+      const active = variants.find((v: any) => v.active);
+      if (active?.audioId != null) {
+        this.activeAudioTrackId.set(`shaka-${active.audioId}`);
+      }
+    }, 2000);
+  }
+
+  private activeAudioStreamIndex: number | undefined;
+
+  async onSelectAudioTrack(trackId: string) {
+    this.activeAudioTrackId.set(trackId);
+
+    // Extract the audio stream index (relative index in the audio streams array)
+    const idx = parseInt(trackId.replace(/^(shaka-|si-)/, ''), 10);
+    this.activeAudioStreamIndex = idx;
+
+    // Reload the stream with the new audio track
+    await this.reloadStream();
+  }
+
   async selectSubtitle(sub: SubtitleOption | null) {
     if (!this.player) return;
 
     if (!sub) {
-      (this.player as any).setTextVisibility(false);
+      try { (this.player as any).setTextVisibility(false); } catch {};
       this.activeSubtitleId.set(null);
       this.subtitlePickerOpen.set(false);
       localStorage.setItem('player.subtitleLang', '');
+      // If burn-in was active, reload stream without it
+      if (this.activeBurnInId) {
+        this.activeBurnInId = null;
+        await this.reloadStream();
+      }
+      return;
+    }
+
+    if (sub.burnIn && sub.subtitleDbId) {
+      // Server-side burn-in: reload stream with subtitle baked in
+      this.activeBurnInId = sub.subtitleDbId;
+      this.activeSubtitleId.set(sub.id);
+      this.subtitlePickerOpen.set(false);
+      localStorage.setItem('player.subtitleLang', sub.language);
+      await this.reloadStream();
       return;
     }
 
     try {
-      // Add the text track via Shaka (works on all platforms including Android WebView)
+      // Client-side: add text track via Shaka
+      if (this.activeBurnInId) {
+        this.activeBurnInId = null;
+        await this.reloadStream();
+      }
       const track = await this.player.addTextTrackAsync(
         sub.url,
         sub.language,
@@ -671,7 +1052,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         sub.label,
       );
       this.player.selectTextTrack(track);
-      (this.player as any).setTextVisibility(true);
+      try { (this.player as any).setTextVisibility(true); } catch {};
     } catch (e) {
       console.error('[Player] Failed to load subtitle:', e);
     }
@@ -791,6 +1172,41 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.statsVisible.set(false);
   }
 
+  /** Reload the stream (e.g. when toggling burn-in subtitles) */
+  private async reloadStream() {
+    const video = this.videoEl()?.nativeElement;
+    if (!video || !this.player) return;
+    const currentPos = video.currentTime;
+
+    // Stop existing sessions
+    this.stopStreamingSessions();
+
+    // Re-fetch playback info with burn-in + audio stream selection
+    const deviceProfile = this.deviceProfileService.getProfile();
+    this.playbackInfo = await this.streamingApi.getPlaybackInfo(
+      this.mediaFileId, deviceProfile, this.activeBurnInId ?? undefined, this.activeAudioStreamIndex,
+    );
+    const pi = this.playbackInfo;
+
+    if (pi.playMethod === 'DirectPlay') {
+      this.playbackMode.set('direct');
+    } else if (pi.playMethod === 'DirectStream') {
+      this.playbackMode.set('remux');
+    } else {
+      this.playbackMode.set('transcode');
+    }
+    this.hwAccel.set(pi.hwAccel);
+
+    const mode = this.playbackMode();
+    if (mode === 'direct') {
+      await this.player.load(this.streamingApi.getStreamUrl(this.mediaFileId), currentPos, 'video/mp4');
+    } else {
+      await this.player.load(this.streamingApi.getHlsUrl(this.mediaFileId), currentPos);
+    }
+
+    video.play().catch(() => {});
+  }
+
   onToggleQualityPicker() {
     this.qualityPickerOpen.set(!this.qualityPickerOpen());
     this.subtitlePickerOpen.set(false);
@@ -860,14 +1276,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const resLabel = this.resolutionLabel(srcW, srcH);
         options.push({ id: 'original', label: `Original (${resLabel})`, height: srcH });
       }
-      // Transcode profiles: only add profiles below or at source resolution
+      // Transcode profiles: use width to match (stable across cinema aspect ratios)
       const profiles = [
-        { id: '1080p', label: '1080p', height: 1080 },
-        { id: '720p', label: '720p', height: 720 },
-        { id: '480p', label: '480p', height: 480 },
+        { id: '2160p', label: '4K', height: 2160, minWidth: 3800 },
+        { id: '1080p', label: '1080p', height: 1080, minWidth: 1900 },
+        { id: '720p', label: '720p', height: 720, minWidth: 1260 },
+        { id: '480p', label: '480p', height: 480, minWidth: 0 },
+        { id: '360p', label: '360p', height: 360, minWidth: 0 },
+        { id: '240p', label: '240p', height: 240, minWidth: 0 },
+        { id: '144p', label: '144p', height: 144, minWidth: 0 },
       ];
       for (const p of profiles) {
-        if (p.height <= srcH) {
+        if (srcW >= p.minWidth) {
           options.push(p);
         }
       }

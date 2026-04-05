@@ -72,4 +72,12 @@ export class AuthController {
   getProfile(@CurrentUser() user: User) {
     return this.authService.safeUser(user);
   }
+
+  /** Generate a short-lived token for Chromecast (15 min, read-only) */
+  @Post('cast-token')
+  @UseGuards(JwtOrApiKeyGuard)
+  castToken(@CurrentUser() user: User) {
+    const token = this.authService.generateCastToken(user);
+    return { token };
+  }
 }

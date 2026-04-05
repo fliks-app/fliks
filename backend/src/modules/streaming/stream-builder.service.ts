@@ -30,6 +30,7 @@ export class StreamBuilderService {
     resolved: ResolvedFile,
     profile: DeviceProfileDto,
     tokenParam: string,
+    burnInSubtitleId?: number,
   ): PlaybackInfoResponse {
     const si = resolved.mediaFile.streamInfo as any;
     const v = si?.video?.[0];
@@ -56,12 +57,35 @@ export class StreamBuilderService {
       audioSampleRate: a?.sampleRate,
       audioLanguage: a?.language,
       durationSeconds: si?.durationSeconds,
+      hdrFormat: v?.hdrFormat as string | undefined,
+      colorSpace: v?.colorSpace as string | undefined,
+      colorTransfer: v?.colorTransfer as string | undefined,
+      colorPrimaries: v?.colorPrimaries as string | undefined,
     };
+
+    // HDR detection
+    const isSourceHdr = !!source.hdrFormat;
+    const clientSupportsHdr = profile.supportsHdr === true;
+    const needsTonemapping = isSourceHdr && !clientSupportsHdr;
+    const needsBurnIn = !!burnInSubtitleId;
 
     const reasons: TranscodeReason[] = [];
 
     // --- Step 1: Try DirectPlay ---
     const directPlayResult = this.tryDirectPlay(source, profile, reasons);
+
+    // HDR on SDR client forces transcode even if codecs match
+    if (needsTonemapping && directPlayResult.canDirectPlay) {
+      directPlayResult.canDirectPlay = false;
+      reasons.push({ flag: 'VideoHdrNotSupported', message: `HDR → SDR (tone mapping ${source.hdrFormat})` });
+    }
+
+    // Subtitle burn-in forces transcode
+    if (needsBurnIn && directPlayResult.canDirectPlay) {
+      directPlayResult.canDirectPlay = false;
+      reasons.push({ flag: 'SubtitleBurnIn', message: 'Sous-titres gravés dans la vidéo' });
+    }
+
     if (directPlayResult.canDirectPlay) {
       this.log.log(`DirectPlay for file ${resolved.mediaFile.id}: ${sourceContainer}/${sourceVideoCodec}/${sourceAudioCodec}`);
       const url = `/api/stream/${resolved.mediaFile.id}${tokenParam}`;
@@ -77,13 +101,15 @@ export class StreamBuilderService {
         outputAudioCodec: sourceAudioCodec,
         outputContainer: sourceContainer,
         hwAccel: 'none',
+        tonemapping: false,
         source,
       };
     }
 
     // --- Step 2: Try DirectStream (remux) ---
     // Video codec must be supported; only container or audio may differ
-    const canCopyVideo = directPlayResult.videoSupported && directPlayResult.videoConditionsMet;
+    // Cannot remux if tone mapping or burn-in is needed (video must be re-encoded)
+    const canCopyVideo = directPlayResult.videoSupported && directPlayResult.videoConditionsMet && !needsTonemapping && !needsBurnIn;
     if (canCopyVideo) {
       const canCopyAudio = directPlayResult.audioSupported;
       const outputAudioCodec = canCopyAudio ? sourceAudioCodec : 'aac';
@@ -109,11 +135,15 @@ export class StreamBuilderService {
         outputAudioCodec,
         outputContainer: 'hls',
         hwAccel: canCopyAudio ? 'none' : this.transcodingService.getDetectedHwAccel(),
+        tonemapping: false,
         source,
       };
     }
 
     // --- Step 3: Full Transcode ---
+    if (needsTonemapping && !reasons.some(r => r.flag === 'VideoHdrNotSupported')) {
+      reasons.push({ flag: 'VideoHdrNotSupported', message: `HDR → SDR (tone mapping ${source.hdrFormat})` });
+    }
     this.log.log(`Transcode for file ${resolved.mediaFile.id}: ${reasons.map(r => r.flag).join(', ')}`);
     const url = `/api/stream/${resolved.mediaFile.id}/master.m3u8${tokenParam}`;
     return {
@@ -128,6 +158,7 @@ export class StreamBuilderService {
       outputAudioCodec: 'aac',
       outputContainer: 'hls',
       hwAccel: this.transcodingService.getDetectedHwAccel(),
+      tonemapping: needsTonemapping,
       source,
     };
   }

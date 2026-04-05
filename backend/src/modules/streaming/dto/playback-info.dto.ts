@@ -42,6 +42,9 @@ export interface PlaybackInfoResponse {
   /** Hardware acceleration type used for transcoding */
   hwAccel: string;
 
+  /** Whether HDR→SDR tone mapping is being applied */
+  tonemapping: boolean;
+
   /** Source file info */
   source: {
     container: string;
@@ -60,5 +63,9 @@ export interface PlaybackInfoResponse {
     audioSampleRate?: number;
     audioLanguage?: string;
     durationSeconds?: number;
+    hdrFormat?: string;
+    colorSpace?: string;
+    colorTransfer?: string;
+    colorPrimaries?: string;
   };
 }

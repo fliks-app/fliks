@@ -17,14 +17,15 @@ import * as fs from 'fs';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { StreamingService } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
-import { TranscodingService, PROFILES, SessionContext } from './transcoding.service';
+import { TranscodingService, PROFILES, SessionContext, BurnInSubtitle } from './transcoding.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
+import { SubtitleBurnInService } from './subtitle-burn-in.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 import { User } from '../users/entities/user.entity';
 
 const VALID_QUALITIES = new Set([...PROFILES.map((p) => p.name), 'remux']);
-const SEGMENT_RE = /^seg-\d{3}\.ts$/;
+const SEGMENT_RE = /^seg-\d{3,4}\.ts$/;
 
 @Controller('stream')
 @UseGuards(JwtOrApiKeyGuard)
@@ -37,6 +38,7 @@ export class StreamingController {
     private readonly transcodingService: TranscodingService,
     private readonly streamBuilder: StreamBuilderService,
     private readonly activeStreamTracker: ActiveStreamTracker,
+    private readonly subtitleBurnIn: SubtitleBurnInService,
   ) {}
 
   private buildSessionContext(req: Request, resolved: { media: any }, mediaFileId: number): SessionContext {
@@ -48,6 +50,9 @@ export class StreamingController {
       mediaType: resolved.media?.type,
       posterUrl: resolved.media?.posterUrl ?? null,
       transcodeReasons: this.activeStreamTracker.getTranscodeReasons(mediaFileId),
+      tonemap: this.activeStreamTracker.getTonemapping(mediaFileId),
+      burnInSubtitle: this.activeStreamTracker.getBurnIn(mediaFileId),
+      audioStreamIndex: this.activeStreamTracker.getAudioStreamIndex(mediaFileId),
     };
   }
 
@@ -55,6 +60,24 @@ export class StreamingController {
   @Get('info/hw-accel')
   hwAccelInfo() {
     return { hwAccel: this.transcodingService.getDetectedHwAccel() };
+  }
+
+  /**
+   * Server URL accessible from the LAN (for Chromecast).
+   * Uses EXTERNAL_URL env var, or derives from the Host header.
+   */
+  @Get('info/server-url')
+  serverUrl(@Req() req: Request) {
+    if (process.env.EXTERNAL_URL) {
+      return { url: process.env.EXTERNAL_URL.replace(/\/+$/, '') };
+    }
+    // Derive from Host header (works when browser accesses via LAN IP)
+    const host = req.headers.host;
+    if (host) {
+      const proto = (req.headers['x-forwarded-proto'] as string) || 'http';
+      return { url: `${proto}://${host}` };
+    }
+    return { url: `http://localhost:${process.env.PORT || 3000}` };
   }
 
   /**
@@ -70,11 +93,32 @@ export class StreamingController {
     const resolved = await this.streamingService.resolveFile(mediaFileId);
     const token = (req.query as any).token;
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
-    const result = this.streamBuilder.evaluate(resolved, deviceProfile, tokenParam);
+    const burnInSubtitleId = (req.query as any).burnInSubtitleId
+      ? parseInt((req.query as any).burnInSubtitleId, 10)
+      : undefined;
+    const audioStreamIndex = (req.query as any).audioStreamIndex != null
+      ? parseInt((req.query as any).audioStreamIndex, 10)
+      : undefined;
+    const result = this.streamBuilder.evaluate(resolved, deviceProfile, tokenParam, burnInSubtitleId);
     // Cache transcode reasons for the admin dashboard
     if (result.transcodeReasons.length) {
       this.activeStreamTracker.setTranscodeReasons(mediaFileId, result.transcodeReasons);
     }
+    this.activeStreamTracker.setTonemapping(mediaFileId, result.tonemapping);
+    // Cache burn-in info for HLS endpoints
+    if (burnInSubtitleId) {
+      this.subtitleBurnIn.resolve(burnInSubtitleId, mediaFileId).then((info) => {
+        const filter = this.subtitleBurnIn.buildFilter(info);
+        this.activeStreamTracker.setBurnIn(mediaFileId, {
+          filter,
+          streamIndex: info.streamIndex,
+          type: info.type,
+        });
+      }).catch(() => {});
+    } else {
+      this.activeStreamTracker.setBurnIn(mediaFileId, undefined);
+    }
+    this.activeStreamTracker.setAudioStreamIndex(mediaFileId, audioStreamIndex);
     return result;
   }
 
@@ -176,7 +220,7 @@ export class StreamingController {
       const remaining = duration - i * segDuration;
       const segLen = Math.min(segDuration, remaining);
       lines.push(`#EXTINF:${segLen.toFixed(3)},`);
-      lines.push(`/api/stream/${mediaFileId}/${quality}/seg-${String(i).padStart(3, '0')}.ts${tokenParam}`);
+      lines.push(`/api/stream/${mediaFileId}/${quality}/seg-${String(i).padStart(4, '0')}.ts${tokenParam}`);
     }
     lines.push('#EXT-X-ENDLIST');
 

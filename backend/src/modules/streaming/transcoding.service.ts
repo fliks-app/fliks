@@ -24,6 +24,15 @@ export interface TranscodeProfile {
   audioBitrate: string;
 }
 
+export interface BurnInSubtitle {
+  /** FFmpeg -vf filter string (e.g. "subtitles='/path/to/sub.srt'") or null for image-based */
+  filter: string | null;
+  /** For image-based: stream index to overlay */
+  streamIndex?: number;
+  /** 'text' or 'image' */
+  type: 'text' | 'image';
+}
+
 export interface SessionContext {
   userId?: number;
   username?: string;
@@ -31,6 +40,9 @@ export interface SessionContext {
   mediaType?: string;
   posterUrl?: string | null;
   transcodeReasons?: { flag: string; message: string }[];
+  tonemap?: boolean;
+  burnInSubtitle?: BurnInSubtitle;
+  audioStreamIndex?: number;
 }
 
 export interface TranscodeSession {
@@ -64,9 +76,13 @@ export type HwAccelType = 'vaapi' | 'nvenc' | 'qsv' | 'none';
 // ---------------------------------------------------------------------------
 
 export const PROFILES: TranscodeProfile[] = [
+  { name: '2160p', maxWidth: 3840, maxHeight: 2160, videoBitrate: '20M', audioBitrate: '192k' },
   { name: '1080p', maxWidth: 1920, maxHeight: 1080, videoBitrate: '8M', audioBitrate: '192k' },
   { name: '720p', maxWidth: 1280, maxHeight: 720, videoBitrate: '4M', audioBitrate: '128k' },
   { name: '480p', maxWidth: 854, maxHeight: 480, videoBitrate: '2M', audioBitrate: '96k' },
+  { name: '360p', maxWidth: 640, maxHeight: 360, videoBitrate: '1M', audioBitrate: '64k' },
+  { name: '240p', maxWidth: 426, maxHeight: 240, videoBitrate: '500k', audioBitrate: '64k' },
+  { name: '144p', maxWidth: 256, maxHeight: 144, videoBitrate: '200k', audioBitrate: '48k' },
 ];
 
 async function fileExists(p: string): Promise<boolean> {
@@ -197,9 +213,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
         // If the requested segment is far ahead, restart FFmpeg with seek
         if (requestedSegment > 0) {
-          const segFile = path.join(existing.cachePath, `seg-${String(requestedSegment).padStart(3, '0')}.ts`);
+          const segFile = path.join(existing.cachePath, `seg-${String(requestedSegment).padStart(4, '0')}.ts`);
           const nearbyExists = await fileExists(segFile) ||
-            await fileExists(path.join(existing.cachePath, `seg-${String(Math.max(0, requestedSegment - 1)).padStart(3, '0')}.ts`));
+            await fileExists(path.join(existing.cachePath, `seg-${String(Math.max(0, requestedSegment - 1)).padStart(4, '0')}.ts`));
           if (!nearbyExists) {
             this.log.log(`Seek: restarting transcode [${sessionId}] from segment ${requestedSegment}`);
             this.sessions.delete(sessionId);
@@ -222,9 +238,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const sessionDir = path.join(this.cachePath, sessionId);
     await fsp.mkdir(sessionDir, { recursive: true });
 
+    const shouldTonemap = ctx?.tonemap ?? false;
+    const burnIn = ctx?.burnInSubtitle;
+    const audioIdx = ctx?.audioStreamIndex;
     const session = await this.startFfmpeg(
       sessionId, mediaFileId, quality, absolutePath, profile, sessionDir, this.detectedHwAccel,
-      requestedSegment,
+      requestedSegment, shouldTonemap, burnIn, audioIdx,
     );
     this.applyContext(session, ctx);
 
@@ -235,11 +254,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       // Wait up to 5s for the process to potentially crash
       for (let i = 0; i < 10; i++) {
         if (session.process.exitCode !== null) break;
-        const expectedSeg = path.join(sessionDir, `seg-${String(requestedSegment).padStart(3, '0')}.ts`);
+        const expectedSeg = path.join(sessionDir, `seg-${String(requestedSegment).padStart(4, '0')}.ts`);
         if (await fileExists(expectedSeg)) break;
         await new Promise((r) => setTimeout(r, 500));
       }
-      const expectedSeg = path.join(sessionDir, `seg-${String(requestedSegment).padStart(3, '0')}.ts`);
+      const expectedSeg = path.join(sessionDir, `seg-${String(requestedSegment).padStart(4, '0')}.ts`);
       const crashed = session.process.exitCode !== null && !(await fileExists(expectedSeg));
       if (crashed) {
         this.log.warn(`Transcode [${sessionId}]: HW accel (${this.detectedHwAccel}) crashed (exit=${session.process.exitCode}), falling back to CPU\n${(session.stderr ?? '').slice(-1000)}`);
@@ -247,7 +266,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         await this.killAndClean(session.process, sessionDir);
         await fsp.mkdir(sessionDir, { recursive: true });
         const cpuSession = await this.startFfmpeg(
-          sessionId, mediaFileId, quality, absolutePath, profile, sessionDir, 'none', requestedSegment,
+          sessionId, mediaFileId, quality, absolutePath, profile, sessionDir, 'none', requestedSegment, shouldTonemap, burnIn, audioIdx,
         );
         this.applyContext(cpuSession, ctx);
         this.sessions.set(sessionId, cpuSession);
@@ -317,10 +336,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     sessionDir: string,
     hwAccel: HwAccelType,
     startSegment = 0,
+    tonemap = false,
+    burnIn?: BurnInSubtitle,
+    audioStreamIndex?: number,
   ): Promise<TranscodeSession> {
     const { resolve: readyResolve, promise: readyPromise } = this.createDeferred();
 
-    const args = this.buildFfmpegArgs(absolutePath, profile, sessionDir, hwAccel, startSegment);
+    const args = this.buildFfmpegArgs(absolutePath, profile, sessionDir, hwAccel, startSegment, tonemap, burnIn, audioStreamIndex);
     this.log.log(`Transcode start [${sessionId}] (${hwAccel}): ffmpeg ${args.join(' ')}`);
 
     const proc = spawn('ffmpeg', args, {
@@ -329,7 +351,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     let stderr = '';
     let resolved = false;
-    const firstSeg = path.join(sessionDir, `seg-${String(startSegment).padStart(3, '0')}.ts`);
+    const firstSeg = path.join(sessionDir, `seg-${String(startSegment).padStart(4, '0')}.ts`);
 
     const checkReady = () => {
       if (!resolved && existsSync(firstSeg)) {
@@ -392,7 +414,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const profile = PROFILES.find((p) => p.name === quality) ?? PROFILES[0];
     const session = await this.startFfmpeg(
       sessionId, mediaFileId, quality, absolutePath, profile, sessionDir,
-      this.detectedHwAccel, startSegment,
+      this.detectedHwAccel, startSegment, ctx?.tonemap ?? false, ctx?.burnInSubtitle, ctx?.audioStreamIndex,
     );
     this.applyContext(session, ctx);
     this.sessions.set(sessionId, session);
@@ -428,6 +450,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     outputDir: string,
     hwAccel: HwAccelType,
     startSegment = 0,
+    tonemap = false,
+    burnIn?: BurnInSubtitle,
+    audioStreamIndex?: number,
   ): string[] {
     const args = ['-hide_banner', '-loglevel', 'warning'];
 
@@ -460,15 +485,29 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         '-noautorotate',
       );
     } else if (hwAccel === 'nvenc') {
-      args.push('-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda', '-noautorotate');
+      if (tonemap) {
+        // For tone mapping, don't force cuda output format — allows hwdownload to CPU
+        args.push('-hwaccel', 'cuda', '-noautorotate');
+      } else {
+        args.push('-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda', '-noautorotate');
+      }
     }
 
     args.push('-i', inputPath);
 
     // Video encoding
-    switch (hwAccel) {
+    const w = profile.maxWidth;
+    const burnInFilter = burnIn?.filter ? `,${burnIn.filter}` : '';
+    // Subtitle burn-in filters are CPU-only — force CPU pipeline when burn-in is active
+    const effectiveHwAccel = burnIn?.filter ? 'none' as HwAccelType : hwAccel;
+    const tonemapVaapi = (tonemap && !burnIn?.filter) ? ',tonemap_vaapi=format=nv12:t=bt709:m=bt709:p=bt709' : '';
+    const tonemapCpu = tonemap
+      ? `zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,`
+      : '';
+
+    switch (effectiveHwAccel) {
       case 'qsv':
-        // VAAPI decode → VAAPI scale → map to QSV → QSV encode (Jellyfin Linux pipeline)
+        // VAAPI decode → VAAPI scale (+tonemap) → map to QSV → QSV encode
         args.push(
           '-c:v', 'h264_qsv',
           '-mbbrc', '1',
@@ -476,7 +515,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           '-maxrate', String(bitrateNum + 1),
           '-rc_init_occupancy', String(bitrateNum * 2),
           '-bufsize', String(bitrateNum * 4),
-          '-vf', `scale_vaapi=w=${profile.maxWidth}:h=-2:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
+          '-vf', `scale_vaapi=w=${w}:h=-2:format=nv12:extra_hw_frames=24${tonemapVaapi},hwmap=derive_device=qsv,format=qsv`,
           '-g', String(SEGMENT_DURATION * 24),
           '-keyint_min', String(SEGMENT_DURATION * 24),
         );
@@ -486,21 +525,34 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           '-c:v', 'h264_vaapi',
           '-b:v', profile.videoBitrate,
           '-maxrate', profile.videoBitrate,
-          '-vf', `scale_vaapi=w=${profile.maxWidth}:h=-2:format=nv12`,
+          '-vf', `scale_vaapi=w=${w}:h=-2:format=nv12${tonemapVaapi}`,
           '-g', String(SEGMENT_DURATION * 24),
           '-keyint_min', String(SEGMENT_DURATION * 24),
         );
         break;
       case 'nvenc':
-        args.push(
-          '-c:v', 'h264_nvenc',
-          '-preset', 'p4',
-          '-b:v', profile.videoBitrate,
-          '-maxrate', profile.videoBitrate,
-          '-vf', `scale=${profile.maxWidth}:-2`,
-          '-g', String(SEGMENT_DURATION * 24),
-          '-keyint_min', String(SEGMENT_DURATION * 24),
-        );
+        if (tonemap) {
+          // No native GPU tone mapping — download from GPU, tonemap on CPU, encode with NVENC
+          args.push(
+            '-c:v', 'h264_nvenc',
+            '-preset', 'p4',
+            '-b:v', profile.videoBitrate,
+            '-maxrate', profile.videoBitrate,
+            '-vf', `hwdownload,format=p010le,${tonemapCpu}scale=${w}:-2`,
+            '-g', String(SEGMENT_DURATION * 24),
+            '-keyint_min', String(SEGMENT_DURATION * 24),
+          );
+        } else {
+          args.push(
+            '-c:v', 'h264_nvenc',
+            '-preset', 'p4',
+            '-b:v', profile.videoBitrate,
+            '-maxrate', profile.videoBitrate,
+            '-vf', `scale=${w}:-2`,
+            '-g', String(SEGMENT_DURATION * 24),
+            '-keyint_min', String(SEGMENT_DURATION * 24),
+          );
+        }
         break;
       default:
         args.push(
@@ -509,7 +561,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           '-b:v', profile.videoBitrate,
           '-maxrate', profile.videoBitrate,
           '-bufsize', `${parseInt(profile.videoBitrate) * 2}M`,
-          '-vf', `scale=${profile.maxWidth}:-2`,
+          '-vf', `${tonemapCpu}scale=${w}:-2${burnInFilter}`,
           // Force keyframes at segment boundaries + disable scene-change keyframes
           '-force_key_frames', `expr:gte(t,n_forced*${SEGMENT_DURATION})`,
           '-sc_threshold:v:0', '0',
@@ -517,7 +569,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         break;
     }
 
-    // Audio
+    // Audio — select specific audio stream if requested
+    if (audioStreamIndex != null) {
+      args.push('-map', '0:v:0', '-map', `0:a:${audioStreamIndex}`);
+    }
     args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
 
     // HLS output
@@ -526,7 +581,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       '-hls_time', String(SEGMENT_DURATION),
       '-hls_list_size', '0',
       '-start_number', String(startSegment),
-      '-hls_segment_filename', path.join(outputDir, 'seg-%03d.ts'),
+      '-hls_segment_filename', path.join(outputDir, 'seg-%04d.ts'),
       '-hls_flags', 'independent_segments',
       path.join(outputDir, 'index.m3u8'),
     );
@@ -570,7 +625,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       '-hls_list_size', '0',
       '-start_number', String(startSegment),
       '-hls_segment_type', 'mpegts',
-      '-hls_segment_filename', path.join(outputDir, 'seg-%03d.ts'),
+      '-hls_segment_filename', path.join(outputDir, 'seg-%04d.ts'),
       '-hls_flags', 'independent_segments',
       path.join(outputDir, 'index.m3u8'),
     );
@@ -601,9 +656,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         existing.lastAccess = Date.now();
 
         if (requestedSegment > 0) {
-          const segFile = path.join(existing.cachePath, `seg-${String(requestedSegment).padStart(3, '0')}.ts`);
+          const segFile = path.join(existing.cachePath, `seg-${String(requestedSegment).padStart(4, '0')}.ts`);
           const nearbyExists = await fileExists(segFile) ||
-            await fileExists(path.join(existing.cachePath, `seg-${String(Math.max(0, requestedSegment - 1)).padStart(3, '0')}.ts`));
+            await fileExists(path.join(existing.cachePath, `seg-${String(Math.max(0, requestedSegment - 1)).padStart(4, '0')}.ts`));
           if (!nearbyExists) {
             this.log.log(`Seek: restarting remux [${sessionId}] from segment ${requestedSegment}`);
             this.sessions.delete(sessionId);
@@ -632,7 +687,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     let stderr = '';
     let resolved = false;
-    const firstSeg = path.join(sessionDir, `seg-${String(requestedSegment).padStart(3, '0')}.ts`);
+    const firstSeg = path.join(sessionDir, `seg-${String(requestedSegment).padStart(4, '0')}.ts`);
 
     const checkReady = () => {
       if (!resolved && existsSync(firstSeg)) {

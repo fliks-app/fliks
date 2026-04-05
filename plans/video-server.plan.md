@@ -25,16 +25,55 @@
 - ✅ Buffer 60s en avance
 - ✅ Barre de progression custom avec zone bufferisée
 - ✅ Mémorisation langue sous-titres (localStorage)
+- ✅ Sous-titres via Shaka API (fonctionne sur Android WebView)
+- ✅ Fallback CPU intelligent (ne fallback que si FFmpeg crash, pas si lent avec seek)
+- ✅ Icônes Lucide (@lucide/angular) dans tout le frontend
 - ⬜ Settings page streaming (HW accel, qualité par défaut, max sessions)
 
-### Phase 2.5 : Dashboard flux actifs — 🆕 À FAIRE
-- ⬜ Endpoint admin : sessions de transcodage en cours + qui regarde quoi
-- ⬜ Page admin : tableau temps réel des flux actifs (user, média, qualité, durée, HW accel)
-- ⬜ Actions admin : kill session, voir stats
+### Phase 2.5 : Dashboard activités vidéos — ✅ TERMINÉE
+- ✅ ActiveStreamTracker : sessions direct play en mémoire (Map + cleanup 30s)
+- ✅ Contexte user/media sur les sessions transcode (userId, username, titre, poster)
+- ✅ GET /api/system/streams : merge transcode + direct play, infos stream complètes
+- ✅ DELETE /api/system/streams/:sessionId : kill session
+- ✅ POST /api/system/streams/:sessionId/command : pause/play/stop à distance via SSE
+- ✅ Frontend : cards style Emby (poster, progression, buffer transcodage, flux/vidéo/audio détaillés)
+- ✅ Raisons de transcodage par catégorie (vidéo/audio/conteneur)
+- ✅ Liens cliquables vers média et épisode
+- ✅ Résolution affichée = qualité cible (pas source) pour le transcodage
+- ✅ Dédup par user+file (changement de qualité ne crée pas de doublon)
+- ✅ Auto-refresh 5s
+- ✅ Onglet "Activités vidéos" dans la page System
 
-### Phase 3 : HDR Tone Mapping — ⬜ À FAIRE
-### Phase 4 : Chromecast + DLNA — ⬜ À FAIRE
-### Phase 5 : Sous-titres avancés (burn-in) — ⬜ À FAIRE
+### Phase 3 : HDR Tone Mapping — ✅ TERMINÉE
+- ✅ Extraction couleur ffprobe (colorSpace, colorTransfer, colorPrimaries, hdrFormat)
+- ✅ Détection HDR client (matchMedia dynamic-range + codec 10-bit)
+- ✅ Décision HDR-aware (HDR+SDR client → force transcode, HDR+HDR client → direct play)
+- ✅ Tone mapping GPU : tonemap_vaapi pour QSV/VAAPI
+- ✅ Tone mapping CPU : zscale+tonemap pour CPU et NVENC (hwdownload)
+- ✅ Badge HDR10/HLG dans les stats player (remplace le naïf bitDepth>=10)
+- ✅ Indicateur "HDR → SDR" dans le mode vidéo des stats
+- ✅ Raison transcodage "HDR → SDR (tone mapping HDR10)"
+- ✅ Rescan auto des fichiers existants sans métadonnées couleur
+- ✅ tonemapping flag dans PlaybackInfoResponse
+### Phase 4 : Chromecast — ✅ TERMINÉE
+- ✅ Custom Web Receiver (cast-receiver.html avec CAF SDK, servi via ServeStaticModule)
+- ✅ Cast Sender SDK chargé dans index.html
+- ✅ CastService Angular (signals isAvailable/isConnected, loadMedia, play/pause/seek/stop)
+- ✅ Bouton Cast dans le player (icône Lucide, bleu quand connecté)
+- ✅ Transfert de playback : pause locale → envoie HLS au Chromecast avec position
+- ✅ Retour de Cast : reprend lecture locale à la position du Cast
+- ✅ URLs absolues pour Cast (getAbsoluteHlsUrl, getAbsoluteSubtitleUrl)
+- ✅ Sous-titres WebVTT passés au receiver en sidecar
+- ✅ Metadata (titre, poster) affichés sur la TV
+### Phase 5 : Sous-titres avancés (burn-in) — ✅ TERMINÉE
+- ✅ Classification bitmap vs texte (isImageBased dans SubtitleStreamInfo)
+- ✅ SubtitleBurnInService : résolution chemin/extraction pour FFmpeg
+- ✅ Filtres FFmpeg burn-in : subtitles=/ass= (CPU forcé quand burn-in actif)
+- ✅ StreamBuilder force transcode quand burn-in demandé
+- ✅ Endpoint playback-info accepte burnInSubtitleId
+- ✅ Frontend : bitmap subs (PGS) visibles dans la liste avec badge "gravé"
+- ✅ Sélection burn-in recharge le stream HLS avec le sous-titre gravé
+- ✅ Désélection revient au stream normal
 ### Phase 6 : Watch Together + Profils — ⬜ À FAIRE
 
 ---
@@ -422,9 +461,9 @@ interface ClientCapabilities {
 
 ---
 
-## Phase 4 : Chromecast + DLNA
+## Phase 4 : Chromecast
 
-**Objectif** : Diffuser le contenu sur Chromecast, Google TV, et appareils DLNA.
+**Objectif** : Diffuser le contenu sur Chromecast et Google TV.
 
 ### Backend
 
@@ -459,11 +498,6 @@ npm install chromecast-caf-sender  # ou script Google Cast SDK
 #### 4.4 App native (Capacitor)
 - iOS : `GCKCastContext` via plugin Capacitor custom ou `@nicandor/capacitor-google-cast`
 - Android : Cast SDK natif via plugin Capacitor
-
-#### 4.5 DLNA/UPnP (optionnel)
-- Backend : serveur DLNA basique avec `node-ssdp` + `upnp-mediaserver`
-- Expose la bibliothèque aux TV connectées et lecteurs DLNA
-- Plus simple que Chromecast mais couverture plus large
 
 ### Vérification Phase 4
 - Chrome desktop → icône Cast visible, sélection du Chromecast, lecture
@@ -530,14 +564,16 @@ Phase 1 (Direct Play)          ✅ TERMINÉE
   └─ Player fonctionnel, resume, sous-titres client-side
 Phase 2 (Transcodage)          ✅ TERMINÉE (sauf settings page)
   └─ HLS adaptatif, GPU, multi-qualité
-Phase 2.5 (Dashboard flux)     ← PROCHAINE ÉTAPE
-  └─ Admin : voir qui regarde quoi, kill sessions
+Phase 2.5 (Dashboard vidéos)   ✅ TERMINÉE
+  └─ Admin : cards Emby, pause/stop à distance, raisons transcodage
+Phase 3 (HDR Tone Mapping)     ✅ TERMINÉE
+  └─ Détection HDR, tonemap_vaapi/zscale, badges HDR10/HLG
 Phase 3 (HDR Tone Mapping)
   └─ Détection HDR, conversion SDR automatique
 Phase 5 (Burn-in sous-titres)
   └─ ASS/PGS gravés pour Chromecast
 Phase 4 (Chromecast)
-  └─ Cast SDK, receiver, DLNA
+  └─ Cast SDK, receiver
 Phase 6 (Watch Together)
   └─ Profils, sync multi-utilisateurs
 ```

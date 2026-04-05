@@ -12,6 +12,7 @@ import { TranscodingService } from './transcoding.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { PlaybackService } from './playback.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
+import { SubtitleBurnInService } from './subtitle-burn-in.service';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
@@ -20,7 +21,7 @@ import { AuthModule } from '../auth/auth.module';
     AuthModule,
   ],
   controllers: [StreamingController, PlaybackController],
-  providers: [StreamingService, SubtitleStreamService, TranscodingService, StreamBuilderService, PlaybackService, ActiveStreamTracker],
+  providers: [StreamingService, SubtitleStreamService, TranscodingService, StreamBuilderService, PlaybackService, ActiveStreamTracker, SubtitleBurnInService],
   exports: [PlaybackService, TranscodingService, ActiveStreamTracker],
 })
 export class StreamingModule {}

@@ -1,8 +1,10 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   input,
   output,
+  signal,
 } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
 import {
@@ -16,6 +18,8 @@ import {
   LucideRotateCw,
   LucideSettings,
   LucideSkipForward,
+  LucideCast,
+  LucideHeadphones,
   LucideVolume2,
   LucideVolumeX,
 } from '@lucide/angular';
@@ -34,6 +38,8 @@ import {
     LucideRotateCw,
     LucideSettings,
     LucideSkipForward,
+    LucideCast,
+    LucideHeadphones,
     LucideVolume2,
     LucideVolumeX,
   ],
@@ -58,10 +64,14 @@ export class PlayerControlsComponent {
   readonly isNative = input(false);
   readonly subtitlePickerOpen = input(false);
   readonly qualityPickerOpen = input(false);
-  readonly availableSubtitles = input<{ id: string; label: string }[]>([]);
+  readonly availableSubtitles = input<{ id: string; label: string; burnIn?: boolean }[]>([]);
   readonly availableQualities = input<{ id: string; label: string }[]>([]);
   readonly activeSubtitleId = input<string | null>(null);
   readonly activeQualityId = input('auto');
+  readonly availableAudioTracks = input<{ id: string; label: string }[]>([]);
+  readonly activeAudioTrackId = input<string | null>(null);
+  readonly castAvailable = input(false);
+  readonly castConnected = input(false);
 
   readonly togglePlay = output<void>();
   readonly tapOverlay = output<void>();
@@ -79,8 +89,17 @@ export class PlayerControlsComponent {
   readonly nextEpisode = output<void>();
   readonly prevEpisode = output<void>();
   readonly back = output<void>();
+  readonly selectAudioTrack = output<string>();
+  readonly toggleCast = output<void>();
 
   readonly speedOptions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+
+  // Progress bar drag state
+  readonly dragging = signal(false);
+  readonly dragTime = signal(0);
+  /** After seek release, hold the drag position until currentTime catches up */
+  readonly seekPending = signal(false);
+  private seekTarget = 0;
 
   formatTime(seconds: number): string {
     if (!seconds || !isFinite(seconds)) return '0:00';
@@ -106,28 +125,56 @@ export class PlayerControlsComponent {
     this.volumeChange.emit(value);
   }
 
-  onProgressClick(event: MouseEvent) {
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-    this.seek.emit(ratio * (this.duration() || 0));
-  }
+  /** The displayed position: dragTime during drag/seekPending, currentTime otherwise */
+  readonly displayTime = computed(() => {
+    if (this.dragging()) return this.dragTime();
+    if (this.seekPending()) {
+      // Check if currentTime caught up — clear seekPending outside render via setTimeout
+      if (Math.abs(this.currentTime() - this.seekTarget) < 2) {
+        setTimeout(() => this.seekPending.set(false), 0);
+        return this.currentTime();
+      }
+      return this.dragTime();
+    }
+    return this.currentTime();
+  });
 
-  onProgressDrag(event: PointerEvent) {
+  readonly displayPercent = computed(() => {
+    const d = this.duration() || 1;
+    return (this.displayTime() / d) * 100;
+  });
+
+  onProgressDown(event: PointerEvent) {
     const bar = event.currentTarget as HTMLElement;
     bar.setPointerCapture(event.pointerId);
+    event.preventDefault();
+
+    this.dragging.set(true);
+    this.updateDragFromPointer(event, bar);
 
     const onMove = (e: PointerEvent) => {
-      const rect = bar.getBoundingClientRect();
-      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      this.seek.emit(ratio * (this.duration() || 0));
+      this.updateDragFromPointer(e, bar);
     };
 
     const onUp = () => {
       bar.removeEventListener('pointermove', onMove);
       bar.removeEventListener('pointerup', onUp);
+      bar.removeEventListener('pointercancel', onUp);
+      this.dragging.set(false);
+      // Keep showing dragTime until currentTime catches up
+      this.seekTarget = this.dragTime();
+      this.seekPending.set(true);
+      this.seek.emit(this.seekTarget);
     };
 
     bar.addEventListener('pointermove', onMove);
     bar.addEventListener('pointerup', onUp);
+    bar.addEventListener('pointercancel', onUp);
+  }
+
+  private updateDragFromPointer(e: PointerEvent, bar: HTMLElement) {
+    const rect = bar.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    this.dragTime.set(ratio * (this.duration() || 0));
   }
 }

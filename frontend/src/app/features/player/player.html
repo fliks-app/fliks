@@ -1,7 +1,29 @@
+<!-- Cast remote overlay (on top when casting) -->
+@if (castService.isConnected()) {
+  <app-cast-remote
+    [mediaTitle]="mediaTitle()"
+    [episodeTitle]="episodeTitle()"
+    [fanartUrl]="fanartUrl()"
+    [availableSubtitles]="castSubtitleOptions()"
+    [availableAudioTracks]="availableAudioTracks()"
+    [availableQualities]="castQualityOptions()"
+    [initialSubtitleId]="activeSubtitleId()"
+    [initialQualityId]="activeQualityId()"
+    [initialAudioTrackId]="activeAudioTrackId()"
+    (back)="onBack()"
+    (disconnect)="onDisconnectCast()"
+    (selectBurnIn)="onCastBurnIn($event)"
+    (qualityChange)="onCastQualityChange($event)"
+    (audioChange)="onCastAudioChange($event)"
+  />
+}
+
+<!-- Local player (always in DOM, hidden when casting) -->
 <div
   #playerContainer
   class="player-container"
   [class.hide-cursor]="!controlsVisible()"
+  [class.hidden]="castService.isConnected()"
   (mousemove)="isNative ? null : showControls()"
 >
   <!-- Backdrop shown while video loads -->
@@ -22,7 +44,6 @@
   @if (error()) {
     <div class="absolute inset-0 flex items-center justify-center z-50">
       <div class="text-center text-white">
-        <!-- lucide:circle-alert -->
         <svg lucideCircleAlert class="h-12 w-12 mx-auto mb-4 text-error"></svg>
         <p class="text-lg font-medium">{{ 'player.error' | translate }}</p>
         <p class="text-sm text-white/60 mt-1">{{ error() }}</p>
@@ -52,7 +73,7 @@
     [episodeTitle]="episodeTitle()"
     [hasNextEpisode]="false"
     [hasPrevEpisode]="false"
-    [activeQualityLabel]="activeQualityId() === 'auto' ? 'Auto' : activeQualityId()"
+    [activeQualityLabel]="activeQualityId() === 'auto' ? (activeResolution() ? 'Auto (' + activeResolution() + ')' : 'Auto') : activeQualityId()"
     [isNative]="isNative"
     (togglePlay)="onTogglePlay()"
     (tapOverlay)="toggleControls()"
@@ -65,11 +86,17 @@
     [availableQualities]="availableQualities()"
     [activeSubtitleId]="activeSubtitleId()"
     [activeQualityId]="activeQualityId()"
+    [availableAudioTracks]="availableAudioTracks()"
+    [activeAudioTrackId]="activeAudioTrackId()"
     (selectSubtitle)="onSelectSubtitleById($event)"
     (selectQuality)="onSelectQualityById($event)"
+    (selectAudioTrack)="onSelectAudioTrack($event)"
     (toggleStats)="statsVisible.set(!statsVisible())"
     (speedChange)="onSpeedChange($event)"
     (back)="onBack()"
+    [castAvailable]="castService.isAvailable()"
+    [castConnected]="castService.isConnected()"
+    (toggleCast)="onToggleCast()"
   />
   }
 
@@ -78,5 +105,4 @@
     [stats]="playerStats()"
     (close)="onCloseStats()"
   />
-
 </div>

@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
+import { CastService } from '../cast.service';
 import { DeviceProfile } from '../browser-device-profile.service';
 
 export type PlayMethod = 'DirectPlay' | 'DirectStream' | 'Transcode';
@@ -19,6 +20,7 @@ export interface PlaybackInfoResponse {
   outputAudioCodec: string;
   outputContainer: string;
   hwAccel: string;
+  tonemapping: boolean;
   source: {
     container: string;
     videoCodec: string;
@@ -36,6 +38,10 @@ export interface PlaybackInfoResponse {
     audioSampleRate?: number;
     audioLanguage?: string;
     durationSeconds?: number;
+    hdrFormat?: string;
+    colorSpace?: string;
+    colorTransfer?: string;
+    colorPrimaries?: string;
   };
 }
 
@@ -70,6 +76,7 @@ export class StreamingApiService {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
   private readonly serverConfig = inject(ServerConfigService);
+  private readonly castService = inject(CastService);
 
   /** Build authenticated HLS master playlist URL */
   getHlsUrl(mediaFileId: number): string {
@@ -107,6 +114,43 @@ export class StreamingApiService {
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
 
+  /**
+   * Always-absolute URL for Cast (Chromecast needs full LAN hostname).
+   * Uses castServerUrl if configured, otherwise derives from current origin.
+   */
+  private absoluteUrl(path: string): string {
+    if (this.serverConfig.isNative) return this.serverConfig.resolveUrl(path);
+    const lanUrl = this.castService.serverLanUrl();
+    if (lanUrl) return `${lanUrl}${path}`;
+    return `${window.location.origin}${path}`;
+  }
+
+  private appendToken(url: string, token: string): string {
+    return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+  }
+
+  private withToken(url: string): string {
+    const token = this.auth.accessToken;
+    return token ? this.appendToken(url, token) : url;
+  }
+
+  /** Build Cast URLs with a temporary token */
+  getAbsoluteHlsUrl(mediaFileId: number, castToken: string): string {
+    return this.appendToken(this.absoluteUrl(`/api/stream/${mediaFileId}/master.m3u8`), castToken);
+  }
+
+  getAbsoluteStreamUrl(mediaFileId: number, castToken: string): string {
+    return this.appendToken(this.absoluteUrl(`/api/stream/${mediaFileId}`), castToken);
+  }
+
+  getAbsoluteSubtitleUrl(mediaFileId: number, subtitleId: number, castToken: string): string {
+    return this.appendToken(this.absoluteUrl(`/api/stream/${mediaFileId}/subtitles/${subtitleId}`), castToken);
+  }
+
+  getAbsoluteEmbeddedSubtitleUrl(mediaFileId: number, streamIndex: number, castToken: string): string {
+    return this.appendToken(this.absoluteUrl(`/api/stream/${mediaFileId}/subtitles/embedded/${streamIndex}`), castToken);
+  }
+
   getHwAccelInfo() {
     return firstValueFrom(
       this.http.get<{ hwAccel: string }>('/api/stream/info/hw-accel'),
@@ -116,12 +160,18 @@ export class StreamingApiService {
   /**
    * Ask the backend to decide how to play this file based on client capabilities.
    */
-  getPlaybackInfo(mediaFileId: number, deviceProfile: DeviceProfile): Promise<PlaybackInfoResponse> {
+  getPlaybackInfo(mediaFileId: number, deviceProfile: DeviceProfile, burnInSubtitleId?: number, audioStreamIndex?: number): Promise<PlaybackInfoResponse> {
     const token = this.auth.accessToken;
-    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+    let params = token ? `?token=${encodeURIComponent(token)}` : '';
+    if (burnInSubtitleId) {
+      params += (params ? '&' : '?') + `burnInSubtitleId=${burnInSubtitleId}`;
+    }
+    if (audioStreamIndex != null) {
+      params += (params ? '&' : '?') + `audioStreamIndex=${audioStreamIndex}`;
+    }
     return firstValueFrom(
       this.http.post<PlaybackInfoResponse>(
-        `/api/stream/${mediaFileId}/playback-info${tokenParam}`,
+        `/api/stream/${mediaFileId}/playback-info${params}`,
         deviceProfile,
       ),
     );

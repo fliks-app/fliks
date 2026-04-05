@@ -62,12 +62,47 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     this.sessions.delete(`${userId}-${mediaFileId}`);
   }
 
+  private readonly tonemappingCache = new Map<number, boolean>();
+
   setTranscodeReasons(mediaFileId: number, reasons: { flag: string; message: string }[]) {
     this.transcodeReasonsCache.set(mediaFileId, reasons);
   }
 
   getTranscodeReasons(mediaFileId: number): { flag: string; message: string }[] {
     return this.transcodeReasonsCache.get(mediaFileId) ?? [];
+  }
+
+  private readonly burnInCache = new Map<number, any>();
+
+  setTonemapping(mediaFileId: number, value: boolean) {
+    this.tonemappingCache.set(mediaFileId, value);
+  }
+
+  getTonemapping(mediaFileId: number): boolean {
+    return this.tonemappingCache.get(mediaFileId) ?? false;
+  }
+
+  setBurnIn(mediaFileId: number, info: any) {
+    if (info) {
+      this.burnInCache.set(mediaFileId, info);
+    } else {
+      this.burnInCache.delete(mediaFileId);
+    }
+  }
+
+  getBurnIn(mediaFileId: number): any {
+    return this.burnInCache.get(mediaFileId) ?? undefined;
+  }
+
+  private readonly audioStreamIndexCache = new Map<number, number | undefined>();
+
+  setAudioStreamIndex(mediaFileId: number, index: number | undefined) {
+    if (index != null) this.audioStreamIndexCache.set(mediaFileId, index);
+    else this.audioStreamIndexCache.delete(mediaFileId);
+  }
+
+  getAudioStreamIndex(mediaFileId: number): number | undefined {
+    return this.audioStreamIndexCache.get(mediaFileId);
   }
 
   getActive(): DirectPlaySession[] {

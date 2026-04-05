@@ -1,4 +1,10 @@
 import { Injectable } from '@angular/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+interface HdrPlugin {
+  isSupported(): Promise<{ supported: boolean }>;
+}
+const Hdr = registerPlugin<HdrPlugin>('Hdr');
 
 /**
  * Builds a DeviceProfile by probing actual browser capabilities via canPlayType()
@@ -27,11 +33,22 @@ export interface DeviceProfile {
   maxAudioChannels: number;
   supportsHlsFmp4: boolean;
   supportsHlsTs: boolean;
+  supportsHdr: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
 export class BrowserDeviceProfileService {
   private cachedProfile: DeviceProfile | null = null;
+  private nativeHdr: boolean | null = null;
+
+  constructor() {
+    // Pre-fetch native HDR capability (async, cached for later sync use)
+    if (Capacitor.isNativePlatform()) {
+      Hdr.isSupported()
+        .then((r) => { this.nativeHdr = r.supported; })
+        .catch(() => { this.nativeHdr = false; });
+    }
+  }
 
   /**
    * Build the device profile. Cached after first call.
@@ -131,6 +148,17 @@ export class BrowserDeviceProfileService {
                            this.testType(video, false, 'application/vnd.apple.mpegurl');
     const supportsHlsFmp4 = hasMSE; // Shaka/hls.js can handle fMP4 via MSE
 
+    // --- HDR support ---
+    let supportsHdr: boolean;
+    if (Capacitor.isNativePlatform()) {
+      // Use native plugin result (pre-fetched in constructor). Default true if not yet resolved.
+      supportsHdr = this.nativeHdr ?? true;
+    } else {
+      const hdrDisplay = typeof matchMedia !== 'undefined' && matchMedia('(dynamic-range: high)').matches;
+      const has10bitCodec = codecConditions.some(c => (c.maxBitDepth ?? 0) >= 10);
+      supportsHdr = hdrDisplay && has10bitCodec;
+    }
+
     return {
       directPlayProfiles: [{
         containers,
@@ -142,6 +170,7 @@ export class BrowserDeviceProfileService {
       maxAudioChannels,
       supportsHlsFmp4,
       supportsHlsTs,
+      supportsHdr,
     };
   }
 
