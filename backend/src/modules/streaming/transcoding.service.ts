@@ -69,6 +69,11 @@ export interface TranscodeSession {
   stderr?: string;
 }
 
+/** Build the session map key: one transcode per user per file (like Jellyfin/Plex). */
+function sessionKey(mediaFileId: number, userId?: number): string {
+  return userId != null ? `${mediaFileId}-u${userId}` : `${mediaFileId}-anon`;
+}
+
 export type HwAccelType = 'vaapi' | 'nvenc' | 'qsv' | 'none';
 
 // ---------------------------------------------------------------------------
@@ -91,7 +96,7 @@ async function fileExists(p: string): Promise<boolean> {
 
 const SEGMENT_DURATION = 6;
 const SESSION_TIMEOUT_MS = 60 * 1000; // 60s (like Jellyfin HLS timeout)
-const MAX_SESSIONS = 3;
+const MAX_SESSIONS = 4;
 
 @Injectable()
 export class TranscodingService implements OnModuleInit, OnModuleDestroy {
@@ -129,14 +134,23 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return Array.from(this.sessions.values());
   }
 
-  /** Estimate transcode progress as a percentage (0-100) by counting segments on disk. */
+  /** Estimate transcode progress as a percentage (0-100) by looking at the highest segment on disk. */
   async getTranscodePercent(session: TranscodeSession, durationSeconds: number): Promise<number> {
     if (!durationSeconds || durationSeconds <= 0) return 0;
     try {
       const files = await fsp.readdir(session.cachePath);
-      const segCount = files.filter((f) => f.endsWith('.ts')).length;
-      const transcodedSeconds = segCount * SEGMENT_DURATION;
-      return Math.min(100, (transcodedSeconds / durationSeconds) * 100);
+      // Find the highest segment number (accounts for seek restarts)
+      let maxSeg = -1;
+      for (const f of files) {
+        const m = f.match(/^seg-(\d+)\.ts$/);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (n > maxSeg) maxSeg = n;
+        }
+      }
+      if (maxSeg < 0) return 0;
+      const transcodedUpTo = (maxSeg + 1) * SEGMENT_DURATION;
+      return Math.min(100, (transcodedUpTo / durationSeconds) * 100);
     } catch {
       return 0;
     }
@@ -190,7 +204,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Start or retrieve a transcode session. Returns the session cache path.
+   * Start or retrieve a transcode session.
+   * Key: one session per user per file (like Jellyfin/Plex).
+   * If the user requests a different quality, the old session is killed first.
    */
   async getOrCreateSession(
     mediaFileId: number,
@@ -199,14 +215,20 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     requestedSegment = 0,
     ctx?: SessionContext,
   ): Promise<TranscodeSession> {
-    const sessionId = `${mediaFileId}-${quality}`;
-    const existing = this.sessions.get(sessionId);
+    const key = sessionKey(mediaFileId, ctx?.userId);
+    const existing = this.sessions.get(key);
     if (existing) {
       // If FFmpeg process has exited, clean up and start fresh
       if (existing.process.exitCode !== null) {
-        this.log.warn(`Session [${sessionId}]: FFmpeg already exited (code ${existing.process.exitCode}), restarting`);
-        this.sessions.delete(sessionId);
+        this.log.warn(`Session [${key}]: FFmpeg already exited (code ${existing.process.exitCode}), restarting`);
+        this.sessions.delete(key);
         await fsp.rm(existing.cachePath, { recursive: true, force: true });
+        // Fall through to create a new session below
+      } else if (existing.quality !== quality || existing.remux) {
+        // Quality changed (or switching from remux to transcode) — kill old, start new
+        this.log.log(`Quality change [${key}]: ${existing.quality} → ${quality}, killing old session`);
+        this.sessions.delete(key);
+        await this.killAndClean(existing.process, existing.cachePath);
         // Fall through to create a new session below
       } else {
         existing.lastAccess = Date.now();
@@ -217,11 +239,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           const nearbyExists = await fileExists(segFile) ||
             await fileExists(path.join(existing.cachePath, `seg-${String(Math.max(0, requestedSegment - 1)).padStart(4, '0')}.ts`));
           if (!nearbyExists) {
-            this.log.log(`Seek: restarting transcode [${sessionId}] from segment ${requestedSegment}`);
-            this.sessions.delete(sessionId);
+            this.log.log(`Seek: restarting transcode [${key}] from segment ${requestedSegment}`);
+            this.sessions.delete(key);
             await this.killAndClean(existing.process, existing.cachePath);
             await fsp.mkdir(existing.cachePath, { recursive: true });
-            return this.startSeekSession(sessionId, mediaFileId, quality, absolutePath, existing.cachePath, requestedSegment, ctx);
+            return this.startSeekSession(key, mediaFileId, quality, absolutePath, existing.cachePath, requestedSegment, ctx);
           }
         }
 
@@ -235,14 +257,14 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     }
 
     const profile = PROFILES.find((p) => p.name === quality) ?? PROFILES[0];
-    const sessionDir = path.join(this.cachePath, sessionId);
+    const sessionDir = path.join(this.cachePath, key);
     await fsp.mkdir(sessionDir, { recursive: true });
 
     const shouldTonemap = ctx?.tonemap ?? false;
     const burnIn = ctx?.burnInSubtitle;
     const audioIdx = ctx?.audioStreamIndex;
     const session = await this.startFfmpeg(
-      sessionId, mediaFileId, quality, absolutePath, profile, sessionDir, this.detectedHwAccel,
+      key, mediaFileId, quality, absolutePath, profile, sessionDir, this.detectedHwAccel,
       requestedSegment, shouldTonemap, burnIn, audioIdx,
     );
     this.applyContext(session, ctx);
@@ -261,15 +283,15 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       const expectedSeg = path.join(sessionDir, `seg-${String(requestedSegment).padStart(4, '0')}.ts`);
       const crashed = session.process.exitCode !== null && !(await fileExists(expectedSeg));
       if (crashed) {
-        this.log.warn(`Transcode [${sessionId}]: HW accel (${this.detectedHwAccel}) crashed (exit=${session.process.exitCode}), falling back to CPU\n${(session.stderr ?? '').slice(-1000)}`);
-        this.sessions.delete(sessionId);
+        this.log.warn(`Transcode [${key}]: HW accel (${this.detectedHwAccel}) crashed (exit=${session.process.exitCode}), falling back to CPU\n${(session.stderr ?? '').slice(-1000)}`);
+        this.sessions.delete(key);
         await this.killAndClean(session.process, sessionDir);
         await fsp.mkdir(sessionDir, { recursive: true });
         const cpuSession = await this.startFfmpeg(
-          sessionId, mediaFileId, quality, absolutePath, profile, sessionDir, 'none', requestedSegment, shouldTonemap, burnIn, audioIdx,
+          key, mediaFileId, quality, absolutePath, profile, sessionDir, 'none', requestedSegment, shouldTonemap, burnIn, audioIdx,
         );
         this.applyContext(cpuSession, ctx);
-        this.sessions.set(sessionId, cpuSession);
+        this.sessions.set(key, cpuSession);
         return cpuSession;
       }
     }
@@ -303,8 +325,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   async getSegmentPath(session: TranscodeSession, segmentName: string): Promise<string | null> {
     const segPath = path.join(session.cachePath, segmentName);
 
-    // Wait up to 30s for the segment to appear
-    for (let i = 0; i < 60; i++) {
+    // Wait up to 60s for the segment to appear (GPU can be slow when multiple transcodes run)
+    for (let i = 0; i < 120; i++) {
       // If FFmpeg has exited, stop waiting immediately
       if (session.process.exitCode !== null && !(await fileExists(segPath))) {
         this.log.warn(`Segment ${segmentName} unavailable: FFmpeg exited with code ${session.process.exitCode}`);
@@ -421,11 +443,19 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return session;
   }
 
-  killSession(mediaFileId: number, quality: string) {
-    const sessionId = `${mediaFileId}-${quality}`;
-    const session = this.sessions.get(sessionId);
+  killSession(mediaFileId: number, userId?: number) {
+    const key = sessionKey(mediaFileId, userId);
+    const session = this.sessions.get(key);
     if (!session) return;
-    this.sessions.delete(sessionId);
+    this.sessions.delete(key);
+    this.gracefulKill(session);
+  }
+
+  /** Kill a session by its map key (used by admin dashboard). */
+  killSessionById(id: string) {
+    const session = this.sessions.get(id);
+    if (!session) return;
+    this.sessions.delete(id);
     this.gracefulKill(session);
   }
 
@@ -471,6 +501,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args.push(
         '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
         '-init_hw_device', 'qsv=qs@va',
+      );
+      if (tonemap) {
+        args.push('-init_hw_device', 'opencl=ocl:0.0', '-filter_hw_device', 'ocl');
+      }
+      args.push(
         '-hwaccel', 'vaapi',
         '-hwaccel_output_format', 'vaapi',
         '-hwaccel_device', 'va',
@@ -479,6 +514,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     } else if (hwAccel === 'vaapi') {
       args.push(
         '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
+      );
+      if (tonemap) {
+        args.push('-init_hw_device', 'opencl=ocl:0.0', '-filter_hw_device', 'ocl');
+      }
+      args.push(
         '-hwaccel', 'vaapi',
         '-hwaccel_output_format', 'vaapi',
         '-hwaccel_device', 'va',
@@ -500,35 +540,62 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const burnInFilter = burnIn?.filter ? `,${burnIn.filter}` : '';
     // Subtitle burn-in filters are CPU-only — force CPU pipeline when burn-in is active
     const effectiveHwAccel = burnIn?.filter ? 'none' as HwAccelType : hwAccel;
-    const tonemapVaapi = (tonemap && !burnIn?.filter) ? ',tonemap_vaapi=format=nv12:t=bt709:m=bt709:p=bt709' : '';
+    const tonemapOpencl = (tonemap && !burnIn?.filter)
+      ? ',hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0'
+      : '';
     const tonemapCpu = tonemap
-      ? `zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,`
+      ? `zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,`
       : '';
 
     switch (effectiveHwAccel) {
       case 'qsv':
-        // VAAPI decode → VAAPI scale (+tonemap) → map to QSV → QSV encode
-        args.push(
-          '-c:v', 'h264_qsv',
-          '-mbbrc', '1',
-          '-b:v', String(bitrateNum),
-          '-maxrate', String(bitrateNum + 1),
-          '-rc_init_occupancy', String(bitrateNum * 2),
-          '-bufsize', String(bitrateNum * 4),
-          '-vf', `scale_vaapi=w=${w}:h=-2:format=nv12:extra_hw_frames=24${tonemapVaapi},hwmap=derive_device=qsv,format=qsv`,
-          '-g', String(SEGMENT_DURATION * 24),
-          '-keyint_min', String(SEGMENT_DURATION * 24),
-        );
+        // VAAPI decode → VAAPI scale → (OpenCL tonemap →) map to QSV → QSV encode
+        if (tonemapOpencl) {
+          args.push(
+            '-c:v', 'h264_qsv',
+            '-mbbrc', '1',
+            '-b:v', String(bitrateNum),
+            '-maxrate', String(bitrateNum + 1),
+            '-rc_init_occupancy', String(bitrateNum * 2),
+            '-bufsize', String(bitrateNum * 4),
+            '-vf', `scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
+            '-g', String(SEGMENT_DURATION * 24),
+            '-keyint_min', String(SEGMENT_DURATION * 24),
+          );
+        } else {
+          args.push(
+            '-c:v', 'h264_qsv',
+            '-mbbrc', '1',
+            '-b:v', String(bitrateNum),
+            '-maxrate', String(bitrateNum + 1),
+            '-rc_init_occupancy', String(bitrateNum * 2),
+            '-bufsize', String(bitrateNum * 4),
+            '-vf', `scale_vaapi=w=${w}:h=-2:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
+            '-g', String(SEGMENT_DURATION * 24),
+            '-keyint_min', String(SEGMENT_DURATION * 24),
+          );
+        }
         break;
       case 'vaapi':
-        args.push(
-          '-c:v', 'h264_vaapi',
-          '-b:v', profile.videoBitrate,
-          '-maxrate', profile.videoBitrate,
-          '-vf', `scale_vaapi=w=${w}:h=-2:format=nv12${tonemapVaapi}`,
-          '-g', String(SEGMENT_DURATION * 24),
-          '-keyint_min', String(SEGMENT_DURATION * 24),
-        );
+        if (tonemapOpencl) {
+          args.push(
+            '-c:v', 'h264_vaapi',
+            '-b:v', profile.videoBitrate,
+            '-maxrate', profile.videoBitrate,
+            '-vf', `scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
+            '-g', String(SEGMENT_DURATION * 24),
+            '-keyint_min', String(SEGMENT_DURATION * 24),
+          );
+        } else {
+          args.push(
+            '-c:v', 'h264_vaapi',
+            '-b:v', profile.videoBitrate,
+            '-maxrate', profile.videoBitrate,
+            '-vf', `scale_vaapi=w=${w}:h=-2:format=nv12`,
+            '-g', String(SEGMENT_DURATION * 24),
+            '-keyint_min', String(SEGMENT_DURATION * 24),
+          );
+        }
         break;
       case 'nvenc':
         if (tonemap) {
@@ -635,6 +702,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Start a remux session (copy video, optionally transcode audio).
+   * Shares the same per-user-per-file slot as transcode sessions.
    */
   async getOrCreateRemuxSession(
     mediaFileId: number,
@@ -643,14 +711,20 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     requestedSegment = 0,
     ctx?: SessionContext,
   ): Promise<TranscodeSession> {
-    const sessionId = `${mediaFileId}-remux`;
-    const existing = this.sessions.get(sessionId);
+    const key = sessionKey(mediaFileId, ctx?.userId);
+    const existing = this.sessions.get(key);
     if (existing) {
       // If FFmpeg process has exited, clean up and start fresh
       if (existing.process.exitCode !== null) {
-        this.log.warn(`Session [${sessionId}]: FFmpeg already exited (code ${existing.process.exitCode}), restarting`);
-        this.sessions.delete(sessionId);
+        this.log.warn(`Session [${key}]: FFmpeg already exited (code ${existing.process.exitCode}), restarting`);
+        this.sessions.delete(key);
         await fsp.rm(existing.cachePath, { recursive: true, force: true });
+        // Fall through to create a new session below
+      } else if (!existing.remux || existing.quality !== 'remux') {
+        // Switching from transcode to remux — kill old session
+        this.log.log(`Switch to remux [${key}]: killing old ${existing.quality} session`);
+        this.sessions.delete(key);
+        await this.killAndClean(existing.process, existing.cachePath);
         // Fall through to create a new session below
       } else {
         existing.lastAccess = Date.now();
@@ -660,8 +734,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           const nearbyExists = await fileExists(segFile) ||
             await fileExists(path.join(existing.cachePath, `seg-${String(Math.max(0, requestedSegment - 1)).padStart(4, '0')}.ts`));
           if (!nearbyExists) {
-            this.log.log(`Seek: restarting remux [${sessionId}] from segment ${requestedSegment}`);
-            this.sessions.delete(sessionId);
+            this.log.log(`Seek: restarting remux [${key}] from segment ${requestedSegment}`);
+            this.sessions.delete(key);
             await this.killAndClean(existing.process, existing.cachePath);
           }
         } else {
@@ -674,12 +748,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.evictOldestSession();
     }
 
-    const sessionDir = path.join(this.cachePath, sessionId);
+    const sessionDir = path.join(this.cachePath, key);
     await fsp.mkdir(sessionDir, { recursive: true });
 
     const { resolve: readyResolve, promise: readyPromise } = this.createDeferred();
     const args = this.buildRemuxArgs(absolutePath, sessionDir, copyAudio, '192k', requestedSegment);
-    this.log.log(`Remux start [${sessionId}]: ffmpeg ${args.join(' ')}`);
+    this.log.log(`Remux start [${key}]: ffmpeg ${args.join(' ')}`);
 
     const proc = spawn('ffmpeg', args, {
       stdio: ['ignore', 'ignore', 'pipe'],
@@ -710,17 +784,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       clearInterval(pollTimer);
       if (!resolved) { resolved = true; readyResolve(); }
       if (code && code !== 0 && code !== 255) {
-        this.log.error(`Remux [${sessionId}] exited ${code}:\n${stderr.slice(-500)}`);
+        this.log.error(`Remux [${key}] exited ${code}:\n${stderr.slice(-500)}`);
       }
     });
 
     proc.on('error', (err) => {
-      this.log.error(`Remux [${sessionId}] spawn error: ${err.message}`);
+      this.log.error(`Remux [${key}] spawn error: ${err.message}`);
       readyResolve();
     });
 
     const session: TranscodeSession = {
-      id: sessionId,
+      id: key,
       mediaFileId,
       quality: 'remux',
       process: proc,
@@ -731,7 +805,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     };
 
     this.applyContext(session, ctx);
-    this.sessions.set(sessionId, session);
+    this.sessions.set(key, session);
     return session;
   }
 

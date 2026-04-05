@@ -1,8 +1,13 @@
-FROM node:24.14.0-bookworm-slim
+FROM ubuntu:24.04
 
-# Enable non-free-firmware repo for Intel media drivers
-RUN sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources
+# Install Node.js 24
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+  && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
+  && apt-get install -y --no-install-recommends nodejs \
+  && apt-get purge -y curl gnupg \
+  && rm -rf /var/lib/apt/lists/*
 
+# Install runtime dependencies + Intel GPU drivers + FFmpeg
 RUN apt-get update && apt-get install -y --no-install-recommends \
   bash \
   postgresql-client \
@@ -12,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   python3-venv \
   ffmpeg \
   intel-media-va-driver-non-free \
+  intel-opencl-icd \
   libmfx-gen1.2 \
   libvpl2 \
   vainfo \

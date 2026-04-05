@@ -275,14 +275,14 @@ export class StreamingController {
   // Session cleanup
   // ---------------------------------------------------------------------------
 
-  /** Stop all transcoding sessions for a media file (called on player close / page unload). */
+  /** Stop the transcoding session for this user + media file (called on player close / page unload). */
   @Delete(':mediaFileId/sessions')
   stopSessions(
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
     @Req() req: Request,
   ) {
-    this.transcodingService.killAllSessionsForFile(mediaFileId);
     const user = (req as any).user as User | undefined;
+    this.transcodingService.killSession(mediaFileId, user?.id);
     if (user) {
       this.activeStreamTracker.unregister(user.id, mediaFileId);
     }

@@ -508,15 +508,8 @@ export class SystemController {
         this.activeStreamTracker.unregister(userId, mediaFileId);
       }
     } else {
-      // Transcode session — format: "mediaFileId-quality"
-      const dashIdx = sessionId.indexOf('-');
-      if (dashIdx > 0) {
-        const mediaFileId = parseInt(sessionId.substring(0, dashIdx), 10);
-        const quality = sessionId.substring(dashIdx + 1);
-        if (mediaFileId && quality) {
-          this.transcodingService.killSession(mediaFileId, quality);
-        }
-      }
+      // Transcode session — kill by session map key directly
+      this.transcodingService.killSessionById(sessionId);
     }
     return { ok: true };
   }
@@ -561,12 +554,7 @@ export class SystemController {
       if (sessionId.startsWith('dp-')) {
         this.activeStreamTracker.unregister(userId, mediaFileId);
       } else {
-        const dashIdx = sessionId.indexOf('-');
-        if (dashIdx > 0) {
-          const mfId = parseInt(sessionId.substring(0, dashIdx), 10);
-          const quality = sessionId.substring(dashIdx + 1);
-          if (mfId && quality) this.transcodingService.killSession(mfId, quality);
-        }
+        this.transcodingService.killSessionById(sessionId);
       }
     }
 

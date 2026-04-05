@@ -155,7 +155,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly castQualityOptions = computed<CastQualityOption[]>(() => {
     return this.availableQualities().map(q => ({
       id: q.id,
-      label: q.id === 'auto' ? 'Auto' : q.id === 'original' ? `Original` : q.id,
+      label: q.id === 'auto' ? 'Auto' : q.label,
     }));
   });
 
@@ -660,65 +660,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
       if (!this.castService.isConnected()) return;
 
-      // Capture current position BEFORE stopping local playback
+      // Pause local playback (keep Shaka alive for reconnect)
       const video = this.videoEl()?.nativeElement;
       const currentPos = video?.currentTime ?? 0;
-
-      // Prepare everything BEFORE unloading (template may switch after unload)
-      const castToken = await this.authService.getCastToken();
-      const mode = this.playbackMode();
-      const qualityId = this.activeQualityId();
-      const subtitles = this.availableSubtitles()
-        .filter(s => !s.burnIn && s.subtitleDbId)
-        .map(s => ({
-          url: s.id.startsWith('ext-')
-            ? this.streamingApi.getAbsoluteSubtitleUrl(this.mediaFileId, s.subtitleDbId!, castToken)
-            : this.streamingApi.getAbsoluteEmbeddedSubtitleUrl(this.mediaFileId, parseInt(s.id.replace('emb-', ''), 10), castToken),
-          language: s.language,
-          label: s.label,
-        }));
-      // Find active subtitle track ID for Cast (1-based)
-      const activeSubId = this.activeSubtitleId();
-      let activeTrackId: number | undefined;
-      if (activeSubId) {
-        const allNonBurnIn = this.availableSubtitles().filter(s => !s.burnIn && s.subtitleDbId);
-        const idx = allNonBurnIn.findIndex(s => s.id === activeSubId);
-        if (idx >= 0) activeTrackId = idx + 1;
-      }
-
-      // Build Cast URL based on current quality selection
-      let castUrl: string;
-      let contentType: string;
-      const lanUrl = this.castService.serverLanUrl() || window.location.origin;
-      if (mode === 'direct' || qualityId === 'original') {
-        castUrl = this.streamingApi.getAbsoluteStreamUrl(this.mediaFileId, castToken);
-        contentType = 'video/mp4';
-      } else if (qualityId === 'auto') {
-        castUrl = this.streamingApi.getAbsoluteHlsUrl(this.mediaFileId, castToken);
-        contentType = 'application/x-mpegurl';
-      } else {
-        // Specific quality variant
-        castUrl = `${lanUrl}/api/stream/${this.mediaFileId}/${qualityId}/index.m3u8?token=${encodeURIComponent(castToken)}`;
-        contentType = 'application/x-mpegurl';
-      }
-
-      // Stop local playback (pause + mute, don't unload — keep Shaka alive for reconnect)
       if (video) {
         video.pause();
         video.muted = true;
       }
 
-      // Send to Chromecast
-      await this.castService.loadMedia({
-        url: castUrl,
-        contentType,
-        title: this.mediaTitle(),
-        subtitle: this.episodeTitle() || undefined,
-        posterUrl: this.fanartUrl() ?? undefined,
-        currentTime: currentPos,
-        subtitles,
-        activeSubtitleTrackId: activeTrackId,
-      });
+      await this.reloadCastStream(currentPos);
     }
   }
 
@@ -734,123 +684,54 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  /** Handle quality change from Cast remote — reload stream with specific variant URL */
-  /** Handle audio track change from Cast remote — reload stream with different audio */
   async onCastAudioChange(audioIndex: number) {
-    // Tell backend to use this audio stream
-    const deviceProfile = this.deviceProfileService.getProfile();
-    await this.streamingApi.getPlaybackInfo(
-      this.mediaFileId, deviceProfile, this.activeBurnInId ?? undefined, audioIndex,
-    );
-    // Stop old sessions
+    this.activeAudioStreamIndex = audioIndex;
     this.stopStreamingSessions();
-
-    // Reload Cast with new stream
-    const castToken = await this.authService.getCastToken();
-    const currentPos = this.castService.currentTime();
-    const qualityId = this.activeQualityId();
-    const lanUrl = this.castService.serverLanUrl() || window.location.origin;
-
-    let castUrl: string;
-    let contentType: string;
-    if (qualityId === 'auto') {
-      castUrl = this.streamingApi.getAbsoluteHlsUrl(this.mediaFileId, castToken);
-      contentType = 'application/x-mpegurl';
-    } else if (qualityId === 'original') {
-      castUrl = this.streamingApi.getAbsoluteStreamUrl(this.mediaFileId, castToken);
-      contentType = 'video/mp4';
-    } else {
-      castUrl = `${lanUrl}/api/stream/${this.mediaFileId}/${qualityId}/index.m3u8?token=${encodeURIComponent(castToken)}`;
-      contentType = 'application/x-mpegurl';
-    }
-
-    const subtitles = this.availableSubtitles()
-      .filter(s => !s.burnIn && s.subtitleDbId)
-      .map(s => ({
-        url: s.id.startsWith('ext-')
-          ? this.streamingApi.getAbsoluteSubtitleUrl(this.mediaFileId, s.subtitleDbId!, castToken)
-          : this.streamingApi.getAbsoluteEmbeddedSubtitleUrl(this.mediaFileId, parseInt(s.id.replace('emb-', ''), 10), castToken),
-        language: s.language,
-        label: s.label,
-      }));
-
-    await this.castService.loadMedia({
-      url: castUrl,
-      contentType,
-      title: this.mediaTitle(),
-      subtitle: this.episodeTitle() || undefined,
-      posterUrl: this.fanartUrl() ?? undefined,
-      currentTime: currentPos,
-      subtitles,
-    });
+    await this.reloadCastStream();
   }
 
   async onCastQualityChange(qualityId: string) {
-    const castToken = await this.authService.getCastToken();
-    const currentPos = this.castService.currentTime();
-
-    let castUrl: string;
-    if (qualityId === 'auto') {
-      // Master playlist — let Chromecast ABR decide
-      castUrl = this.streamingApi.getAbsoluteHlsUrl(this.mediaFileId, castToken);
-    } else if (qualityId === 'original') {
-      // Direct stream
-      castUrl = this.streamingApi.getAbsoluteStreamUrl(this.mediaFileId, castToken);
-    } else {
-      // Specific quality variant — build the variant playlist URL directly
-      const lanUrl = this.castService.serverLanUrl() || window.location.origin;
-      castUrl = `${lanUrl}/api/stream/${this.mediaFileId}/${qualityId}/index.m3u8?token=${encodeURIComponent(castToken)}`;
-    }
-
-    const subtitles = this.availableSubtitles()
-      .filter(s => !s.burnIn && s.subtitleDbId)
-      .map(s => ({
-        url: s.id.startsWith('ext-')
-          ? this.streamingApi.getAbsoluteSubtitleUrl(this.mediaFileId, s.subtitleDbId!, castToken)
-          : this.streamingApi.getAbsoluteEmbeddedSubtitleUrl(this.mediaFileId, parseInt(s.id.replace('emb-', ''), 10), castToken),
-        language: s.language,
-        label: s.label,
-      }));
-
-    const contentType = qualityId === 'original' ? 'video/mp4' : 'application/x-mpegurl';
-
-    await this.castService.loadMedia({
-      url: castUrl,
-      contentType,
-      title: this.mediaTitle(),
-      subtitle: this.episodeTitle() || undefined,
-      posterUrl: this.fanartUrl() ?? undefined,
-      currentTime: currentPos,
-      subtitles,
-    });
+    this.activeQualityId.set(qualityId);
+    await this.reloadCastStream();
   }
 
   /** Handle burn-in subtitle selection from Cast remote */
   async onCastBurnIn(subtitleDbId: number | null) {
-    if (!subtitleDbId) {
-      // Disable burn-in: reload stream without subtitle
-      this.activeBurnInId = null;
-      await this.reloadCastStream();
-      return;
-    }
-    // Reload stream with burn-in subtitle
-    this.activeBurnInId = subtitleDbId;
+    this.activeBurnInId = subtitleDbId ?? null;
     await this.reloadCastStream();
   }
 
-  private async reloadCastStream() {
-    const castToken = await this.authService.getCastToken();
-    const mode = this.playbackMode();
-    const hlsUrl = this.streamingApi.getAbsoluteHlsUrl(this.mediaFileId, castToken);
-    const streamUrl = this.streamingApi.getAbsoluteStreamUrl(this.mediaFileId, castToken);
-
-    // Re-fetch playback info with burn-in
-    const deviceProfile = this.deviceProfileService.getProfile();
+  /**
+   * (Re)load media on Chromecast. Handles playbackInfo refresh (with HDR disabled),
+   * Cast URL building, subtitle list, and loadMedia call.
+   */
+  private async reloadCastStream(positionOverride?: number) {
+    // Re-fetch playback info with HDR disabled (Chromecast is SDR)
+    const castProfile = { ...this.deviceProfileService.getProfile(), supportsHdr: false };
     await this.streamingApi.getPlaybackInfo(
-      this.mediaFileId, deviceProfile, this.activeBurnInId ?? undefined,
+      this.mediaFileId, castProfile, this.activeBurnInId ?? undefined, this.activeAudioStreamIndex,
     );
 
-    // Build subtitle list (only non-burn-in for sidecar, absolute URLs)
+    const castToken = await this.authService.getCastToken();
+    const currentPos = positionOverride ?? this.castService.currentTime();
+    const qualityId = this.activeQualityId();
+    const lanUrl = this.castService.serverLanUrl() || window.location.origin;
+
+    // Build Cast URL based on current quality selection
+    let castUrl: string;
+    let contentType: string;
+    if (this.playbackMode() === 'direct' || qualityId === 'original') {
+      castUrl = this.streamingApi.getAbsoluteStreamUrl(this.mediaFileId, castToken);
+      contentType = 'video/mp4';
+    } else if (qualityId === 'auto') {
+      castUrl = this.streamingApi.getAbsoluteHlsUrl(this.mediaFileId, castToken);
+      contentType = 'application/x-mpegurl';
+    } else {
+      castUrl = `${lanUrl}/api/stream/${this.mediaFileId}/${qualityId}/index.m3u8?token=${encodeURIComponent(castToken)}`;
+      contentType = 'application/x-mpegurl';
+    }
+
+    // Build subtitle list (only non-burn-in sidecar, absolute URLs)
     const subtitles = this.availableSubtitles()
       .filter(s => !s.burnIn && s.subtitleDbId)
       .map(s => ({
@@ -861,15 +742,24 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         label: s.label,
       }));
 
-    const currentPos = this.castService.currentTime();
+    // Find active subtitle track ID for Cast (1-based)
+    const activeSubId = this.activeSubtitleId();
+    let activeSubtitleTrackId: number | undefined;
+    if (activeSubId) {
+      const allNonBurnIn = this.availableSubtitles().filter(s => !s.burnIn && s.subtitleDbId);
+      const idx = allNonBurnIn.findIndex(s => s.id === activeSubId);
+      if (idx >= 0) activeSubtitleTrackId = idx + 1;
+    }
+
     await this.castService.loadMedia({
-      url: mode === 'direct' ? streamUrl : hlsUrl,
-      contentType: mode === 'direct' ? 'video/mp4' : 'application/x-mpegurl',
+      url: castUrl,
+      contentType,
       title: this.mediaTitle(),
       subtitle: this.episodeTitle() || undefined,
       posterUrl: this.fanartUrl() ?? undefined,
       currentTime: currentPos,
       subtitles,
+      activeSubtitleTrackId,
     });
   }
 
@@ -1196,12 +1086,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.playbackMode.set('transcode');
     }
     this.hwAccel.set(pi.hwAccel);
+    this.buildQualityOptions(pi);
+
+    // Remember current quality choice before reload
+    const prevQualityId = this.activeQualityId();
 
     const mode = this.playbackMode();
     if (mode === 'direct') {
       await this.player.load(this.streamingApi.getStreamUrl(this.mediaFileId), currentPos, 'video/mp4');
     } else {
       await this.player.load(this.streamingApi.getHlsUrl(this.mediaFileId), currentPos);
+    }
+
+    // Re-apply quality selection after reload (Shaka resets to ABR)
+    if (prevQualityId && prevQualityId !== 'auto') {
+      const option = this.availableQualities().find(q => q.id === prevQualityId);
+      if (option) this.selectQuality(option);
     }
 
     video.play().catch(() => {});
@@ -1269,12 +1169,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (pi.playMethod === 'DirectPlay') {
       // Only original quality
       const resLabel = this.resolutionLabel(srcW, srcH);
-      options.push({ id: 'original', label: `Original (${resLabel})`, height: srcH });
+      options.push({ id: 'original', label: resLabel, height: srcH });
     } else {
       // Original (remux) if video can be copied
       if (pi.videoCopyStream) {
         const resLabel = this.resolutionLabel(srcW, srcH);
-        options.push({ id: 'original', label: `Original (${resLabel})`, height: srcH });
+        options.push({ id: 'original', label: resLabel, height: srcH });
       }
       // Transcode profiles: use width to match (stable across cinema aspect ratios)
       const profiles = [
@@ -1286,8 +1186,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         { id: '240p', label: '240p', height: 240, minWidth: 0 },
         { id: '144p', label: '144p', height: 144, minWidth: 0 },
       ];
+      const originalLabel = pi.videoCopyStream ? this.resolutionLabel(srcW, srcH) : null;
       for (const p of profiles) {
-        if (srcW >= p.minWidth) {
+        if (srcW >= p.minWidth && p.label !== originalLabel) {
           options.push(p);
         }
       }
