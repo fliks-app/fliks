@@ -102,6 +102,8 @@ const MAX_SESSIONS = 4;
 export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger(TranscodingService.name);
   private readonly sessions = new Map<string, TranscodeSession>();
+  /** Per-key locks to prevent concurrent getOrCreate calls racing (like Jellyfin's AsyncKeyedLocker). */
+  private readonly locks = new Map<string, Promise<void>>();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private detectedHwAccel: HwAccelType = 'none';
   private cachePath = '/tmp/suitarr-stream';
@@ -216,6 +218,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     ctx?: SessionContext,
   ): Promise<TranscodeSession> {
     const key = sessionKey(mediaFileId, ctx?.userId);
+    return this.withLock(key, () => this.doGetOrCreateSession(key, mediaFileId, quality, absolutePath, requestedSegment, ctx));
+  }
+
+  private async doGetOrCreateSession(
+    key: string,
+    mediaFileId: number,
+    quality: string,
+    absolutePath: string,
+    requestedSegment: number,
+    ctx?: SessionContext,
+  ): Promise<TranscodeSession> {
     const existing = this.sessions.get(key);
     if (existing) {
       // If FFmpeg process has exited, clean up and start fresh
@@ -712,6 +725,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     ctx?: SessionContext,
   ): Promise<TranscodeSession> {
     const key = sessionKey(mediaFileId, ctx?.userId);
+    return this.withLock(key, () => this.doGetOrCreateRemuxSession(key, mediaFileId, absolutePath, copyAudio, requestedSegment, ctx));
+  }
+
+  private async doGetOrCreateRemuxSession(
+    key: string,
+    mediaFileId: number,
+    absolutePath: string,
+    copyAudio: boolean,
+    requestedSegment: number,
+    ctx?: SessionContext,
+  ): Promise<TranscodeSession> {
     const existing = this.sessions.get(key);
     if (existing) {
       // If FFmpeg process has exited, clean up and start fresh
@@ -925,6 +949,23 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     session.posterUrl = ctx.posterUrl;
     session.transcodeReasons = ctx.transcodeReasons;
     if (!session.startedAt) session.startedAt = new Date();
+  }
+
+  /** Simple keyed lock: serialises access per session key (like Jellyfin's AsyncKeyedLocker). */
+  private async withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    // Wait for any existing operation on this key
+    while (this.locks.has(key)) {
+      await this.locks.get(key);
+    }
+    let release!: () => void;
+    const lock = new Promise<void>((r) => { release = r; });
+    this.locks.set(key, lock);
+    try {
+      return await fn();
+    } finally {
+      this.locks.delete(key);
+      release();
+    }
   }
 
   private createDeferred(): { resolve: () => void; promise: Promise<void> } {

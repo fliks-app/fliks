@@ -158,6 +158,13 @@ export const routes: Routes = [
         ],
       },
       {
+        path: 'playback-settings',
+        loadComponent: () =>
+          import('./features/playback-settings/playback-settings').then(
+            (m) => m.PlaybackSettingsComponent,
+          ),
+      },
+      {
         path: 'settings',
         loadComponent: () =>
           import('./features/settings/settings-shell').then(

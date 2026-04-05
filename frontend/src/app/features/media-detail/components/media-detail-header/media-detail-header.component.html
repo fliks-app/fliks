@@ -103,6 +103,14 @@
       <div class="flex flex-wrap items-center gap-2 mt-5">
         @if (selectedFileId()) {
           <a
+            class="btn btn-ghost btn-sm gap-1"
+            [routerLink]="['/watch', selectedFileId()]"
+            [queryParams]="{ mediaId: media().id, t: 0 }"
+          >
+            <svg lucideRotateCcw class="h-4 w-4"></svg>
+            {{ 'player.play_from_start' | translate }}
+          </a>
+          <a
             class="btn btn-primary btn-sm gap-1"
             [routerLink]="['/watch', selectedFileId()]"
             [queryParams]="{ mediaId: media().id }"

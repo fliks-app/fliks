@@ -20,6 +20,7 @@ import { BrowserDeviceProfileService } from '../../core/services/browser-device-
 import { SseService } from '../../core/services/sse.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
+import { CastSettingsService } from '../../core/services/cast-settings.service';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 interface ImmersivePlugin {
@@ -48,6 +49,8 @@ interface SubtitleOption {
   burnIn: boolean;
   /** Database subtitle ID (for burn-in request) */
   subtitleDbId?: number;
+  /** True if this is a forced subtitle track */
+  forced?: boolean;
 }
 
 interface QualityOption {
@@ -96,6 +99,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly sseService = inject(SseService);
   private readonly authService = inject(AuthService);
   readonly castService = inject(CastService);
+  private readonly castSettingsService = inject(CastSettingsService);
 
   private readonly videoEl = viewChild<ElementRef<HTMLVideoElement>>('videoElement');
   private readonly containerEl = viewChild<ElementRef<HTMLDivElement>>('playerContainer');
@@ -161,15 +165,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   readonly isNative = Capacitor.isNativePlatform();
 
-  // Mute/pause local video whenever Cast is connected
+  // Sync local playback with Cast connection state
+  private wasCasting = false;
   private readonly castSyncEffect = effect(() => {
     const casting = this.castService.isConnected();
-    if (!casting) return;
-    try {
-      const video = this.videoEl()?.nativeElement;
-      if (video && !video.paused) video.pause();
-      if (video) video.muted = true;
-    } catch { /* video element may not be ready yet */ }
+    if (casting && !this.wasCasting) {
+      // Just connected — mute/pause local video
+      try {
+        const video = this.videoEl()?.nativeElement;
+        if (video && !video.paused) video.pause();
+        if (video) video.muted = true;
+      } catch { /* video element may not be ready yet */ }
+    } else if (!casting && this.wasCasting) {
+      // Just disconnected — reload Shaka and resume local playback at Cast position
+      const castPos = this.castService.currentTime();
+      this.resumeLocalAfterCast(castPos);
+    }
+    this.wasCasting = casting;
   });
 
   // Remote control: listen for admin commands via SSE
@@ -180,14 +192,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const currentUserId = this.authService.user()?.id;
     if (cmd.mediaFileId !== this.mediaFileId || cmd.userId !== currentUserId) return;
 
-    if (cmd.action === 'pause') {
+    if (this.castService.isConnected()) {
+      if (cmd.action === 'pause') this.castService.pause();
+      else if (cmd.action === 'play') this.castService.play();
+      else if (cmd.action === 'stop') { this.castService.disconnect(); this.onBack(); }
+    } else {
       const video = this.videoEl()?.nativeElement;
-      if (video && !video.paused) video.pause();
-    } else if (cmd.action === 'play') {
-      const video = this.videoEl()?.nativeElement;
-      if (video && video.paused) video.play();
-    } else if (cmd.action === 'stop') {
-      this.onBack();
+      if (cmd.action === 'pause' && video && !video.paused) video.pause();
+      else if (cmd.action === 'play' && video && video.paused) video.play();
+      else if (cmd.action === 'stop') this.onBack();
     }
   });
 
@@ -340,7 +353,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.mediaFileId = +this.route.snapshot.params['mediaFileId'];
     this.mediaId = qp['mediaId'] ? +qp['mediaId'] : 0;
     this.episodeId = qp['episodeId'] ? +qp['episodeId'] : undefined;
-    const resumeTime = qp['t'] ? +qp['t'] : undefined;
+    const resumeTime = 't' in qp ? +qp['t'] : undefined;
 
     const video = this.videoEl()!.nativeElement;
     this.player = new shaka.Player();
@@ -482,12 +495,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.loadAudioTracks();
       const savedLang = localStorage.getItem('player.subtitleLang');
       if (savedLang) {
-        const match = this.availableSubtitles().find(s => s.language === savedLang);
+        const savedForced = localStorage.getItem('player.subtitleForced') === '1';
+        const match = this.availableSubtitles().find(s => s.language === savedLang && !!s.forced === savedForced)
+          ?? this.availableSubtitles().find(s => s.language === savedLang);
         if (match) await this.selectSubtitle(match);
       }
 
       // Resume position
-      if (resumeTime) {
+      if (resumeTime != null) {
         video.currentTime = resumeTime;
       } else {
         try {
@@ -500,12 +515,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         }
       }
 
-      video.play().catch(() => {
-        // Autoplay may be blocked
-      });
+      // If Cast is already connected (user connected from navbar), send to Cast
+      if (this.castService.isConnected()) {
+        video.pause();
+        video.muted = true;
+        // Unload Shaka so it stops requesting HLS segments (would conflict with Cast session)
+        await this.player.unload();
+        const startPos = resumeTime ?? video.currentTime;
+        await this.reloadCastStream(startPos);
+      } else {
+        video.play().catch(() => {
+          // Autoplay may be blocked
+        });
+      }
 
-      // Save position every 10 seconds
+      // Save position every 10 seconds + immediately on seek
       this.saveInterval = setInterval(() => this.savePosition(), 10_000);
+      video.addEventListener('seeked', () => this.savePosition());
 
       // Update stats every second
       this.statsInterval = setInterval(() => {
@@ -641,14 +667,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   async onToggleCast() {
     if (this.castService.isConnected()) {
-      // Disconnect: resume local playback at Cast position
-      const castTime = this.castService.currentTime();
+      // The castSyncEffect handles resuming local playback
       this.castService.disconnect();
-      const video = this.videoEl()?.nativeElement;
-      if (video) {
-        video.currentTime = castTime;
-        video.play().catch(() => {});
-      }
     } else {
       // Connect and transfer playback to Cast
       this.castService.requestSession();
@@ -660,28 +680,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
       if (!this.castService.isConnected()) return;
 
-      // Pause local playback (keep Shaka alive for reconnect)
+      // Stop local playback and unload Shaka (its HLS requests would conflict with Cast)
       const video = this.videoEl()?.nativeElement;
       const currentPos = video?.currentTime ?? 0;
       if (video) {
         video.pause();
         video.muted = true;
       }
+      if (this.player) await this.player.unload();
 
       await this.reloadCastStream(currentPos);
     }
   }
 
   onDisconnectCast() {
-    const castTime = this.castService.currentTime();
+    // The castSyncEffect handles resuming local playback when isConnected goes false
     this.castService.disconnect();
-    // Resume local — Shaka is still loaded, just muted+paused
-    const video = this.videoEl()?.nativeElement;
-    if (video) {
-      video.muted = false;
-      video.currentTime = castTime;
-      video.play().catch(() => {});
-    }
   }
 
   async onCastAudioChange(audioIndex: number) {
@@ -706,8 +720,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    * Cast URL building, subtitle list, and loadMedia call.
    */
   private async reloadCastStream(positionOverride?: number) {
-    // Re-fetch playback info with HDR disabled (Chromecast is SDR)
-    const castProfile = { ...this.deviceProfileService.getProfile(), supportsHdr: false };
+    // Apply Cast settings (user preferences override device detection)
+    const cs = this.castSettingsService.get();
+    const castProfile = {
+      ...this.deviceProfileService.getProfile(),
+      supportsHdr: cs.hdr,
+      maxAudioChannels: cs.audioChannels,
+    };
     await this.streamingApi.getPlaybackInfo(
       this.mediaFileId, castProfile, this.activeBurnInId ?? undefined, this.activeAudioStreamIndex,
     );
@@ -717,17 +736,30 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const qualityId = this.activeQualityId();
     const lanUrl = this.castService.serverLanUrl() || window.location.origin;
 
-    // Build Cast URL based on current quality selection
+    // Build Cast URL — always use a fixed quality (no ABR master playlist).
+    // Chromecast ABR constantly switches qualities which kills/restarts FFmpeg each time.
     let castUrl: string;
     let contentType: string;
     if (this.playbackMode() === 'direct' || qualityId === 'original') {
       castUrl = this.streamingApi.getAbsoluteStreamUrl(this.mediaFileId, castToken);
       contentType = 'video/mp4';
-    } else if (qualityId === 'auto') {
-      castUrl = this.streamingApi.getAbsoluteHlsUrl(this.mediaFileId, castToken);
-      contentType = 'application/x-mpegurl';
     } else {
-      castUrl = `${lanUrl}/api/stream/${this.mediaFileId}/${qualityId}/index.m3u8?token=${encodeURIComponent(castToken)}`;
+      // Pick a fixed quality: user selection, or best available capped by maxQuality setting
+      let fixedQuality: string;
+      if (qualityId !== 'auto') {
+        fixedQuality = qualityId;
+      } else {
+        // Find the best quality that doesn't exceed the Cast max quality setting
+        const maxQ = cs.maxQuality;
+        const qualities = this.availableQualities().filter(q => q.id !== 'auto' && q.id !== 'original');
+        if (maxQ === 'original') {
+          fixedQuality = qualities[0]?.id ?? '1080p';
+        } else {
+          const maxOption = qualities.find(q => q.id === maxQ);
+          fixedQuality = maxOption?.id ?? qualities[0]?.id ?? '1080p';
+        }
+      }
+      castUrl = `${lanUrl}/api/stream/${this.mediaFileId}/${fixedQuality}/index.m3u8?token=${encodeURIComponent(castToken)}`;
       contentType = 'application/x-mpegurl';
     }
 
@@ -761,6 +793,29 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       subtitles,
       activeSubtitleTrackId,
     });
+  }
+
+  /** Reload Shaka and resume local playback after Cast disconnect. */
+  private async resumeLocalAfterCast(castPos: number) {
+    try {
+      const video = this.videoEl()?.nativeElement;
+      if (video) video.muted = false;
+      if (this.player && this.mediaFileId) {
+        const mode = this.playbackMode();
+        const url = mode === 'direct'
+          ? this.streamingApi.getStreamUrl(this.mediaFileId)
+          : this.streamingApi.getHlsUrl(this.mediaFileId);
+        const mimeType = mode === 'direct' ? 'video/mp4' : undefined;
+        await this.player.load(url, castPos > 0 ? castPos : undefined, mimeType);
+        // Re-apply quality selection
+        const qId = this.activeQualityId();
+        if (qId && qId !== 'auto') {
+          const option = this.availableQualities().find(q => q.id === qId);
+          if (option) this.selectQuality(option);
+        }
+        video?.play().catch(() => {});
+      }
+    } catch { /* ignore */ }
   }
 
   onSpeedChange(rate: number) {
@@ -800,6 +855,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             language: sub.language,
             burnIn: false,
             subtitleDbId: sub.id,
+            forced: sub.forced ?? false,
           });
         } else if (sub.streamIndex != null) {
           const key = `emb-${sub.streamIndex}`;
@@ -812,6 +868,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             language: sub.language,
             burnIn: isBitmap,
             subtitleDbId: sub.id,
+            forced: sub.forced ?? false,
           });
         }
       }
@@ -832,6 +889,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             url: this.streamingApi.getEmbeddedSubtitleUrl(this.mediaFileId, emb.streamIndex),
             language: emb.language,
             burnIn: false,
+            forced: emb.forced ?? false,
           });
         }
       }
@@ -909,6 +967,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.activeSubtitleId.set(null);
       this.subtitlePickerOpen.set(false);
       localStorage.setItem('player.subtitleLang', '');
+      localStorage.removeItem('player.subtitleForced');
       // If burn-in was active, reload stream without it
       if (this.activeBurnInId) {
         this.activeBurnInId = null;
@@ -923,6 +982,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.activeSubtitleId.set(sub.id);
       this.subtitlePickerOpen.set(false);
       localStorage.setItem('player.subtitleLang', sub.language);
+      localStorage.setItem('player.subtitleForced', sub.forced ? '1' : '0');
       await this.reloadStream();
       return;
     }
@@ -1034,12 +1094,25 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private async savePosition() {
-    const video = this.videoEl()?.nativeElement;
-    if (!video || !this.mediaId || !video.currentTime) return;
+    if (!this.mediaId) return;
+
+    let pos: number;
+    let dur: number;
+
+    if (this.castService.isConnected()) {
+      // Playback is on Chromecast — read position from Cast receiver
+      pos = this.castService.currentTime();
+      dur = this.castService.duration() || this.duration();
+    } else {
+      const video = this.videoEl()?.nativeElement;
+      if (!video || !video.currentTime) return;
+      pos = video.currentTime;
+      dur = isFinite(video.duration) ? video.duration : this.duration();
+    }
+
     try {
-      const dur = isFinite(video.duration) ? video.duration : this.duration();
       await this.streamingApi.updatePlaybackState(this.mediaFileId, {
-        positionSeconds: video.currentTime,
+        positionSeconds: pos,
         durationSeconds: dur || 0,
         mediaId: this.mediaId,
         episodeId: this.episodeId,

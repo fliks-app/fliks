@@ -25,6 +25,7 @@
   },
   "player": {
     "play": "Lire",
+    "play_from_start": "Depuis le début",
     "pause": "Pause",
     "next_episode": "Épisode suivant",
     "prev_episode": "Épisode précédent",
@@ -78,7 +79,18 @@
     "settings": "Paramètres",
     "open_menu": "Ouvrir le menu",
     "close_menu": "Fermer le menu",
-    "logout": "Se déconnecter"
+    "logout": "Se déconnecter",
+    "playback_settings": "Paramètres de lecture"
+  },
+  "playback_settings": {
+    "title": "Paramètres de lecture",
+    "subtitle": "Configuration de la lecture sur vos appareils.",
+    "cast_hdr": "HDR",
+    "cast_hdr_hint": "Activer si votre Chromecast et votre TV supportent le HDR. Désactivé = le serveur convertit en SDR.",
+    "cast_max_quality": "Qualité maximale",
+    "cast_max_quality_hint": "Limite la résolution envoyée au Chromecast.",
+    "cast_audio": "Audio",
+    "cast_audio_hint": "Nombre de canaux audio. Stéréo si votre TV n'a pas de système surround."
   },
   "import_disk": {
     "title": "Import manuel depuis le disque",

@@ -1,6 +1,6 @@
 <div class="drawer lg:drawer-open min-h-screen">
   <input id="sidebar" type="checkbox" class="drawer-toggle" />
-  <div class="drawer-content flex flex-col">
+  <div class="drawer-content flex flex-col relative">
     <nav class="navbar bg-base-100 shadow-sm lg:hidden">
       <div class="flex-none">
         <label for="sidebar" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate">
@@ -10,7 +10,22 @@
       <div class="flex-1">
         <a class="btn btn-ghost text-xl" routerLink="/">{{ 'app.name' | translate }}</a>
       </div>
+      <div class="flex-none">
+        @if (castService.isAvailable()) {
+          <button class="btn btn-ghost btn-circle" (click)="onToggleCastConnection()">
+            <svg lucideCast class="h-6 w-6" [class.text-info]="castService.isConnected()"></svg>
+          </button>
+        }
+      </div>
     </nav>
+    <!-- Desktop Cast button (top-right, floating) -->
+    @if (castService.isAvailable()) {
+      <div class="hidden lg:block absolute top-3 right-4 z-10">
+        <button class="btn btn-ghost btn-circle" (click)="onToggleCastConnection()">
+          <svg lucideCast class="h-6 w-6" [class.text-info]="castService.isConnected()"></svg>
+        </button>
+      </div>
+    }
     <main class="flex-1 p-4 lg:p-6">
       <router-outlet />
     </main>
@@ -110,6 +125,12 @@
         }
 
         <!-- Settings — collapsible dropdown (admin only) -->
+        <li>
+          <a routerLink="/playback-settings" routerLinkActive="active">
+            <svg lucideCast class="h-5 w-5"></svg>
+            {{ 'nav.playback_settings' | translate }}
+          </a>
+        </li>
         @if (auth.canAccessSettings()) {
           <li>
             <details [open]="isSettingsOpen()">

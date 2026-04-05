@@ -7,6 +7,7 @@ import { DownloadClientsApiService } from '../../core/services/api/download-clie
 import { RequestsService } from '../../core/services/api/requests.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SseService } from '../../core/services/sse.service';
+import { CastService } from '../../core/services/cast.service';
 import {
   LucideMenu,
   LucideHome,
@@ -24,6 +25,7 @@ import {
   LucideSun,
   LucideMoon,
   LucideLogOut,
+  LucideCast,
 } from '@lucide/angular';
 
 function getInitialTheme(): 'dark' | 'light' {
@@ -39,7 +41,7 @@ function getInitialTheme(): 'dark' | 'light' {
     LucideMenu, LucideHome, LucideFilm, LucideTv, LucideSearch,
     LucideClipboardList, LucideDownload, LucideCalendar, LucideUpload,
     LucideArrowRightLeft, LucideLayoutGrid, LucideSettings, LucideUser,
-    LucideSun, LucideMoon, LucideLogOut,
+    LucideSun, LucideMoon, LucideLogOut, LucideCast,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './layout.html',
@@ -52,6 +54,7 @@ export class LayoutComponent implements OnInit {
   private readonly requestsService = inject(RequestsService);
   readonly serverConfig = inject(ServerConfigService);
   private readonly sse = inject(SseService);
+  readonly castService = inject(CastService);
 
   readonly theme = signal<'dark' | 'light'>(getInitialTheme());
 
@@ -136,5 +139,13 @@ export class LayoutComponent implements OnInit {
 
   toggleTheme(): void {
     this.theme.update((t) => (t === 'dark' ? 'light' : 'dark'));
+  }
+
+  onToggleCastConnection() {
+    if (this.castService.isConnected()) {
+      this.castService.disconnect();
+    } else {
+      this.castService.requestSession();
+    }
   }
 }
