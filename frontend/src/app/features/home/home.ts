@@ -34,8 +34,8 @@ export class HomeComponent implements OnInit {
     try {
       const [cw, movies, series] = await Promise.all([
         this.streamingApi.getContinueWatching().catch(() => []),
-        this.mediaService.getAll({ type: 'movie' as any, sortBy: 'createdAt', sortOrder: 'DESC', limit: 20, excludeWatched: true }),
-        this.mediaService.getAll({ type: 'series' as any, sortBy: 'createdAt', sortOrder: 'DESC', limit: 20, excludeWatched: true }),
+        this.mediaService.getAll({ type: 'movie' as any, sortBy: 'createdAt', sortOrder: 'DESC', limit: 20, excludeWatched: true, missing: false }),
+        this.mediaService.getAll({ type: 'series' as any, sortBy: 'createdAt', sortOrder: 'DESC', limit: 20, excludeWatched: true, missing: false }),
       ]);
       this.continueWatching.set(cw);
       this.recentMovies.set(movies.data);

@@ -212,15 +212,37 @@ export class PlaybackService {
     await this.repo.delete({ userId, mediaFileId });
   }
 
-  /** Return the set of mediaIds the user has fully watched. */
+  /** Return mediaIds the user has fully watched (movies: any completed file; series: all hasFile episodes completed). */
   async getWatchedMediaIds(userId: number): Promise<number[]> {
-    const rows = await this.repo
-      .createQueryBuilder('ps')
-      .select('DISTINCT ps.mediaId', 'mediaId')
-      .where('ps.userId = :userId', { userId })
-      .andWhere('ps.completed = true')
-      .getRawMany();
-    return rows.map((r) => r.mediaId);
+    const rows: { id: number }[] = await this.repo.query(
+      `
+      SELECT DISTINCT m.id FROM media m
+      WHERE m.type = 'movie'
+        AND EXISTS (
+          SELECT 1 FROM playback_states ps
+          WHERE ps."userId" = $1 AND ps."mediaId" = m.id AND ps.completed = true
+        )
+      UNION
+      SELECT m.id FROM media m
+      WHERE m.type = 'series'
+        AND EXISTS (
+          SELECT 1 FROM seasons s
+          JOIN episodes e ON e."seasonId" = s.id
+          WHERE s."mediaId" = m.id AND s."seasonNumber" > 0 AND e."hasFile" = true
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM seasons s
+          JOIN episodes e ON e."seasonId" = s.id
+          WHERE s."mediaId" = m.id AND s."seasonNumber" > 0 AND e."hasFile" = true
+            AND NOT EXISTS (
+              SELECT 1 FROM playback_states ps
+              WHERE ps."userId" = $1 AND ps."episodeId" = e.id AND ps.completed = true
+            )
+        )
+      `,
+      [userId],
+    );
+    return rows.map((r) => r.id);
   }
 
   /** Toggle watched status for a specific media file. */
