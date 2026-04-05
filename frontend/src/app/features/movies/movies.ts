@@ -12,6 +12,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { MediaService, Media } from '../../core/services/api/media.service';
+import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { ProfilesService, QualityProfile } from '../../core/services/api/profiles.service';
 import { MediaCardComponent } from '../../shared/components/media-card';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
@@ -26,6 +27,7 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 })
 export class MoviesComponent implements OnInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
+  private readonly streamingApi = inject(StreamingApiService);
   private readonly profilesService = inject(ProfilesService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -34,6 +36,8 @@ export class MoviesComponent implements OnInit, OnDestroy {
   private readonly scrollKey = 'movies';
 
   readonly allMovies = signal<Media[]>([]);
+  /** Media IDs fully watched (see GET /api/playback/watched-ids). */
+  readonly watchedIds = signal<Set<number>>(new Set());
   readonly total = signal(0);
   readonly loading = signal(false);
   readonly searchQuery = signal('');
@@ -179,22 +183,35 @@ export class MoviesComponent implements OnInit, OnDestroy {
     }
   }
 
+  async refreshWatchedIds() {
+    try {
+      const ids = await this.streamingApi.getWatchedMediaIds();
+      this.watchedIds.set(new Set(ids));
+    } catch {
+      /* ignore */
+    }
+  }
+
   private async load() {
     this.loading.set(true);
     const monitored = this.filterMonitored();
     try {
       const fs = this.filterStatus();
-      const res = await this.mediaService.getAll({
-        type: 'movie',
-        q: this.searchQuery() || undefined,
-        sortBy: this.sortBy(),
-        monitored: monitored ? monitored === 'true' : undefined,
-        missing: fs === 'missing' ? true : fs === 'downloaded' ? false : undefined,
-        cutoffUnmet: fs === 'cutoffUnmet' ? true : undefined,
-        limit: 0,
-      });
+      const [res, watchedIds] = await Promise.all([
+        this.mediaService.getAll({
+          type: 'movie',
+          q: this.searchQuery() || undefined,
+          sortBy: this.sortBy(),
+          monitored: monitored ? monitored === 'true' : undefined,
+          missing: fs === 'missing' ? true : fs === 'downloaded' ? false : undefined,
+          cutoffUnmet: fs === 'cutoffUnmet' ? true : undefined,
+          limit: 0,
+        }),
+        this.streamingApi.getWatchedMediaIds().catch(() => [] as number[]),
+      ]);
       this.allMovies.set(res.data);
       this.total.set(res.total);
+      this.watchedIds.set(new Set(watchedIds));
     } finally {
       this.loading.set(false);
     }

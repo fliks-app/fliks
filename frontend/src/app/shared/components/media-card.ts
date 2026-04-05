@@ -1,9 +1,11 @@
-import { Component, ChangeDetectionStrategy, input, computed } from '@angular/core';
+import { Component, ChangeDetectionStrategy, input, output, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgClass } from '@angular/common';
 import { TranslateModule } from '@ngx-translate/core';
-import { LucideFilm } from '@lucide/angular';
+import { LucideFilm, LucidePlay, LucideEye, LucideEyeOff } from '@lucide/angular';
 import { Media } from '../../core/services/api/media.service';
+import { PlayableMediaService } from '../../core/services/playable-media.service';
+import { pickPlayContext } from '../utils/media-play.util';
 
 export type MediaStatus =
   | 'downloaded-monitored'
@@ -13,14 +15,33 @@ export type MediaStatus =
   | 'queued'
   | 'unreleased';
 
+export type MediaCardVariant = 'grid' | 'poster';
+
 @Component({
   selector: 'app-media-card',
-  imports: [RouterLink, NgClass, TranslateModule, LucideFilm],
+  imports: [RouterLink, NgClass, TranslateModule, LucideFilm, LucidePlay, LucideEye, LucideEyeOff],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-card.html',
 })
 export class MediaCardComponent {
+  private readonly playable = inject(PlayableMediaService);
+
   readonly media = input.required<Media>();
+  /** From GET /api/playback/watched-ids (fully watched movie or full series). */
+  readonly watched = input(false);
+  readonly watchedChange = output<void>();
+  /** `grid`: liste films/séries ; `poster`: bandeau horizontal (accueil). */
+  readonly variant = input<MediaCardVariant>('grid');
+
+  readonly isPoster = computed(() => this.variant() === 'poster');
+
+  readonly detailLink = computed(() => [
+    '/',
+    this.media().type === 'movie' ? 'movies' : 'series',
+    String(this.media().id),
+  ]);
+
+  readonly canPlay = computed(() => pickPlayContext(this.media()) != null);
 
   readonly mediaStatus = computed<MediaStatus>(() => {
     const m = this.media();
@@ -73,5 +94,28 @@ export class MediaCardComponent {
     const now = new Date();
     const dates = [m.releaseDate, m.inCinemas, m.digitalRelease, m.physicalRelease];
     return dates.some((d) => d && new Date(d) <= now);
+  }
+
+  async play(ev: Event) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const ctx = pickPlayContext(this.media());
+    if (!ctx) return;
+    await this.playable.play(ctx, false);
+  }
+
+  async toggleWatchedMovie(ev: Event) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const m = this.media();
+    if (m.type !== 'movie') return;
+    const ctx = pickPlayContext(m);
+    if (!ctx) return;
+    try {
+      await this.playable.toggleWatched(ctx.fileId, m.id);
+      this.watchedChange.emit();
+    } catch {
+      /* ignore */
+    }
   }
 }

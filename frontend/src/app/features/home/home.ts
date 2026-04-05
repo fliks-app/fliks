@@ -5,7 +5,7 @@ import { LucideFilm, LucideTv } from '@lucide/angular';
 import { MediaService, Media } from '../../core/services/api/media.service';
 import { StreamingApiService, ContinueWatchingItem } from '../../core/services/api/streaming-api.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
-import { MediaPosterCardComponent } from '../../shared/components/media-poster-card';
+import { MediaCardComponent } from '../../shared/components/media-card';
 import { ContinueWatchingCardComponent } from '../../shared/components/continue-watching-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 
@@ -14,7 +14,7 @@ import { HorizontalScrollerComponent } from '../../shared/components/horizontal-
   imports: [
     RouterLink, TranslateModule,
     LucideFilm, LucideTv,
-    MediaPosterCardComponent, ContinueWatchingCardComponent,
+    MediaCardComponent, ContinueWatchingCardComponent,
     HorizontalScrollerComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -29,19 +29,31 @@ export class HomeComponent implements OnInit {
   readonly continueWatching = signal<ContinueWatchingItem[]>([]);
   readonly recentMovies = signal<Media[]>([]);
   readonly recentSeries = signal<Media[]>([]);
+  readonly watchedIds = signal<Set<number>>(new Set());
 
   async ngOnInit() {
     try {
-      const [cw, movies, series] = await Promise.all([
+      const [cw, watchedIds, movies, series] = await Promise.all([
         this.streamingApi.getContinueWatching().catch(() => []),
+        this.streamingApi.getWatchedMediaIds().catch(() => [] as number[]),
         this.mediaService.getAll({ type: 'movie' as any, sortBy: 'createdAt', sortOrder: 'DESC', limit: 20, excludeWatched: true, missing: false }),
         this.mediaService.getAll({ type: 'series' as any, sortBy: 'createdAt', sortOrder: 'DESC', limit: 20, excludeWatched: true, missing: false }),
       ]);
       this.continueWatching.set(cw);
+      this.watchedIds.set(new Set(watchedIds));
       this.recentMovies.set(movies.data);
       this.recentSeries.set(series.data);
     } catch { /* ignore */ }
     this.loading.set(false);
+  }
+
+  async refreshWatchedIds() {
+    try {
+      const ids = await this.streamingApi.getWatchedMediaIds();
+      this.watchedIds.set(new Set(ids));
+    } catch {
+      /* ignore */
+    }
   }
 
   async removeContinueWatching(item: ContinueWatchingItem) {

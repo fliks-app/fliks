@@ -81,11 +81,19 @@
                 (click)="$event.stopPropagation()"
                 (change)="toggleSelect(movie.id)"
               />
-              <app-media-card [media]="movie" />
+              <app-media-card
+                [media]="movie"
+                [watched]="watchedIds().has(movie.id)"
+                (watchedChange)="refreshWatchedIds()"
+              />
             </div>
           } @else {
             <div class="" [id]="'movie-' + movie.id">
-              <app-media-card [media]="movie" />
+              <app-media-card
+                [media]="movie"
+                [watched]="watchedIds().has(movie.id)"
+                (watchedChange)="refreshWatchedIds()"
+              />
             </div>
           }
         }

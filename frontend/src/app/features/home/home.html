@@ -30,11 +30,11 @@
     @if (recentMovies().length) {
       <app-horizontal-scroller [title]="'home.recent_movies' | translate">
         @for (m of recentMovies(); track m.id) {
-          <app-media-poster-card
-            [posterUrl]="m.posterUrl"
-            [title]="m.title"
-            [subtitle]="'' + m.year"
-            [link]="['/movies', '' + m.id]"
+          <app-media-card
+            [media]="m"
+            [variant]="'poster'"
+            [watched]="watchedIds().has(m.id)"
+            (watchedChange)="refreshWatchedIds()"
           />
         }
       </app-horizontal-scroller>
@@ -44,11 +44,11 @@
     @if (recentSeries().length) {
       <app-horizontal-scroller [title]="'home.recent_series' | translate">
         @for (s of recentSeries(); track s.id) {
-          <app-media-poster-card
-            [posterUrl]="s.posterUrl"
-            [title]="s.title"
-            [subtitle]="'' + s.year"
-            [link]="['/series', '' + s.id]"
+          <app-media-card
+            [media]="s"
+            [variant]="'poster'"
+            [watched]="watchedIds().has(s.id)"
+            (watchedChange)="refreshWatchedIds()"
           />
         }
       </app-horizontal-scroller>

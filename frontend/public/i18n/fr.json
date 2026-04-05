@@ -1245,7 +1245,13 @@
   },
   "media_card": {
     "monitored": "Suivi",
-    "unmonitored": "Non suivi"
+    "unmonitored": "Non suivi",
+    "play": "Lire",
+    "open_detail": "Voir la fiche",
+    "mark_watched": "Marquer comme vu",
+    "mark_unwatched": "Marquer comme non vu",
+    "fully_watched": "Entièrement vu",
+    "not_fully_watched": "Pas entièrement vu"
   },
   "legend": {
     "downloaded_monitored": "Téléchargé (suivi)",
