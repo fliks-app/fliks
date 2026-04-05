@@ -12,6 +12,10 @@ body.native {
 body.native.immersive {
   padding: 0 !important;
 }
+/* Pages with hero fanart — content extends behind status bar */
+body.native.hero-page {
+  padding-top: 0 !important;
+}
 
 @theme {
   --breakpoint-3xl: 120rem;

@@ -2,17 +2,27 @@
   <input id="sidebar" type="checkbox" class="drawer-toggle" />
   <div class="drawer-content flex flex-col relative">
     <nav
-      class="navbar bg-base-100 shadow-sm lg:hidden fixed top-0 left-0 right-0 z-30 transition-transform duration-300"
+      class="navbar lg:hidden fixed top-0 left-0 right-0 z-30 transition-all duration-300"
       style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 + 8px)"
       [class.-translate-y-full]="navbarHidden()"
+      [class.bg-base-100]="!navbarTransparent()"
+      [class.shadow-sm]="!navbarTransparent()"
+      [class.bg-transparent]="navbarTransparent()"
     >
-      <div class="flex-none">
+      <div class="flex-none flex">
+        @if (canGoBack()) {
+          <button class="btn btn-square btn-ghost" (click)="goBack()">
+            <svg lucideChevronLeft class="h-5 w-5"></svg>
+          </button>
+        }
         <label for="sidebar" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate">
           <svg lucideMenu class="h-5 w-5"></svg>
         </label>
       </div>
       <div class="flex-1">
-        <a class="btn btn-ghost text-xl" routerLink="/">{{ 'app.name' | translate }}</a>
+        @if (!navbarTransparent()) {
+          <a class="btn btn-ghost text-xl" routerLink="/">{{ 'app.name' | translate }}</a>
+        }
       </div>
       <div class="flex-none">
         @if (castPlayer.hasMedia()) {
@@ -60,7 +70,7 @@
 
   <div class="drawer-side z-40">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
-    <aside class="bg-base-100 w-64 min-h-full flex flex-col">
+    <aside class="bg-base-100 w-64 min-h-full flex flex-col" style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 + 8px)">
       <div class="p-4 border-b border-base-200">
         <a routerLink="/" class="text-2xl font-bold">{{ 'app.name' | translate }}</a>
       </div>
@@ -69,7 +79,7 @@
         <li>
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
             <svg lucideHome class="h-5 w-5"></svg>
-            {{ 'nav.dashboard' | translate }}
+            {{ 'nav.home' | translate }}
           </a>
         </li>
         <li>
@@ -143,6 +153,12 @@
           </li>
         }
         @if (auth.canAccessSettings()) {
+          <li>
+            <a routerLink="/statistics" routerLinkActive="active">
+              <svg lucideLayoutGrid class="h-5 w-5"></svg>
+              {{ 'nav.statistics' | translate }}
+            </a>
+          </li>
           <li>
             <a routerLink="/system" routerLinkActive="active">
               <svg lucideLayoutGrid class="h-5 w-5"></svg>

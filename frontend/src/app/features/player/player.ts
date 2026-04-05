@@ -21,6 +21,7 @@ import { SseService } from '../../core/services/sse.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
+import { parseAudioIndex } from '../../core/utils/player.utils';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 interface ImmersivePlugin {
@@ -873,9 +874,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   async onSelectAudioTrack(trackId: string) {
     this.activeAudioTrackId.set(trackId);
 
-    // Extract the audio stream index (relative index in the audio streams array)
-    const idx = parseInt(trackId.replace(/^(shaka-|si-)/, ''), 10);
-    this.activeAudioStreamIndex = idx;
+    this.activeAudioStreamIndex = parseAudioIndex(trackId);
 
     // Reload the stream with the new audio track
     await this.reloadStream();
@@ -1208,12 +1207,4 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return file?.streamInfo as any;
   }
 
-  private formatTime(seconds: number): string {
-    if (!seconds || !isFinite(seconds)) return '0:00';
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    return `${m}:${String(s).padStart(2, '0')}`;
-  }
 }

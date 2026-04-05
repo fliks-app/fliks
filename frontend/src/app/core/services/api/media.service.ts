@@ -131,6 +131,7 @@ export interface SearchParams {
   missing?: boolean;
   cutoffUnmet?: boolean;
   letter?: string;
+  excludeWatched?: boolean;
 }
 
 export interface VideoStreamInfo {

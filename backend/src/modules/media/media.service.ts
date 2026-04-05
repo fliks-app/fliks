@@ -205,6 +205,7 @@ export class MediaService {
 
   async findAll(
     query: SearchMediaDto,
+    userId?: number,
   ): Promise<{ data: Media[]; total: number }> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 25;
@@ -219,6 +220,13 @@ export class MediaService {
       .leftJoinAndSelect('media.files', 'files');
 
     this.applyFilters(qb, query);
+
+    if (query.excludeWatched && userId) {
+      qb.andWhere(
+        `media.id NOT IN (SELECT DISTINCT ps."mediaId" FROM playback_states ps WHERE ps."userId" = :userId AND ps.completed = true)`,
+        { userId },
+      );
+    }
 
     if (query.q) {
       this.applyFullTextSearch(qb, query.q);

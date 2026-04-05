@@ -81,4 +81,9 @@ export class SearchMediaDto {
   @IsString()
   @IsOptional()
   letter?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  excludeWatched?: boolean;
 }

@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Put,
+  Post,
   Delete,
   Body,
   Param,
@@ -19,6 +20,12 @@ import { User } from '../users/entities/user.entity';
 @UseGuards(JwtOrApiKeyGuard)
 export class PlaybackController {
   constructor(private readonly playbackService: PlaybackService) {}
+
+  @Get('watched-ids')
+  watchedIds(@Req() req: Request) {
+    const user = req.user as User;
+    return this.playbackService.getWatchedMediaIds(user.id);
+  }
 
   @Get('continue-watching')
   continueWatching(@Req() req: Request) {
@@ -65,6 +72,16 @@ export class PlaybackController {
     return this.playbackService.updateState(user.id, mediaFileId, body);
   }
 
+  @Post(':mediaFileId/toggle-watched')
+  toggleWatched(
+    @Req() req: Request,
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Body() body: { mediaId: number; episodeId?: number },
+  ) {
+    const user = req.user as User;
+    return this.playbackService.toggleWatched(user.id, mediaFileId, body.mediaId, body.episodeId);
+  }
+
   @Delete(':mediaFileId')
   deleteState(
     @Req() req: Request,
@@ -72,5 +89,15 @@ export class PlaybackController {
   ) {
     const user = req.user as User;
     return this.playbackService.deleteState(user.id, mediaFileId);
+  }
+
+  /** Remove a media from continue watching (marks all episodes as completed). */
+  @Delete('hide/:mediaId')
+  hideFromContinueWatching(
+    @Req() req: Request,
+    @Param('mediaId', ParseIntPipe) mediaId: number,
+  ) {
+    const user = req.user as User;
+    return this.playbackService.hideFromContinueWatching(user.id, mediaId);
   }
 }

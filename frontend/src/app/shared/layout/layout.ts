@@ -1,5 +1,6 @@
 import { Component, ChangeDetectionStrategy, inject, signal, effect, OnInit, OnDestroy } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet, Router } from '@angular/router';
+import { RouterLink, RouterLinkActive, RouterOutlet, Router, NavigationEnd } from '@angular/router';
+import { Location } from '@angular/common';
 import { TranslateModule } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import { MediaService } from '../../core/services/api/media.service';
@@ -12,6 +13,7 @@ import { CastPlayerService } from '../../core/services/cast-player.service';
 import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
 import {
   LucideMenu,
+  LucideChevronLeft,
   LucideHome,
   LucideFilm,
   LucideTv,
@@ -40,7 +42,7 @@ function getInitialTheme(): 'dark' | 'light' {
   selector: 'app-layout',
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, TranslateModule,
-    LucideMenu, LucideHome, LucideFilm, LucideTv, LucideSearch,
+    LucideMenu, LucideChevronLeft, LucideHome, LucideFilm, LucideTv, LucideSearch,
     LucideClipboardList, LucideDownload, LucideCalendar, LucideUpload,
     LucideArrowRightLeft, LucideLayoutGrid, LucideSettings, LucideUser,
     LucideSun, LucideMoon, LucideLogOut, LucideCast,
@@ -59,13 +61,16 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly sse = inject(SseService);
   readonly castService = inject(CastService);
   readonly castPlayer = inject(CastPlayerService);
+  private readonly location = inject(Location);
+  readonly canGoBack = signal(false);
 
   readonly theme = signal<'dark' | 'light'>(getInitialTheme());
   readonly navbarHidden = signal(false);
+  readonly navbarTransparent = signal(true);
   private lastScrollY = 0;
   private readonly onScroll = () => {
     const y = window.scrollY;
-    // Only hide/show after scrolling past a small threshold
+    this.navbarTransparent.set(y < 20);
     if (Math.abs(y - this.lastScrollY) < 10) return;
     this.navbarHidden.set(y > this.lastScrollY && y > 56);
     this.lastScrollY = y;
@@ -103,10 +108,18 @@ export class LayoutComponent implements OnInit, OnDestroy {
     }
   });
 
+  private navCount = 0;
+
   ngOnInit() {
     this.refreshCounts();
     this.sse.connect();
     window.addEventListener('scroll', this.onScroll, { passive: true });
+    this.router.events.subscribe(e => {
+      if (e instanceof NavigationEnd) {
+        this.navCount++;
+        this.canGoBack.set(this.navCount > 1 && this.router.url !== '/');
+      }
+    });
   }
 
   ngOnDestroy() {
@@ -157,6 +170,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   toggleTheme(): void {
     this.theme.update((t) => (t === 'dark' ? 'light' : 'dark'));
+  }
+
+  goBack() {
+    this.location.back();
   }
 
   toggleCastOverlay() {

@@ -1,8 +1,6 @@
-import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output, signal, OnInit } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
-import { Router, RouterLink } from '@angular/router';
-import { CastService } from '../../../../core/services/cast.service';
-import { CastPlayerService } from '../../../../core/services/cast-player.service';
+import { RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
 import {
@@ -18,8 +16,10 @@ import {
   LucideFileText,
   LucideEyeOff,
   LucideEye,
+  LucideCircleCheck,
 } from '@lucide/angular';
 import { Media } from '../../../../core/services/api/media.service';
+import { PlayableMediaService } from '../../../../core/services/playable-media.service';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
 import type { MediaFileRow } from '../../media-detail.utils';
 import { formatMediaDetailBytes } from '../../media-detail.utils';
@@ -30,17 +30,16 @@ import { formatMediaDetailBytes } from '../../media-detail.utils';
     DecimalPipe, FormsModule, RouterLink, TranslateModule,
     LucideChevronLeft, LucideFilm, LucideTrash2, LucideEllipsisVertical,
     LucideDownload, LucideSearch, LucideSettings, LucideFolder,
-    LucideRotateCcw, LucideFileText, LucideEyeOff, LucideEye,
+    LucideRotateCcw, LucideFileText, LucideEyeOff, LucideEye, LucideCircleCheck,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-header.component.html',
 })
-export class MediaDetailHeaderComponent {
+export class MediaDetailHeaderComponent implements OnInit {
   private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
-  private readonly router = inject(Router);
-  readonly castService = inject(CastService);
-  private readonly castPlayer = inject(CastPlayerService);
+  readonly playable = inject(PlayableMediaService);
+  readonly watched = signal(false);
 
   readonly media = input.required<Media>();
   readonly backRoute = input<string[]>(['/']);
@@ -67,6 +66,18 @@ export class MediaDetailHeaderComponent {
   readonly deleteFile = output<{ fileId: number; deleteOnDisk: boolean }>();
   readonly rescanFiles = output<void>();
 
+  async ngOnInit() {
+    const fileId = this.selectedFileId();
+    if (fileId) this.watched.set(await this.playable.loadWatchedState(fileId));
+  }
+
+  async toggleWatched() {
+    const fileId = this.selectedFileId();
+    const m = this.media();
+    if (!fileId || !m) return;
+    try { this.watched.set(await this.playable.toggleWatched(fileId, m.id)); } catch { /* ignore */ }
+  }
+
   formatBytes(bytes: number): string {
     return formatMediaDetailBytes(bytes);
   }
@@ -75,23 +86,11 @@ export class MediaDetailHeaderComponent {
     const fileId = this.selectedFileId();
     if (!fileId) return;
     const m = this.media();
-
-    if (this.castService.isConnected()) {
-      const file = this.files().find(f => f.id === fileId);
-      await this.castPlayer.quickStart({
-        mediaFileId: fileId,
-        mediaId: m.id,
-        title: m.title,
-        fanartUrl: m.posterUrl ?? null,
-        streamInfo: file?.streamInfo,
-        startTime: fromStart ? 0 : undefined,
-      });
-      this.castPlayer.expanded.set(true);
-    } else {
-      const qp: any = { mediaId: m.id };
-      if (fromStart) qp.t = 0;
-      this.router.navigate(['/watch', fileId], { queryParams: qp });
-    }
+    const file = this.files().find(f => f.id === fileId);
+    await this.playable.play({
+      fileId, mediaId: m.id, title: m.title,
+      fanartUrl: m.posterUrl ?? null, streamInfo: file?.streamInfo,
+    }, fromStart);
   }
 
   async onDeleteFileClick() {

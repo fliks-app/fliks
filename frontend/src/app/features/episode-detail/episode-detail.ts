@@ -8,9 +8,9 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { CastService } from '../../core/services/cast.service';
-import { CastPlayerService } from '../../core/services/cast-player.service';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { PlayableMediaService } from '../../core/services/playable-media.service';
+import { SubtitleActionsService } from '../../core/services/subtitle-actions.service';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Media, MediaService, Season, Episode } from '../../core/services/api/media.service';
@@ -40,6 +40,7 @@ import {
   LucideEye,
   LucideRotateCcw,
   LucideFileText,
+  LucideCircleCheck,
 } from '@lucide/angular';
 
 @Component({
@@ -61,13 +62,13 @@ import {
     LucideEye,
     LucideRotateCcw,
     LucideFileText,
+    LucideCircleCheck,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './episode-detail.html',
 })
 export class EpisodeDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
-  private readonly router = inject(Router);
   private readonly mediaService = inject(MediaService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
@@ -75,8 +76,9 @@ export class EpisodeDetailComponent implements OnInit {
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
-  readonly castService = inject(CastService);
-  private readonly castPlayer = inject(CastPlayerService);
+  readonly playable = inject(PlayableMediaService);
+  private readonly subActions = inject(SubtitleActionsService);
+  readonly watched = signal(false);
 
   readonly loading = signal(true);
   readonly notFound = signal(false);
@@ -214,6 +216,11 @@ export class EpisodeDetailComponent implements OnInit {
       } else {
         this.season.set(foundSeason);
         this.episode.set(foundEpisode);
+        // Load watched status
+        const fileId = this.activeFileId();
+        if (fileId) {
+          this.playable.loadWatchedState(fileId).then(v => this.watched.set(v));
+        }
       }
     } catch {
       this.notFound.set(true);
@@ -355,57 +362,22 @@ export class EpisodeDetailComponent implements OnInit {
 
   async syncSubtitle(event: { subtitleId: number; options: import('../../core/services/api/subtitles-api.service').SyncOptions }) {
     const m = this.media();
-    if (!m) return;
-    this.toast.info(this.translate.instant('media_detail.sync_started'));
-    try {
-      await this.subtitlesApi.sync(m.id, event.subtitleId, event.options);
-      // Success toast will come from SSE when sync actually completes
-    } catch {
-      // handled by global interceptor
-    }
+    if (m) await this.subActions.sync(m.id, event.subtitleId, event.options);
   }
 
   async postProcessSubtitle(event: { subtitleId: number; action: string; params?: Record<string, unknown> }) {
     const m = this.media();
-    if (!m) return;
-    try {
-      await this.subtitlesApi.postProcess(m.id, event.subtitleId, event.action, event.params);
-      this.toast.success(this.translate.instant('media_detail.post_process_success'));
-    } catch {
-      // handled by global interceptor
-    }
+    if (m) await this.subActions.postProcess(m.id, event.subtitleId, event.action, event.params);
   }
 
   async blacklistSubtitle(sub: import('../../core/services/api/subtitles-api.service').SubtitleFileRow) {
     const m = this.media();
-    if (!m) return;
-    try {
-      await this.subtitlesApi.addToBlacklist({
-        providerType: sub.providerType,
-        providerFileId: sub.providerFileId,
-        mediaId: m.id,
-        language: sub.language,
-        sourceTitle: sub.providerFileId,
-        reason: 'Manually blacklisted',
-      });
-      await this.subtitlesApi.delete(m.id, sub.id);
-      this.toast.success(this.translate.instant('media_detail.blacklist_success'));
-      this.subtitles.update((list) => list.filter((s) => s.id !== sub.id));
-    } catch {
-      // handled by global interceptor
-    }
+    if (m) await this.subActions.blacklist(m.id, sub, this.subtitles);
   }
 
   async deleteSubtitle(subtitleId: number) {
     const m = this.media();
-    if (!m) return;
-    this.subtitleActionBusy.set(true);
-    try {
-      await this.subtitlesApi.delete(m.id, subtitleId);
-      this.subtitles.update((list) => list.filter((s) => s.id !== subtitleId));
-    } finally {
-      this.subtitleActionBusy.set(false);
-    }
+    if (m) await this.subActions.remove(m.id, subtitleId, this.subtitles, this.subtitleActionBusy);
   }
 
   async onDeleteFileClick() {
@@ -433,20 +405,9 @@ export class EpisodeDetailComponent implements OnInit {
   async autoSubtitle() {
     const m = this.media();
     const ep = this.episode();
-    if (!m || !ep) return;
     const fileId = this.activeFileId();
-    if (!fileId) return;
-    this.subtitleActionBusy.set(true);
-    try {
-      await this.subtitlesApi.autoDownload(m.id, {
-        mediaFileId: fileId,
-        episodeId: ep.id,
-        language: this.subSearchLang(),
-      });
-      this.subtitles.set(await this.subtitlesApi.getForMedia(m.id));
-    } finally {
-      this.subtitleActionBusy.set(false);
-    }
+    if (!m || !ep || !fileId) return;
+    await this.subActions.autoDownload(m.id, fileId, this.subSearchLang(), this.subtitles, this.subtitleActionBusy, ep.id);
   }
 
   openSubtitleSearch() {
@@ -461,8 +422,7 @@ export class EpisodeDetailComponent implements OnInit {
     if (!m || !ep) return;
     this.subSearchLoading.set(true);
     try {
-      const results = await this.subtitlesApi.search(m.id, this.subSearchLang(), ep.id);
-      this.subSearchResults.set(results);
+      this.subSearchResults.set(await this.subActions.search(m.id, this.subSearchLang(), ep.id));
       this.subSearchSearched.set(true);
     } finally {
       this.subSearchLoading.set(false);
@@ -472,21 +432,16 @@ export class EpisodeDetailComponent implements OnInit {
   async downloadSearchResult(result: any) {
     const m = this.media();
     const ep = this.episode();
-    if (!m || !ep) return;
     const fileId = this.activeFileId();
-    if (!fileId) return;
-    this.subtitleActionBusy.set(true);
-    try {
-      await this.subtitlesApi.download(m.id, {
-        searchResult: result,
-        mediaFileId: fileId,
-        episodeId: ep.id,
-      });
-      const subs = await this.subtitlesApi.getForMedia(m.id);
-      this.subtitles.set(subs);
-    } finally {
-      this.subtitleActionBusy.set(false);
-    }
+    if (!m || !ep || !fileId) return;
+    await this.subActions.download(m.id, fileId, result, this.subtitles, this.subtitleActionBusy, ep.id);
+  }
+
+  async toggleWatched() {
+    const fileId = this.selectedFileId();
+    const m = this.media();
+    if (!fileId || !m) return;
+    try { this.watched.set(await this.playable.toggleWatched(fileId, m.id, this.episode()?.id)); } catch { /* ignore */ }
   }
 
   formatBytes(bytes: number): string {
@@ -498,25 +453,14 @@ export class EpisodeDetailComponent implements OnInit {
     if (!fileId) return;
     const m = this.media();
     const ep = this.episode();
-
-    if (this.castService.isConnected() && m) {
-      const file = this.episodeFiles().find(f => f.id === fileId);
-      await this.castPlayer.quickStart({
-        mediaFileId: fileId,
-        mediaId: m.id,
-        episodeId: ep?.id,
-        title: m.title,
-        episodeTitle: ep ? `S${String(this.season()?.seasonNumber ?? 0).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')} - ${ep.title}` : undefined,
-        fanartUrl: m.posterUrl ?? null,
-        streamInfo: file?.streamInfo,
-        startTime: fromStart ? 0 : undefined,
-      });
-      this.castPlayer.expanded.set(true);
-    } else {
-      const qp: any = { mediaId: m?.id, episodeId: ep?.id };
-      if (fromStart) qp.t = 0;
-      this.router.navigate(['/watch', fileId], { queryParams: qp });
-    }
+    if (!m) return;
+    const file = this.episodeFiles().find(f => f.id === fileId);
+    const sn = this.season()?.seasonNumber ?? 0;
+    await this.playable.play({
+      fileId, mediaId: m.id, episodeId: ep?.id, title: m.title,
+      episodeTitle: ep ? `S${String(sn).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')} - ${ep.title}` : undefined,
+      fanartUrl: m.posterUrl ?? null, streamInfo: file?.streamInfo,
+    }, fromStart);
   }
 
   fileDiskPath(relativePath: string): string {

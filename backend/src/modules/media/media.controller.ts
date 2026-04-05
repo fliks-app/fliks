@@ -12,6 +12,7 @@ import {
   ParseIntPipe,
   NotFoundException,
 } from '@nestjs/common';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { MediaService } from './media.service';
 import { MovieDownloadService } from './movie-download.service';
 import { EpisodeDownloadService } from './episode-download.service';
@@ -79,8 +80,8 @@ export class MediaController {
 
   @Get()
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  findAll(@Query() query: SearchMediaDto) {
-    return this.mediaService.findAll(query);
+  findAll(@Query() query: SearchMediaDto, @CurrentUser() user: any) {
+    return this.mediaService.findAll(query, query.excludeWatched ? user?.id : undefined);
   }
 
   @Get('counts')

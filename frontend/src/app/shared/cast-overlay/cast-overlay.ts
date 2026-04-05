@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, HostListener, inject, signal } from '@angular/core';
+import { formatTime, calcDragTime, parseAudioIndex } from '../../core/utils/player.utils';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import {
@@ -42,24 +43,14 @@ export class CastOverlayComponent {
     this.cp.expanded.update(v => !v);
   }
 
+  readonly formatTime = formatTime;
+
   progressPercent(): number {
-    const d = this.cast.duration() || 1;
-    return (this.cast.currentTime() / d) * 100;
+    return ((this.cast.currentTime() / (this.cast.duration() || 1)) * 100);
   }
 
   dragPercent(): number {
-    const d = this.cast.duration() || 1;
-    return (this.dragTime() / d) * 100;
-  }
-
-  formatTime(seconds: number): string {
-    if (!seconds || !isFinite(seconds)) return '0:00';
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    return h > 0
-      ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-      : `${m}:${String(s).padStart(2, '0')}`;
+    return ((this.dragTime() / (this.cast.duration() || 1)) * 100);
   }
 
   selectSubtitle(sub: any | null) {
@@ -80,8 +71,7 @@ export class CastOverlayComponent {
   selectAudio(track: any | null) {
     if (!track) return;
     this.cp.activeAudioTrackId.set(track.id);
-    const idx = parseInt(track.id.replace(/^(si-|shaka-|audio-)/, ''), 10);
-    this.cp.changeAudio(idx);
+    this.cp.changeAudio(parseAudioIndex(track.id));
   }
 
   selectQuality(quality: any) {
@@ -116,8 +106,6 @@ export class CastOverlayComponent {
   }
 
   private updateDrag(e: PointerEvent, bar: HTMLElement) {
-    const rect = bar.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    this.dragTime.set(pct * (this.cast.duration() || 0));
+    this.dragTime.set(calcDragTime(e, bar, this.cast.duration()));
   }
 }

@@ -66,6 +66,8 @@
     "users.manage": "Gérer les utilisateurs"
   },
   "nav": {
+    "home": "Accueil",
+    "statistics": "Statistiques",
     "dashboard": "Tableau de bord",
     "import_disk": "Import disque",
     "import": "Import Radarr/Sonarr",
@@ -81,6 +83,12 @@
     "close_menu": "Fermer le menu",
     "logout": "Se déconnecter",
     "playback_settings": "Paramètres de lecture"
+  },
+  "home": {
+    "libraries": "Bibliothèques",
+    "continue_watching": "Reprendre la lecture",
+    "recent_movies": "Films récemment ajoutés",
+    "recent_series": "Séries récemment ajoutées"
   },
   "playback_settings": {
     "title": "Paramètres de lecture",
@@ -343,6 +351,7 @@
     "unmonitor": "Ne plus surveiller",
     "unmonitored": "Non surveillé",
     "delete": "Supprimer",
+    "delete_short": "Suppr.",
     "confirm_delete": "Supprimer « {{title}} » de la bibliothèque ?",
     "library_details": "Détails bibliothèque",
     "episode_progress": "Progression des épisodes",

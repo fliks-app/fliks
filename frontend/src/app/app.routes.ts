@@ -31,6 +31,11 @@ export const routes: Routes = [
         path: '',
         pathMatch: 'full',
         loadComponent: () =>
+          import('./features/home/home').then((m) => m.HomeComponent),
+      },
+      {
+        path: 'statistics',
+        loadComponent: () =>
           import('./features/dashboard/dashboard').then((m) => m.DashboardComponent),
       },
       {

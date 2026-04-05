@@ -10,7 +10,8 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
-      if (req.url.includes('/i18n/')) {
+      // Skip i18n files and successful responses with parse errors (e.g. HTML returned instead of JSON)
+      if (req.url.includes('/i18n/') || err.status === 200) {
         return throwError(() => err);
       }
       const message = extractMessage(err, translate);

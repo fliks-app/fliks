@@ -1,4 +1,4 @@
-import { Entity, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, Unique, Index } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { User } from '../../users/entities/user.entity';
 import { Media } from '../../media/entities/media.entity';
@@ -6,6 +6,8 @@ import { MediaFile } from '../../media/entities/media-file.entity';
 
 @Entity('playback_states')
 @Unique(['userId', 'mediaFileId'])
+@Index(['userId', 'mediaId', 'completed'])
+@Index(['userId', 'completed', 'lastPlayedAt'])
 export class PlaybackState extends BaseEntity {
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })

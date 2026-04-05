@@ -1,8 +1,151 @@
 @let m = media();
-<div class="relative">
-  <!-- Fanart background: fixed behind everything, full height -->
+
+<!-- ===== MOBILE layout (Emby-style) ===== -->
+<div class="lg:hidden">
+  <!-- Fanart hero (extends behind navbar) -->
+  <div class="relative -mx-4 -mt-20">
+    @if (m.fanartUrl) {
+      <img [src]="m.fanartUrl" alt="" class="w-full aspect-video landscape:max-h-[40vh] object-cover object-[50%_25%]" />
+      <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-transparent to-black/20"></div>
+    } @else {
+      <div class="w-full aspect-video bg-base-300"></div>
+    }
+  </div>
+
+  <div class="px-1 -mt-8 relative z-10">
+    <!-- Title -->
+    <h1 class="text-2xl font-bold tracking-tight">{{ m.title }}</h1>
+    @if (m.originalTitle && m.originalTitle !== m.title) {
+      <p class="text-base-content/50 text-sm">{{ m.originalTitle }}</p>
+    }
+
+    <!-- Badges: rating, year, runtime, genres -->
+    <div class="flex flex-wrap items-center gap-1.5 mt-2 text-sm text-base-content/70">
+      @if (m.rating) {
+        <span class="flex items-center gap-0.5 text-warning font-semibold">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          {{ m.rating | number:'1.1-1' }}
+        </span>
+      }
+      @if (m.year) { <span>{{ m.year }}</span> }
+      @if (m.runtime) { <span>{{ m.runtime }}min</span> }
+      @if (m.genres?.length) {
+        <span>{{ m.genres!.slice(0, 2).join(', ') }}</span>
+      }
+    </div>
+
+    <!-- File info badges -->
+    @if (files().length > 1) {
+      <div class="mt-3">
+        <select
+          class="select select-bordered select-sm w-full"
+          [ngModel]="selectedFileId()"
+          (ngModelChange)="selectedFileIdChange.emit($event)"
+        >
+          @for (f of files(); track f.id) {
+            <option [ngValue]="f.id">{{ f.quality }} — {{ formatBytes(f.size) }}</option>
+          }
+        </select>
+      </div>
+    } @else if (files().length === 1) {
+      <div class="flex flex-wrap gap-1.5 mt-3 text-xs">
+        <span class="badge badge-sm badge-ghost">{{ files()[0].quality }}</span>
+        <span class="badge badge-sm badge-ghost tabular-nums">{{ formatBytes(files()[0].size) }}</span>
+      </div>
+    }
+
+    <!-- Series episode progress -->
+    @if (m.type === 'series' && m.episodeStats) {
+      <div class="mt-3">
+        <div class="flex justify-between text-xs mb-1">
+          <span class="text-base-content/60">{{ 'media_detail.episode_progress' | translate }}</span>
+          <span class="tabular-nums font-medium">
+            {{ m.episodeStats.downloadedEpisodes }} / {{ m.episodeStats.totalEpisodes }}
+          </span>
+        </div>
+        <progress
+          class="progress progress-primary w-full h-1.5"
+          [attr.value]="m.episodeStats.totalEpisodes ? (100 * m.episodeStats.downloadedEpisodes / m.episodeStats.totalEpisodes) : 0"
+          max="100"
+        ></progress>
+      </div>
+    }
+
+    <!-- Action buttons -->
+    <div class="flex items-center gap-3 mt-4">
+      @if (selectedFileId()) {
+        <button class="btn btn-primary flex-1 gap-2" (click)="play(false)">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          {{ 'player.play' | translate }}
+        </button>
+        <button
+          class="btn btn-ghost btn-square"
+          [class.text-success]="watched()"
+          (click)="toggleWatched()"
+          [title]="watched() ? 'Marquer comme non lu' : 'Marquer comme lu'"
+        >
+          <svg lucideCircleCheck class="h-5 w-5"></svg>
+        </button>
+        <div class="dropdown dropdown-end">
+        <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-circle">
+          <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+        </div>
+        <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-56 p-2 shadow-lg">
+          @if (selectedFileId()) {
+            <li>
+              <a class="flex items-center gap-3" (click)="play(true)">
+                <svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>
+                {{ 'player.play_from_start' | translate }}
+              </a>
+            </li>
+          }
+          @if (canGrab()) {
+            <li>
+              <a class="flex items-center gap-3" (click)="grabBest.emit()" [class.pointer-events-none]="grabBusy() !== null">
+                @if (grabBusy() === 'best') { <span class="loading loading-spinner loading-xs"></span> }
+                @else { <svg lucideDownload class="h-4 w-4 shrink-0 opacity-70"></svg> }
+                {{ 'media_detail.grab_best' | translate }}
+              </a>
+            </li>
+            <li>
+              <a class="flex items-center gap-3" (click)="loadReleases.emit()" [class.pointer-events-none]="releasesLoading()">
+                @if (releasesLoading()) { <span class="loading loading-spinner loading-xs"></span> }
+                @else { <svg lucideSearch class="h-4 w-4 shrink-0 opacity-70"></svg> }
+                {{ 'media_detail.search_releases' | translate }}
+              </a>
+            </li>
+          }
+          @if (canEditProfiles()) {
+            <li><a class="flex items-center gap-3" (click)="openProfiles.emit()"><svg lucideSettings class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_profiles' | translate }}</a></li>
+            <li><a class="flex items-center gap-3" (click)="openRootFolder.emit()"><svg lucideFolder class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_root_folder' | translate }}</a></li>
+          }
+          @if (isAdmin()) {
+            <li><a class="flex items-center gap-3" (click)="refreshMetadata.emit()"><svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.refresh_metadata' | translate }}</a></li>
+            <li><a class="flex items-center gap-3" (click)="rescanFiles.emit()"><svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.rescan_files' | translate }}</a></li>
+            <li>
+              <a class="flex items-center gap-3" (click)="toggleMonitored.emit()">
+                @if (m.monitored) { <svg lucideEyeOff class="h-4 w-4 shrink-0 opacity-70"></svg> {{ 'media_detail.unmonitor' | translate }} }
+                @else { <svg lucideEye class="h-4 w-4 shrink-0 opacity-70"></svg> {{ 'media_detail.monitor' | translate }} }
+              </a>
+            </li>
+            <li><a class="flex items-center gap-3 text-error" (click)="deleteMedia.emit()"><svg lucideTrash2 class="h-4 w-4 shrink-0"></svg>{{ 'media_detail.delete' | translate }}</a></li>
+          }
+        </ul>
+        </div>
+      }
+    </div>
+
+    <!-- Overview -->
+    @if (m.overview) {
+      <p class="mt-3 text-sm text-base-content/80 leading-relaxed line-clamp-4">{{ m.overview }}</p>
+    }
+  </div>
+</div>
+
+<!-- ===== DESKTOP layout (unchanged) ===== -->
+<div class="hidden lg:block relative">
   @if (m.fanartUrl) {
-    <div class="absolute inset-0 -mx-4 -mt-6 lg:-mx-6 overflow-hidden">
+    <div class="absolute inset-0 -mx-6 -mt-6 overflow-hidden">
       <img [src]="m.fanartUrl" alt="" class="w-full h-full object-cover object-[50%_25%]" />
       <div class="absolute inset-0 bg-base-100/80"></div>
       <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-base-100/30 to-base-100/50"></div>
@@ -13,14 +156,10 @@
     </a>
   }
 
-  <div class="flex flex-col lg:flex-row gap-6 lg:gap-10 relative z-10">
-    <div class="shrink-0 w-full max-w-[200px] sm:max-w-[220px] lg:max-w-[240px] mx-auto lg:mx-0">
+  <div class="flex gap-10 relative z-10">
+    <div class="shrink-0 w-[240px]">
       @if (m.posterUrl) {
-        <img
-          [src]="m.posterUrl"
-          [alt]="m.title"
-          class="w-full rounded-xl aspect-2/3 object-cover bg-base-300"
-        />
+        <img [src]="m.posterUrl" [alt]="m.title" class="w-full rounded-xl aspect-2/3 object-cover bg-base-300" />
       } @else {
         <div class="aspect-2/3 rounded-xl bg-base-300 flex items-center justify-center text-base-content/30">
           <svg lucideFilm class="h-20 w-20" [strokeWidth]="1.5"></svg>
@@ -28,38 +167,28 @@
       }
     </div>
 
-    <div class="flex-1 min-w-0 lg:pt-2">
+    <div class="flex-1 min-w-0 pt-2">
       <div class="flex flex-wrap items-center gap-2 mb-2">
         <span class="badge badge-lg badge-neutral">{{ m.status }}</span>
-        @if (!m.monitored) {
-          <span class="badge badge-lg badge-ghost">{{ 'media_detail.unmonitored' | translate }}</span>
-        }
-        @if (m.year) {
-          <span class="badge badge-lg badge-outline">{{ m.year }}</span>
-        }
+        @if (!m.monitored) { <span class="badge badge-lg badge-ghost">{{ 'media_detail.unmonitored' | translate }}</span> }
+        @if (m.year) { <span class="badge badge-lg badge-outline">{{ m.year }}</span> }
         @if (m.rating) {
           <span class="badge badge-lg badge-warning gap-1">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
             {{ m.rating | number:'1.1-1' }}
           </span>
         }
-        @if (m.runtime) {
-          <span class="badge badge-lg badge-outline">{{ m.runtime }} {{ 'common.min' | translate }}</span>
-        }
+        @if (m.runtime) { <span class="badge badge-lg badge-outline">{{ m.runtime }} {{ 'common.min' | translate }}</span> }
       </div>
 
-      <h1 class="text-3xl sm:text-4xl font-bold tracking-tight">{{ m.title }}</h1>
+      <h1 class="text-4xl font-bold tracking-tight">{{ m.title }}</h1>
       @if (m.originalTitle && m.originalTitle !== m.title) {
         <p class="text-base-content/60 mt-1 text-lg">{{ m.originalTitle }}</p>
       }
 
       @if (files().length > 1) {
         <div class="flex items-center gap-3 mt-3">
-          <select
-            class="select select-bordered select-sm"
-            [ngModel]="selectedFileId()"
-            (ngModelChange)="selectedFileIdChange.emit($event)"
-          >
+          <select class="select select-bordered select-sm" [ngModel]="selectedFileId()" (ngModelChange)="selectedFileIdChange.emit($event)">
             @for (f of files(); track f.id) {
               <option [ngValue]="f.id">{{ f.quality }} — {{ formatBytes(f.size) }}</option>
             }
@@ -76,28 +205,20 @@
         <div class="mt-4 max-w-md">
           <div class="flex justify-between text-sm mb-1">
             <span class="text-base-content/70">{{ 'media_detail.episode_progress' | translate }}</span>
-            <span class="tabular-nums font-medium">
-              {{ m.episodeStats.downloadedEpisodes }} / {{ m.episodeStats.totalEpisodes }}
-            </span>
+            <span class="tabular-nums font-medium">{{ m.episodeStats.downloadedEpisodes }} / {{ m.episodeStats.totalEpisodes }}</span>
           </div>
-          <progress
-            class="progress progress-primary w-full h-2"
-            [attr.value]="m.episodeStats.totalEpisodes ? (100 * m.episodeStats.downloadedEpisodes / m.episodeStats.totalEpisodes) : 0"
-            max="100"
-          ></progress>
+          <progress class="progress progress-primary w-full h-2" [attr.value]="m.episodeStats.totalEpisodes ? (100 * m.episodeStats.downloadedEpisodes / m.episodeStats.totalEpisodes) : 0" max="100"></progress>
         </div>
       }
 
       @if (m.genres?.length) {
         <div class="flex flex-wrap gap-1.5 mt-4">
-          @for (g of m.genres; track g) {
-            <span class="badge badge-ghost">{{ g }}</span>
-          }
+          @for (g of m.genres; track g) { <span class="badge badge-ghost">{{ g }}</span> }
         </div>
       }
 
       @if (m.overview) {
-        <p class="mt-4 text-base-content/90 leading-relaxed whitespace-pre-line line-clamp-6 sm:line-clamp-none">{{ m.overview }}</p>
+        <p class="mt-4 text-base-content/90 leading-relaxed whitespace-pre-line">{{ m.overview }}</p>
       }
 
       <div class="flex flex-wrap items-center gap-2 mt-5">
@@ -110,12 +231,10 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
             {{ 'player.play' | translate }}
           </button>
-          <button
-            type="button"
-            class="btn btn-error btn-outline btn-sm btn-square"
-            (click)="onDeleteFileClick()"
-            [title]="'media_detail.delete' | translate"
-          >
+          <button type="button" class="btn btn-outline btn-sm btn-square" [class.btn-success]="watched()" [class.btn-ghost]="!watched()" (click)="toggleWatched()" [title]="watched() ? 'Marquer comme non lu' : 'Marquer comme lu'">
+            <svg lucideCircleCheck class="h-4 w-4"></svg>
+          </button>
+          <button type="button" class="btn btn-error btn-outline btn-sm btn-square" (click)="onDeleteFileClick()" [title]="'media_detail.delete' | translate">
             <svg lucideTrash2 class="h-4 w-4"></svg>
           </button>
         }
@@ -125,93 +244,42 @@
           </div>
           <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-56 p-2 shadow-lg">
             @if (canGrab()) {
-              <li>
-                <a class="flex items-center gap-3" (click)="grabBest.emit()" [class.pointer-events-none]="grabBusy() !== null" [class.opacity-50]="grabBusy() !== null">
-                  @if (grabBusy() === 'best') {
-                    <span class="loading loading-spinner loading-xs"></span>
-                  } @else {
-                    <svg lucideDownload class="h-4 w-4 shrink-0 opacity-70"></svg>
-                  }
-                  {{ 'media_detail.grab_best' | translate }}
-                </a>
-              </li>
-              <li>
-                <a class="flex items-center gap-3" (click)="loadReleases.emit()" [class.pointer-events-none]="releasesLoading()" [class.opacity-50]="releasesLoading()">
-                  @if (releasesLoading()) {
-                    <span class="loading loading-spinner loading-xs"></span>
-                  } @else {
-                    <svg lucideSearch class="h-4 w-4 shrink-0 opacity-70"></svg>
-                  }
-                  {{ 'media_detail.search_releases' | translate }}
-                </a>
-              </li>
+              <li><a class="flex items-center gap-3" (click)="grabBest.emit()" [class.pointer-events-none]="grabBusy() !== null" [class.opacity-50]="grabBusy() !== null">
+                @if (grabBusy() === 'best') { <span class="loading loading-spinner loading-xs"></span> } @else { <svg lucideDownload class="h-4 w-4 shrink-0 opacity-70"></svg> }
+                {{ 'media_detail.grab_best' | translate }}
+              </a></li>
+              <li><a class="flex items-center gap-3" (click)="loadReleases.emit()" [class.pointer-events-none]="releasesLoading()" [class.opacity-50]="releasesLoading()">
+                @if (releasesLoading()) { <span class="loading loading-spinner loading-xs"></span> } @else { <svg lucideSearch class="h-4 w-4 shrink-0 opacity-70"></svg> }
+                {{ 'media_detail.search_releases' | translate }}
+              </a></li>
             }
             @if (canEditProfiles()) {
-              <li>
-                <a class="flex items-center gap-3" (click)="openProfiles.emit()">
-                  <svg lucideSettings class="h-4 w-4 shrink-0 opacity-70"></svg>
-                  {{ 'media_detail.edit_profiles' | translate }}
-                </a>
-              </li>
-              <li>
-                <a class="flex items-center gap-3" (click)="openRootFolder.emit()">
-                  <svg lucideFolder class="h-4 w-4 shrink-0 opacity-70"></svg>
-                  {{ 'media_detail.edit_root_folder' | translate }}
-                </a>
-              </li>
+              <li><a class="flex items-center gap-3" (click)="openProfiles.emit()"><svg lucideSettings class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_profiles' | translate }}</a></li>
+              <li><a class="flex items-center gap-3" (click)="openRootFolder.emit()"><svg lucideFolder class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_root_folder' | translate }}</a></li>
             }
             @if (isAdmin()) {
-              <li>
-                <a class="flex items-center gap-3" (click)="refreshMetadata.emit()" [class.pointer-events-none]="refreshLoading()" [class.opacity-50]="refreshLoading()">
-                  @if (refreshLoading()) {
-                    <span class="loading loading-spinner loading-xs"></span>
-                  } @else {
-                    <svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>
-                  }
-                  {{ 'media_detail.refresh_metadata' | translate }}
-                </a>
-              </li>
-              <li>
-                <a class="flex items-center gap-3" (click)="rescanFiles.emit()" [class.pointer-events-none]="rescanLoading()" [class.opacity-50]="rescanLoading()">
-                  @if (rescanLoading()) {
-                    <span class="loading loading-spinner loading-xs"></span>
-                  } @else {
-                    <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg>
-                  }
-                  {{ 'media_detail.rescan_files' | translate }}
-                </a>
-              </li>
-              <li>
-                <a class="flex items-center gap-3" (click)="toggleMonitored.emit()" [class.pointer-events-none]="monitoredLoading()" [class.opacity-50]="monitoredLoading()">
-                  @if (monitoredLoading()) {
-                    <span class="loading loading-spinner loading-xs"></span>
-                  } @else if (m.monitored) {
-                    <svg lucideEyeOff class="h-4 w-4 shrink-0 opacity-70"></svg>
-                  } @else {
-                    <svg lucideEye class="h-4 w-4 shrink-0 opacity-70"></svg>
-                  }
-                  @if (m.monitored) {
-                    {{ 'media_detail.unmonitor' | translate }}
-                  } @else {
-                    {{ 'media_detail.monitor' | translate }}
-                  }
-                </a>
-              </li>
-              <li>
-                <a class="flex items-center gap-3 text-error" (click)="deleteMedia.emit()" [class.pointer-events-none]="deleteLoading()" [class.opacity-50]="deleteLoading()">
-                  @if (deleteLoading()) {
-                    <span class="loading loading-spinner loading-xs"></span>
-                  } @else {
-                    <svg lucideTrash2 class="h-4 w-4 shrink-0"></svg>
-                  }
-                  {{ 'media_detail.delete' | translate }}
-                </a>
-              </li>
+              <li><a class="flex items-center gap-3" (click)="refreshMetadata.emit()" [class.pointer-events-none]="refreshLoading()" [class.opacity-50]="refreshLoading()">
+                @if (refreshLoading()) { <span class="loading loading-spinner loading-xs"></span> } @else { <svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg> }
+                {{ 'media_detail.refresh_metadata' | translate }}
+              </a></li>
+              <li><a class="flex items-center gap-3" (click)="rescanFiles.emit()" [class.pointer-events-none]="rescanLoading()" [class.opacity-50]="rescanLoading()">
+                @if (rescanLoading()) { <span class="loading loading-spinner loading-xs"></span> } @else { <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg> }
+                {{ 'media_detail.rescan_files' | translate }}
+              </a></li>
+              <li><a class="flex items-center gap-3" (click)="toggleMonitored.emit()" [class.pointer-events-none]="monitoredLoading()" [class.opacity-50]="monitoredLoading()">
+                @if (monitoredLoading()) { <span class="loading loading-spinner loading-xs"></span> }
+                @else if (m.monitored) { <svg lucideEyeOff class="h-4 w-4 shrink-0 opacity-70"></svg> }
+                @else { <svg lucideEye class="h-4 w-4 shrink-0 opacity-70"></svg> }
+                {{ m.monitored ? ('media_detail.unmonitor' | translate) : ('media_detail.monitor' | translate) }}
+              </a></li>
+              <li><a class="flex items-center gap-3 text-error" (click)="deleteMedia.emit()" [class.pointer-events-none]="deleteLoading()" [class.opacity-50]="deleteLoading()">
+                @if (deleteLoading()) { <span class="loading loading-spinner loading-xs"></span> } @else { <svg lucideTrash2 class="h-4 w-4 shrink-0"></svg> }
+                {{ 'media_detail.delete' | translate }}
+              </a></li>
             }
           </ul>
         </div>
       </div>
-
     </div>
   </div>
 </div>

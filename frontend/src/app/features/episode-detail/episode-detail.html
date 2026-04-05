@@ -107,6 +107,16 @@
               </button>
               <button
                 type="button"
+                class="btn btn-outline btn-sm btn-square"
+                [class.btn-success]="watched()"
+                [class.btn-ghost]="!watched()"
+                (click)="toggleWatched()"
+                [title]="watched() ? 'Marquer comme non lu' : 'Marquer comme lu'"
+              >
+                <svg lucideCircleCheck class="h-4 w-4"></svg>
+              </button>
+              <button
+                type="button"
                 class="btn btn-error btn-outline btn-sm btn-square"
                 (click)="onDeleteFileClick()"
                 [title]="'media_detail.delete' | translate"

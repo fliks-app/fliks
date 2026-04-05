@@ -1,0 +1,58 @@
+@if (loading()) {
+  <div class="flex justify-center py-16">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+} @else {
+  <div class="flex flex-col gap-8">
+
+    <!-- Libraries -->
+    <app-horizontal-scroller [title]="'home.libraries' | translate">
+      <a routerLink="/movies" class="shrink-0 w-48 h-28 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 flex items-center gap-3 px-5 hover:shadow-lg transition-shadow">
+        <svg lucideFilm class="h-8 w-8 text-primary shrink-0"></svg>
+        <span class="text-base font-semibold">{{ 'nav.movies' | translate }}</span>
+      </a>
+      <a routerLink="/series" class="shrink-0 w-48 h-28 rounded-xl bg-gradient-to-br from-secondary/20 to-secondary/5 border border-secondary/20 flex items-center gap-3 px-5 hover:shadow-lg transition-shadow">
+        <svg lucideTv class="h-8 w-8 text-secondary shrink-0"></svg>
+        <span class="text-base font-semibold">{{ 'nav.series' | translate }}</span>
+      </a>
+    </app-horizontal-scroller>
+
+    <!-- Continue Watching -->
+    @if (continueWatching().length) {
+      <app-horizontal-scroller [title]="'home.continue_watching' | translate">
+        @for (item of continueWatching(); track item.id) {
+          <app-continue-watching-card [item]="item" (remove)="removeContinueWatching($event)" />
+        }
+      </app-horizontal-scroller>
+    }
+
+    <!-- Recent Movies -->
+    @if (recentMovies().length) {
+      <app-horizontal-scroller [title]="'home.recent_movies' | translate">
+        @for (m of recentMovies(); track m.id) {
+          <app-media-poster-card
+            [posterUrl]="m.posterUrl"
+            [title]="m.title"
+            [subtitle]="'' + m.year"
+            [link]="['/movies', '' + m.id]"
+          />
+        }
+      </app-horizontal-scroller>
+    }
+
+    <!-- Recent Series -->
+    @if (recentSeries().length) {
+      <app-horizontal-scroller [title]="'home.recent_series' | translate">
+        @for (s of recentSeries(); track s.id) {
+          <app-media-poster-card
+            [posterUrl]="s.posterUrl"
+            [title]="s.title"
+            [subtitle]="'' + s.year"
+            [link]="['/series', '' + s.id]"
+          />
+        }
+      </app-horizontal-scroller>
+    }
+
+  </div>
+}

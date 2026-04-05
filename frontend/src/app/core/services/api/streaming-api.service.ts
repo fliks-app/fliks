@@ -68,6 +68,7 @@ export interface ContinueWatchingItem {
   mediaTitle: string;
   mediaType: string;
   posterUrl: string | null;
+  fanartUrl: string | null;
   episodeLabel: string | null;
 }
 
@@ -229,6 +230,22 @@ export class StreamingApiService {
   deletePlaybackState(mediaFileId: number) {
     return firstValueFrom(
       this.http.delete<void>(`/api/playback/${mediaFileId}`),
+    );
+  }
+
+  getWatchedMediaIds(): Promise<number[]> {
+    return firstValueFrom(this.http.get<number[]>('/api/playback/watched-ids'));
+  }
+
+  toggleWatched(mediaFileId: number, mediaId: number, episodeId?: number) {
+    return firstValueFrom(
+      this.http.post<PlaybackState>(`/api/playback/${mediaFileId}/toggle-watched`, { mediaId, episodeId }),
+    );
+  }
+
+  hideFromContinueWatching(mediaId: number) {
+    return firstValueFrom(
+      this.http.delete<void>(`/api/playback/hide/${mediaId}`),
     );
   }
 }

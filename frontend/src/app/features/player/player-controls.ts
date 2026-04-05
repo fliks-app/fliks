@@ -7,6 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
+import { formatTime, calcDragTime } from '../../core/utils/player.utils';
 import {
   LucideCaptions,
   LucideChartNoAxesColumnIncreasing,
@@ -102,18 +103,11 @@ export class PlayerControlsComponent {
   readonly seekPending = signal(false);
   private seekTarget = 0;
 
-  formatTime(seconds: number): string {
-    if (!seconds || !isFinite(seconds)) return '0:00';
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    return `${m}:${String(s).padStart(2, '0')}`;
-  }
+  readonly formatTime = formatTime;
 
   formatRemaining(current: number, total: number): string {
     if (!total || !isFinite(total)) return '';
-    return '-' + this.formatTime(Math.max(0, total - current));
+    return '-' + formatTime(Math.max(0, total - current));
   }
 
   onSeek(event: Event) {
@@ -174,8 +168,6 @@ export class PlayerControlsComponent {
   }
 
   private updateDragFromPointer(e: PointerEvent, bar: HTMLElement) {
-    const rect = bar.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    this.dragTime.set(ratio * (this.duration() || 0));
+    this.dragTime.set(calcDragTime(e, bar, this.duration()));
   }
 }

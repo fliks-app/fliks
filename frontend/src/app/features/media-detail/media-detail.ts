@@ -6,6 +6,7 @@ import {
   computed,
   effect,
   OnInit,
+  OnDestroy,
   viewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -28,6 +29,7 @@ import {
   SubtitleFileRow,
   SubtitleSearchResult,
 } from '../../core/services/api/subtitles-api.service';
+import { SubtitleActionsService } from '../../core/services/subtitle-actions.service';
 import { MediaDetailHeaderComponent } from './components/media-detail-header/media-detail-header.component';
 import { MediaDetailSubtitlesComponent } from './components/media-detail-subtitles/media-detail-subtitles.component';
 import { MediaFileInfoComponent } from '../../shared/components/media-file-info';
@@ -78,7 +80,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail.html',
 })
-export class MediaDetailComponent implements OnInit {
+export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly mediaService = inject(MediaService);
@@ -87,6 +89,7 @@ export class MediaDetailComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly rootFoldersApi = inject(RootFoldersApiService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
+  private readonly subActions = inject(SubtitleActionsService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly sse = inject(SseService);
@@ -259,7 +262,12 @@ export class MediaDetailComponent implements OnInit {
     return filesForEpisode(m.files, c.episode.id);
   });
 
+  ngOnDestroy() {
+    document.body.classList.remove('hero-page');
+  }
+
   async ngOnInit() {
+    document.body.classList.add('hero-page');
     const kind = this.route.snapshot.data['kind'] as MediaType;
     this.expectedKind.set(kind);
     const idParam = this.route.snapshot.paramMap.get('id');
@@ -870,19 +878,9 @@ export class MediaDetailComponent implements OnInit {
 
   async autoSubtitle() {
     const m = this.media();
-    if (!m) return;
     const fileId = this.activeFileId();
-    if (!fileId) return;
-    this.subtitleActionBusy.set(true);
-    try {
-      await this.subtitlesApi.autoDownload(m.id, {
-        mediaFileId: fileId,
-        language: this.subSearchLang(),
-      });
-      await this.loadSubtitles(m.id);
-    } finally {
-      this.subtitleActionBusy.set(false);
-    }
+    if (!m || !fileId) return;
+    await this.subActions.autoDownload(m.id, fileId, this.subSearchLang(), this.subtitles, this.subtitleActionBusy);
   }
 
   openSubtitleSearch() {
@@ -909,12 +907,7 @@ export class MediaDetailComponent implements OnInit {
     this.subSearchSearched.set(false);
     this.subSearchResults.set([]);
     try {
-      const results = await this.subtitlesApi.search(
-        m.id,
-        this.subSearchLang(),
-        epId ?? undefined,
-      );
-      this.subSearchResults.set(results);
+      this.subSearchResults.set(await this.subActions.search(m.id, this.subSearchLang(), epId ?? undefined));
     } catch {
       this.subSearchResults.set([]);
     } finally {
@@ -935,74 +928,32 @@ export class MediaDetailComponent implements OnInit {
     } else {
       mediaFileId = this.activeFileId()!;
     }
-    this.subtitleActionBusy.set(true);
-    try {
-      await this.subtitlesApi.download(m.id, {
-        searchResult: r,
-        mediaFileId,
-        episodeId: epId ?? undefined,
-      });
-      await this.loadSubtitles(m.id);
-    } finally {
-      this.subtitleActionBusy.set(false);
-    }
+    await this.subActions.download(m.id, mediaFileId, r, this.subtitles, this.subtitleActionBusy, epId ?? undefined);
   }
 
   async syncSubtitle(event: { subtitleId: number; options: import('./../../core/services/api/subtitles-api.service').SyncOptions }) {
     const m = this.media();
-    if (!m) return;
-    this.toast.info(this.translate.instant('media_detail.sync_started'));
-    try {
-      await this.subtitlesApi.sync(m.id, event.subtitleId, event.options);
-      // Success toast will come from SSE when sync actually completes
-    } catch {
-      // handled by global interceptor
-    }
+    if (m) await this.subActions.sync(m.id, event.subtitleId, event.options);
   }
 
   async postProcessSubtitle(event: { subtitleId: number; action: string; params?: Record<string, unknown> }) {
     const m = this.media();
     if (!m) return;
-    try {
-      await this.subtitlesApi.postProcess(m.id, event.subtitleId, event.action, event.params);
-      this.toast.success(this.translate.instant('media_detail.post_process_success'));
-      await this.loadSubtitles(m.id);
-    } catch {
-      // handled by global interceptor
-    }
+    await this.subActions.postProcess(m.id, event.subtitleId, event.action, event.params);
+    await this.loadSubtitles(m.id);
   }
 
   async blacklistSubtitle(sub: import('../../core/services/api/subtitles-api.service').SubtitleFileRow) {
     const m = this.media();
     if (!m) return;
-    try {
-      await this.subtitlesApi.addToBlacklist({
-        providerType: sub.providerType,
-        providerFileId: sub.providerFileId,
-        mediaId: m.id,
-        language: sub.language,
-        sourceTitle: sub.providerFileId,
-        reason: 'Manually blacklisted',
-      });
-      await this.subtitlesApi.delete(m.id, sub.id);
-      this.toast.success(this.translate.instant('media_detail.blacklist_success'));
-      await this.loadSubtitles(m.id);
-    } catch {
-      // handled by global interceptor
-    }
+    await this.subActions.blacklist(m.id, sub, this.subtitles);
   }
 
   async deleteSubtitle(subtitleId: number) {
     const m = this.media();
     if (!m) return;
     if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('media_detail.confirm_delete_subtitle'), variant: 'danger' })) return;
-    this.subtitleActionBusy.set(true);
-    try {
-      await this.subtitlesApi.delete(m.id, subtitleId);
-      await this.loadSubtitles(m.id);
-    } finally {
-      this.subtitleActionBusy.set(false);
-    }
+    await this.subActions.remove(m.id, subtitleId, this.subtitles, this.subtitleActionBusy);
   }
 
   async grabRelease(r: MovieRelease, index: number) {
