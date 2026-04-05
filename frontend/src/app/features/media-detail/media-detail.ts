@@ -30,6 +30,7 @@ import {
   SubtitleSearchResult,
 } from '../../core/services/api/subtitles-api.service';
 import { SubtitleActionsService } from '../../core/services/subtitle-actions.service';
+import { NavbarService } from '../../core/services/navbar.service';
 import { MediaDetailHeaderComponent } from './components/media-detail-header/media-detail-header.component';
 import { MediaDetailSubtitlesComponent } from './components/media-detail-subtitles/media-detail-subtitles.component';
 import { MediaFileInfoComponent } from '../../shared/components/media-file-info';
@@ -90,6 +91,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly rootFoldersApi = inject(RootFoldersApiService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly subActions = inject(SubtitleActionsService);
+  private readonly navbarService = inject(NavbarService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly sse = inject(SseService);
@@ -263,11 +265,12 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   });
 
   ngOnDestroy() {
-    document.body.classList.remove('hero-page');
+    this.navbarService.leaveHeroPage();
   }
 
   async ngOnInit() {
-    document.body.classList.add('hero-page');
+    // Enter hero page immediately (transparent navbar) — title will be set after media loads
+    this.navbarService.enterHeroPage('');
     const kind = this.route.snapshot.data['kind'] as MediaType;
     this.expectedKind.set(kind);
     const idParam = this.route.snapshot.paramMap.get('id');
@@ -312,6 +315,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         return;
       }
       this.media.set(m);
+      this.navbarService.enterHeroPage(m.title);
       if (m.type === 'series' && m.seasons?.length) {
         this.syncActiveSeasonForSeriesFilter();
       } else {

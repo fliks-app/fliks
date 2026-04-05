@@ -1,6 +1,7 @@
-import { Component, ChangeDetectionStrategy, inject, signal, effect, OnInit, OnDestroy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal, computed, effect, OnInit, OnDestroy } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { Location } from '@angular/common';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { TranslateModule } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import { MediaService } from '../../core/services/api/media.service';
@@ -8,9 +9,12 @@ import { DownloadClientsApiService } from '../../core/services/api/download-clie
 import { RequestsService } from '../../core/services/api/requests.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SseService } from '../../core/services/sse.service';
+import { ThemeService } from '../../core/services/theme.service';
 import { CastService } from '../../core/services/cast.service';
+import { NavbarService } from '../../core/services/navbar.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
+import { UserMenuComponent } from '../components/user-menu';
 import {
   LucideMenu,
   LucideChevronLeft,
@@ -30,13 +34,11 @@ import {
   LucideMoon,
   LucideLogOut,
   LucideCast,
+  LucideUserCog,
+  LucideShield,
+  LucideRepeat,
 } from '@lucide/angular';
 
-function getInitialTheme(): 'dark' | 'light' {
-  const stored = localStorage.getItem('suitarr-theme');
-  if (stored === 'dark' || stored === 'light') return stored;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
 
 @Component({
   selector: 'app-layout',
@@ -46,7 +48,9 @@ function getInitialTheme(): 'dark' | 'light' {
     LucideClipboardList, LucideDownload, LucideCalendar, LucideUpload,
     LucideArrowRightLeft, LucideLayoutGrid, LucideSettings, LucideUser,
     LucideSun, LucideMoon, LucideLogOut, LucideCast,
+    LucideUserCog, LucideShield, LucideRepeat,
     CastOverlayComponent,
+    UserMenuComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './layout.html',
@@ -60,17 +64,28 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly serverConfig = inject(ServerConfigService);
   private readonly sse = inject(SseService);
   readonly castService = inject(CastService);
+  readonly navbar = inject(NavbarService);
   readonly castPlayer = inject(CastPlayerService);
   private readonly location = inject(Location);
   readonly canGoBack = signal(false);
 
-  readonly theme = signal<'dark' | 'light'>(getInitialTheme());
+  readonly themeService = inject(ThemeService);
   readonly navbarHidden = signal(false);
-  readonly navbarTransparent = signal(true);
+  private readonly scrollAtTop = signal(true);
+  readonly navbarTransparent = computed(() => this.scrollAtTop() && this.navbar.isHeroPage());
+
+  // Sync Android status bar icons with navbar state
+  private readonly statusBarEffect = Capacitor.isNativePlatform() ? effect(() => {
+    const transparent = this.navbarTransparent();
+    const theme = this.themeService.theme();
+    const light = !transparent && theme === 'light';
+    const Immersive = registerPlugin<any>('Immersive');
+    Immersive.setLightStatusBar({ light }).catch(() => {});
+  }) : null;
   private lastScrollY = 0;
   private readonly onScroll = () => {
     const y = window.scrollY;
-    this.navbarTransparent.set(y < 20);
+    this.scrollAtTop.set(y < 20);
     if (Math.abs(y - this.lastScrollY) < 10) return;
     this.navbarHidden.set(y > this.lastScrollY && y > 56);
     this.lastScrollY = y;
@@ -81,11 +96,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly queueCount = signal(0);
   readonly pendingRequestCount = signal(0);
 
-  private readonly themeEffect = effect(() => {
-    const t = this.theme();
-    document.documentElement.setAttribute('data-theme', t);
-    localStorage.setItem('suitarr-theme', t);
-  });
 
   /** Refresh counts when relevant SSE events arrive */
   private readonly sseEffect = effect(() => {
@@ -164,13 +174,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     } catch { /* ignore */ }
   }
 
-  isSettingsOpen(): boolean {
-    return this.router.url.startsWith('/settings');
-  }
 
-  toggleTheme(): void {
-    this.theme.update((t) => (t === 'dark' ? 'light' : 'dark'));
-  }
 
   goBack() {
     this.location.back();
@@ -178,6 +182,12 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   toggleCastOverlay() {
     this.castPlayer.expanded.update(v => !v);
+  }
+
+  switchUser() {
+    // Navigate to login without clearing the current session
+    // (allows reconnection later without password)
+    this.router.navigate(['/login'], { queryParams: { switch: true } });
   }
 
   onToggleCastConnection() {

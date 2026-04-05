@@ -8,6 +8,7 @@
       [class.bg-base-100]="!navbarTransparent()"
       [class.shadow-sm]="!navbarTransparent()"
       [class.bg-transparent]="navbarTransparent()"
+      [class.text-white]="navbarTransparent()"
     >
       <div class="flex-none flex">
         @if (canGoBack()) {
@@ -19,9 +20,13 @@
           <svg lucideMenu class="h-5 w-5"></svg>
         </label>
       </div>
-      <div class="flex-1">
+      <div class="flex-1 min-w-0">
         @if (!navbarTransparent()) {
-          <a class="btn btn-ghost text-xl" routerLink="/">{{ 'app.name' | translate }}</a>
+          @if (navbar.heroTitle()) {
+            <span class="text-lg font-bold truncate pl-2">{{ navbar.heroTitle() }}</span>
+          } @else {
+            <a class="btn btn-ghost text-xl" routerLink="/">{{ 'app.name' | translate }}</a>
+          }
         }
       </div>
       <div class="flex-none">
@@ -39,12 +44,13 @@
             }
           </button>
         }
+        <app-user-menu />
       </div>
     </nav>
     <!-- Spacer for fixed navbar on mobile -->
     <div class="h-16 lg:hidden"></div>
-    <!-- Desktop top-right: Cast chip or Cast button -->
-    <div class="hidden lg:block absolute top-3 right-4 z-10">
+    <!-- Desktop top-right: Cast + User -->
+    <div class="hidden lg:flex items-center gap-1 absolute top-3 right-4 z-50">
       @if (castPlayer.hasMedia()) {
         <button class="btn btn-ghost btn-sm gap-2" (click)="toggleCastOverlay()">
           <svg lucideCast class="h-5 w-5 text-info"></svg>
@@ -59,6 +65,7 @@
           }
         </button>
       }
+      <app-user-menu />
     </div>
     <main class="flex-1 p-4 lg:p-6">
       <router-outlet />
@@ -75,13 +82,15 @@
         <a routerLink="/" class="text-2xl font-bold">{{ 'app.name' | translate }}</a>
       </div>
 
-      <ul class="menu p-4 flex-1 gap-1 min-w-64">
+      <ul class="menu p-4 flex-1 gap-0.5 min-w-64">
         <li>
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
             <svg lucideHome class="h-5 w-5"></svg>
             {{ 'nav.home' | translate }}
           </a>
         </li>
+
+        <li class="menu-title text-xs uppercase tracking-wider mt-3">{{ 'nav.section_library' | translate }}</li>
         <li>
           <a routerLink="/movies" routerLinkActive="active" class="justify-between">
             <span class="flex items-center gap-2">
@@ -104,6 +113,8 @@
             }
           </a>
         </li>
+
+        <li class="menu-title text-xs uppercase tracking-wider mt-3">{{ 'nav.section_downloads' | translate }}</li>
         <li>
           <a routerLink="/add" routerLinkActive="active">
             <svg lucideSearch class="h-5 w-5"></svg>
@@ -138,101 +149,8 @@
             {{ 'nav.calendar' | translate }}
           </a>
         </li>
-        @if (auth.canAccessSettings()) {
-          <li>
-            <a routerLink="/import-disk" routerLinkActive="active">
-              <svg lucideUpload class="h-5 w-5"></svg>
-              {{ 'nav.import_disk' | translate }}
-            </a>
-          </li>
-          <li>
-            <a routerLink="/import" routerLinkActive="active">
-              <svg lucideArrowRightLeft class="h-5 w-5"></svg>
-              {{ 'nav.import' | translate }}
-            </a>
-          </li>
-        }
-        @if (auth.canAccessSettings()) {
-          <li>
-            <a routerLink="/statistics" routerLinkActive="active">
-              <svg lucideLayoutGrid class="h-5 w-5"></svg>
-              {{ 'nav.statistics' | translate }}
-            </a>
-          </li>
-          <li>
-            <a routerLink="/system" routerLinkActive="active">
-              <svg lucideLayoutGrid class="h-5 w-5"></svg>
-              {{ 'nav.system' | translate }}
-            </a>
-          </li>
-        }
-
-        <!-- Settings — collapsible dropdown (admin only) -->
-        <li>
-          <a routerLink="/playback-settings" routerLinkActive="active">
-            <svg lucideCast class="h-5 w-5"></svg>
-            {{ 'nav.playback_settings' | translate }}
-          </a>
-        </li>
-        @if (auth.canAccessSettings()) {
-          <li>
-            <details [open]="isSettingsOpen()">
-              <summary>
-                <svg lucideSettings class="h-5 w-5"></svg>
-                {{ 'nav.settings' | translate }}
-              </summary>
-              <ul>
-                <li><a routerLink="/settings/general" routerLinkActive="active">{{ 'settings.nav.general' | translate }}</a></li>
-                <li><a routerLink="/settings/quality-profiles" routerLinkActive="active">{{ 'settings.nav.quality_profiles' | translate }}</a></li>
-                <li><a routerLink="/settings/language-profiles" routerLinkActive="active">{{ 'settings.nav.language_profiles' | translate }}</a></li>
-                <li><a routerLink="/settings/quality-definitions" routerLinkActive="active">{{ 'settings.nav.quality_definitions' | translate }}</a></li>
-                <li><a routerLink="/settings/custom-formats" routerLinkActive="active">{{ 'settings.nav.custom_formats' | translate }}</a></li>
-                <li><a routerLink="/settings/indexers" routerLinkActive="active">{{ 'settings.nav.indexers' | translate }}</a></li>
-                <li><a routerLink="/settings/download-clients" routerLinkActive="active">{{ 'settings.nav.download_clients' | translate }}</a></li>
-                <li><a routerLink="/settings/naming" routerLinkActive="active">{{ 'settings.nav.naming' | translate }}</a></li>
-                <li><a routerLink="/settings/blocklist" routerLinkActive="active">{{ 'settings.nav.blocklist' | translate }}</a></li>
-                <li><a routerLink="/settings/subtitle-providers" routerLinkActive="active">{{ 'settings.nav.subtitle_providers' | translate }}</a></li>
-                <li><a routerLink="/settings/subtitles" routerLinkActive="active">{{ 'settings.nav.subtitles' | translate }}</a></li>
-                <li><a routerLink="/settings/notifications" routerLinkActive="active">{{ 'settings.nav.notifications' | translate }}</a></li>
-                <li><a routerLink="/settings/media-servers" routerLinkActive="active">{{ 'settings.nav.media_servers' | translate }}</a></li>
-                <li><a routerLink="/settings/root-folders" routerLinkActive="active">{{ 'settings.nav.root_folders' | translate }}</a></li>
-                <li><a routerLink="/settings/tags" routerLinkActive="active">{{ 'settings.nav.tags' | translate }}</a></li>
-                <li><a routerLink="/settings/users" routerLinkActive="active">{{ 'settings.nav.users' | translate }}</a></li>
-                <li><a routerLink="/settings/roles" routerLinkActive="active">{{ 'settings.nav.roles' | translate }}</a></li>
-                <li><a routerLink="/settings/schedulers" routerLinkActive="active">{{ 'settings.nav.schedulers' | translate }}</a></li>
-                <li><a routerLink="/settings/auto-approval" routerLinkActive="active">{{ 'settings.nav.auto_approval' | translate }}</a></li>
-                @if (serverConfig.isNative) {
-                  <li><a routerLink="/setup">{{ 'settings.nav.server' | translate }}</a></li>
-                }
-              </ul>
-            </details>
-          </li>
-        }
       </ul>
 
-      <div class="p-4 border-t border-base-200">
-        @if (auth.user(); as user) {
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-full bg-base-300 flex items-center justify-center shrink-0">
-              <svg lucideUser class="h-4 w-4 text-base-content/40"></svg>
-            </div>
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-medium truncate">{{ user.username }}</p>
-              <p class="text-sm text-base-content/50">{{ user.role }}</p>
-            </div>
-            <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="toggleTheme()">
-              @if (theme() === 'dark') {
-                <svg lucideSun class="h-4 w-4"></svg>
-              } @else {
-                <svg lucideMoon class="h-4 w-4"></svg>
-              }
-            </button>
-            <button class="btn btn-ghost btn-sm btn-square" (click)="auth.logout()" [attr.aria-label]="'nav.logout' | translate">
-              <svg lucideLogOut class="h-4 w-4"></svg>
-            </button>
-          </div>
-        }
-      </div>
     </aside>
   </div>
 </div>

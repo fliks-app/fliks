@@ -4,7 +4,7 @@
     <!-- Header -->
     <div class="flex items-center justify-between gap-4">
       <div class="flex items-center gap-4">
-        <a routerLink="/settings/users" class="btn btn-ghost btn-sm btn-circle">
+        <a routerLink="../" class="btn btn-ghost btn-sm btn-circle">
           <svg lucideChevronLeft class="h-5 w-5"></svg>
         </a>
         <div class="flex items-center gap-3">
@@ -67,6 +67,6 @@
 } @else {
   <div class="text-center py-16">
     <p class="text-lg text-base-content/50">{{ 'settings.user_detail.not_found' | translate }}</p>
-    <a routerLink="/settings/users" class="btn btn-ghost btn-sm mt-4">{{ 'settings.user_detail.back' | translate }}</a>
+    <a routerLink="../" class="btn btn-ghost btn-sm mt-4">{{ 'settings.user_detail.back' | translate }}</a>
   </div>
 }

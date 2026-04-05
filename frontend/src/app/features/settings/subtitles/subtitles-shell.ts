@@ -15,13 +15,13 @@ import { TranslateModule } from '@ngx-translate/core';
 
       <div role="tablist" class="tabs tabs-bordered">
         <a role="tab" class="tab"
-          routerLink="/settings/subtitles"
+          routerLink="./"
           routerLinkActive="tab-active"
           [routerLinkActiveOptions]="{ exact: true }">
           {{ 'settings.subtitles.tab_settings' | translate }}
         </a>
         <a role="tab" class="tab"
-          routerLink="/settings/subtitles/stats"
+          routerLink="./stats"
           routerLinkActive="tab-active">
           {{ 'settings.subtitles.tab_stats' | translate }}
         </a>

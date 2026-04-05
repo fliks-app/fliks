@@ -24,19 +24,23 @@ public class MainActivity extends BridgeActivity {
         window.setStatusBarColor(Color.TRANSPARENT);
         window.setNavigationBarColor(Color.TRANSPARENT);
 
-        // Force light (white) icons on status/nav bars — post to run after Capacitor setup
-        window.getDecorView().post(() -> {
-            WindowInsetsControllerCompat ic =
-                WindowCompat.getInsetsController(window, window.getDecorView());
-            ic.setAppearanceLightStatusBars(false);
-            ic.setAppearanceLightNavigationBars(false);
-        });
+        // Set initial status bar icon color — post to run after Capacitor setup
+        window.getDecorView().post(() -> setLightStatusBar(false));
 
     }
 
     /** Called by ImmersivePlugin. */
     public void setImmersiveMode(boolean enabled) {
         this.immersiveMode = enabled;
+    }
+
+    /** Set status/nav bar icon color: light=true means dark icons (for light theme). */
+    public void setLightStatusBar(boolean light) {
+        Window window = getWindow();
+        WindowInsetsControllerCompat ic =
+            WindowCompat.getInsetsController(window, window.getDecorView());
+        ic.setAppearanceLightStatusBars(light);
+        ic.setAppearanceLightNavigationBars(light);
     }
 
     @Override

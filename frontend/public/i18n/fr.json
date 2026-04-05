@@ -82,7 +82,17 @@
     "open_menu": "Ouvrir le menu",
     "close_menu": "Fermer le menu",
     "logout": "Se déconnecter",
+    "switch_user": "Changer d'utilisateur",
+    "administration": "Administration",
+    "section_library": "Bibliothèque",
+    "section_downloads": "Téléchargement",
     "playback_settings": "Paramètres de lecture"
+  },
+  "admin": {
+    "title": "Administration",
+    "back_to_app": "Retour à l'application",
+    "section_system": "Système",
+    "section_settings": "Paramètres"
   },
   "home": {
     "libraries": "Bibliothèques",

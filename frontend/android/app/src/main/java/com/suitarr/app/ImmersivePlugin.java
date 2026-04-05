@@ -70,6 +70,17 @@ public class ImmersivePlugin extends Plugin {
     }
 
     @PluginMethod()
+    public void setLightStatusBar(PluginCall call) {
+        boolean light = call.getBoolean("light", false);
+        getActivity().runOnUiThread(() -> {
+            if (getActivity() instanceof MainActivity) {
+                ((MainActivity) getActivity()).setLightStatusBar(light);
+            }
+        });
+        call.resolve();
+    }
+
+    @PluginMethod()
     public void exit(PluginCall call) {
         getActivity().runOnUiThread(() -> {
             Window window = getActivity().getWindow();
