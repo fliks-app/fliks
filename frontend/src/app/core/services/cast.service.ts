@@ -78,9 +78,15 @@ export class CastService implements OnDestroy {
 
       // Listen for native Cast events
       window.addEventListener('castStateChanged', ((e: CustomEvent) => {
-        this.isConnected.set(e.detail?.connected ?? false);
-        this.connecting.set(false);
+        const connected = e.detail?.connected ?? false;
+        this.isConnected.set(connected);
+        if (connected) this.connecting.set(false);
       }) as EventListener);
+
+      // Picker dismissed without selecting a device
+      window.addEventListener('castPickerDismissed', () => {
+        this.connecting.set(false);
+      });
 
       window.addEventListener('castMediaUpdate', ((e: CustomEvent) => {
         this.currentTime.set(e.detail?.currentTime ?? 0);
@@ -157,9 +163,8 @@ export class CastService implements OnDestroy {
   requestSession() {
     this.connecting.set(true);
     if (this.isNative) {
-      NativeCast.requestSession()
-        .then(() => { if (!this.isConnected()) this.connecting.set(false); })
-        .catch(() => this.connecting.set(false));
+      // The plugin resolves immediately; castStateChanged fires on connect OR dismiss.
+      NativeCast.requestSession().catch(() => this.connecting.set(false));
     } else {
       cast.framework.CastContext.getInstance().requestSession().catch(() => this.connecting.set(false));
     }

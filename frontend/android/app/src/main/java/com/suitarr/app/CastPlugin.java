@@ -50,41 +50,63 @@ public class CastPlugin extends Plugin {
     private CastContext castContext;
     private SessionManager sessionManager;
     private CastSession castSession;
+    /** True between the user picking a device and the session starting/failing. */
+    private volatile boolean sessionPending = false;
 
     private final SessionManagerListener<CastSession> sessionListener = new SessionManagerListener<CastSession>() {
         @Override
         public void onSessionStarted(CastSession session, String sessionId) {
+            sessionPending = false;
             castSession = session;
             notifyJS("connected", true);
         }
         @Override
         public void onSessionEnded(CastSession session, int error) {
+            sessionPending = false;
             castSession = null;
             notifyJS("connected", false);
         }
         @Override
         public void onSessionResumed(CastSession session, boolean wasSuspended) {
+            sessionPending = false;
             castSession = session;
             notifyJS("connected", true);
         }
         @Override
         public void onSessionSuspended(CastSession session, int reason) {}
         @Override
-        public void onSessionStarting(CastSession session) {}
+        public void onSessionStarting(CastSession session) {
+            sessionPending = true;
+        }
         @Override
         public void onSessionStartFailed(CastSession session, int error) {
+            sessionPending = false;
             notifyJS("connected", false);
+            notifyPickerDismissed(); // also reset connecting spinner
         }
         @Override
         public void onSessionEnding(CastSession session) {}
         @Override
-        public void onSessionResuming(CastSession session, String sessionId) {}
+        public void onSessionResuming(CastSession session, String sessionId) {
+            sessionPending = true;
+        }
         @Override
-        public void onSessionResumeFailed(CastSession session, int error) {}
+        public void onSessionResumeFailed(CastSession session, int error) {
+            sessionPending = false;
+            notifyJS("connected", false);
+            notifyPickerDismissed();
+        }
     };
 
     private void notifyJS(String key, boolean value) {
         String js = "window.dispatchEvent(new CustomEvent('castStateChanged', { detail: { " + key + ": " + value + " } }));";
+        getBridge().getWebView().post(() ->
+            getBridge().getWebView().evaluateJavascript(js, null)
+        );
+    }
+
+    private void notifyPickerDismissed() {
+        String js = "window.dispatchEvent(new CustomEvent('castPickerDismissed'));";
         getBridge().getWebView().post(() ->
             getBridge().getWebView().evaluateJavascript(js, null)
         );
@@ -141,6 +163,24 @@ public class CastPlugin extends Plugin {
 
                 MediaRouteChooserDialogFragment dialog = new MediaRouteChooserDialogFragment();
                 dialog.setRouteSelector(selector);
+
+                // Notify JS when the dialog is dismissed without connecting
+                ((AppCompatActivity) getActivity()).getSupportFragmentManager()
+                    .registerFragmentLifecycleCallbacks(new androidx.fragment.app.FragmentManager.FragmentLifecycleCallbacks() {
+                        @Override
+                        public void onFragmentDestroyed(androidx.fragment.app.FragmentManager fm, androidx.fragment.app.Fragment f) {
+                            if (f == dialog) {
+                                fm.unregisterFragmentLifecycleCallbacks(this);
+                                // Only notify dismiss if no session is starting or already connected.
+                                // If sessionPending=true, the user picked a device and we wait for
+                                // onSessionStarted/onSessionStartFailed to fire instead.
+                                if (!sessionPending && (castSession == null || !castSession.isConnected())) {
+                                    notifyPickerDismissed();
+                                }
+                            }
+                        }
+                    }, false);
+
                 dialog.show(((AppCompatActivity) getActivity()).getSupportFragmentManager(), "cast_picker");
                 call.resolve();
             } catch (Exception e) {
