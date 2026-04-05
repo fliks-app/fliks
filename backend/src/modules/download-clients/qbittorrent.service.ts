@@ -12,6 +12,7 @@ export interface QbittorrentTorrent {
   progress: number; // 0–1
   dlspeed: number; // bytes/s
   upspeed: number; // bytes/s
+  ratio: number; // upload/download ratio
   eta: number; // seconds
   state: string; // 'downloading' | 'seeding' | 'paused' | 'error' | ...
   category: string;

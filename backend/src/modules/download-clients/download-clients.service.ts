@@ -15,6 +15,9 @@ export interface QueueEntry extends QbittorrentTorrent {
   mediaId?: number;
   mediaTitle?: string;
   mediaType?: 'movie' | 'series';
+  /** Download client status (Downloading, Seeding, Paused, Stalled…) */
+  trackerStatus: string;
+  /** App-level status (Awaiting import, Importing, Imported, Import failed…) */
   status: string;
   statusMessage?: string;
 }
@@ -124,15 +127,90 @@ export class DownloadClientsService {
     await this.qbittorrent.deleteTorrent(client, hash, deleteFiles);
   }
 
+  async linkTorrentToMedia(
+    mediaId: number,
+    torrentHash: string,
+  ): Promise<DownloadHistory> {
+    const hash = torrentHash.toLowerCase();
+
+    // Find the torrent in qBittorrent to get name and client
+    let sourceTitle = hash;
+    let clientId: number | undefined;
+    const clients = await this.repo.find({ where: { enabled: true } });
+    for (const client of clients) {
+      if (!this.qbittorrent.supports(client)) continue;
+      try {
+        const torrents = await this.qbittorrent.getTorrents(client);
+        const t = torrents.find(t => t.hash?.toLowerCase() === hash);
+        if (t) {
+          sourceTitle = t.name;
+          clientId = client.id;
+          break;
+        }
+      } catch { continue; }
+    }
+
+    return this.historyRepo.save(
+      this.historyRepo.create({
+        mediaId,
+        sourceTitle,
+        downloadClientId: clientId,
+        torrentHash: hash,
+        quality: this.parseQuality(sourceTitle),
+        status: 'grabbed',
+      }),
+    );
+  }
+
+  private parseQuality(title: string): string {
+    const u = title.toUpperCase();
+    if (u.includes('2160P') || u.includes('4K') || u.includes('UHD')) return '2160p';
+    if (u.includes('1080P')) return '1080p';
+    if (u.includes('720P')) return '720p';
+    if (u.includes('480P')) return '480p';
+    if (u.includes('REMUX')) return 'Remux';
+    if (u.includes('BLURAY') || u.includes('BLU-RAY')) return 'Bluray';
+    if (u.includes('WEBRIP')) return 'WEBRip';
+    if (u.includes('WEB-DL') || u.includes('WEBDL')) return 'WEB-DL';
+    if (u.includes('WEB')) return 'WEB';
+    if (u.includes('HDTV')) return 'HDTV';
+    return '';
+  }
+
   async reimport(torrentHash: string): Promise<void> {
-    const entry = await this.historyRepo.findOne({
+    let entry = await this.historyRepo.findOne({
       where: { torrentHash },
       order: { createdAt: 'DESC' },
     });
+
+    // Fallback: find by torrent name (hash may not have been resolved at link time)
     if (!entry) {
-      throw new NotFoundException('No history entry found for this torrent');
+      const clients = await this.repo.find({ where: { enabled: true } });
+      for (const client of clients) {
+        if (!this.qbittorrent.supports(client)) continue;
+        try {
+          const torrents = await this.qbittorrent.getTorrents(client);
+          const t = torrents.find(t => t.hash?.toLowerCase() === torrentHash.toLowerCase());
+          if (t) {
+            entry = await this.historyRepo.findOne({
+              where: { sourceTitle: t.name },
+              order: { createdAt: 'DESC' },
+            });
+            if (entry) {
+              // Patch the hash for future lookups
+              entry.torrentHash = torrentHash;
+            }
+            break;
+          }
+        } catch { continue; }
+      }
+    }
+
+    if (!entry) {
+      throw new NotFoundException('No history entry — link the torrent to a media first');
     }
     await this.historyRepo.update(entry.id, {
+      torrentHash: entry.torrentHash,
       status: 'grabbed',
       statusMessage: null as any,
     });
@@ -149,7 +227,8 @@ export class DownloadClientsService {
           ...t,
           clientId: client.id,
           clientName: client.name,
-          status: QB_STATE_MAP[t.state] ?? t.state,
+          trackerStatus: QB_STATE_MAP[t.state] ?? t.state,
+          status: '',
         });
       }
     }
@@ -185,20 +264,19 @@ export class DownloadClientsService {
         entry.mediaType = match.media.type;
       }
 
-      // Override status for seeding torrents waiting for import
-      const isSeeding = entry.status === 'Seeding';
-      if (isSeeding && match) {
-        if (match.status === 'warning') {
-          entry.status = 'Quality not upgraded';
-          entry.statusMessage = match.statusMessage ?? undefined;
+      // App-level status from history
+      if (match) {
+        if (match.status === 'completed') {
+          entry.status = 'Imported';
+        } else if (match.status === 'importing') {
+          entry.status = 'Importing';
         } else if (match.status === 'failed') {
           entry.status = 'Import failed';
           entry.statusMessage = match.statusMessage ?? undefined;
-        } else if (match.status === 'importing') {
-          entry.status = 'Importing';
-        } else if (match.status === 'completed') {
-          entry.status = 'Imported';
-        } else {
+        } else if (match.status === 'warning') {
+          entry.status = 'Quality not upgraded';
+          entry.statusMessage = match.statusMessage ?? undefined;
+        } else if (entry.progress >= 1) {
           entry.status = 'Awaiting import';
         }
       }

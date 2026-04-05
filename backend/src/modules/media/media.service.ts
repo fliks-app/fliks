@@ -583,38 +583,6 @@ export class MediaService {
   // History
   // ---------------------------------------------------------------------------
 
-  async linkTorrentToMedia(
-    mediaId: number,
-    sourceTitle: string,
-    clientId?: number,
-  ): Promise<DownloadHistory> {
-    await this.findOne(mediaId);
-    return this.historyRepo.save(
-      this.historyRepo.create({
-        mediaId,
-        sourceTitle,
-        downloadClientId: clientId ?? undefined,
-        quality: this.parseQuality(sourceTitle),
-        status: 'grabbed',
-      }),
-    );
-  }
-
-  private parseQuality(title: string): string {
-    const u = title.toUpperCase();
-    if (u.includes('2160P') || u.includes('4K') || u.includes('UHD'))
-      return '2160p';
-    if (u.includes('1080P')) return '1080p';
-    if (u.includes('720P')) return '720p';
-    if (u.includes('480P')) return '480p';
-    if (u.includes('REMUX')) return 'Remux';
-    if (u.includes('BLURAY') || u.includes('BLU-RAY')) return 'Bluray';
-    if (u.includes('WEBRIP')) return 'WEBRip';
-    if (u.includes('WEB-DL') || u.includes('WEBDL')) return 'WEB-DL';
-    if (u.includes('WEB')) return 'WEB';
-    if (u.includes('HDTV')) return 'HDTV';
-    return '';
-  }
 
   async updateSeasonMonitored(
     seasonId: number,

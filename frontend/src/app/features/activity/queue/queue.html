@@ -1,19 +1,4 @@
 <div class="flex justify-end gap-2">
-  @if (hasImportable) {
-    <button
-      type="button"
-      class="btn btn-primary btn-sm"
-      [disabled]="importing()"
-      (click)="triggerImport()"
-    >
-      @if (importing()) {
-        <span class="loading loading-spinner loading-xs"></span>
-      } @else {
-        <svg lucideSparkles class="h-4 w-4"></svg>
-      }
-      {{ 'activity.import_now' | translate }}
-    </button>
-  }
   <button type="button" class="btn btn-ghost btn-sm" (click)="refreshQueue()">
     <svg lucideRotateCcw class="h-4 w-4"></svg>
     {{ 'common.refresh' | translate }}
@@ -60,33 +45,21 @@
                     {{ 'activity.link_media' | translate }}
                   </button>
                 }
-                @if (item.mediaId && (item.status === 'Awaiting import' || item.status === 'Import failed' || (item.status === 'Stopped' && item.progress >= 1))) {
-                  <button
-                    type="button"
-                    class="btn btn-success btn-xs gap-1"
-                    [disabled]="importing()"
-                    (click)="reimportAndTrigger(item)"
-                  >
-                    @if (importing()) {
-                      <span class="loading loading-spinner loading-xs"></span>
-                    } @else {
-                      <svg lucideSparkles class="h-3.5 w-3.5"></svg>
-                    }
-                    {{ 'activity.import_now' | translate }}
-                  </button>
-                }
               </div>
             </div>
             <div class="flex items-center gap-1 shrink-0">
-              <span class="badge badge-sm" [ngClass]="stateClass(item.status)">
-                {{ item.status }}
-              </span>
+              <span class="badge badge-sm badge-ghost">{{ item.trackerStatus }}</span>
+              @if (item.status) {
+                <span class="badge badge-sm" [ngClass]="appStateClass(item.status)">
+                  {{ item.status }}
+                </span>
+              }
               <div class="dropdown dropdown-end">
                 <label tabindex="0" class="btn btn-ghost btn-xs btn-circle">
                   <svg lucideEllipsisVertical class="h-4 w-4"></svg>
                 </label>
                 <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-200 rounded-box shadow-lg z-10 w-56 p-2">
-                  @if (item.status === 'Imported' || item.status === 'Quality not upgraded' || (item.status === 'Stopped' && item.progress >= 1)) {
+                  @if (item.status === 'Imported' || item.status === 'Quality not upgraded' || item.status === 'Import failed' || (!item.status && item.progress >= 1)) {
                     <li>
                       <button (click)="reimportAndTrigger(item)">
                         <svg lucideRotateCcw class="h-4 w-4"></svg>
@@ -114,11 +87,11 @@
           <div class="w-full bg-base-300 rounded-full h-1.5 overflow-hidden">
             <div
               class="h-1.5 rounded-full transition-all duration-500"
-              [class.bg-primary]="item.status === 'Downloading' || item.status === 'Downloading metadata'"
-              [class.bg-success]="item.status === 'Seeding' || item.status === 'Awaiting import' || item.status === 'Imported'"
-              [class.bg-warning]="item.status === 'Stalled' || item.status === 'Importing' || item.status === 'Quality not upgraded'"
+              [class.bg-primary]="item.trackerStatus === 'Downloading' || item.trackerStatus === 'Downloading metadata'"
+              [class.bg-success]="item.trackerStatus === 'Seeding' || item.status === 'Imported'"
+              [class.bg-warning]="item.trackerStatus === 'Stalled' || item.status === 'Importing' || item.status === 'Quality not upgraded'"
               [class.bg-error]="item.status === 'Import failed'"
-              [class.bg-base-content/20]="item.status === 'Paused' || item.status === 'Stopped'"
+              [class.bg-base-content/20]="item.trackerStatus === 'Paused' || item.trackerStatus === 'Stopped'"
               [style.width.%]="item.progress * 100"
             ></div>
           </div>
@@ -132,7 +105,7 @@
             @if (item.upspeed > 0) {
               <span>↑ {{ formatSpeed(item.upspeed) }}</span>
             }
-            @if (item.eta > 0 && item.status === 'Downloading') {
+            @if (item.eta > 0 && item.trackerStatus === 'Downloading') {
               <span>{{ 'activity.eta' | translate }}: {{ formatEta(item.eta) }}</span>
             }
             @if (item.num_seeds > 0 || item.num_leechs > 0) {

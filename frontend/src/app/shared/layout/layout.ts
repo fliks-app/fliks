@@ -163,7 +163,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private async refreshQueueCount() {
     try {
       const queue = await this.downloadApi.getQueue();
-      this.queueCount.set(queue.length);
+      this.queueCount.set(queue.filter(q => q.status !== 'Imported').length);
     } catch { /* ignore */ }
   }
 

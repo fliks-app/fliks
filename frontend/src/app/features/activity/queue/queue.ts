@@ -21,6 +21,7 @@ import {
   Media,
 } from '../../../core/services/api/media.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { ToastService } from '../../../core/services/toast.service';
 import {
   LucideSparkles,
   LucideRotateCcw,
@@ -43,6 +44,7 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly toast = inject(ToastService);
 
   readonly queue = signal<QueueItem[]>([]);
   readonly queueLoading = signal(true);
@@ -90,6 +92,7 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
     try {
       await this.downloadApi.reimport(item.hash);
       await this.downloadApi.triggerImport();
+      this.toast.info(this.translate.instant('activity.import_started'));
       setTimeout(() => this.refreshQueue(), 3000);
     } catch { /* ignore */ } finally {
       this.importing.set(false);
@@ -134,7 +137,7 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
     if (!item || !mediaId) return;
     this.linkSaving.set(true);
     try {
-      await this.mediaService.linkTorrent(mediaId, item.name, item.clientId);
+      await this.mediaService.linkTorrent(mediaId, item.hash);
       this.linkDialog()?.nativeElement.close();
       await this.refreshQueue();
     } finally {
@@ -176,21 +179,12 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
     return `${s}s`;
   }
 
-  stateClass(status: string): string {
+  appStateClass(status: string): string {
     switch (status) {
-      case 'Downloading':
-      case 'Downloading metadata': return 'badge-info';
-      case 'Stalled':
-      case 'Importing':
-      case 'Quality not upgraded': return 'badge-warning';
-      case 'Seeding':
       case 'Awaiting import':
+      case 'Importing': return 'badge-warning';
       case 'Imported': return 'badge-success';
-      case 'Paused':
-      case 'Stopped':
-      case 'Queued': return 'badge-ghost';
-      case 'Error':
-      case 'Missing files':
+      case 'Quality not upgraded': return 'badge-warning';
       case 'Import failed': return 'badge-error';
       default: return 'badge-ghost';
     }

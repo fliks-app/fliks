@@ -265,9 +265,9 @@ export class MediaService {
     );
   }
 
-  linkTorrent(mediaId: number, sourceTitle: string, clientId?: number) {
+  linkTorrent(mediaId: number, torrentHash: string) {
     return firstValueFrom(
-      this.http.post('/api/media/history/link', { mediaId, sourceTitle, clientId }),
+      this.http.post('/api/download-clients/queue/link', { mediaId, torrentHash }),
     );
   }
 

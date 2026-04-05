@@ -17,6 +17,7 @@ import {
   QbittorrentService,
   QbittorrentTorrent,
 } from '../download-clients/qbittorrent.service';
+import { Indexer } from '../indexers/entities/indexer.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NamingService } from './naming.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
@@ -46,6 +47,8 @@ export class CompletionService {
     private readonly clientRepo: Repository<DownloadClient>,
     @InjectRepository(RootFolder)
     private readonly rootFolderRepo: Repository<RootFolder>,
+    @InjectRepository(Indexer)
+    private readonly indexerRepo: Repository<Indexer>,
     private readonly qbittorrent: QbittorrentService,
     private readonly notifications: NotificationsService,
     private readonly naming: NamingService,
@@ -662,6 +665,77 @@ export class CompletionService {
       await this.dataSource.query(
         `INSERT INTO commands (name, status, trigger, body) VALUES ('SearchMissing', 'queued', 'scheduled', '{}')`,
       );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Seed ratio cleanup — remove torrents that have met their seed ratio target
+  // ---------------------------------------------------------------------------
+
+  async cleanSeededTorrents(): Promise<void> {
+    // Only care about completed imports that still have a torrent hash
+    const completed = await this.historyRepo.find({
+      where: { status: 'completed' },
+    });
+    const withHash = completed.filter(h => h.torrentHash);
+    if (!withHash.length) return;
+
+    // Load all indexers into a map for quick lookup
+    const indexers = await this.indexerRepo.find();
+    const indexerMap = new Map(indexers.map(ix => [ix.id, ix]));
+
+    // Fetch torrents from all enabled qBittorrent clients
+    const clients = await this.clientRepo.find({ where: { enabled: true } });
+    const qbitClients = clients.filter(c => this.qbittorrent.supports(c));
+    if (!qbitClients.length) return;
+
+    const allTorrents: { client: typeof clients[0]; torrent: QbittorrentTorrent }[] = [];
+    for (const client of qbitClients) {
+      try {
+        const torrents = await this.qbittorrent.getTorrents(client);
+        for (const t of torrents) allTorrents.push({ client, torrent: t });
+      } catch { continue; }
+    }
+    if (!allTorrents.length) return;
+
+    const torrentMap = new Map(allTorrents.map(e => [e.torrent.hash.toLowerCase(), e]));
+    const nowSec = Math.floor(Date.now() / 1000);
+    let deleted = 0;
+
+    for (const history of withHash) {
+      const entry = torrentMap.get(history.torrentHash!.toLowerCase());
+      if (!entry) continue; // torrent already removed
+
+      const { client, torrent } = entry;
+      const indexer = history.indexerId ? indexerMap.get(history.indexerId) : undefined;
+      const settings = (indexer?.settings ?? {}) as Record<string, unknown>;
+      const targetRatio = Number(settings['seedRatio'] ?? 1);
+      const maxRetentionDays = settings['maxRetentionDays'] != null ? Number(settings['maxRetentionDays']) : null;
+
+      let reason = '';
+      if (maxRetentionDays != null && maxRetentionDays > 0 && torrent.completion_on > 0) {
+        const ageDays = (nowSec - torrent.completion_on) / 86400;
+        if (ageDays >= maxRetentionDays) {
+          reason = `retention ${Math.round(ageDays)}d >= ${maxRetentionDays}d`;
+        }
+      }
+      if (!reason && torrent.ratio >= targetRatio) {
+        reason = `ratio ${torrent.ratio.toFixed(2)} >= ${targetRatio}`;
+      }
+
+      if (!reason) continue;
+
+      this.log.log(`SeedCleanup: removing "${torrent.name}" (${reason})`);
+      try {
+        await this.qbittorrent.deleteTorrent(client, torrent.hash, true);
+        deleted++;
+      } catch (e) {
+        this.log.error(`SeedCleanup: failed to delete "${torrent.name}": ${(e as Error).message}`);
+      }
+    }
+
+    if (deleted > 0) {
+      this.events.emit({ type: 'queue.updated' });
     }
   }
 }

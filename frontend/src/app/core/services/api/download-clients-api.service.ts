@@ -43,6 +43,7 @@ export interface QueueItem {
   downloaded: number;
   progress: number;
   state: string;
+  trackerStatus: string;
   status: string;
   eta: number;
   dlspeed: number;

@@ -45,6 +45,8 @@ export class IndexersSettingsComponent implements OnInit {
   readonly formTorznabBase = signal('');
   readonly formTorznabKey = signal('');
   readonly formMinSeeders = signal(0);
+  readonly formSeedRatio = signal(1);
+  readonly formMaxRetentionDays = signal<number | null>(null);
   readonly formUnknownLanguage = signal('');
 
   readonly testLoading = signal(false);
@@ -86,6 +88,8 @@ export class IndexersSettingsComponent implements OnInit {
     this.formTorznabBase.set('');
     this.formTorznabKey.set('');
     this.formMinSeeders.set(0);
+    this.formSeedRatio.set(1);
+    this.formMaxRetentionDays.set(null);
     this.formUnknownLanguage.set('');
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
@@ -101,6 +105,8 @@ export class IndexersSettingsComponent implements OnInit {
     this.formTorznabBase.set(String(s['baseUrl'] ?? ''));
     this.formTorznabKey.set(String(s['apiKey'] ?? ''));
     this.formMinSeeders.set(Number(s['minSeeders'] ?? 0));
+    this.formSeedRatio.set(Number(s['seedRatio'] ?? 1));
+    this.formMaxRetentionDays.set(s['maxRetentionDays'] != null ? Number(s['maxRetentionDays']) : null);
     this.formUnknownLanguage.set(String(s['unknownLanguageIsoCode'] ?? ''));
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
@@ -156,6 +162,8 @@ export class IndexersSettingsComponent implements OnInit {
         baseUrl: base.replace(/\/$/, ''),
         apiKey: this.formTorznabKey().trim(),
         minSeeders: this.formMinSeeders(),
+        seedRatio: this.formSeedRatio(),
+        maxRetentionDays: this.formMaxRetentionDays() || undefined,
         unknownLanguageIsoCode: this.formUnknownLanguage() || undefined,
       },
     };

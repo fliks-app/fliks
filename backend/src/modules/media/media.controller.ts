@@ -29,7 +29,6 @@ import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { PatchMonitoredDto } from './dto/patch-monitored.dto';
 import { UpdateRootFolderDto } from './dto/update-path.dto';
-import { LinkTorrentDto } from './dto/link-torrent.dto';
 import { SUITARR_QUALITIES } from '../../common/constants/suitarr-qualities';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
@@ -100,16 +99,6 @@ export class MediaController {
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
   calendar(@Query() query: CalendarQueryDto) {
     return this.mediaService.getCalendar(query);
-  }
-
-  @Post('history/link')
-  @CheckPolicies((ability) => ability.can(Action.Manage, Media))
-  linkTorrent(@Body() dto: LinkTorrentDto) {
-    return this.mediaService.linkTorrentToMedia(
-      dto.mediaId,
-      dto.sourceTitle,
-      dto.clientId,
-    );
   }
 
   @Patch('bulk')

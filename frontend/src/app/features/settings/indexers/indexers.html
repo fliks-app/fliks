@@ -163,6 +163,35 @@
             />
           </label>
         </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.indexers.field_seed_ratio' | translate }}</span>
+            <input
+              type="number"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formSeedRatio()"
+              (ngModelChange)="formSeedRatio.set(+$event)"
+              min="0"
+              step="0.1"
+            />
+            <div class="label">
+              <span class="label-text-alt text-base-content/50">{{ 'settings.indexers.seed_ratio_hint' | translate }}</span>
+            </div>
+          </label>
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.indexers.field_max_retention' | translate }}</span>
+            <input
+              type="number"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formMaxRetentionDays()"
+              (ngModelChange)="formMaxRetentionDays.set($event ? +$event : null)"
+              min="0"
+            />
+            <div class="label">
+              <span class="label-text-alt text-base-content/50">{{ 'settings.indexers.max_retention_hint' | translate }}</span>
+            </div>
+          </label>
+        </div>
         <label class="label cursor-pointer justify-start gap-3">
           <input
             type="checkbox"

@@ -94,6 +94,11 @@ export class SchedulerService implements OnModuleInit {
       triggerable: true,
     },
     {
+      name: 'CleanSeeded',
+      cron: CronExpression.EVERY_MINUTE,
+      triggerable: true,
+    },
+    {
       name: 'SubtitleSearch',
       cron: CronExpression.EVERY_6_HOURS,
       triggerable: true,
@@ -262,6 +267,8 @@ export class SchedulerService implements OnModuleInit {
         await this.completion.processCompleted();
       else if (name === 'CleanStalled')
         await this.completion.cleanStalledTorrents();
+      else if (name === 'CleanSeeded')
+        await this.completion.cleanSeededTorrents();
       else if (name === 'SubtitleSearch')
         await this.subtitleScheduler.searchMissingSubtitles();
       else if (name === 'SubtitleUpgrade')
