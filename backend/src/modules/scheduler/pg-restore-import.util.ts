@@ -91,6 +91,42 @@ export function rowMonitored(v: unknown): boolean {
   return v === true || v === 1 || v === '1' || v === 't' || v === 'true';
 }
 
+export async function queryRadarrRootFolderPaths(
+  client: Client,
+): Promise<string[]> {
+  const attempts = [
+    `SELECT "Path" AS path FROM "RootFolders"`,
+    `SELECT path FROM root_folders`,
+  ];
+  for (const sql of attempts) {
+    try {
+      const r = await client.query<{ path: string }>(sql);
+      return r.rows.map((row) => row.path).filter(Boolean);
+    } catch {
+      /* try next */
+    }
+  }
+  return [];
+}
+
+export async function querySonarrRootFolderPaths(
+  client: Client,
+): Promise<string[]> {
+  const attempts = [
+    `SELECT "Path" AS path FROM "RootFolders"`,
+    `SELECT path FROM root_folders`,
+  ];
+  for (const sql of attempts) {
+    try {
+      const r = await client.query<{ path: string }>(sql);
+      return r.rows.map((row) => row.path).filter(Boolean);
+    } catch {
+      /* try next */
+    }
+  }
+  return [];
+}
+
 export async function queryRadarrMovies(client: Client): Promise<
   Array<{
     title: string;
@@ -98,11 +134,18 @@ export async function queryRadarrMovies(client: Client): Promise<
     year: number | null;
     path: string | null;
     monitored: unknown;
+    rootFolderPath: string | null;
   }>
 > {
   const attempts = [
-    `SELECT "Title" AS title, "TmdbId" AS tmdbid, "Year" AS year, "Path" AS path, "Monitored" AS monitored FROM "Movies"`,
-    `SELECT title, tmdbid AS tmdbid, year, path, monitored FROM movies`,
+    `SELECT m."Title" AS title, m."TmdbId" AS tmdbid, m."Year" AS year, m."Path" AS path, m."Monitored" AS monitored, rf."Path" AS root_folder_path
+     FROM "Movies" m
+     LEFT JOIN "RootFolders" rf ON m."RootFolderId" = rf."Id"`,
+    `SELECT m.title, m.tmdbid AS tmdbid, m.year, m.path, m.monitored, rf.path AS root_folder_path
+     FROM movies m
+     LEFT JOIN root_folders rf ON m.rootfolderid = rf.id`,
+    `SELECT "Title" AS title, "TmdbId" AS tmdbid, "Year" AS year, "Path" AS path, "Monitored" AS monitored, NULL::text AS root_folder_path FROM "Movies"`,
+    `SELECT title, tmdbid AS tmdbid, year, path, monitored, NULL::text AS root_folder_path FROM movies`,
   ];
   for (const sql of attempts) {
     try {
@@ -112,6 +155,7 @@ export async function queryRadarrMovies(client: Client): Promise<
         year: number | null;
         path: string | null;
         monitored: unknown;
+        root_folder_path: string | null;
       }>(sql);
       return r.rows.map((row) => ({
         title: row.title,
@@ -119,6 +163,7 @@ export async function queryRadarrMovies(client: Client): Promise<
         year: row.year,
         path: row.path,
         monitored: row.monitored,
+        rootFolderPath: row.root_folder_path,
       }));
     } catch {
       /* try next */
@@ -156,18 +201,31 @@ export async function querySonarrSeries(client: Client): Promise<
     year: number | null;
     path: string | null;
     monitored: unknown;
+    rootFolderPath: string | null;
   }>
 > {
   const useTmdb = await sonarrUsesTmdb(client);
 
   const attempts = useTmdb
     ? [
-        `SELECT "Title" AS title, "TmdbId" AS extid, "Year" AS year, "Path" AS path, "Monitored" AS monitored FROM "Series"`,
-        `SELECT title, tmdbid AS extid, year, path, monitored FROM series`,
+        `SELECT s."Title" AS title, s."TmdbId" AS extid, s."Year" AS year, s."Path" AS path, s."Monitored" AS monitored, rf."Path" AS root_folder_path
+         FROM "Series" s
+         LEFT JOIN "RootFolders" rf ON s."RootFolderId" = rf."Id"`,
+        `SELECT s.title, s.tmdbid AS extid, s.year, s.path, s.monitored, rf.path AS root_folder_path
+         FROM series s
+         LEFT JOIN root_folders rf ON s.rootfolderid = rf.id`,
+        `SELECT "Title" AS title, "TmdbId" AS extid, "Year" AS year, "Path" AS path, "Monitored" AS monitored, NULL::text AS root_folder_path FROM "Series"`,
+        `SELECT title, tmdbid AS extid, year, path, monitored, NULL::text AS root_folder_path FROM series`,
       ]
     : [
-        `SELECT "Title" AS title, "TvdbId" AS extid, "Year" AS year, "Path" AS path, "Monitored" AS monitored FROM "Series"`,
-        `SELECT title, tvdbid AS extid, year, path, monitored FROM series`,
+        `SELECT s."Title" AS title, s."TvdbId" AS extid, s."Year" AS year, s."Path" AS path, s."Monitored" AS monitored, rf."Path" AS root_folder_path
+         FROM "Series" s
+         LEFT JOIN "RootFolders" rf ON s."RootFolderId" = rf."Id"`,
+        `SELECT s.title, s.tvdbid AS extid, s.year, s.path, s.monitored, rf.path AS root_folder_path
+         FROM series s
+         LEFT JOIN root_folders rf ON s.rootfolderid = rf.id`,
+        `SELECT "Title" AS title, "TvdbId" AS extid, "Year" AS year, "Path" AS path, "Monitored" AS monitored, NULL::text AS root_folder_path FROM "Series"`,
+        `SELECT title, tvdbid AS extid, year, path, monitored, NULL::text AS root_folder_path FROM series`,
       ];
 
   for (const sql of attempts) {
@@ -178,6 +236,7 @@ export async function querySonarrSeries(client: Client): Promise<
         year: number | null;
         path: string | null;
         monitored: unknown;
+        root_folder_path: string | null;
       }>(sql);
       return r.rows.map((row) => ({
         title: row.title,
@@ -185,6 +244,7 @@ export async function querySonarrSeries(client: Client): Promise<
         year: row.year,
         path: row.path,
         monitored: row.monitored,
+        rootFolderPath: row.root_folder_path,
       }));
     } catch {
       /* try next */

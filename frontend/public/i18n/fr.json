@@ -153,7 +153,12 @@
     "result_skipped": "{{count}} ignoré(s)",
     "result_errors": "erreur(s)",
     "root_folders_created": "{{count}} root folder(s) créé(s)",
-    "quality_profiles_created": "{{count}} profil(s) de qualité créé(s)"
+    "quality_profiles_created": "{{count}} profil(s) de qualite cree(s)",
+    "mode_label": "Mode d'import",
+    "mode_skip": "Completer (ignorer les existants)",
+    "mode_update": "Mettre a jour (maj les existants)",
+    "import_subtitles": "Importer les sous-titres externes",
+    "result_subtitles": "{{count}} sous-titre(s) importe(s)"
   },
   "dashboard": {
     "title": "Tableau de bord",

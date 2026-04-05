@@ -20,6 +20,8 @@ import { CreateCommentDto } from './dto/create-comment.dto';
 import { MediaType, RequestStatus } from '../../common/enums';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MediaService } from '../media/media.service';
+import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
+import { Action } from '../auth/casl/actions.enum';
 
 @Injectable()
 export class RequestsService {
@@ -32,7 +34,15 @@ export class RequestsService {
     private readonly ruleRepo: Repository<AutoApprovalRule>,
     private readonly notifications: NotificationsService,
     private readonly mediaService: MediaService,
+    private readonly caslAbilityFactory: CaslAbilityFactory,
   ) {}
+
+  /** Aligné sur PoliciesGuard / CaslAbilityFactory (manage:all → Manage sur tout). */
+  private canManageRequests(user: User): boolean {
+    return this.caslAbilityFactory
+      .createForUser(user)
+      .can(Action.Manage, SuitarrRequest);
+  }
 
   // ---------------------------------------------------------------------------
   // Auto-approval
@@ -201,7 +211,7 @@ export class RequestsService {
       .leftJoinAndSelect('r.approvedBy', 'approvedBy')
       .orderBy('r.createdAt', 'DESC');
 
-    if (!user.permissions.includes('requests.manage')) {
+    if (!this.canManageRequests(user)) {
       qb.andWhere('r.userId = :uid', { uid: user.id });
     } else if (query.userId) {
       qb.andWhere('r.userId = :uid', { uid: query.userId });
@@ -224,7 +234,7 @@ export class RequestsService {
       relations: ['user', 'approvedBy', 'comments', 'comments.user'],
     });
     if (!row) throw new NotFoundException(`Request #${id} not found`);
-    if (!user.permissions.includes('requests.manage') && row.userId !== user.id) {
+    if (!this.canManageRequests(user) && row.userId !== user.id) {
       throw new ForbiddenException();
     }
     return row;
@@ -239,7 +249,7 @@ export class RequestsService {
     if (row.status !== RequestStatus.PENDING) {
       throw new ForbiddenException('Only pending requests can be updated');
     }
-    if (!user.permissions.includes('requests.manage') && row.userId !== user.id) {
+    if (!this.canManageRequests(user) && row.userId !== user.id) {
       throw new ForbiddenException();
     }
     if (dto.qualityProfileId !== undefined) row.qualityProfileId = dto.qualityProfileId;
@@ -250,7 +260,7 @@ export class RequestsService {
 
   async remove(id: number, user: User): Promise<void> {
     const row = await this.findOne(id, user);
-    const isManager = user.permissions.includes('requests.manage');
+    const isManager = this.canManageRequests(user);
     if (isManager) {
       await this.requestRepo.remove(row);
       return;
@@ -265,7 +275,7 @@ export class RequestsService {
   }
 
   async approve(id: number, admin: User): Promise<SuitarrRequest> {
-    if (!admin.permissions.includes('requests.manage')) throw new ForbiddenException();
+    if (!this.canManageRequests(admin)) throw new ForbiddenException();
     const row = await this.requestRepo.findOne({ where: { id } });
     if (!row) throw new NotFoundException(`Request #${id} not found`);
     if (row.status !== RequestStatus.PENDING) {
@@ -311,7 +321,7 @@ export class RequestsService {
     admin: User,
     reason?: string,
   ): Promise<SuitarrRequest> {
-    if (!admin.permissions.includes('requests.manage')) throw new ForbiddenException();
+    if (!this.canManageRequests(admin)) throw new ForbiddenException();
     const row = await this.requestRepo.findOne({ where: { id } });
     if (!row) throw new NotFoundException(`Request #${id} not found`);
     if (row.status !== RequestStatus.PENDING) {
@@ -342,7 +352,7 @@ export class RequestsService {
     });
     if (!request)
       throw new NotFoundException(`Request #${requestId} not found`);
-    if (!user.permissions.includes('requests.manage') && request.userId !== user.id) {
+    if (!this.canManageRequests(user) && request.userId !== user.id) {
       throw new ForbiddenException();
     }
     const comment = this.commentRepo.create({
@@ -359,7 +369,7 @@ export class RequestsService {
     });
     if (!request)
       throw new NotFoundException(`Request #${requestId} not found`);
-    if (!user.permissions.includes('requests.manage') && request.userId !== user.id) {
+    if (!this.canManageRequests(user) && request.userId !== user.id) {
       throw new ForbiddenException();
     }
     return this.commentRepo.find({
@@ -376,7 +386,7 @@ export class RequestsService {
     });
     if (!comment)
       throw new NotFoundException(`Comment #${commentId} not found`);
-    if (!user.permissions.includes('requests.manage') && comment.userId !== user.id) {
+    if (!this.canManageRequests(user) && comment.userId !== user.id) {
       throw new ForbiddenException();
     }
     await this.commentRepo.remove(comment);

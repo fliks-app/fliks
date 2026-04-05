@@ -40,8 +40,8 @@ export class CaslAbilityFactory {
   createForUser(user: User): AppAbility {
     const { can, build } = new AbilityBuilder<AppAbility>(createMongoAbility);
 
-    // Super-admin: full access
-    if (user.isAdmin) {
+    // Super-admin / rôle avec manage:all — aligné sur User.permissions (getter)
+    if (user.permissions.includes('manage:all')) {
       can(Action.Manage, 'all');
       return build();
     }

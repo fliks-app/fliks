@@ -1,8 +1,10 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ForbiddenException,
   ConflictException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -11,15 +13,35 @@ import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { Role } from '../roles/entities/role.entity';
+import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
+import { Action } from '../auth/casl/actions.enum';
 
 @Injectable()
-export class UsersService {
+export class UsersService implements OnModuleInit {
+  private readonly log = new Logger(UsersService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     @InjectRepository(Role)
     private readonly roleRepo: Repository<Role>,
+    private readonly caslAbilityFactory: CaslAbilityFactory,
   ) {}
+
+  async onModuleInit() {
+    const count = await this.userRepo.count();
+    if (count > 0) return;
+
+    this.log.warn('No users found — creating default admin account (admin / password)');
+    const user = this.userRepo.create({
+      username: 'admin',
+      passwordHash: await bcrypt.hash('password', 12),
+      isAdmin: true,
+      enabled: true,
+    });
+    await this.userRepo.save(user);
+    this.log.warn('Default admin account created — change the password after first login!');
+  }
 
   async findAll() {
     const users = await this.userRepo.find({
@@ -85,7 +107,8 @@ export class UsersService {
   ): Promise<User> {
     const target = await this.findOne(targetId);
     const isSelf = requester.id === targetId;
-    const isManager = requester.permissions.includes('users.manage');
+    const ability = this.caslAbilityFactory.createForUser(requester);
+    const isManager = ability.can(Action.Manage, User);
 
     if (!isSelf && !isManager) throw new ForbiddenException();
 

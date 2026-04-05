@@ -15,7 +15,7 @@
 
 @if (result(); as ir) {
   <div role="alert" class="alert text-sm mt-3" [class.alert-success]="ir.errors.length === 0" [class.alert-warning]="ir.errors.length > 0">
-    {{ ir.imported }} importé(s), {{ ir.skipped }} ignoré(s).
+    {{ ir.imported }} importé(s)@if (ir.skipped > 0) {, {{ ir.skipped }} ignoré(s)}.
     @if (ir.errors.length) {
       <br>{{ ir.errors.length }} erreur(s): {{ ir.errors.slice(0, 3).join(', ') }}
     }

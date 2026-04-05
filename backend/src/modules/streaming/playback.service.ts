@@ -172,7 +172,11 @@ export class PlaybackService {
       JOIN media m ON m.id = c."mediaId"
       JOIN episodes e ON e.id = c."episodeId"
       JOIN seasons s ON s.id = e."seasonId"
-      LEFT JOIN media_files mf ON mf."mediaId" = c."mediaId" AND mf."episodeId" = c."episodeId" AND c."mediaFileId" IS NULL
+      LEFT JOIN LATERAL (
+        SELECT mf2.id FROM media_files mf2
+        WHERE mf2."mediaId" = c."mediaId" AND mf2."episodeId" = c."episodeId"
+        ORDER BY mf2.id DESC LIMIT 1
+      ) mf ON c."mediaFileId" IS NULL
       LEFT JOIN playback_states ps_next ON ps_next."userId" = $1 AND ps_next."mediaFileId" = COALESCE(c."mediaFileId", mf.id)
       WHERE COALESCE(ps_next.completed, false) = false
         AND COALESCE(c."mediaFileId", mf.id) IS NOT NULL`,

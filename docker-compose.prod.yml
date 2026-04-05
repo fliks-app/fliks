@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: suitarr
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-suitarr}
+      POSTGRES_DB: suitarr
+    volumes:
+      - suitarr_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  suitarr:
+    image: ghcr.io/clementdelestre/suitarr:v1.0.0
+    ports:
+      - "3000:3000"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: suitarr
+      DB_PASSWORD: ${DB_PASSWORD:-suitarr}
+      DB_NAME: suitarr
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+    volumes:
+      - /path/to/downloads:/downloads
+      - /path/to/medias:/medias
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "992"  # render group for Intel GPU
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+volumes:
+  suitarr_pgdata:

@@ -65,4 +65,7 @@ export class SubtitleFile extends BaseEntity {
 
   @Column({ default: false })
   locked: boolean;
+
+  @Column('simple-json', { default: '[]' })
+  tags: string[];
 }

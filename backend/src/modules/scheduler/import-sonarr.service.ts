@@ -13,8 +13,13 @@ import { MediaType, MediaStatus } from '../../common/enums';
 import {
   withTemporaryRestoredDatabase,
   querySonarrSeries,
+  querySonarrRootFolderPaths,
   rowMonitored,
 } from './pg-restore-import.util';
+import {
+  ensureRootFolderPathsExist,
+  resolveRootFolderFromArrPaths,
+} from './arr-import-path.util';
 import * as path from 'path';
 
 interface SonarrSeries {
@@ -25,6 +30,8 @@ interface SonarrSeries {
   year?: number;
   monitored?: boolean;
   path?: string;
+  /** Sonarr API: path of the library root */
+  rootFolderPath?: string;
   overview?: string;
   qualityProfileId?: number;
 }
@@ -64,7 +71,7 @@ export class ImportSonarrService {
     private readonly config: ConfigService,
   ) {}
 
-  async importFromApi(url: string, apiKey: string): Promise<ApiImportResult> {
+  async importFromApi(url: string, apiKey: string, mode: 'skip' | 'update' = 'skip', _importSubtitles = false): Promise<ApiImportResult> {
     const baseUrl = url.replace(/\/+$/, '');
     let imported = 0;
     const errors: string[] = [];
@@ -105,6 +112,8 @@ export class ImportSonarrService {
       qualityProfilesCreated,
     );
 
+    const rootFolders = await this.rootFolderRepo.find();
+
     for (const s of series) {
       const title = s.title ?? '';
       const tmdbId = Number(s.tmdbId || s.tvdbId);
@@ -121,28 +130,46 @@ export class ImportSonarrService {
             ? profileMap.get(s.qualityProfileId)
             : undefined;
 
-        if (exists) {
-          await this.mediaRepo.remove(exists);
-        }
-
-        const folderName = s.path
-          ? path.basename(s.path.replace(/\/+$/, ''))
-          : undefined;
-        await this.mediaRepo.save(
-          this.mediaRepo.create({
-            title,
-            tmdbId,
-            year: s.year ?? undefined,
-            type: MediaType.SERIES,
-            status: MediaStatus.CONTINUING,
-            monitored: s.monitored ?? true,
-            path: s.path || undefined,
-            folderName: folderName || undefined,
-            imdbId: s.imdbId || undefined,
-            overview: s.overview || undefined,
-            qualityProfileId: localProfileId ?? undefined,
-          }),
+        const resolved = resolveRootFolderFromArrPaths(
+          s.path,
+          s.rootFolderPath,
+          rootFolders,
         );
+        const folderName =
+          resolved?.folderName ??
+          (s.path
+            ? path.basename(s.path.replace(/\/+$/, ''))
+            : undefined);
+
+        if (exists) {
+          if (mode === 'skip') continue;
+          await this.mediaRepo.update(exists.id, {
+            title,
+            year: s.year ?? exists.year,
+            monitored: s.monitored ?? exists.monitored,
+            rootFolderId: resolved?.rootFolderId ?? exists.rootFolderId,
+            folderName: folderName || exists.folderName,
+            imdbId: s.imdbId || exists.imdbId,
+            overview: s.overview || exists.overview,
+            qualityProfileId: localProfileId ?? exists.qualityProfileId,
+          });
+        } else {
+          await this.mediaRepo.save(
+            this.mediaRepo.create({
+              title,
+              tmdbId,
+              year: s.year ?? undefined,
+              type: MediaType.SERIES,
+              status: MediaStatus.CONTINUING,
+              monitored: s.monitored ?? true,
+              rootFolderId: resolved?.rootFolderId,
+              folderName: folderName || undefined,
+              imdbId: s.imdbId || undefined,
+              overview: s.overview || undefined,
+              qualityProfileId: localProfileId ?? undefined,
+            }),
+          );
+        }
         imported++;
       } catch (e) {
         errors.push(`${title}: ${(e as Error).message}`);
@@ -304,26 +331,14 @@ export class ImportSonarrService {
       });
       if (rfRes.ok) {
         const remoteFolders = (await rfRes.json()) as { path: string }[];
-        const existing = await this.rootFolderRepo.find();
-        const existingPaths = new Set(
-          existing.map((f) => f.path.replace(/\/+$/, '')),
+        const before = rootFoldersCreated.length;
+        await ensureRootFolderPathsExist(
+          this.rootFolderRepo,
+          remoteFolders.map((r) => r.path),
+          rootFoldersCreated,
         );
-
-        for (const rf of remoteFolders) {
-          const normalized = rf.path.replace(/\/+$/, '');
-          if (!existingPaths.has(normalized)) {
-            try {
-              await this.rootFolderRepo.save(
-                this.rootFolderRepo.create({ path: rf.path }),
-              );
-              rootFoldersCreated.push(rf.path);
-              this.log.log(`Created root folder from Sonarr: ${rf.path}`);
-            } catch (e) {
-              this.log.warn(
-                `Could not create root folder ${rf.path}: ${(e as Error).message}`,
-              );
-            }
-          }
+        for (let i = before; i < rootFoldersCreated.length; i++) {
+          this.log.log(`Created root folder from Sonarr: ${rootFoldersCreated[i]}`);
         }
       }
     } catch (e) {
@@ -341,7 +356,6 @@ export class ImportSonarrService {
     }
 
     let imported = 0;
-    let skipped = 0;
     const errors: string[] = [];
 
     try {
@@ -349,11 +363,24 @@ export class ImportSonarrService {
         this.config,
         buffer,
         async (client) => {
+          const dumpPaths = await querySonarrRootFolderPaths(client);
+          const createdRf: string[] = [];
+          await ensureRootFolderPathsExist(
+            this.rootFolderRepo,
+            dumpPaths,
+            createdRf,
+          );
+          for (const p of createdRf) {
+            this.log.log(`Created root folder from Sonarr dump: ${p}`);
+          }
+
           const rows = await querySonarrSeries(client);
           if (!rows.length) {
             errors.push('No series found in database');
             return;
           }
+
+          const rootFolders = await this.rootFolderRepo.find();
 
           for (const row of rows) {
             const title = row.title ?? '';
@@ -366,26 +393,40 @@ export class ImportSonarrService {
               const exists = await this.mediaRepo.findOne({
                 where: { tmdbId: externalId, type: MediaType.SERIES },
               });
-              if (exists) {
-                skipped++;
-                continue;
-              }
 
-              const folderName = row.path
-                ? path.basename(row.path.replace(/\/+$/, ''))
-                : undefined;
-              await this.mediaRepo.save(
-                this.mediaRepo.create({
-                  title,
-                  tmdbId: externalId,
-                  year: row.year ?? undefined,
-                  type: MediaType.SERIES,
-                  status: MediaStatus.CONTINUING,
-                  monitored: rowMonitored(row.monitored),
-                  path: row.path || undefined,
-                  folderName: folderName || undefined,
-                }),
+              const resolved = resolveRootFolderFromArrPaths(
+                row.path,
+                row.rootFolderPath,
+                rootFolders,
               );
+              const folderName =
+                resolved?.folderName ??
+                (row.path
+                  ? path.basename(row.path.replace(/\/+$/, ''))
+                  : undefined);
+
+              if (exists) {
+                await this.mediaRepo.update(exists.id, {
+                  title,
+                  year: row.year ?? undefined,
+                  monitored: rowMonitored(row.monitored),
+                  rootFolderId: resolved?.rootFolderId,
+                  folderName: folderName || undefined,
+                });
+              } else {
+                await this.mediaRepo.save(
+                  this.mediaRepo.create({
+                    title,
+                    tmdbId: externalId,
+                    year: row.year ?? undefined,
+                    type: MediaType.SERIES,
+                    status: MediaStatus.CONTINUING,
+                    monitored: rowMonitored(row.monitored),
+                    rootFolderId: resolved?.rootFolderId,
+                    folderName: folderName || undefined,
+                  }),
+                );
+              }
               imported++;
             } catch (e) {
               errors.push(`${title}: ${(e as Error).message}`);
@@ -398,8 +439,8 @@ export class ImportSonarrService {
     }
 
     this.log.log(
-      `Sonarr import: ${imported} imported, ${skipped} skipped, ${errors.length} errors`,
+      `Sonarr import: ${imported} imported, ${errors.length} errors`,
     );
-    return { imported, skipped, errors };
+    return { imported, skipped: 0, errors };
   }
 }

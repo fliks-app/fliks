@@ -185,7 +185,7 @@ export class CastPlayerService {
 
     let castUrl: string;
     let contentType: string;
-    if (castMode === 'direct' || qualityId === 'original') {
+    if (castMode === 'direct') {
       castUrl = this.streamingApi.getAbsoluteStreamUrl(mfId, castToken);
       contentType = 'video/mp4';
     } else if (castMode === 'remux') {
@@ -194,7 +194,7 @@ export class CastPlayerService {
       contentType = 'application/x-mpegurl';
     } else {
       let fixedQuality: string;
-      if (qualityId !== 'auto') {
+      if (qualityId !== 'auto' && qualityId !== 'original') {
         fixedQuality = qualityId;
       } else {
         const cs = this.castSettings.get();

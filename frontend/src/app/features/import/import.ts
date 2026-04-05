@@ -14,6 +14,7 @@ interface ImportApiResult {
   errors: string[];
   rootFoldersCreated: string[];
   qualityProfilesCreated: string[];
+  subtitlesImported?: number;
 }
 
 @Component({
@@ -29,6 +30,8 @@ export class ImportComponent {
   // Radarr form
   readonly radarrUrl = signal('');
   readonly radarrApiKey = signal('');
+  readonly radarrMode = signal<'skip' | 'update'>('skip');
+  readonly radarrImportSubs = signal(false);
   readonly radarrLoading = signal(false);
   readonly radarrResult = signal<ImportApiResult | null>(null);
   readonly radarrError = signal('');
@@ -36,6 +39,8 @@ export class ImportComponent {
   // Sonarr form
   readonly sonarrUrl = signal('');
   readonly sonarrApiKey = signal('');
+  readonly sonarrMode = signal<'skip' | 'update'>('skip');
+  readonly sonarrImportSubs = signal(false);
   readonly sonarrLoading = signal(false);
   readonly sonarrResult = signal<ImportApiResult | null>(null);
   readonly sonarrError = signal('');
@@ -50,7 +55,9 @@ export class ImportComponent {
     this.radarrError.set('');
     try {
       const result = await firstValueFrom(
-        this.http.post<ImportApiResult>('/api/system/import-radarr-api', { url, apiKey }),
+        this.http.post<ImportApiResult>('/api/system/import-radarr-api', {
+          url, apiKey, mode: this.radarrMode(), importSubtitles: this.radarrImportSubs(),
+        }),
       );
       this.radarrResult.set(result);
     } catch (err: unknown) {
@@ -71,7 +78,9 @@ export class ImportComponent {
     this.sonarrError.set('');
     try {
       const result = await firstValueFrom(
-        this.http.post<ImportApiResult>('/api/system/import-sonarr-api', { url, apiKey }),
+        this.http.post<ImportApiResult>('/api/system/import-sonarr-api', {
+          url, apiKey, mode: this.sonarrMode(), importSubtitles: this.sonarrImportSubs(),
+        }),
       );
       this.sonarrResult.set(result);
     } catch (err: unknown) {

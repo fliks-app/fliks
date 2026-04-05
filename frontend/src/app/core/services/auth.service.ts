@@ -41,18 +41,22 @@ export class AuthService {
 
   /** Check if the current user has a specific permission. */
   hasPermission(perm: string): boolean {
-    return this._user()?.permissions?.includes(perm) ?? false;
+    const u = this._user();
+    if (u?.isAdmin) return true;
+    return u?.permissions?.includes(perm) ?? false;
   }
 
   /** Convenience: true if the user has settings.access permission. */
-  readonly canAccessSettings = computed(() =>
-    this._user()?.permissions?.includes('settings.access') ?? false,
-  );
+  readonly canAccessSettings = computed(() => {
+    const u = this._user();
+    return u?.isAdmin || u?.permissions?.includes('settings.access') || false;
+  });
 
   /** Convenience: true if the user can manage users. */
-  readonly canManageUsers = computed(() =>
-    this._user()?.permissions?.includes('users.manage') ?? false,
-  );
+  readonly canManageUsers = computed(() => {
+    const u = this._user();
+    return u?.isAdmin || u?.permissions?.includes('users.manage') || false;
+  });
 
   /** Get a short-lived token for Chromecast (15 min) */
   async getCastToken(): Promise<string> {

@@ -33,6 +33,20 @@
           />
         </div>
 
+        <div class="flex flex-col gap-2">
+          <div class="form-control">
+            <label class="label"><span class="label-text">{{ 'import.mode_label' | translate }}</span></label>
+            <select class="select select-bordered select-sm" [ngModel]="radarrMode()" (ngModelChange)="radarrMode.set($event)">
+              <option value="skip">{{ 'import.mode_skip' | translate }}</option>
+              <option value="update">{{ 'import.mode_update' | translate }}</option>
+            </select>
+          </div>
+          <label class="label cursor-pointer justify-start gap-3">
+            <input type="checkbox" class="toggle toggle-sm" [ngModel]="radarrImportSubs()" (ngModelChange)="radarrImportSubs.set($event)" />
+            <span class="label-text">{{ 'import.import_subtitles' | translate }}</span>
+          </label>
+        </div>
+
         <button
           type="button"
           class="btn btn-primary btn-sm"
@@ -53,6 +67,9 @@
           <div role="alert" class="alert text-sm" [class.alert-success]="r.errors.length === 0" [class.alert-warning]="r.errors.length > 0">
             <div>
               <p>{{ 'import.result_imported' | translate:{ count: r.imported } }}</p>
+              @if (r.subtitlesImported) {
+                <p class="mt-1">{{ 'import.result_subtitles' | translate:{ count: r.subtitlesImported } }}</p>
+              }
               @if (r.qualityProfilesCreated.length) {
                 <p class="mt-1">{{ 'import.quality_profiles_created' | translate:{ count: r.qualityProfilesCreated.length } }}: {{ r.qualityProfilesCreated.join(', ') }}</p>
               }
@@ -96,6 +113,20 @@
           />
         </div>
 
+        <div class="flex flex-col gap-2">
+          <div class="form-control">
+            <label class="label"><span class="label-text">{{ 'import.mode_label' | translate }}</span></label>
+            <select class="select select-bordered select-sm" [ngModel]="sonarrMode()" (ngModelChange)="sonarrMode.set($event)">
+              <option value="skip">{{ 'import.mode_skip' | translate }}</option>
+              <option value="update">{{ 'import.mode_update' | translate }}</option>
+            </select>
+          </div>
+          <label class="label cursor-pointer justify-start gap-3">
+            <input type="checkbox" class="toggle toggle-sm" [ngModel]="sonarrImportSubs()" (ngModelChange)="sonarrImportSubs.set($event)" />
+            <span class="label-text">{{ 'import.import_subtitles' | translate }}</span>
+          </label>
+        </div>
+
         <button
           type="button"
           class="btn btn-primary btn-sm"
@@ -116,6 +147,9 @@
           <div role="alert" class="alert text-sm" [class.alert-success]="r.errors.length === 0" [class.alert-warning]="r.errors.length > 0">
             <div>
               <p>{{ 'import.result_imported' | translate:{ count: r.imported } }}</p>
+              @if (r.subtitlesImported) {
+                <p class="mt-1">{{ 'import.result_subtitles' | translate:{ count: r.subtitlesImported } }}</p>
+              }
               @if (r.qualityProfilesCreated.length) {
                 <p class="mt-1">{{ 'import.quality_profiles_created' | translate:{ count: r.qualityProfilesCreated.length } }}: {{ r.qualityProfilesCreated.join(', ') }}</p>
               }

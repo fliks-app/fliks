@@ -13,19 +13,42 @@ import { MediaType, MediaStatus } from '../../common/enums';
 import {
   withTemporaryRestoredDatabase,
   queryRadarrMovies,
+  queryRadarrRootFolderPaths,
   rowMonitored,
 } from './pg-restore-import.util';
+import {
+  ensureRootFolderPathsExist,
+  resolveRootFolderFromArrPaths,
+} from './arr-import-path.util';
+import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
+import { MediaFile } from '../media/entities/media-file.entity';
+import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import * as path from 'path';
 
 interface RadarrMovie {
+  id?: number;
   title?: string;
   tmdbId?: number;
   imdbId?: string;
   year?: number;
   monitored?: boolean;
   path?: string;
+  /** Radarr API: path of the library root */
+  rootFolderPath?: string;
   overview?: string;
   qualityProfileId?: number;
+  movieFile?: { relativePath?: string; size?: number; quality?: { quality?: { name?: string } } };
+}
+
+interface RadarrExtraFile {
+  movieId: number;
+  relativePath: string;
+  extension: string;
+  type: string;
+  /** Language object from Radarr v3+ */
+  language?: { name?: string; id?: number };
+  /** Tags from filename parsing (e.g. "forced", "sdh", "cc") */
+  tags?: string[];
 }
 
 interface RemoteQualityItem {
@@ -47,6 +70,7 @@ export interface ApiImportResult {
   errors: string[];
   rootFoldersCreated: string[];
   qualityProfilesCreated: string[];
+  subtitlesImported?: number;
 }
 
 @Injectable()
@@ -60,10 +84,14 @@ export class ImportRadarrService {
     private readonly rootFolderRepo: Repository<RootFolder>,
     @InjectRepository(QualityProfile)
     private readonly qpRepo: Repository<QualityProfile>,
+    @InjectRepository(SubtitleFile)
+    private readonly subtitleRepo: Repository<SubtitleFile>,
+    @InjectRepository(MediaFile)
+    private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly config: ConfigService,
   ) {}
 
-  async importFromApi(url: string, apiKey: string): Promise<ApiImportResult> {
+  async importFromApi(url: string, apiKey: string, mode: 'skip' | 'update' = 'skip', importSubtitles = false): Promise<ApiImportResult> {
     const baseUrl = url.replace(/\/+$/, '');
     let imported = 0;
     const errors: string[] = [];
@@ -104,6 +132,8 @@ export class ImportRadarrService {
       qualityProfilesCreated,
     );
 
+    const rootFolders = await this.rootFolderRepo.find();
+
     for (const movie of movies) {
       const title = movie.title ?? '';
       const tmdbId = Number(movie.tmdbId);
@@ -120,38 +150,163 @@ export class ImportRadarrService {
             ? profileMap.get(movie.qualityProfileId)
             : undefined;
 
-        if (exists) {
-          await this.mediaRepo.remove(exists);
-        }
-
-        const folderName = movie.path
-          ? path.basename(movie.path.replace(/\/+$/, ''))
-          : undefined;
-        await this.mediaRepo.save(
-          this.mediaRepo.create({
-            title,
-            tmdbId,
-            year: movie.year ?? undefined,
-            type: MediaType.MOVIE,
-            status: MediaStatus.RELEASED,
-            monitored: movie.monitored ?? true,
-            path: movie.path || undefined,
-            folderName: folderName || undefined,
-            imdbId: movie.imdbId || undefined,
-            overview: movie.overview || undefined,
-            qualityProfileId: localProfileId ?? undefined,
-          }),
+        const resolved = resolveRootFolderFromArrPaths(
+          movie.path,
+          movie.rootFolderPath,
+          rootFolders,
         );
+        const folderName =
+          resolved?.folderName ??
+          (movie.path
+            ? path.basename(movie.path.replace(/\/+$/, ''))
+            : undefined);
+
+        if (exists) {
+          if (mode === 'skip') continue;
+          // mode === 'update': update existing fields without deleting
+          await this.mediaRepo.update(exists.id, {
+            title,
+            year: movie.year ?? exists.year,
+            monitored: movie.monitored ?? exists.monitored,
+            rootFolderId: resolved?.rootFolderId ?? exists.rootFolderId,
+            folderName: folderName || exists.folderName,
+            imdbId: movie.imdbId || exists.imdbId,
+            overview: movie.overview || exists.overview,
+            qualityProfileId: localProfileId ?? exists.qualityProfileId,
+          });
+        } else {
+          await this.mediaRepo.save(
+            this.mediaRepo.create({
+              title,
+              tmdbId,
+              year: movie.year ?? undefined,
+              type: MediaType.MOVIE,
+              status: MediaStatus.RELEASED,
+              monitored: movie.monitored ?? true,
+              rootFolderId: resolved?.rootFolderId,
+              folderName: folderName || undefined,
+              imdbId: movie.imdbId || undefined,
+              overview: movie.overview || undefined,
+              qualityProfileId: localProfileId ?? undefined,
+            }),
+          );
+        }
         imported++;
       } catch (e) {
         errors.push(`${title}: ${(e as Error).message}`);
       }
     }
 
+    // Import subtitles if requested
+    let subtitlesImported = 0;
+    if (importSubtitles) {
+      subtitlesImported = await this.importSubtitlesFromRadarr(baseUrl, apiKey, movies, errors);
+    }
+
     this.log.log(
-      `Radarr API import: ${imported} imported, ${errors.length} errors`,
+      `Radarr API import: ${imported} imported, ${subtitlesImported} subtitles, ${errors.length} errors`,
     );
-    return { imported, errors, rootFoldersCreated, qualityProfilesCreated };
+    return { imported, errors, rootFoldersCreated, qualityProfilesCreated, subtitlesImported };
+  }
+
+  private async importSubtitlesFromRadarr(
+    baseUrl: string,
+    apiKey: string,
+    movies: RadarrMovie[],
+    errors: string[],
+  ): Promise<number> {
+    let count = 0;
+    const SUBTITLE_EXTS = new Set(['.srt', '.ass', '.ssa', '.sub', '.vtt']);
+
+    for (const movie of movies) {
+      if (!movie.id || !movie.tmdbId) continue;
+
+      // Find the local media for this movie
+      const media = await this.mediaRepo.findOne({
+        where: { tmdbId: movie.tmdbId, type: MediaType.MOVIE },
+      });
+      if (!media) continue;
+
+      // Find a media file for this movie
+      const mediaFile = await this.mediaFileRepo.findOne({
+        where: { mediaId: media.id },
+        order: { id: 'DESC' },
+      });
+      if (!mediaFile) continue;
+
+      try {
+        const res = await fetch(`${baseUrl}/api/v3/extrafile?movieId=${movie.id}`, {
+          headers: { 'X-Api-Key': apiKey },
+        });
+        if (!res.ok) continue;
+        const extras = (await res.json()) as RadarrExtraFile[];
+
+        for (const extra of extras) {
+          if (extra.type !== 'subtitle') continue;
+          const ext = path.extname(extra.relativePath).toLowerCase();
+          if (!SUBTITLE_EXTS.has(ext)) continue;
+
+          // Parse language from Radarr language object or filename
+          const lang = extra.language?.name?.toLowerCase() ?? this.parseLanguageFromPath(extra.relativePath);
+
+          // Parse tags from filename (e.g. "movie.en.forced.srt" → ["forced"])
+          const tags = this.parseSubtitleTags(extra.relativePath);
+          const forced = tags.includes('forced');
+          const hearingImpaired = tags.includes('sdh') || tags.includes('cc') || tags.includes('hi');
+
+          // Build absolute path from movie path + relative path
+          const filePath = movie.path ? path.join(movie.path, extra.relativePath) : null;
+
+          // Check if subtitle already exists
+          const existing = await this.subtitleRepo.findOne({
+            where: { mediaFileId: mediaFile.id, language: lang, forced, filePath: filePath ?? undefined },
+          });
+          if (existing) continue;
+
+          await this.subtitleRepo.save(this.subtitleRepo.create({
+            mediaId: media.id,
+            mediaFileId: mediaFile.id,
+            language: lang,
+            forced,
+            hearingImpaired,
+            providerType: SubtitleProviderType.EMBEDDED,
+            status: SubtitleStatus.DOWNLOADED,
+            filePath,
+            tags,
+          }));
+          count++;
+        }
+      } catch (e) {
+        errors.push(`Subtitles for "${movie.title}": ${(e as Error).message}`);
+      }
+    }
+
+    this.log.log(`Radarr subtitle import: ${count} subtitles imported`);
+    return count;
+  }
+
+  private parseLanguageFromPath(relativePath: string): string {
+    // Try to extract language code from filename like "movie.en.srt" or "movie.fra.forced.srt"
+    const base = path.basename(relativePath, path.extname(relativePath));
+    const parts = base.split('.');
+    // Common 2-3 letter language codes
+    const langCodes = new Set(['en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'ja', 'ko', 'zh', 'ru', 'ar', 'pl', 'sv', 'da', 'no', 'fi',
+      'eng', 'fra', 'fre', 'deu', 'ger', 'spa', 'ita', 'por', 'nld', 'dut', 'jpn', 'kor', 'zho', 'chi', 'rus', 'ara', 'pol', 'swe', 'dan', 'nor', 'fin']);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i].toLowerCase();
+      if (langCodes.has(p)) return p;
+    }
+    return 'und';
+  }
+
+  private parseSubtitleTags(relativePath: string): string[] {
+    const base = path.basename(relativePath, path.extname(relativePath)).toLowerCase();
+    const tags: string[] = [];
+    if (base.includes('forced')) tags.push('forced');
+    if (base.includes('sdh')) tags.push('sdh');
+    if (base.includes('.cc') || base.includes('_cc')) tags.push('cc');
+    if (base.includes('.hi') || base.includes('_hi')) tags.push('hi');
+    return tags;
   }
 
   private async importQualityProfiles(
@@ -304,26 +459,14 @@ export class ImportRadarrService {
       });
       if (rfRes.ok) {
         const remoteFolders = (await rfRes.json()) as { path: string }[];
-        const existing = await this.rootFolderRepo.find();
-        const existingPaths = new Set(
-          existing.map((f) => f.path.replace(/\/+$/, '')),
+        const before = rootFoldersCreated.length;
+        await ensureRootFolderPathsExist(
+          this.rootFolderRepo,
+          remoteFolders.map((r) => r.path),
+          rootFoldersCreated,
         );
-
-        for (const rf of remoteFolders) {
-          const normalized = rf.path.replace(/\/+$/, '');
-          if (!existingPaths.has(normalized)) {
-            try {
-              await this.rootFolderRepo.save(
-                this.rootFolderRepo.create({ path: rf.path }),
-              );
-              rootFoldersCreated.push(rf.path);
-              this.log.log(`Created root folder from Radarr: ${rf.path}`);
-            } catch (e) {
-              this.log.warn(
-                `Could not create root folder ${rf.path}: ${(e as Error).message}`,
-              );
-            }
-          }
+        for (let i = before; i < rootFoldersCreated.length; i++) {
+          this.log.log(`Created root folder from Radarr: ${rootFoldersCreated[i]}`);
         }
       }
     } catch (e) {
@@ -341,7 +484,6 @@ export class ImportRadarrService {
     }
 
     let imported = 0;
-    let skipped = 0;
     const errors: string[] = [];
 
     try {
@@ -349,11 +491,24 @@ export class ImportRadarrService {
         this.config,
         buffer,
         async (client) => {
+          const dumpPaths = await queryRadarrRootFolderPaths(client);
+          const createdRf: string[] = [];
+          await ensureRootFolderPathsExist(
+            this.rootFolderRepo,
+            dumpPaths,
+            createdRf,
+          );
+          for (const p of createdRf) {
+            this.log.log(`Created root folder from Radarr dump: ${p}`);
+          }
+
           const rows = await queryRadarrMovies(client);
           if (!rows.length) {
             errors.push('No movies found in database');
             return;
           }
+
+          const rootFolders = await this.rootFolderRepo.find();
 
           for (const row of rows) {
             const title = row.title ?? '';
@@ -366,26 +521,40 @@ export class ImportRadarrService {
               const exists = await this.mediaRepo.findOne({
                 where: { tmdbId, type: MediaType.MOVIE },
               });
-              if (exists) {
-                skipped++;
-                continue;
-              }
 
-              const folderName = row.path
-                ? path.basename(row.path.replace(/\/+$/, ''))
-                : undefined;
-              await this.mediaRepo.save(
-                this.mediaRepo.create({
-                  title,
-                  tmdbId,
-                  year: row.year ?? undefined,
-                  type: MediaType.MOVIE,
-                  status: MediaStatus.RELEASED,
-                  monitored: rowMonitored(row.monitored),
-                  path: row.path || undefined,
-                  folderName: folderName || undefined,
-                }),
+              const resolved = resolveRootFolderFromArrPaths(
+                row.path,
+                row.rootFolderPath,
+                rootFolders,
               );
+              const folderName =
+                resolved?.folderName ??
+                (row.path
+                  ? path.basename(row.path.replace(/\/+$/, ''))
+                  : undefined);
+
+              if (exists) {
+                await this.mediaRepo.update(exists.id, {
+                  title,
+                  year: row.year ?? undefined,
+                  monitored: rowMonitored(row.monitored),
+                  rootFolderId: resolved?.rootFolderId,
+                  folderName: folderName || undefined,
+                });
+              } else {
+                await this.mediaRepo.save(
+                  this.mediaRepo.create({
+                    title,
+                    tmdbId,
+                    year: row.year ?? undefined,
+                    type: MediaType.MOVIE,
+                    status: MediaStatus.RELEASED,
+                    monitored: rowMonitored(row.monitored),
+                    rootFolderId: resolved?.rootFolderId,
+                    folderName: folderName || undefined,
+                  }),
+                );
+              }
               imported++;
             } catch (e) {
               errors.push(`${title}: ${(e as Error).message}`);
@@ -398,8 +567,8 @@ export class ImportRadarrService {
     }
 
     this.log.log(
-      `Radarr import: ${imported} imported, ${skipped} skipped, ${errors.length} errors`,
+      `Radarr import: ${imported} imported, ${errors.length} errors`,
     );
-    return { imported, skipped, errors };
+    return { imported, skipped: 0, errors };
   }
 }

@@ -26,11 +26,20 @@ import { join } from 'path';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'public'),
-      serveRoot: '/cast',
-      serveStaticOptions: { index: false },
-    }),
+    ServeStaticModule.forRoot(
+      {
+        rootPath: join(__dirname, '..', 'public'),
+        serveRoot: '/cast',
+        serveStaticOptions: { index: false },
+      },
+      // Serve the Angular frontend in production (when SERVE_STATIC_PATH is set)
+      ...(process.env.SERVE_STATIC_PATH
+        ? [{
+            rootPath: process.env.SERVE_STATIC_PATH,
+            exclude: ['/api/{*path}', '/cast/{*path}'],
+          }]
+        : []),
+    ),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

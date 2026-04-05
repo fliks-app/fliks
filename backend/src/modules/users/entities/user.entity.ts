@@ -17,9 +17,9 @@ export class User extends BaseEntity {
   @Column({ nullable: true })
   roleId: number;
 
-  @ManyToOne(() => Role, { eager: true, onDelete: 'SET NULL' })
+  @ManyToOne(() => Role, { eager: true, onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'roleId' })
-  userRole: Role;
+  userRole: Role | null;
 
   @Column({
     type: 'enum',
@@ -56,13 +56,7 @@ export class User extends BaseEntity {
   get permissions(): string[] {
     if (this.isAdmin) {
       // Dynamic import would be circular; just return a known superset
-      return [
-        'media.read', 'media.create', 'media.edit', 'media.delete', 'media.grab',
-        'requests.create', 'requests.manage',
-        'subtitles.manage',
-        'settings.access',
-        'users.manage',
-      ];
+      return ['manage:all'];
     }
     return this.userRole?.permissions ?? [];
   }

@@ -278,13 +278,13 @@ export class SystemController {
   @Post('import-radarr-api')
   @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
   importRadarrApi(@Body() dto: ImportApiDto): Promise<ApiImportResult> {
-    return this.importRadarrService.importFromApi(dto.url, dto.apiKey);
+    return this.importRadarrService.importFromApi(dto.url, dto.apiKey, dto.mode ?? 'skip', dto.importSubtitles ?? false);
   }
 
   @Post('import-sonarr-api')
   @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
   importSonarrApi(@Body() dto: ImportApiDto): Promise<ApiImportResult> {
-    return this.importSonarrService.importFromApi(dto.url, dto.apiKey);
+    return this.importSonarrService.importFromApi(dto.url, dto.apiKey, dto.mode ?? 'skip', dto.importSubtitles ?? false);
   }
 
   private async checkClients(): Promise<ServiceStatus[]> {

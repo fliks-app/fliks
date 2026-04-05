@@ -197,7 +197,9 @@ export class CastService implements OnDestroy {
     if (!this.session) return;
 
     const mediaInfo = new chrome.cast.media.MediaInfo(info.url, info.contentType);
+    // HLS: use BUFFERED for VOD playlists, the Default Media Receiver handles it
     mediaInfo.streamType = chrome.cast.media.StreamType.BUFFERED;
+    console.log('[Cast] Web loadMedia:', info.url, 'contentType:', info.contentType, 'streamType: BUFFERED');
     mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata();
     mediaInfo.metadata.title = info.title;
     mediaInfo.metadata.subtitle = info.subtitle ?? '';
@@ -233,7 +235,9 @@ export class CastService implements OnDestroy {
     }
 
     try {
+      console.log('[Cast] Web session.loadMedia calling...');
       await this.session.loadMedia(request);
+      console.log('[Cast] Web session.loadMedia succeeded');
       this.mediaTitle.set(info.title);
       this.isPaused.set(false);
       if (info.activeSubtitleTrackId) {
