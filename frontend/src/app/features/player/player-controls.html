@@ -1,0 +1,330 @@
+<!-- ===== TOP BAR ===== -->
+<div
+  class="absolute top-0 left-0 right-0 z-40 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent transition-opacity duration-300 px-10 py-5"
+  style="padding-left: max(var(--ctrl-px), env(safe-area-inset-left)); padding-right: max(var(--ctrl-px), env(safe-area-inset-right)); padding-top: max(var(--ctrl-py), env(safe-area-inset-top));"
+  [style.--ctrl-px]="isNative() ? '1rem' : '2.5rem'"
+  [style.--ctrl-py]="isNative() ? '0.75rem' : '1.25rem'"
+  [class.opacity-0]="!visible()"
+  [class.pointer-events-none]="!visible()"
+>
+  <!-- Left: back + title -->
+  <div class="flex items-center gap-2 min-w-0">
+    <button type="button" class="btn btn-ghost btn-circle text-white" [class]="isNative() ? 'btn-sm' : 'btn-md'" (click)="back.emit()">
+      <!-- lucide:chevron-left -->
+      <svg lucideChevronLeft [class]="isNative() ? 'h-6 w-6' : 'h-7 w-7'"></svg>
+    </button>
+    <span class="text-white font-semibold truncate" [class]="isNative() ? 'text-lg' : 'text-xl'">{{ mediaTitle() }}</span>
+  </div>
+
+  <!-- Right -->
+  <div class="flex items-center gap-2">
+    @if (!isNative()) {
+      <input
+        type="range"
+        class="range range-xs w-28 opacity-70 hover:opacity-100"
+        [min]="0"
+        [max]="1"
+        [step]="0.05"
+        [value]="volume()"
+        (input)="onVolumeChange($event)"
+      />
+      <button type="button" class="btn btn-ghost btn-md btn-circle text-white" (click)="toggleMute.emit()">
+        @if (volume() === 0) {
+          <!-- lucide:volume-x -->
+          <svg lucideVolumeX class="h-6 w-6"></svg>
+        } @else {
+          <!-- lucide:volume-2 -->
+          <svg lucideVolume2 class="h-6 w-6"></svg>
+        }
+      </button>
+    }
+    <!-- lucide:picture-in-picture-2 -->
+    <button type="button" class="btn btn-ghost btn-circle text-white" [class]="isNative() ? 'btn-sm' : 'btn-md'" (click)="togglePip.emit()">
+      <svg lucidePictureInPicture2 [class]="isNative() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+    </button>
+    <!-- Cast -->
+    @if (castAvailable()) {
+      <button type="button" class="btn btn-ghost btn-circle btn-sm lg:btn-md" [class.text-info]="castConnected()" [class.text-white]="!castConnected() && !castConnecting()" [disabled]="castConnecting()" (click)="toggleCast.emit()">
+        @if (castConnecting()) {
+          <span class="loading loading-spinner loading-sm lg:loading-md"></span>
+        } @else {
+          <svg lucideCast class="h-5 w-5 lg:h-6 lg:w-6"></svg>
+        }
+      </button>
+    }
+  </div>
+</div>
+
+<!-- ===== CENTER OVERLAY (tap zone) ===== -->
+<div
+  class="absolute inset-0 z-30 flex items-center justify-center"
+  (click)="isNative() ? tapOverlay.emit() : togglePlay.emit()"
+  (dblclick)="isNative() ? null : toggleFullscreen.emit()"
+>
+  <!-- Mobile: big center controls (rewind / play / forward) -->
+  @if (isNative() && !loading() && !buffering()) {
+    <div
+      class="flex items-center gap-6 transition-opacity duration-200"
+      [class.opacity-0]="!visible()"
+      [class.pointer-events-none]="!visible()"
+    >
+      <!-- lucide:rotate-ccw -->
+      <button type="button" class="p-6 -m-3 text-white/90 active:scale-90 transition-transform" (click)="seek.emit(currentTime() - 10); $event.stopPropagation()">
+        <svg lucideRotateCcw class="h-7 w-7" [strokeWidth]="1.5"></svg>
+      </button>
+      <!-- lucide:play / lucide:pause -->
+      <button type="button" class="p-6 -m-2 text-white active:scale-90 transition-transform" (click)="togglePlay.emit(); $event.stopPropagation()">
+        @if (paused()) {
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-14 w-14 drop-shadow-lg" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></svg>
+        } @else {
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-14 w-14 drop-shadow-lg" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/></svg>
+        }
+      </button>
+      <!-- lucide:rotate-cw -->
+      <button type="button" class="p-6 -m-3 text-white/90 active:scale-90 transition-transform" (click)="seek.emit(currentTime() + 10); $event.stopPropagation()">
+        <svg lucideRotateCw class="h-7 w-7" [strokeWidth]="1.5"></svg>
+      </button>
+    </div>
+  }
+</div>
+
+<!-- ===== BOTTOM SECTION ===== -->
+<div
+  class="absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-opacity duration-300 pt-12"
+  [class]="isNative() ? 'px-4' : 'px-10 pb-4'"
+  style="padding-left: max(var(--ctrl-px), env(safe-area-inset-left)); padding-right: max(var(--ctrl-px), env(safe-area-inset-right)); padding-bottom: max(var(--ctrl-pb), env(safe-area-inset-bottom));"
+  [style.--ctrl-px]="isNative() ? '1rem' : '2.5rem'"
+  [style.--ctrl-pb]="isNative() ? '0.5rem' : '1rem'"
+  [class.opacity-0]="!visible()"
+  [class.pointer-events-none]="!visible()"
+>
+  <!-- Episode + Title + Mobile action buttons row -->
+  <div class="flex items-end justify-between mb-1.5 gap-2">
+    <div class="min-w-0 flex-1">
+      @if (episodeTitle()) {
+        <div class="text-white/60 font-semibold text-lg truncate">{{ episodeTitle() }}</div>
+      }
+      <div class="text-white font-bold truncate" [class]="isNative() ? 'text-lg' : 'text-4xl'">{{ mediaTitle() }}</div>
+    </div>
+
+    <!-- Mobile: action buttons aligned right -->
+    @if (isNative()) {
+      <div class="flex items-center gap-0.5 shrink-0">
+        @if (hasNextEpisode()) {
+          <!-- lucide:skip-forward -->
+          <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" (click)="nextEpisode.emit()">
+            <svg lucideSkipForward class="h-5 w-5"></svg>
+          </button>
+        }
+        <!-- Subtitles dropdown -->
+        <div class="dropdown dropdown-top dropdown-end">
+          <button tabindex="0" type="button" class="btn btn-ghost btn-sm btn-circle text-white/80">
+            <svg lucideCaptions class="h-5 w-5"></svg>
+          </button>
+          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-3 px-1 min-w-56 max-h-[75vh] overflow-y-auto mb-2">
+            <div class="text-center text-white/70 text-xs font-medium mb-2">Sous-titres</div>
+            <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle.emit(null)">
+              <svg lucideCaptions class="h-4 w-4 text-white/50 shrink-0"></svg>
+              <span class="flex-1 text-left">Désactivé</span>
+              @if (!activeSubtitleId()) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+            </button>
+            @for (sub of availableSubtitles(); track sub.id) {
+              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle.emit(sub.id)">
+                <svg lucideCaptions class="h-4 w-4 text-white/50 shrink-0"></svg>
+                <span class="flex-1 text-left">{{ sub.label }}@if (sub.burnIn) { <span class="text-warning/70 text-[10px] ml-1">gravé</span> }</span>
+                @if (activeSubtitleId() === sub.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+              </button>
+            }
+          </div>
+        </div>
+        <!-- lucide:chart-no-axes-column-increasing -->
+        <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" (click)="toggleStats.emit()">
+          <svg lucideChartNoAxesColumnIncreasing class="h-5 w-5"></svg>
+        </button>
+        <!-- Quality dropdown -->
+        <div class="dropdown dropdown-top dropdown-end">
+          <button tabindex="0" type="button" class="btn btn-ghost btn-sm text-white/80 text-sm">{{ activeQualityLabel() }}</button>
+          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-3 px-1 min-w-56 max-h-[75vh] overflow-y-auto mb-2">
+            <div class="text-center text-white/70 text-xs font-medium mb-2">Qualité</div>
+            @for (q of availableQualities(); track q.id) {
+              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectQuality.emit(q.id)">
+                <span class="flex-1 text-left">{{ q.label }}</span>
+                @if (activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+              </button>
+            }
+          </div>
+        </div>
+        <!-- Audio track dropdown (mobile) -->
+        @if (availableAudioTracks().length > 1) {
+          <div class="dropdown dropdown-top dropdown-end">
+            <button tabindex="0" type="button" class="btn btn-ghost btn-sm btn-circle text-white/80">
+              <svg lucideHeadphones class="h-5 w-5"></svg>
+            </button>
+            <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-3 px-1 min-w-56 max-h-[75vh] overflow-y-auto mb-2">
+              <div class="text-center text-white/70 text-xs font-medium mb-2">Piste audio</div>
+              @for (track of availableAudioTracks(); track track.id) {
+                <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectAudioTrack.emit(track.id)">
+                  <svg lucideHeadphones class="h-4 w-4 text-white/50 shrink-0"></svg>
+                  <span class="flex-1 text-left">{{ track.label }}</span>
+                  @if (activeAudioTrackId() === track.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+                </button>
+              }
+            </div>
+          </div>
+        }
+        <!-- Speed dropdown -->
+        <div class="dropdown dropdown-top dropdown-end">
+          <button tabindex="0" type="button" class="btn btn-ghost btn-sm text-white/80 text-sm">{{ playbackRate() }}x</button>
+          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-3 px-1 min-w-44 max-h-[75vh] overflow-y-auto mb-2">
+            <div class="text-center text-white/70 text-xs font-medium mb-2">Vitesse</div>
+            @for (r of speedOptions; track r) {
+              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="speedChange.emit(r)">
+                <span class="flex-1 text-left">{{ r }}x</span>
+                @if (playbackRate() === r) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+              </button>
+            }
+          </div>
+        </div>
+      </div>
+    }
+  </div>
+
+  <!-- Progress bar -->
+  <div
+    class="group relative w-full h-6 flex items-center cursor-pointer touch-none"
+    (pointerdown)="onProgressDown($event)"
+  >
+    <div class="relative w-full h-2 group-hover:h-2.5 transition-all rounded-full bg-white/20 overflow-hidden">
+      <!-- Buffered -->
+      <div
+        class="absolute inset-y-0 left-0 bg-white/30 rounded-full"
+        [style.width.%]="duration() ? (bufferedEnd() / duration()) * 100 : 0"
+      ></div>
+      <!-- Progress -->
+      <div
+        class="absolute inset-y-0 left-0 bg-white rounded-full"
+        [style.width.%]="displayPercent()"
+      ></div>
+    </div>
+    <!-- Thumb -->
+    <div
+      class="absolute h-3.5 w-3.5 rounded-full bg-white shadow -translate-x-1/2 pointer-events-none group-hover:scale-125 transition-transform"
+      [class.scale-125]="dragging()"
+      [style.left.%]="displayPercent()"
+    ></div>
+  </div>
+
+  <!-- Duration row -->
+  <div class="flex items-center justify-between mt-0.5">
+    <span class="text-white/70 tabular-nums" [class]="isNative() ? 'text-xs' : 'text-sm'">{{ formatTime(displayTime()) }}</span>
+    <span class="text-white/70 tabular-nums" [class]="isNative() ? 'text-xs' : 'text-sm'">{{ formatRemaining(displayTime(), duration()) }} / {{ formatTime(duration()) }}</span>
+  </div>
+
+  <!-- Desktop: buttons row BELOW duration -->
+  @if (!isNative()) {
+    <div class="flex items-center justify-between mt-2 mb-1">
+      <!-- Left: playback controls -->
+      <div class="flex items-center gap-1.5">
+        <!-- lucide:rotate-ccw -->
+        <button type="button" class="btn btn-ghost btn-md btn-circle text-white" (click)="seek.emit(currentTime() - 10)">
+          <svg lucideRotateCcw class="h-6 w-6"></svg>
+        </button>
+        <!-- lucide:play / lucide:pause -->
+        <button type="button" class="btn btn-ghost btn-md btn-circle text-white" (click)="togglePlay.emit()">
+          @if (paused()) {
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></svg>
+          } @else {
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/></svg>
+          }
+        </button>
+        <!-- lucide:rotate-cw -->
+        <button type="button" class="btn btn-ghost btn-md btn-circle text-white" (click)="seek.emit(currentTime() + 10)">
+          <svg lucideRotateCw class="h-6 w-6"></svg>
+        </button>
+        <!-- lucide:skip-forward -->
+        @if (hasNextEpisode()) {
+          <button type="button" class="btn btn-ghost btn-md btn-circle text-white" (click)="nextEpisode.emit()">
+            <svg lucideSkipForward class="h-6 w-6"></svg>
+          </button>
+        }
+      </div>
+
+      <!-- Right: action buttons -->
+      <div class="flex items-center gap-1.5">
+        <!-- Subtitles dropdown -->
+        <div class="dropdown dropdown-top dropdown-end">
+          <button tabindex="0" type="button" class="btn btn-ghost btn-md btn-circle text-white/80">
+            <svg lucideCaptions class="h-6 w-6"></svg>
+          </button>
+          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[75vh] overflow-y-auto mb-2">
+            <div class="text-center text-white/70 text-sm font-medium mb-3">Sous-titres</div>
+            <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle.emit(null)">
+              <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
+              <span class="flex-1 text-left">Désactivé</span>
+              @if (!activeSubtitleId()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+            </button>
+            @for (sub of availableSubtitles(); track sub.id) {
+              <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle.emit(sub.id)">
+                <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
+                <span class="flex-1 text-left">{{ sub.label }}@if (sub.burnIn) { <span class="text-warning/70 text-[10px] ml-1">gravé</span> }</span>
+                @if (activeSubtitleId() === sub.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+              </button>
+            }
+          </div>
+        </div>
+        <!-- Audio track dropdown (desktop) -->
+        @if (availableAudioTracks().length > 1) {
+          <div class="dropdown dropdown-top dropdown-end">
+            <button tabindex="0" type="button" class="btn btn-ghost btn-md btn-circle text-white/80">
+              <svg lucideHeadphones class="h-6 w-6"></svg>
+            </button>
+            <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[75vh] overflow-y-auto mb-2">
+              <div class="text-center text-white/70 text-sm font-medium mb-3">Piste audio</div>
+              @for (track of availableAudioTracks(); track track.id) {
+                <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectAudioTrack.emit(track.id)">
+                  <svg lucideHeadphones class="h-5 w-5 text-white/50 shrink-0"></svg>
+                  <span class="flex-1 text-left">{{ track.label }}</span>
+                  @if (activeAudioTrackId() === track.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+                </button>
+              }
+            </div>
+          </div>
+        }
+        <!-- lucide:chart-no-axes-column-increasing -->
+        <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" (click)="toggleStats.emit()">
+          <svg lucideChartNoAxesColumnIncreasing class="h-6 w-6"></svg>
+        </button>
+        <!-- Quality dropdown -->
+        <div class="dropdown dropdown-top dropdown-end">
+          <button tabindex="0" type="button" class="btn btn-ghost btn-md text-white/80">{{ activeQualityLabel() }}</button>
+          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[75vh] overflow-y-auto mb-2">
+            <div class="text-center text-white/70 text-sm font-medium mb-3">Qualité</div>
+            @for (q of availableQualities(); track q.id) {
+              <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectQuality.emit(q.id)">
+                <span class="flex-1 text-left">{{ q.label }}</span>
+                @if (activeQualityId() === q.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+              </button>
+            }
+          </div>
+        </div>
+        <!-- Speed dropdown -->
+        <div class="dropdown dropdown-top dropdown-end">
+          <button tabindex="0" type="button" class="btn btn-ghost btn-md text-white/80">{{ playbackRate() }}x</button>
+          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-48 max-h-[75vh] overflow-y-auto mb-2">
+            <div class="text-center text-white/70 text-sm font-medium mb-3">Vitesse</div>
+            @for (r of speedOptions; track r) {
+              <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="speedChange.emit(r)">
+                <span class="flex-1 text-left">{{ r }}x</span>
+                @if (playbackRate() === r) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+              </button>
+            }
+          </div>
+        </div>
+        <!-- lucide:maximize -->
+        <button type="button" class="btn btn-ghost btn-md btn-circle text-white" (click)="toggleFullscreen.emit()">
+          <svg lucideMaximize class="h-6 w-6"></svg>
+        </button>
+      </div>
+    </div>
+  }
+</div>

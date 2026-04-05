@@ -39,27 +39,6 @@ export class RolesService implements OnModuleInit {
         );
       }
     }
-
-    // Migrate legacy users: if user has no roleId, assign based on old role column
-    const orphans = await this.userRepo.find({ where: { roleId: null as any } });
-    if (orphans.length > 0) {
-      const allRoles = await this.roleRepo.find();
-      const roleMap = new Map(allRoles.map((r) => [r.name.toLowerCase(), r]));
-      for (const user of orphans) {
-        const legacyRole = (user as any).role as string | undefined;
-        const match =
-          roleMap.get(legacyRole ?? 'user') ?? roleMap.get('user');
-        if (match) {
-          const patch: any = { roleId: match.id };
-          // Legacy admin users get the isAdmin flag
-          if (legacyRole === 'admin') patch.isAdmin = true;
-          await this.userRepo.update(user.id, patch);
-          this.log.log(
-            `Migrated user "${user.username}" → role "${match.name}"${legacyRole === 'admin' ? ' (isAdmin)' : ''}`,
-          );
-        }
-      }
-    }
   }
 
   findAll(): Promise<Role[]> {

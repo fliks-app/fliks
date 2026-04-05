@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal, effect, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal, effect, OnInit, OnDestroy } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
@@ -7,6 +7,28 @@ import { DownloadClientsApiService } from '../../core/services/api/download-clie
 import { RequestsService } from '../../core/services/api/requests.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SseService } from '../../core/services/sse.service';
+import { CastService } from '../../core/services/cast.service';
+import { CastPlayerService } from '../../core/services/cast-player.service';
+import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
+import {
+  LucideMenu,
+  LucideHome,
+  LucideFilm,
+  LucideTv,
+  LucideSearch,
+  LucideClipboardList,
+  LucideDownload,
+  LucideCalendar,
+  LucideUpload,
+  LucideArrowRightLeft,
+  LucideLayoutGrid,
+  LucideSettings,
+  LucideUser,
+  LucideSun,
+  LucideMoon,
+  LucideLogOut,
+  LucideCast,
+} from '@lucide/angular';
 
 function getInitialTheme(): 'dark' | 'light' {
   const stored = localStorage.getItem('suitarr-theme');
@@ -16,11 +38,18 @@ function getInitialTheme(): 'dark' | 'light' {
 
 @Component({
   selector: 'app-layout',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, TranslateModule],
+  imports: [
+    RouterOutlet, RouterLink, RouterLinkActive, TranslateModule,
+    LucideMenu, LucideHome, LucideFilm, LucideTv, LucideSearch,
+    LucideClipboardList, LucideDownload, LucideCalendar, LucideUpload,
+    LucideArrowRightLeft, LucideLayoutGrid, LucideSettings, LucideUser,
+    LucideSun, LucideMoon, LucideLogOut, LucideCast,
+    CastOverlayComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './layout.html',
 })
-export class LayoutComponent implements OnInit {
+export class LayoutComponent implements OnInit, OnDestroy {
   readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly mediaService = inject(MediaService);
@@ -28,8 +57,19 @@ export class LayoutComponent implements OnInit {
   private readonly requestsService = inject(RequestsService);
   readonly serverConfig = inject(ServerConfigService);
   private readonly sse = inject(SseService);
+  readonly castService = inject(CastService);
+  readonly castPlayer = inject(CastPlayerService);
 
   readonly theme = signal<'dark' | 'light'>(getInitialTheme());
+  readonly navbarHidden = signal(false);
+  private lastScrollY = 0;
+  private readonly onScroll = () => {
+    const y = window.scrollY;
+    // Only hide/show after scrolling past a small threshold
+    if (Math.abs(y - this.lastScrollY) < 10) return;
+    this.navbarHidden.set(y > this.lastScrollY && y > 56);
+    this.lastScrollY = y;
+  };
 
   readonly movieCount = signal(0);
   readonly seriesCount = signal(0);
@@ -66,6 +106,11 @@ export class LayoutComponent implements OnInit {
   ngOnInit() {
     this.refreshCounts();
     this.sse.connect();
+    window.addEventListener('scroll', this.onScroll, { passive: true });
+  }
+
+  ngOnDestroy() {
+    window.removeEventListener('scroll', this.onScroll);
   }
 
   async refreshCounts() {
@@ -112,5 +157,17 @@ export class LayoutComponent implements OnInit {
 
   toggleTheme(): void {
     this.theme.update((t) => (t === 'dark' ? 'light' : 'dark'));
+  }
+
+  toggleCastOverlay() {
+    this.castPlayer.expanded.update(v => !v);
+  }
+
+  onToggleCastConnection() {
+    if (this.castService.isConnected()) {
+      this.castService.disconnect();
+    } else {
+      this.castService.requestSession();
+    }
   }
 }

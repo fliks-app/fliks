@@ -28,10 +28,10 @@ export function parseReleaseQuality(title: string): ParsedReleaseQuality {
   const isSdtv = /\bsdtv\b/.test(t);
 
   let resolution = 0;
-  if (/\b(4320|8k)\b/.test(t)) resolution = 4320;
-  else if (/\b(2160|4k|uhd)\b/.test(t)) resolution = 2160;
-  else if (/\b1080(i|p)?\b/.test(t) || /\b1080\b/.test(t)) resolution = 1080;
-  else if (/\b720(i|p)?\b/.test(t) || /\b720\b/.test(t)) resolution = 720;
+  if (/\b(4320p?|8k)\b/.test(t)) resolution = 4320;
+  else if (/\b(2160p?|4k|uhd)\b/.test(t)) resolution = 2160;
+  else if (/\b1080[ip]?\b/.test(t)) resolution = 1080;
+  else if (/\b720[ip]?\b/.test(t)) resolution = 720;
   else if (/\b(576|480|360)p?\b/.test(t)) {
     const m = t.match(/\b(576|480|360)p?\b/);
     resolution = m ? parseInt(m[1], 10) : 480;

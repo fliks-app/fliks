@@ -12,7 +12,8 @@ export type SseEvent =
   | { type: 'stalled.removed'; title: string }
   | { type: 'queue.updated' }
   | { type: 'command.started'; name: string }
-  | { type: 'command.completed'; name: string; status: string };
+  | { type: 'command.completed'; name: string; status: string }
+  | { type: 'player.command'; mediaFileId: number; userId: number; action: 'pause' | 'play' | 'stop' | 'message'; message?: string };
 
 @Injectable()
 export class EventsService {

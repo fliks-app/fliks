@@ -21,10 +21,11 @@ import { RootFoldersApiService, RootFolder } from '../../core/services/api/root-
 import { SettingsApiService } from '../../core/services/api/settings-api.service';
 import { ToastService } from '../../core/services/toast.service';
 import { RequestModalComponent } from './components/request-modal/request-modal.component';
+import { LucideFilm } from '@lucide/angular';
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, RequestModalComponent],
+  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, RequestModalComponent, LucideFilm],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tmdb-preview.html',
 })

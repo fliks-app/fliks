@@ -1,24 +1,37 @@
-FROM node:24.14.0-alpine
+FROM ubuntu:24.04
 
-RUN apk add --no-cache \
+# Install Node.js 24
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+  && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
+  && apt-get install -y --no-install-recommends nodejs \
+  && apt-get purge -y curl gnupg \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install runtime dependencies + Intel GPU drivers + FFmpeg
+RUN apt-get update && apt-get install -y --no-install-recommends \
   bash \
-  postgresql18-client \
+  postgresql-client \
   procps \
   python3 \
-  py3-pip \
+  python3-pip \
+  python3-venv \
   ffmpeg \
-  && apk add --no-cache --virtual .ffsubsync-build \
+  intel-media-va-driver-non-free \
+  intel-opencl-icd \
+  libmfx-gen1.2 \
+  libvpl2 \
+  vainfo \
+  wget \
+  ca-certificates \
   gcc \
-  musl-dev \
   python3-dev \
+  libc6-dev \
   && python3 -m pip install --no-cache-dir --break-system-packages ffsubsync \
-  && apk del .ffsubsync-build \
   && wget -q -O /usr/local/bin/alass https://github.com/kaegi/alass/releases/download/v2.0.0/alass-linux64 \
   && chmod +x /usr/local/bin/alass \
-  && ffsubsync --version \
-  && alass --help >/dev/null \
-  && pg_dump --version \
-  && psql --version
+  && apt-get purge -y wget gcc python3-dev libc6-dev \
+  && apt-get autoremove -y \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

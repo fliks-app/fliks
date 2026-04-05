@@ -23,6 +23,30 @@
     "default_track": "Par défaut",
     "probe_error": "Métadonnées indisponibles"
   },
+  "player": {
+    "play": "Lire",
+    "play_from_start": "Depuis le début",
+    "pause": "Pause",
+    "next_episode": "Épisode suivant",
+    "prev_episode": "Épisode précédent",
+    "subtitles": "Sous-titres",
+    "audio": "Audio",
+    "speed": "Vitesse",
+    "stats": "Statistiques",
+    "fullscreen": "Plein écran",
+    "pip": "Picture-in-Picture",
+    "back": "Retour",
+    "continue_watching": "Continuer à regarder",
+    "no_continue": "Rien en cours de lecture.",
+    "stats_video": "Vidéo",
+    "stats_audio": "Audio",
+    "stats_playback": "Lecture",
+    "stats_network": "Réseau",
+    "direct_play": "Lecture directe",
+    "remux": "Remux",
+    "off": "Désactivé",
+    "error": "Erreur de lecture"
+  },
   "sse": {
     "subtitle_synced": "Sous-titre synchronisé avec succès.",
     "subtitle_downloaded": "Sous-titre téléchargé : {{title}} [{{lang}}]",
@@ -55,7 +79,18 @@
     "settings": "Paramètres",
     "open_menu": "Ouvrir le menu",
     "close_menu": "Fermer le menu",
-    "logout": "Se déconnecter"
+    "logout": "Se déconnecter",
+    "playback_settings": "Paramètres de lecture"
+  },
+  "playback_settings": {
+    "title": "Paramètres de lecture",
+    "subtitle": "Configuration de la lecture sur vos appareils.",
+    "cast_hdr": "HDR",
+    "cast_hdr_hint": "Activer si votre Chromecast et votre TV supportent le HDR. Désactivé = le serveur convertit en SDR.",
+    "cast_max_quality": "Qualité maximale",
+    "cast_max_quality_hint": "Limite la résolution envoyée au Chromecast.",
+    "cast_audio": "Audio",
+    "cast_audio_hint": "Nombre de canaux audio. Stéréo si votre TV n'a pas de système surround."
   },
   "import_disk": {
     "title": "Import manuel depuis le disque",
@@ -508,6 +543,7 @@
     "tab_backups": "Sauvegardes",
     "tab_logs": "Journaux",
     "tab_import": "Import",
+    "tab_streams": "Activités vidéos",
     "commands_title": "Déclencher une tâche",
     "cmd_rss_sync": "Synchronisation RSS",
     "cmd_search_missing": "Rechercher les manquants",

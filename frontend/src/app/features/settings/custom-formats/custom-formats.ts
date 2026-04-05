@@ -8,6 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { LucideX } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   CustomFormatsApiService,
@@ -18,7 +19,7 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 
 @Component({
   selector: 'app-custom-formats-settings',
-  imports: [FormsModule, TranslateModule],
+  imports: [FormsModule, LucideX, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './custom-formats.html',
 })

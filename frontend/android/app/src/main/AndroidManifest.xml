@@ -11,7 +11,8 @@
         android:theme="@style/AppTheme">
 
         <activity
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode|navigation"
+            android:supportsPictureInPicture="true"
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
@@ -24,6 +25,11 @@
             </intent-filter>
 
         </activity>
+
+        <!-- Cast Framework OptionsProvider -->
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="com.suitarr.app.CastOptionsProvider" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -20,16 +20,12 @@
           <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-base-100/30 to-base-100/50"></div>
         </div>
         <a [routerLink]="seriesRoute()" [queryParams]="seriesQueryParams()" class="relative z-10 btn btn-ghost btn-sm gap-1 mb-4 text-base-content/80 hover:text-base-content">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-          </svg>
+          <svg lucideChevronLeft class="h-4 w-4"></svg>
           {{ m.title }}
         </a>
       } @else {
         <a [routerLink]="seriesRoute()" [queryParams]="seriesQueryParams()" class="btn btn-ghost btn-sm gap-1 mb-4">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-          </svg>
+          <svg lucideChevronLeft class="h-4 w-4"></svg>
           {{ m.title }}
         </a>
       }
@@ -101,22 +97,26 @@
           <!-- Actions -->
           <div class="flex flex-wrap items-center gap-2 pt-1">
             @if (selectedFileId()) {
+              <button class="btn btn-ghost btn-sm gap-1" (click)="play(true)">
+                <svg lucideRotateCcw class="h-4 w-4"></svg>
+                {{ 'player.play_from_start' | translate }}
+              </button>
+              <button class="btn btn-primary btn-sm gap-1" (click)="play(false)">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                {{ 'player.play' | translate }}
+              </button>
               <button
                 type="button"
                 class="btn btn-error btn-outline btn-sm btn-square"
                 (click)="onDeleteFileClick()"
                 [title]="'media_detail.delete' | translate"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
+                <svg lucideTrash2 class="h-4 w-4"></svg>
               </button>
             }
             <div class="dropdown dropdown-end">
               <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6h.01M12 12h.01M12 18h.01" />
-                </svg>
+                <svg lucideEllipsisVertical class="h-5 w-5"></svg>
               </div>
               <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-56 p-2 shadow-lg">
                 @if (canGrab()) {
@@ -125,7 +125,7 @@
                       @if (epGrabBusy() === 'best') {
                         <span class="loading loading-spinner loading-xs"></span>
                       } @else {
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                        <svg lucideDownload class="h-4 w-4 shrink-0 opacity-70"></svg>
                       }
                       {{ 'media_detail.grab_best' | translate }}
                     </a>
@@ -135,7 +135,7 @@
                       @if (epReleasesLoading()) {
                         <span class="loading loading-spinner loading-xs"></span>
                       } @else {
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                        <svg lucideSearch class="h-4 w-4 shrink-0 opacity-70"></svg>
                       }
                       {{ 'media_detail.search_releases' | translate }}
                     </a>
@@ -147,9 +147,9 @@
                       @if (episodeBusy()) {
                         <span class="loading loading-spinner loading-xs"></span>
                       } @else if (ep.monitored) {
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                        <svg lucideEyeOff class="h-4 w-4 shrink-0 opacity-70"></svg>
                       } @else {
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                        <svg lucideEye class="h-4 w-4 shrink-0 opacity-70"></svg>
                       }
                       @if (ep.monitored) {
                         {{ 'media_detail.unmonitor' | translate }}
@@ -164,7 +164,7 @@
                     @if (refreshLoading()) {
                       <span class="loading loading-spinner loading-xs"></span>
                     } @else {
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                      <svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>
                     }
                     {{ 'media_detail.refresh_metadata' | translate }}
                   </a>
@@ -174,7 +174,7 @@
                     @if (rescanLoading()) {
                       <span class="loading loading-spinner loading-xs"></span>
                     } @else {
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                      <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg>
                     }
                     {{ 'media_detail.rescan_files' | translate }}
                   </a>

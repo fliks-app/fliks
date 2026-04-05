@@ -159,9 +159,20 @@ export interface AudioStreamInfo {
   isDefault?: boolean;
 }
 
+export interface SubtitleStreamInfo {
+  streamIndex: number;
+  codec: string;
+  language: string;
+  title?: string;
+  forced: boolean;
+  hearingImpaired: boolean;
+}
+
 export interface MediaFileInfo {
   video: VideoStreamInfo[];
   audio: AudioStreamInfo[];
+  subtitles: SubtitleStreamInfo[];
+  durationSeconds?: number;
   error?: string;
 }
 

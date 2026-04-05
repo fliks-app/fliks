@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Suitarr Cast Receiver</title>
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+    }
+    #splash {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      background: #1d232a;
+      transition: opacity 0.5s;
+    }
+    #splash.hidden { opacity: 0; pointer-events: none; }
+    #splash h1 { font-size: 3rem; font-weight: 700; margin-bottom: 0.5rem; }
+    #splash p { font-size: 1.2rem; opacity: 0.6; }
+    cast-media-player {
+      --theme-hue: 210;
+      --progress-color: #fff;
+      --splash-image: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Splash screen while idle -->
+  <div id="splash">
+    <h1>Suitarr</h1>
+    <p>En attente de lecture...</p>
+  </div>
+
+  <!-- CAF media player element -->
+  <cast-media-player></cast-media-player>
+
+  <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+  <script>
+    const context = cast.framework.CastReceiverContext.getInstance();
+    const playerManager = context.getPlayerManager();
+    const splash = document.getElementById('splash');
+
+    // Show/hide splash based on player state
+    playerManager.addEventListener(cast.framework.events.EventType.PLAYER_LOAD_COMPLETE, () => {
+      splash.classList.add('hidden');
+    });
+    playerManager.addEventListener(cast.framework.events.EventType.MEDIA_FINISHED, () => {
+      splash.classList.remove('hidden');
+    });
+
+    // Intercept LOAD requests to handle Suitarr-specific metadata
+    playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (request) => {
+      // The sender passes custom data with media info
+      const customData = request.media?.customData;
+      if (customData?.title) {
+        request.media.metadata = request.media.metadata || new cast.framework.messages.GenericMediaMetadata();
+        request.media.metadata.title = customData.title;
+        request.media.metadata.subtitle = customData.subtitle || '';
+        if (customData.posterUrl) {
+          request.media.metadata.images = [{ url: customData.posterUrl }];
+        }
+      }
+      return request;
+    });
+
+    // Start the receiver
+    const options = new cast.framework.CastReceiverOptions();
+    options.disableIdleTimeout = true;
+    context.start(options);
+  </script>
+</body>
+</html>

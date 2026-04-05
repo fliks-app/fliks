@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   Post,
   Body,
@@ -32,6 +33,50 @@ import { ImportRadarrService, ApiImportResult } from './import-radarr.service';
 import { ImportSonarrService } from './import-sonarr.service';
 import { ImportApiDto } from './dto/import-api.dto';
 import { Observable } from 'rxjs';
+import { TranscodingService } from '../streaming/transcoding.service';
+import { ActiveStreamTracker } from '../streaming/active-stream-tracker.service';
+import { PlaybackService } from '../streaming/playback.service';
+import { MediaFile } from '../media/entities/media-file.entity';
+import { Episode } from '../media/entities/episode.entity';
+
+export interface ActiveStreamDto {
+  sessionId: string;
+  userId: number | null;
+  username: string | null;
+  mediaId: number;
+  mediaFileId: number;
+  mediaTitle: string;
+  mediaType: string;
+  episodeId: number | null;
+  episodeLabel: string | null;
+  posterUrl: string | null;
+  mode: 'transcode' | 'remux' | 'directplay';
+  quality: string;
+  hwAccel: string;
+  startedAt: string;
+  lastActivity: string;
+  // Progress
+  positionSeconds: number;
+  durationSeconds: number;
+  // Stream info
+  container: string | null;
+  videoCodec: string | null;
+  videoResolution: string | null;
+  videoBitrate: number | null;
+  audioCodec: string | null;
+  audioChannels: string | null;
+  audioLanguage: string | null;
+  outputContainer: string | null;
+  outputBitrate: number | null;
+  videoPlaybackMode: string;   // "Lecture directe" / "Transcodage (QSV)"
+  audioPlaybackMode: string;   // "Lecture directe" / "Transcoder (AAC 192 kbps)"
+  /** Transcode buffer progress (0-100), null for direct play */
+  transcodePercent: number | null;
+  /** Reasons why transcoding is needed, split by category */
+  videoReasons: string[];
+  audioReasons: string[];
+  containerReasons: string[];
+}
 
 export interface ServiceStatus {
   name: string;
@@ -78,6 +123,13 @@ export class SystemController {
     private readonly eventsService: EventsService,
     private readonly importRadarrService: ImportRadarrService,
     private readonly importSonarrService: ImportSonarrService,
+    private readonly transcodingService: TranscodingService,
+    private readonly activeStreamTracker: ActiveStreamTracker,
+    private readonly playbackService: PlaybackService,
+    @InjectRepository(MediaFile)
+    private readonly mediaFileRepo: Repository<MediaFile>,
+    @InjectRepository(Episode)
+    private readonly episodeRepo: Repository<Episode>,
   ) {}
 
   @Sse('events')
@@ -247,5 +299,265 @@ export class SystemController {
         };
       }),
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Active streams (video activity dashboard)
+  // ---------------------------------------------------------------------------
+
+  @Get('streams')
+  @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
+  async activeStreams(): Promise<ActiveStreamDto[]> {
+    const hwAccel = this.transcodingService.getDetectedHwAccel();
+    const streams: ActiveStreamDto[] = [];
+
+    // Collect all mediaFileIds to batch-load streamInfo and playback state
+    const allSessions: { sessionId: string; userId: number | null; username: string | null; mediaFileId: number; mediaTitle: string; mediaType: string; posterUrl: string | null; mode: 'transcode' | 'remux' | 'directplay'; quality: string; hwAccelVal: string; startedAt: string; lastActivity: string }[] = [];
+
+    for (const s of this.transcodingService.getActiveSessions()) {
+      allSessions.push({
+        sessionId: s.id, userId: s.userId ?? null, username: s.username ?? null,
+        mediaFileId: s.mediaFileId, mediaTitle: s.mediaTitle ?? '', mediaType: s.mediaType ?? '',
+        posterUrl: s.posterUrl ?? null, mode: s.remux ? 'remux' : 'transcode', quality: s.quality,
+        hwAccelVal: s.remux ? 'none' : (s.actualHwAccel ?? hwAccel),
+        startedAt: (s.startedAt ?? new Date()).toISOString(),
+        lastActivity: new Date(s.lastAccess).toISOString(),
+      });
+    }
+
+    for (const s of this.activeStreamTracker.getActive()) {
+      allSessions.push({
+        sessionId: `dp-${s.userId}-${s.mediaFileId}`, userId: s.userId, username: s.username,
+        mediaFileId: s.mediaFileId, mediaTitle: s.mediaTitle, mediaType: s.mediaType,
+        posterUrl: s.posterUrl, mode: 'directplay', quality: 'original', hwAccelVal: 'none',
+        startedAt: s.startedAt.toISOString(), lastActivity: s.lastActivity.toISOString(),
+      });
+    }
+
+    // Track episodeId per stream index for resolution later
+    const streamEpisodeIds: (number | null)[] = [];
+
+    // Batch-load media files for streamInfo
+    const mediaFileIds = [...new Set(allSessions.map((s) => s.mediaFileId))];
+    const mediaFiles = mediaFileIds.length
+      ? await this.mediaFileRepo.findByIds(mediaFileIds)
+      : [];
+    const mediaFileMap = new Map(mediaFiles.map((mf) => [mf.id, mf]));
+
+    for (const s of allSessions) {
+      const mf = mediaFileMap.get(s.mediaFileId);
+      const si = mf?.streamInfo as any;
+      const v = si?.video?.[0];
+      const a = si?.audio?.[0];
+
+      // Playback state (position/duration + episodeId)
+      let positionSeconds = 0;
+      let durationSeconds = si?.durationSeconds ?? 0;
+      let episodeId: number | null = null;
+      if (s.userId) {
+        try {
+          const ps = await this.playbackService.getState(s.userId, s.mediaFileId);
+          if (ps) {
+            positionSeconds = ps.positionSeconds;
+            if (ps.durationSeconds > 0) durationSeconds = ps.durationSeconds;
+            episodeId = ps.episodeId ?? null;
+          }
+        } catch { /* ignore */ }
+      }
+
+      // Determine playback modes
+      let videoPlaybackMode = 'Lecture directe';
+      let audioPlaybackMode = 'Lecture directe';
+      let outputContainer: string | null = null;
+      let outputBitrate: number | null = null;
+
+      if (s.mode === 'transcode') {
+        videoPlaybackMode = hwAccel !== 'none'
+          ? `Transcodage (${hwAccel.toUpperCase()})`
+          : 'Transcodage (CPU)';
+        audioPlaybackMode = 'Transcoder (AAC 192 kbps)';
+        outputContainer = 'HLS';
+        const profile = { '1080p': 8, '720p': 4, '480p': 2 }[s.quality];
+        outputBitrate = profile ? profile * 1_000_000 : null;
+      } else if (s.mode === 'remux') {
+        outputContainer = 'HLS';
+        outputBitrate = (v?.bitRate ?? 0) + (a?.bitRate ?? 0) || null;
+        audioPlaybackMode = a?.codec === 'aac' ? 'Lecture directe' : 'Transcoder (AAC 192 kbps)';
+      }
+
+      const sourceResLabel = v?.width && v?.height
+        ? (v.height >= 2160 ? '4K' : v.height >= 1080 ? '1080p' : v.height >= 720 ? '720p' : `${v.width}x${v.height}`)
+        : null;
+      // For transcode sessions, show the target quality, not the source resolution
+      const resLabel = (s.mode === 'transcode' && s.quality !== 'original')
+        ? s.quality
+        : sourceResLabel;
+
+      streamEpisodeIds.push(episodeId);
+      streams.push({
+        sessionId: s.sessionId,
+        userId: s.userId,
+        username: s.username,
+        mediaId: mf?.mediaId ?? 0,
+        mediaFileId: s.mediaFileId,
+        mediaTitle: s.mediaTitle,
+        mediaType: s.mediaType,
+        episodeId,
+        episodeLabel: null as string | null, // resolved below
+        posterUrl: s.posterUrl,
+        mode: s.mode,
+        quality: s.quality,
+        hwAccel: s.hwAccelVal,
+        startedAt: s.startedAt,
+        lastActivity: s.lastActivity,
+        positionSeconds,
+        durationSeconds,
+        container: si?.container ?? (mf as any)?.relativePath?.split('.').pop() ?? null,
+        videoCodec: v?.codec?.toUpperCase() ?? null,
+        videoResolution: resLabel,
+        videoBitrate: v?.bitRate ?? null,
+        audioCodec: a?.codec?.toUpperCase() ?? null,
+        audioChannels: a?.channelLayout ?? (a?.channels ? `${a.channels}ch` : null),
+        audioLanguage: a?.language ?? null,
+        outputContainer,
+        outputBitrate,
+        videoPlaybackMode,
+        audioPlaybackMode,
+        transcodePercent: null as number | null, // filled below for transcode sessions
+        videoReasons: [] as string[],
+        audioReasons: [] as string[],
+        containerReasons: [] as string[],
+      });
+    }
+
+    // Resolve episode labels
+    const uniqueEpIds = [...new Set(streamEpisodeIds.filter((id): id is number => !!id))];
+    if (uniqueEpIds.length) {
+      const episodes = await this.episodeRepo.find({
+        where: uniqueEpIds.map((id) => ({ id })),
+        relations: ['season'],
+      });
+      const epMap = new Map(episodes.map((e) => [e.id, e]));
+      for (let i = 0; i < streams.length; i++) {
+        const epId = streamEpisodeIds[i];
+        if (epId) {
+          const ep = epMap.get(epId);
+          if (ep) {
+            const label = `S${ep.season?.seasonNumber ?? '?'}:E${ep.episodeNumber}`;
+            streams[i].episodeLabel = ep.title ? `${label} - ${ep.title}` : label;
+          }
+        }
+      }
+    }
+
+    // Fill transcode progress for non-directplay sessions
+    const transcodeSessions = this.transcodingService.getActiveSessions();
+    for (const stream of streams) {
+      if (stream.mode !== 'directplay') {
+        const ts = transcodeSessions.find((s) => s.id === stream.sessionId);
+        if (ts) {
+          if (stream.durationSeconds > 0) {
+            stream.transcodePercent = await this.transcodingService.getTranscodePercent(ts, stream.durationSeconds);
+          }
+          // Deduplicate by flag (reasons can be pushed from multiple code paths)
+          const seen = new Set<string>();
+          const reasons = (ts.transcodeReasons ?? []).filter((r) => {
+            if (seen.has(r.flag)) return false;
+            seen.add(r.flag);
+            return true;
+          });
+          stream.videoReasons = reasons.filter((r) => r.flag.startsWith('Video')).map((r) => r.message);
+          stream.audioReasons = reasons.filter((r) => r.flag.startsWith('Audio')).map((r) => r.message);
+          stream.containerReasons = reasons.filter((r) => r.flag.startsWith('Container')).map((r) => r.message);
+        }
+      }
+    }
+
+    // Deduplicate: when a user switches quality, multiple transcode sessions
+    // exist for the same file. Keep only the most recently accessed one per user+file.
+    // Also prefer sessions accessed in the last 15s over stale ones.
+    const deduped = new Map<string, ActiveStreamDto>();
+    const recentCutoff = new Date(Date.now() - 15_000).toISOString();
+    for (const stream of streams) {
+      const key = `${stream.userId ?? 0}-${stream.mediaFileId}`;
+      const existing = deduped.get(key);
+      if (!existing) {
+        deduped.set(key, stream);
+      } else {
+        // Prefer the recently active session; if both recent or both stale, pick latest
+        const existingRecent = existing.lastActivity > recentCutoff;
+        const streamRecent = stream.lastActivity > recentCutoff;
+        if ((!existingRecent && streamRecent) || stream.lastActivity > existing.lastActivity) {
+          deduped.set(key, stream);
+        }
+      }
+    }
+
+    return Array.from(deduped.values());
+  }
+
+  @Delete('streams/:sessionId')
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
+  killStream(@Param('sessionId') sessionId: string) {
+    if (sessionId.startsWith('dp-')) {
+      // Direct play session — can't really kill it, just untrack
+      const parts = sessionId.replace('dp-', '').split('-');
+      const userId = parseInt(parts[0], 10);
+      const mediaFileId = parseInt(parts[1], 10);
+      if (userId && mediaFileId) {
+        this.activeStreamTracker.unregister(userId, mediaFileId);
+      }
+    } else {
+      // Transcode session — kill by session map key directly
+      this.transcodingService.killSessionById(sessionId);
+    }
+    return { ok: true };
+  }
+
+  @Post('streams/:sessionId/command')
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
+  sendPlayerCommand(
+    @Param('sessionId') sessionId: string,
+    @Body() body: { action: 'pause' | 'play' | 'stop'; message?: string },
+  ) {
+    // Parse userId and mediaFileId from sessionId
+    let userId = 0;
+    let mediaFileId = 0;
+
+    if (sessionId.startsWith('dp-')) {
+      const parts = sessionId.replace('dp-', '').split('-');
+      userId = parseInt(parts[0], 10);
+      mediaFileId = parseInt(parts[1], 10);
+    } else {
+      // Transcode session — look up from active sessions
+      const session = this.transcodingService.getActiveSessions().find((s) => s.id === sessionId);
+      if (session) {
+        userId = session.userId ?? 0;
+        mediaFileId = session.mediaFileId;
+      }
+    }
+
+    if (!userId || !mediaFileId) {
+      throw new BadRequestException('Session not found');
+    }
+
+    this.eventsService.emit({
+      type: 'player.command',
+      mediaFileId,
+      userId,
+      action: body.action,
+      message: body.message,
+    });
+
+    // If stop, also kill the transcode session
+    if (body.action === 'stop') {
+      if (sessionId.startsWith('dp-')) {
+        this.activeStreamTracker.unregister(userId, mediaFileId);
+      } else {
+        this.transcodingService.killSessionById(sessionId);
+      }
+    }
+
+    return { ok: true };
   }
 }

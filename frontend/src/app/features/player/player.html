@@ -1,0 +1,89 @@
+<!-- Local player (hidden when casting — Cast overlay is global in the layout) -->
+<div
+  #playerContainer
+  class="player-container"
+  [class.hide-cursor]="!controlsVisible()"
+  [class.hidden]="castService.isConnected()"
+  (mousemove)="isNative ? null : showControls()"
+>
+  <!-- Backdrop shown while video loads -->
+  @if (fanartUrl() && (loading() || buffering())) {
+    <img
+      [src]="fanartUrl()"
+      alt=""
+      class="absolute inset-0 w-full h-full object-cover z-0"
+    />
+  }
+
+  <video
+    #videoElement
+    class="player-video"
+    playsinline
+  ></video>
+
+  @if (error()) {
+    <div class="absolute inset-0 flex items-center justify-center z-50">
+      <div class="text-center text-white">
+        <svg lucideCircleAlert class="h-12 w-12 mx-auto mb-4 text-error"></svg>
+        <p class="text-lg font-medium">{{ 'player.error' | translate }}</p>
+        <p class="text-sm text-white/60 mt-1">{{ error() }}</p>
+        <button class="btn btn-ghost btn-sm mt-4" (click)="onBack()">{{ 'player.back' | translate }}</button>
+      </div>
+    </div>
+  }
+
+  @if (loading() || buffering()) {
+    <div class="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
+      <span class="loading loading-spinner loading-lg text-white"></span>
+    </div>
+  }
+
+  @if (!inPipMode()) {
+  <app-player-controls
+    [visible]="controlsVisible()"
+    [paused]="paused()"
+    [loading]="loading()"
+    [buffering]="buffering()"
+    [currentTime]="currentTime()"
+    [duration]="duration()"
+    [bufferedEnd]="bufferedEnd()"
+    [volume]="volume()"
+    [playbackRate]="playbackRate()"
+    [mediaTitle]="mediaTitle()"
+    [episodeTitle]="episodeTitle()"
+    [hasNextEpisode]="false"
+    [hasPrevEpisode]="false"
+    [activeQualityLabel]="activeQualityId() === 'auto' ? (activeResolution() ? 'Auto (' + activeResolution() + ')' : 'Auto') : activeQualityId()"
+    [isNative]="isNative"
+    (togglePlay)="onTogglePlay()"
+    (tapOverlay)="toggleControls()"
+    (seek)="onSeek($event)"
+    (volumeChange)="onVolumeChange($event)"
+    (toggleMute)="onToggleMute()"
+    (toggleFullscreen)="onToggleFullscreen()"
+    (togglePip)="onTogglePip()"
+    [availableSubtitles]="availableSubtitles()"
+    [availableQualities]="availableQualities()"
+    [activeSubtitleId]="activeSubtitleId()"
+    [activeQualityId]="activeQualityId()"
+    [availableAudioTracks]="availableAudioTracks()"
+    [activeAudioTrackId]="activeAudioTrackId()"
+    (selectSubtitle)="onSelectSubtitleById($event)"
+    (selectQuality)="onSelectQualityById($event)"
+    (selectAudioTrack)="onSelectAudioTrack($event)"
+    (toggleStats)="statsVisible.set(!statsVisible())"
+    (speedChange)="onSpeedChange($event)"
+    (back)="onBack()"
+    [castAvailable]="castService.isAvailable()"
+    [castConnected]="castService.isConnected()"
+    [castConnecting]="castService.connecting()"
+    (toggleCast)="onToggleCast()"
+  />
+  }
+
+  <app-player-stats-overlay
+    [visible]="statsVisible()"
+    [stats]="playerStats()"
+    (close)="onCloseStats()"
+  />
+</div>

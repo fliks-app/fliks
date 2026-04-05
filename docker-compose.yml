@@ -24,6 +24,10 @@ services:
       - ./backend:/app
       - /mnt/data/suitarr/volumes/downloads:/downloads
       - /mnt/data/suitarr/volumes/medias:/medias
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "992"  # render group — required for OpenCL access to Intel GPU
     depends_on:
       - postgres
 

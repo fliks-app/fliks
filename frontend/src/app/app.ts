@@ -3,6 +3,7 @@ import { RouterOutlet } from '@angular/router';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { AuthService } from './core/services/auth.service';
+import { CastPlayerService } from './core/services/cast-player.service';
 import { ToastContainerComponent } from './shared/components/toast-container';
 import { ConfirmationModalComponent } from './shared/components/confirmation-modal';
 
@@ -14,13 +15,20 @@ import { ConfirmationModalComponent } from './shared/components/confirmation-mod
 })
 export class App implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
+  private readonly castPlayer = inject(CastPlayerService);
   private backButtonListener?: { remove: () => Promise<void> };
 
   ngOnInit() {
     this.auth.hydrateFromServer();
 
     if (Capacitor.isNativePlatform()) {
+      document.body.classList.add('native');
       CapApp.addListener('backButton', ({ canGoBack }) => {
+        // Close Cast overlay first if open
+        if (this.castPlayer.expanded()) {
+          this.castPlayer.expanded.set(false);
+          return;
+        }
         if (canGoBack) {
           window.history.back();
         } else {

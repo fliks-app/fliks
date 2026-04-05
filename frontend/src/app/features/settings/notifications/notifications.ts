@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
+import { LucideX } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
@@ -31,7 +32,7 @@ interface CreateNotificationBody {
 
 @Component({
   selector: 'app-notifications-settings',
-  imports: [FormsModule, TranslateModule],
+  imports: [FormsModule, LucideX, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './notifications.html',
 })

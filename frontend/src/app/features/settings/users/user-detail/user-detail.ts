@@ -5,6 +5,7 @@ import {
   OnInit,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { LucideChevronLeft, LucideUser } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { UsersApiService } from '../../../../core/services/api/users-api.service';
 import { RolesApiService } from '../../../../core/services/api/roles-api.service';
@@ -14,7 +15,7 @@ import { UserDetailState } from './user-detail.state';
 
 @Component({
   selector: 'app-user-detail',
-  imports: [TranslateModule, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [LucideChevronLeft, LucideUser, TranslateModule, RouterLink, RouterLinkActive, RouterOutlet],
   providers: [UserDetailState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './user-detail.html',

@@ -139,4 +139,9 @@ export class AuthService {
     return { accessToken, user: this.safeUser(user) };
   }
 
+  /** Generate a JWT for Chromecast (4h — long enough for extended cuts) */
+  generateCastToken(user: User): string {
+    const payload: JwtPayload = { sub: user.id, username: user.username };
+    return this.jwtService.sign(payload, { expiresIn: '4h' });
+  }
 }
