@@ -57,14 +57,22 @@
 - ✅ tonemapping flag dans PlaybackInfoResponse
 ### Phase 4 : Chromecast — ✅ TERMINÉE
 - ✅ Custom Web Receiver (cast-receiver.html avec CAF SDK, servi via ServeStaticModule)
-- ✅ Cast Sender SDK chargé dans index.html
-- ✅ CastService Angular (signals isAvailable/isConnected, loadMedia, play/pause/seek/stop)
+- ✅ Cast Sender SDK chargé dans index.html (web Chrome)
+- ✅ Plugin natif Android CastPlugin.java (MediaRouteChooserDialog, loadMedia, play/pause/seek)
+- ✅ CastService Angular dual (web SDK + natif Android via Capacitor)
 - ✅ Bouton Cast dans le player (icône Lucide, bleu quand connecté)
-- ✅ Transfert de playback : pause locale → envoie HLS au Chromecast avec position
+- ✅ CastRemoteComponent dédié (séparé du player local, pas de if/else)
+- ✅ Transfert de playback : pause+mute locale → envoie HLS au Chromecast avec position
 - ✅ Retour de Cast : reprend lecture locale à la position du Cast
-- ✅ URLs absolues pour Cast (getAbsoluteHlsUrl, getAbsoluteSubtitleUrl)
-- ✅ Sous-titres WebVTT passés au receiver en sidecar
-- ✅ Metadata (titre, poster) affichés sur la TV
+- ✅ URLs absolues pour Cast (server-url endpoint, EXTERNAL_URL env var)
+- ✅ Cast token temporaire (4h) pour sécuriser les URLs
+- ✅ Sous-titres sidecar avec style (transparent bg, drop shadow, sans-serif)
+- ✅ Conservation des sous-titres actifs lors du switch web→Cast
+- ✅ Sélecteur de qualité dans le Cast remote (auto/variant spécifique)
+- ✅ Sélecteur de piste audio dans le Cast remote (reload stream avec -map 0:a:N)
+- ✅ Conservation qualité + audio lors du switch web→Cast
+- ✅ Metadata (titre, épisode, poster) affichés sur la TV
+
 ### Phase 5 : Sous-titres avancés (burn-in) — ✅ TERMINÉE
 - ✅ Classification bitmap vs texte (isImageBased dans SubtitleStreamInfo)
 - ✅ SubtitleBurnInService : résolution chemin/extraction pour FFmpeg
@@ -74,6 +82,16 @@
 - ✅ Frontend : bitmap subs (PGS) visibles dans la liste avec badge "gravé"
 - ✅ Sélection burn-in recharge le stream HLS avec le sous-titre gravé
 - ✅ Désélection revient au stream normal
+
+### Améliorations player (hors phases)
+- ✅ Barre de progression custom (seek drag, feedback immédiat, seekPending)
+- ✅ Sélection piste audio (reload stream avec audioStreamIndex)
+- ✅ Profils qualité 2160p/1080p/720p/480p/360p/240p/144p
+- ✅ Qualité basée sur ffprobe (largeur, comme Jellyfin) au lieu du nom de fichier
+- ✅ Auto-hide overlay + curseur, sauf si dropdown ouverte
+- ✅ HDR natif Android (plugin HdrPlugin.java)
+- ✅ Détection segments 4 chiffres (films >1h40)
+
 ### Phase 6 : Watch Together + Profils — ⬜ À FAIRE
 
 ---
