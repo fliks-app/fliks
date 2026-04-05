@@ -33,6 +33,7 @@
           }
           @if (v.width && v.height) {
             <div><span class="text-base-content/50">{{ 'file_info.resolution' | translate }} :&nbsp;</span><span class="font-medium">{{ formatResolution(v) }}</span></div>
+            <div><span class="text-base-content/50">{{ 'file_info.aspect_ratio' | translate }} :&nbsp;</span><span class="font-medium">{{ formatAspectRatio(v) }}</span></div>
           }
           @if (v.frameRate) {
             <div><span class="text-base-content/50">{{ 'file_info.frame_rate' | translate }} :&nbsp;</span><span class="font-medium">{{ v.frameRate }} fps</span></div>

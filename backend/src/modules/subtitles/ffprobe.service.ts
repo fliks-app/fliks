@@ -22,6 +22,13 @@ export interface MediaStream {
 
 export type HdrFormat = 'HDR10' | 'HLG';
 
+export interface CropInfo {
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+}
+
 export interface VideoStreamInfo {
   streamIndex: number;
   codec: string;
@@ -38,6 +45,7 @@ export interface VideoStreamInfo {
   colorTransfer?: string;
   colorPrimaries?: string;
   hdrFormat?: HdrFormat;
+  crop?: CropInfo;
 }
 
 export interface AudioStreamInfo {
@@ -300,5 +308,71 @@ export class FfprobeService {
     return fps > 0
       ? fps.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
       : undefined;
+  }
+
+  /**
+   * Detect hardcoded black bars (letterbox) using ffmpeg cropdetect.
+   * Samples multiple points in the video for accuracy.
+   * Returns crop info if significant bars are found, null otherwise.
+   */
+  async detectCrop(videoPath: string, durationSeconds?: number): Promise<CropInfo | null> {
+    try {
+      // Sample at 3 different timestamps to avoid false positives (dark scenes, credits)
+      const dur = durationSeconds ?? 600;
+      const timestamps = [
+        Math.min(60, dur * 0.1),      // 10% or 60s
+        Math.min(300, dur * 0.3),     // 30% or 300s
+        Math.min(600, dur * 0.5),     // 50% or 600s
+      ];
+
+      const cropCounts = new Map<string, number>();
+
+      for (const ss of timestamps) {
+        try {
+          const { stderr } = await execFileAsync('ffmpeg', [
+            '-ss', String(Math.floor(ss)),
+            '-i', videoPath,
+            '-t', '3',
+            '-vf', 'cropdetect=24:16:0',
+            '-an', '-f', 'null', '-',
+          ], { timeout: 30_000 });
+
+          // Parse last crop= line
+          const lines = stderr.split('\n');
+          for (let i = lines.length - 1; i >= 0; i--) {
+            const m = lines[i].match(/crop=(\d+):(\d+):(\d+):(\d+)/);
+            if (m) {
+              const key = `${m[1]}:${m[2]}:${m[3]}:${m[4]}`;
+              cropCounts.set(key, (cropCounts.get(key) ?? 0) + 1);
+              break;
+            }
+          }
+        } catch {
+          // Individual sample failed, continue
+        }
+      }
+
+      if (!cropCounts.size) return null;
+
+      // Pick the most common crop value
+      let bestCrop = '';
+      let bestCount = 0;
+      for (const [crop, count] of cropCounts) {
+        if (count > bestCount) { bestCrop = crop; bestCount = count; }
+      }
+
+      const parts = bestCrop.split(':').map(Number);
+      if (parts.length !== 4) return null;
+      const [w, h, x, y] = parts;
+
+      // Only crop if bars are significant (> 20px on each side)
+      // and the crop doesn't reduce width (only vertical bars)
+      if (y < 20 && x < 20) return null;
+
+      return { width: w, height: h, x, y };
+    } catch (err) {
+      this.logger.warn(`cropdetect failed for ${videoPath}: ${err}`);
+      return null;
+    }
   }
 }

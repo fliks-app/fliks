@@ -39,7 +39,7 @@
       </button>
     }
     <!-- lucide:picture-in-picture-2 -->
-    <button type="button" class="btn btn-ghost btn-circle text-white" [class]="isNative() ? 'btn-sm' : 'btn-md'" (click)="togglePip.emit()">
+    <button type="button" class="btn btn-ghost btn-circle text-white btn-sm lg:btn-md" (click)="togglePip.emit()">
       <svg lucidePictureInPicture2 [class]="isNative() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
     </button>
     <!-- Cast -->

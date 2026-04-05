@@ -1151,6 +1151,11 @@ export class MediaService {
         let streamInfo = si;
         if (sizeChanged || missingStreamInfo || missingColorInfo) {
           streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
+          // Detect hardcoded black bars (letterbox)
+          if (streamInfo?.video?.[0]) {
+            const crop = await this.ffprobe.detectCrop(absPath, streamInfo.durationSeconds);
+            if (crop) streamInfo.video[0].crop = crop;
+          }
           dbFile.streamInfo = streamInfo;
         }
         const qualityName = this.resolveQuality(filename, streamInfo?.video?.[0]?.height, streamInfo?.video?.[0]?.width);
@@ -1195,6 +1200,11 @@ export class MediaService {
       }
 
       const streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
+      // Detect hardcoded black bars (letterbox)
+      if (streamInfo?.video?.[0]) {
+        const crop = await this.ffprobe.detectCrop(absPath, streamInfo.durationSeconds);
+        if (crop) streamInfo.video[0].crop = crop;
+      }
       const qualityName = this.resolveQuality(filename, streamInfo.video?.[0]?.height, streamInfo.video?.[0]?.width);
       await this.mediaFileRepo.save(
         this.mediaFileRepo.create({

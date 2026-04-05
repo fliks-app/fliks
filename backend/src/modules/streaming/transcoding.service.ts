@@ -43,6 +43,8 @@ export interface SessionContext {
   tonemap?: boolean;
   burnInSubtitle?: BurnInSubtitle;
   audioStreamIndex?: number;
+  /** Crop info for removing hardcoded black bars */
+  crop?: { width: number; height: number; x: number; y: number };
 }
 
 export interface TranscodeSession {
@@ -196,7 +198,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     for (const p of profiles) {
       const bw = parseInt(p.videoBitrate) * 1_000_000;
       const w = Math.min(p.maxWidth, sourceWidth);
-      const h = Math.min(p.maxHeight, sourceHeight);
+      // Compute height from source aspect ratio (matches ffmpeg scale=W:-2)
+      const h = Math.round(w * sourceHeight / sourceWidth / 2) * 2;
       lines.push(
         `#EXT-X-STREAM-INF:BANDWIDTH=${bw},RESOLUTION=${w}x${h},NAME="${p.name}"`,
         `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
@@ -276,9 +279,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const shouldTonemap = ctx?.tonemap ?? false;
     const burnIn = ctx?.burnInSubtitle;
     const audioIdx = ctx?.audioStreamIndex;
+    const cropInfo = ctx?.crop;
     const session = await this.startFfmpeg(
       key, mediaFileId, quality, absolutePath, profile, sessionDir, this.detectedHwAccel,
-      requestedSegment, shouldTonemap, burnIn, audioIdx,
+      requestedSegment, shouldTonemap, burnIn, audioIdx, cropInfo,
     );
     this.applyContext(session, ctx);
 
@@ -301,7 +305,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         await this.killAndClean(session.process, sessionDir);
         await fsp.mkdir(sessionDir, { recursive: true });
         const cpuSession = await this.startFfmpeg(
-          key, mediaFileId, quality, absolutePath, profile, sessionDir, 'none', requestedSegment, shouldTonemap, burnIn, audioIdx,
+          key, mediaFileId, quality, absolutePath, profile, sessionDir, 'none', requestedSegment, shouldTonemap, burnIn, audioIdx, cropInfo,
         );
         this.applyContext(cpuSession, ctx);
         this.sessions.set(key, cpuSession);
@@ -374,10 +378,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     tonemap = false,
     burnIn?: BurnInSubtitle,
     audioStreamIndex?: number,
+    crop?: { width: number; height: number; x: number; y: number },
   ): Promise<TranscodeSession> {
     const { resolve: readyResolve, promise: readyPromise } = this.createDeferred();
 
-    const args = this.buildFfmpegArgs(absolutePath, profile, sessionDir, hwAccel, startSegment, tonemap, burnIn, audioStreamIndex);
+    const args = this.buildFfmpegArgs(absolutePath, profile, sessionDir, hwAccel, startSegment, tonemap, burnIn, audioStreamIndex, crop);
     this.log.log(`Transcode start [${sessionId}] (${hwAccel}): ffmpeg ${args.join(' ')}`);
 
     const proc = spawn('ffmpeg', args, {
@@ -449,7 +454,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const profile = PROFILES.find((p) => p.name === quality) ?? PROFILES[0];
     const session = await this.startFfmpeg(
       sessionId, mediaFileId, quality, absolutePath, profile, sessionDir,
-      this.detectedHwAccel, startSegment, ctx?.tonemap ?? false, ctx?.burnInSubtitle, ctx?.audioStreamIndex,
+      this.detectedHwAccel, startSegment, ctx?.tonemap ?? false, ctx?.burnInSubtitle, ctx?.audioStreamIndex, ctx?.crop,
     );
     this.applyContext(session, ctx);
     this.sessions.set(sessionId, session);
@@ -496,6 +501,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     tonemap = false,
     burnIn?: BurnInSubtitle,
     audioStreamIndex?: number,
+    crop?: { width: number; height: number; x: number; y: number },
   ): string[] {
     const args = ['-hide_banner', '-loglevel', 'warning'];
 
@@ -507,8 +513,16 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     const bitrateNum = parseInt(profile.videoBitrate) * 1_000_000; // e.g. "8M" -> 8000000
 
+    // Force pipeline adjustments when HW accel can't handle required filters:
+    // - Subtitle burn-in is always CPU-only
+    // - QSV can't crop (fixed-size pool constraint), fallback to VAAPI encode which supports hwdownload/hwupload
+    const effectiveHwAccel = burnIn?.filter
+      ? 'none' as HwAccelType
+      : (hwAccel === 'qsv' && crop) ? 'vaapi' as HwAccelType
+      : hwAccel;
+
     // Hardware acceleration input decoding
-    if (hwAccel === 'qsv') {
+    if (effectiveHwAccel === 'qsv') {
       // Jellyfin approach on Linux: decode with VAAPI (native), scale with VAAPI,
       // then map to QSV surfaces for encoding. More compatible than pure QSV pipeline.
       args.push(
@@ -524,7 +538,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         '-hwaccel_device', 'va',
         '-noautorotate',
       );
-    } else if (hwAccel === 'vaapi') {
+    } else if (effectiveHwAccel === 'vaapi') {
       args.push(
         '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
       );
@@ -537,7 +551,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         '-hwaccel_device', 'va',
         '-noautorotate',
       );
-    } else if (hwAccel === 'nvenc') {
+    } else if (effectiveHwAccel === 'nvenc') {
       if (tonemap) {
         // For tone mapping, don't force cuda output format — allows hwdownload to CPU
         args.push('-hwaccel', 'cuda', '-noautorotate');
@@ -550,9 +564,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     // Video encoding
     const w = profile.maxWidth;
+    const cropStr = crop ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}` : '';
+    const cpuCropPrefix = cropStr ? `${cropStr},` : '';
     const burnInFilter = burnIn?.filter ? `,${burnIn.filter}` : '';
-    // Subtitle burn-in filters are CPU-only — force CPU pipeline when burn-in is active
-    const effectiveHwAccel = burnIn?.filter ? 'none' as HwAccelType : hwAccel;
     const tonemapOpencl = (tonemap && !burnIn?.filter)
       ? ',hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0'
       : '';
@@ -560,10 +574,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ? `zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,`
       : '';
 
+    // For HW paths with crop: hwdownload to CPU, crop, then hwupload back.
+    // If it fails, the fallback mechanism retries with CPU.
+    // For VAAPI/NVENC with crop: hwdownload to CPU, crop, hwupload back to VAAPI surfaces.
+    // QSV hwmap requires fixed-size pools, so crop changes dimensions and breaks it → force CPU.
+    const hwCropPrefix = cropStr ? `hwdownload,format=nv12,${cropStr},hwupload=derive_device=vaapi,` : '';
+
     switch (effectiveHwAccel) {
       case 'qsv':
-        // VAAPI decode → VAAPI scale → (OpenCL tonemap →) map to QSV → QSV encode
+        // Note: QSV + crop is forced to CPU via effectiveHwAccel (fixed-size pool constraint)
         if (tonemapOpencl) {
+          // VAAPI decode → VAAPI scale → OpenCL tonemap → map to QSV → QSV encode
           args.push(
             '-c:v', 'h264_qsv',
             '-mbbrc', '1',
@@ -595,7 +616,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-c:v', 'h264_vaapi',
             '-b:v', profile.videoBitrate,
             '-maxrate', profile.videoBitrate,
-            '-vf', `scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
+            '-vf', `${hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
             '-g', String(SEGMENT_DURATION * 24),
             '-keyint_min', String(SEGMENT_DURATION * 24),
           );
@@ -604,7 +625,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-c:v', 'h264_vaapi',
             '-b:v', profile.videoBitrate,
             '-maxrate', profile.videoBitrate,
-            '-vf', `scale_vaapi=w=${w}:h=-2:format=nv12`,
+            '-vf', `${hwCropPrefix}scale_vaapi=w=${w}:h=-2:format=nv12`,
             '-g', String(SEGMENT_DURATION * 24),
             '-keyint_min', String(SEGMENT_DURATION * 24),
           );
@@ -618,7 +639,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-preset', 'p4',
             '-b:v', profile.videoBitrate,
             '-maxrate', profile.videoBitrate,
-            '-vf', `hwdownload,format=p010le,${tonemapCpu}scale=${w}:-2`,
+            '-vf', `hwdownload,format=p010le,${cpuCropPrefix}${tonemapCpu}scale=${w}:-2`,
             '-g', String(SEGMENT_DURATION * 24),
             '-keyint_min', String(SEGMENT_DURATION * 24),
           );
@@ -628,7 +649,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-preset', 'p4',
             '-b:v', profile.videoBitrate,
             '-maxrate', profile.videoBitrate,
-            '-vf', `scale=${w}:-2`,
+            '-vf', `${cpuCropPrefix}scale=${w}:-2`,
             '-g', String(SEGMENT_DURATION * 24),
             '-keyint_min', String(SEGMENT_DURATION * 24),
           );
@@ -641,7 +662,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           '-b:v', profile.videoBitrate,
           '-maxrate', profile.videoBitrate,
           '-bufsize', `${parseInt(profile.videoBitrate) * 2}M`,
-          '-vf', `${tonemapCpu}scale=${w}:-2${burnInFilter}`,
+          '-vf', `${cpuCropPrefix}${tonemapCpu}scale=${w}:-2${burnInFilter}`,
           // Force keyframes at segment boundaries + disable scene-change keyframes
           '-force_key_frames', `expr:gte(t,n_forced*${SEGMENT_DURATION})`,
           '-sc_threshold:v:0', '0',

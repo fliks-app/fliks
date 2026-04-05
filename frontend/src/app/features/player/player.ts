@@ -111,6 +111,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // State
   readonly loading = signal(true);
+  readonly videoStarted = signal(false);
   readonly error = signal<string | null>(null);
   readonly paused = signal(true);
   readonly currentTime = signal(0);
@@ -402,10 +403,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         }
 
         // Use duration from streamInfo (reliable, from ffprobe)
-        const knownDuration = (file?.streamInfo as any)?.durationSeconds;
+        const si = file?.streamInfo as any;
+        const knownDuration = si?.durationSeconds;
         if (knownDuration && knownDuration > 0) {
           this.duration.set(knownDuration);
         }
+      }
+
+      // Set MediaSession metadata (Android notification, PiP, recent apps)
+      if ('mediaSession' in navigator) {
+        const artwork: MediaImage[] = [];
+        if (this.media?.posterUrl) artwork.push({ src: this.media.posterUrl, sizes: '300x450', type: 'image/jpeg' });
+        if (this.media?.fanartUrl) artwork.push({ src: this.media.fanartUrl, sizes: '1280x720', type: 'image/jpeg' });
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: this.episodeTitle() || this.mediaTitle(),
+          artist: this.episodeTitle() ? this.mediaTitle() : undefined,
+          artwork,
+        });
       }
 
       // Ask the backend to decide how to play this file
@@ -514,6 +528,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Save position every 10 seconds + immediately on seek
       this.saveInterval = setInterval(() => this.savePosition(), 10_000);
       video.addEventListener('seeked', () => this.savePosition());
+      video.addEventListener('playing', () => this.videoStarted.set(true), { once: true });
 
       // Update stats every second
       this.statsInterval = setInterval(() => {

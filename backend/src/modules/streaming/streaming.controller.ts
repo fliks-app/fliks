@@ -41,8 +41,9 @@ export class StreamingController {
     private readonly subtitleBurnIn: SubtitleBurnInService,
   ) {}
 
-  private buildSessionContext(req: Request, resolved: { media: any }, mediaFileId: number): SessionContext {
+  private buildSessionContext(req: Request, resolved: { media: any; mediaFile?: any }, mediaFileId: number): SessionContext {
     const user = (req as any).user as User | undefined;
+    const si = resolved.mediaFile?.streamInfo as any;
     return {
       userId: user?.id,
       username: user?.username,
@@ -53,6 +54,7 @@ export class StreamingController {
       tonemap: this.activeStreamTracker.getTonemapping(mediaFileId),
       burnInSubtitle: this.activeStreamTracker.getBurnIn(mediaFileId),
       audioStreamIndex: this.activeStreamTracker.getAudioStreamIndex(mediaFileId),
+      crop: si?.video?.[0]?.crop ?? undefined,
     };
   }
 
@@ -136,8 +138,10 @@ export class StreamingController {
     const resolved = await this.streamingService.resolveFile(mediaFileId);
     const si = resolved.mediaFile.streamInfo as any;
     const v = si?.video?.[0];
-    const w = v?.width ?? 1920;
-    const h = v?.height ?? 1080;
+    const crop = v?.crop;
+    // Use cropped dimensions if crop is active, otherwise original
+    const w = crop?.width ?? v?.width ?? 1920;
+    const h = crop?.height ?? v?.height ?? 1080;
 
     const token = (req.query as any).token;
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';

@@ -12,6 +12,7 @@
     "codec": "Codec",
     "profile": "Profil",
     "resolution": "Résolution",
+    "aspect_ratio": "Ratio d'aspect",
     "frame_rate": "Images/s",
     "bitrate": "Débit",
     "pixel_format": "Format pixel",

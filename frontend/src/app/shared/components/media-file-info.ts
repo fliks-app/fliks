@@ -53,6 +53,19 @@ export class MediaFileInfoComponent {
     return s;
   }
 
+  formatAspectRatio(v: VideoStreamInfo): string {
+    const crop = (v as any).crop;
+    if (crop) {
+      const ratio = (crop.width / crop.height).toFixed(2);
+      return `${ratio}:1 (${crop.width}\u00d7${crop.height} — crop auto)`;
+    }
+    if (v.width && v.height) {
+      const ratio = (v.width / v.height).toFixed(2);
+      return `${ratio}:1`;
+    }
+    return v.displayAspectRatio ?? '';
+  }
+
   formatChannels(a: AudioStreamInfo): string {
     if (a.channelLayout) return a.channelLayout;
     if (!a.channels) return '';

@@ -6,19 +6,16 @@
   [class.hidden]="castService.isConnected()"
   (mousemove)="isNative ? null : showControls()"
 >
-  <!-- Backdrop shown while video loads -->
-  @if (fanartUrl() && (loading() || buffering())) {
-    <img
-      [src]="fanartUrl()"
-      alt=""
-      class="absolute inset-0 w-full h-full object-cover z-0"
-    />
+  <!-- Fanart backdrop until video renders its first frame -->
+  @if (!videoStarted()) {
+    <div class="absolute inset-0 z-[1]" [style.background-image]="fanartUrl() ? 'url(' + fanartUrl() + ')' : 'none'" style="background-size: cover; background-position: center; background-color: #000"></div>
   }
 
   <video
     #videoElement
     class="player-video"
     playsinline
+    [class.opacity-0]="!videoStarted()"
   ></video>
 
   @if (error()) {

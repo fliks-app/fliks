@@ -136,7 +136,11 @@ CPU decode → zscale/tonemap (mobius) → scale → libx264 encode
 ## Priorite de selection
 
 1. Si burn-in sous-titres actif → force CPU (les filtres ASS sont CPU-only)
-2. Sinon utilise le `hwAccel` detecte/configure : `qsv` > `vaapi` > `nvenc` > `none`
+2. Si crop actif + QSV → descend a VAAPI (QSV ne supporte pas le changement de dimensions via hwmap)
+3. Si crop actif + VAAPI → reste VAAPI avec `hwdownload → crop → hwupload` (fallback CPU si crash)
+4. Sinon utilise le `hwAccel` detecte/configure : `qsv` > `vaapi` > `nvenc` > `none`
+
+Voir [crop-black-bars.md](crop-black-bars.md) pour le detail du systeme de suppression des bandes noires.
 
 ## Prerequis
 

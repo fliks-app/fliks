@@ -68,6 +68,7 @@ export class StreamBuilderService {
     const clientSupportsHdr = profile.supportsHdr === true;
     const needsTonemapping = isSourceHdr && !clientSupportsHdr;
     const needsBurnIn = !!burnInSubtitleId;
+    const needsCrop = !!v?.crop;
 
     const reasons: TranscodeReason[] = [];
 
@@ -75,15 +76,21 @@ export class StreamBuilderService {
     const directPlayResult = this.tryDirectPlay(source, profile, reasons);
 
     // HDR on SDR client forces transcode even if codecs match
-    if (needsTonemapping && directPlayResult.canDirectPlay) {
-      directPlayResult.canDirectPlay = false;
+    if (needsTonemapping) {
+      if (directPlayResult.canDirectPlay) directPlayResult.canDirectPlay = false;
       reasons.push({ flag: 'VideoHdrNotSupported', message: `HDR → SDR (tone mapping ${source.hdrFormat})` });
     }
 
     // Subtitle burn-in forces transcode
-    if (needsBurnIn && directPlayResult.canDirectPlay) {
-      directPlayResult.canDirectPlay = false;
+    if (needsBurnIn) {
+      if (directPlayResult.canDirectPlay) directPlayResult.canDirectPlay = false;
       reasons.push({ flag: 'SubtitleBurnIn', message: 'Sous-titres gravés dans la vidéo' });
+    }
+
+    // Crop (black bar removal) forces transcode
+    if (needsCrop) {
+      if (directPlayResult.canDirectPlay) directPlayResult.canDirectPlay = false;
+      reasons.push({ flag: 'VideoCrop', message: 'Suppression des bandes noires' });
     }
 
     if (directPlayResult.canDirectPlay) {
@@ -109,7 +116,7 @@ export class StreamBuilderService {
     // --- Step 2: Try DirectStream (remux) ---
     // Video codec must be supported; only container or audio may differ
     // Cannot remux if tone mapping or burn-in is needed (video must be re-encoded)
-    const canCopyVideo = directPlayResult.videoSupported && directPlayResult.videoConditionsMet && !needsTonemapping && !needsBurnIn;
+    const canCopyVideo = directPlayResult.videoSupported && directPlayResult.videoConditionsMet && !needsTonemapping && !needsBurnIn && !needsCrop;
     if (canCopyVideo) {
       const canCopyAudio = directPlayResult.audioSupported;
       const outputAudioCodec = canCopyAudio ? sourceAudioCodec : 'aac';
@@ -144,6 +151,16 @@ export class StreamBuilderService {
     if (needsTonemapping && !reasons.some(r => r.flag === 'VideoHdrNotSupported')) {
       reasons.push({ flag: 'VideoHdrNotSupported', message: `HDR → SDR (tone mapping ${source.hdrFormat})` });
     }
+    // Compute effective HW accel (same logic as transcoding.service.ts buildFfmpegArgs):
+    // - Burn-in forces CPU
+    // - QSV + crop falls back to VAAPI (fixed-size pool constraint)
+    let effectiveHwAccel = this.transcodingService.getDetectedHwAccel();
+    if (needsBurnIn) {
+      effectiveHwAccel = 'none';
+    } else if (effectiveHwAccel === 'qsv' && needsCrop) {
+      effectiveHwAccel = 'vaapi';
+    }
+
     this.log.log(`Transcode for file ${resolved.mediaFile.id}: ${reasons.map(r => r.flag).join(', ')}`);
     const url = `/api/stream/${resolved.mediaFile.id}/master.m3u8${tokenParam}`;
     return {
@@ -157,7 +174,7 @@ export class StreamBuilderService {
       outputVideoCodec: 'h264',
       outputAudioCodec: 'aac',
       outputContainer: 'hls',
-      hwAccel: this.transcodingService.getDetectedHwAccel(),
+      hwAccel: effectiveHwAccel,
       tonemapping: needsTonemapping,
       source,
     };

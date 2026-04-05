@@ -23,6 +23,8 @@ import {
   LucideHeadphones,
   LucideVolume2,
   LucideVolumeX,
+  LucideScan,
+  LucideMinimize,
 } from '@lucide/angular';
 
 @Component({
@@ -43,6 +45,8 @@ import {
     LucideHeadphones,
     LucideVolume2,
     LucideVolumeX,
+    LucideScan,
+    LucideMinimize,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player-controls.html',
@@ -74,7 +78,6 @@ export class PlayerControlsComponent {
   readonly castAvailable = input(false);
   readonly castConnected = input(false);
   readonly castConnecting = input(false);
-
   readonly togglePlay = output<void>();
   readonly tapOverlay = output<void>();
   readonly seek = output<number>();
