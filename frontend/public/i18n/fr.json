@@ -93,7 +93,9 @@
     "section_library": "Bibliothèque",
     "section_downloads": "Téléchargement",
     "playback_settings": "Paramètres de lecture",
-    "history": "Historique"
+    "history": "Historique",
+    "more": "Plus",
+    "change_server": "Changer de serveur"
   },
   "history": {
     "title": "Historique",
@@ -212,6 +214,20 @@
     "submit": "Se connecter",
     "error": "Erreur de connexion"
   },
+  "search": {
+    "title": "Recherche",
+    "placeholder": "Rechercher un film ou une série...",
+    "hint": "Tapez pour rechercher dans votre bibliothèque et les fournisseurs externes.",
+    "hint_local": "Tapez pour rechercher dans votre bibliothèque.",
+    "filter_all": "Tout",
+    "filter_movies": "Films",
+    "filter_series": "Séries",
+    "section_library": "Ma bibliothèque",
+    "section_discover": "Ajouter à la bibliothèque",
+    "no_results": "Aucun résultat trouvé.",
+    "external_search": "Rechercher hors bibliothèque",
+    "enable_external": "Rechercher hors bibliothèque"
+  },
   "discover": {
     "title": "Ajouter à la bibliothèque",
     "subtitle": "Recherche sur The Movie Database (TMDB) — comme dans Radarr / Sonarr.",
@@ -325,6 +341,7 @@
     "no_results_letter": "Aucune série pour cette lettre."
   },
   "media_detail": {
+    "episodes": "Épisodes",
     "back": "Retour à la liste",
     "refresh_metadata": "Rafraîchir les métadonnées",
     "edit_profiles": "Profils",

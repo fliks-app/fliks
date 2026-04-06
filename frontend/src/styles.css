@@ -1,10 +1,21 @@
 @import "tailwindcss";
 @plugin "daisyui";
 
+/* Rounder corners for all DaisyUI components */
+:root, [data-theme] {
+  --radius-selector: 1rem;
+  --radius-field: 1rem;
+  --radius-box: 1rem;
+}
+
+/* Thinner focus outline on form fields */
+.select:focus, .input:focus, .textarea:focus {
+  outline-width: 1px;
+  outline-offset: 0px;
+}
+
 /* Native app (Capacitor): offset content from system bars */
 body.native {
-  padding-top: calc(env(safe-area-inset-top) / 2 + 12px);
-  padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }

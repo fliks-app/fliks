@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
+import { HorizontalScrollerComponent } from '../../../../shared/components/horizontal-scroller';
 import {
   Episode,
   Media,
@@ -22,7 +23,7 @@ import {
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, RouterLink],
+  imports: [TranslateModule, RouterLink, HorizontalScrollerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })

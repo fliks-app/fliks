@@ -23,11 +23,14 @@ import { SettingsApiService } from '../../core/services/api/settings-api.service
 import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { RequestModalComponent } from './components/request-modal/request-modal.component';
-import { LucideFilm } from '@lucide/angular';
+import { ImportModalComponent } from './components/import-modal/import-modal.component';
+import { MediaType } from '../../core/enums/media-type.enum';
+import { LucideFilm, LucideChevronLeft } from '@lucide/angular';
+import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart-hero';
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, RequestModalComponent, LucideFilm],
+  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, LucideFilm, LucideChevronLeft],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tmdb-preview.html',
 })
@@ -66,10 +69,11 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   readonly canRequest = computed(() => !this.canImport() && this.auth.hasPermission('requests.create'));
 
   private readonly requestModal = viewChild(RequestModalComponent);
+  private readonly importModal = viewChild(ImportModalComponent);
   readonly languageProfiles = signal<{ id: number; name: string }[]>([]);
 
   ngOnDestroy() {
-    this.navbar.clearPageTitle();
+    this.navbar.leaveHeroPage();
   }
 
   async ngOnInit() {
@@ -112,7 +116,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
         ? await this.metadata.getTvDetails(tmdbId)
         : await this.metadata.getMovieDetails(tmdbId);
       this.media.set(details);
-      this.navbar.setPageTitle(details.title);
+      this.navbar.enterHeroPage(details.title);
     } catch {
       this.error.set(this.translate.instant('discover.preview_error'));
     } finally {
@@ -147,6 +151,16 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     } finally {
       this.importing.set(false);
     }
+  }
+
+  openImportModal() {
+    const m = this.media();
+    if (!m) return;
+    this.importModal()?.open({
+      title: m.title,
+      mediaType: this.type() as MediaType,
+      tmdbId: m.tmdbId,
+    });
   }
 
   openRequestModal() {

@@ -94,95 +94,97 @@
             >
               <svg lucideTrash2 class="h-5 w-5"></svg>
             </button>
-            <div class="dropdown dropdown-end">
-              <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-circle">
-                <svg lucideEllipsisVertical class="h-5 w-5"></svg>
-              </div>
-              <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-56 p-2 shadow-lg">
+          }
+          <div class="dropdown dropdown-end" [class.ml-auto]="!selectedFileId()">
+            <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-circle">
+              <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+            </div>
+            <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-56 p-2 shadow-lg">
+              @if (selectedFileId()) {
                 <li>
                   <a class="flex items-center gap-3" (click)="play(true)">
                     <svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>
                     {{ 'player.play_from_start' | translate }}
                   </a>
                 </li>
-                @if (canGrab()) {
-                  <li>
-                    <a
-                      class="flex items-center gap-3"
-                      (click)="grabBest()"
-                      [class.pointer-events-none]="epGrabBusy() !== null"
-                      [class.opacity-50]="epGrabBusy() !== null"
-                    >
-                      @if (epGrabBusy() === 'best') {
-                        <span class="loading loading-spinner loading-xs"></span>
-                      } @else {
-                        <svg lucideDownload class="h-4 w-4 shrink-0 opacity-70"></svg>
-                      }
-                      {{ 'media_detail.grab_best' | translate }}
-                    </a>
-                  </li>
-                  <li>
-                    <a
-                      class="flex items-center gap-3"
-                      (click)="loadReleases()"
-                      [class.pointer-events-none]="epReleasesLoading()"
-                      [class.opacity-50]="epReleasesLoading()"
-                    >
-                      @if (epReleasesLoading()) {
-                        <span class="loading loading-spinner loading-xs"></span>
-                      } @else {
-                        <svg lucideSearch class="h-4 w-4 shrink-0 opacity-70"></svg>
-                      }
-                      {{ 'media_detail.search_releases' | translate }}
-                    </a>
-                  </li>
-                }
-                @if (isAdmin()) {
-                  <li>
-                    <a
-                      class="flex items-center gap-3"
-                      (click)="toggleMonitored()"
-                      [class.pointer-events-none]="episodeBusy()"
-                      [class.opacity-50]="episodeBusy()"
-                    >
-                      @if (episodeBusy()) {
-                        <span class="loading loading-spinner loading-xs"></span>
-                      } @else if (ep.monitored) {
-                        <svg lucideEyeOff class="h-4 w-4 shrink-0 opacity-70"></svg>
-                      } @else {
-                        <svg lucideEye class="h-4 w-4 shrink-0 opacity-70"></svg>
-                      }
-                      @if (ep.monitored) {
-                        {{ 'media_detail.unmonitor' | translate }}
-                      } @else {
-                        {{ 'media_detail.monitor' | translate }}
-                      }
-                    </a>
-                  </li>
-                }
+              }
+              @if (canGrab()) {
                 <li>
                   <a
                     class="flex items-center gap-3"
-                    (click)="refreshMetadata()"
-                    [class.pointer-events-none]="refreshLoading()"
-                    [class.opacity-50]="refreshLoading()"
+                    (click)="grabBest()"
+                    [class.pointer-events-none]="epGrabBusy() !== null"
+                    [class.opacity-50]="epGrabBusy() !== null"
                   >
-                    @if (refreshLoading()) {
+                    @if (epGrabBusy() === 'best') {
                       <span class="loading loading-spinner loading-xs"></span>
                     } @else {
-                      <svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>
+                      <svg lucideDownload class="h-4 w-4 shrink-0 opacity-70"></svg>
                     }
-                    {{ 'media_detail.refresh_metadata' | translate }}
+                    {{ 'media_detail.grab_best' | translate }}
                   </a>
                 </li>
                 <li>
-                  <a class="flex items-center gap-3" (click)="rescanFiles()">
-                    <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.rescan_files' | translate }}
+                  <a
+                    class="flex items-center gap-3"
+                    (click)="loadReleases()"
+                    [class.pointer-events-none]="epReleasesLoading()"
+                    [class.opacity-50]="epReleasesLoading()"
+                  >
+                    @if (epReleasesLoading()) {
+                      <span class="loading loading-spinner loading-xs"></span>
+                    } @else {
+                      <svg lucideSearch class="h-4 w-4 shrink-0 opacity-70"></svg>
+                    }
+                    {{ 'media_detail.search_releases' | translate }}
                   </a>
                 </li>
-              </ul>
-            </div>
-          }
+              }
+              @if (isAdmin()) {
+                <li>
+                  <a
+                    class="flex items-center gap-3"
+                    (click)="toggleMonitored()"
+                    [class.pointer-events-none]="episodeBusy()"
+                    [class.opacity-50]="episodeBusy()"
+                  >
+                    @if (episodeBusy()) {
+                      <span class="loading loading-spinner loading-xs"></span>
+                    } @else if (ep.monitored) {
+                      <svg lucideEyeOff class="h-4 w-4 shrink-0 opacity-70"></svg>
+                    } @else {
+                      <svg lucideEye class="h-4 w-4 shrink-0 opacity-70"></svg>
+                    }
+                    @if (ep.monitored) {
+                      {{ 'media_detail.unmonitor' | translate }}
+                    } @else {
+                      {{ 'media_detail.monitor' | translate }}
+                    }
+                  </a>
+                </li>
+              }
+              <li>
+                <a
+                  class="flex items-center gap-3"
+                  (click)="refreshMetadata()"
+                  [class.pointer-events-none]="refreshLoading()"
+                  [class.opacity-50]="refreshLoading()"
+                >
+                  @if (refreshLoading()) {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  } @else {
+                    <svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>
+                  }
+                  {{ 'media_detail.refresh_metadata' | translate }}
+                </a>
+              </li>
+              <li>
+                <a class="flex items-center gap-3" (click)="rescanFiles()">
+                  <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.rescan_files' | translate }}
+                </a>
+              </li>
+            </ul>
+          </div>
         </div>
 
         @if (ep.overview) {

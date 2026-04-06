@@ -3,6 +3,8 @@ import { Router, RouterLink } from '@angular/router';
 import { ThemeService } from '../../core/services/theme.service';
 import { TranslateModule } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
+import { ServerConfigService } from '../../core/services/server-config.service';
+import { Capacitor } from '@capacitor/core';
 import {
   LucideUser,
   LucideSettings,
@@ -11,6 +13,7 @@ import {
   LucideLogOut,
   LucideSun,
   LucideMoon,
+  LucideServer,
 } from '@lucide/angular';
 
 @Component({
@@ -18,7 +21,7 @@ import {
   imports: [
     RouterLink, TranslateModule,
     LucideUser, LucideSettings, LucideShield, LucideRepeat, LucideLogOut,
-    LucideSun, LucideMoon,
+    LucideSun, LucideMoon, LucideServer,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -52,6 +55,9 @@ import {
               <li><a routerLink="/admin" class="flex items-center gap-3 w-full"><svg lucideShield class="h-4 w-4 opacity-60"></svg>{{ 'nav.administration' | translate }}</a></li>
             }
             <li><a (click)="switchUser()" class="flex items-center gap-3 w-full"><svg lucideRepeat class="h-4 w-4 opacity-60"></svg>{{ 'nav.switch_user' | translate }}</a></li>
+            @if (isNative) {
+              <li><a (click)="changeServer()" class="flex items-center gap-3 w-full"><svg lucideServer class="h-4 w-4 opacity-60"></svg>{{ 'nav.change_server' | translate }}</a></li>
+            }
             <li><a (click)="auth.logout()" class="flex items-center gap-3 w-full text-error"><svg lucideLogOut class="h-4 w-4"></svg>{{ 'nav.logout' | translate }}</a></li>
           </ul>
         </div>
@@ -62,9 +68,16 @@ import {
 export class UserMenuComponent {
   readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly serverConfig = inject(ServerConfigService);
   readonly themeService = inject(ThemeService);
+  readonly isNative = Capacitor.isNativePlatform();
 
   switchUser() {
     this.router.navigate(['/login'], { queryParams: { switch: true } });
+  }
+
+  async changeServer() {
+    await this.serverConfig.clear();
+    this.router.navigate(['/setup']);
   }
 }

@@ -1,0 +1,81 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-lg">
+    <h2 class="text-lg font-bold text-primary">{{ 'discover.add_to_library' | translate }}</h2>
+    <p class="text-base-content/80">{{ title() }}</p>
+
+    @if (error()) {
+      <div role="alert" class="alert alert-error text-sm mt-4 py-2">{{ error() }}</div>
+    }
+
+    @if (loading()) {
+      <div class="flex justify-center py-8">
+        <span class="loading loading-spinner loading-md"></span>
+      </div>
+    } @else {
+      <div class="mt-6 flex flex-col gap-3">
+        @if (qualityProfiles().length) {
+          <label class="form-control w-full">
+            <span class="label-text text-base-content/60">{{ 'discover.quality_profile' | translate }}</span>
+            <select
+              class="select select-bordered select-sm w-full"
+              [ngModel]="selectedQualityProfileId()"
+              (ngModelChange)="selectedQualityProfileId.set(+$event)"
+            >
+              @for (p of qualityProfiles(); track p.id) {
+                <option [ngValue]="p.id">{{ p.name }}</option>
+              }
+            </select>
+          </label>
+        }
+        @if (languageProfiles().length) {
+          <label class="form-control w-full">
+            <span class="label-text text-base-content/60">{{ 'discover.language_profile' | translate }}</span>
+            <select
+              class="select select-bordered select-sm w-full"
+              [ngModel]="selectedLanguageProfileId()"
+              (ngModelChange)="selectedLanguageProfileId.set(+$event)"
+            >
+              @for (p of languageProfiles(); track p.id) {
+                <option [ngValue]="p.id">{{ p.name }}</option>
+              }
+            </select>
+          </label>
+        }
+        @if (compatibleFolders().length > 1) {
+          <label class="form-control w-full">
+            <span class="label-text text-base-content/60">{{ 'discover.root_folder' | translate }}</span>
+            <select
+              class="select select-bordered select-sm w-full"
+              [ngModel]="selectedRootFolderId()"
+              (ngModelChange)="selectedRootFolderId.set($event ? +$event : null)"
+            >
+              @for (f of compatibleFolders(); track f.id) {
+                <option [ngValue]="f.id">{{ f.label || f.path }}</option>
+              }
+            </select>
+          </label>
+        }
+      </div>
+    }
+
+    <div class="modal-action">
+      <button type="button" class="btn btn-ghost" (click)="close()">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        [disabled]="importing() || loading()"
+        (click)="confirm()"
+      >
+        @if (importing()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ 'discover.add_to_library' | translate }}
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="close()">close</button>
+  </form>
+</dialog>

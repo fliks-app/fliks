@@ -37,7 +37,53 @@
   }
 
   @if (selSeason && isSeasonTabVisible(selSeason)) {
-    <div class="flex flex-wrap items-center gap-2 border border-base-200 rounded-xl p-3 bg-base-200/30">
+    @if (filteredEpisodes().length === 0 && episodesHasFileOnly() && selSeason.episodes.length > 0) {
+      <p class="text-sm text-base-content/50 py-8 text-center">
+        {{ 'media_detail.episodes_filter_empty' | translate }}
+      </p>
+    } @else if (filteredEpisodes().length > 0) {
+      <app-horizontal-scroller [title]="'media_detail.episodes' | translate">
+        @for (ep of filteredEpisodes(); track ep.id) {
+          <a
+            [routerLink]="episodeRoute(ep)"
+            class="shrink-0 w-56 sm:w-64 group text-left rounded-xl overflow-hidden border border-base-200 bg-base-100 hover:border-primary hover:shadow-lg transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            [class.opacity-55]="!ep.monitored"
+          >
+            <div class="aspect-video bg-base-300 relative overflow-hidden">
+              @if (ep.stillUrl) {
+                <img [src]="ep.stillUrl" [alt]="" class="w-full h-full object-cover" loading="lazy" />
+              } @else if (m.posterUrl) {
+                <img
+                  [src]="m.posterUrl"
+                  alt=""
+                  class="w-full h-full object-cover opacity-35 group-hover:opacity-50 transition-opacity scale-105"
+                />
+              } @else {
+                <div class="absolute inset-0 flex items-center justify-center text-2xl font-bold text-base-content/15">
+                  {{ ep.episodeNumber }}
+                </div>
+              }
+              <div class="absolute top-1.5 left-1.5">
+                <span class="badge badge-sm badge-neutral font-mono">{{ ep.episodeNumber }}</span>
+              </div>
+              @if (ep.hasFile) {
+                <div class="absolute top-1.5 right-1.5" [title]="'media_detail.has_file' | translate">
+                  <span class="badge badge-sm badge-success">✓</span>
+                </div>
+              }
+            </div>
+            <div class="p-2.5">
+              <p class="font-medium text-sm line-clamp-1 leading-snug">
+                {{ ep.title ?? ('media_detail.ep_no_title' | translate) }}
+              </p>
+              <p class="text-xs text-base-content/50 mt-0.5">{{ ep.airDate ?? '—' }}</p>
+            </div>
+          </a>
+        }
+      </app-horizontal-scroller>
+    }
+
+    <div class="flex items-center gap-2 overflow-x-auto pb-1 mt-4">
       @if (!selSeason.monitored) {
         <span class="badge badge-sm badge-ghost">{{ 'media_detail.unmonitored' | translate }}</span>
       }
@@ -85,60 +131,5 @@
         </button>
       }
     </div>
-
-
-    @if (filteredEpisodes().length === 0 && episodesHasFileOnly() && selSeason.episodes.length > 0) {
-      <p class="text-sm text-base-content/50 py-8 text-center">
-        {{ 'media_detail.episodes_filter_empty' | translate }}
-      </p>
-    } @else if (filteredEpisodes().length > 0) {
-      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-        @for (ep of filteredEpisodes(); track ep.id) {
-          <a
-            [routerLink]="episodeRoute(ep)"
-            class="group text-left rounded-xl overflow-hidden border border-base-200 bg-base-100 hover:border-primary hover:shadow-lg transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            [class.opacity-55]="!ep.monitored"
-          >
-            <div class="aspect-video bg-base-300 relative overflow-hidden">
-              @if (ep.stillUrl) {
-                <img [src]="ep.stillUrl" [alt]="" class="w-full h-full object-cover" loading="lazy" />
-              } @else if (m.posterUrl) {
-                <img
-                  [src]="m.posterUrl"
-                  alt=""
-                  class="w-full h-full object-cover opacity-35 group-hover:opacity-50 transition-opacity scale-105"
-                />
-              } @else {
-                <div class="absolute inset-0 flex items-center justify-center text-3xl font-bold text-base-content/15">
-                  {{ ep.episodeNumber }}
-                </div>
-              }
-              <div class="absolute top-1.5 left-1.5">
-                <span class="badge badge-sm badge-neutral font-mono">{{ ep.episodeNumber }}</span>
-              </div>
-              @if (ep.hasFile) {
-                <div class="absolute top-1.5 right-1.5" [title]="'media_detail.has_file' | translate">
-                  <span class="badge badge-sm badge-success">✓</span>
-                </div>
-              }
-            </div>
-            <div class="p-2.5 min-h-[4.25rem]">
-              <p class="font-medium text-sm line-clamp-2 leading-snug">
-                {{ ep.title ?? ('media_detail.ep_no_title' | translate) }}
-              </p>
-              <p class="text-xs text-base-content/50 mt-0.5">{{ ep.airDate ?? '—' }}</p>
-              @for (tf of trackedFilesForEpisode(ep.id); track tf.id) {
-                <p
-                  class="text-[10px] font-mono text-base-content/55 mt-1 leading-tight line-clamp-2"
-                  [title]="fileDiskPath(tf.relativePath)"
-                >
-                  {{ fileDiskPath(tf.relativePath) }}
-                </p>
-              }
-            </div>
-          </a>
-        }
-      </div>
-    }
   }
 </section>

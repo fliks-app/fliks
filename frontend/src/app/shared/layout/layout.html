@@ -17,9 +17,11 @@
             <svg lucideChevronLeft class="h-5 w-5"></svg>
           </button>
         }
-        <label for="sidebar" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate">
-          <svg lucideMenu class="h-5 w-5"></svg>
-        </label>
+        @if (!isNative) {
+          <label for="sidebar" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate">
+            <svg lucideMenu class="h-5 w-5"></svg>
+          </label>
+        }
       </div>
       <div class="flex-1 min-w-0">
         @if (navbarTransparent()) {
@@ -55,10 +57,10 @@
         <app-user-menu />
       </div>
     </nav>
-    <!-- Spacer for fixed navbar on mobile -->
-    <div class="h-16 lg:hidden"></div>
+    <!-- Spacer for fixed navbar on mobile (navbar height + safe area; reduced on hero pages so fanart extends under status bar) -->
+    <div class="lg:hidden" [style.height]="navbar.isHeroPage() ? '0px' : 'calc(4rem + env(safe-area-inset-top, 0px))'"></div>
     <!-- Desktop top-right: Cast + User -->
-    <div class="hidden lg:flex items-center gap-1 absolute top-3 right-4 z-50">
+    <div class="hidden lg:flex items-center justify-end gap-1 absolute top-3 right-4 z-50 pointer-events-none [&>*]:pointer-events-auto">
       @if (castPlayer.hasMedia()) {
         <button class="btn btn-ghost btn-sm gap-2" (click)="toggleCastOverlay()">
           <svg lucideCast class="h-5 w-5 text-info"></svg>
@@ -82,12 +84,91 @@
     >
       <router-outlet />
     </main>
+    <!-- Bottom spacer for native bottom bar -->
+    @if (isNative) {
+      <div class="h-20"></div>
+    }
+    <!-- Native bottom navigation bar -->
+    @if (isNative && !keyboardOpen()) {
+      <nav class="fixed bottom-0 left-0 right-0 z-40 bg-base-100 border-t border-base-200"
+           style="padding-bottom: env(safe-area-inset-bottom, 0px)">
+        <div class="flex items-center justify-around h-16 px-2 relative">
+          <a routerLink="/" routerLinkActive="text-primary" [routerLinkActiveOptions]="{ exact: true }"
+             (click)="resetNavHistory()" class="flex flex-col items-center gap-0.5 text-xs min-w-0 flex-1">
+            <svg lucideHome class="h-5 w-5"></svg>
+            <span class="truncate">{{ 'nav.home' | translate }}</span>
+          </a>
+          <a routerLink="/movies" routerLinkActive="text-primary" [routerLinkActiveOptions]="{ exact: false }"
+             (click)="resetNavHistory()" class="flex flex-col items-center gap-0.5 text-xs min-w-0 flex-1">
+            <svg lucideFilm class="h-5 w-5"></svg>
+            <span class="truncate">{{ 'nav.movies' | translate }}</span>
+          </a>
+          <a routerLink="/series" routerLinkActive="text-primary" [routerLinkActiveOptions]="{ exact: false }"
+             (click)="resetNavHistory()" class="flex flex-col items-center gap-0.5 text-xs min-w-0 flex-1">
+            <svg lucideTv class="h-5 w-5"></svg>
+            <span class="truncate">{{ 'nav.series' | translate }}</span>
+          </a>
+          <a routerLink="/search" routerLinkActive="text-primary" [routerLinkActiveOptions]="{ exact: false }"
+             (click)="resetNavHistory()" class="flex flex-col items-center gap-0.5 text-xs min-w-0 flex-1">
+            <svg lucideSearch class="h-5 w-5"></svg>
+            <span class="truncate">{{ 'search.title' | translate }}</span>
+          </a>
+          <button (click)="toggleBottomMenu()" class="flex flex-col items-center gap-0.5 text-xs min-w-0 flex-1"
+                  [class.text-primary]="bottomMenuOpen()">
+            <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+            <span class="truncate">{{ 'nav.more' | translate }}</span>
+          </button>
+        </div>
+        <!-- More menu dropdown (opens upward) -->
+        @if (bottomMenuOpen()) {
+          <div class="fixed inset-0 z-40" (click)="bottomMenuOpen.set(false)"></div>
+          <div class="absolute bottom-full right-2 mb-2 bg-base-100 rounded-box shadow-xl border border-base-200 min-w-48 z-50">
+            <ul class="menu p-2 gap-0.5">
+              <li>
+                <a routerLink="/history" routerLinkActive="active" (click)="resetNavHistory()">
+                  <svg lucideHistory class="h-5 w-5"></svg>
+                  {{ 'nav.history' | translate }}
+                </a>
+              </li>
+              <li>
+                <a routerLink="/activity" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
+                  <span class="flex items-center gap-2">
+                    <svg lucideDownload class="h-5 w-5"></svg>
+                    {{ 'nav.activity' | translate }}
+                  </span>
+                  @if (queueCount() > 0) {
+                    <span class="badge badge-sm badge-primary">{{ queueCount() }}</span>
+                  }
+                </a>
+              </li>
+              <li>
+                <a routerLink="/requests" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
+                  <span class="flex items-center gap-2">
+                    <svg lucideClipboardList class="h-5 w-5"></svg>
+                    {{ 'nav.requests' | translate }}
+                  </span>
+                  @if (pendingRequestCount() > 0) {
+                    <span class="badge badge-sm badge-warning">{{ pendingRequestCount() }}</span>
+                  }
+                </a>
+              </li>
+              <li>
+                <a routerLink="/calendar" routerLinkActive="active" (click)="resetNavHistory()">
+                  <svg lucideCalendar class="h-5 w-5"></svg>
+                  {{ 'nav.calendar' | translate }}
+                </a>
+              </li>
+            </ul>
+          </div>
+        }
+      </nav>
+    }
   </div>
 
   <!-- Cast overlay (chip + card) — global, persists across navigation -->
   <app-cast-overlay />
 
-  <div class="drawer-side z-40">
+  <div class="drawer-side z-40" [class.hidden]="isNative">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
     <aside class="bg-base-100 w-64 min-h-full flex flex-col" style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 + 12px)">
       <div class="p-4 border-b border-base-200">
@@ -99,6 +180,12 @@
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
             <svg lucideHome class="h-5 w-5"></svg>
             {{ 'nav.home' | translate }}
+          </a>
+        </li>
+        <li>
+          <a routerLink="/search" routerLinkActive="active">
+            <svg lucideSearch class="h-5 w-5"></svg>
+            {{ 'search.title' | translate }}
           </a>
         </li>
 
@@ -133,12 +220,6 @@
         </li>
 
         <li class="menu-title text-xs uppercase tracking-wider mt-3">{{ 'nav.section_downloads' | translate }}</li>
-        <li>
-          <a routerLink="/add" routerLinkActive="active">
-            <svg lucideSearch class="h-5 w-5"></svg>
-            {{ 'nav.add' | translate }}
-          </a>
-        </li>
         <li>
           <a routerLink="/requests" routerLinkActive="active" class="justify-between">
             <span class="flex items-center gap-2">

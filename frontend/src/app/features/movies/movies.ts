@@ -16,12 +16,13 @@ import { StreamingApiService } from '../../core/services/api/streaming-api.servi
 import { ProfilesService, QualityProfile } from '../../core/services/api/profiles.service';
 import { MediaCardComponent } from '../../shared/components/media-card';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
+import { LucideSearch, LucideSlidersHorizontal } from '@lucide/angular';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 @Component({
   selector: 'app-movies',
-  imports: [MediaCardComponent, FormsModule, TranslateModule],
+  imports: [MediaCardComponent, FormsModule, TranslateModule, LucideSearch, LucideSlidersHorizontal],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './movies.html',
 })
@@ -50,6 +51,8 @@ export class MoviesComponent implements OnInit, OnDestroy {
 
   readonly alphabet = ALPHABET;
   readonly activeLetter = signal('');
+  readonly filtersOpen = signal(false);
+  readonly hasActiveFilters = computed(() => this.filterMonitored() !== '' || this.filterStatus() !== '' || this.sortBy() !== 'title');
 
   // Bulk editing
   readonly selectedIds = signal<Set<number>>(new Set());

@@ -845,7 +845,7 @@ export class MediaService {
         media."searchVector" @@ plainto_tsquery('french', :q)
         OR media.title ILIKE :like
         OR media."originalTitle" ILIKE :like
-        OR similarity(media.title, :q) > 0.3
+        OR similarity(media.title, :q) > 0.8
       )`,
       { q: searchTerm, like: `%${searchTerm}%` },
     );

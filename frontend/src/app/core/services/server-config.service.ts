@@ -36,6 +36,17 @@ export class ServerConfigService {
     }
   }
 
+  async clear(): Promise<void> {
+    this._serverUrl.set('');
+    if (this.isNative) {
+      try {
+        await Preferences.remove({ key: STORAGE_KEY });
+      } catch {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    }
+  }
+
   resolveUrl(path: string): string {
     if (!this.isNative || !this._serverUrl()) return path;
     return this._serverUrl() + path;

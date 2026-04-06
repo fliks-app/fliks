@@ -1,45 +1,27 @@
 <div class="flex flex-col gap-4">
-  <div class="flex flex-wrap items-center justify-between gap-3">
+  <!-- Header -->
+  <div class="flex flex-col gap-3">
     <h1 class="sr-only lg:not-sr-only text-2xl font-bold">{{ 'series.title' | translate }}</h1>
-    <div class="flex flex-wrap items-center gap-2">
-      <input
-        type="text"
-        [placeholder]="'common.search' | translate"
-        class="input input-bordered input-sm w-52"
-        [ngModel]="searchQuery()"
-        (ngModelChange)="onSearch($event)"
-      />
-      <select
-        class="select select-bordered select-sm"
-        [ngModel]="filterMonitored()"
-        (ngModelChange)="filterMonitored.set($event); onFilterChange()"
-      >
-        <option value="">{{ 'series.filter_all' | translate }}</option>
-        <option value="true">{{ 'series.filter_monitored' | translate }}</option>
-        <option value="false">{{ 'series.filter_unmonitored' | translate }}</option>
-      </select>
-      <select
-        class="select select-bordered select-sm"
-        [ngModel]="filterStatus()"
-        (ngModelChange)="filterStatus.set($event); onFilterChange()"
-      >
-        <option value="">{{ 'series.filter_all_status' | translate }}</option>
-        <option value="downloaded">{{ 'series.filter_downloaded' | translate }}</option>
-        <option value="missing">{{ 'series.filter_missing' | translate }}</option>
-        <option value="cutoffUnmet">{{ 'series.filter_cutoff_unmet' | translate }}</option>
-      </select>
-      <select
-        class="select select-bordered select-sm"
-        [ngModel]="sortBy()"
-        (ngModelChange)="sortBy.set($event); onFilterChange()"
-      >
-        <option value="title">{{ 'series.sort_title' | translate }}</option>
-        <option value="year">{{ 'series.sort_year' | translate }}</option>
-        <option value="added">{{ 'series.sort_added' | translate }}</option>
-        <option value="rating">{{ 'series.sort_rating' | translate }}</option>
-      </select>
+    <!-- Search + filter toggle -->
+    <div class="flex gap-2 items-center">
+      <div class="relative flex-1">
+        <svg lucideSearch class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-base-content/40 pointer-events-none z-10"></svg>
+        <input
+          type="text"
+          [placeholder]="'common.search' | translate"
+          class="input input-bordered input-sm w-full pl-9"
+          [ngModel]="searchQuery()"
+          (ngModelChange)="onSearch($event)"
+        />
+      </div>
+      <button class="btn btn-sm btn-square btn-ghost relative" (click)="filtersOpen.set(!filtersOpen())">
+        <svg lucideSlidersHorizontal class="h-5 w-5"></svg>
+        @if (hasActiveFilters()) {
+          <span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-primary"></span>
+        }
+      </button>
       <button
-        class="btn btn-sm"
+        class="hidden lg:inline-flex btn btn-sm"
         [class.btn-primary]="bulkMode()"
         [class.btn-outline]="!bulkMode()"
         (click)="toggleBulkMode()"
@@ -47,6 +29,48 @@
         {{ 'series.bulk_edit' | translate }}
       </button>
     </div>
+    <!-- Collapsible filters -->
+    @if (filtersOpen()) {
+      <div class="flex flex-wrap gap-2">
+        <select
+          class="select select-bordered select-sm flex-1 min-w-28"
+          [ngModel]="filterMonitored()"
+          (ngModelChange)="filterMonitored.set($event); onFilterChange()"
+        >
+          <option value="">{{ 'series.filter_all' | translate }}</option>
+          <option value="true">{{ 'series.filter_monitored' | translate }}</option>
+          <option value="false">{{ 'series.filter_unmonitored' | translate }}</option>
+        </select>
+        <select
+          class="select select-bordered select-sm flex-1 min-w-28"
+          [ngModel]="filterStatus()"
+          (ngModelChange)="filterStatus.set($event); onFilterChange()"
+        >
+          <option value="">{{ 'series.filter_all_status' | translate }}</option>
+          <option value="downloaded">{{ 'series.filter_downloaded' | translate }}</option>
+          <option value="missing">{{ 'series.filter_missing' | translate }}</option>
+          <option value="cutoffUnmet">{{ 'series.filter_cutoff_unmet' | translate }}</option>
+        </select>
+        <select
+          class="select select-bordered select-sm flex-1 min-w-28"
+          [ngModel]="sortBy()"
+          (ngModelChange)="sortBy.set($event); onFilterChange()"
+        >
+          <option value="title">{{ 'series.sort_title' | translate }}</option>
+          <option value="year">{{ 'series.sort_year' | translate }}</option>
+          <option value="added">{{ 'series.sort_added' | translate }}</option>
+          <option value="rating">{{ 'series.sort_rating' | translate }}</option>
+        </select>
+        <button
+          class="btn btn-sm lg:hidden"
+          [class.btn-primary]="bulkMode()"
+          [class.btn-outline]="!bulkMode()"
+          (click)="toggleBulkMode()"
+        >
+          {{ 'series.bulk_edit' | translate }}
+        </button>
+      </div>
+    }
   </div>
 
   @if (loading()) {
@@ -66,7 +90,7 @@
       </div>
     }
     <div class="flex gap-2">
-      <div class="flex-1 min-w-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-4">
+      <div class="flex-1 min-w-0 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-3 sm:gap-4">
         @for (show of allSeries(); track show.id) {
           @if (bulkMode()) {
             <div

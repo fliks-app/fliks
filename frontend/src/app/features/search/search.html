@@ -1,0 +1,95 @@
+<div class="flex flex-col gap-4">
+  <!-- Search input + settings -->
+  <div class="flex gap-2 items-center">
+    <div class="relative flex-1">
+      <svg lucideSearch class="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-base-content/40 pointer-events-none z-10"></svg>
+      <input
+        #searchInput
+        type="text"
+        class="input input-bordered w-full pl-10 pr-10"
+        [placeholder]="'search.placeholder' | translate"
+        [ngModel]="state.query()"
+        (ngModelChange)="onQueryInput($event)"
+      />
+      @if (state.hasQuery()) {
+        <button class="btn btn-ghost btn-circle btn-sm absolute right-1 top-1/2 -translate-y-1/2" (click)="clearQuery()">
+          <svg lucideX class="h-4 w-4"></svg>
+        </button>
+      }
+    </div>
+    <div class="dropdown dropdown-end">
+      <div tabindex="0" role="button" class="btn btn-square btn-ghost">
+        <svg lucideSettings class="h-5 w-5"></svg>
+      </div>
+      <div tabindex="0" class="dropdown-content bg-base-100 rounded-box shadow-xl border border-base-200 p-4 w-64 z-50">
+        <label class="flex items-center justify-between gap-3 cursor-pointer">
+          <span class="text-sm">{{ 'search.external_search' | translate }}</span>
+          <input type="checkbox" class="toggle toggle-primary toggle-sm"
+                 [ngModel]="state.externalEnabled()"
+                 (ngModelChange)="toggleExternal()" />
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter tabs -->
+  <div role="tablist" class="tabs tabs-boxed w-fit">
+    <button type="button" role="tab" class="tab" [class.tab-active]="state.filter() === 'all'" (click)="setFilter('all')">
+      {{ 'search.filter_all' | translate }}
+    </button>
+    <button type="button" role="tab" class="tab" [class.tab-active]="state.filter() === 'movie'" (click)="setFilter('movie')">
+      {{ 'search.filter_movies' | translate }}
+    </button>
+    <button type="button" role="tab" class="tab" [class.tab-active]="state.filter() === 'series'" (click)="setFilter('series')">
+      {{ 'search.filter_series' | translate }}
+    </button>
+  </div>
+
+  @if (!state.hasQuery()) {
+    <p class="text-base-content/50 text-center py-12">{{ (state.externalEnabled() ? 'search.hint' : 'search.hint_local') | translate }}</p>
+  } @else {
+    <!-- Local library results -->
+    @if (state.localLoading()) {
+      <div class="flex justify-center py-8">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    } @else if (state.localResults().length > 0) {
+      <div>
+        <h2 class="text-lg font-semibold mb-3">{{ 'search.section_library' | translate }}</h2>
+        <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-3 sm:gap-4">
+          @for (media of state.localResults(); track media.id) {
+            <app-media-card [media]="media" />
+          }
+        </div>
+      </div>
+    }
+
+    <!-- External provider results -->
+    @if (state.externalLoading()) {
+      <div class="flex justify-center py-8">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    } @else if (state.filteredExternalResults().length > 0) {
+      <div>
+        <h2 class="text-lg font-semibold mb-3">{{ 'search.section_discover' | translate }}</h2>
+        <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-3 sm:gap-4">
+          @for (row of state.filteredExternalResults(); track row.tmdbId) {
+            <app-discover-card [row]="row" [status]="cardStatus(row)" (clicked)="onExternalCardClick($event)" />
+          }
+        </div>
+      </div>
+    }
+
+    <!-- No results at all -->
+    @if (!state.localLoading() && !state.externalLoading() && state.localResults().length === 0 && state.filteredExternalResults().length === 0) {
+      <div class="text-center py-8">
+        <p class="text-base-content/50">{{ 'search.no_results' | translate }}</p>
+        @if (!state.externalEnabled()) {
+          <button class="btn btn-primary btn-sm mt-4" (click)="toggleExternal()">
+            {{ 'search.enable_external' | translate }}
+          </button>
+        }
+      </div>
+    }
+  }
+</div>

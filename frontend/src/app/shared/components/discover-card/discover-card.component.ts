@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
-import { MetadataSearchResult } from '../../../../core/services/api/metadata.service';
+import { MetadataSearchResult } from '../../../core/services/api/metadata.service';
 import { LucideFilm, LucideCheck, LucideClock, LucideX } from '@lucide/angular';
 
 export type CardStatus = 'library' | 'pending' | 'declined' | null;

@@ -47,20 +47,20 @@ export const routes: Routes = [
         data: { titleKey: 'series.title' },
       },
       {
-        path: 'add',
+        path: 'search',
         loadComponent: () =>
-          import('./features/discover/discover').then((m) => m.DiscoverComponent),
-        data: { titleKey: 'discover.title' },
+          import('./features/search/search').then((m) => m.SearchComponent),
+        data: { titleKey: 'search.title' },
       },
       {
         path: 'add/movie/:tmdbId',
         loadComponent: () =>
-          import('./features/discover/tmdb-preview').then((m) => m.TmdbPreviewComponent),
+          import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),
       },
       {
         path: 'add/tv/:tmdbId',
         loadComponent: () =>
-          import('./features/discover/tmdb-preview').then((m) => m.TmdbPreviewComponent),
+          import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),
       },
       {
         path: 'movies/:id',

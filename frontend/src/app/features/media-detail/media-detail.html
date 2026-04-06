@@ -57,7 +57,7 @@
         <app-media-file-info [file]="af" />
       }
 
-        @if (m.type === 'series' && m.seasons?.length) {
+      @if (m.type === 'series' && m.seasons?.length) {
         <app-media-detail-seasons
           [media]="m"
           [selectedSeason]="activeSeason(m)"
@@ -94,97 +94,97 @@
       />
     </div>
 
-    <app-media-detail-subtitle-search-modal
-      [subSearchLang]="subSearchLang()"
-      (subSearchLangChange)="subSearchLang.set($event)"
-      [subSearchLoading]="subSearchLoading()"
-      [subSearchSearched]="subSearchSearched()"
-      [subSearchResults]="subSearchResults()"
-      [subtitleActionBusy]="subtitleActionBusy()"
-      (search)="searchSubtitles()"
-      (download)="downloadSearchResult($event)"
-    />
+    <!-- Modals (outside gap container to avoid spacing) -->
+     <div>
+        <app-media-detail-subtitle-search-modal
+        [subSearchLang]="subSearchLang()"
+        (subSearchLangChange)="subSearchLang.set($event)"
+        [subSearchLoading]="subSearchLoading()"
+        [subSearchSearched]="subSearchSearched()"
+        [subSearchResults]="subSearchResults()"
+        [subtitleActionBusy]="subtitleActionBusy()"
+        (search)="searchSubtitles()"
+        (download)="downloadSearchResult($event)"
+      />
 
-    <!-- Movie releases modal -->
-    <app-releases-modal #movieReleasesModal
-      [title]="'media_detail.download_section' | translate"
-      [releases]="releases()"
-      [loading]="releasesLoading()"
-      [searched]="releasesSearched()"
-      [error]="releasesError()"
-      [grabBusy]="grabBusy()"
-      [grabState]="grabState()"
-      [canGrab]="canGrab()"
-      [showSearch]="true"
-      [customSearchQuery]="customSearchQuery()"
-      (customSearchQueryChange)="customSearchQuery.set($event)"
-      grabPrefix="r"
-      (grab)="grabRelease($event.release, $event.index)"
-    />
+      <app-releases-modal #movieReleasesModal
+        [title]="'media_detail.download_section' | translate"
+        [releases]="releases()"
+        [loading]="releasesLoading()"
+        [searched]="releasesSearched()"
+        [error]="releasesError()"
+        [grabBusy]="grabBusy()"
+        [grabState]="grabState()"
+        [canGrab]="canGrab()"
+        [showSearch]="true"
+        [customSearchQuery]="customSearchQuery()"
+        (customSearchQueryChange)="customSearchQuery.set($event)"
+        grabPrefix="r"
+        (grab)="grabRelease($event.release, $event.index)"
+      />
 
-    <!-- Upgrade releases modal -->
-    <app-releases-modal #upgradeReleasesModal
-      [title]="'media_detail.upgrade_section' | translate"
-      [releases]="upgradeReleases()"
-      [loading]="upgradeReleasesLoading()"
-      [searched]="upgradeReleasesSearched()"
-      [error]="upgradeReleasesError()"
-      [grabBusy]="upgradeGrabBusy()"
-      [grabState]="upgradeGrabState()"
-      [canGrab]="canGrab()"
-      grabPrefix="u"
-      (grab)="grabUpgradeRelease($event.release, $event.index)"
-    />
+      <app-releases-modal #upgradeReleasesModal
+        [title]="'media_detail.upgrade_section' | translate"
+        [releases]="upgradeReleases()"
+        [loading]="upgradeReleasesLoading()"
+        [searched]="upgradeReleasesSearched()"
+        [error]="upgradeReleasesError()"
+        [grabBusy]="upgradeGrabBusy()"
+        [grabState]="upgradeGrabState()"
+        [canGrab]="canGrab()"
+        grabPrefix="u"
+        (grab)="grabUpgradeRelease($event.release, $event.index)"
+      />
 
-    <!-- Episode releases modal -->
-    <app-releases-modal #episodeReleasesModal
-      [title]="'media_detail.ep_releases_title' | translate"
-      [releases]="epReleases()"
-      [loading]="epReleasesLoading()"
-      [searched]="epReleasesSearched()"
-      [error]="epReleasesError()"
-      [grabBusy]="epGrabBusy()"
-      [grabState]="epGrabState()"
-      [canGrab]="canGrab()"
-      grabPrefix="ep"
-      (grab)="grabEpisodeRelease(m.id, selectedEpisodeId()!, $event.release, $event.index)"
-    />
+      <app-releases-modal #episodeReleasesModal
+        [title]="'media_detail.ep_releases_title' | translate"
+        [releases]="epReleases()"
+        [loading]="epReleasesLoading()"
+        [searched]="epReleasesSearched()"
+        [error]="epReleasesError()"
+        [grabBusy]="epGrabBusy()"
+        [grabState]="epGrabState()"
+        [canGrab]="canGrab()"
+        grabPrefix="ep"
+        (grab)="grabEpisodeRelease(m.id, selectedEpisodeId()!, $event.release, $event.index)"
+      />
 
-    <!-- Season releases modal -->
-    <app-releases-modal #seasonReleasesModal
-      [title]="'media_detail.season_packs_title' | translate"
-      [releases]="seasonReleases()"
-      [loading]="seasonReleasesLoading()"
-      [searched]="true"
-      [error]="seasonReleasesError()"
-      [grabBusy]="seasonGrabBusy()"
-      [grabState]="seasonReleaseGrabState()"
-      [showCfScore]="false"
-      grabPrefix="s"
-      (grab)="onGrabSeasonReleaseFromModal(m.id, $event.release, $event.index)"
-    />
+      <app-releases-modal #seasonReleasesModal
+        [title]="'media_detail.season_packs_title' | translate"
+        [releases]="seasonReleases()"
+        [loading]="seasonReleasesLoading()"
+        [searched]="true"
+        [error]="seasonReleasesError()"
+        [grabBusy]="seasonGrabBusy()"
+        [grabState]="seasonReleaseGrabState()"
+        [showCfScore]="false"
+        grabPrefix="s"
+        (grab)="onGrabSeasonReleaseFromModal(m.id, $event.release, $event.index)"
+      />
 
-    <app-media-detail-profiles-modal
-      [profilesOptionsLoading]="profilesOptionsLoading()"
-      [draftQualityProfileId]="draftQualityProfileId()"
-      [draftLanguageProfileId]="draftLanguageProfileId()"
-      [qualityProfileOptions]="qualityProfileOptions()"
-      [languageProfileOptions]="languageProfileOptions()"
-      [profilesOk]="profilesOk()"
-      [profilesErr]="profilesErr()"
-      [profilesSaveLoading]="profilesSaveLoading()"
-      (draftQualityProfileIdChange)="draftQualityProfileId.set($event)"
-      (draftLanguageProfileIdChange)="draftLanguageProfileId.set($event)"
-      (save)="saveProfiles()"
-    />
+      <app-media-detail-profiles-modal
+        [profilesOptionsLoading]="profilesOptionsLoading()"
+        [draftQualityProfileId]="draftQualityProfileId()"
+        [draftLanguageProfileId]="draftLanguageProfileId()"
+        [qualityProfileOptions]="qualityProfileOptions()"
+        [languageProfileOptions]="languageProfileOptions()"
+        [profilesOk]="profilesOk()"
+        [profilesErr]="profilesErr()"
+        [profilesSaveLoading]="profilesSaveLoading()"
+        (draftQualityProfileIdChange)="draftQualityProfileId.set($event)"
+        (draftLanguageProfileIdChange)="draftLanguageProfileId.set($event)"
+        (save)="saveProfiles()"
+      />
 
-    <app-media-detail-root-folder-modal
-      [rootFolders]="rootFolders()"
-      [selectedRootFolderId]="selectedRootFolderId()"
-      [pathSaving]="pathSaving()"
-      [pathOk]="pathOk()"
-      (selectedRootFolderIdChange)="selectedRootFolderId.set($event)"
-      (save)="saveRootFolder()"
-    />
+      <app-media-detail-root-folder-modal
+        [rootFolders]="rootFolders()"
+        [selectedRootFolderId]="selectedRootFolderId()"
+        [pathSaving]="pathSaving()"
+        [pathOk]="pathOk()"
+        (selectedRootFolderIdChange)="selectedRootFolderId.set($event)"
+        (save)="saveRootFolder()"
+      />
+    </div>
+   
   }
 </div>

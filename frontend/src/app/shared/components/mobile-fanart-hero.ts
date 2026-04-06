@@ -7,7 +7,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 @Component({
   selector: 'app-mobile-fanart-hero',
   template: `
-    <div class="relative -mx-4 -mt-20 hero-fanart-bleed">
+    <div class="relative -mx-4 -mt-4 hero-fanart-bleed">
       @if (fanartUrl()) {
         <img
           [src]="fanartUrl()!"

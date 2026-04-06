@@ -74,7 +74,8 @@
         >
           <svg lucideCircleCheck class="h-5 w-5"></svg>
         </button>
-        <div class="dropdown dropdown-end">
+      }
+      <div class="dropdown dropdown-end" [class.ml-auto]="!selectedFileId()">
         <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-circle">
           <svg lucideEllipsisVertical class="h-5 w-5"></svg>
         </div>
@@ -119,8 +120,7 @@
             <li><a class="flex items-center gap-3 text-error" (click)="deleteMedia.emit()"><svg lucideTrash2 class="h-4 w-4 shrink-0"></svg>{{ 'media_detail.delete' | translate }}</a></li>
           }
         </ul>
-        </div>
-      }
+      </div>
     </div>
 
     <!-- Overview -->

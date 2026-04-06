@@ -94,13 +94,15 @@ export class MetadataService {
     type: MediaType,
     tmdbId: number,
     qualityProfileId?: number,
+    languageProfileId?: number,
     rootFolderId?: number,
   ) {
-    const body: { type: string; tmdbId: number; qualityProfileId?: number; rootFolderId?: number } = {
+    const body: { type: string; tmdbId: number; qualityProfileId?: number; languageProfileId?: number; rootFolderId?: number } = {
       type,
       tmdbId,
     };
     if (qualityProfileId != null) body.qualityProfileId = qualityProfileId;
+    if (languageProfileId != null) body.languageProfileId = languageProfileId;
     if (rootFolderId != null) body.rootFolderId = rootFolderId;
     return firstValueFrom(this.http.post<Media>('/api/media/import/tmdb', body));
   }

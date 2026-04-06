@@ -14,6 +14,7 @@ import { Title } from '@angular/platform-browser';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { Location } from '@angular/common';
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Keyboard } from '@capacitor/keyboard';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import { MediaService } from '../../core/services/api/media.service';
@@ -50,6 +51,7 @@ import {
   LucideShield,
   LucideRepeat,
   LucideHistory,
+  LucideEllipsisVertical,
 } from '@lucide/angular';
 
 
@@ -62,6 +64,7 @@ import {
     LucideArrowRightLeft, LucideLayoutGrid, LucideSettings, LucideUser,
     LucideSun, LucideMoon, LucideLogOut, LucideCast,
     LucideUserCog, LucideShield, LucideRepeat, LucideHistory,
+    LucideEllipsisVertical,
     CastOverlayComponent,
     UserMenuComponent,
   ],
@@ -88,6 +91,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly canGoBack = signal(false);
 
   readonly themeService = inject(ThemeService);
+  readonly isNative = Capacitor.isNativePlatform();
+  readonly bottomMenuOpen = signal(false);
+  readonly keyboardOpen = signal(false);
   readonly navbarHidden = signal(false);
   private readonly scrollAtTop = signal(true);
   readonly navbarTransparent = computed(() => this.scrollAtTop() && this.navbar.isHeroPage());
@@ -149,6 +155,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.refreshCounts();
     this.sse.connect();
     window.addEventListener('scroll', this.onScroll, { passive: true });
+    if (this.isNative) {
+      Keyboard.addListener('keyboardWillShow', () => this.keyboardOpen.set(true));
+      Keyboard.addListener('keyboardWillHide', () => this.keyboardOpen.set(false));
+    }
     this.translate.onLangChange.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.langTick.update((n) => n + 1);
       this.syncNavbarTitleFromRoute();
@@ -157,6 +167,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
       if (e instanceof NavigationEnd) {
         this.navCount++;
         this.canGoBack.set(this.navCount > 1 && this.router.url !== '/');
+        this.bottomMenuOpen.set(false);
         this.syncNavbarTitleFromRoute();
       }
     });
@@ -181,6 +192,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     window.removeEventListener('scroll', this.onScroll);
+    if (this.isNative) {
+      Keyboard.removeAllListeners();
+    }
   }
 
   async refreshCounts() {
@@ -222,6 +236,14 @@ export class LayoutComponent implements OnInit, OnDestroy {
   }
 
 
+
+  resetNavHistory() {
+    this.navCount = 0;
+  }
+
+  toggleBottomMenu() {
+    this.bottomMenuOpen.update(v => !v);
+  }
 
   goBack() {
     this.location.back();
