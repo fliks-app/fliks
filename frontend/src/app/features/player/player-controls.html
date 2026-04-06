@@ -137,23 +137,6 @@
             }
           </div>
         </div>
-        <!-- lucide:chart-no-axes-column-increasing -->
-        <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" (click)="toggleStats.emit()">
-          <svg lucideChartNoAxesColumnIncreasing class="h-5 w-5"></svg>
-        </button>
-        <!-- Quality dropdown -->
-        <div class="dropdown dropdown-top dropdown-end">
-          <button tabindex="0" type="button" class="btn btn-ghost btn-sm text-white/80 text-sm">{{ activeQualityLabel() }}</button>
-          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-3 px-1 min-w-56 max-h-[75vh] overflow-y-auto mb-2">
-            <div class="text-center text-white/70 text-xs font-medium mb-2">Qualité</div>
-            @for (q of availableQualities(); track q.id) {
-              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectQuality.emit(q.id)">
-                <span class="flex-1 text-left">{{ q.label }}</span>
-                @if (activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
-              </button>
-            }
-          </div>
-        </div>
         <!-- Audio track dropdown (mobile) -->
         @if (availableAudioTracks().length > 1) {
           <div class="dropdown dropdown-top dropdown-end">
@@ -172,6 +155,23 @@
             </div>
           </div>
         }
+        <!-- lucide:chart-no-axes-column-increasing -->
+        <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" (click)="toggleStats.emit()">
+          <svg lucideChartNoAxesColumnIncreasing class="h-5 w-5"></svg>
+        </button>
+        <!-- Quality dropdown -->
+        <div class="dropdown dropdown-top dropdown-end">
+          <button tabindex="0" type="button" class="btn btn-ghost btn-sm text-white/80 text-sm">{{ activeQualityLabel() }}</button>
+          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-3 px-1 min-w-56 max-h-[75vh] overflow-y-auto mb-2">
+            <div class="text-center text-white/70 text-xs font-medium mb-2">Qualité</div>
+            @for (q of availableQualities(); track q.id) {
+              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectQuality.emit(q.id)">
+                <span class="flex-1 text-left">{{ q.label }}</span>
+                @if (activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+              </button>
+            }
+          </div>
+        </div>
         <!-- Speed dropdown -->
         <div class="dropdown dropdown-top dropdown-end">
           <button tabindex="0" type="button" class="btn btn-ghost btn-sm text-white/80 text-sm">{{ playbackRate() }}x</button>
