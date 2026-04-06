@@ -5,7 +5,7 @@
 :root, [data-theme] {
   --radius-selector: 1rem;
   --radius-field: 1rem;
-  --radius-box: 1rem;
+  --radius-box: 0.5rem;
 }
 
 /* Thinner focus outline on form fields */

@@ -90,7 +90,7 @@
       </div>
     }
     <div class="flex gap-2">
-      <div class="flex-1 min-w-0 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-3 sm:gap-4">
+      <div class="flex-1 min-w-0 pr-6 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-1.5 sm:gap-4">
         @for (movie of allMovies(); track movie.id) {
           @if (bulkMode()) {
             <div
@@ -124,11 +124,11 @@
       </div>
 
       <!-- Alphabet sidebar -->
-      <nav class="hidden md:flex flex-col items-center gap-0.5 sticky top-4 self-start select-none pt-1">
+      <nav class="fixed right-3 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-0 select-none">
         @for (letter of alphabet; track letter) {
           <button
             type="button"
-            class="text-xs font-medium w-5 h-5 flex items-center justify-center rounded transition-colors"
+            class="text-[10px] font-medium w-4 h-4 flex items-center justify-center rounded transition-colors"
             [class.bg-primary]="activeLetter() === letter"
             [class.text-primary-content]="activeLetter() === letter"
             [class.text-base-content/60]="activeLetter() !== letter"
