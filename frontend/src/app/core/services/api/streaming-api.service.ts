@@ -21,12 +21,26 @@ export interface PlaybackInfoResponse {
   outputContainer: string;
   hwAccel: string;
   tonemapping: boolean;
+  /** Cibles par rung (transcodage), comme Jellyfin TranscodingInfo */
+  transcodeBitrateByQuality?: Record<
+    string,
+    {
+      videoBitrateBps: number;
+      audioBitrateBps: number;
+      /** = BANDWIDTH dans master.m3u8 pour cette variante (vidéo + audio) */
+      totalBitrateBps: number;
+    }
+  >;
+  /** BANDWIDTH variante remux (DirectStream HLS), aligné serveur / manifeste */
+  remuxMasterBandwidthBps?: number;
   source: {
     container: string;
     videoCodec: string;
     videoProfile?: string;
     videoLevel?: number;
     videoBitRate?: number;
+    /** ffprobe format.bit_rate (conteneur) quand les flux n’ont pas de bit_rate */
+    formatBitRate?: number;
     videoBitDepth?: number;
     width?: number;
     height?: number;

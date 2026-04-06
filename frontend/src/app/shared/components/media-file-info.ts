@@ -31,6 +31,18 @@ export class MediaFileInfoComponent {
   readonly videoStream = computed(() => this.file()?.streamInfo?.video[0] ?? null);
   readonly audioStreams = computed(() => this.file()?.streamInfo?.audio ?? []);
 
+  /** Container bitrate from ffprobe, or estimated from file size and duration. */
+  readonly originalFileBitrate = computed(() => {
+    const f = this.file();
+    if (!f?.streamInfo) return undefined;
+    const si = f.streamInfo;
+    const fromFfprobe = si.formatBitRate;
+    if (fromFfprobe && fromFfprobe > 0) return fromFfprobe;
+    const dur = si.durationSeconds;
+    if (f.size && dur && dur > 0) return Math.round((f.size * 8) / dur);
+    return undefined;
+  });
+
   formatSize(bytes?: number): string {
     const n = Number(bytes);
     if (!n || n <= 0) return '0 GB';

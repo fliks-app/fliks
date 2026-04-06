@@ -144,6 +144,19 @@ async function fileExists(p: string): Promise<boolean> {
 }
 
 const SEGMENT_DURATION = 6;
+
+/** Parse FFmpeg-style rates like '8M', '500k', '192k' to bits per second. */
+export function parseBitrateToBps(s: string): number {
+  const m = String(s)
+    .trim()
+    .match(/^(\d+(?:\.\d+)?)\s*([kKmM])?$/);
+  if (!m) return 0;
+  const n = parseFloat(m[1]);
+  const u = (m[2] || '').toLowerCase();
+  if (u === 'm') return Math.round(n * 1e6);
+  if (u === 'k') return Math.round(n * 1e3);
+  return Math.round(n);
+}
 const SESSION_TIMEOUT_MS = 60 * 1000; // 60s (like Jellyfin HLS timeout)
 const MAX_SESSIONS = 4;
 
@@ -249,7 +262,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     if (!profiles.length) profiles.push(PROFILES[PROFILES.length - 1]); // at least 480p
 
     for (const p of profiles) {
-      const bw = parseInt(p.videoBitrate) * 1_000_000;
+      // HLS BANDWIDTH = peak total for the variant (video + audio), not video-only.
+      const bw =
+        parseBitrateToBps(p.videoBitrate) + parseBitrateToBps(p.audioBitrate);
       const w = Math.min(p.maxWidth, sourceWidth);
       // Compute height from source aspect ratio, aligned to 16px (matches ffmpeg scale=W:-16 for HW encoders)
       const rawH = (w * sourceHeight) / sourceWidth;

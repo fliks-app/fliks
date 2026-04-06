@@ -9,6 +9,7 @@
     "path": "Fichier",
     "quality": "Qualité",
     "size": "Taille",
+    "original_file_bitrate": "Débit",
     "codec": "Codec",
     "profile": "Profil",
     "resolution": "Résolution",

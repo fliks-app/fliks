@@ -11,6 +11,9 @@
         <div><span class="text-base-content/50">{{ 'file_info.quality' | translate }} :&nbsp;</span><span class="font-medium">{{ f.quality }}</span></div>
       }
       <div><span class="text-base-content/50">{{ 'file_info.size' | translate }} :&nbsp;</span><span class="font-medium">{{ formatSize(f.size) }}</span></div>
+      @if (originalFileBitrate(); as br) {
+        <div><span class="text-base-content/50">{{ 'file_info.original_file_bitrate' | translate }} :&nbsp;</span><span class="font-medium">{{ formatBitrate(br) }}</span></div>
+      }
     </div>
 
     @if (f.streamInfo?.error) {

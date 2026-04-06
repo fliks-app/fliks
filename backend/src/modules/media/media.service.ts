@@ -1057,6 +1057,91 @@ export class MediaService {
     return { renamed };
   }
 
+  /**
+   * Runs ffprobe on a file already stored in DB (e.g. disk import): streamInfo,
+   * crop, resolution-based quality — same path as rescan / download import.
+   */
+  async enrichMediaFileFromDisk(mediaFileId: number): Promise<void> {
+    const dbFile = await this.mediaFileRepo.findOne({
+      where: { id: mediaFileId },
+      relations: ['media'],
+    });
+    if (!dbFile?.media?.path) {
+      this.log.warn(
+        `enrichMediaFileFromDisk: file #${mediaFileId} missing or media has no path`,
+      );
+      return;
+    }
+    const mediaDir = path.resolve(dbFile.media.path);
+    const normPath = dbFile.relativePath?.replace(/\\/g, '/');
+    if (!normPath) return;
+    const absPath = path.join(mediaDir, normPath);
+    if (!fs.existsSync(absPath)) {
+      this.log.warn(
+        `enrichMediaFileFromDisk: file not on disk — "${absPath}"`,
+      );
+      return;
+    }
+
+    let diskSize: number;
+    try {
+      diskSize = fs.statSync(absPath).size;
+    } catch (err) {
+      this.log.warn(
+        `enrichMediaFileFromDisk: cannot stat "${absPath}"`,
+        err instanceof Error ? err.stack : err,
+      );
+      return;
+    }
+
+    const filename = path.basename(absPath);
+
+    let streamInfo: Awaited<
+      ReturnType<FfprobeService['detectMediaFileInfo']>
+    >;
+    try {
+      streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
+      if (streamInfo?.video?.[0]) {
+        try {
+          const crop = await this.ffprobe.detectCrop(
+            absPath,
+            streamInfo.durationSeconds,
+          );
+          if (crop) streamInfo.video[0].crop = crop;
+        } catch (err) {
+          this.log.warn(
+            `enrichMediaFileFromDisk: detectCrop failed for "${normPath}" (metadata otherwise kept)`,
+            err instanceof Error ? err.stack : err,
+          );
+        }
+      }
+    } catch (err) {
+      this.log.error(
+        `enrichMediaFileFromDisk: ffprobe failed for "${absPath}"`,
+        err instanceof Error ? err.stack : err,
+      );
+      return;
+    }
+
+    const qualityName = this.resolveQuality(
+      filename,
+      streamInfo.video?.[0]?.height,
+      streamInfo.video?.[0]?.width,
+    );
+    dbFile.size = diskSize;
+    dbFile.streamInfo = streamInfo;
+    dbFile.quality = qualityName;
+    await this.mediaFileRepo.save(dbFile);
+    this.log.log(
+      `enrichMediaFileFromDisk: enriched media file #${mediaFileId} "${normPath}"`,
+    );
+
+    void this.mediaServers.dispatch('library.rescan', {
+      title: dbFile.media.title,
+      path: dbFile.media.path,
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Rescan files on disk
   // ---------------------------------------------------------------------------

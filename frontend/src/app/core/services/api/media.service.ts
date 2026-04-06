@@ -173,6 +173,8 @@ export interface MediaFileInfo {
   video: VideoStreamInfo[];
   audio: AudioStreamInfo[];
   subtitles: SubtitleStreamInfo[];
+  /** Overall container bitrate from ffprobe (bits/s). */
+  formatBitRate?: number;
   durationSeconds?: number;
   error?: string;
 }

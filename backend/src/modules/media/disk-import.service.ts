@@ -1,4 +1,10 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  Logger,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as fs from 'fs';
@@ -11,6 +17,8 @@ import { Episode } from './entities/episode.entity';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { parseReleaseQuality } from './release-quality.parser';
 import { ImportFileEntry } from './dto/confirm-disk-import.dto';
+import { MediaService } from './media.service';
+import { SubtitleSchedulerService } from '../scheduler/subtitle-scheduler.service';
 
 const VIDEO_EXTS = new Set([
   '.mkv',
@@ -55,6 +63,9 @@ export class DiskImportService {
     private readonly episodeRepo: Repository<Episode>,
     @InjectRepository(RootFolder)
     private readonly rootFolderRepo: Repository<RootFolder>,
+    private readonly mediaService: MediaService,
+    @Inject(forwardRef(() => SubtitleSchedulerService))
+    private readonly subtitleScheduler: SubtitleSchedulerService,
   ) {}
 
   async scanFolder(folderPath: string): Promise<ScanCandidate[]> {
@@ -158,26 +169,7 @@ export class DiskImportService {
         });
         if (existing) continue;
 
-        // Block import if a file of equivalent or better quality already exists
-        if (!entry.force) {
-          const candidateQuality = parseReleaseQuality(entry.quality);
-          const candidateRank = candidateQuality.quality.rank;
-          const where: Record<string, unknown> = { mediaId: media.id };
-          if (entry.episodeId) where['episodeId'] = entry.episodeId;
-          const existingFiles = await this.fileRepo.find({ where });
-          const hasBetterOrEqual = existingFiles.some((ef) => {
-            const parsed = parseReleaseQuality(ef.quality);
-            return parsed.quality.rank >= candidateRank;
-          });
-          if (hasBetterOrEqual) {
-            errors.push(
-              `${path.basename(entry.filePath)}: qualité équivalente ou supérieure déjà présente`,
-            );
-            continue;
-          }
-        }
-
-        await this.fileRepo.save(
+        const saved = await this.fileRepo.save(
           this.fileRepo.create({
             mediaId: media.id,
             episodeId: entry.episodeId ?? undefined,
@@ -186,6 +178,20 @@ export class DiskImportService {
             quality: entry.quality,
           }),
         );
+
+        await this.mediaService.enrichMediaFileFromDisk(saved.id);
+
+        try {
+          await this.subtitleScheduler.onMediaFileImported(
+            media.id,
+            saved.id,
+            entry.episodeId ?? undefined,
+          );
+        } catch (e) {
+          this.logger.warn(
+            `Disk import: post-import subtitle pipeline failed — ${(e as Error).message}`,
+          );
+        }
 
         // Mark episode as having a file
         if (entry.episodeId) {
@@ -274,22 +280,6 @@ export class DiskImportService {
       episodeTitle = ep.title ?? null;
     }
 
-    // Check if a file of equivalent or better quality already exists
-    let existingQuality: string | null = null;
-    if (matched) {
-      const where: Record<string, unknown> = { mediaId: matched.id };
-      if (episodeId) where['episodeId'] = episodeId;
-      const existingFiles = await this.fileRepo.find({ where });
-      const candidateRank = quality.rank;
-      for (const ef of existingFiles) {
-        const parsed = parseReleaseQuality(ef.quality);
-        if (parsed.quality.rank >= candidateRank) {
-          existingQuality = ef.quality;
-          break;
-        }
-      }
-    }
-
     return {
       filePath,
       filename,
@@ -304,7 +294,7 @@ export class DiskImportService {
       mediaType: matched?.type ?? null,
       episodeId,
       episodeTitle,
-      existingQuality,
+      existingQuality: null,
     };
   }
 

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Media } from './entities/media.entity';
 import { Season } from './entities/season.entity';
@@ -22,6 +22,7 @@ import { EpisodeDownloadService } from './episode-download.service';
 import { DiskImportService } from './disk-import.service';
 import { NamingService } from '../scheduler/naming.service';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
+import { FliksSchedulerModule } from '../scheduler/scheduler.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { RootFolder } from '../root-folders/entities/root-folder.entity';
     NotificationsModule,
     SubtitlesModule,
     MediaServersModule,
+    forwardRef(() => FliksSchedulerModule),
   ],
   controllers: [MediaController],
   providers: [

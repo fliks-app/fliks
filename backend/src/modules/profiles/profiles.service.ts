@@ -38,7 +38,10 @@ export class ProfilesService {
       }
       return p.id;
     }
-    const first = await this.qpRepo.findOne({ order: { id: 'ASC' } });
+    const [first] = await this.qpRepo.find({
+      order: { id: 'ASC' },
+      take: 1,
+    });
     return first?.id ?? null;
   }
 

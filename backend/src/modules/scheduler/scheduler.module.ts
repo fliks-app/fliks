@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { Command } from './entities/command.entity';
@@ -57,7 +57,7 @@ import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
     DownloadClientsModule,
     MetadataProvidersModule,
     NotificationsModule,
-    MediaModule,
+    forwardRef(() => MediaModule),
     AuthModule,
     BlocklistModule,
     SubtitlesModule,

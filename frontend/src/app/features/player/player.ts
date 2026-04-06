@@ -60,6 +60,16 @@ interface QualityOption {
   height: number;  // 0 for auto, source height for original, profile height
 }
 
+/** Persisted user choice for quality (same key across sessions). */
+const PLAYER_QUALITY_STORAGE_KEY = 'player.qualityId';
+
+/**
+ * ABR: prefer starting at 720p+ and staying there when possible; below 720 only
+ * when no variant meets the restriction (very slow network / low source res).
+ */
+const ABR_DEFAULT_BANDWIDTH_ESTIMATE = 4_500_000;
+const ABR_MIN_HEIGHT_PREFERENCE = 720;
+
 @Component({
   imports: [TranslateModule, LucideCircleAlert, PlayerControlsComponent, PlayerStatsOverlayComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -123,6 +133,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly bufferedEnd = signal(0);
   readonly inPipMode = signal(false);
   readonly statsVisible = signal(false);
+  /** Forces stats recomputation while overlay is open (e.g. Shaka getStats, paused playback). */
+  private readonly statsRefreshTick = signal(0);
   readonly subtitlePickerOpen = signal(false);
   readonly qualityPickerOpen = signal(false);
   readonly activeSubtitleId = signal<string | null>(null);
@@ -208,6 +220,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Read signals so Angular tracks them as dependencies
     const _time = this.currentTime();
     const _quality = this.activeQualityId();
+    void this.statsRefreshTick();
 
     const pi = this.playbackInfo;
     const src = pi?.source;
@@ -225,26 +238,33 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const effectiveVideoCopy = isTranscodeQuality ? false : (pi?.videoCopyStream ?? true);
     const effectiveAudioCopy = isTranscodeQuality ? false : (pi?.audioCopyStream ?? true);
 
-    // --- Container / Flux ---
-    const containerBitrate = src?.videoBitRate
-      ? `${(((src.videoBitRate ?? 0) + (src.audioBitRate ?? 0)) / 1_000_000).toFixed(0)} mbps`
-      : '?';
+    /** Same formatting as media-file-info (bps). */
+    const formatBitrateBps = (bps: number): string => {
+      if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} Mbps`;
+      if (bps >= 1_000) return `${(bps / 1_000).toFixed(0)} kbps`;
+      return `${bps} bps`;
+    };
+
+    // --- Container (summary) ---
+    const totalContainerBps =
+      src?.formatBitRate ??
+      (src?.videoBitRate != null
+        ? (src.videoBitRate ?? 0) + (src.audioBitRate ?? 0)
+        : undefined);
+    const containerBitrate =
+      totalContainerBps != null && totalContainerBps > 0
+        ? formatBitrateBps(totalContainerBps)
+        : '?';
 
     const isHls = mode !== 'direct' || isTranscodeQuality;
     const outputFormat = isHls ? 'HLS' : '';
-    // Use active track bandwidth if available, else estimated bandwidth
-    const activeBw = activeTrack?.bandwidth ?? shakaStats?.estimatedBandwidth;
-    const outputBitrate = activeBw
-      ? `${(activeBw / 1_000_000).toFixed(0)} mbps`
-      : '';
     const outputFps = src?.frameRate ?? '';
 
     const audioTranscodeNote = !effectiveAudioCopy && src?.audioCodec !== 'aac'
-      ? 'Conversion audio en codec compatible'
+      ? 'Audio transcoded to a compatible codec'
       : '';
 
-    // --- Video label ---
-    // Show CURRENT playing resolution (from Shaka track), not just source
+    // --- Video label (playing resolution from Shaka when available) ---
     const playingWidth = activeTrack?.width ?? src?.width;
     const playingHeight = activeTrack?.height ?? src?.height;
     const resLabel = this.resolutionLabel(playingWidth, playingHeight);
@@ -252,30 +272,71 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const codecName = (src?.videoCodec ?? '?').toUpperCase();
     const videoLabel = `${resLabel}${hdrTag} ${codecName}`;
 
+    const rateMap = pi?.transcodeBitrateByQuality;
+    const qId = _quality;
+    const sourceA = src?.audioBitRate;
+
+    /** Selected HLS profile entry (same resolution as stream bitrate logic). */
+    let selectedRateEntry: {
+      videoBitrateBps: number;
+      audioBitrateBps: number;
+      totalBitrateBps: number;
+    } | null = null;
+    if (rateMap && qId !== 'auto' && qId !== 'original' && rateMap[qId]) {
+      selectedRateEntry = rateMap[qId];
+    } else if (rateMap && (qId === 'auto' || qId === 'original')) {
+      const tier = this.transcodeTierFromVariantHeight(activeTrack?.height ?? 0);
+      if (tier && rateMap[tier]) selectedRateEntry = rateMap[tier];
+    }
+
+    const validBps = (n: unknown): n is number =>
+      typeof n === 'number' && !Number.isNaN(n) && n > 0;
+
+    // Video stream bitrate: server manifest BANDWIDTH, else Shaka variant / total.
+    let videoStreamBitrate = '';
+    let serverStreamTotalBps: number | undefined;
+    if (selectedRateEntry) {
+      serverStreamTotalBps = selectedRateEntry.totalBitrateBps;
+    } else if (
+      pi?.playMethod === 'DirectStream' &&
+      qId === 'original' &&
+      validBps(pi.remuxMasterBandwidthBps)
+    ) {
+      serverStreamTotalBps = pi.remuxMasterBandwidthBps;
+    } else if (pi?.playMethod === 'DirectStream' && validBps(pi.remuxMasterBandwidthBps)) {
+      serverStreamTotalBps = pi.remuxMasterBandwidthBps;
+    }
+
+    if (serverStreamTotalBps != null && serverStreamTotalBps > 0) {
+      videoStreamBitrate = formatBitrateBps(serverStreamTotalBps);
+    } else {
+      const trackVbw = activeTrack?.videoBandwidth;
+      const shakaStreamBw = (shakaStats as { streamBandwidth?: number } | undefined)
+        ?.streamBandwidth;
+      if (validBps(trackVbw)) {
+        videoStreamBitrate = formatBitrateBps(trackVbw);
+      } else if (validBps(shakaStreamBw)) {
+        videoStreamBitrate = formatBitrateBps(shakaStreamBw);
+      }
+    }
+
     const profileParts: string[] = [];
     if (src?.videoProfile) profileParts.push(src.videoProfile);
     if (src?.videoLevel) profileParts.push(String(src.videoLevel));
-    // Show active track bitrate if different from source
-    if (activeTrack?.videoBandwidth) {
-      profileParts.push(`${(activeTrack.videoBandwidth / 1_000_000).toFixed(0)} mbps`);
-    } else if (src?.videoBitRate) {
-      profileParts.push(`${(src.videoBitRate / 1_000_000).toFixed(0)} mbps`);
-    }
     if (src?.frameRate) profileParts.push(`${src.frameRate} fps`);
     const videoProfileLine = profileParts.join('  ') || '?';
 
     // Playback mode for video
     let videoPlaybackMode: string;
     if (effectiveVideoCopy) {
-      videoPlaybackMode = 'Lecture directe';
+      videoPlaybackMode = 'Direct playback';
     } else {
-      videoPlaybackMode = hw !== 'none' ? `Transcodage (${hw.toUpperCase()})` : 'Transcodage (CPU)';
+      videoPlaybackMode = hw !== 'none' ? `Transcoding (${hw.toUpperCase()})` : 'Transcoding (CPU)';
     }
     // Show current resolution if transcoding to a lower quality
     if (activeTrack && playingHeight && src?.height && playingHeight < src.height) {
       videoPlaybackMode += ` → ${playingWidth}x${playingHeight}`;
     }
-    // Tone mapping indicator
     if (pi?.tonemapping) {
       videoPlaybackMode += ' (HDR → SDR)';
     }
@@ -286,31 +347,41 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const audioCodecUpper = (src?.audioCodec ?? '?').toUpperCase();
     const audioLabel = `${langLabel} ${audioCodecUpper} ${channelLabel}`;
 
-    const audioDetailParts: string[] = [];
-    if (src?.audioBitRate) audioDetailParts.push(`${(src.audioBitRate / 1000).toFixed(0)} kbps`);
-    if (src?.audioSampleRate) audioDetailParts.push(`${src.audioSampleRate} Hz`);
-    const audioDetailLine = audioDetailParts.join('  ') || '?';
+    let audioStreamBitrate = '';
+    if (selectedRateEntry) {
+      audioStreamBitrate = formatBitrateBps(selectedRateEntry.audioBitrateBps);
+    } else if (validBps(sourceA) && pi?.playMethod === 'DirectStream') {
+      audioStreamBitrate = formatBitrateBps(sourceA);
+    } else {
+      const trackAbw = (activeTrack as { audioBandwidth?: number } | undefined)?.audioBandwidth;
+      if (validBps(trackAbw)) {
+        audioStreamBitrate = formatBitrateBps(trackAbw);
+      }
+    }
+
+    const audioDetailLine = src?.audioSampleRate ? `${src.audioSampleRate} Hz` : '?';
 
     let audioPlaybackMode: string;
     if (effectiveAudioCopy) {
-      audioPlaybackMode = 'Lecture directe';
+      audioPlaybackMode = 'Direct playback';
     } else {
       const outCodec = isTranscodeQuality ? 'AAC' : (pi?.outputAudioCodec ?? 'aac').toUpperCase();
-      audioPlaybackMode = `Transcoder (${outCodec} 192 kbps)`;
+      audioPlaybackMode = `Transcode (${outCodec} 192 kbps)`;
     }
 
     return {
       container: src?.container ?? '?',
       containerBitrate,
       outputFormat,
-      outputBitrate,
       outputFps,
       audioTranscodeNote,
       videoLabel,
+      videoStreamBitrate,
       videoProfileLine,
       videoPlaybackMode,
       droppedFrames: shakaStats?.droppedFrames ?? 0,
       audioLabel,
+      audioStreamBitrate,
       audioDetailLine,
       audioPlaybackMode,
     };
@@ -445,6 +516,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       // Build quality options
       this.buildQualityOptions(pi);
+      this.applySavedQualityPreferenceFromStorage();
 
       const mode = this.playbackMode();
       console.log('[Player] mediaFileId:', this.mediaFileId, 'mode:', pi.playMethod,
@@ -485,6 +557,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         console.log('[Player] HLS URL:', hlsUrl);
         await this.player.load(hlsUrl);
       }
+
+      this.applyQualityPreferenceAfterLoad();
 
       // Load subtitles + auto-select last used language
       await this.loadSubtitles();
@@ -539,6 +613,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         }
         if (this.statsVisible()) {
           this.currentTime.set(video.currentTime);
+          this.statsRefreshTick.update((n) => n + 1);
         }
       }, 1000);
     } catch (e) {
@@ -750,12 +825,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           : this.streamingApi.getHlsUrl(this.mediaFileId);
         const mimeType = mode === 'direct' ? 'video/mp4' : undefined;
         await this.player.load(url, castPos > 0 ? castPos : undefined, mimeType);
-        // Re-apply quality selection
-        const qId = this.activeQualityId();
-        if (qId && qId !== 'auto') {
-          const option = this.availableQualities().find(q => q.id === qId);
-          if (option) this.selectQuality(option);
-        }
+        this.applyQualityPreferenceAfterLoad();
         video?.play().catch(() => {});
       }
     } catch { /* ignore */ }
@@ -1103,9 +1173,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.hwAccel.set(pi.hwAccel);
     this.buildQualityOptions(pi);
 
-    // Remember current quality choice before reload
-    const prevQualityId = this.activeQualityId();
-
     const mode = this.playbackMode();
     if (mode === 'direct') {
       await this.player.load(this.streamingApi.getStreamUrl(this.mediaFileId), currentPos, 'video/mp4');
@@ -1113,11 +1180,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await this.player.load(this.streamingApi.getHlsUrl(this.mediaFileId), currentPos);
     }
 
-    // Re-apply quality selection after reload (Shaka resets to ABR)
-    if (prevQualityId && prevQualityId !== 'auto') {
-      const option = this.availableQualities().find(q => q.id === prevQualityId);
-      if (option) this.selectQuality(option);
-    }
+    this.applyQualityPreferenceAfterLoad();
 
     video.play().catch(() => {});
   }
@@ -1127,16 +1190,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.subtitlePickerOpen.set(false);
   }
 
-  async selectQuality(option: QualityOption) {
+  async selectQuality(option: QualityOption, force = false) {
     this.qualityPickerOpen.set(false);
-    if (option.id === this.activeQualityId()) return;
+    if (!force && option.id === this.activeQualityId()) return;
     this.activeQualityId.set(option.id);
+    this.persistQualityPreference(option.id);
 
     if (!this.player) return;
 
     if (option.id === 'auto') {
-      // Re-enable ABR
-      this.player.configure({ abr: { enabled: true } } as any);
+      if (this.playbackMode() !== 'direct') {
+        this.configureAutoAbrForHls();
+      } else {
+        this.player.configure({ abr: { enabled: true } } as any);
+      }
       return;
     }
 
@@ -1157,6 +1224,70 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       );
       this.player.selectVariantTrack(match, true);
     }
+  }
+
+  private readSavedQualityIdFromStorage(): string | null {
+    try {
+      return localStorage.getItem(PLAYER_QUALITY_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  }
+
+  private persistQualityPreference(id: string) {
+    try {
+      localStorage.setItem(PLAYER_QUALITY_STORAGE_KEY, id);
+    } catch {
+      /* private mode / quota */
+    }
+  }
+
+  /** After buildQualityOptions: restore last choice if still valid for this manifest. */
+  private applySavedQualityPreferenceFromStorage() {
+    const saved = this.readSavedQualityIdFromStorage();
+    const ids = new Set(this.availableQualities().map(q => q.id));
+    if (saved && ids.has(saved)) {
+      this.activeQualityId.set(saved);
+    } else {
+      this.activeQualityId.set('auto');
+    }
+  }
+
+  /**
+   * Apply activeQualityId after load / reload (Shaka resets ABR).
+   * Uses force=true so initial state matches persisted preference.
+   */
+  private applyQualityPreferenceAfterLoad() {
+    const option = this.availableQualities().find(q => q.id === this.activeQualityId())
+      ?? this.availableQualities().find(q => q.id === 'auto');
+    if (!option) return;
+    void this.selectQuality(option, true);
+  }
+
+  /** Optimistic ABR for HLS: bias toward 720p+, still allowed to drop if needed. */
+  private configureAutoAbrForHls() {
+    if (!this.player) return;
+    this.player.configure({
+      abr: {
+        enabled: true,
+        defaultBandwidthEstimate: ABR_DEFAULT_BANDWIDTH_ESTIMATE,
+        useNetworkInformation: true,
+        restrictions: {
+          minWidth: 0,
+          maxWidth: Infinity,
+          minHeight: ABR_MIN_HEIGHT_PREFERENCE,
+          maxHeight: Infinity,
+          minPixels: 0,
+          maxPixels: Infinity,
+          minFrameRate: 0,
+          maxFrameRate: Infinity,
+          minBandwidth: 0,
+          maxBandwidth: Infinity,
+          minChannelsCount: 0,
+          maxChannelsCount: Infinity,
+        },
+      },
+    } as any);
   }
 
   onSelectQualityById(id: string) {
@@ -1210,6 +1341,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
 
     this.availableQualities.set(options);
+  }
+
+  /**
+   * Hauteur de la variante Shaka → clé PROFILES / transcodeBitrateByQuality.
+   */
+  private transcodeTierFromVariantHeight(h: number): string | null {
+    if (h <= 0) return null;
+    if (h >= 2160) return '2160p';
+    if (h >= 1080) return '1080p';
+    if (h >= 720) return '720p';
+    if (h >= 480) return '480p';
+    if (h >= 360) return '360p';
+    if (h >= 240) return '240p';
+    return '144p';
   }
 
   private resolutionLabel(w?: number, h?: number): string {

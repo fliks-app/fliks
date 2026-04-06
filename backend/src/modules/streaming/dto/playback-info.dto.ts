@@ -45,6 +45,28 @@ export interface PlaybackInfoResponse {
   /** Whether HDR→SDR tone mapping is being applied */
   tonemapping: boolean;
 
+  /**
+   * Cibles de débit par rung de qualité (profils FFmpeg), aligné Jellyfin TranscodingInfo.
+   * Présent si playMethod === 'Transcode', ou **DirectStream** (master avec remux + échelle transcodage).
+   * `totalBitrateBps` = somme vidéo + audio = valeur **BANDWIDTH** de la ligne correspondante
+   * dans `master.m3u8` (même calcul que `generateMasterPlaylist`).
+   */
+  transcodeBitrateByQuality?: Record<
+    string,
+    {
+      videoBitrateBps: number;
+      audioBitrateBps: number;
+      totalBitrateBps: number;
+    }
+  >;
+
+  /**
+   * BANDWIDTH de la variante « remux » dans `master.m3u8` (copie vidéo sans réencodage).
+   * Présent si playMethod === 'DirectStream' et URL HLS avec remux.
+   * Même calcul que `StreamingController.hlsMaster` (ffprobe vidéo + audio ou format).
+   */
+  remuxMasterBandwidthBps?: number;
+
   /** Source file info */
   source: {
     container: string;
@@ -52,6 +74,8 @@ export interface PlaybackInfoResponse {
     videoProfile?: string;
     videoLevel?: number;
     videoBitRate?: number;
+    /** Débit conteneur ffprobe `format.bit_rate` (bits/s) — utile quand les flux n’ont pas de bit_rate */
+    formatBitRate?: number;
     videoBitDepth?: number;
     width?: number;
     height?: number;

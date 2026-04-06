@@ -2,7 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 import { PlaybackInfoResponse, TranscodeReason } from './dto/playback-info.dto';
 import { ResolvedFile } from './streaming.service';
-import { TranscodingService } from './transcoding.service';
+import {
+  TranscodingService,
+  PROFILES,
+  parseBitrateToBps,
+} from './transcoding.service';
 
 /**
  * Decides how a media file should be played: DirectPlay, DirectStream (remux), or Transcode.
@@ -32,6 +36,29 @@ export class StreamBuilderService {
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
     const a = si?.audio?.[0];
+    const formatBitRate =
+      si?.formatBitRate != null && si.formatBitRate > 0
+        ? si.formatBitRate
+        : undefined;
+    const audioStreams = si?.audio ?? [];
+    const audioSumBitrate = audioStreams.reduce(
+      (sum, s) => sum + (s.bitRate ?? 0),
+      0,
+    );
+
+    let videoBitRate = v?.bitRate;
+    if (videoBitRate == null && formatBitRate != null) {
+      if (audioSumBitrate > 0) {
+        const est = formatBitRate - audioSumBitrate;
+        if (est > 10_000) videoBitRate = est;
+      }
+    }
+
+    let audioBitRate = a?.bitRate;
+    if (audioBitRate == null && formatBitRate != null && videoBitRate != null) {
+      const leftover = formatBitRate - videoBitRate;
+      if (leftover > 1_000) audioBitRate = leftover;
+    }
 
     const sourceContainer = resolved.ext.replace('.', '').toLowerCase();
     const sourceVideoCodec = (v?.codec ?? '').toLowerCase();
@@ -42,7 +69,8 @@ export class StreamBuilderService {
       videoCodec: sourceVideoCodec,
       videoProfile: v?.profile?.toLowerCase(),
       videoLevel: v?.level,
-      videoBitRate: v?.bitRate,
+      videoBitRate,
+      formatBitRate,
       videoBitDepth: v?.bitDepth,
       width: v?.width,
       height: v?.height,
@@ -50,7 +78,7 @@ export class StreamBuilderService {
       audioCodec: sourceAudioCodec,
       audioChannels: a?.channels,
       audioChannelLayout: a?.channelLayout,
-      audioBitRate: a?.bitRate,
+      audioBitRate,
       audioSampleRate: a?.sampleRate,
       audioLanguage: a?.language,
       durationSeconds: si?.durationSeconds,
@@ -157,6 +185,22 @@ export class StreamBuilderService {
       );
       const sep = tokenParam ? '&' : '?';
       const url = `/api/stream/${resolved.mediaFile.id}/master.m3u8${tokenParam}${sep}remux=1`;
+      const remuxBw =
+        source.formatBitRate ??
+        (source.videoBitRate ?? 0) + (source.audioBitRate ?? 0);
+      // Même échelle que le master.m3u8 (variantes transcodées après la ligne remux)
+      const transcodeBitrateByQuality: NonNullable<
+        PlaybackInfoResponse['transcodeBitrateByQuality']
+      > = {};
+      for (const p of PROFILES) {
+        const v = parseBitrateToBps(p.videoBitrate);
+        const a = parseBitrateToBps(p.audioBitrate);
+        transcodeBitrateByQuality[p.name] = {
+          videoBitrateBps: v,
+          audioBitrateBps: a,
+          totalBitrateBps: v + a,
+        };
+      }
       return {
         mediaFileId: resolved.mediaFile.id,
         playMethod: 'DirectStream',
@@ -172,6 +216,8 @@ export class StreamBuilderService {
           ? 'none'
           : this.transcodingService.getDetectedHwAccel(),
         tonemapping: false,
+        remuxMasterBandwidthBps: remuxBw > 0 ? remuxBw : undefined,
+        transcodeBitrateByQuality,
         source,
       };
     }
@@ -200,6 +246,18 @@ export class StreamBuilderService {
       `Transcode for file ${resolved.mediaFile.id}: ${reasons.map((r) => r.flag).join(', ')}`,
     );
     const url = `/api/stream/${resolved.mediaFile.id}/master.m3u8${tokenParam}`;
+    const transcodeBitrateByQuality: NonNullable<
+      PlaybackInfoResponse['transcodeBitrateByQuality']
+    > = {};
+    for (const p of PROFILES) {
+      const v = parseBitrateToBps(p.videoBitrate);
+      const a = parseBitrateToBps(p.audioBitrate);
+      transcodeBitrateByQuality[p.name] = {
+        videoBitrateBps: v,
+        audioBitrateBps: a,
+        totalBitrateBps: v + a,
+      };
+    }
     return {
       mediaFileId: resolved.mediaFile.id,
       playMethod: 'Transcode',
@@ -213,6 +271,7 @@ export class StreamBuilderService {
       outputContainer: 'hls',
       hwAccel: effectiveHwAccel,
       tonemapping: needsTonemapping,
+      transcodeBitrateByQuality,
       source,
     };
   }
@@ -303,6 +362,7 @@ export class StreamBuilderService {
     // Bitrate check
     if (profile.maxStreamingBitrate && profile.maxStreamingBitrate > 0) {
       const totalBitrate =
+        source.formatBitRate ??
         (source.videoBitRate ?? 0) + (source.audioBitRate ?? 0);
       if (totalBitrate > profile.maxStreamingBitrate) {
         reasons.push({

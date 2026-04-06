@@ -82,6 +82,8 @@ export interface MediaFileInfo {
   video: VideoStreamInfo[];
   audio: AudioStreamInfo[];
   subtitles: SubtitleStreamInfo[];
+  /** Overall container bitrate from ffprobe `format.bit_rate` (bits/s). */
+  formatBitRate?: number;
   durationSeconds?: number;
   error?: string;
 }
@@ -204,12 +206,17 @@ export class FfprobeService {
 
       const parsed = JSON.parse(stdout) as {
         streams?: FfprobeStream[];
-        format?: { duration?: string };
+        format?: { duration?: string; bit_rate?: string };
       };
       const streams = parsed.streams ?? [];
       const durationSeconds = parsed.format?.duration
         ? Number(parsed.format.duration)
         : undefined;
+      const formatBitRateRaw = parsed.format?.bit_rate
+        ? Number(parsed.format.bit_rate)
+        : undefined;
+      const formatBitRate =
+        formatBitRateRaw && formatBitRateRaw > 0 ? formatBitRateRaw : undefined;
 
       const video: VideoStreamInfo[] = streams
         .filter((s) => s.codec_type === 'video')
@@ -270,11 +277,12 @@ export class FfprobeService {
           video: [],
           audio: [],
           subtitles: [],
+          formatBitRate,
           durationSeconds,
           error: 'No streams detected',
         };
       }
-      return { video, audio, subtitles, durationSeconds };
+      return { video, audio, subtitles, formatBitRate, durationSeconds };
     } catch (err: unknown) {
       const e = err as { message?: string; stderr?: string };
       const message =
