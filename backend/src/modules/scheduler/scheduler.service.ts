@@ -34,8 +34,6 @@ export class SchedulerService implements OnModuleInit {
     private readonly mediaRepo: Repository<Media>,
     @InjectRepository(DownloadHistory)
     private readonly historyRepo: Repository<DownloadHistory>,
-    @InjectRepository(Season)
-    private readonly seasonRepo: Repository<Season>,
     @InjectRepository(Episode)
     private readonly episodeRepo: Repository<Episode>,
     @InjectRepository(Indexer)

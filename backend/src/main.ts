@@ -5,7 +5,9 @@ import { AppModule } from './app.module';
 import { LogBufferService } from './modules/scheduler/log-buffer.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    forceCloseConnections: true,
+  });
   const logBuffer = app.get(LogBufferService);
   app.useLogger(logBuffer);
   app.enableShutdownHooks();
