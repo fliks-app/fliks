@@ -26,6 +26,7 @@ import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
 import { MediaType } from '../../common/enums';
+import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 
 @Injectable()
 export class CompletionService {
@@ -440,7 +441,16 @@ export class CompletionService {
         companionExts,
       );
 
-      const relativePath = path.relative(libraryRoot, path.normalize(destPath));
+      const relativePath = relativePathUnderMediaRoot(
+        path.resolve(libraryRoot),
+        path.resolve(destPath),
+      );
+      if (!relativePath) {
+        this.log.error(
+          `Import[${history.sourceTitle}]: dest outside library root — resolvedRoot=${path.resolve(libraryRoot)} resolvedDest=${path.resolve(destPath)} libraryRoot=${libraryRoot} dest=${destPath}`,
+        );
+        continue;
+      }
       const streamInfo = await this.ffprobe.detectMediaFileInfo(destPath);
 
       // Avoid duplicate: update existing record if same path already tracked

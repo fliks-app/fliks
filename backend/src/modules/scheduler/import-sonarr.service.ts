@@ -29,6 +29,7 @@ import { MediaFile } from '../media/entities/media-file.entity';
 import { MediaService } from '../media/media.service';
 import { SubtitleProviderType } from '../../common/enums';
 import * as path from 'path';
+import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 
 interface SonarrSeries {
   /** Sonarr API series id (required for extra files / episode files) */
@@ -266,8 +267,13 @@ export class ImportSonarrService {
             const lang = parseLanguageFromPath(relativeName);
             const tags = parseSubtitleTags(relativeName);
             const forced = tags.includes('forced');
-            const rel = path.relative(media.path, absSubtitlePath);
-            if (!rel || rel.startsWith('..')) continue;
+            const rel = relativePathUnderMediaRoot(media.path, absSubtitlePath);
+            if (!rel) {
+              this.log.error(
+                `Sonarr subtitles: path outside media root — mediaId=${media.id} path=${media.path} subtitle=${absSubtitlePath}`,
+              );
+              continue;
+            }
 
             count += await upsertImportedSubtitleFile(this.subtitleRepo, {
               mediaId: media.id,

@@ -347,6 +347,8 @@
     "refresh_ok": "Métadonnées mises à jour avec succès",
     "refresh_error": "Erreur lors du rafraîchissement des métadonnées",
     "rescan_files": "Rescanner les fichiers",
+    "rescan_launched": "Scan lancé. Le résultat s'affichera une fois le scan terminé.",
+    "rescan_launch_error": "Impossible de lancer le scan",
     "rescan_ok": "Scan terminé : {{added}} ajouté(s), {{removed}} supprimé(s), {{updated}} mis à jour",
     "not_found": "Contenu introuvable",
     "download_section": "Téléchargement",

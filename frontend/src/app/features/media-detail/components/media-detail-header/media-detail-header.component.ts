@@ -53,7 +53,6 @@ export class MediaDetailHeaderComponent implements OnInit {
   readonly canGrab = input(false);
   readonly releasesLoading = input(false);
   readonly grabBusy = input<string | null>(null);
-  readonly rescanLoading = input(false);
 
   readonly openProfiles = output<void>();
   readonly openRootFolder = output<void>();

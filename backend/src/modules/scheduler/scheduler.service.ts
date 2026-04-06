@@ -668,6 +668,8 @@ export class SchedulerService implements OnModuleInit {
       select: ['id', 'title'],
     });
 
+    this.log.log(`RescanAll: started — ${allMedia.length} media to scan`);
+
     let totalUpdated = 0;
     let skipped = 0;
     for (let i = 0; i < allMedia.length; i++) {
@@ -703,6 +705,11 @@ export class SchedulerService implements OnModuleInit {
     this.log.log(
       `RescanAll: scanned ${allMedia.length - skipped}/${allMedia.length} media, ${totalUpdated} change(s), ${skipped} skipped`,
     );
+    if (skipped > 0) {
+      this.log.warn(
+        `RescanAll: ${skipped} media failed (see WARN lines above per title)`,
+      );
+    }
   }
 
   /**
@@ -798,6 +805,10 @@ export class SchedulerService implements OnModuleInit {
       return false;
     });
 
+    this.log.log(
+      `RescanMissingFiles: started — ${candidates.length} media to scan`,
+    );
+
     let totalUpdated = 0;
     let skipped = 0;
     for (let i = 0; i < candidates.length; i++) {
@@ -833,6 +844,11 @@ export class SchedulerService implements OnModuleInit {
     this.log.log(
       `RescanMissingFiles: scanned ${candidates.length - skipped}/${candidates.length} media, ${totalUpdated} change(s) (from ${allMedia.length} total)`,
     );
+    if (skipped > 0) {
+      this.log.warn(
+        `RescanMissingFiles: ${skipped} media failed (see WARN lines above per title)`,
+      );
+    }
   }
 
   private isDelayed(

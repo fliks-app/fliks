@@ -262,10 +262,7 @@
                 @if (refreshLoading()) { <span class="loading loading-spinner loading-xs"></span> } @else { <svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg> }
                 {{ 'media_detail.refresh_metadata' | translate }}
               </a></li>
-              <li><a class="flex items-center gap-3" (click)="rescanFiles.emit()" [class.pointer-events-none]="rescanLoading()" [class.opacity-50]="rescanLoading()">
-                @if (rescanLoading()) { <span class="loading loading-spinner loading-xs"></span> } @else { <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg> }
-                {{ 'media_detail.rescan_files' | translate }}
-              </a></li>
+              <li><a class="flex items-center gap-3" (click)="rescanFiles.emit()"><svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.rescan_files' | translate }}</a></li>
               <li><a class="flex items-center gap-3" (click)="toggleMonitored.emit()" [class.pointer-events-none]="monitoredLoading()" [class.opacity-50]="monitoredLoading()">
                 @if (monitoredLoading()) { <span class="loading loading-spinner loading-xs"></span> }
                 @else if (m.monitored) { <svg lucideEyeOff class="h-4 w-4 shrink-0 opacity-70"></svg> }

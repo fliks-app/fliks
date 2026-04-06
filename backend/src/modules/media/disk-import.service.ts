@@ -1,8 +1,9 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
+import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 import { Media } from './entities/media.entity';
 import { MediaFile } from './entities/media-file.entity';
 import { Season } from './entities/season.entity';
@@ -41,6 +42,8 @@ export interface ScanCandidate {
 
 @Injectable()
 export class DiskImportService {
+  private readonly logger = new Logger(DiskImportService.name);
+
   constructor(
     @InjectRepository(Media)
     private readonly mediaRepo: Repository<Media>,
@@ -56,6 +59,7 @@ export class DiskImportService {
 
   async scanFolder(folderPath: string): Promise<ScanCandidate[]> {
     const resolved = path.resolve(folderPath);
+    this.logger.log(`Disk library scan started — folder="${resolved}"`);
     let stat: fs.Stats;
     try {
       stat = fs.statSync(resolved);
@@ -137,7 +141,16 @@ export class DiskImportService {
         }
 
         if (!media.path) continue; // Skip if we can't compute a path
-        const relativePath = path.relative(media.path, entry.filePath);
+        const relativePath = relativePathUnderMediaRoot(media.path, entry.filePath);
+        if (!relativePath) {
+          this.logger.error(
+            `Disk import: file outside media folder — mediaId=${media.id} mediaPath=${media.path} filePath=${entry.filePath}`,
+          );
+          errors.push(
+            `${path.basename(entry.filePath)}: fichier en dehors du dossier média (vérifiez le dossier racine)`,
+          );
+          continue;
+        }
 
         // Avoid duplicate path
         const existing = await this.fileRepo.findOne({

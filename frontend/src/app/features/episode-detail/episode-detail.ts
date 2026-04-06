@@ -91,10 +91,7 @@ export class EpisodeDetailComponent implements OnInit {
     if (eventMediaId !== m.id) return;
 
     if (event.type === 'rescan.completed') {
-      this.rescanLoading.set(false);
       void this.reloadAfterRescan(m.id);
-    } else if (event.type === 'rescan.failed') {
-      this.rescanLoading.set(false);
     }
   });
 
@@ -110,7 +107,6 @@ export class EpisodeDetailComponent implements OnInit {
 
   readonly episodeBusy = signal(false);
   readonly refreshLoading = signal(false);
-  readonly rescanLoading = signal(false);
 
   readonly epReleasesLoading = signal(false);
   readonly epReleases = signal<any[]>([]);
@@ -276,11 +272,15 @@ export class EpisodeDetailComponent implements OnInit {
   async rescanFiles() {
     const m = this.media();
     if (!m) return;
-    this.rescanLoading.set(true);
     try {
       await this.mediaService.rescanFiles(m.id);
+      this.toast.success(
+        this.translate.instant('media_detail.rescan_launched'),
+      );
     } catch {
-      this.rescanLoading.set(false);
+      this.toast.error(
+        this.translate.instant('media_detail.rescan_launch_error'),
+      );
     }
   }
 

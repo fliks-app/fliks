@@ -86,9 +86,7 @@ export class SseService implements OnDestroy {
         );
         break;
       case 'rescan.started':
-        this.toast.info(
-          this.translate.instant('sse.rescan_started', { title: event['title'] ?? '' }),
-        );
+        // Toast shown from media-detail / episode-detail when POST /rescan returns
         break;
       case 'rescan.completed':
         this.toast.success(

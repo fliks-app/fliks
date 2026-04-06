@@ -25,6 +25,7 @@ import { cleanSubtitle } from './subtitle-cleaner';
 import * as postProcess from './subtitle-post-processor';
 import { SettingsService } from '../settings/settings.service';
 import { resolveSubtitleAbsolutePath } from './subtitle-path.util';
+import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 
 @Injectable()
 export class SubtitlesService {
@@ -231,12 +232,11 @@ export class SubtitlesService {
         'Assign a root folder to this media before downloading subtitles',
       );
     }
-    const relativePath = path.relative(media.path, subtitlePath);
-    if (
-      !relativePath ||
-      relativePath.startsWith('..' + path.sep) ||
-      relativePath === '..'
-    ) {
+    const relativePath = relativePathUnderMediaRoot(media.path, subtitlePath);
+    if (!relativePath) {
+      this.logger.error(
+        `Subtitle save path invalid: mediaId=${mediaId} media.path=${media.path} subtitlePath=${subtitlePath}`,
+      );
       throw new BadRequestException(
         'Subtitle file would be outside the media folder; check root folder configuration',
       );

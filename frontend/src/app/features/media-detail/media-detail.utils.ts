@@ -11,10 +11,25 @@ export function displayMediaFilePath(
 ): string {
   if (relativePath == null || relativePath === '') return '—';
   const root = mediaPath?.trim();
-  if (!root) return relativePath.replace(/\\/g, '/');
+  if (!root) return normalizeDisplayPath(relativePath.replace(/\\/g, '/'));
   const a = root.replace(/[/\\]+$/, '').replace(/\\/g, '/');
   const b = relativePath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
-  return `${a}/${b}`;
+  return normalizeDisplayPath(`${a}/${b}`);
+}
+
+/** Collapse `.` / `..` in a display path (legacy DB rows could store unsafe relatives). */
+function normalizeDisplayPath(p: string): string {
+  const parts = p.split('/');
+  const stack: string[] = [];
+  for (const part of parts) {
+    if (part === '' || part === '.') continue;
+    if (part === '..') {
+      if (stack.length) stack.pop();
+      continue;
+    }
+    stack.push(part);
+  }
+  return stack.join('/') || '—';
 }
 
 export function formatMediaDetailBytes(bytes: number): string {

@@ -40,6 +40,7 @@ import { MediaServersService } from '../media-servers/media-servers.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 
 @Injectable()
 export class MediaService {
@@ -1085,23 +1086,51 @@ export class MediaService {
       );
     }
 
-    const mediaDir = media.path;
+    const mediaDir = path.resolve(media.path);
     if (!fs.existsSync(mediaDir)) {
-      throw new BadRequestException(`Path "${mediaDir}" does not exist`);
+      try {
+        fs.mkdirSync(mediaDir, { recursive: true });
+        this.log.warn(
+          `Rescan: created missing media folder — "${mediaDir}" (media #${mediaId} "${media.title}")`,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new BadRequestException(
+          `Cannot create media folder "${mediaDir}": ${msg}`,
+        );
+      }
     }
 
+    this.log.log(
+      `Rescan: started — media #${mediaId} "${media.title}" root="${mediaDir}"`,
+    );
+
     // 1. Collect all video files on disk
-    this.log.log(`Rescan: scanning "${mediaDir}" for media #${mediaId}`);
-    const diskFiles = this.collectVideoFilesRecursive(mediaDir, 0);
+    const rawDiskFiles = this.collectVideoFilesRecursive(mediaDir, 0, mediaId);
+    const diskFiles: string[] = [];
+    const diskRelPaths = new Set<string>();
+    for (const f of rawDiskFiles) {
+      const rel = relativePathUnderMediaRoot(mediaDir, f);
+      if (!rel) {
+        this.log.error(
+          `Rescan[media #${mediaId}]: file is outside resolved media folder — mediaDir="${mediaDir}" file="${f}"`,
+        );
+        continue;
+      }
+      diskRelPaths.add(rel);
+      diskFiles.push(f);
+    }
     this.log.log(
       `Rescan: found ${diskFiles.length} file(s) on disk, ${(media.files ?? []).length} in DB`,
-    );
-    const diskRelPaths = new Set(
-      diskFiles.map((f) => path.relative(mediaDir, f).replace(/\\/g, '/')),
     );
 
     // 2. Existing DB records
     const dbFiles = media.files ?? [];
+    if (diskFiles.length === 0 && dbFiles.length > 0) {
+      this.log.warn(
+        `Rescan[media #${mediaId}]: no video file on disk, ${dbFiles.length} file(s) still in DB (orphan rows will be removed if paths do not match)`,
+      );
+    }
     const dbRelPaths = new Set(
       dbFiles.map((f) => f.relativePath.replace(/\\/g, '/')),
     );
@@ -1113,22 +1142,39 @@ export class MediaService {
     for (const dbFile of dbFiles) {
       const normPath = dbFile.relativePath?.replace(/\\/g, '/');
       if (!normPath || !diskRelPaths.has(normPath)) {
+        if (normPath?.includes('..')) {
+          this.log.error(
+            `Rescan[media #${mediaId}]: dropping DB file row with unsafe relativePath (not on disk or invalid): "${normPath}"`,
+          );
+        }
         const episodeId = dbFile.episodeId;
-        await this.mediaFileRepo.remove(dbFile);
-        removed++;
-        this.log.log(
-          `Rescan: removed missing file "${normPath}" for media #${mediaId}`,
-        );
-        // Update episode.hasFile if needed
-        if (episodeId != null) {
-          const remaining = await this.mediaFileRepo.count({
-            where: { episodeId },
-          });
-          if (remaining === 0) {
-            await this.episodeRepo.update(episodeId, { hasFile: false });
+        try {
+          await this.mediaFileRepo.remove(dbFile);
+          removed++;
+          this.log.log(
+            `Rescan: removed missing file "${normPath}" for media #${mediaId}`,
+          );
+          if (episodeId != null) {
+            const remaining = await this.mediaFileRepo.count({
+              where: { episodeId },
+            });
+            if (remaining === 0) {
+              await this.episodeRepo.update(episodeId, { hasFile: false });
+            }
           }
+        } catch (err) {
+          this.log.error(
+            `Rescan[media #${mediaId}]: failed to remove DB row for missing file "${normPath}"`,
+            err instanceof Error ? err.stack : err,
+          );
         }
       }
+    }
+
+    if (removed > 0) {
+      this.log.warn(
+        `Rescan[media #${mediaId}]: removed ${removed} file row(s) from DB (not found on disk)`,
+      );
     }
 
     // 4. Refresh metadata for existing DB records from disk
@@ -1141,7 +1187,11 @@ export class MediaService {
       let diskSize: number;
       try {
         diskSize = fs.statSync(absPath).size;
-      } catch {
+      } catch (err) {
+        this.log.warn(
+          `Rescan[media #${mediaId}]: cannot stat file for refresh (skipped) — path="${absPath}" relativePath="${normPath}"`,
+          err instanceof Error ? err.stack : err,
+        );
         continue;
       }
 
@@ -1151,43 +1201,57 @@ export class MediaService {
       if (media.type === MediaType.SERIES && dbFile.episodeId == null) {
         const epNums = this.parseEpisodeNumbers(filename);
         if (epNums) {
-          let season = await this.seasonRepo.findOne({
-            where: { mediaId: media.id, seasonNumber: epNums.season },
-          });
-          if (!season) {
-            season = await this.seasonRepo.save(
-              this.seasonRepo.create({
-                mediaId: media.id,
-                seasonNumber: epNums.season,
-                monitored: true,
-              }),
-            );
-            this.log.log(
-              `Rescan: created season ${epNums.season} for media #${mediaId}`,
+          try {
+            let season = await this.seasonRepo.findOne({
+              where: { mediaId: media.id, seasonNumber: epNums.season },
+            });
+            if (!season) {
+              season = await this.seasonRepo.save(
+                this.seasonRepo.create({
+                  mediaId: media.id,
+                  seasonNumber: epNums.season,
+                  monitored: true,
+                }),
+              );
+              this.log.log(
+                `Rescan: created season ${epNums.season} for media #${mediaId}`,
+              );
+            }
+            let ep = await this.episodeRepo.findOne({
+              where: { seasonId: season.id, episodeNumber: epNums.episode },
+            });
+            if (!ep) {
+              ep = await this.episodeRepo.save(
+                this.episodeRepo.create({
+                  seasonId: season.id,
+                  episodeNumber: epNums.episode,
+                  monitored: true,
+                }),
+              );
+              this.log.log(
+                `Rescan: created episode S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')} for media #${mediaId}`,
+              );
+            }
+            dbFile.episodeId = ep.id;
+            try {
+              await this.mediaFileRepo.save(dbFile);
+              await this.episodeRepo.update(ep.id, { hasFile: true });
+              updated++;
+              this.log.log(
+                `Rescan: linked "${normPath}" to S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')} for media #${mediaId}`,
+              );
+            } catch (err) {
+              this.log.error(
+                `Rescan[media #${mediaId}]: failed to link file "${normPath}" to episode`,
+                err instanceof Error ? err.stack : err,
+              );
+            }
+          } catch (err) {
+            this.log.error(
+              `Rescan[media #${mediaId}]: failed to create season/episode for refresh "${normPath}"`,
+              err instanceof Error ? err.stack : err,
             );
           }
-          let ep = await this.episodeRepo.findOne({
-            where: { seasonId: season.id, episodeNumber: epNums.episode },
-          });
-          if (!ep) {
-            ep = await this.episodeRepo.save(
-              this.episodeRepo.create({
-                seasonId: season.id,
-                episodeNumber: epNums.episode,
-                monitored: true,
-              }),
-            );
-            this.log.log(
-              `Rescan: created episode S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')} for media #${mediaId}`,
-            );
-          }
-          dbFile.episodeId = ep.id;
-          await this.mediaFileRepo.save(dbFile);
-          await this.episodeRepo.update(ep.id, { hasFile: true });
-          updated++;
-          this.log.log(
-            `Rescan: linked "${normPath}" to S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')} for media #${mediaId}`,
-          );
         }
       }
 
@@ -1222,16 +1286,30 @@ export class MediaService {
         dbFile.size = diskSize;
         let streamInfo = si;
         if (sizeChanged || missingStreamInfo || missingColorInfo) {
-          streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
-          // Detect hardcoded black bars (letterbox)
-          if (streamInfo?.video?.[0]) {
-            const crop = await this.ffprobe.detectCrop(
-              absPath,
-              streamInfo.durationSeconds,
+          try {
+            streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
+            if (streamInfo?.video?.[0]) {
+              try {
+                const crop = await this.ffprobe.detectCrop(
+                  absPath,
+                  streamInfo.durationSeconds,
+                );
+                if (crop) streamInfo.video[0].crop = crop;
+              } catch (err) {
+                this.log.warn(
+                  `Rescan[media #${mediaId}]: detectCrop failed on refresh "${normPath}" abs="${absPath}" (metadata otherwise kept)`,
+                  err instanceof Error ? err.stack : err,
+                );
+              }
+            }
+            dbFile.streamInfo = streamInfo;
+          } catch (err) {
+            this.log.error(
+              `Rescan[media #${mediaId}]: ffprobe failed on refresh "${normPath}" abs="${absPath}"`,
+              err instanceof Error ? err.stack : err,
             );
-            if (crop) streamInfo.video[0].crop = crop;
+            continue;
           }
-          dbFile.streamInfo = streamInfo;
         }
         const qualityName = this.resolveQuality(
           filename,
@@ -1239,23 +1317,40 @@ export class MediaService {
           streamInfo?.video?.[0]?.width,
         );
         dbFile.quality = qualityName;
-        await this.mediaFileRepo.save(dbFile);
-        updated++;
-        this.log.log(
-          `Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${qualityName})`,
-        );
+        try {
+          await this.mediaFileRepo.save(dbFile);
+          updated++;
+          this.log.log(
+            `Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${qualityName})`,
+          );
+        } catch (err) {
+          this.log.error(
+            `Rescan[media #${mediaId}]: failed to save refreshed metadata for "${normPath}"`,
+            err instanceof Error ? err.stack : err,
+          );
+        }
       }
     }
 
     // 5. Add new files found on disk but not in DB
     for (const absPath of diskFiles) {
-      const relativePath = path.relative(mediaDir, absPath).replace(/\\/g, '/');
+      const relativePath = relativePathUnderMediaRoot(mediaDir, absPath);
+      if (!relativePath) {
+        this.log.error(
+          `Rescan[media #${mediaId}]: internal inconsistency — file was listed but not under mediaDir — mediaDir="${mediaDir}" file="${absPath}"`,
+        );
+        continue;
+      }
       if (dbRelPaths.has(relativePath)) continue;
 
       let size = 0;
       try {
         size = fs.statSync(absPath).size;
-      } catch {
+      } catch (err) {
+        this.log.error(
+          `Rescan[media #${mediaId}]: cannot stat new file — path="${absPath}"`,
+          err instanceof Error ? err.stack : err,
+        );
         continue;
       }
 
@@ -1266,72 +1361,115 @@ export class MediaService {
       if (media.type === MediaType.SERIES) {
         const epNums = this.parseEpisodeNumbers(filename);
         if (epNums) {
-          let season = await this.seasonRepo.findOne({
-            where: { mediaId: media.id, seasonNumber: epNums.season },
-          });
-          if (!season) {
-            season = await this.seasonRepo.save(
-              this.seasonRepo.create({
-                mediaId: media.id,
-                seasonNumber: epNums.season,
-                monitored: true,
-              }),
-            );
-            this.log.log(
-              `Rescan: created season ${epNums.season} for media #${mediaId}`,
+          try {
+            let season = await this.seasonRepo.findOne({
+              where: { mediaId: media.id, seasonNumber: epNums.season },
+            });
+            if (!season) {
+              season = await this.seasonRepo.save(
+                this.seasonRepo.create({
+                  mediaId: media.id,
+                  seasonNumber: epNums.season,
+                  monitored: true,
+                }),
+              );
+              this.log.log(
+                `Rescan: created season ${epNums.season} for media #${mediaId}`,
+              );
+            }
+            let ep = await this.episodeRepo.findOne({
+              where: { seasonId: season.id, episodeNumber: epNums.episode },
+            });
+            if (!ep) {
+              ep = await this.episodeRepo.save(
+                this.episodeRepo.create({
+                  seasonId: season.id,
+                  episodeNumber: epNums.episode,
+                  monitored: true,
+                }),
+              );
+              this.log.log(
+                `Rescan: created episode S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')} for media #${mediaId}`,
+              );
+            }
+            episodeId = ep.id;
+          } catch (err) {
+            this.log.error(
+              `Rescan[media #${mediaId}]: failed to create season/episode for new file "${filename}" — importing file without episode link`,
+              err instanceof Error ? err.stack : err,
             );
           }
-          let ep = await this.episodeRepo.findOne({
-            where: { seasonId: season.id, episodeNumber: epNums.episode },
-          });
-          if (!ep) {
-            ep = await this.episodeRepo.save(
-              this.episodeRepo.create({
-                seasonId: season.id,
-                episodeNumber: epNums.episode,
-                monitored: true,
-              }),
-            );
-            this.log.log(
-              `Rescan: created episode S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')} for media #${mediaId}`,
-            );
-          }
-          episodeId = ep.id;
+        } else {
+          this.log.warn(
+            `Rescan[media #${mediaId}]: series file name has no SxxEyy pattern — "${filename}" (file will not link to an episode)`,
+          );
         }
       }
 
-      const streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
-      // Detect hardcoded black bars (letterbox)
-      if (streamInfo?.video?.[0]) {
-        const crop = await this.ffprobe.detectCrop(
-          absPath,
-          streamInfo.durationSeconds,
+      let streamInfo: Awaited<
+        ReturnType<FfprobeService['detectMediaFileInfo']>
+      >;
+      try {
+        streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
+        if (streamInfo?.video?.[0]) {
+          try {
+            const crop = await this.ffprobe.detectCrop(
+              absPath,
+              streamInfo.durationSeconds,
+            );
+            if (crop) streamInfo.video[0].crop = crop;
+          } catch (err) {
+            this.log.warn(
+              `Rescan[media #${mediaId}]: detectCrop failed for "${relativePath}" abs="${absPath}" (file still imported)`,
+              err instanceof Error ? err.stack : err,
+            );
+          }
+        }
+      } catch (err) {
+        this.log.error(
+          `Rescan[media #${mediaId}]: ffprobe failed for new file "${relativePath}" abs="${absPath}"`,
+          err instanceof Error ? err.stack : err,
         );
-        if (crop) streamInfo.video[0].crop = crop;
+        continue;
       }
       const qualityName = this.resolveQuality(
         filename,
         streamInfo.video?.[0]?.height,
         streamInfo.video?.[0]?.width,
       );
-      await this.mediaFileRepo.save(
-        this.mediaFileRepo.create({
-          mediaId: media.id,
-          episodeId,
-          relativePath,
-          size,
-          quality: qualityName,
-          streamInfo,
-        }),
-      );
-      added++;
-      this.log.log(
-        `Rescan: added new file "${relativePath}" for media #${mediaId}`,
-      );
-
-      if (episodeId != null) {
-        await this.episodeRepo.update(episodeId, { hasFile: true });
+      try {
+        await this.mediaFileRepo.save(
+          this.mediaFileRepo.create({
+            mediaId: media.id,
+            episodeId,
+            relativePath,
+            size,
+            quality: qualityName,
+            streamInfo,
+          }),
+        );
+        added++;
+        this.log.log(
+          `Rescan: added new file "${relativePath}" for media #${mediaId}`,
+        );
+        if (episodeId != null) {
+          await this.episodeRepo.update(episodeId, { hasFile: true });
+        }
+      } catch (err) {
+        this.log.error(
+          `Rescan[media #${mediaId}]: failed to save new file row "${relativePath}" abs="${absPath}"`,
+          err instanceof Error ? err.stack : err,
+        );
       }
+    }
+
+    this.log.log(
+      `Rescan: finished — media #${mediaId} "${media.title}" added=${added} removed=${removed} updated=${updated}`,
+    );
+    if (added === 0 && removed === 0 && updated === 0) {
+      this.log.warn(
+        `Rescan[media #${mediaId}]: no changes (added=0 removed=0 updated=0)`,
+      );
     }
 
     if (added || removed || updated) {
@@ -1344,19 +1482,34 @@ export class MediaService {
     return { added, removed, updated };
   }
 
-  private collectVideoFilesRecursive(dir: string, depth: number): string[] {
-    if (depth > 3) return [];
+  private collectVideoFilesRecursive(
+    dir: string,
+    depth: number,
+    mediaId: number,
+  ): string[] {
+    if (depth > 3) {
+      this.log.warn(
+        `Rescan[media #${mediaId}]: skipping subfolder (max depth 3) — "${dir}"`,
+      );
+      return [];
+    }
     const files: string[] = [];
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
+    } catch (err) {
+      this.log.error(
+        `Rescan[media #${mediaId}]: cannot read directory (permissions, missing path, or I/O) — "${dir}"`,
+        err instanceof Error ? err.stack : err,
+      );
       return [];
     }
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        files.push(...this.collectVideoFilesRecursive(fullPath, depth + 1));
+        files.push(
+          ...this.collectVideoFilesRecursive(fullPath, depth + 1, mediaId),
+        );
       } else if (
         MediaService.VIDEO_EXTS.has(path.extname(entry.name).toLowerCase())
       ) {

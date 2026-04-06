@@ -180,14 +180,7 @@
                   </a>
                 </li>
                 <li>
-                  <a class="flex items-center gap-3" (click)="rescanFiles()" [class.pointer-events-none]="rescanLoading()" [class.opacity-50]="rescanLoading()">
-                    @if (rescanLoading()) {
-                      <span class="loading loading-spinner loading-xs"></span>
-                    } @else {
-                      <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg>
-                    }
-                    {{ 'media_detail.rescan_files' | translate }}
-                  </a>
+                  <a class="flex items-center gap-3" (click)="rescanFiles()"><svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.rescan_files' | translate }}</a>
                 </li>
               </ul>
             </div>

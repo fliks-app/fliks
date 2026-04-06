@@ -11,6 +11,7 @@ import {
   UseGuards,
   ParseIntPipe,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { MediaService } from './media.service';
@@ -44,6 +45,8 @@ import { EventsService } from '../scheduler/events.service';
 @Controller('media')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
 export class MediaController {
+  private readonly logger = new Logger(MediaController.name);
+
   constructor(
     private readonly mediaService: MediaService,
     private readonly movieDownload: MovieDownloadService,
@@ -243,6 +246,7 @@ export class MediaController {
     if (!media) throw new NotFoundException(`Media #${id} not found`);
     const title = media.title;
 
+    this.logger.log(`Media rescan started (API) — id=${id} title="${title}"`);
     this.eventsService.emit({ type: 'rescan.started', mediaId: id, title });
 
     // Fire-and-forget: don't await
@@ -258,11 +262,16 @@ export class MediaController {
         });
       },
       (err) => {
+        const message = (err as Error).message;
+        this.logger.error(
+          `Media rescan failed — id=${id} title="${title}" error=${message}`,
+          err instanceof Error ? err.stack : err,
+        );
         this.eventsService.emit({
           type: 'rescan.failed',
           mediaId: id,
           title,
-          error: (err as Error).message,
+          error: message,
         });
       },
     );

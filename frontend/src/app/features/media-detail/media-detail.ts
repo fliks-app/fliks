@@ -49,7 +49,7 @@ import {
 } from './media-detail.utils';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
-import { SseService } from '../../core/services/sse.service';
+import { SseService, type SseEvent } from '../../core/services/sse.service';
 import { MediaType } from '../../core/enums/media-type.enum';
 
 const LS_EPISODES_HAS_FILE_ONLY = 'fliks.mediaDetail.episodesHasFileOnly';
@@ -95,6 +95,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly sse = inject(SseService);
+  /** Same SSE payload must run handlers once; `media` updates (e.g. after rescan) re-run this effect. */
+  private lastHandledSseEvent: SseEvent | null = null;
 
   /** React to SSE events for this media (subtitle sync/download) */
   private readonly sseEffect = effect(() => {
@@ -103,6 +105,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!event || !m) return;
     const eventMediaId = event['mediaId'] as number | undefined;
     if (eventMediaId !== m.id) return;
+    if (event === this.lastHandledSseEvent) return;
+    this.lastHandledSseEvent = event;
 
     if (event.type === 'subtitle.synced') {
       this.toast.success(this.translate.instant('sse.subtitle_synced'));
@@ -116,10 +120,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       );
       void this.loadSubtitles(m.id);
     } else if (event.type === 'rescan.completed') {
-      this.rescanLoading.set(false);
       void this.reloadAfterRescan(m.id);
-    } else if (event.type === 'rescan.failed') {
-      this.rescanLoading.set(false);
     }
   });
 
@@ -191,7 +192,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly monitoredLoading = signal(false);
   readonly refreshLoading = signal(false);
   readonly refreshToast = signal('');
-  readonly rescanLoading = signal(false);
   /** Active season tab (series) — first season selected after load */
   readonly activeSeasonId = signal<number | null>(null);
   readonly seasonBusy = signal<number | null>(null);
@@ -489,12 +489,15 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   async rescanFiles() {
     const m = this.media();
     if (!m) return;
-    this.rescanLoading.set(true);
     try {
       await this.mediaService.rescanFiles(m.id);
-      // rescanLoading is cleared by the SSE event handler (rescan.completed / rescan.failed)
+      this.toast.success(
+        this.translate.instant('media_detail.rescan_launched'),
+      );
     } catch {
-      this.rescanLoading.set(false);
+      this.toast.error(
+        this.translate.instant('media_detail.rescan_launch_error'),
+      );
     }
   }
 
