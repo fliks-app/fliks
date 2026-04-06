@@ -52,7 +52,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { SseService } from '../../core/services/sse.service';
 import { MediaType } from '../../core/enums/media-type.enum';
 
-const LS_EPISODES_HAS_FILE_ONLY = 'suitarr.mediaDetail.episodesHasFileOnly';
+const LS_EPISODES_HAS_FILE_ONLY = 'fliks.mediaDetail.episodesHasFileOnly';
 
 function readEpisodesHasFileOnlyFromStorage(): boolean {
   if (typeof localStorage === 'undefined') return false;
@@ -517,9 +517,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!m) return;
     try {
       if (seasonId != null) {
-        sessionStorage.setItem(`suitarr.season.${m.id}`, String(seasonId));
+        sessionStorage.setItem(`fliks.season.${m.id}`, String(seasonId));
       } else {
-        sessionStorage.removeItem(`suitarr.season.${m.id}`);
+        sessionStorage.removeItem(`fliks.season.${m.id}`);
       }
     } catch { /* private mode */ }
   }
@@ -528,7 +528,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const m = this.media();
     if (!m) return null;
     try {
-      const v = sessionStorage.getItem(`suitarr.season.${m.id}`);
+      const v = sessionStorage.getItem(`fliks.season.${m.id}`);
       return v ? Number(v) : null;
     } catch { return null; }
   }

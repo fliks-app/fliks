@@ -7,7 +7,7 @@ import {
 
 const BASE_URL = 'https://www.subsynchro.com';
 const SEARCH_URL = `${BASE_URL}/include/ajax/subMarin.php`;
-const USER_AGENT = 'Suitarr';
+const USER_AGENT = 'Fliks';
 
 interface SubsynchroSearchItem {
   titre: string;

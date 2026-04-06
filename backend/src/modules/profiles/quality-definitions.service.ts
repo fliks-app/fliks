@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { QualityDefinition } from './entities/quality-definition.entity';
-import { SUITARR_QUALITIES } from '../../common/constants/suitarr-qualities';
+import { APP_QUALITIES } from '../../common/constants/app-qualities';
 import { QualityDefinitionItemDto } from './dto/update-quality-definitions.dto';
 
 /**
@@ -63,7 +63,7 @@ export class QualityDefinitionsService {
   async ensureDefaults(): Promise<void> {
     if ((await this.repo.count()) > 0) return;
 
-    const entities = SUITARR_QUALITIES.map((q) => {
+    const entities = APP_QUALITIES.map((q) => {
       const def = getDefault(q.resolution, q.source);
       return this.repo.create({
         qualityId: q.id,
@@ -82,7 +82,7 @@ export class QualityDefinitionsService {
   async getDefaults(): Promise<QualityDefinition[]> {
     const existing = await this.findAll();
     return existing.map((d) => {
-      const q = SUITARR_QUALITIES.find((sq) => sq.id === d.qualityId);
+      const q = APP_QUALITIES.find((sq) => sq.id === d.qualityId);
       const def = q ? getDefault(q.resolution, q.source) : getDefault(0, '');
       return {
         ...d,

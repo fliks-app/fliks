@@ -49,7 +49,7 @@ export class SubdlProvider implements SubtitleProviderInterface {
     const res = await rateLimitedFetch(
       PROVIDER_TYPE,
       `https://api.subdl.com/api/v1/subtitles?${query}`,
-      { headers: { 'User-Agent': 'Suitarr/1.0' } },
+      { headers: { 'User-Agent': 'Fliks/1.0' } },
     );
 
     if (!res) return [];
@@ -91,7 +91,7 @@ export class SubdlProvider implements SubtitleProviderInterface {
     // providerFileId contains the relative URL path from search results
     const dlUrl = `https://dl.subdl.com${result.providerFileId}`;
     const res = await rateLimitedFetch(PROVIDER_TYPE, dlUrl, {
-      headers: { 'User-Agent': 'Suitarr/1.0' },
+      headers: { 'User-Agent': 'Fliks/1.0' },
     });
 
     if (!res || !res.ok) {
@@ -111,7 +111,7 @@ export class SubdlProvider implements SubtitleProviderInterface {
       imdb_id: 'tt0111161',
     });
     const res = await fetch(`https://api.subdl.com/api/v1/subtitles?${query}`, {
-      headers: { 'User-Agent': 'Suitarr/1.0' },
+      headers: { 'User-Agent': 'Fliks/1.0' },
     });
     return res.ok;
   }

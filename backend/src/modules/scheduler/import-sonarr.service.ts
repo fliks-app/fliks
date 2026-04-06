@@ -8,7 +8,7 @@ import {
   QualityProfile,
   QualityProfileItem,
 } from '../profiles/entities/quality-profile.entity';
-import { SUITARR_QUALITIES } from '../../common/constants/suitarr-qualities';
+import { APP_QUALITIES } from '../../common/constants/app-qualities';
 import { MediaType, MediaStatus } from '../../common/enums';
 import {
   withTemporaryRestoredDatabase,
@@ -227,7 +227,7 @@ export class ImportSonarrService {
   }
 
   /**
-   * Sidecar subtitles next to already-imported episode files. Uses only Suitarr DB +
+   * Sidecar subtitles next to already-imported episode files. Uses only Fliks DB +
    * disk (same paths as streaming); no Sonarr episodefile API.
    */
   private async importSidecarSubtitlesForSyncedSeries(
@@ -380,7 +380,7 @@ export class ImportSonarrService {
     }
 
     const presentIds = new Set(items.map((i) => i.quality.id));
-    for (const q of SUITARR_QUALITIES) {
+    for (const q of APP_QUALITIES) {
       if (!presentIds.has(q.id)) {
         items.push({
           quality: {
@@ -400,7 +400,7 @@ export class ImportSonarrService {
 
   private findLocalQuality(remoteName: string) {
     const normalized = remoteName.replace(/[\s\-_]/g, '').toLowerCase();
-    return SUITARR_QUALITIES.find(
+    return APP_QUALITIES.find(
       (q) => q.name.replace(/[\s\-_]/g, '').toLowerCase() === normalized,
     );
   }

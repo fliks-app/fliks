@@ -6,7 +6,7 @@ import {
 } from './subtitle-provider.interface';
 
 const BASE_URL = 'https://api.gestdown.info';
-const USER_AGENT = 'Suitarr/1.0';
+const USER_AGENT = 'Fliks/1.0';
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 5_000;
 

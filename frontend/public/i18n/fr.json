@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "Suitarr"
+    "name": "Fliks"
   },
   "file_info": {
     "title": "Informations du fichier",
@@ -196,7 +196,7 @@
     "sub_col_date": "Date"
   },
   "setup": {
-    "subtitle": "Configurez l'adresse de votre serveur Suitarr",
+    "subtitle": "Configurez l'adresse de votre serveur Fliks",
     "server_url": "Adresse du serveur",
     "server_url_hint": "L'adresse complète de votre serveur (ex: http://192.168.1.10:3000)",
     "test": "Tester",
@@ -622,7 +622,7 @@
     "col_log_context": "Contexte",
     "col_log_message": "Message",
     "import_title": "Importer depuis Radarr / Sonarr",
-    "import_subtitle": "Uploadez un dump PostgreSQL de Radarr/Sonarr (pg_dump en SQL ou format custom .dump). Le conteneur backend doit pouvoir exécuter psql/pg_restore vers la même base que Suitarr.",
+    "import_subtitle": "Uploadez un dump PostgreSQL de Radarr/Sonarr (pg_dump en SQL ou format custom .dump). Le conteneur backend doit pouvoir exécuter psql/pg_restore vers la même base que Fliks.",
     "import_radarr": "Importer Radarr (pg_dump)",
     "import_sonarr": "Importer Sonarr (pg_dump)"
   },
@@ -670,7 +670,7 @@
     },
     "general": {
       "title": "Paramètres généraux",
-      "subtitle": "Configuration globale de Suitarr.",
+      "subtitle": "Configuration globale de Fliks.",
       "section_metadata": "Métadonnées",
       "tmdb_api_key": "Clé API TMDB",
       "tmdb_api_key_hint": "Clé API v4 (Bearer token) ou v3 de The Movie Database.",
@@ -695,7 +695,7 @@
       "section_post_import": "Post-import",
       "post_import_script": "Script post-import",
       "post_import_script_hint": "/path/to/script.sh",
-      "post_import_script_vars": "Variables : SUITARR_MEDIA_TITLE, SUITARR_FILE_PATH, SUITARR_QUALITY, SUITARR_MEDIA_TYPE, SUITARR_MEDIA_ID"
+      "post_import_script_vars": "Variables : FLIKS_MEDIA_TITLE, FLIKS_MEDIA_ID, FLIKS_MEDIA_TYPE, FLIKS_QUALITY, FLIKS_FILE_COUNT, FLIKS_SOURCE_TITLE"
     },
     "indexers": {
       "title": "Indexeurs",
@@ -911,7 +911,7 @@
     },
     "notifications": {
       "title": "Notifications",
-      "subtitle": "Connectez Suitarr à Discord, Slack, ntfy ou d'autres services.",
+      "subtitle": "Connectez Fliks à Discord, Slack, ntfy ou d'autres services.",
       "new": "Nouvelle connexion",
       "load_error": "Impossible de charger les connexions.",
       "empty": "Aucune connexion de notification configurée.",
@@ -940,7 +940,7 @@
     },
     "media_servers": {
       "title": "Serveurs de medias",
-      "subtitle": "Connectez Suitarr a Emby, Jellyfin ou Plex pour rafraichir automatiquement leurs bibliotheques.",
+      "subtitle": "Connectez Fliks a Emby, Jellyfin ou Plex pour rafraichir automatiquement leurs bibliotheques.",
       "new": "Nouveau serveur",
       "load_error": "Impossible de charger les serveurs.",
       "empty": "Aucun serveur configure.",
@@ -970,7 +970,7 @@
     },
     "root_folders": {
       "title": "Dossiers racines",
-      "subtitle": "Répertoires où Suitarr dépose les fichiers téléchargés.",
+      "subtitle": "Répertoires où Fliks dépose les fichiers téléchargés.",
       "new": "Ajouter un dossier",
       "load_error": "Impossible de charger les dossiers.",
       "empty": "Aucun dossier racine configuré.",

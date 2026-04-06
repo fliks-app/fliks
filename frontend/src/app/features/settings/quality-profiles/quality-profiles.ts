@@ -18,7 +18,7 @@ import {
 } from '../../../core/services/api/profiles.service';
 import {
   MediaService,
-  SuitarrQualityDef,
+  AppQualityDef,
 } from '../../../core/services/api/media.service';
 
 @Component({
@@ -35,7 +35,7 @@ export class QualityProfilesComponent implements OnInit {
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
   readonly profiles = signal<QualityProfile[]>([]);
-  readonly definitions = signal<SuitarrQualityDef[]>([]);
+  readonly definitions = signal<AppQualityDef[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
   readonly saving = signal(false);
@@ -57,7 +57,7 @@ export class QualityProfilesComponent implements OnInit {
     try {
       const [profiles, defs] = await Promise.all([
         this.profilesApi.getQualityProfiles(),
-        this.mediaApi.getSuitarrQualities(),
+        this.mediaApi.getAppQualities(),
       ]);
       this.profiles.set(profiles);
       this.definitions.set(defs);

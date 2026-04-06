@@ -2,7 +2,7 @@
 
 ## Objectif
 
-Permettre d'envoyer des requetes a des services externes (Emby, Jellyfin, Plex...) lors d'evenements Suitarr (download termine, media ajoute, etc.). Meme philosophie que le systeme de notifications existant, mais avec des actions specifiques a chaque type de serveur (refresh de bibliotheque, etc.).
+Permettre d'envoyer des requetes a des services externes (Emby, Jellyfin, Plex...) lors d'evenements Fliks (download termine, media ajoute, etc.). Meme philosophie que le systeme de notifications existant, mais avec des actions specifiques a chaque type de serveur (refresh de bibliotheque, etc.).
 
 ---
 
@@ -112,7 +112,7 @@ Aux memes endroits que `notifications.dispatch`, ajouter `mediaServers.dispatch`
 - **`subtitle-scheduler.service.ts`** (~ligne 98) : apres `subtitle.downloaded`, dispatch refresh
 - **Plus tard** : ajouter les events `media.added` et `media.deleted` dans les services correspondants
 
-**Injection :** Ajouter `MediaServersService` dans `SuitarrSchedulerModule` imports.
+**Injection :** Ajouter `MediaServersService` dans `FliksSchedulerModule` imports.
 
 ### Etape 4 : Frontend — API service
 
@@ -175,7 +175,7 @@ Pattern identique a `subtitle-providers` ou `notifications` settings :
 | `backend/src/app.module.ts` | Import `MediaServersModule` |
 | `backend/src/modules/scheduler/completion.service.ts` | Ajout `mediaServersService.dispatch('download.complete', ...)` |
 | `backend/src/modules/scheduler/subtitle-scheduler.service.ts` | Ajout dispatch `subtitle.downloaded` |
-| `backend/src/modules/scheduler/suitarr-scheduler.module.ts` | Import `MediaServersModule` |
+| `backend/src/modules/scheduler/scheduler.module.ts` | Import `MediaServersModule` |
 | `frontend/src/app/app.routes.ts` | Ajout route settings/media-servers |
 | `frontend/src/app/shared/layout/layout.html` | Ajout lien sidebar |
 | `frontend/public/i18n/fr.json` | Cles i18n pour media-servers |

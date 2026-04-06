@@ -155,7 +155,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   private readonly locks = new Map<string, Promise<void>>();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private detectedHwAccel: HwAccelType = 'none';
-  private cachePath = '/tmp/suitarr-stream';
+  private cachePath = '/tmp/fliks-stream';
 
   async onModuleInit() {
     // Ensure cache directory exists

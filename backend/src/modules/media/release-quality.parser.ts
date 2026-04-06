@@ -1,11 +1,11 @@
 import {
-  getSuitarrQualityById,
-  SUITARR_QUALITIES,
-  SuitarrQualityDefinition,
-} from '../../common/constants/suitarr-qualities';
+  getAppQualityById,
+  APP_QUALITIES,
+  AppQualityDefinition,
+} from '../../common/constants/app-qualities';
 
 export interface ParsedReleaseQuality {
-  quality: SuitarrQualityDefinition;
+  quality: AppQualityDefinition;
   label: string;
 }
 
@@ -14,7 +14,7 @@ function norm(s: string): string {
 }
 
 /**
- * Infer Suitarr quality from a release name (torrent title).
+ * Infer app quality from a release name (torrent title).
  */
 export function parseReleaseQuality(title: string): ParsedReleaseQuality {
   const t = norm(title);
@@ -38,15 +38,15 @@ export function parseReleaseQuality(title: string): ParsedReleaseQuality {
   }
 
   if (/\bcam\b/.test(t)) {
-    const q = getSuitarrQualityById(2)!;
+    const q = getAppQualityById(2)!;
     return { quality: q, label: q.name };
   }
   if (/\b(ts|telesync)\b/.test(t)) {
-    const q = getSuitarrQualityById(3)!;
+    const q = getAppQualityById(3)!;
     return { quality: q, label: q.name };
   }
   if (/\btc\b|telecine/.test(t)) {
-    const q = getSuitarrQualityById(4)!;
+    const q = getAppQualityById(4)!;
     return { quality: q, label: q.name };
   }
 
@@ -65,7 +65,7 @@ export function parseReleaseQuality(title: string): ParsedReleaseQuality {
   else if (isDvd) source = 'dvd';
   else if (isSdtv) source = 'sdtv';
 
-  const candidates = SUITARR_QUALITIES.filter(
+  const candidates = APP_QUALITIES.filter(
     (q) => q.resolution === resolution && q.source === source,
   );
   if (candidates.length === 1) {
@@ -87,7 +87,7 @@ export function parseReleaseQuality(title: string): ParsedReleaseQuality {
     return { quality: q, label: q.name };
   }
 
-  const fuzzy = SUITARR_QUALITIES.filter((q) => {
+  const fuzzy = APP_QUALITIES.filter((q) => {
     if (resolution > 0 && q.resolution !== resolution) return false;
     if (resolution === 0 && q.resolution > 480) return false;
     return true;
@@ -95,6 +95,6 @@ export function parseReleaseQuality(title: string): ParsedReleaseQuality {
   const fallback =
     fuzzy.find((q) => q.source === source) ??
     fuzzy[fuzzy.length - 1] ??
-    SUITARR_QUALITIES[0];
+    APP_QUALITIES[0];
   return { quality: fallback, label: fallback.name };
 }

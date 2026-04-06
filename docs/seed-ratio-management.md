@@ -1,6 +1,6 @@
 # Gestion du ratio de seed
 
-Suitarr supprime automatiquement les torrents de qBittorrent une fois qu'ils ont atteint leur objectif de seed et que l'import est termine.
+Fliks supprime automatiquement les torrents de qBittorrent une fois qu'ils ont atteint leur objectif de seed et que l'import est termine.
 
 ## Configuration
 

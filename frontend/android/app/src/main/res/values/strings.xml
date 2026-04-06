@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Suitarr</string>
-    <string name="title_activity_main">Suitarr</string>
-    <string name="package_name">com.suitarr.app</string>
-    <string name="custom_url_scheme">com.suitarr.app</string>
+    <string name="app_name">Fliks</string>
+    <string name="title_activity_main">Fliks</string>
+    <string name="package_name">com.fliks.app</string>
+    <string name="custom_url_scheme">com.fliks.app</string>
 </resources>

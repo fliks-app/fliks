@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="ghcr.io/clementdelestre/suitarr"
+IMAGE="ghcr.io/clementdelestre/fliks"
 TAG="${1:-latest}"
 
 echo "==> Building ${IMAGE}:${TAG}"

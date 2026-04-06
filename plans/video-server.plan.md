@@ -1,4 +1,4 @@
-# Plan : Serveur vidéo intégré à Suitarr
+# Plan : Serveur vidéo intégré à Fliks
 
 ## État d'avancement (mis à jour 2026-04-04)
 
@@ -97,7 +97,7 @@
 ---
 
 ## Contexte
-Suitarr gère déjà l'acquisition et l'organisation des médias. L'objectif est d'intégrer un serveur vidéo complet (comparable à Jellyfin) pour éliminer la dépendance à un serveur externe. Le serveur doit supporter le direct play, le transcodage hardware (VA-API, NVENC, QSV), le HDR tone mapping, Chromecast, et les apps natives iOS/Android via Capacitor.
+Fliks gère déjà l'acquisition et l'organisation des médias. L'objectif est d'intégrer un serveur vidéo complet (comparable à Jellyfin) pour éliminer la dépendance à un serveur externe. Le serveur doit supporter le direct play, le transcodage hardware (VA-API, NVENC, QSV), le HDR tone mapping, Chromecast, et les apps natives iOS/Android via Capacitor.
 
 ## Infrastructure existante réutilisable
 - **FFmpeg** : déjà dans le container Docker, `FfprobeService` analyse les streams
@@ -201,7 +201,7 @@ player-audio-picker.ts        ← sélection piste audio
 
 **UI custom shaka-player** : Le player par défaut de shaka sera entièrement re-skinné :
 - Barre de contrôle custom DaisyUI (pas l'UI shaka par défaut) — utilise l'API `shaka.Player` sans le plugin UI
-- Thème cohérent avec le reste de Suitarr (couleurs, typographie, animations)
+- Thème cohérent avec le reste de Fliks (couleurs, typographie, animations)
 - Boutons additionnels : épisode suivant/précédent (séries), vitesse de lecture, ratio d'aspect
 - Miniatures de preview au survol de la timeline (via sprite sheet ou BIF)
 - Gestion des raccourcis clavier (espace, flèches, F, M, etc.)
@@ -321,7 +321,7 @@ ffmpeg -hwaccel qsv -hwaccel_output_format qsv \
 Nouvelles clés dans `app_settings` :
 - `streaming_hw_accel`: 'auto' | 'vaapi' | 'nvenc' | 'qsv' | 'none'
 - `streaming_max_sessions`: 3
-- `streaming_cache_path`: '/tmp/suitarr-transcode'
+- `streaming_cache_path`: '/tmp/fliks-transcode'
 - `streaming_default_quality`: 'auto'
 
 #### 2.6 Docker GPU passthrough

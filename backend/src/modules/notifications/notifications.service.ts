@@ -83,7 +83,7 @@ export class NotificationsService {
     try {
       await this.send(conn, 'health.issue', {
         test: true,
-        message: 'Test notification from Suitarr',
+        message: 'Test notification from Fliks',
       });
       return { ok: true, message: 'Test notification sent' };
     } catch (e) {
@@ -103,7 +103,7 @@ export class NotificationsService {
           const webhookUrl = String(s.webhookUrl ?? '');
           if (!webhookUrl) throw new Error('webhookUrl not configured');
           await axios.post(webhookUrl, {
-            username: String(s.username ?? 'Suitarr'),
+            username: String(s.username ?? 'Fliks'),
             content: this.formatMessage(event, payload),
           });
           break;
@@ -133,7 +133,7 @@ export class NotificationsService {
           const token = String(s.token ?? '');
           if (!url || !token) throw new Error('url and token required');
           await axios.post(`${url}/message?token=${token}`, {
-            title: `Suitarr — ${event}`,
+            title: `Fliks — ${event}`,
             message: this.formatMessage(event, payload),
             priority: 5,
           });
@@ -141,12 +141,12 @@ export class NotificationsService {
         }
         case 'ntfy': {
           const url = String(s.url ?? '').replace(/\/$/, '');
-          const topic = String(s.topic ?? 'suitarr');
+          const topic = String(s.topic ?? 'fliks');
           await axios.post(
             `${url}/${topic}`,
             this.formatMessage(event, payload),
             {
-              headers: { Title: `Suitarr — ${event}` },
+              headers: { Title: `Fliks — ${event}` },
             },
           );
           break;

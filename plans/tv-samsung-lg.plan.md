@@ -1,7 +1,7 @@
 # Plan : Compilation pour TV Samsung (Tizen) & LG (webOS)
 
 ## Context
-Les smart TV Samsung et LG utilisent des plateformes web-based (Tizen et webOS) qui exécutent des apps HTML/CSS/JS. L'app Angular Suitarr peut être packagée pour ces plateformes avec des adaptations UI et des outils de build spécifiques.
+Les smart TV Samsung et LG utilisent des plateformes web-based (Tizen et webOS) qui exécutent des apps HTML/CSS/JS. L'app Angular Fliks peut être packagée pour ces plateformes avec des adaptations UI et des outils de build spécifiques.
 
 ---
 
@@ -27,12 +27,12 @@ mkdir -p tv/tizen
 <?xml version="1.0" encoding="UTF-8"?>
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:tizen="http://tizen.org/ns/widgets"
-        id="http://suitarr.app"
+        id="http://fliks.app"
         version="1.0.0"
         viewmodes="maximized">
-    <tizen:application id="com.suitarr.app" package="com.suitarr" required_version="6.0"/>
+    <tizen:application id="com.fliks.app" package="com.fliks" required_version="6.0"/>
     <content src="index.html"/>
-    <name>Suitarr</name>
+    <name>Fliks</name>
     <icon src="icon.png"/>
     <tizen:privilege name="http://tizen.org/privilege/internet"/>
     <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
@@ -58,8 +58,8 @@ Résultat : fichier `.wgt` installable sur TV Samsung.
 
 ```bash
 # Sur TV en mode dev (connectée au même réseau)
-tizen install -n Suitarr.wgt -t <TV_IP>:26101
-tizen run -p com.suitarr.app -t <TV_IP>:26101
+tizen install -n Fliks.wgt -t <TV_IP>:26101
+tizen run -p com.fliks.app -t <TV_IP>:26101
 ```
 
 ---
@@ -80,12 +80,12 @@ mkdir -p tv/webos
 **Fichier `tv/webos/appinfo.json`** :
 ```json
 {
-  "id": "com.suitarr.app",
+  "id": "com.fliks.app",
   "version": "1.0.0",
-  "vendor": "Suitarr",
+  "vendor": "Fliks",
   "type": "web",
   "main": "index.html",
-  "title": "Suitarr",
+  "title": "Fliks",
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
   "bgImage": "splash.png",
@@ -113,8 +113,8 @@ Résultat : fichier `.ipk` installable sur TV LG.
 ares-setup-device
 
 # Installer et lancer
-ares-install --device <tv_name> com.suitarr.app_1.0.0_all.ipk
-ares-launch --device <tv_name> com.suitarr.app
+ares-install --device <tv_name> com.fliks.app_1.0.0_all.ipk
+ares-launch --device <tv_name> com.fliks.app
 ```
 
 ---
@@ -216,7 +216,7 @@ cp -r dist/frontend/browser/* tv/webos/
 3. **Performances** : Les SoC des TV sont lents. Éviter les animations lourdes, limiter les DOM nodes, utiliser `trackBy` partout.
 4. **Certification** : Pour publier sur le Samsung TV Store ou LG Content Store, il faut passer une certification (tests de conformité, QA). Le sideloading en mode dev est plus rapide pour usage personnel.
 5. **Résolution** : Tizen supporte 4K (3840x2160) mais le rendu CSS est en 1920x1080 upscalé. Designer pour 1080p.
-6. **Vidéo** : Si Suitarr intègre un jour la lecture vidéo, utiliser les API natives (`AVPlay` sur Tizen, `webOS video tag`) plutôt que le `<video>` HTML standard.
+6. **Vidéo** : Si Fliks intègre un jour la lecture vidéo, utiliser les API natives (`AVPlay` sur Tizen, `webOS video tag`) plutôt que le `<video>` HTML standard.
 
 ---
 

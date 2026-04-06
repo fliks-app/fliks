@@ -1,15 +1,15 @@
 import { CreateQualityProfileDto } from './dto/create-quality-profile.dto';
 import {
   DEFAULT_MOVIE_QUALITY_PROFILE_NAME,
-  SUITARR_QUALITIES,
-} from '../../common/constants/suitarr-qualities';
+  APP_QUALITIES,
+} from '../../common/constants/app-qualities';
 
 /** Default profile: 720p–1080p web/bluray allowed, cutoff WEBDL-1080p (id 16). */
 export function buildDefaultMovieQualityProfileDto(): CreateQualityProfileDto {
   const allowedIds = new Set([
     11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
   ]);
-  const items = SUITARR_QUALITIES.map((q, index) => ({
+  const items = APP_QUALITIES.map((q, index) => ({
     qualityId: q.id,
     qualityName: q.name,
     resolution: q.resolution,

@@ -8,7 +8,7 @@ import {
   QualityProfile,
   QualityProfileItem,
 } from '../profiles/entities/quality-profile.entity';
-import { SUITARR_QUALITIES } from '../../common/constants/suitarr-qualities';
+import { APP_QUALITIES } from '../../common/constants/app-qualities';
 import { MediaType, MediaStatus } from '../../common/enums';
 import {
   withTemporaryRestoredDatabase,
@@ -388,7 +388,7 @@ export class ImportRadarrService {
 
     // Fill in missing qualities as not allowed
     const presentIds = new Set(items.map((i) => i.quality.id));
-    for (const q of SUITARR_QUALITIES) {
+    for (const q of APP_QUALITIES) {
       if (!presentIds.has(q.id)) {
         items.push({
           quality: {
@@ -409,7 +409,7 @@ export class ImportRadarrService {
   private findLocalQuality(remoteName: string) {
     // Normalize: remove spaces, dashes, case → e.g. "webdl1080p"
     const normalized = remoteName.replace(/[\s\-_]/g, '').toLowerCase();
-    return SUITARR_QUALITIES.find(
+    return APP_QUALITIES.find(
       (q) => q.name.replace(/[\s\-_]/g, '').toLowerCase() === normalized,
     );
   }

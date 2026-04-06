@@ -1,6 +1,6 @@
 # Transcoding Pipelines
 
-Suitarr supporte 4 pipelines de transcodage video, avec gestion du tone mapping HDR vers SDR.
+Fliks supporte 4 pipelines de transcodage video, avec gestion du tone mapping HDR vers SDR.
 
 ## Pipelines
 

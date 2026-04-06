@@ -9,7 +9,6 @@ import { Season } from './entities/season.entity';
 import { Episode } from './entities/episode.entity';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { parseReleaseQuality } from './release-quality.parser';
-import { getSuitarrQualityById } from '../../common/constants/suitarr-qualities';
 import { ImportFileEntry } from './dto/confirm-disk-import.dto';
 
 const VIDEO_EXTS = new Set([

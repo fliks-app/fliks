@@ -164,7 +164,7 @@ export class MoviesComponent implements OnInit, OnDestroy {
     this.saveFilters();
   }
 
-  private readonly storageKey = 'suitarr.filters.movies';
+  private readonly storageKey = 'fliks.filters.movies';
 
   private saveFilters() {
     const data: Record<string, string> = {};

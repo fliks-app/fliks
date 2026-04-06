@@ -37,7 +37,14 @@ export type SseEvent =
   | { type: 'command.started'; name: string }
   | { type: 'command.completed'; name: string; status: string }
   | { type: 'rescan.started'; mediaId: number; title: string }
-  | { type: 'rescan.completed'; mediaId: number; title: string; added: number; removed: number; updated: number }
+  | {
+      type: 'rescan.completed';
+      mediaId: number;
+      title: string;
+      added: number;
+      removed: number;
+      updated: number;
+    }
   | { type: 'rescan.failed'; mediaId: number; title: string; error: string }
   | {
       type: 'player.command';

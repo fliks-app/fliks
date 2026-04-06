@@ -31,10 +31,10 @@ import { ProfilesService } from '../profiles/profiles.service';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { NamingService } from '../scheduler/naming.service';
 import {
-  getSuitarrQualityById,
-  SUITARR_QUALITIES,
-  SuitarrQualityDefinition,
-} from '../../common/constants/suitarr-qualities';
+  getAppQualityById,
+  APP_QUALITIES,
+  AppQualityDefinition,
+} from '../../common/constants/app-qualities';
 
 import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
@@ -305,10 +305,10 @@ export class MediaService {
     });
 
     if (query.cutoffUnmet === true) {
-      const qualityByName = new Map(SUITARR_QUALITIES.map((q) => [q.name, q]));
+      const qualityByName = new Map(APP_QUALITIES.map((q) => [q.name, q]));
       enriched = enriched.filter((m) => {
         if (!m.files?.length || !m.qualityProfile) return false;
-        const cutoffQuality = getSuitarrQualityById(m.qualityProfile.cutoff);
+        const cutoffQuality = getAppQualityById(m.qualityProfile.cutoff);
         if (!cutoffQuality) return false;
         return !m.files.some((f) => {
           const fq = qualityByName.get(f.quality);
@@ -1394,13 +1394,13 @@ export class MediaService {
     else if (/\bweb-?rip\b/.test(t)) source = 'web';
     else if (/\b(dvd|dvdrip)\b/.test(t)) source = 'dvd';
 
-    const match = SUITARR_QUALITIES.find(
+    const match = APP_QUALITIES.find(
       (q) => q.resolution === resolution && q.source === source,
     );
     if (match) return match.name;
 
     // Fallback: any quality with correct resolution
-    const fallback = SUITARR_QUALITIES.find((q) => q.resolution === resolution);
+    const fallback = APP_QUALITIES.find((q) => q.resolution === resolution);
     return fallback?.name ?? `HDTV-${resolution}p`;
   }
 }

@@ -522,12 +522,12 @@ export class CompletionService {
         const execAsync = promisify(exec);
         const env = {
           ...process.env,
-          SUITARR_MEDIA_TITLE: media.title,
-          SUITARR_MEDIA_ID: String(media.id),
-          SUITARR_MEDIA_TYPE: media.type,
-          SUITARR_QUALITY: history.quality,
-          SUITARR_FILE_COUNT: String(importedFiles.length),
-          SUITARR_SOURCE_TITLE: history.sourceTitle,
+          FLIKS_MEDIA_TITLE: media.title,
+          FLIKS_MEDIA_ID: String(media.id),
+          FLIKS_MEDIA_TYPE: media.type,
+          FLIKS_QUALITY: history.quality,
+          FLIKS_FILE_COUNT: String(importedFiles.length),
+          FLIKS_SOURCE_TITLE: history.sourceTitle,
         };
         const { stdout, stderr } = await execAsync(script, {
           env,

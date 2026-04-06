@@ -15,11 +15,7 @@ import { TorznabService } from '../indexers/torznab.service';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
 import { MediaService } from '../media/media.service';
-import {
-  MediaType,
-  MediaStatus,
-  MinimumAvailability,
-} from '../../common/enums';
+import { MediaType, MinimumAvailability } from '../../common/enums';
 import { ConfigService } from '@nestjs/config';
 import { CompletionService } from './completion.service';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
@@ -208,6 +204,7 @@ export class SchedulerService implements OnModuleInit {
 
     // Fire-and-forget, do not await
     this.dispatchCommand(name, cmd.id).catch((e) =>
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       this.log.error(`Command ${name} failed: ${e.message}`),
     );
 

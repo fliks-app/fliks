@@ -1,7 +1,7 @@
 # Plan : Compilation Android & iOS via Capacitor
 
 ## Context
-L'app Suitarr est une SPA Angular 21 avec PWA déjà configurée (service worker, manifest, icônes). Capacitor est le choix naturel pour wrapper l'app web dans un shell natif Android/iOS sans réécrire le code.
+L'app Fliks est une SPA Angular 21 avec PWA déjà configurée (service worker, manifest, icônes). Capacitor est le choix naturel pour wrapper l'app web dans un shell natif Android/iOS sans réécrire le code.
 
 ## Prérequis
 - Node 20+, npm
@@ -16,7 +16,7 @@ L'app Suitarr est une SPA Angular 21 avec PWA déjà configurée (service worker
 ```bash
 cd frontend
 npm install @capacitor/core @capacitor/cli
-npx cap init Suitarr com.suitarr.app --web-dir dist/frontend/browser
+npx cap init Fliks com.fliks.app --web-dir dist/frontend/browser
 ```
 
 Cela crée `capacitor.config.ts` à la racine de `frontend/`.
@@ -26,8 +26,8 @@ Cela crée `capacitor.config.ts` à la racine de `frontend/`.
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.suitarr.app',
-  appName: 'Suitarr',
+  appId: 'com.fliks.app',
+  appName: 'Fliks',
   webDir: 'dist/frontend/browser',
   server: {
     // En dev, pointer vers le backend pour les requêtes API
@@ -57,7 +57,7 @@ Cela crée les dossiers `android/` et `ios/` dans `frontend/`.
 
 ## Étape 3 : Adapter la configuration API
 
-Le problème principal : l'app web fait des requêtes relatives (`/api/...`) qui fonctionnent en web car le proxy ou le serveur backend est sur le même domaine. En natif, il faut pointer vers le serveur Suitarr.
+Le problème principal : l'app web fait des requêtes relatives (`/api/...`) qui fonctionnent en web car le proxy ou le serveur backend est sur le même domaine. En natif, il faut pointer vers le serveur Fliks.
 
 **Solution** : Écran de saisie de l'URL du serveur au premier lancement.
 
@@ -76,7 +76,7 @@ npm install @capacitor/preferences
    - L'URL reste modifiable dans les settings de l'app
 
 3. **Écran `/setup`** :
-   - Champ texte : "Adresse du serveur Suitarr" (placeholder : `http://192.168.1.x:3000`)
+   - Champ texte : "Adresse du serveur Fliks" (placeholder : `http://192.168.1.x:3000`)
    - Bouton "Tester" → appelle `GET {url}/api/health`
    - Bouton "Enregistrer" (désactivé si test échoué)
    - Cet écran n'est affiché que si aucune URL n'est configurée ou si l'utilisateur y accède depuis les settings

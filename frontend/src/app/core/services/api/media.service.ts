@@ -15,7 +15,7 @@ export interface QualityProfileBrief {
   }[];
 }
 
-export interface SuitarrQualityDef {
+export interface AppQualityDef {
   id: number;
   name: string;
   resolution: number;
@@ -199,8 +199,8 @@ export class MediaService {
     return firstValueFrom(this.http.get<Media>(`/api/media/${id}`));
   }
 
-  getSuitarrQualities() {
-    return firstValueFrom(this.http.get<SuitarrQualityDef[]>('/api/media/qualities'));
+  getAppQualities() {
+    return firstValueFrom(this.http.get<AppQualityDef[]>('/api/media/qualities'));
   }
 
   create(data: Partial<Media>) {

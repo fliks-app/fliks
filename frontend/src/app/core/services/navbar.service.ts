@@ -5,7 +5,7 @@ import { Injectable, signal } from '@angular/core';
  */
 @Injectable({ providedIn: 'root' })
 export class NavbarService {
-  /** When set, the navbar shows this title instead of "Suitarr" on scroll. */
+  /** When set, the navbar shows this title instead of "Fliks" on scroll. */
   readonly heroTitle = signal('');
   /** Whether the current page has a hero fanart. */
   readonly isHeroPage = signal(false);

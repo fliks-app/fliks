@@ -84,4 +84,4 @@ import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
     SubtitleSchedulerService,
   ],
 })
-export class SuitarrSchedulerModule {}
+export class FliksSchedulerModule {}

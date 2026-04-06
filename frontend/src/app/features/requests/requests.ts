@@ -15,8 +15,8 @@ import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import {
   RequestsService,
-  SuitarrRequestRow,
-  SuitarrRequestStatus,
+  FliksRequestRow,
+  FliksRequestStatus,
 } from '../../core/services/api/requests.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -52,10 +52,10 @@ export class RequestsComponent implements OnInit {
   private readonly viewDeclineModal = viewChild(RequestViewDeclineModalComponent);
   private readonly editModal = viewChild(RequestEditModalComponent);
 
-  readonly rows = signal<SuitarrRequestRow[]>([]);
+  readonly rows = signal<FliksRequestRow[]>([]);
   readonly total = signal(0);
   readonly loading = signal(false);
-  readonly statusFilter = signal<SuitarrRequestStatus | ''>('');
+  readonly statusFilter = signal<FliksRequestStatus | ''>('');
   readonly declineForId = signal<number | null>(null);
   readonly declineReasonText = signal('');
   /** Read-only modal: motif affiché après un refus. */
@@ -68,7 +68,7 @@ export class RequestsComponent implements OnInit {
   // Edit modal
   readonly qualityProfiles = signal<{ id: number; name: string }[]>([]);
   readonly languageProfiles = signal<{ id: number; name: string }[]>([]);
-  readonly editingRequest = signal<SuitarrRequestRow | null>(null);
+  readonly editingRequest = signal<FliksRequestRow | null>(null);
   readonly editQualityProfileId = signal<number | null>(null);
   readonly editLanguageProfileId = signal<number | null>(null);
   readonly editSaving = signal(false);
@@ -92,7 +92,7 @@ export class RequestsComponent implements OnInit {
   }
 
   onStatusChange(value: string) {
-    this.statusFilter.set(value as SuitarrRequestStatus | '');
+    this.statusFilter.set(value as FliksRequestStatus | '');
     this.reload();
   }
 
@@ -125,14 +125,14 @@ export class RequestsComponent implements OnInit {
     }
   }
 
-  canCancel(row: SuitarrRequestRow): boolean {
+  canCancel(row: FliksRequestRow): boolean {
     if (row.status !== 'pending') return false;
     const u = this.auth.user();
     return !!u && row.userId === u.id;
   }
 
   /** Colonne d’actions : supprimer seul (hors pending / refus avec motif gérés ailleurs). */
-  showOrphanDeleteColumn(row: SuitarrRequestRow): boolean {
+  showOrphanDeleteColumn(row: FliksRequestRow): boolean {
     if (!this.auth.hasPermission('requests.manage')) return false;
     if (row.status === 'pending') return false;
     if (row.status === 'declined' && row.declinedReason?.trim()) return false;
@@ -150,7 +150,7 @@ export class RequestsComponent implements OnInit {
     this.declineForId.set(null);
   }
 
-  openViewDeclineReason(row: SuitarrRequestRow) {
+  openViewDeclineReason(row: FliksRequestRow) {
     const reason = row.declinedReason?.trim();
     if (row.status !== 'declined' || !reason) return;
     this.viewDeclineReasonModal.set({ mediaTitle: row.title, reason });
@@ -185,7 +185,7 @@ export class RequestsComponent implements OnInit {
     }
   }
 
-  async removeRequest(row: SuitarrRequestRow) {
+  async removeRequest(row: FliksRequestRow) {
     const manage = this.auth.hasPermission('requests.manage');
     const message = manage
       ? this.translate.instant('requests.confirm_delete')
@@ -211,7 +211,7 @@ export class RequestsComponent implements OnInit {
     }
   }
 
-  openEdit(row: SuitarrRequestRow) {
+  openEdit(row: FliksRequestRow) {
     this.editingRequest.set(row);
     this.editQualityProfileId.set(row.qualityProfileId);
     this.editLanguageProfileId.set(row.languageProfileId);
@@ -242,13 +242,13 @@ export class RequestsComponent implements OnInit {
     }
   }
 
-  private patchRow(updated: SuitarrRequestRow) {
+  private patchRow(updated: FliksRequestRow) {
     this.rows.update((list) =>
       list.map((r) => (r.id === updated.id ? updated : r)),
     );
   }
 
-  mediaLink(row: SuitarrRequestRow): (string | number)[] {
+  mediaLink(row: FliksRequestRow): (string | number)[] {
     if (row.mediaId) {
       return row.mediaType === 'movie'
         ? ['/movies', row.mediaId]
@@ -259,7 +259,7 @@ export class RequestsComponent implements OnInit {
       : ['/add', 'tv', row.tmdbId];
   }
 
-  statusBadgeClass(status: SuitarrRequestStatus): string {
+  statusBadgeClass(status: FliksRequestStatus): string {
     switch (status) {
       case 'pending':
         return 'badge-warning';

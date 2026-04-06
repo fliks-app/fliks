@@ -12,7 +12,7 @@ import {
 
 const PROVIDER_TYPE = 'opensubtitles';
 const DEFAULT_API_KEY = 'KXXhBJcOUG9xTxmPzIIkE56obyHtyCyd';
-const USER_AGENT = 'Suitarr v1.0';
+const USER_AGENT = 'Fliks v1.0';
 
 interface OpenSubtitlesSettings {
   apiKey?: string;

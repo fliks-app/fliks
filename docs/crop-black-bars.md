@@ -1,6 +1,6 @@
 # Suppression automatique des bandes noires (Crop)
 
-Suitarr detecte et supprime automatiquement les bandes noires (letterbox/pillarbox) integrees dans les fichiers video lors du transcodage.
+Fliks detecte et supprime automatiquement les bandes noires (letterbox/pillarbox) integrees dans les fichiers video lors du transcodage.
 
 ## Vue d'ensemble
 

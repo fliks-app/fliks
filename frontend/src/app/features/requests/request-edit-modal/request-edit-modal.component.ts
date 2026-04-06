@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, ElementRef, input, output, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
-import { SuitarrRequestRow } from '../../../core/services/api/requests.service';
+import { FliksRequestRow } from '../../../core/services/api/requests.service';
 
 @Component({
   selector: 'app-request-edit-modal',
@@ -10,7 +10,7 @@ import { SuitarrRequestRow } from '../../../core/services/api/requests.service';
   templateUrl: './request-edit-modal.component.html',
 })
 export class RequestEditModalComponent {
-  readonly row = input<SuitarrRequestRow | null>(null);
+  readonly row = input<FliksRequestRow | null>(null);
   readonly qualityProfiles = input<{ id: number; name: string }[]>([]);
   readonly languageProfiles = input<{ id: number; name: string }[]>([]);
   readonly qualityProfileId = input<number | null>(null);

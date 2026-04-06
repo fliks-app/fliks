@@ -23,10 +23,7 @@ export function resolveSubtitleAbsolutePath(
   }
 
   const sep = path.sep;
-  if (
-    !absolute.startsWith(normRoot + sep) &&
-    absolute !== normRoot
-  ) {
+  if (!absolute.startsWith(normRoot + sep) && absolute !== normRoot) {
     return null;
   }
 

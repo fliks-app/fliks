@@ -1,8 +1,8 @@
-# Suitarr — Plan Subtitles (equivalent Bazarr)
+# Fliks — Plan Subtitles (equivalent Bazarr)
 
 ## Objectif
 
-Integrer la gestion des sous-titres directement dans Suitarr, sans dependance externe a Bazarr. Le systeme doit pouvoir rechercher, telecharger, upgrader et synchroniser automatiquement les sous-titres pour les films et series geres par Suitarr.
+Integrer la gestion des sous-titres directement dans Fliks, sans dependance externe a Bazarr. Le systeme doit pouvoir rechercher, telecharger, upgrader et synchroniser automatiquement les sous-titres pour les films et series geres par Fliks.
 
 ---
 
@@ -10,7 +10,7 @@ Integrer la gestion des sous-titres directement dans Suitarr, sans dependance ex
 
 ### 1.1 Enums & constantes
 
-- [x] `SubtitleLanguage` — couvert par `suitarr-languages.ts` existant (ISO 639-1)
+- [x] `SubtitleLanguage` — couvert par `app-languages.ts` existant (ISO 639-1)
 - [x] `SubtitleProviderType` — enum : `OPENSUBTITLES`, `SUBSCENE`, `SOUS_TITRES_EU`, `SUBDL`, `SUBSYNCHRO`, `SUPERSUBTITLES`, `WHISPER` (extensible)
 - [x] `SubtitleStatus` — enum : `MISSING`, `DOWNLOADED`, `UPGRADED`, `SYNCED`, `FAILED`
 

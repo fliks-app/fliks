@@ -5,7 +5,7 @@ import { User } from '../../users/entities/user.entity';
 import { RequestComment } from './request-comment.entity';
 
 @Entity('requests')
-export class SuitarrRequest extends BaseEntity {
+export class FliksRequest extends BaseEntity {
   @ManyToOne(() => User, { eager: true })
   @JoinColumn({ name: 'userId' })
   user: User;

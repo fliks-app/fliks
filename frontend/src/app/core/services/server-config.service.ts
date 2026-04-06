@@ -2,7 +2,7 @@ import { Injectable, signal, computed } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
 
-const STORAGE_KEY = 'suitarr_server_url';
+const STORAGE_KEY = 'fliks_server_url';
 
 @Injectable({ providedIn: 'root' })
 export class ServerConfigService {

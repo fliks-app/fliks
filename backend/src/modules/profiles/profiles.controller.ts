@@ -18,7 +18,7 @@ import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
 import { QualityProfile } from './entities/quality-profile.entity';
 import { LanguageProfile } from './entities/language-profile.entity';
-import { SUITARR_LANGUAGES } from '../../common/constants/suitarr-languages';
+import { APP_LANGUAGES } from '../../common/constants/app-languages';
 
 @Controller('profiles')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
@@ -61,7 +61,7 @@ export class ProfilesController {
   @Get('language-definitions')
   @CheckPolicies((ability) => ability.can(Action.Read, LanguageProfile))
   languageDefinitions() {
-    return SUITARR_LANGUAGES;
+    return APP_LANGUAGES;
   }
 
   @Post('language')

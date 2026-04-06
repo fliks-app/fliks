@@ -8,7 +8,7 @@ export interface RequestUser {
   username: string;
 }
 
-export type SuitarrRequestStatus =
+export type FliksRequestStatus =
   | 'pending'
   | 'approved'
   | 'declined'
@@ -32,14 +32,14 @@ export interface UpdateRequestBody {
   rootFolderId?: number;
 }
 
-export interface SuitarrRequestRow {
+export interface FliksRequestRow {
   id: number;
   userId: number;
   user: RequestUser;
   mediaType: MediaType;
   tmdbId: number;
   title: string;
-  status: SuitarrRequestStatus;
+  status: FliksRequestStatus;
   approvedById: number | null;
   approvedBy: RequestUser | null;
   declinedReason: string | null;
@@ -53,12 +53,12 @@ export interface SuitarrRequestRow {
 }
 
 export interface RequestsPage {
-  data: SuitarrRequestRow[];
+  data: FliksRequestRow[];
   total: number;
 }
 
 export interface ListRequestsParams {
-  status?: SuitarrRequestStatus;
+  status?: FliksRequestStatus;
   userId?: number;
   page?: number;
   limit?: number;
@@ -69,11 +69,11 @@ export class RequestsService {
   private readonly http = inject(HttpClient);
 
   create(body: CreateRequestBody) {
-    return firstValueFrom(this.http.post<SuitarrRequestRow>('/api/requests', body));
+    return firstValueFrom(this.http.post<FliksRequestRow>('/api/requests', body));
   }
 
   update(id: number, body: UpdateRequestBody) {
-    return firstValueFrom(this.http.patch<SuitarrRequestRow>(`/api/requests/${id}`, body));
+    return firstValueFrom(this.http.patch<FliksRequestRow>(`/api/requests/${id}`, body));
   }
 
   list(params: ListRequestsParams = {}) {
@@ -91,12 +91,12 @@ export class RequestsService {
   }
 
   approve(id: number) {
-    return firstValueFrom(this.http.post<SuitarrRequestRow>(`/api/requests/${id}/approve`, {}));
+    return firstValueFrom(this.http.post<FliksRequestRow>(`/api/requests/${id}/approve`, {}));
   }
 
   decline(id: number, reason?: string) {
     return firstValueFrom(
-      this.http.post<SuitarrRequestRow>(`/api/requests/${id}/decline`, {
+      this.http.post<FliksRequestRow>(`/api/requests/${id}/decline`, {
         reason: reason?.trim() || undefined,
       }),
     );

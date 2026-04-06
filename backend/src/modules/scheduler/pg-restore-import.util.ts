@@ -20,7 +20,7 @@ function pgEnv(password: string): NodeJS.ProcessEnv {
 }
 
 /**
- * Writes a Radarr/Sonarr pg_dump upload to a temp DB (same Postgres as Suitarr),
+ * Writes a Radarr/Sonarr pg_dump upload to a temp DB (same Postgres as Fliks),
  * runs restore via psql/pg_restore, executes the callback, then drops the DB.
  */
 export async function withTemporaryRestoredDatabase(
@@ -30,10 +30,10 @@ export async function withTemporaryRestoredDatabase(
 ): Promise<void> {
   const host = config.get<string>('DB_HOST', 'localhost');
   const port = config.get<number>('DB_PORT', 5432);
-  const user = config.get<string>('DB_USERNAME', 'suitarr');
-  const password = config.get<string>('DB_PASSWORD', 'suitarr');
-  const dbName = `suitarr_imp_${randomUUID().replace(/-/g, '')}`;
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'suitarr-import-'));
+  const user = config.get<string>('DB_USERNAME', 'fliks');
+  const password = config.get<string>('DB_PASSWORD', 'fliks');
+  const dbName = `fliks_imp_${randomUUID().replace(/-/g, '')}`;
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'fliks-import-'));
   const custom = isCustomPgDumpFormat(fileBuffer);
   const ext = custom ? '.dump' : '.sql';
   const dumpPath = path.join(tmpDir, `arr${ext}`);

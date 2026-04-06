@@ -10,7 +10,7 @@ import { MetadataProvidersModule } from './modules/metadata-providers/metadata-p
 import { IndexersModule } from './modules/indexers/indexers.module';
 import { DownloadClientsModule } from './modules/download-clients/download-clients.module';
 import { RequestsModule } from './modules/requests/requests.module';
-import { SuitarrSchedulerModule } from './modules/scheduler/scheduler.module';
+import { FliksSchedulerModule } from './modules/scheduler/scheduler.module';
 import { EventsModule } from './modules/scheduler/events.module';
 import { RootFoldersModule } from './modules/root-folders/root-folders.module';
 import { BlocklistModule } from './modules/blocklist/blocklist.module';
@@ -48,9 +48,9 @@ import { join } from 'path';
         type: 'postgres',
         host: config.get('DB_HOST', 'localhost'),
         port: config.get<number>('DB_PORT', 5432),
-        username: config.get('DB_USERNAME', 'suitarr'),
-        password: config.get('DB_PASSWORD', 'suitarr'),
-        database: config.get('DB_NAME', 'suitarr'),
+        username: config.get('DB_USERNAME', 'fliks'),
+        password: config.get('DB_PASSWORD', 'fliks'),
+        database: config.get('DB_NAME', 'fliks'),
         autoLoadEntities: true,
         synchronize: true,
         extra: { max: 20 },
@@ -66,7 +66,7 @@ import { join } from 'path';
     IndexersModule,
     DownloadClientsModule,
     RequestsModule,
-    SuitarrSchedulerModule,
+    FliksSchedulerModule,
     RootFoldersModule,
     BlocklistModule,
     NotificationsModule,

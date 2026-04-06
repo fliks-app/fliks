@@ -19,7 +19,7 @@ export class BackupService {
   async createBackup(): Promise<{ filename: string; size: number }> {
     fs.mkdirSync(this.backupDir, { recursive: true });
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `suitarr-backup-${timestamp}.sql`;
+    const filename = `fliks-backup-${timestamp}.sql`;
     const filePath = path.join(this.backupDir, filename);
 
     const dbUrl = this.config.get<string>('DATABASE_URL', '');

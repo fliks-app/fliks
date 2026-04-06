@@ -2,11 +2,11 @@ services:
   postgres:
     image: postgres:17
     environment:
-      POSTGRES_USER: suitarr
-      POSTGRES_PASSWORD: suitarr
-      POSTGRES_DB: suitarr
+      POSTGRES_USER: fliks
+      POSTGRES_PASSWORD: fliks
+      POSTGRES_DB: fliks
     volumes:
-      - suitarr_pgdata:/var/lib/postgresql/data
+      - fliks_pgdata:/var/lib/postgresql/data
     ports:
       - "5434:5432"
 
@@ -22,8 +22,8 @@ services:
       CHOKIDAR_INTERVAL: "1000"
     volumes:
       - ./backend:/app
-      - /mnt/data/suitarr/volumes/downloads:/downloads
-      - /mnt/data/suitarr/volumes/medias:/medias
+      - /mnt/data/fliks/volumes/downloads:/downloads
+      - /mnt/data/fliks/volumes/medias:/medias
     devices:
       - /dev/dri:/dev/dri
     group_add:
@@ -42,7 +42,7 @@ services:
 
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
-    container_name: suitarr-qbittorrent
+    container_name: fliks-qbittorrent
     environment:
       - PUID=1000
       - PGID=1000
@@ -54,12 +54,12 @@ services:
       - "6881:6881/udp"
     volumes:
       - qbittorrent_config:/config
-      - /mnt/data/suitarr/volumes/downloads:/downloads
+      - /mnt/data/fliks/volumes/downloads:/downloads
     restart: unless-stopped
 
   jackett:
     image: lscr.io/linuxserver/jackett:latest
-    container_name: suitarr-jackett
+    container_name: fliks-jackett
     environment:
       - PUID=1000
       - PGID=1000
@@ -72,7 +72,7 @@ services:
 
   emby:
     image: lscr.io/linuxserver/emby:latest
-    container_name: suitarr-emby
+    container_name: fliks-emby
     environment:
       - PUID=1000
       - PGID=1000
@@ -81,11 +81,11 @@ services:
       - "8096:8096"
     volumes:
       - emby_config:/config
-      - /mnt/data/suitarr/volumes/medias:/medias
+      - /mnt/data/fliks/volumes/medias:/medias
     restart: unless-stopped
 
 volumes:
-  suitarr_pgdata:
+  fliks_pgdata:
   qbittorrent_config:
   jackett_config:
   emby_config:

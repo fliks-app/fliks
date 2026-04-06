@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
-import { SuitarrRequest } from './entities/request.entity';
+import { FliksRequest } from './entities/request.entity';
 import { RequestComment } from './entities/request-comment.entity';
 import {
   AutoApprovalRule,
@@ -26,8 +26,8 @@ import { Action } from '../auth/casl/actions.enum';
 @Injectable()
 export class RequestsService {
   constructor(
-    @InjectRepository(SuitarrRequest)
-    private readonly requestRepo: Repository<SuitarrRequest>,
+    @InjectRepository(FliksRequest)
+    private readonly requestRepo: Repository<FliksRequest>,
     @InjectRepository(RequestComment)
     private readonly commentRepo: Repository<RequestComment>,
     @InjectRepository(AutoApprovalRule)
@@ -41,7 +41,7 @@ export class RequestsService {
   private canManageRequests(user: User): boolean {
     return this.caslAbilityFactory
       .createForUser(user)
-      .can(Action.Manage, SuitarrRequest);
+      .can(Action.Manage, FliksRequest);
   }
 
   // ---------------------------------------------------------------------------
@@ -145,7 +145,7 @@ export class RequestsService {
   // Requests CRUD
   // ---------------------------------------------------------------------------
 
-  async create(user: User, dto: CreateRequestDto): Promise<SuitarrRequest> {
+  async create(user: User, dto: CreateRequestDto): Promise<FliksRequest> {
     await this.checkQuota(user, dto.mediaType);
 
     const dup = await this.requestRepo.findOne({
@@ -179,7 +179,7 @@ export class RequestsService {
 
     const autoApprove = await this.shouldAutoApprove(user, dto);
 
-    const partial: DeepPartial<SuitarrRequest> = {
+    const partial: DeepPartial<FliksRequest> = {
       userId: user.id,
       mediaType: dto.mediaType,
       tmdbId: dto.tmdbId,
@@ -206,7 +206,7 @@ export class RequestsService {
   async findAll(
     user: User,
     query: ListRequestsDto,
-  ): Promise<{ data: SuitarrRequest[]; total: number }> {
+  ): Promise<{ data: FliksRequest[]; total: number }> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 25;
     const qb = this.requestRepo
@@ -232,7 +232,7 @@ export class RequestsService {
     return { data, total };
   }
 
-  async findOne(id: number, user: User): Promise<SuitarrRequest> {
+  async findOne(id: number, user: User): Promise<FliksRequest> {
     const row = await this.requestRepo.findOne({
       where: { id },
       relations: ['user', 'approvedBy', 'comments', 'comments.user'],
@@ -248,7 +248,7 @@ export class RequestsService {
     id: number,
     dto: UpdateRequestDto,
     user: User,
-  ): Promise<SuitarrRequest> {
+  ): Promise<FliksRequest> {
     const row = await this.findOne(id, user);
     if (row.status !== RequestStatus.PENDING) {
       throw new ForbiddenException('Only pending requests can be updated');
@@ -280,7 +280,7 @@ export class RequestsService {
     await this.requestRepo.remove(row);
   }
 
-  async approve(id: number, admin: User): Promise<SuitarrRequest> {
+  async approve(id: number, admin: User): Promise<FliksRequest> {
     if (!this.canManageRequests(admin)) throw new ForbiddenException();
     const row = await this.requestRepo.findOne({ where: { id } });
     if (!row) throw new NotFoundException(`Request #${id} not found`);
@@ -326,7 +326,7 @@ export class RequestsService {
     id: number,
     admin: User,
     reason?: string,
-  ): Promise<SuitarrRequest> {
+  ): Promise<FliksRequest> {
     if (!this.canManageRequests(admin)) throw new ForbiddenException();
     const row = await this.requestRepo.findOne({ where: { id } });
     if (!row) throw new NotFoundException(`Request #${id} not found`);

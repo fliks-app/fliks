@@ -1,7 +1,7 @@
 # Plan : Améliorations sous-titres — Parité Bazarr
 
 ## Context
-Suitarr a déjà une base solide (6 providers, scoring, upgrade auto, sync ffsubsync/alass, embedded detection, language profiles). Ce plan identifie les features Bazarr manquantes à implémenter.
+Fliks a déjà une base solide (6 providers, scoring, upgrade auto, sync ffsubsync/alass, embedded detection, language profiles). Ce plan identifie les features Bazarr manquantes à implémenter.
 
 ---
 
@@ -19,7 +19,7 @@ Suitarr a déjà une base solide (6 providers, scoring, upgrade auto, sync ffsub
 ---
 
 ## 1. Anti-captcha / rate-limiting provider
-Bazarr gère les limites de l'API OpenSubtitles (quotas, cooldowns). Suitarr devrait :
+Bazarr gère les limites de l'API OpenSubtitles (quotas, cooldowns). Fliks devrait :
 - Tracker les quotas restants par provider (OpenSubtitles = 40 downloads/24h pour les comptes gratuits)
 - Respecter les `Retry-After` headers
 - Mettre en pause un provider temporairement si quota atteint

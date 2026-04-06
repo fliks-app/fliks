@@ -146,7 +146,7 @@ export class TorznabService {
       const res = await axios.get<string>(url, {
         timeout: 30_000,
         responseType: 'text',
-        headers: { 'User-Agent': 'Suitarr/1.0' },
+        headers: { 'User-Agent': 'Fliks/1.0' },
         validateStatus: () => true,
       });
       const body = typeof res.data === 'string' ? res.data : String(res.data);
@@ -183,7 +183,7 @@ export class TorznabService {
       const res = await axios.get<string>(url, {
         timeout: 60_000,
         responseType: 'text',
-        headers: { 'User-Agent': 'Suitarr/1.0' },
+        headers: { 'User-Agent': 'Fliks/1.0' },
         validateStatus: (s) => s >= 200 && s < 400,
       });
       const body = typeof res.data === 'string' ? res.data : String(res.data);
@@ -236,7 +236,7 @@ export class TorznabService {
       const res = await axios.get<string>(url, {
         timeout: 90_000,
         responseType: 'text',
-        headers: { 'User-Agent': 'Suitarr/1.0' },
+        headers: { 'User-Agent': 'Fliks/1.0' },
         validateStatus: (s) => s >= 200 && s < 400,
       });
       const body = typeof res.data === 'string' ? res.data : String(res.data);
@@ -289,7 +289,7 @@ export class TorznabService {
       const res = await axios.get<string>(url, {
         timeout: 90_000,
         responseType: 'text',
-        headers: { 'User-Agent': 'Suitarr/1.0' },
+        headers: { 'User-Agent': 'Fliks/1.0' },
         validateStatus: (s) => s >= 200 && s < 400,
       });
       const body = typeof res.data === 'string' ? res.data : String(res.data);
@@ -343,7 +343,7 @@ export class TorznabService {
       const res = await axios.get<string>(url, {
         timeout: 90_000,
         responseType: 'text',
-        headers: { 'User-Agent': 'Suitarr/1.0' },
+        headers: { 'User-Agent': 'Fliks/1.0' },
         validateStatus: (s) => s >= 200 && s < 400,
       });
       const body = typeof res.data === 'string' ? res.data : String(res.data);

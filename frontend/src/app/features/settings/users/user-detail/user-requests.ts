@@ -10,7 +10,7 @@ import { DatePipe } from '@angular/common';
 import { TranslateModule } from '@ngx-translate/core';
 import {
   RequestsService,
-  SuitarrRequestRow,
+  FliksRequestRow,
 } from '../../../../core/services/api/requests.service';
 import { UserDetailState } from './user-detail.state';
 
@@ -24,7 +24,7 @@ export class UserRequestsComponent implements OnInit {
   private readonly requestsApi = inject(RequestsService);
   private readonly state = inject(UserDetailState);
 
-  readonly requests = signal<SuitarrRequestRow[]>([]);
+  readonly requests = signal<FliksRequestRow[]>([]);
   readonly total = signal(0);
   readonly loading = signal(false);
   private page = 1;

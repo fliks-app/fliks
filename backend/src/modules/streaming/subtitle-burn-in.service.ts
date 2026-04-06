@@ -34,7 +34,7 @@ export interface BurnInInfo {
 @Injectable()
 export class SubtitleBurnInService {
   private readonly log = new Logger(SubtitleBurnInService.name);
-  private readonly tmpDir = '/tmp/suitarr-burn-in';
+  private readonly tmpDir = '/tmp/fliks-burn-in';
 
   constructor(
     @InjectRepository(SubtitleFile)

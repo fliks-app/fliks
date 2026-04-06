@@ -18,7 +18,7 @@ import {
 } from '../../core/services/api/metadata.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { RootFoldersApiService, RootFolder } from '../../core/services/api/root-folders-api.service';
-import { RequestsService, SuitarrRequestStatus } from '../../core/services/api/requests.service';
+import { RequestsService, FliksRequestStatus } from '../../core/services/api/requests.service';
 import { ToastService } from '../../core/services/toast.service';
 import { MediaType } from '../../core/enums/media-type.enum';
 import { DiscoverCardComponent, CardStatus } from './components/discover-card/discover-card.component';
@@ -60,7 +60,7 @@ export class DiscoverComponent implements OnInit, OnDestroy {
 
   readonly canImport = computed(() => this.auth.hasPermission('media.create'));
   readonly canRequest = computed(() => !this.canImport() && this.auth.hasPermission('requests.create'));
-  readonly requestedTmdbIds = signal<Map<number, SuitarrRequestStatus>>(new Map());
+  readonly requestedTmdbIds = signal<Map<number, FliksRequestStatus>>(new Map());
 
   // Request modal
   private readonly requestModal = viewChild(RequestModalComponent);

@@ -27,7 +27,7 @@ export class AuthService {
   private readonly router = inject(Router);
   private readonly serverConfig = inject(ServerConfigService);
 
-  private static readonly TOKEN_KEY = 'suitarr_access_token';
+  private static readonly TOKEN_KEY = 'fliks_access_token';
 
   private readonly _user = signal<User | null>(null);
   private _accessToken: string | null = null;

@@ -20,7 +20,7 @@ import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
-import { SuitarrRequest } from './entities/request.entity';
+import { FliksRequest } from './entities/request.entity';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
 
@@ -30,25 +30,25 @@ export class RequestsController {
   constructor(private readonly requestsService: RequestsService) {}
 
   @Post()
-  @CheckPolicies((ability) => ability.can(Action.Create, SuitarrRequest))
+  @CheckPolicies((ability) => ability.can(Action.Create, FliksRequest))
   create(@CurrentUser() user: User, @Body() dto: CreateRequestDto) {
     return this.requestsService.create(user, dto);
   }
 
   @Get()
-  @CheckPolicies((ability) => ability.can(Action.Read, SuitarrRequest))
+  @CheckPolicies((ability) => ability.can(Action.Read, FliksRequest))
   findAll(@CurrentUser() user: User, @Query() query: ListRequestsDto) {
     return this.requestsService.findAll(user, query);
   }
 
   @Get(':id')
-  @CheckPolicies((ability) => ability.can(Action.Read, SuitarrRequest))
+  @CheckPolicies((ability) => ability.can(Action.Read, FliksRequest))
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: User) {
     return this.requestsService.findOne(id, user);
   }
 
   @Patch(':id')
-  @CheckPolicies((ability) => ability.can(Action.Update, SuitarrRequest))
+  @CheckPolicies((ability) => ability.can(Action.Update, FliksRequest))
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateRequestDto,
@@ -58,19 +58,19 @@ export class RequestsController {
   }
 
   @Delete(':id')
-  @CheckPolicies((ability) => ability.can(Action.Delete, SuitarrRequest))
+  @CheckPolicies((ability) => ability.can(Action.Delete, FliksRequest))
   remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: User) {
     return this.requestsService.remove(id, user);
   }
 
   @Post(':id/approve')
-  @CheckPolicies((ability) => ability.can(Action.Approve, SuitarrRequest))
+  @CheckPolicies((ability) => ability.can(Action.Approve, FliksRequest))
   approve(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: User) {
     return this.requestsService.approve(id, user);
   }
 
   @Post(':id/decline')
-  @CheckPolicies((ability) => ability.can(Action.Decline, SuitarrRequest))
+  @CheckPolicies((ability) => ability.can(Action.Decline, FliksRequest))
   decline(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: User,
@@ -81,7 +81,7 @@ export class RequestsController {
 
   // Comments
   @Post(':id/comments')
-  @CheckPolicies((ability) => ability.can(Action.Read, SuitarrRequest))
+  @CheckPolicies((ability) => ability.can(Action.Read, FliksRequest))
   addComment(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: User,
@@ -91,7 +91,7 @@ export class RequestsController {
   }
 
   @Get(':id/comments')
-  @CheckPolicies((ability) => ability.can(Action.Read, SuitarrRequest))
+  @CheckPolicies((ability) => ability.can(Action.Read, FliksRequest))
   getComments(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: User,
@@ -100,7 +100,7 @@ export class RequestsController {
   }
 
   @Delete('comments/:commentId')
-  @CheckPolicies((ability) => ability.can(Action.Read, SuitarrRequest))
+  @CheckPolicies((ability) => ability.can(Action.Read, FliksRequest))
   removeComment(
     @Param('commentId', ParseIntPipe) commentId: number,
     @CurrentUser() user: User,

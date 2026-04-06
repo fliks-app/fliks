@@ -1,6 +1,6 @@
 /** Radarr-inspired quality definitions for release parsing and profiles. */
 
-export interface SuitarrQualityDefinition {
+export interface AppQualityDefinition {
   id: number;
   name: string;
   resolution: number;
@@ -9,7 +9,7 @@ export interface SuitarrQualityDefinition {
   rank: number;
 }
 
-export const SUITARR_QUALITIES: SuitarrQualityDefinition[] = [
+export const APP_QUALITIES: AppQualityDefinition[] = [
   { id: 1, name: 'WORKPRINT', resolution: 0, source: 'workprint', rank: 5 },
   { id: 2, name: 'CAM', resolution: 0, source: 'cam', rank: 8 },
   { id: 3, name: 'TELESYNC', resolution: 0, source: 'telesync', rank: 10 },
@@ -48,11 +48,11 @@ export const SUITARR_QUALITIES: SuitarrQualityDefinition[] = [
   { id: 24, name: 'Remux-2160p', resolution: 2160, source: 'remux', rank: 95 },
 ];
 
-const byId = new Map(SUITARR_QUALITIES.map((q) => [q.id, q]));
+const byId = new Map(APP_QUALITIES.map((q) => [q.id, q]));
 
-export function getSuitarrQualityById(
+export function getAppQualityById(
   id: number,
-): SuitarrQualityDefinition | undefined {
+): AppQualityDefinition | undefined {
   return byId.get(id);
 }
 

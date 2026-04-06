@@ -29,7 +29,7 @@ import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { PatchMonitoredDto } from './dto/patch-monitored.dto';
 import { UpdateRootFolderDto } from './dto/update-path.dto';
-import { SUITARR_QUALITIES } from '../../common/constants/suitarr-qualities';
+import { APP_QUALITIES } from '../../common/constants/app-qualities';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
@@ -96,8 +96,8 @@ export class MediaController {
 
   @Get('qualities')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  suitarrQualities() {
-    return SUITARR_QUALITIES;
+  qualityDefinitions() {
+    return APP_QUALITIES;
   }
 
   @Get('calendar')

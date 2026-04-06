@@ -1,5 +1,5 @@
 # ============================================================
-# Suitarr — production image (backend + frontend)
+# Fliks — production image (backend + frontend)
 # ============================================================
 
 # --- Stage 1: Build frontend ---

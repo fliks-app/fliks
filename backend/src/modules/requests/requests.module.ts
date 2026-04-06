@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { SuitarrRequest } from './entities/request.entity';
+import { FliksRequest } from './entities/request.entity';
 import { RequestComment } from './entities/request-comment.entity';
 import { AutoApprovalRule } from './entities/auto-approval-rule.entity';
 import { AuthModule } from '../auth/auth.module';
@@ -12,11 +12,7 @@ import { AutoApprovalRulesController } from './auto-approval-rules.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      SuitarrRequest,
-      RequestComment,
-      AutoApprovalRule,
-    ]),
+    TypeOrmModule.forFeature([FliksRequest, RequestComment, AutoApprovalRule]),
     AuthModule,
     NotificationsModule,
     MediaModule,

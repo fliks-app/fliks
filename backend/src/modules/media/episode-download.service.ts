@@ -26,7 +26,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { MediaType } from '../../common/enums';
 import { QualityProfileItem } from '../profiles/entities/quality-profile.entity';
 import { AudioLanguageItem } from '../profiles/entities/language-profile.entity';
-import { SUITARR_LANGUAGES } from '../../common/constants/suitarr-languages';
+import { APP_LANGUAGES } from '../../common/constants/app-languages';
 
 function allowedAudioLanguageIds(
   audioLangs: AudioLanguageItem[] | undefined,
@@ -34,7 +34,7 @@ function allowedAudioLanguageIds(
   const set = new Set<number>();
   if (!audioLangs?.length) return set;
   for (const item of audioLangs) {
-    const lang = SUITARR_LANGUAGES.find((l) => l.isoCode === item.isoCode);
+    const lang = APP_LANGUAGES.find((l) => l.isoCode === item.isoCode);
     if (lang) set.add(lang.id);
   }
   return set;

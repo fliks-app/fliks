@@ -168,7 +168,7 @@ export class SeriesComponent implements OnInit, OnDestroy {
     this.saveFilters();
   }
 
-  private readonly storageKey = 'suitarr.filters.series';
+  private readonly storageKey = 'fliks.filters.series';
 
   private saveFilters() {
     const data: Record<string, string> = {};

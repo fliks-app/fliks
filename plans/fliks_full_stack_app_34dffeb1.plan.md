@@ -1,6 +1,6 @@
 ---
-name: Suitarr Full Stack App
-overview: "Projet Suitarr : un remplacement unifie de Radarr, Sonarr et Prowlarr, avec un backend NestJS (backend/) et un frontend Angular 21 (frontend/) en deux projets separes, avec architecture modulaire par plugins."
+name: Fliks Full Stack App
+overview: "Projet Fliks : un remplacement unifie de Radarr, Sonarr et Prowlarr, avec un backend NestJS (backend/) et un frontend Angular 21 (frontend/) en deux projets separes, avec architecture modulaire par plugins."
 todos:
   - id: scaffold
     content: "Scaffolding deux projets separes : NestJS API (backend/) + Angular 21 (frontend/)"
@@ -38,14 +38,14 @@ todos:
 isProject: false
 ---
 
-# Plan de developpement Suitarr
+# Plan de developpement Fliks
 
 ## 1. Architecture globale
 
 Deux projets separes dans le meme dossier parent, chacun avec son propre `package.json`, ses propres dependances et son propre repo git potentiel. Les types/interfaces partages sont dupliques ou extraits dans un package npm local si necessaire.
 
 ```
-suitarr/
+fliks/
 ├── backend/                # NestJS backend (projet independant)
 │   ├── src/
 │   │   ├── main.ts
@@ -243,7 +243,7 @@ graph LR
 - **ProwlarrImportService** :
   - Import des fichiers YML depuis le repo Prowlarr/Indexers
   - Import depuis la base SQLite Prowlarr (`prowlarr.db`, table `Indexers`)
-  - Mapping des champs Prowlarr vers le modele Suitarr
+  - Mapping des champs Prowlarr vers le modele Fliks
 
 ### 2.5 Systeme de demandes (type Jellyseerr)
 

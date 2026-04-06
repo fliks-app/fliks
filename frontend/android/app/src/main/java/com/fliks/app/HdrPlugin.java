@@ -1,4 +1,4 @@
-package com.suitarr.app;
+package com.fliks.app;
 
 import android.os.Build;
 import android.view.Display;

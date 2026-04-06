@@ -42,7 +42,7 @@ export class DownloadClientsSettingsComponent implements OnInit {
   readonly formUsername = signal('');
   readonly formPassword = signal('');
   readonly formUseSsl = signal(false);
-  readonly formCategory = signal('suitarr');
+  readonly formCategory = signal('fliks');
   readonly formMovieCategory = signal('');
   readonly formSeriesCategory = signal('');
   readonly formPriority = signal(1);
@@ -79,7 +79,7 @@ export class DownloadClientsSettingsComponent implements OnInit {
     this.formUsername.set('');
     this.formPassword.set('');
     this.formUseSsl.set(false);
-    this.formCategory.set('suitarr');
+    this.formCategory.set('fliks');
     this.formMovieCategory.set('');
     this.formSeriesCategory.set('');
     this.formPriority.set(1);
@@ -97,7 +97,7 @@ export class DownloadClientsSettingsComponent implements OnInit {
     this.formUsername.set(dc.settings.username ?? '');
     this.formPassword.set('');
     this.formUseSsl.set(dc.settings.useSsl ?? false);
-    this.formCategory.set(dc.settings.category ?? 'suitarr');
+    this.formCategory.set(dc.settings.category ?? 'fliks');
     this.formMovieCategory.set(dc.settings.movieCategory ?? '');
     this.formSeriesCategory.set(dc.settings.seriesCategory ?? '');
     this.formPriority.set(dc.priority);

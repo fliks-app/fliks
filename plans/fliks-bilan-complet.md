@@ -1,4 +1,4 @@
-# Suitarr — Bilan complet des travaux
+# Fliks — Bilan complet des travaux
 
 ## Batch 1 : Limites de poids, seeders min, rejections
 
@@ -48,7 +48,7 @@
 - [x] **Log viewer** — `LogBufferService` (ring buffer 2000 entries) + `GET /system/logs` + UI avec filtre niveau/recherche + auto-refresh 5s
 - [x] **Indexer stats** — `IndexerStat` entite + timing dans torznab + `GET /indexers/:id/stats` agrege 30j + modale stats
 - [x] **Rename & organize** — `POST /media/:id/rename` + NamingService dans MediaModule + bouton dans section fichiers
-- [x] **Post-import scripts** — execution script apres import avec env vars (SUITARR_MEDIA_TITLE, FILE_PATH, etc.) + input dans settings general
+- [x] **Post-import scripts** — execution script apres import avec env vars (FLIKS_MEDIA_TITLE, FILE_PATH, etc.) + input dans settings general
 - [x] **SSE task progress** — `EventsService` + `@Sse('events')` + `SseService` frontend (EventSource) + barres de progression dans system
 - [x] **Migration Radarr/Sonarr** — ImportRadarrService/ImportSonarrService (sql.js) + upload endpoints + UI dans system
 - [x] **PWA** — manifest.webmanifest + meta theme-color + link manifest dans index.html

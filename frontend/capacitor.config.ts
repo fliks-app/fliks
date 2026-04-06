@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.suitarr.app',
-  appName: 'Suitarr',
+  appId: 'com.fliks.app',
+  appName: 'Fliks',
   webDir: 'dist/frontend/browser',
   server: {
     androidScheme: 'https',

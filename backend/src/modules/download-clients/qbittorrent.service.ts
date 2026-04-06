@@ -70,7 +70,7 @@ export class QbittorrentService {
     try {
       const http = axios.create({
         timeout: 10_000,
-        headers: { 'User-Agent': 'Suitarr/1.0' },
+        headers: { 'User-Agent': 'Fliks/1.0' },
       });
       const formAuth = new URLSearchParams({
         username: s.username ?? '',
@@ -112,7 +112,7 @@ export class QbittorrentService {
     if (!base) return [];
     const http = axios.create({
       timeout: 15_000,
-      headers: { 'User-Agent': 'Suitarr/1.0' },
+      headers: { 'User-Agent': 'Fliks/1.0' },
     });
 
     const formAuth = new URLSearchParams({
@@ -189,7 +189,7 @@ export class QbittorrentService {
     if (!base) return [];
     const http = axios.create({
       timeout: 15_000,
-      headers: { 'User-Agent': 'Suitarr/1.0' },
+      headers: { 'User-Agent': 'Fliks/1.0' },
     });
 
     const formAuth = new URLSearchParams({
@@ -249,7 +249,7 @@ export class QbittorrentService {
 
     const http = axios.create({
       timeout: 15_000,
-      headers: { 'User-Agent': 'Suitarr/1.0' },
+      headers: { 'User-Agent': 'Fliks/1.0' },
     });
 
     const formAuth = new URLSearchParams({
@@ -333,7 +333,7 @@ export class QbittorrentService {
 
     const http = axios.create({
       timeout: 60_000,
-      headers: { 'User-Agent': 'Suitarr/1.0' },
+      headers: { 'User-Agent': 'Fliks/1.0' },
     });
 
     // --- Authenticate ---

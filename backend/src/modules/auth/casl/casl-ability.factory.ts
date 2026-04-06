@@ -7,7 +7,7 @@ import {
 import { Injectable } from '@nestjs/common';
 import { User } from '../../users/entities/user.entity';
 import { Media } from '../../media/entities/media.entity';
-import { SuitarrRequest } from '../../requests/entities/request.entity';
+import { FliksRequest } from '../../requests/entities/request.entity';
 import { Indexer } from '../../indexers/entities/indexer.entity';
 import { DownloadClient } from '../../download-clients/entities/download-client.entity';
 import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
@@ -21,7 +21,7 @@ type Subjects =
   | InferSubjects<
       | typeof User
       | typeof Media
-      | typeof SuitarrRequest
+      | typeof FliksRequest
       | typeof Indexer
       | typeof DownloadClient
       | typeof QualityProfile
@@ -74,19 +74,19 @@ export class CaslAbilityFactory {
 
     // --- requests ---
     if (perms.has('requests.create')) {
-      can(Action.Create, SuitarrRequest);
-      can(Action.Read, SuitarrRequest, { userId: user.id } as any);
-      can(Action.Delete, SuitarrRequest, {
+      can(Action.Create, FliksRequest);
+      can(Action.Read, FliksRequest, { userId: user.id } as any);
+      can(Action.Delete, FliksRequest, {
         userId: user.id,
         status: 'pending',
       } as any);
-      can(Action.Update, SuitarrRequest, {
+      can(Action.Update, FliksRequest, {
         userId: user.id,
         status: 'pending',
       } as any);
     }
     if (perms.has('requests.manage')) {
-      can(Action.Manage, SuitarrRequest);
+      can(Action.Manage, FliksRequest);
     }
 
     // --- subtitles ---

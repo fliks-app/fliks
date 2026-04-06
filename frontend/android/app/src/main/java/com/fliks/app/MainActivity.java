@@ -1,4 +1,4 @@
-package com.suitarr.app;
+package com.fliks.app;
 
 import android.content.res.Configuration;
 import android.graphics.Color;

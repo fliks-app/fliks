@@ -1,9 +1,9 @@
 import {
-  SuitarrLanguageDefinition,
+  AppLanguageDefinition,
   ENGLISH_LANGUAGE,
   UNKNOWN_LANGUAGE,
-  SUITARR_LANGUAGES,
-} from '../../common/constants/suitarr-languages';
+  APP_LANGUAGES,
+} from '../../common/constants/app-languages';
 
 function norm(s: string): string {
   return s.replace(/[._\-]/g, ' ').toLowerCase();
@@ -13,7 +13,7 @@ function norm(s: string): string {
  * Infer release language from a torrent title.
  * Returns ENGLISH for untagged releases (standard assumption for English-language content).
  */
-export function parseReleaseLanguage(title: string): SuitarrLanguageDefinition {
+export function parseReleaseLanguage(title: string): AppLanguageDefinition {
   const t = norm(title);
 
   // French markers (must check before generic patterns)
@@ -77,10 +77,8 @@ export function parseReleaseLanguage(title: string): SuitarrLanguageDefinition {
   return ENGLISH_LANGUAGE;
 }
 
-function lang(isoCode: string): SuitarrLanguageDefinition {
-  return (
-    SUITARR_LANGUAGES.find((l) => l.isoCode === isoCode) ?? UNKNOWN_LANGUAGE
-  );
+function lang(isoCode: string): AppLanguageDefinition {
+  return APP_LANGUAGES.find((l) => l.isoCode === isoCode) ?? UNKNOWN_LANGUAGE;
 }
 
 /**
@@ -88,13 +86,12 @@ function lang(isoCode: string): SuitarrLanguageDefinition {
  * remap to that language.
  */
 export function resolveUnknownLanguage(
-  parsed: SuitarrLanguageDefinition,
+  parsed: AppLanguageDefinition,
   unknownLanguageIsoCode: string | undefined,
-): SuitarrLanguageDefinition {
+): AppLanguageDefinition {
   if (parsed.id !== UNKNOWN_LANGUAGE.id || !unknownLanguageIsoCode)
     return parsed;
   return (
-    SUITARR_LANGUAGES.find((l) => l.isoCode === unknownLanguageIsoCode) ??
-    parsed
+    APP_LANGUAGES.find((l) => l.isoCode === unknownLanguageIsoCode) ?? parsed
   );
 }

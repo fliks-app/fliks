@@ -1,4 +1,4 @@
-package com.suitarr.app;
+package com.fliks.app;
 
 import android.app.PictureInPictureParams;
 import android.content.pm.PackageManager;
