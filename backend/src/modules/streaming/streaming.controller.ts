@@ -32,7 +32,6 @@ import { SubtitleBurnInService } from './subtitle-burn-in.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 
 const VALID_QUALITIES = new Set([...PROFILES.map((p) => p.name), 'remux']);
-const VALID_TRANSCODE_QUALITY = new Set(PROFILES.map((p) => p.name));
 const SEGMENT_RE = /^seg-\d{3,4}\.ts$/;
 
 function firstQueryString(
