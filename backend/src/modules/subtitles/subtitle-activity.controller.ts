@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Delete, Query, Param, Body, UseGuards, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Query,
+  Param,
+  Body,
+  UseGuards,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import { SubtitleFile } from './entities/subtitle-file.entity';
@@ -93,14 +103,18 @@ export class SubtitleActivityController {
         .createQueryBuilder('sf')
         .select('sf.status', 'status')
         .addSelect('COUNT(*)::int', 'count')
-        .where('sf.providerType != :emb', { emb: SubtitleProviderType.EMBEDDED })
+        .where('sf.providerType != :emb', {
+          emb: SubtitleProviderType.EMBEDDED,
+        })
         .groupBy('sf.status')
         .getRawMany(),
       this.subtitleFileRepo
         .createQueryBuilder('sf')
         .select('sf.providerType', 'providerType')
         .addSelect('COUNT(*)::int', 'count')
-        .where('sf.providerType != :emb', { emb: SubtitleProviderType.EMBEDDED })
+        .where('sf.providerType != :emb', {
+          emb: SubtitleProviderType.EMBEDDED,
+        })
         .groupBy('sf.providerType')
         .getRawMany(),
       this.subtitleFileRepo.find({
@@ -193,8 +207,7 @@ export class SubtitleActivityController {
         for (const lang of subtitleLangs) {
           const hasSub = existingSubs.some(
             (s) =>
-              s.language === lang.isoCode &&
-              s.status !== SubtitleStatus.FAILED,
+              s.language === lang.isoCode && s.status !== SubtitleStatus.FAILED,
           );
           if (hasSub) continue;
 
@@ -233,10 +246,7 @@ export class SubtitleActivityController {
 
   @Get('blacklist')
   @CheckPolicies((ability) => ability.can(Action.Read, SubtitleFile))
-  getBlacklist(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
+  getBlacklist(@Query('page') page?: string, @Query('limit') limit?: string) {
     return this.subtitlesService.getBlacklist(
       Number(page) || 1,
       Number(limit) || 25,
@@ -246,7 +256,15 @@ export class SubtitleActivityController {
   @Post('blacklist')
   @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
   addToBlacklist(
-    @Body() dto: { providerType: string; providerFileId: string; mediaId?: number; language?: string; sourceTitle?: string; reason?: string },
+    @Body()
+    dto: {
+      providerType: string;
+      providerFileId: string;
+      mediaId?: number;
+      language?: string;
+      sourceTitle?: string;
+      reason?: string;
+    },
   ) {
     return this.subtitlesService.blacklistSubtitle(dto);
   }

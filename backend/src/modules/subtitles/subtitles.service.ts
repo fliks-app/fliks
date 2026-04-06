@@ -54,7 +54,9 @@ export class SubtitlesService {
       if (hashResult) {
         params.moviehash = hashResult.hash;
         params.moviebytesize = hashResult.bytesize;
-        this.logger.log(`Computed moviehash=${hashResult.hash} for ${params.filePath}`);
+        this.logger.log(
+          `Computed moviehash=${hashResult.hash} for ${params.filePath}`,
+        );
       }
     }
 
@@ -202,8 +204,11 @@ export class SubtitlesService {
     }
 
     // Clean subtitle content (remove ads, optionally HI tags)
-    const removeHiTags = (await this.settingsService.get('subtitle_remove_hi_tags')) === 'true';
-    const customExclusions = ((await this.settingsService.get('subtitle_custom_exclusions')) ?? '')
+    const removeHiTags =
+      (await this.settingsService.get('subtitle_remove_hi_tags')) === 'true';
+    const customExclusions = (
+      (await this.settingsService.get('subtitle_custom_exclusions')) ?? ''
+    )
       .split('\n')
       .filter((l) => l.trim());
     buffer = cleanSubtitle(buffer, {
@@ -372,18 +377,25 @@ export class SubtitlesService {
     params?: Record<string, unknown>,
   ): Promise<SubtitleFile> {
     const sub = await this.repo.findOne({ where: { id: subtitleId } });
-    if (!sub) throw new NotFoundException(`SubtitleFile #${subtitleId} not found`);
-    if (!sub.filePath) throw new BadRequestException('Subtitle has no file path');
+    if (!sub)
+      throw new NotFoundException(`SubtitleFile #${subtitleId} not found`);
+    if (!sub.filePath)
+      throw new BadRequestException('Subtitle has no file path');
 
     const paramsStr = params ? JSON.stringify(params) : '';
-    this.logger.log(`PostProcess #${subtitleId}: ${action}${paramsStr ? ` ${paramsStr}` : ''} on "${sub.filePath}"`);
+    this.logger.log(
+      `PostProcess #${subtitleId}: ${action}${paramsStr ? ` ${paramsStr}` : ''} on "${sub.filePath}"`,
+    );
 
     let content = await fs.readFile(sub.filePath, 'utf-8');
     const sizeBefore = content.length;
 
     switch (action) {
       case 'removeHiTags': {
-        const buf = cleanSubtitle(Buffer.from(content, 'utf-8'), { removeAds: false, removeHiTags: true });
+        const buf = cleanSubtitle(Buffer.from(content, 'utf-8'), {
+          removeAds: false,
+          removeHiTags: true,
+        });
         content = buf.toString('utf-8');
         break;
       }
@@ -406,7 +418,10 @@ export class SubtitlesService {
         content = postProcess.reverseRtl(content);
         break;
       case 'adjustTimes':
-        content = postProcess.adjustTimes(content, Number(params?.offsetMs ?? 0));
+        content = postProcess.adjustTimes(
+          content,
+          Number(params?.offsetMs ?? 0),
+        );
         break;
       case 'changeFrameRate':
         content = postProcess.changeFrameRate(
@@ -419,7 +434,9 @@ export class SubtitlesService {
         content = postProcess.assToSrt(content);
         break;
       default:
-        throw new BadRequestException(`Unknown post-processing action: ${action}`);
+        throw new BadRequestException(
+          `Unknown post-processing action: ${action}`,
+        );
     }
 
     await fs.writeFile(sub.filePath, content, 'utf-8');
@@ -427,7 +444,9 @@ export class SubtitlesService {
     await this.repo.save(sub);
     // Log a sample of the first timestamp to verify the change
     const sampleMatch = content.match(/\d{2}:\d{2}:\d{2},\d{3}/);
-    this.logger.log(`PostProcess #${subtitleId}: ${action} done (${sizeBefore} → ${content.length} chars, first timestamp: ${sampleMatch?.[0] ?? 'none'})`);
+    this.logger.log(
+      `PostProcess #${subtitleId}: ${action} done (${sizeBefore} → ${content.length} chars, first timestamp: ${sampleMatch?.[0] ?? 'none'})`,
+    );
     return sub;
   }
 }

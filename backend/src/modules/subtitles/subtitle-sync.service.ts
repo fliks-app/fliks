@@ -83,7 +83,9 @@ export class SubtitleSyncService {
 
     // Don't queue duplicates
     const existing = this.queue.find(
-      (q) => q.subtitleId === id && (q.status === 'queued' || q.status === 'running'),
+      (q) =>
+        q.subtitleId === id &&
+        (q.status === 'queued' || q.status === 'running'),
     );
     if (existing) return existing;
 
@@ -93,10 +95,16 @@ export class SubtitleSyncService {
       queuedAt: Date.now(),
     };
     this.queue.push(item);
-    this.logger.log(`Sync queued for subtitle #${id} (queue size: ${this.queue.filter((q) => q.status === 'queued').length})`);
+    this.logger.log(
+      `Sync queued for subtitle #${id} (queue size: ${this.queue.filter((q) => q.status === 'queued').length})`,
+    );
 
     // Trim old completed/failed entries (keep last 50)
-    while (this.queue.length > 50 && (this.queue[0].status === 'completed' || this.queue[0].status === 'failed')) {
+    while (
+      this.queue.length > 50 &&
+      (this.queue[0].status === 'completed' ||
+        this.queue[0].status === 'failed')
+    ) {
       this.queue.shift();
     }
 
@@ -119,11 +127,15 @@ export class SubtitleSyncService {
       await this.doSync(next.subtitleId, options);
       next.status = 'completed';
       const durationSec = ((Date.now() - next.startedAt) / 1000).toFixed(1);
-      this.logger.log(`Sync completed for subtitle #${next.subtitleId} in ${durationSec}s`);
+      this.logger.log(
+        `Sync completed for subtitle #${next.subtitleId} in ${durationSec}s`,
+      );
     } catch (err) {
       next.status = 'failed';
       next.error = (err as Error).message;
-      this.logger.warn(`Sync failed for subtitle #${next.subtitleId}: ${next.error}`);
+      this.logger.warn(
+        `Sync failed for subtitle #${next.subtitleId}: ${next.error}`,
+      );
     } finally {
       next.completedAt = Date.now();
       this.running--;
@@ -132,11 +144,17 @@ export class SubtitleSyncService {
   }
 
   /** Direct sync (called from queue or legacy) */
-  async syncSubtitle(id: number, options: SyncOptions = {}): Promise<SubtitleFile> {
+  async syncSubtitle(
+    id: number,
+    options: SyncOptions = {},
+  ): Promise<SubtitleFile> {
     return this.doSync(id, options);
   }
 
-  private async doSync(id: number, options: SyncOptions): Promise<SubtitleFile> {
+  private async doSync(
+    id: number,
+    options: SyncOptions,
+  ): Promise<SubtitleFile> {
     const subtitle = await this.repo.findOne({ where: { id } });
     if (!subtitle) throw new NotFoundException(`SubtitleFile #${id} not found`);
     if (subtitle.providerType === SubtitleProviderType.EMBEDDED) {
@@ -184,7 +202,10 @@ export class SubtitleSyncService {
     };
 
     try {
-      await execFileAsync('ffsubsync', buildFfsubsyncArgs(refPath, refStreamIndex));
+      await execFileAsync(
+        'ffsubsync',
+        buildFfsubsyncArgs(refPath, refStreamIndex),
+      );
       subtitle.synced = true;
       subtitle.status = SubtitleStatus.SYNCED;
     } catch (err: any) {
@@ -193,23 +214,41 @@ export class SubtitleSyncService {
       );
 
       // If auto mode failed with "Unable to detect speech", retry with first audio stream
-      if (refStreamIndex == null && /unable to detect speech/i.test(err.stderr || '')) {
+      if (
+        refStreamIndex == null &&
+        /unable to detect speech/i.test(err.stderr || '')
+      ) {
         const streams = await this.ffprobe.detectStreams(mediaFilePath);
         const firstAudio = streams.find((s) => s.type === 'audio');
         if (firstAudio) {
-          this.logger.log(`Retrying ffsubsync with explicit audio stream:${firstAudio.streamIndex}`);
+          this.logger.log(
+            `Retrying ffsubsync with explicit audio stream:${firstAudio.streamIndex}`,
+          );
           try {
-            await execFileAsync('ffsubsync', buildFfsubsyncArgs(refPath, firstAudio.streamIndex));
+            await execFileAsync(
+              'ffsubsync',
+              buildFfsubsyncArgs(refPath, firstAudio.streamIndex),
+            );
             subtitle.synced = true;
             subtitle.status = SubtitleStatus.SYNCED;
             const saved = await this.repo.save(subtitle);
             if (saved.synced) {
-              void this.notifications.dispatch('subtitle.synced', { language: saved.language, subtitleId: saved.id });
-              this.events.emit({ type: 'subtitle.synced', subtitleId: saved.id, language: saved.language, mediaId: saved.mediaId });
+              void this.notifications.dispatch('subtitle.synced', {
+                language: saved.language,
+                subtitleId: saved.id,
+              });
+              this.events.emit({
+                type: 'subtitle.synced',
+                subtitleId: saved.id,
+                language: saved.language,
+                mediaId: saved.mediaId,
+              });
             }
             return saved;
           } catch (retryErr: any) {
-            this.logger.warn(`ffsubsync retry also failed: ${retryErr.stderr || retryErr.message}`);
+            this.logger.warn(
+              `ffsubsync retry also failed: ${retryErr.stderr || retryErr.message}`,
+            );
           }
         }
       }
@@ -242,7 +281,9 @@ export class SubtitleSyncService {
         mediaId: saved.mediaId,
       });
       // Notify media servers (Emby/Plex) to refresh
-      const media = await this.mediaRepo.findOne({ where: { id: saved.mediaId } });
+      const media = await this.mediaRepo.findOne({
+        where: { id: saved.mediaId },
+      });
       if (media) {
         void this.mediaServers.dispatch('subtitle.synced', {
           title: media.title,

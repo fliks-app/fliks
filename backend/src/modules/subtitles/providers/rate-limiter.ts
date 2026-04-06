@@ -61,10 +61,14 @@ export function markRateLimited(
     }
 
     // OpenSubtitles specific: X-RateLimit-Remaining-Second
-    const remaining = response.headers.get('x-ratelimit-remaining-second')
-      ?? response.headers.get('ratelimit-remaining');
+    const remaining =
+      response.headers.get('x-ratelimit-remaining-second') ??
+      response.headers.get('ratelimit-remaining');
     if (remaining !== null) {
-      const cd = cooldowns.get(providerType) ?? { retryAfter: 0, remaining: null };
+      const cd = cooldowns.get(providerType) ?? {
+        retryAfter: 0,
+        remaining: null,
+      };
       cd.remaining = Number(remaining);
       cooldowns.set(providerType, cd);
     }
@@ -82,11 +86,15 @@ export function markRateLimited(
  * Call after every successful request to track quotas.
  */
 export function trackQuota(providerType: string, response: Response): void {
-  const remaining = response.headers.get('x-ratelimit-remaining-second')
-    ?? response.headers.get('ratelimit-remaining')
-    ?? response.headers.get('x-ratelimit-remaining');
+  const remaining =
+    response.headers.get('x-ratelimit-remaining-second') ??
+    response.headers.get('ratelimit-remaining') ??
+    response.headers.get('x-ratelimit-remaining');
   if (remaining !== null) {
-    const cd = cooldowns.get(providerType) ?? { retryAfter: 0, remaining: null };
+    const cd = cooldowns.get(providerType) ?? {
+      retryAfter: 0,
+      remaining: null,
+    };
     cd.remaining = Number(remaining);
     cooldowns.set(providerType, cd);
   }
@@ -143,7 +151,9 @@ export async function rateLimitedFetch(
       if (attempt < maxRetries) {
         const delay = getRateLimitDelay(providerType);
         if (attempt === 0) {
-          log.warn(`${providerType} rate-limited (${res.status}), retrying ${maxRetries} time(s)...`);
+          log.warn(
+            `${providerType} rate-limited (${res.status}), retrying ${maxRetries} time(s)...`,
+          );
         }
         await new Promise((r) => setTimeout(r, Math.min(delay, 10) * 1000));
         continue;

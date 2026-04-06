@@ -8,8 +8,8 @@
 // ---------------------------------------------------------------------------
 export function removeStyleTags(content: string): string {
   return content
-    .replace(/<\/?[a-z][^>]*>/gi, '')       // HTML tags
-    .replace(/\{\\[^}]+\}/g, '');           // ASS override tags like {\an8}
+    .replace(/<\/?[a-z][^>]*>/gi, '') // HTML tags
+    .replace(/\{\\[^}]+\}/g, ''); // ASS override tags like {\an8}
 }
 
 // ---------------------------------------------------------------------------
@@ -26,16 +26,16 @@ export function removeEmoji(content: string): string {
 // OCR fixes: common OCR misreads
 // ---------------------------------------------------------------------------
 const OCR_REPLACEMENTS: [RegExp, string][] = [
-  [/\bl\b(?=[A-Z])/g, 'I'],         // standalone l before uppercase = I
-  [/\bln\b/g, 'In'],                 // ln → In
-  [/\bIVIr\b/g, 'Mr'],              // IVIr → Mr
+  [/\bl\b(?=[A-Z])/g, 'I'], // standalone l before uppercase = I
+  [/\bln\b/g, 'In'], // ln → In
+  [/\bIVIr\b/g, 'Mr'], // IVIr → Mr
   [/\bIVIrs\b/g, 'Mrs'],
-  [/\brn(?=[aeiou])/g, 'm'],        // rn before vowel → m
-  [/\b0(?=[a-zA-Z])/g, 'O'],        // 0 before letter → O
-  [/(?<=[a-zA-Z])0\b/g, 'O'],       // letter then 0 → O
-  [/\|\|/g, 'H'],                    // || → H
-  [/\|(?=[a-z])/g, 'l'],            // | before lowercase → l
-  [/\|(?=[A-Z])/g, 'I'],            // | before uppercase → I
+  [/\brn(?=[aeiou])/g, 'm'], // rn before vowel → m
+  [/\b0(?=[a-zA-Z])/g, 'O'], // 0 before letter → O
+  [/(?<=[a-zA-Z])0\b/g, 'O'], // letter then 0 → O
+  [/\|\|/g, 'H'], // || → H
+  [/\|(?=[a-z])/g, 'l'], // | before lowercase → l
+  [/\|(?=[A-Z])/g, 'I'], // | before uppercase → I
 ];
 
 export function fixOcr(content: string): string {
@@ -51,12 +51,12 @@ export function fixOcr(content: string): string {
 // ---------------------------------------------------------------------------
 export function commonFixes(content: string): string {
   return content
-    .replace(/  +/g, ' ')                   // double spaces
-    .replace(/\. \./g, '..')                 // ". ." → ".."
-    .replace(/\.\.\.\./g, '...')             // four dots → three
-    .replace(/ +([,.!?;:])/g, '$1')          // space before punctuation
-    .replace(/([.!?])\1{3,}/g, '$1$1$1')    // excessive punctuation
-    .replace(/^\s*\n/gm, '');                // empty lines within text
+    .replace(/  +/g, ' ') // double spaces
+    .replace(/\. \./g, '..') // ". ." → ".."
+    .replace(/\.\.\.\./g, '...') // four dots → three
+    .replace(/ +([,.!?;:])/g, '$1') // space before punctuation
+    .replace(/([.!?])\1{3,}/g, '$1$1$1') // excessive punctuation
+    .replace(/^\s*\n/gm, ''); // empty lines within text
 }
 
 // ---------------------------------------------------------------------------
@@ -64,23 +64,25 @@ export function commonFixes(content: string): string {
 // ---------------------------------------------------------------------------
 export function fixUppercase(content: string): string {
   const blocks = content.split(/\r?\n\r?\n/);
-  return blocks.map((block) => {
-    const lines = block.split(/\r?\n/);
-    if (lines.length < 3) return block;
+  return blocks
+    .map((block) => {
+      const lines = block.split(/\r?\n/);
+      if (lines.length < 3) return block;
 
-    // Only fix text lines (skip index + timestamp)
-    const textLines = lines.slice(2).map((line) => {
-      // Check if line is ALL CAPS (ignoring punctuation/spaces)
-      const letters = line.replace(/[^a-zA-Z]/g, '');
-      if (letters.length > 1 && letters === letters.toUpperCase()) {
-        // Convert to sentence case
-        return line.charAt(0).toUpperCase() + line.slice(1).toLowerCase();
-      }
-      return line;
-    });
+      // Only fix text lines (skip index + timestamp)
+      const textLines = lines.slice(2).map((line) => {
+        // Check if line is ALL CAPS (ignoring punctuation/spaces)
+        const letters = line.replace(/[^a-zA-Z]/g, '');
+        if (letters.length > 1 && letters === letters.toUpperCase()) {
+          // Convert to sentence case
+          return line.charAt(0).toUpperCase() + line.slice(1).toLowerCase();
+        }
+        return line;
+      });
 
-    return [...lines.slice(0, 2), ...textLines].join('\n');
-  }).join('\n\n');
+      return [...lines.slice(0, 2), ...textLines].join('\n');
+    })
+    .join('\n\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -88,20 +90,22 @@ export function fixUppercase(content: string): string {
 // ---------------------------------------------------------------------------
 export function reverseRtl(content: string): string {
   const blocks = content.split(/\r?\n\r?\n/);
-  return blocks.map((block) => {
-    const lines = block.split(/\r?\n/);
-    if (lines.length < 3) return block;
+  return blocks
+    .map((block) => {
+      const lines = block.split(/\r?\n/);
+      if (lines.length < 3) return block;
 
-    const textLines = lines.slice(2).map((line) => {
-      // Reverse if contains RTL characters
-      if (/[\u0590-\u05FF\u0600-\u06FF\u0700-\u074F]/.test(line)) {
-        return line.split('').reverse().join('');
-      }
-      return line;
-    });
+      const textLines = lines.slice(2).map((line) => {
+        // Reverse if contains RTL characters
+        if (/[\u0590-\u05FF\u0600-\u06FF\u0700-\u074F]/.test(line)) {
+          return line.split('').reverse().join('');
+        }
+        return line;
+      });
 
-    return [...lines.slice(0, 2), ...textLines].join('\n');
-  }).join('\n\n');
+      return [...lines.slice(0, 2), ...textLines].join('\n');
+    })
+    .join('\n\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +202,9 @@ export function assToSrt(content: string): string {
 
     const startRaw = parts[1].trim();
     const endRaw = parts[2].trim();
-    const text = parts.slice(9).join(',')
+    const text = parts
+      .slice(9)
+      .join(',')
       .replace(/\\N/g, '\n')
       .replace(/\{\\[^}]*\}/g, '')
       .trim();
@@ -219,13 +225,5 @@ function assTimeToSrt(assTime: string): string {
   // ASS: H:MM:SS.CC → SRT: HH:MM:SS,mmm
   const m = /^(\d+):(\d{2}):(\d{2})\.(\d{2})$/.exec(assTime);
   if (!m) return assTime;
-  return (
-    m[1].padStart(2, '0') +
-    ':' +
-    m[2] +
-    ':' +
-    m[3] +
-    ',' +
-    m[4] + '0'
-  );
+  return m[1].padStart(2, '0') + ':' + m[2] + ':' + m[3] + ',' + m[4] + '0';
 }

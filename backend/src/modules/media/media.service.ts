@@ -607,7 +607,6 @@ export class MediaService {
   // History
   // ---------------------------------------------------------------------------
 
-
   async updateSeasonMonitored(
     seasonId: number,
     monitored: boolean,
@@ -700,7 +699,9 @@ export class MediaService {
     await this.updateSearchVector(media.id);
 
     // Refresh embedded subtitles for all files
-    const files = await this.mediaFileRepo.find({ where: { mediaId: media.id } });
+    const files = await this.mediaFileRepo.find({
+      where: { mediaId: media.id },
+    });
     for (const file of files) {
       await this.embeddedSubtitle.detectAndStore(
         media.id,
@@ -1050,7 +1051,14 @@ export class MediaService {
   // ---------------------------------------------------------------------------
 
   private static readonly VIDEO_EXTS = new Set([
-    '.mkv', '.mp4', '.avi', '.mov', '.ts', '.m2ts', '.wmv', '.flv',
+    '.mkv',
+    '.mp4',
+    '.avi',
+    '.mov',
+    '.ts',
+    '.m2ts',
+    '.wmv',
+    '.flv',
   ]);
 
   async rescanFiles(
@@ -1075,7 +1083,9 @@ export class MediaService {
     // 1. Collect all video files on disk
     this.log.log(`Rescan: scanning "${mediaDir}" for media #${mediaId}`);
     const diskFiles = this.collectVideoFilesRecursive(mediaDir, 0);
-    this.log.log(`Rescan: found ${diskFiles.length} file(s) on disk, ${(media.files ?? []).length} in DB`);
+    this.log.log(
+      `Rescan: found ${diskFiles.length} file(s) on disk, ${(media.files ?? []).length} in DB`,
+    );
     const diskRelPaths = new Set(
       diskFiles.map((f) => path.relative(mediaDir, f).replace(/\\/g, '/')),
     );
@@ -1096,7 +1106,9 @@ export class MediaService {
         const episodeId = dbFile.episodeId;
         await this.mediaFileRepo.remove(dbFile);
         removed++;
-        this.log.log(`Rescan: removed missing file "${normPath}" for media #${mediaId}`);
+        this.log.log(
+          `Rescan: removed missing file "${normPath}" for media #${mediaId}`,
+        );
         // Update episode.hasFile if needed
         if (episodeId != null) {
           const remaining = await this.mediaFileRepo.count({
@@ -1128,33 +1140,56 @@ export class MediaService {
       const sizeChanged = Number(dbFile.size) !== diskSize;
       const si = dbFile.streamInfo as any;
       const missingStreamInfo =
-        !si || si.error || (!si.video?.length && !si.audio?.length)
-        || !('subtitles' in si) || !('durationSeconds' in si);
-      const missingColorInfo = si?.video?.[0] && (
-        !('colorTransfer' in (si.video[0] ?? {}))
-        || (si.video[0].colorTransfer === 'smpte2084' && !si.video[0].hdrFormat)
-      );
+        !si ||
+        si.error ||
+        (!si.video?.length && !si.audio?.length) ||
+        !('subtitles' in si) ||
+        !('durationSeconds' in si);
+      const missingColorInfo =
+        si?.video?.[0] &&
+        (!('colorTransfer' in (si.video[0] ?? {})) ||
+          (si.video[0].colorTransfer === 'smpte2084' &&
+            !si.video[0].hdrFormat));
       // Check if quality needs correction (e.g. was parsed from filename, now use ffprobe)
-      const expectedQuality = this.resolveQuality(filename, si?.video?.[0]?.height, si?.video?.[0]?.width);
-      const qualityStale = dbFile.quality !== expectedQuality && si?.video?.[0]?.height;
+      const expectedQuality = this.resolveQuality(
+        filename,
+        si?.video?.[0]?.height,
+        si?.video?.[0]?.width,
+      );
+      const qualityStale =
+        dbFile.quality !== expectedQuality && si?.video?.[0]?.height;
 
-      if (sizeChanged || missingStreamInfo || missingColorInfo || qualityStale) {
+      if (
+        sizeChanged ||
+        missingStreamInfo ||
+        missingColorInfo ||
+        qualityStale
+      ) {
         dbFile.size = diskSize;
         let streamInfo = si;
         if (sizeChanged || missingStreamInfo || missingColorInfo) {
           streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
           // Detect hardcoded black bars (letterbox)
           if (streamInfo?.video?.[0]) {
-            const crop = await this.ffprobe.detectCrop(absPath, streamInfo.durationSeconds);
+            const crop = await this.ffprobe.detectCrop(
+              absPath,
+              streamInfo.durationSeconds,
+            );
             if (crop) streamInfo.video[0].crop = crop;
           }
           dbFile.streamInfo = streamInfo;
         }
-        const qualityName = this.resolveQuality(filename, streamInfo?.video?.[0]?.height, streamInfo?.video?.[0]?.width);
+        const qualityName = this.resolveQuality(
+          filename,
+          streamInfo?.video?.[0]?.height,
+          streamInfo?.video?.[0]?.width,
+        );
         dbFile.quality = qualityName;
         await this.mediaFileRepo.save(dbFile);
         updated++;
-        this.log.log(`Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${qualityName})`);
+        this.log.log(
+          `Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${qualityName})`,
+        );
       }
     }
 
@@ -1194,10 +1229,17 @@ export class MediaService {
       const streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
       // Detect hardcoded black bars (letterbox)
       if (streamInfo?.video?.[0]) {
-        const crop = await this.ffprobe.detectCrop(absPath, streamInfo.durationSeconds);
+        const crop = await this.ffprobe.detectCrop(
+          absPath,
+          streamInfo.durationSeconds,
+        );
         if (crop) streamInfo.video[0].crop = crop;
       }
-      const qualityName = this.resolveQuality(filename, streamInfo.video?.[0]?.height, streamInfo.video?.[0]?.width);
+      const qualityName = this.resolveQuality(
+        filename,
+        streamInfo.video?.[0]?.height,
+        streamInfo.video?.[0]?.width,
+      );
       await this.mediaFileRepo.save(
         this.mediaFileRepo.create({
           mediaId: media.id,
@@ -1209,7 +1251,9 @@ export class MediaService {
         }),
       );
       added++;
-      this.log.log(`Rescan: added new file "${relativePath}" for media #${mediaId}`);
+      this.log.log(
+        `Rescan: added new file "${relativePath}" for media #${mediaId}`,
+      );
 
       if (episodeId != null) {
         await this.episodeRepo.update(episodeId, { hasFile: true });
@@ -1239,7 +1283,9 @@ export class MediaService {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         files.push(...this.collectVideoFilesRecursive(fullPath, depth + 1));
-      } else if (MediaService.VIDEO_EXTS.has(path.extname(entry.name).toLowerCase())) {
+      } else if (
+        MediaService.VIDEO_EXTS.has(path.extname(entry.name).toLowerCase())
+      ) {
         files.push(fullPath);
       }
     }
@@ -1257,7 +1303,11 @@ export class MediaService {
   /**
    * Determine quality from ffprobe resolution (source of truth) + filename source tag.
    */
-  private resolveQuality(filename: string, actualHeight?: number, actualWidth?: number): string {
+  private resolveQuality(
+    filename: string,
+    actualHeight?: number,
+    actualWidth?: number,
+  ): string {
     // Use width to determine resolution (stable across aspect ratios, like Jellyfin)
     let resolution: number;
     if (actualWidth && actualWidth >= 3800) resolution = 2160;

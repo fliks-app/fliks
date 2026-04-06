@@ -28,7 +28,13 @@ export function computeMovieHash(
     // Read first 64 KiB
     fs.readSync(fd, buf, 0, HASH_CHUNK_SIZE, 0);
     // Read last 64 KiB
-    fs.readSync(fd, buf, HASH_CHUNK_SIZE, HASH_CHUNK_SIZE, bytesize - HASH_CHUNK_SIZE);
+    fs.readSync(
+      fd,
+      buf,
+      HASH_CHUNK_SIZE,
+      HASH_CHUNK_SIZE,
+      bytesize - HASH_CHUNK_SIZE,
+    );
 
     // Sum as uint64 little-endian words + filesize
     let lo = 0;
@@ -51,8 +57,7 @@ export function computeMovieHash(
     hi = hi >>> 0;
 
     const hash =
-      hi.toString(16).padStart(8, '0') +
-      lo.toString(16).padStart(8, '0');
+      hi.toString(16).padStart(8, '0') + lo.toString(16).padStart(8, '0');
 
     return { hash, bytesize };
   } finally {

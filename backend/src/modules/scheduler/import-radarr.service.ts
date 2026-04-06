@@ -37,7 +37,11 @@ interface RadarrMovie {
   rootFolderPath?: string;
   overview?: string;
   qualityProfileId?: number;
-  movieFile?: { relativePath?: string; size?: number; quality?: { quality?: { name?: string } } };
+  movieFile?: {
+    relativePath?: string;
+    size?: number;
+    quality?: { quality?: { name?: string } };
+  };
 }
 
 interface RadarrExtraFile {
@@ -91,7 +95,12 @@ export class ImportRadarrService {
     private readonly config: ConfigService,
   ) {}
 
-  async importFromApi(url: string, apiKey: string, mode: 'skip' | 'update' = 'skip', importSubtitles = false): Promise<ApiImportResult> {
+  async importFromApi(
+    url: string,
+    apiKey: string,
+    mode: 'skip' | 'update' = 'skip',
+    importSubtitles = false,
+  ): Promise<ApiImportResult> {
     const baseUrl = url.replace(/\/+$/, '');
     let imported = 0;
     const errors: string[] = [];
@@ -199,13 +208,24 @@ export class ImportRadarrService {
     // Import subtitles if requested
     let subtitlesImported = 0;
     if (importSubtitles) {
-      subtitlesImported = await this.importSubtitlesFromRadarr(baseUrl, apiKey, movies, errors);
+      subtitlesImported = await this.importSubtitlesFromRadarr(
+        baseUrl,
+        apiKey,
+        movies,
+        errors,
+      );
     }
 
     this.log.log(
       `Radarr API import: ${imported} imported, ${subtitlesImported} subtitles, ${errors.length} errors`,
     );
-    return { imported, errors, rootFoldersCreated, qualityProfilesCreated, subtitlesImported };
+    return {
+      imported,
+      errors,
+      rootFoldersCreated,
+      qualityProfilesCreated,
+      subtitlesImported,
+    };
   }
 
   private async importSubtitlesFromRadarr(
@@ -234,9 +254,12 @@ export class ImportRadarrService {
       if (!mediaFile) continue;
 
       try {
-        const res = await fetch(`${baseUrl}/api/v3/extrafile?movieId=${movie.id}`, {
-          headers: { 'X-Api-Key': apiKey },
-        });
+        const res = await fetch(
+          `${baseUrl}/api/v3/extrafile?movieId=${movie.id}`,
+          {
+            headers: { 'X-Api-Key': apiKey },
+          },
+        );
         if (!res.ok) continue;
         const extras = (await res.json()) as RadarrExtraFile[];
 
@@ -246,33 +269,45 @@ export class ImportRadarrService {
           if (!SUBTITLE_EXTS.has(ext)) continue;
 
           // Parse language from Radarr language object or filename
-          const lang = extra.language?.name?.toLowerCase() ?? this.parseLanguageFromPath(extra.relativePath);
+          const lang =
+            extra.language?.name?.toLowerCase() ??
+            this.parseLanguageFromPath(extra.relativePath);
 
           // Parse tags from filename (e.g. "movie.en.forced.srt" → ["forced"])
           const tags = this.parseSubtitleTags(extra.relativePath);
           const forced = tags.includes('forced');
-          const hearingImpaired = tags.includes('sdh') || tags.includes('cc') || tags.includes('hi');
+          const hearingImpaired =
+            tags.includes('sdh') || tags.includes('cc') || tags.includes('hi');
 
           // Build absolute path from movie path + relative path
-          const filePath = movie.path ? path.join(movie.path, extra.relativePath) : null;
+          const filePath = movie.path
+            ? path.join(movie.path, extra.relativePath)
+            : null;
 
           // Check if subtitle already exists
           const existing = await this.subtitleRepo.findOne({
-            where: { mediaFileId: mediaFile.id, language: lang, forced, filePath: filePath ?? undefined },
+            where: {
+              mediaFileId: mediaFile.id,
+              language: lang,
+              forced,
+              filePath: filePath ?? undefined,
+            },
           });
           if (existing) continue;
 
-          await this.subtitleRepo.save(this.subtitleRepo.create({
-            mediaId: media.id,
-            mediaFileId: mediaFile.id,
-            language: lang,
-            forced,
-            hearingImpaired,
-            providerType: SubtitleProviderType.EMBEDDED,
-            status: SubtitleStatus.DOWNLOADED,
-            filePath,
-            tags,
-          }));
+          await this.subtitleRepo.save(
+            this.subtitleRepo.create({
+              mediaId: media.id,
+              mediaFileId: mediaFile.id,
+              language: lang,
+              forced,
+              hearingImpaired,
+              providerType: SubtitleProviderType.RADARR,
+              status: SubtitleStatus.DOWNLOADED,
+              filePath,
+              tags,
+            }),
+          );
           count++;
         }
       } catch (e) {
@@ -289,8 +324,46 @@ export class ImportRadarrService {
     const base = path.basename(relativePath, path.extname(relativePath));
     const parts = base.split('.');
     // Common 2-3 letter language codes
-    const langCodes = new Set(['en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'ja', 'ko', 'zh', 'ru', 'ar', 'pl', 'sv', 'da', 'no', 'fi',
-      'eng', 'fra', 'fre', 'deu', 'ger', 'spa', 'ita', 'por', 'nld', 'dut', 'jpn', 'kor', 'zho', 'chi', 'rus', 'ara', 'pol', 'swe', 'dan', 'nor', 'fin']);
+    const langCodes = new Set([
+      'en',
+      'fr',
+      'de',
+      'es',
+      'it',
+      'pt',
+      'nl',
+      'ja',
+      'ko',
+      'zh',
+      'ru',
+      'ar',
+      'pl',
+      'sv',
+      'da',
+      'no',
+      'fi',
+      'eng',
+      'fra',
+      'fre',
+      'deu',
+      'ger',
+      'spa',
+      'ita',
+      'por',
+      'nld',
+      'dut',
+      'jpn',
+      'kor',
+      'zho',
+      'chi',
+      'rus',
+      'ara',
+      'pol',
+      'swe',
+      'dan',
+      'nor',
+      'fin',
+    ]);
     for (let i = parts.length - 1; i >= 0; i--) {
       const p = parts[i].toLowerCase();
       if (langCodes.has(p)) return p;
@@ -299,7 +372,9 @@ export class ImportRadarrService {
   }
 
   private parseSubtitleTags(relativePath: string): string[] {
-    const base = path.basename(relativePath, path.extname(relativePath)).toLowerCase();
+    const base = path
+      .basename(relativePath, path.extname(relativePath))
+      .toLowerCase();
     const tags: string[] = [];
     if (base.includes('forced')) tags.push('forced');
     if (base.includes('sdh')) tags.push('sdh');
@@ -465,7 +540,9 @@ export class ImportRadarrService {
           rootFoldersCreated,
         );
         for (let i = before; i < rootFoldersCreated.length; i++) {
-          this.log.log(`Created root folder from Radarr: ${rootFoldersCreated[i]}`);
+          this.log.log(
+            `Created root folder from Radarr: ${rootFoldersCreated[i]}`,
+          );
         }
       }
     } catch (e) {

@@ -79,7 +79,12 @@ export class PlaybackController {
     @Body() body: { mediaId: number; episodeId?: number },
   ) {
     const user = req.user as User;
-    return this.playbackService.toggleWatched(user.id, mediaFileId, body.mediaId, body.episodeId);
+    return this.playbackService.toggleWatched(
+      user.id,
+      mediaFileId,
+      body.mediaId,
+      body.episodeId,
+    );
   }
 
   @Delete(':mediaFileId')

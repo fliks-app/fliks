@@ -19,11 +19,26 @@ import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PlaybackState, Media, MediaFile, SubtitleFile, Episode, Season]),
+    TypeOrmModule.forFeature([
+      PlaybackState,
+      Media,
+      MediaFile,
+      SubtitleFile,
+      Episode,
+      Season,
+    ]),
     AuthModule,
   ],
   controllers: [StreamingController, PlaybackController],
-  providers: [StreamingService, SubtitleStreamService, TranscodingService, StreamBuilderService, PlaybackService, ActiveStreamTracker, SubtitleBurnInService],
+  providers: [
+    StreamingService,
+    SubtitleStreamService,
+    TranscodingService,
+    StreamBuilderService,
+    PlaybackService,
+    ActiveStreamTracker,
+    SubtitleBurnInService,
+  ],
   exports: [PlaybackService, TranscodingService, ActiveStreamTracker],
 })
 export class StreamingModule {}

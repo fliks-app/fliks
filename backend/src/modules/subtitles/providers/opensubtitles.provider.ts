@@ -4,7 +4,11 @@ import {
   SubtitleSearchParams,
   SubtitleSearchResult,
 } from './subtitle-provider.interface';
-import { isRateLimited, rateLimitedFetch, markRateLimited } from './rate-limiter';
+import {
+  isRateLimited,
+  rateLimitedFetch,
+  markRateLimited,
+} from './rate-limiter';
 
 const PROVIDER_TYPE = 'opensubtitles';
 const DEFAULT_API_KEY = 'KXXhBJcOUG9xTxmPzIIkE56obyHtyCyd';

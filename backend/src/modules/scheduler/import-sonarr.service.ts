@@ -71,7 +71,12 @@ export class ImportSonarrService {
     private readonly config: ConfigService,
   ) {}
 
-  async importFromApi(url: string, apiKey: string, mode: 'skip' | 'update' = 'skip', _importSubtitles = false): Promise<ApiImportResult> {
+  async importFromApi(
+    url: string,
+    apiKey: string,
+    mode: 'skip' | 'update' = 'skip',
+    _importSubtitles = false,
+  ): Promise<ApiImportResult> {
     const baseUrl = url.replace(/\/+$/, '');
     let imported = 0;
     const errors: string[] = [];
@@ -137,9 +142,7 @@ export class ImportSonarrService {
         );
         const folderName =
           resolved?.folderName ??
-          (s.path
-            ? path.basename(s.path.replace(/\/+$/, ''))
-            : undefined);
+          (s.path ? path.basename(s.path.replace(/\/+$/, '')) : undefined);
 
         if (exists) {
           if (mode === 'skip') continue;
@@ -337,7 +340,9 @@ export class ImportSonarrService {
           rootFoldersCreated,
         );
         for (let i = before; i < rootFoldersCreated.length; i++) {
-          this.log.log(`Created root folder from Sonarr: ${rootFoldersCreated[i]}`);
+          this.log.log(
+            `Created root folder from Sonarr: ${rootFoldersCreated[i]}`,
+          );
         }
       }
     } catch (e) {

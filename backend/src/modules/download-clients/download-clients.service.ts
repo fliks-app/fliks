@@ -141,13 +141,15 @@ export class DownloadClientsService {
       if (!this.qbittorrent.supports(client)) continue;
       try {
         const torrents = await this.qbittorrent.getTorrents(client);
-        const t = torrents.find(t => t.hash?.toLowerCase() === hash);
+        const t = torrents.find((t) => t.hash?.toLowerCase() === hash);
         if (t) {
           sourceTitle = t.name;
           clientId = client.id;
           break;
         }
-      } catch { continue; }
+      } catch {
+        continue;
+      }
     }
 
     return this.historyRepo.save(
@@ -164,7 +166,8 @@ export class DownloadClientsService {
 
   private parseQuality(title: string): string {
     const u = title.toUpperCase();
-    if (u.includes('2160P') || u.includes('4K') || u.includes('UHD')) return '2160p';
+    if (u.includes('2160P') || u.includes('4K') || u.includes('UHD'))
+      return '2160p';
     if (u.includes('1080P')) return '1080p';
     if (u.includes('720P')) return '720p';
     if (u.includes('480P')) return '480p';
@@ -190,7 +193,9 @@ export class DownloadClientsService {
         if (!this.qbittorrent.supports(client)) continue;
         try {
           const torrents = await this.qbittorrent.getTorrents(client);
-          const t = torrents.find(t => t.hash?.toLowerCase() === torrentHash.toLowerCase());
+          const t = torrents.find(
+            (t) => t.hash?.toLowerCase() === torrentHash.toLowerCase(),
+          );
           if (t) {
             entry = await this.historyRepo.findOne({
               where: { sourceTitle: t.name },
@@ -202,12 +207,16 @@ export class DownloadClientsService {
             }
             break;
           }
-        } catch { continue; }
+        } catch {
+          continue;
+        }
       }
     }
 
     if (!entry) {
-      throw new NotFoundException('No history entry — link the torrent to a media first');
+      throw new NotFoundException(
+        'No history entry — link the torrent to a media first',
+      );
     }
     await this.historyRepo.update(entry.id, {
       torrentHash: entry.torrentHash,

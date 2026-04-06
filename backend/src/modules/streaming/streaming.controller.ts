@@ -17,7 +17,12 @@ import * as fs from 'fs';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { StreamingService } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
-import { TranscodingService, PROFILES, SessionContext, BurnInSubtitle } from './transcoding.service';
+import {
+  TranscodingService,
+  PROFILES,
+  SessionContext,
+  BurnInSubtitle,
+} from './transcoding.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { SubtitleBurnInService } from './subtitle-burn-in.service';
@@ -41,7 +46,11 @@ export class StreamingController {
     private readonly subtitleBurnIn: SubtitleBurnInService,
   ) {}
 
-  private buildSessionContext(req: Request, resolved: { media: any; mediaFile?: any }, mediaFileId: number): SessionContext {
+  private buildSessionContext(
+    req: Request,
+    resolved: { media: any; mediaFile?: any },
+    mediaFileId: number,
+  ): SessionContext {
     const user = (req as any).user as User | undefined;
     const si = resolved.mediaFile?.streamInfo as any;
     return {
@@ -50,10 +59,12 @@ export class StreamingController {
       mediaTitle: resolved.media?.title,
       mediaType: resolved.media?.type,
       posterUrl: resolved.media?.posterUrl ?? null,
-      transcodeReasons: this.activeStreamTracker.getTranscodeReasons(mediaFileId),
+      transcodeReasons:
+        this.activeStreamTracker.getTranscodeReasons(mediaFileId),
       tonemap: this.activeStreamTracker.getTonemapping(mediaFileId),
       burnInSubtitle: this.activeStreamTracker.getBurnIn(mediaFileId),
-      audioStreamIndex: this.activeStreamTracker.getAudioStreamIndex(mediaFileId),
+      audioStreamIndex:
+        this.activeStreamTracker.getAudioStreamIndex(mediaFileId),
       crop: si?.video?.[0]?.crop ?? undefined,
     };
   }
@@ -98,25 +109,37 @@ export class StreamingController {
     const burnInSubtitleId = (req.query as any).burnInSubtitleId
       ? parseInt((req.query as any).burnInSubtitleId, 10)
       : undefined;
-    const audioStreamIndex = (req.query as any).audioStreamIndex != null
-      ? parseInt((req.query as any).audioStreamIndex, 10)
-      : undefined;
-    const result = this.streamBuilder.evaluate(resolved, deviceProfile, tokenParam, burnInSubtitleId);
+    const audioStreamIndex =
+      (req.query as any).audioStreamIndex != null
+        ? parseInt((req.query as any).audioStreamIndex, 10)
+        : undefined;
+    const result = this.streamBuilder.evaluate(
+      resolved,
+      deviceProfile,
+      tokenParam,
+      burnInSubtitleId,
+    );
     // Cache transcode reasons for the admin dashboard
     if (result.transcodeReasons.length) {
-      this.activeStreamTracker.setTranscodeReasons(mediaFileId, result.transcodeReasons);
+      this.activeStreamTracker.setTranscodeReasons(
+        mediaFileId,
+        result.transcodeReasons,
+      );
     }
     this.activeStreamTracker.setTonemapping(mediaFileId, result.tonemapping);
     // Cache burn-in info for HLS endpoints
     if (burnInSubtitleId) {
-      this.subtitleBurnIn.resolve(burnInSubtitleId, mediaFileId).then((info) => {
-        const filter = this.subtitleBurnIn.buildFilter(info);
-        this.activeStreamTracker.setBurnIn(mediaFileId, {
-          filter,
-          streamIndex: info.streamIndex,
-          type: info.type,
-        });
-      }).catch(() => {});
+      this.subtitleBurnIn
+        .resolve(burnInSubtitleId, mediaFileId)
+        .then((info) => {
+          const filter = this.subtitleBurnIn.buildFilter(info);
+          this.activeStreamTracker.setBurnIn(mediaFileId, {
+            filter,
+            streamIndex: info.streamIndex,
+            type: info.type,
+          });
+        })
+        .catch(() => {});
     } else {
       this.activeStreamTracker.setBurnIn(mediaFileId, undefined);
     }
@@ -149,7 +172,12 @@ export class StreamingController {
     const includeRemux = (req.query as any).remux === '1';
     const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
     const playlist = this.transcodingService.generateMasterPlaylist(
-      mediaFileId, w, h, tokenParam, includeRemux, sourceBitrate || undefined,
+      mediaFileId,
+      w,
+      h,
+      tokenParam,
+      includeRemux,
+      sourceBitrate || undefined,
     );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -178,13 +206,24 @@ export class StreamingController {
         const { execFile: ef } = require('child_process');
         const { promisify } = require('util');
         const exec = promisify(ef);
-        const { stdout } = await exec('ffprobe', [
-          '-v', 'error', '-show_entries', 'format=duration',
-          '-of', 'csv=p=0', resolved.absolutePath,
-        ], { timeout: 10_000 });
+        const { stdout } = await exec(
+          'ffprobe',
+          [
+            '-v',
+            'error',
+            '-show_entries',
+            'format=duration',
+            '-of',
+            'csv=p=0',
+            resolved.absolutePath,
+          ],
+          { timeout: 10_000 },
+        );
         duration = parseFloat(stdout.trim()) || 0;
       } catch (err) {
-        this.log.warn(`Failed to probe duration for MediaFile #${mediaFileId}: ${err}`);
+        this.log.warn(
+          `Failed to probe duration for MediaFile #${mediaFileId}: ${err}`,
+        );
       }
     }
 
@@ -198,11 +237,19 @@ export class StreamingController {
     if (quality === 'remux') {
       const copyAudio = (req.query as any).copyAudio !== 'false';
       void this.transcodingService.getOrCreateRemuxSession(
-        mediaFileId, resolved.absolutePath, copyAudio, 0, ctx,
+        mediaFileId,
+        resolved.absolutePath,
+        copyAudio,
+        0,
+        ctx,
       );
     } else {
       void this.transcodingService.getOrCreateSession(
-        mediaFileId, quality, resolved.absolutePath, 0, ctx,
+        mediaFileId,
+        quality,
+        resolved.absolutePath,
+        0,
+        ctx,
       );
     }
 
@@ -224,7 +271,9 @@ export class StreamingController {
       const remaining = duration - i * segDuration;
       const segLen = Math.min(segDuration, remaining);
       lines.push(`#EXTINF:${segLen.toFixed(3)},`);
-      lines.push(`/api/stream/${mediaFileId}/${quality}/seg-${String(i).padStart(4, '0')}.ts${tokenParam}`);
+      lines.push(
+        `/api/stream/${mediaFileId}/${quality}/seg-${String(i).padStart(4, '0')}.ts${tokenParam}`,
+      );
     }
     lines.push('#EXT-X-ENDLIST');
 
@@ -256,15 +305,27 @@ export class StreamingController {
     const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
 
     const ctx = this.buildSessionContext(req, resolved, mediaFileId);
-    const session = quality === 'remux'
-      ? await this.transcodingService.getOrCreateRemuxSession(
-          mediaFileId, resolved.absolutePath, true, segIndex, ctx,
-        )
-      : await this.transcodingService.getOrCreateSession(
-          mediaFileId, quality, resolved.absolutePath, segIndex, ctx,
-        );
+    const session =
+      quality === 'remux'
+        ? await this.transcodingService.getOrCreateRemuxSession(
+            mediaFileId,
+            resolved.absolutePath,
+            true,
+            segIndex,
+            ctx,
+          )
+        : await this.transcodingService.getOrCreateSession(
+            mediaFileId,
+            quality,
+            resolved.absolutePath,
+            segIndex,
+            ctx,
+          );
 
-    const segPath = await this.transcodingService.getSegmentPath(session, segment);
+    const segPath = await this.transcodingService.getSegmentPath(
+      session,
+      segment,
+    );
     if (!segPath) {
       res.status(404).send('Segment not found');
       return;
@@ -342,8 +403,11 @@ export class StreamingController {
     const user = (req as any).user as User | undefined;
     if (user) {
       this.activeStreamTracker.register(
-        user.id, user.username, mediaFileId,
-        resolved.media?.title ?? '', resolved.media?.type ?? '',
+        user.id,
+        user.username,
+        mediaFileId,
+        resolved.media?.title ?? '',
+        resolved.media?.type ?? '',
         resolved.media?.posterUrl ?? null,
       );
     }

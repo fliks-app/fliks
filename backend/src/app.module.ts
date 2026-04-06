@@ -34,10 +34,12 @@ import { join } from 'path';
       },
       // Serve the Angular frontend in production (when SERVE_STATIC_PATH is set)
       ...(process.env.SERVE_STATIC_PATH
-        ? [{
-            rootPath: process.env.SERVE_STATIC_PATH,
-            exclude: ['/api/{*path}', '/cast/{*path}'],
-          }]
+        ? [
+            {
+              rootPath: process.env.SERVE_STATIC_PATH,
+              exclude: ['/api/{*path}', '/cast/{*path}'],
+            },
+          ]
         : []),
     ),
     TypeOrmModule.forRootAsync({

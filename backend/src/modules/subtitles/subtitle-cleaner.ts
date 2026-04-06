@@ -91,13 +91,15 @@ export function cleanSubtitle(
 
     // Clean HI tags from text lines if requested
     if (removeHiTags) {
-      const cleanedLines = textLines.map((line) => {
-        let cleaned = line;
-        for (const pattern of HI_TAG_PATTERNS) {
-          cleaned = cleaned.replace(pattern, '');
-        }
-        return cleaned.trim();
-      }).filter((line) => line.length > 0);
+      const cleanedLines = textLines
+        .map((line) => {
+          let cleaned = line;
+          for (const pattern of HI_TAG_PATTERNS) {
+            cleaned = cleaned.replace(pattern, '');
+          }
+          return cleaned.trim();
+        })
+        .filter((line) => line.length > 0);
 
       if (cleanedLines.length === 0) continue; // All text was HI tags
       cleaned.push([...lines.slice(0, 2), ...cleanedLines].join('\n'));

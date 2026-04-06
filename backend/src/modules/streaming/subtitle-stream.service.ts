@@ -63,19 +63,30 @@ export class SubtitleStreamService {
     mediaFileId: number,
     streamIndex: number,
   ): Promise<Readable> {
-    if (!Number.isInteger(streamIndex) || streamIndex < 0 || streamIndex > 999) {
+    if (
+      !Number.isInteger(streamIndex) ||
+      streamIndex < 0 ||
+      streamIndex > 999
+    ) {
       throw new BadRequestException(`Invalid stream index: ${streamIndex}`);
     }
 
     const resolved = await this.streamingService.resolveFile(mediaFileId);
     const { spawn } = require('child_process');
 
-    const proc = spawn('ffmpeg', [
-      '-i', resolved.absolutePath,
-      '-map', `0:${streamIndex}`,
-      '-f', 'webvtt',
-      '-',
-    ], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const proc = spawn(
+      'ffmpeg',
+      [
+        '-i',
+        resolved.absolutePath,
+        '-map',
+        `0:${streamIndex}`,
+        '-f',
+        'webvtt',
+        '-',
+      ],
+      { stdio: ['ignore', 'pipe', 'ignore'] },
+    );
 
     return proc.stdout as Readable;
   }

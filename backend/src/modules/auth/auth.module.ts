@@ -27,12 +27,7 @@ import { Role } from '../roles/entities/role.entity';
     }),
   ],
   controllers: [AuthController],
-  providers: [
-    AuthService,
-    JwtStrategy,
-    CaslAbilityFactory,
-    PoliciesGuard,
-  ],
+  providers: [AuthService, JwtStrategy, CaslAbilityFactory, PoliciesGuard],
   exports: [AuthService, CaslAbilityFactory, PoliciesGuard, JwtModule],
 })
 export class AuthModule {}

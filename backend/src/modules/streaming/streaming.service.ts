@@ -46,7 +46,8 @@ export class StreamingService {
       where: { id: mediaFileId },
       relations: ['media', 'media.rootFolder'],
     });
-    if (!file) throw new NotFoundException(`MediaFile #${mediaFileId} not found`);
+    if (!file)
+      throw new NotFoundException(`MediaFile #${mediaFileId} not found`);
 
     const media = file.media;
     if (!media?.path) {
@@ -59,7 +60,10 @@ export class StreamingService {
 
     // Ensure the resolved path stays within the media root folder
     const normalizedRoot = path.resolve(media.path);
-    if (!absolutePath.startsWith(normalizedRoot + path.sep) && absolutePath !== normalizedRoot) {
+    if (
+      !absolutePath.startsWith(normalizedRoot + path.sep) &&
+      absolutePath !== normalizedRoot
+    ) {
       throw new NotFoundException(`Invalid file path`);
     }
 
@@ -72,7 +76,10 @@ export class StreamingService {
 
     // Reject symlinks pointing outside the root folder
     const realPath = await fs.realpath(absolutePath);
-    if (!realPath.startsWith(normalizedRoot + path.sep) && realPath !== normalizedRoot) {
+    if (
+      !realPath.startsWith(normalizedRoot + path.sep) &&
+      realPath !== normalizedRoot
+    ) {
       throw new NotFoundException(`Invalid file path`);
     }
 

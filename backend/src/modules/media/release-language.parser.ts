@@ -91,6 +91,10 @@ export function resolveUnknownLanguage(
   parsed: SuitarrLanguageDefinition,
   unknownLanguageIsoCode: string | undefined,
 ): SuitarrLanguageDefinition {
-  if (parsed.id !== UNKNOWN_LANGUAGE.id || !unknownLanguageIsoCode) return parsed;
-  return SUITARR_LANGUAGES.find((l) => l.isoCode === unknownLanguageIsoCode) ?? parsed;
+  if (parsed.id !== UNKNOWN_LANGUAGE.id || !unknownLanguageIsoCode)
+    return parsed;
+  return (
+    SUITARR_LANGUAGES.find((l) => l.isoCode === unknownLanguageIsoCode) ??
+    parsed
+  );
 }

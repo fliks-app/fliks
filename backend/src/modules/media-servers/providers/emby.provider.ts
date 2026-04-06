@@ -20,14 +20,10 @@ export class EmbyProvider implements MediaServerProvider {
 
   async refreshLibrary(url: string, apiKey: string): Promise<void> {
     const base = url.replace(/\/$/, '');
-    await axios.post(
-      `${base}/Library/Refresh`,
-      null,
-      {
-        headers: { 'X-Emby-Token': apiKey },
-        timeout: 30_000,
-      },
-    );
+    await axios.post(`${base}/Library/Refresh`, null, {
+      headers: { 'X-Emby-Token': apiKey },
+      timeout: 30_000,
+    });
     this.log.log(`Emby library refresh triggered on ${base}`);
   }
 

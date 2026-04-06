@@ -1,9 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DeviceProfileDto } from './dto/device-profile.dto';
-import {
-  PlaybackInfoResponse,
-  TranscodeReason,
-} from './dto/playback-info.dto';
+import { PlaybackInfoResponse, TranscodeReason } from './dto/playback-info.dto';
 import { ResolvedFile } from './streaming.service';
 import { TranscodingService } from './transcoding.service';
 
@@ -77,24 +74,38 @@ export class StreamBuilderService {
 
     // HDR on SDR client forces transcode even if codecs match
     if (needsTonemapping) {
-      if (directPlayResult.canDirectPlay) directPlayResult.canDirectPlay = false;
-      reasons.push({ flag: 'VideoHdrNotSupported', message: `HDR → SDR (tone mapping ${source.hdrFormat})` });
+      if (directPlayResult.canDirectPlay)
+        directPlayResult.canDirectPlay = false;
+      reasons.push({
+        flag: 'VideoHdrNotSupported',
+        message: `HDR → SDR (tone mapping ${source.hdrFormat})`,
+      });
     }
 
     // Subtitle burn-in forces transcode
     if (needsBurnIn) {
-      if (directPlayResult.canDirectPlay) directPlayResult.canDirectPlay = false;
-      reasons.push({ flag: 'SubtitleBurnIn', message: 'Sous-titres gravés dans la vidéo' });
+      if (directPlayResult.canDirectPlay)
+        directPlayResult.canDirectPlay = false;
+      reasons.push({
+        flag: 'SubtitleBurnIn',
+        message: 'Sous-titres gravés dans la vidéo',
+      });
     }
 
     // Crop (black bar removal) forces transcode
     if (needsCrop) {
-      if (directPlayResult.canDirectPlay) directPlayResult.canDirectPlay = false;
-      reasons.push({ flag: 'VideoCrop', message: 'Suppression des bandes noires' });
+      if (directPlayResult.canDirectPlay)
+        directPlayResult.canDirectPlay = false;
+      reasons.push({
+        flag: 'VideoCrop',
+        message: 'Suppression des bandes noires',
+      });
     }
 
     if (directPlayResult.canDirectPlay) {
-      this.log.log(`DirectPlay for file ${resolved.mediaFile.id}: ${sourceContainer}/${sourceVideoCodec}/${sourceAudioCodec}`);
+      this.log.log(
+        `DirectPlay for file ${resolved.mediaFile.id}: ${sourceContainer}/${sourceVideoCodec}/${sourceAudioCodec}`,
+      );
       const url = `/api/stream/${resolved.mediaFile.id}${tokenParam}`;
       return {
         mediaFileId: resolved.mediaFile.id,
@@ -116,18 +127,34 @@ export class StreamBuilderService {
     // --- Step 2: Try DirectStream (remux) ---
     // Video codec must be supported; only container or audio may differ
     // Cannot remux if tone mapping or burn-in is needed (video must be re-encoded)
-    const canCopyVideo = directPlayResult.videoSupported && directPlayResult.videoConditionsMet && !needsTonemapping && !needsBurnIn && !needsCrop;
+    const canCopyVideo =
+      directPlayResult.videoSupported &&
+      directPlayResult.videoConditionsMet &&
+      !needsTonemapping &&
+      !needsBurnIn &&
+      !needsCrop;
     if (canCopyVideo) {
       const canCopyAudio = directPlayResult.audioSupported;
       const outputAudioCodec = canCopyAudio ? sourceAudioCodec : 'aac';
-      if (!canCopyAudio && !reasons.some(r => r.flag.startsWith('Audio'))) {
-        reasons.push({ flag: 'AudioCodecNotSupported', message: `Codec "${sourceAudioCodec}" incompatible` });
+      if (!canCopyAudio && !reasons.some((r) => r.flag.startsWith('Audio'))) {
+        reasons.push({
+          flag: 'AudioCodecNotSupported',
+          message: `Codec "${sourceAudioCodec}" incompatible`,
+        });
       }
-      if (!directPlayResult.containerSupported && !reasons.some(r => r.flag === 'ContainerNotSupported')) {
-        reasons.push({ flag: 'ContainerNotSupported', message: `Conteneur "${sourceContainer}" incompatible` });
+      if (
+        !directPlayResult.containerSupported &&
+        !reasons.some((r) => r.flag === 'ContainerNotSupported')
+      ) {
+        reasons.push({
+          flag: 'ContainerNotSupported',
+          message: `Conteneur "${sourceContainer}" incompatible`,
+        });
       }
 
-      this.log.log(`DirectStream (remux) for file ${resolved.mediaFile.id}: copy video, ${canCopyAudio ? 'copy' : 'transcode'} audio`);
+      this.log.log(
+        `DirectStream (remux) for file ${resolved.mediaFile.id}: copy video, ${canCopyAudio ? 'copy' : 'transcode'} audio`,
+      );
       const sep = tokenParam ? '&' : '?';
       const url = `/api/stream/${resolved.mediaFile.id}/master.m3u8${tokenParam}${sep}remux=1`;
       return {
@@ -141,15 +168,23 @@ export class StreamBuilderService {
         outputVideoCodec: sourceVideoCodec,
         outputAudioCodec,
         outputContainer: 'hls',
-        hwAccel: canCopyAudio ? 'none' : this.transcodingService.getDetectedHwAccel(),
+        hwAccel: canCopyAudio
+          ? 'none'
+          : this.transcodingService.getDetectedHwAccel(),
         tonemapping: false,
         source,
       };
     }
 
     // --- Step 3: Full Transcode ---
-    if (needsTonemapping && !reasons.some(r => r.flag === 'VideoHdrNotSupported')) {
-      reasons.push({ flag: 'VideoHdrNotSupported', message: `HDR → SDR (tone mapping ${source.hdrFormat})` });
+    if (
+      needsTonemapping &&
+      !reasons.some((r) => r.flag === 'VideoHdrNotSupported')
+    ) {
+      reasons.push({
+        flag: 'VideoHdrNotSupported',
+        message: `HDR → SDR (tone mapping ${source.hdrFormat})`,
+      });
     }
     // Compute effective HW accel (same logic as transcoding.service.ts buildFfmpegArgs):
     // - Burn-in forces CPU
@@ -161,7 +196,9 @@ export class StreamBuilderService {
       effectiveHwAccel = 'vaapi';
     }
 
-    this.log.log(`Transcode for file ${resolved.mediaFile.id}: ${reasons.map(r => r.flag).join(', ')}`);
+    this.log.log(
+      `Transcode for file ${resolved.mediaFile.id}: ${reasons.map((r) => r.flag).join(', ')}`,
+    );
     const url = `/api/stream/${resolved.mediaFile.id}/master.m3u8${tokenParam}`;
     return {
       mediaFileId: resolved.mediaFile.id,
@@ -209,57 +246,116 @@ export class StreamBuilderService {
     // Check fine-grained codec conditions on video
     let videoConditionsMet = true;
     if (videoSupported && profile.codecConditions?.length) {
-      const cond = profile.codecConditions.find(c => c.codec === source.videoCodec);
+      const cond = profile.codecConditions.find(
+        (c) => c.codec === source.videoCodec,
+      );
       if (cond) {
-        if (cond.maxLevel && source.videoLevel && source.videoLevel > cond.maxLevel) {
+        if (
+          cond.maxLevel &&
+          source.videoLevel &&
+          source.videoLevel > cond.maxLevel
+        ) {
           videoConditionsMet = false;
-          reasons.push({ flag: 'VideoLevelNotSupported', message: `Niveau ${source.videoLevel} > max ${cond.maxLevel}` });
+          reasons.push({
+            flag: 'VideoLevelNotSupported',
+            message: `Niveau ${source.videoLevel} > max ${cond.maxLevel}`,
+          });
         }
-        if (cond.profiles?.length && source.videoProfile && !cond.profiles.includes(source.videoProfile)) {
+        if (
+          cond.profiles?.length &&
+          source.videoProfile &&
+          !cond.profiles.includes(source.videoProfile)
+        ) {
           videoConditionsMet = false;
-          reasons.push({ flag: 'VideoProfileNotSupported', message: `Profil "${source.videoProfile}" incompatible` });
+          reasons.push({
+            flag: 'VideoProfileNotSupported',
+            message: `Profil "${source.videoProfile}" incompatible`,
+          });
         }
-        if (cond.maxBitDepth && source.videoBitDepth && source.videoBitDepth > cond.maxBitDepth) {
+        if (
+          cond.maxBitDepth &&
+          source.videoBitDepth &&
+          source.videoBitDepth > cond.maxBitDepth
+        ) {
           videoConditionsMet = false;
-          reasons.push({ flag: 'VideoBitDepthNotSupported', message: `${source.videoBitDepth} bit > max ${cond.maxBitDepth} bit` });
+          reasons.push({
+            flag: 'VideoBitDepthNotSupported',
+            message: `${source.videoBitDepth} bit > max ${cond.maxBitDepth} bit`,
+          });
         }
         if (cond.maxWidth && source.width && source.width > cond.maxWidth) {
           videoConditionsMet = false;
-          reasons.push({ flag: 'VideoResolutionNotSupported', message: `Largeur ${source.width} > max ${cond.maxWidth}` });
+          reasons.push({
+            flag: 'VideoResolutionNotSupported',
+            message: `Largeur ${source.width} > max ${cond.maxWidth}`,
+          });
         }
         if (cond.maxHeight && source.height && source.height > cond.maxHeight) {
           videoConditionsMet = false;
-          reasons.push({ flag: 'VideoResolutionNotSupported', message: `Hauteur ${source.height} > max ${cond.maxHeight}` });
+          reasons.push({
+            flag: 'VideoResolutionNotSupported',
+            message: `Hauteur ${source.height} > max ${cond.maxHeight}`,
+          });
         }
       }
     }
 
     // Bitrate check
     if (profile.maxStreamingBitrate && profile.maxStreamingBitrate > 0) {
-      const totalBitrate = (source.videoBitRate ?? 0) + (source.audioBitRate ?? 0);
+      const totalBitrate =
+        (source.videoBitRate ?? 0) + (source.audioBitRate ?? 0);
       if (totalBitrate > profile.maxStreamingBitrate) {
-        reasons.push({ flag: 'VideoBitrateNotSupported', message: `Débit trop élevé (${Math.round(totalBitrate / 1_000_000)} Mbps)` });
+        reasons.push({
+          flag: 'VideoBitrateNotSupported',
+          message: `Débit trop élevé (${Math.round(totalBitrate / 1_000_000)} Mbps)`,
+        });
         videoConditionsMet = false;
       }
     }
 
     // Audio channels check
-    if (profile.maxAudioChannels && source.audioChannels && source.audioChannels > profile.maxAudioChannels) {
+    if (
+      profile.maxAudioChannels &&
+      source.audioChannels &&
+      source.audioChannels > profile.maxAudioChannels
+    ) {
       audioSupported = false;
-      reasons.push({ flag: 'AudioChannelsNotSupported', message: `${source.audioChannels} canaux > max ${profile.maxAudioChannels}` });
+      reasons.push({
+        flag: 'AudioChannelsNotSupported',
+        message: `${source.audioChannels} canaux > max ${profile.maxAudioChannels}`,
+      });
     }
 
     if (!videoSupported) {
-      reasons.push({ flag: 'VideoCodecNotSupported', message: `Codec "${source.videoCodec}" incompatible` });
+      reasons.push({
+        flag: 'VideoCodecNotSupported',
+        message: `Codec "${source.videoCodec}" incompatible`,
+      });
     }
     if (!audioSupported) {
-      reasons.push({ flag: 'AudioCodecNotSupported', message: `Codec "${source.audioCodec}" incompatible` });
+      reasons.push({
+        flag: 'AudioCodecNotSupported',
+        message: `Codec "${source.audioCodec}" incompatible`,
+      });
     }
     if (!containerSupported) {
-      reasons.push({ flag: 'ContainerNotSupported', message: `Conteneur "${source.container}" incompatible` });
+      reasons.push({
+        flag: 'ContainerNotSupported',
+        message: `Conteneur "${source.container}" incompatible`,
+      });
     }
 
-    const canDirectPlay = containerSupported && videoSupported && audioSupported && videoConditionsMet;
-    return { canDirectPlay, containerSupported, videoSupported, audioSupported, videoConditionsMet };
+    const canDirectPlay =
+      containerSupported &&
+      videoSupported &&
+      audioSupported &&
+      videoConditionsMet;
+    return {
+      canDirectPlay,
+      containerSupported,
+      videoSupported,
+      audioSupported,
+      videoConditionsMet,
+    };
   }
 }

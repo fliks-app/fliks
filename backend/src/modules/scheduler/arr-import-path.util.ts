@@ -39,7 +39,10 @@ export function resolveRootFolderFromArrPaths(
   if (!rootFolders.length) return null;
 
   const norm = (p: string) =>
-    path.normalize(p.trim()).replace(/[/\\]+$/, '').replace(/\\/g, '/');
+    path
+      .normalize(p.trim())
+      .replace(/[/\\]+$/, '')
+      .replace(/\\/g, '/');
 
   const sorted = [...rootFolders].sort(
     (a, b) => norm(b.path).length - norm(a.path).length,

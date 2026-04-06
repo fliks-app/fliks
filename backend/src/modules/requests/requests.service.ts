@@ -158,7 +158,11 @@ export class RequestsService {
     });
     if (dup) {
       // For series, allow new requests if seasons don't overlap
-      if (dto.mediaType === 'series' && dto.seasons?.length && dup.seasons?.length) {
+      if (
+        dto.mediaType === 'series' &&
+        dto.seasons?.length &&
+        dup.seasons?.length
+      ) {
         const overlap = dto.seasons.filter((s) => dup.seasons!.includes(s));
         if (overlap.length > 0) {
           throw new ConflictException(
@@ -252,8 +256,10 @@ export class RequestsService {
     if (!this.canManageRequests(user) && row.userId !== user.id) {
       throw new ForbiddenException();
     }
-    if (dto.qualityProfileId !== undefined) row.qualityProfileId = dto.qualityProfileId;
-    if (dto.languageProfileId !== undefined) row.languageProfileId = dto.languageProfileId;
+    if (dto.qualityProfileId !== undefined)
+      row.qualityProfileId = dto.qualityProfileId;
+    if (dto.languageProfileId !== undefined)
+      row.languageProfileId = dto.languageProfileId;
     if (dto.rootFolderId !== undefined) row.rootFolderId = dto.rootFolderId;
     return this.requestRepo.save(row);
   }

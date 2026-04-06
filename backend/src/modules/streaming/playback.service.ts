@@ -189,7 +189,11 @@ export class PlaybackService {
 
     // 3. Merge and sort by lastPlayedAt
     return [...movies, ...seriesItems]
-      .sort((a, b) => new Date(b.lastPlayedAt).getTime() - new Date(a.lastPlayedAt).getTime())
+      .sort(
+        (a, b) =>
+          new Date(b.lastPlayedAt).getTime() -
+          new Date(a.lastPlayedAt).getTime(),
+      )
       .slice(0, 20);
   }
 
@@ -246,7 +250,12 @@ export class PlaybackService {
   }
 
   /** Toggle watched status for a specific media file. */
-  async toggleWatched(userId: number, mediaFileId: number, mediaId: number, episodeId?: number): Promise<PlaybackState> {
+  async toggleWatched(
+    userId: number,
+    mediaFileId: number,
+    mediaId: number,
+    episodeId?: number,
+  ): Promise<PlaybackState> {
     let state = await this.repo.findOne({ where: { userId, mediaFileId } });
     if (state) {
       state.completed = !state.completed;
@@ -254,16 +263,27 @@ export class PlaybackService {
       state.lastPlayedAt = new Date();
     } else {
       state = this.repo.create({
-        userId, mediaFileId, mediaId, episodeId,
-        positionSeconds: 0, durationSeconds: 0,
-        completed: true, lastPlayedAt: new Date(),
+        userId,
+        mediaFileId,
+        mediaId,
+        episodeId,
+        positionSeconds: 0,
+        durationSeconds: 0,
+        completed: true,
+        lastPlayedAt: new Date(),
       });
     }
     return this.repo.save(state);
   }
 
   /** Mark all playback states for a media as completed (hides from continue watching). */
-  async hideFromContinueWatching(userId: number, mediaId: number): Promise<void> {
-    await this.repo.update({ userId, mediaId }, { completed: true, positionSeconds: 0 });
+  async hideFromContinueWatching(
+    userId: number,
+    mediaId: number,
+  ): Promise<void> {
+    await this.repo.update(
+      { userId, mediaId },
+      { completed: true, positionSeconds: 0 },
+    );
   }
 }

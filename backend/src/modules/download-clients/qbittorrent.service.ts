@@ -25,9 +25,9 @@ export interface QbittorrentTorrent {
 }
 
 export interface QbittorrentTorrentFile {
-  name: string;      // relative path within torrent
+  name: string; // relative path within torrent
   size: number;
-  progress: number;  // 0–1
+  progress: number; // 0–1
   priority: number;
 }
 
@@ -207,7 +207,9 @@ export class QbittorrentService {
       );
       const cookies = loginRes.headers['set-cookie'];
       if (!cookies?.length || loginRes.data === 'Fails.') return [];
-      const cookieHeader = cookies.map((c: string) => c.split(';')[0]).join('; ');
+      const cookieHeader = cookies
+        .map((c: string) => c.split(';')[0])
+        .join('; ');
 
       const res = await http.get<QbittorrentTorrentFile[]>(
         `${base}/api/v2/torrents/files`,
@@ -219,7 +221,9 @@ export class QbittorrentService {
       );
       return Array.isArray(res.data) ? res.data : [];
     } catch (e) {
-      this.log.warn(`getTorrentFiles: error for hash ${hash}: ${(e as Error).message}`);
+      this.log.warn(
+        `getTorrentFiles: error for hash ${hash}: ${(e as Error).message}`,
+      );
       return [];
     }
   }

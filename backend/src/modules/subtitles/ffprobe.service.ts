@@ -61,7 +61,10 @@ export interface AudioStreamInfo {
 }
 
 const IMAGE_BASED_SUBTITLE_CODECS = new Set([
-  'hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle', 'xsub',
+  'hdmv_pgs_subtitle',
+  'dvd_subtitle',
+  'dvb_subtitle',
+  'xsub',
 ]);
 
 export interface SubtitleStreamInfo {
@@ -160,12 +163,7 @@ export class FfprobeService {
     try {
       const { stdout } = await execFileAsync(
         'ffprobe',
-        [
-          '-v', 'error',
-          '-print_format', 'json',
-          '-show_streams',
-          videoPath,
-        ],
+        ['-v', 'error', '-print_format', 'json', '-show_streams', videoPath],
         { timeout: 30_000 },
       );
 
@@ -233,9 +231,11 @@ export class FfprobeService {
           colorTransfer: s.color_transfer,
           colorPrimaries: s.color_primaries,
           hdrFormat: this.deriveHdrFormat(
-            s.color_transfer, s.color_primaries,
+            s.color_transfer,
+            s.color_primaries,
             s.bits_per_raw_sample ? Number(s.bits_per_raw_sample) : undefined,
-            s.pix_fmt, s.profile,
+            s.pix_fmt,
+            s.profile,
           ),
         }));
 
@@ -266,7 +266,13 @@ export class FfprobeService {
         }));
 
       if (!video.length && !audio.length) {
-        return { video: [], audio: [], subtitles: [], durationSeconds, error: 'No streams detected' };
+        return {
+          video: [],
+          audio: [],
+          subtitles: [],
+          durationSeconds,
+          error: 'No streams detected',
+        };
       }
       return { video, audio, subtitles, durationSeconds };
     } catch (err) {
@@ -288,9 +294,10 @@ export class FfprobeService {
   ): HdrFormat | undefined {
     if (!colorTransfer) return undefined;
     // Determine if 10-bit from bitDepth, pixel format, or codec profile
-    const is10bit = (bitDepth && bitDepth >= 10)
-      || (pixelFormat && /10le|10be|p010/.test(pixelFormat))
-      || (profile && /main 10|main10/i.test(profile));
+    const is10bit =
+      (bitDepth && bitDepth >= 10) ||
+      (pixelFormat && /10le|10be|p010/.test(pixelFormat)) ||
+      (profile && /main 10|main10/i.test(profile));
     if (!is10bit) return undefined;
     const isBt2020 = colorPrimaries === 'bt2020';
     if (colorTransfer === 'smpte2084' && isBt2020) return 'HDR10';
@@ -315,27 +322,41 @@ export class FfprobeService {
    * Samples multiple points in the video for accuracy.
    * Returns crop info if significant bars are found, null otherwise.
    */
-  async detectCrop(videoPath: string, durationSeconds?: number): Promise<CropInfo | null> {
+  async detectCrop(
+    videoPath: string,
+    durationSeconds?: number,
+  ): Promise<CropInfo | null> {
     try {
       // Sample at 3 different timestamps to avoid false positives (dark scenes, credits)
       const dur = durationSeconds ?? 600;
       const timestamps = [
-        Math.min(60, dur * 0.1),      // 10% or 60s
-        Math.min(300, dur * 0.3),     // 30% or 300s
-        Math.min(600, dur * 0.5),     // 50% or 600s
+        Math.min(60, dur * 0.1), // 10% or 60s
+        Math.min(300, dur * 0.3), // 30% or 300s
+        Math.min(600, dur * 0.5), // 50% or 600s
       ];
 
       const cropCounts = new Map<string, number>();
 
       for (const ss of timestamps) {
         try {
-          const { stderr } = await execFileAsync('ffmpeg', [
-            '-ss', String(Math.floor(ss)),
-            '-i', videoPath,
-            '-t', '3',
-            '-vf', 'cropdetect=24:16:0',
-            '-an', '-f', 'null', '-',
-          ], { timeout: 30_000 });
+          const { stderr } = await execFileAsync(
+            'ffmpeg',
+            [
+              '-ss',
+              String(Math.floor(ss)),
+              '-i',
+              videoPath,
+              '-t',
+              '3',
+              '-vf',
+              'cropdetect=24:16:0',
+              '-an',
+              '-f',
+              'null',
+              '-',
+            ],
+            { timeout: 30_000 },
+          );
 
           // Parse last crop= line
           const lines = stderr.split('\n');
@@ -358,7 +379,10 @@ export class FfprobeService {
       let bestCrop = '';
       let bestCount = 0;
       for (const [crop, count] of cropCounts) {
-        if (count > bestCount) { bestCrop = crop; bestCount = count; }
+        if (count > bestCount) {
+          bestCrop = crop;
+          bestCount = count;
+        }
       }
 
       const parts = bestCrop.split(':').map(Number);

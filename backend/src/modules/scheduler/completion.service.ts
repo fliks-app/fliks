@@ -197,7 +197,12 @@ export class CompletionService {
           statusMessage: (e as Error).message,
         });
 
-        this.events.emit({ type: 'import.failed', mediaId: history.mediaId, title: history.sourceTitle, error: (e as Error).message });
+        this.events.emit({
+          type: 'import.failed',
+          mediaId: history.mediaId,
+          title: history.sourceTitle,
+          error: (e as Error).message,
+        });
 
         // Auto-blocklist the failed release so it won't be grabbed again
         try {
@@ -217,7 +222,10 @@ export class CompletionService {
 
   private async processOne(
     history: DownloadHistory,
-    torrent: QbittorrentTorrent & { _clientId?: number; _client?: import('../download-clients/entities/download-client.entity').DownloadClient },
+    torrent: QbittorrentTorrent & {
+      _clientId?: number;
+      _client?: import('../download-clients/entities/download-client.entity').DownloadClient;
+    },
     movieFormat: string,
     movieFolderFormat: string,
     seriesFormat: string,
@@ -225,13 +233,25 @@ export class CompletionService {
     seasonFolderFormat: string,
     rootFolders: RootFolder[],
   ): Promise<void> {
-    const VIDEO_EXTS = ['.mkv', '.mp4', '.avi', '.mov', '.ts', '.m2ts', '.wmv', '.flv'];
+    const VIDEO_EXTS = [
+      '.mkv',
+      '.mp4',
+      '.avi',
+      '.mov',
+      '.ts',
+      '.m2ts',
+      '.wmv',
+      '.flv',
+    ];
 
     // Use qBittorrent API to get actual files of this torrent
     let videoFiles: { filePath: string; size: number }[] = [];
 
     if (torrent._client) {
-      const torrentFiles = await this.qbittorrent.getTorrentFiles(torrent._client, torrent.hash);
+      const torrentFiles = await this.qbittorrent.getTorrentFiles(
+        torrent._client,
+        torrent.hash,
+      );
       for (const f of torrentFiles) {
         const ext = path.extname(f.name).toLowerCase();
         if (VIDEO_EXTS.includes(ext) && f.progress >= 1) {
@@ -463,7 +483,11 @@ export class CompletionService {
       quality: history.quality,
       sourceTitle: history.sourceTitle,
     });
-    this.events.emit({ type: 'import.complete', mediaId: media.id, title: media.title });
+    this.events.emit({
+      type: 'import.complete',
+      mediaId: media.id,
+      title: media.title,
+    });
     this.events.emit({ type: 'queue.updated' });
 
     void this.mediaServers.dispatch('download.complete', {
@@ -637,7 +661,10 @@ export class CompletionService {
           where: { torrentHash: t.hash },
         });
 
-        this.events.emit({ type: 'stalled.removed', title: history?.sourceTitle ?? t.name });
+        this.events.emit({
+          type: 'stalled.removed',
+          title: history?.sourceTitle ?? t.name,
+        });
         this.events.emit({ type: 'queue.updated' });
 
         // Blocklist the release
@@ -660,7 +687,9 @@ export class CompletionService {
 
     // Re-trigger search for missing media if configured
     if (searchAfter && needsSearch) {
-      this.log.log('StalledCleanup: triggering SearchMissing after stalled removal');
+      this.log.log(
+        'StalledCleanup: triggering SearchMissing after stalled removal',
+      );
       // Use dataSource to create a command directly (avoid circular dep with SchedulerService)
       await this.dataSource.query(
         `INSERT INTO commands (name, status, trigger, body) VALUES ('SearchMissing', 'queued', 'scheduled', '{}')`,
@@ -677,28 +706,35 @@ export class CompletionService {
     const completed = await this.historyRepo.find({
       where: { status: 'completed' },
     });
-    const withHash = completed.filter(h => h.torrentHash);
+    const withHash = completed.filter((h) => h.torrentHash);
     if (!withHash.length) return;
 
     // Load all indexers into a map for quick lookup
     const indexers = await this.indexerRepo.find();
-    const indexerMap = new Map(indexers.map(ix => [ix.id, ix]));
+    const indexerMap = new Map(indexers.map((ix) => [ix.id, ix]));
 
     // Fetch torrents from all enabled qBittorrent clients
     const clients = await this.clientRepo.find({ where: { enabled: true } });
-    const qbitClients = clients.filter(c => this.qbittorrent.supports(c));
+    const qbitClients = clients.filter((c) => this.qbittorrent.supports(c));
     if (!qbitClients.length) return;
 
-    const allTorrents: { client: typeof clients[0]; torrent: QbittorrentTorrent }[] = [];
+    const allTorrents: {
+      client: (typeof clients)[0];
+      torrent: QbittorrentTorrent;
+    }[] = [];
     for (const client of qbitClients) {
       try {
         const torrents = await this.qbittorrent.getTorrents(client);
         for (const t of torrents) allTorrents.push({ client, torrent: t });
-      } catch { continue; }
+      } catch {
+        continue;
+      }
     }
     if (!allTorrents.length) return;
 
-    const torrentMap = new Map(allTorrents.map(e => [e.torrent.hash.toLowerCase(), e]));
+    const torrentMap = new Map(
+      allTorrents.map((e) => [e.torrent.hash.toLowerCase(), e]),
+    );
     const nowSec = Math.floor(Date.now() / 1000);
     let deleted = 0;
 
@@ -707,13 +743,22 @@ export class CompletionService {
       if (!entry) continue; // torrent already removed
 
       const { client, torrent } = entry;
-      const indexer = history.indexerId ? indexerMap.get(history.indexerId) : undefined;
+      const indexer = history.indexerId
+        ? indexerMap.get(history.indexerId)
+        : undefined;
       const settings = (indexer?.settings ?? {}) as Record<string, unknown>;
       const targetRatio = Number(settings['seedRatio'] ?? 1);
-      const maxRetentionDays = settings['maxRetentionDays'] != null ? Number(settings['maxRetentionDays']) : null;
+      const maxRetentionDays =
+        settings['maxRetentionDays'] != null
+          ? Number(settings['maxRetentionDays'])
+          : null;
 
       let reason = '';
-      if (maxRetentionDays != null && maxRetentionDays > 0 && torrent.completion_on > 0) {
+      if (
+        maxRetentionDays != null &&
+        maxRetentionDays > 0 &&
+        torrent.completion_on > 0
+      ) {
         const ageDays = (nowSec - torrent.completion_on) / 86400;
         if (ageDays >= maxRetentionDays) {
           reason = `retention ${Math.round(ageDays)}d >= ${maxRetentionDays}d`;
@@ -730,7 +775,9 @@ export class CompletionService {
         await this.qbittorrent.deleteTorrent(client, torrent.hash, true);
         deleted++;
       } catch (e) {
-        this.log.error(`SeedCleanup: failed to delete "${torrent.name}": ${(e as Error).message}`);
+        this.log.error(
+          `SeedCleanup: failed to delete "${torrent.name}": ${(e as Error).message}`,
+        );
       }
     }
 

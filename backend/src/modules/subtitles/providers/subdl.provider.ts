@@ -90,14 +90,14 @@ export class SubdlProvider implements SubtitleProviderInterface {
 
     // providerFileId contains the relative URL path from search results
     const dlUrl = `https://dl.subdl.com${result.providerFileId}`;
-    const res = await rateLimitedFetch(
-      PROVIDER_TYPE,
-      dlUrl,
-      { headers: { 'User-Agent': 'Suitarr/1.0' } },
-    );
+    const res = await rateLimitedFetch(PROVIDER_TYPE, dlUrl, {
+      headers: { 'User-Agent': 'Suitarr/1.0' },
+    });
 
     if (!res || !res.ok) {
-      throw new Error(`Subdl download failed: ${res?.status ?? 'rate-limited'}`);
+      throw new Error(
+        `Subdl download failed: ${res?.status ?? 'rate-limited'}`,
+      );
     }
 
     const zipBuf = Buffer.from(await res.arrayBuffer());

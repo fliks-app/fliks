@@ -32,7 +32,9 @@ export class UsersService implements OnModuleInit {
     const count = await this.userRepo.count();
     if (count > 0) return;
 
-    this.log.warn('No users found — creating default admin account (admin / password)');
+    this.log.warn(
+      'No users found — creating default admin account (admin / password)',
+    );
     const user = this.userRepo.create({
       username: 'admin',
       passwordHash: await bcrypt.hash('password', 12),
@@ -40,7 +42,9 @@ export class UsersService implements OnModuleInit {
       enabled: true,
     });
     await this.userRepo.save(user);
-    this.log.warn('Default admin account created — change the password after first login!');
+    this.log.warn(
+      'Default admin account created — change the password after first login!',
+    );
   }
 
   async findAll() {
@@ -131,7 +135,11 @@ export class UsersService implements OnModuleInit {
       if (dto.roleId !== undefined) target.roleId = dto.roleId;
       if (dto.isAdmin !== undefined) target.isAdmin = dto.isAdmin;
       if (dto.enabled !== undefined) target.enabled = dto.enabled;
-    } else if (dto.roleId !== undefined || dto.enabled !== undefined || dto.isAdmin !== undefined) {
+    } else if (
+      dto.roleId !== undefined ||
+      dto.enabled !== undefined ||
+      dto.isAdmin !== undefined
+    ) {
       throw new ForbiddenException(
         'Only users with users.manage permission can change role or enabled status',
       );
@@ -152,5 +160,4 @@ export class UsersService implements OnModuleInit {
     const user = await this.findOne(id);
     await this.userRepo.remove(user);
   }
-
 }

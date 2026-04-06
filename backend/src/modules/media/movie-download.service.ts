@@ -13,7 +13,10 @@ import { DownloadClient } from '../download-clients/entities/download-client.ent
 import { TorznabService, TorznabRelease } from '../indexers/torznab.service';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { parseReleaseQuality } from './release-quality.parser';
-import { parseReleaseLanguage, resolveUnknownLanguage } from './release-language.parser';
+import {
+  parseReleaseLanguage,
+  resolveUnknownLanguage,
+} from './release-language.parser';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
 import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
@@ -117,13 +120,21 @@ export class MovieDownloadService {
     const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
     const indexerMinSeeders = buildIndexerMinSeeders(indexers);
     const indexerUnknownLang = new Map(
-      indexers.map((ix) => [ix.id, (ix.settings as Record<string, unknown>)?.unknownLanguageIsoCode as string | undefined]),
+      indexers.map((ix) => [
+        ix.id,
+        (ix.settings as Record<string, unknown>)?.unknownLanguageIsoCode as
+          | string
+          | undefined,
+      ]),
     );
 
     return Promise.all(
       releases.map(async (r) => {
         const parsed = parseReleaseQuality(r.title);
-        const lang = resolveUnknownLanguage(parseReleaseLanguage(r.title), indexerUnknownLang.get(r.indexerId));
+        const lang = resolveUnknownLanguage(
+          parseReleaseLanguage(r.title),
+          indexerUnknownLang.get(r.indexerId),
+        );
         const [cfScore, isBlocklisted] = await Promise.all([
           this.customFormats.scoreRelease(r.title, {
             freeleech: r.freeleech,

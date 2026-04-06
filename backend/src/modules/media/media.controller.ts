@@ -80,7 +80,10 @@ export class MediaController {
   @Get()
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
   findAll(@Query() query: SearchMediaDto, @CurrentUser() user: any) {
-    return this.mediaService.findAll(query, query.excludeWatched ? user?.id : undefined);
+    return this.mediaService.findAll(
+      query,
+      query.excludeWatched ? user?.id : undefined,
+    );
   }
 
   @Get('counts')
@@ -348,7 +351,13 @@ export class MediaController {
   async syncSubtitle(
     @Param('id', ParseIntPipe) _id: number,
     @Param('subtitleId', ParseIntPipe) subtitleId: number,
-    @Body() body?: { reference?: string; maxOffsetSeconds?: number; noFixFramerate?: boolean; goldenSectionSearch?: boolean },
+    @Body()
+    body?: {
+      reference?: string;
+      maxOffsetSeconds?: number;
+      noFixFramerate?: boolean;
+      goldenSectionSearch?: boolean;
+    },
   ) {
     return this.subtitleSync.enqueueSyncSubtitle(subtitleId, body ?? {});
   }
@@ -361,7 +370,8 @@ export class MediaController {
   ) {
     const media = await this.mediaService.findOne(id);
     const file = media.files?.find((f) => f.id === mediaFileId);
-    if (!file) throw new NotFoundException(`MediaFile #${mediaFileId} not found`);
+    if (!file)
+      throw new NotFoundException(`MediaFile #${mediaFileId} not found`);
     const path = require('path');
     const videoPath = path.join(media.path, file.relativePath);
     return this.ffprobe.detectStreams(videoPath);
@@ -380,7 +390,11 @@ export class MediaController {
     @Param('subtitleId', ParseIntPipe) subtitleId: number,
     @Body() body: { action: string; params?: Record<string, unknown> },
   ) {
-    return this.subtitlesService.applyPostProcessing(subtitleId, body.action, body.params);
+    return this.subtitlesService.applyPostProcessing(
+      subtitleId,
+      body.action,
+      body.params,
+    );
   }
 
   @Post(':id/subtitles/:subtitleId/upgrade')

@@ -116,7 +116,9 @@ export class SchedulerService implements OnModuleInit {
       { status: 'failed', endedOn: new Date() },
     );
     if (stale.affected) {
-      this.log.warn(`Marked ${stale.affected} stale command(s) as failed on startup`);
+      this.log.warn(
+        `Marked ${stale.affected} stale command(s) as failed on startup`,
+      );
     }
   }
 
@@ -249,7 +251,11 @@ export class SchedulerService implements OnModuleInit {
     } finally {
       cmd.endedOn = new Date();
       await this.commandRepo.save(cmd);
-      this.eventsService.emit({ type: 'command.completed', name, status: cmd.status });
+      this.eventsService.emit({
+        type: 'command.completed',
+        name,
+        status: cmd.status,
+      });
     }
   }
 
@@ -278,13 +284,21 @@ export class SchedulerService implements OnModuleInit {
         status: 'completed',
         endedOn: new Date(),
       });
-      this.eventsService.emit({ type: 'command.completed', name, status: 'completed' });
+      this.eventsService.emit({
+        type: 'command.completed',
+        name,
+        status: 'completed',
+      });
     } catch (e) {
       await this.commandRepo.update(cmdId, {
         status: 'failed',
         endedOn: new Date(),
       });
-      this.eventsService.emit({ type: 'command.completed', name, status: 'failed' });
+      this.eventsService.emit({
+        type: 'command.completed',
+        name,
+        status: 'failed',
+      });
       throw e;
     }
   }

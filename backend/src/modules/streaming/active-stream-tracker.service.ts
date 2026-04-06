@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  OnModuleInit,
-  OnModuleDestroy,
-} from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 
 export interface DirectPlaySession {
   userId: number;
@@ -21,7 +17,10 @@ const STALE_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
 export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
   private readonly sessions = new Map<string, DirectPlaySession>();
   /** Cache transcode reasons per mediaFileId (set during playback-info, read by dashboard) */
-  private readonly transcodeReasonsCache = new Map<number, { flag: string; message: string }[]>();
+  private readonly transcodeReasonsCache = new Map<
+    number,
+    { flag: string; message: string }[]
+  >();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
   onModuleInit() {
@@ -64,11 +63,16 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
 
   private readonly tonemappingCache = new Map<number, boolean>();
 
-  setTranscodeReasons(mediaFileId: number, reasons: { flag: string; message: string }[]) {
+  setTranscodeReasons(
+    mediaFileId: number,
+    reasons: { flag: string; message: string }[],
+  ) {
     this.transcodeReasonsCache.set(mediaFileId, reasons);
   }
 
-  getTranscodeReasons(mediaFileId: number): { flag: string; message: string }[] {
+  getTranscodeReasons(
+    mediaFileId: number,
+  ): { flag: string; message: string }[] {
     return this.transcodeReasonsCache.get(mediaFileId) ?? [];
   }
 
@@ -94,7 +98,10 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.burnInCache.get(mediaFileId) ?? undefined;
   }
 
-  private readonly audioStreamIndexCache = new Map<number, number | undefined>();
+  private readonly audioStreamIndexCache = new Map<
+    number,
+    number | undefined
+  >();
 
   setAudioStreamIndex(mediaFileId: number, index: number | undefined) {
     if (index != null) this.audioStreamIndexCache.set(mediaFileId, index);

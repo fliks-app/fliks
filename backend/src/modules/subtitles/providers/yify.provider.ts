@@ -191,5 +191,4 @@ export class YifyProvider implements SubtitleProviderInterface {
   private stripTags(html: string): string {
     return html.replace(/<[^>]+>/g, '');
   }
-
 }

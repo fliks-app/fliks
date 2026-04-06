@@ -16,7 +16,11 @@ import { CurrentUser } from './decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
 import { ACCESS_TOKEN_COOKIE } from './auth.constants';
 
-const NATIVE_ORIGINS = ['https://localhost', 'capacitor://localhost', 'http://localhost'];
+const NATIVE_ORIGINS = [
+  'https://localhost',
+  'capacitor://localhost',
+  'http://localhost',
+];
 
 function isCrossOriginNative(req: Request): boolean {
   const origin = req.headers.origin ?? '';
@@ -25,16 +29,38 @@ function isCrossOriginNative(req: Request): boolean {
 
 function cookieOpts(req: Request, maxAgeMs: number) {
   if (isCrossOriginNative(req)) {
-    return { httpOnly: true, secure: true, sameSite: 'none' as const, path: '/', maxAge: maxAgeMs };
+    return {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none' as const,
+      path: '/',
+      maxAge: maxAgeMs,
+    };
   }
-  return { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const, path: '/', maxAge: maxAgeMs };
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    path: '/',
+    maxAge: maxAgeMs,
+  };
 }
 
 function clearOpts(req: Request) {
   if (isCrossOriginNative(req)) {
-    return { path: '/', httpOnly: true, secure: true, sameSite: 'none' as const };
+    return {
+      path: '/',
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none' as const,
+    };
   }
-  return { path: '/', httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const };
+  return {
+    path: '/',
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+  };
 }
 
 @Controller('auth')
@@ -55,10 +81,7 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(204)
-  logout(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     res.clearCookie(ACCESS_TOKEN_COOKIE, clearOpts(req));
   }
 

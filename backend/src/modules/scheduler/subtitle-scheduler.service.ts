@@ -39,12 +39,12 @@ export class SubtitleSchedulerService {
   @Cron(CronExpression.EVERY_6_HOURS)
   async tick(): Promise<void> {
     const now = Date.now();
-    const searchInterval = Number(
-      (await this.settings.get('subtitle_search_interval')) ?? '360',
-    ) * 60_000;
-    const upgradeInterval = Number(
-      (await this.settings.get('subtitle_upgrade_interval')) ?? '720',
-    ) * 60_000;
+    const searchInterval =
+      Number((await this.settings.get('subtitle_search_interval')) ?? '360') *
+      60_000;
+    const upgradeInterval =
+      Number((await this.settings.get('subtitle_upgrade_interval')) ?? '720') *
+      60_000;
 
     if (now - this.lastSearchRun >= searchInterval) {
       this.lastSearchRun = now;

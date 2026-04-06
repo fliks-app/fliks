@@ -11,7 +11,10 @@ import { promisify } from 'util';
 const execFileAsync = promisify(execFile);
 
 const IMAGE_BASED_CODECS = new Set([
-  'hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle', 'xsub',
+  'hdmv_pgs_subtitle',
+  'dvd_subtitle',
+  'dvb_subtitle',
+  'xsub',
 ]);
 
 export interface BurnInInfo {
@@ -44,7 +47,9 @@ export class SubtitleBurnInService {
    * Resolve burn-in info for a subtitle (external file or embedded stream).
    */
   async resolve(subtitleId: number, mediaFileId: number): Promise<BurnInInfo> {
-    const sub = await this.subtitleFileRepo.findOne({ where: { id: subtitleId } });
+    const sub = await this.subtitleFileRepo.findOne({
+      where: { id: subtitleId },
+    });
     if (!sub) throw new NotFoundException(`Subtitle #${subtitleId} not found`);
 
     const resolved = await this.streamingService.resolveFile(mediaFileId);
@@ -80,16 +85,29 @@ export class SubtitleBurnInService {
       }
 
       // Text embedded: extract to temp ASS file for the subtitles= filter
-      const tmpPath = path.join(this.tmpDir, `${mediaFileId}-${sub.streamIndex}.ass`);
+      const tmpPath = path.join(
+        this.tmpDir,
+        `${mediaFileId}-${sub.streamIndex}.ass`,
+      );
       try {
-        await execFileAsync('ffmpeg', [
-          '-y', '-i', videoPath,
-          '-map', `0:${sub.streamIndex}`,
-          '-c:s', 'ass',
-          tmpPath,
-        ], { timeout: 30_000 });
+        await execFileAsync(
+          'ffmpeg',
+          [
+            '-y',
+            '-i',
+            videoPath,
+            '-map',
+            `0:${sub.streamIndex}`,
+            '-c:s',
+            'ass',
+            tmpPath,
+          ],
+          { timeout: 30_000 },
+        );
       } catch (err) {
-        this.log.error(`Failed to extract subtitle stream ${sub.streamIndex}: ${err}`);
+        this.log.error(
+          `Failed to extract subtitle stream ${sub.streamIndex}: ${err}`,
+        );
         throw new NotFoundException('Failed to extract embedded subtitle');
       }
 

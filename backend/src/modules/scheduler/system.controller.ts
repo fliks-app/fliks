@@ -68,8 +68,8 @@ export interface ActiveStreamDto {
   audioLanguage: string | null;
   outputContainer: string | null;
   outputBitrate: number | null;
-  videoPlaybackMode: string;   // "Lecture directe" / "Transcodage (QSV)"
-  audioPlaybackMode: string;   // "Lecture directe" / "Transcoder (AAC 192 kbps)"
+  videoPlaybackMode: string; // "Lecture directe" / "Transcodage (QSV)"
+  audioPlaybackMode: string; // "Lecture directe" / "Transcoder (AAC 192 kbps)"
   /** Transcode buffer progress (0-100), null for direct play */
   transcodePercent: number | null;
   /** Reasons why transcoding is needed, split by category */
@@ -278,13 +278,23 @@ export class SystemController {
   @Post('import-radarr-api')
   @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
   importRadarrApi(@Body() dto: ImportApiDto): Promise<ApiImportResult> {
-    return this.importRadarrService.importFromApi(dto.url, dto.apiKey, dto.mode ?? 'skip', dto.importSubtitles ?? false);
+    return this.importRadarrService.importFromApi(
+      dto.url,
+      dto.apiKey,
+      dto.mode ?? 'skip',
+      dto.importSubtitles ?? false,
+    );
   }
 
   @Post('import-sonarr-api')
   @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
   importSonarrApi(@Body() dto: ImportApiDto): Promise<ApiImportResult> {
-    return this.importSonarrService.importFromApi(dto.url, dto.apiKey, dto.mode ?? 'skip', dto.importSubtitles ?? false);
+    return this.importSonarrService.importFromApi(
+      dto.url,
+      dto.apiKey,
+      dto.mode ?? 'skip',
+      dto.importSubtitles ?? false,
+    );
   }
 
   private async checkClients(): Promise<ServiceStatus[]> {
@@ -312,13 +322,32 @@ export class SystemController {
     const streams: ActiveStreamDto[] = [];
 
     // Collect all mediaFileIds to batch-load streamInfo and playback state
-    const allSessions: { sessionId: string; userId: number | null; username: string | null; mediaFileId: number; mediaTitle: string; mediaType: string; posterUrl: string | null; mode: 'transcode' | 'remux' | 'directplay'; quality: string; hwAccelVal: string; startedAt: string; lastActivity: string }[] = [];
+    const allSessions: {
+      sessionId: string;
+      userId: number | null;
+      username: string | null;
+      mediaFileId: number;
+      mediaTitle: string;
+      mediaType: string;
+      posterUrl: string | null;
+      mode: 'transcode' | 'remux' | 'directplay';
+      quality: string;
+      hwAccelVal: string;
+      startedAt: string;
+      lastActivity: string;
+    }[] = [];
 
     for (const s of this.transcodingService.getActiveSessions()) {
       allSessions.push({
-        sessionId: s.id, userId: s.userId ?? null, username: s.username ?? null,
-        mediaFileId: s.mediaFileId, mediaTitle: s.mediaTitle ?? '', mediaType: s.mediaType ?? '',
-        posterUrl: s.posterUrl ?? null, mode: s.remux ? 'remux' : 'transcode', quality: s.quality,
+        sessionId: s.id,
+        userId: s.userId ?? null,
+        username: s.username ?? null,
+        mediaFileId: s.mediaFileId,
+        mediaTitle: s.mediaTitle ?? '',
+        mediaType: s.mediaType ?? '',
+        posterUrl: s.posterUrl ?? null,
+        mode: s.remux ? 'remux' : 'transcode',
+        quality: s.quality,
         hwAccelVal: s.remux ? 'none' : (s.actualHwAccel ?? hwAccel),
         startedAt: (s.startedAt ?? new Date()).toISOString(),
         lastActivity: new Date(s.lastAccess).toISOString(),
@@ -327,10 +356,18 @@ export class SystemController {
 
     for (const s of this.activeStreamTracker.getActive()) {
       allSessions.push({
-        sessionId: `dp-${s.userId}-${s.mediaFileId}`, userId: s.userId, username: s.username,
-        mediaFileId: s.mediaFileId, mediaTitle: s.mediaTitle, mediaType: s.mediaType,
-        posterUrl: s.posterUrl, mode: 'directplay', quality: 'original', hwAccelVal: 'none',
-        startedAt: s.startedAt.toISOString(), lastActivity: s.lastActivity.toISOString(),
+        sessionId: `dp-${s.userId}-${s.mediaFileId}`,
+        userId: s.userId,
+        username: s.username,
+        mediaFileId: s.mediaFileId,
+        mediaTitle: s.mediaTitle,
+        mediaType: s.mediaType,
+        posterUrl: s.posterUrl,
+        mode: 'directplay',
+        quality: 'original',
+        hwAccelVal: 'none',
+        startedAt: s.startedAt.toISOString(),
+        lastActivity: s.lastActivity.toISOString(),
       });
     }
 
@@ -356,13 +393,18 @@ export class SystemController {
       let episodeId: number | null = null;
       if (s.userId) {
         try {
-          const ps = await this.playbackService.getState(s.userId, s.mediaFileId);
+          const ps = await this.playbackService.getState(
+            s.userId,
+            s.mediaFileId,
+          );
           if (ps) {
             positionSeconds = ps.positionSeconds;
             if (ps.durationSeconds > 0) durationSeconds = ps.durationSeconds;
             episodeId = ps.episodeId ?? null;
           }
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       }
 
       // Determine playback modes
@@ -372,9 +414,10 @@ export class SystemController {
       let outputBitrate: number | null = null;
 
       if (s.mode === 'transcode') {
-        videoPlaybackMode = hwAccel !== 'none'
-          ? `Transcodage (${hwAccel.toUpperCase()})`
-          : 'Transcodage (CPU)';
+        videoPlaybackMode =
+          hwAccel !== 'none'
+            ? `Transcodage (${hwAccel.toUpperCase()})`
+            : 'Transcodage (CPU)';
         audioPlaybackMode = 'Transcoder (AAC 192 kbps)';
         outputContainer = 'HLS';
         const profile = { '1080p': 8, '720p': 4, '480p': 2 }[s.quality];
@@ -382,16 +425,25 @@ export class SystemController {
       } else if (s.mode === 'remux') {
         outputContainer = 'HLS';
         outputBitrate = (v?.bitRate ?? 0) + (a?.bitRate ?? 0) || null;
-        audioPlaybackMode = a?.codec === 'aac' ? 'Lecture directe' : 'Transcoder (AAC 192 kbps)';
+        audioPlaybackMode =
+          a?.codec === 'aac' ? 'Lecture directe' : 'Transcoder (AAC 192 kbps)';
       }
 
-      const sourceResLabel = v?.width && v?.height
-        ? (v.height >= 2160 ? '4K' : v.height >= 1080 ? '1080p' : v.height >= 720 ? '720p' : `${v.width}x${v.height}`)
-        : null;
+      const sourceResLabel =
+        v?.width && v?.height
+          ? v.height >= 2160
+            ? '4K'
+            : v.height >= 1080
+              ? '1080p'
+              : v.height >= 720
+                ? '720p'
+                : `${v.width}x${v.height}`
+          : null;
       // For transcode sessions, show the target quality, not the source resolution
-      const resLabel = (s.mode === 'transcode' && s.quality !== 'original')
-        ? s.quality
-        : sourceResLabel;
+      const resLabel =
+        s.mode === 'transcode' && s.quality !== 'original'
+          ? s.quality
+          : sourceResLabel;
 
       streamEpisodeIds.push(episodeId);
       streams.push({
@@ -412,12 +464,14 @@ export class SystemController {
         lastActivity: s.lastActivity,
         positionSeconds,
         durationSeconds,
-        container: si?.container ?? (mf as any)?.relativePath?.split('.').pop() ?? null,
+        container:
+          si?.container ?? (mf as any)?.relativePath?.split('.').pop() ?? null,
         videoCodec: v?.codec?.toUpperCase() ?? null,
         videoResolution: resLabel,
         videoBitrate: v?.bitRate ?? null,
         audioCodec: a?.codec?.toUpperCase() ?? null,
-        audioChannels: a?.channelLayout ?? (a?.channels ? `${a.channels}ch` : null),
+        audioChannels:
+          a?.channelLayout ?? (a?.channels ? `${a.channels}ch` : null),
         audioLanguage: a?.language ?? null,
         outputContainer,
         outputBitrate,
@@ -431,7 +485,9 @@ export class SystemController {
     }
 
     // Resolve episode labels
-    const uniqueEpIds = [...new Set(streamEpisodeIds.filter((id): id is number => !!id))];
+    const uniqueEpIds = [
+      ...new Set(streamEpisodeIds.filter((id): id is number => !!id)),
+    ];
     if (uniqueEpIds.length) {
       const episodes = await this.episodeRepo.find({
         where: uniqueEpIds.map((id) => ({ id })),
@@ -444,7 +500,9 @@ export class SystemController {
           const ep = epMap.get(epId);
           if (ep) {
             const label = `S${ep.season?.seasonNumber ?? '?'}:E${ep.episodeNumber}`;
-            streams[i].episodeLabel = ep.title ? `${label} - ${ep.title}` : label;
+            streams[i].episodeLabel = ep.title
+              ? `${label} - ${ep.title}`
+              : label;
           }
         }
       }
@@ -457,7 +515,11 @@ export class SystemController {
         const ts = transcodeSessions.find((s) => s.id === stream.sessionId);
         if (ts) {
           if (stream.durationSeconds > 0) {
-            stream.transcodePercent = await this.transcodingService.getTranscodePercent(ts, stream.durationSeconds);
+            stream.transcodePercent =
+              await this.transcodingService.getTranscodePercent(
+                ts,
+                stream.durationSeconds,
+              );
           }
           // Deduplicate by flag (reasons can be pushed from multiple code paths)
           const seen = new Set<string>();
@@ -466,9 +528,15 @@ export class SystemController {
             seen.add(r.flag);
             return true;
           });
-          stream.videoReasons = reasons.filter((r) => r.flag.startsWith('Video')).map((r) => r.message);
-          stream.audioReasons = reasons.filter((r) => r.flag.startsWith('Audio')).map((r) => r.message);
-          stream.containerReasons = reasons.filter((r) => r.flag.startsWith('Container')).map((r) => r.message);
+          stream.videoReasons = reasons
+            .filter((r) => r.flag.startsWith('Video'))
+            .map((r) => r.message);
+          stream.audioReasons = reasons
+            .filter((r) => r.flag.startsWith('Audio'))
+            .map((r) => r.message);
+          stream.containerReasons = reasons
+            .filter((r) => r.flag.startsWith('Container'))
+            .map((r) => r.message);
         }
       }
     }
@@ -487,7 +555,10 @@ export class SystemController {
         // Prefer the recently active session; if both recent or both stale, pick latest
         const existingRecent = existing.lastActivity > recentCutoff;
         const streamRecent = stream.lastActivity > recentCutoff;
-        if ((!existingRecent && streamRecent) || stream.lastActivity > existing.lastActivity) {
+        if (
+          (!existingRecent && streamRecent) ||
+          stream.lastActivity > existing.lastActivity
+        ) {
           deduped.set(key, stream);
         }
       }
@@ -530,7 +601,9 @@ export class SystemController {
       mediaFileId = parseInt(parts[1], 10);
     } else {
       // Transcode session — look up from active sessions
-      const session = this.transcodingService.getActiveSessions().find((s) => s.id === sessionId);
+      const session = this.transcodingService
+        .getActiveSessions()
+        .find((s) => s.id === sessionId);
       if (session) {
         userId = session.userId ?? 0;
         mediaFileId = session.mediaFileId;

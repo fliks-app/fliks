@@ -9,4 +9,8 @@ export enum SubtitleProviderType {
   YIFY = 'yify',
   GESTDOWN = 'gestdown',
   EMBEDDED = 'embedded',
+  /** External subtitle files discovered via Radarr API import (extra files) */
+  RADARR = 'radarr',
+  /** External subtitle files discovered via Sonarr API import */
+  SONARR = 'sonarr',
 }

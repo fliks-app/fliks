@@ -126,12 +126,14 @@ export class DiskImportService {
         } else if (!media.folderName) {
           const dir = path.dirname(entry.filePath);
           const folderName = media.rootFolder
-            ? dir.slice(media.rootFolder.path.length).replace(/^\/+/, '').split('/')[0]
+            ? dir
+                .slice(media.rootFolder.path.length)
+                .replace(/^\/+/, '')
+                .split('/')[0]
             : path.basename(dir);
           if (folderName) {
             await this.mediaRepo.update(media.id, { folderName });
             media.folderName = folderName;
-
           }
         }
 
