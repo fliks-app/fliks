@@ -154,17 +154,13 @@ export class CastPlayerService {
 
   async reloadCastStream(positionOverride?: number) {
     const mfId = this.mediaFileId();
-    if (!mfId) { console.warn('[CastPlayer] reloadCastStream: no mediaFileId'); return; }
-
-    console.log('[CastPlayer] reloadCastStream start, mediaFileId:', mfId, 'positionOverride:', positionOverride);
+    if (!mfId) return;
 
     const castProfile = this.getCastDeviceProfile();
-    console.log('[CastPlayer] castProfile:', JSON.stringify(castProfile));
 
     const pi = await this.streamingApi.getPlaybackInfo(
       mfId, castProfile, this.activeBurnInId ?? undefined, this.activeAudioStreamIndex,
     );
-    console.log('[CastPlayer] playbackInfo:', pi.playMethod, 'videoCopy:', pi.videoCopyStream, 'audioCopy:', pi.audioCopyStream, 'reasons:', pi.transcodeReasons?.map((r: any) => r.flag));
 
     // Update playback mode from backend decision (may differ from local player)
     const castMode: 'direct' | 'remux' | 'transcode' =
@@ -172,16 +168,34 @@ export class CastPlayerService {
       pi.playMethod === 'DirectStream' ? 'remux' : 'transcode';
     this.playbackMode.set(castMode);
 
-    const castToken = await this.authService.getCastToken();
     const currentPos = positionOverride ?? this.cast.currentTime();
     const qualityId = this.activeQualityId();
-    // On native, use the configured server URL (e.g. http://192.168.0.103:3001).
-    // On web, use the LAN URL from the backend, or fall back to current origin.
-    const lanUrl = this.serverConfig.isNative
-      ? this.serverConfig.serverUrl()
-      : (this.cast.serverLanUrl() || window.location.origin);
 
-    console.log('[CastPlayer] castMode:', castMode, 'qualityId:', qualityId, 'lanUrl:', lanUrl, 'currentPos:', currentPos);
+    let transcodeQuality: string | undefined;
+    if (castMode === 'transcode') {
+      if (qualityId !== 'auto' && qualityId !== 'original') {
+        transcodeQuality = qualityId;
+      } else {
+        const cs = this.castSettings.get();
+        const maxQ = cs.maxQuality;
+        const qualities = this.availableQualities().filter(q => q.id !== 'auto' && q.id !== 'original');
+        if (maxQ === 'original') {
+          transcodeQuality = qualities[0]?.id ?? '1080p';
+        } else {
+          transcodeQuality = qualities.find(q => q.id === maxQ)?.id ?? qualities[0]?.id ?? '1080p';
+        }
+      }
+    }
+
+    // Token + base URL le plus tard possible avant loadMedia (expiration du token Cast).
+    const { token: castToken, streamBaseUrl } = await this.authService.getCastInfo();
+    this.cast.setCastStreamBase(streamBaseUrl);
+    const fromServer = streamBaseUrl.replace(/\/+$/, '');
+    const lanUrl =
+      fromServer ||
+      (this.serverConfig.isNative
+        ? this.serverConfig.serverUrl()
+        : window.location.origin);
 
     let castUrl: string;
     let contentType: string;
@@ -193,24 +207,10 @@ export class CastPlayerService {
       castUrl = `${lanUrl}/api/stream/${mfId}/remux/index.m3u8?token=${encodeURIComponent(castToken)}&copyAudio=false`;
       contentType = 'application/x-mpegurl';
     } else {
-      let fixedQuality: string;
-      if (qualityId !== 'auto' && qualityId !== 'original') {
-        fixedQuality = qualityId;
-      } else {
-        const cs = this.castSettings.get();
-        const maxQ = cs.maxQuality;
-        const qualities = this.availableQualities().filter(q => q.id !== 'auto' && q.id !== 'original');
-        if (maxQ === 'original') {
-          fixedQuality = qualities[0]?.id ?? '1080p';
-        } else {
-          fixedQuality = qualities.find(q => q.id === maxQ)?.id ?? qualities[0]?.id ?? '1080p';
-        }
-      }
-      castUrl = `${lanUrl}/api/stream/${mfId}/${fixedQuality}/index.m3u8?token=${encodeURIComponent(castToken)}`;
+      const q = transcodeQuality ?? '1080p';
+      castUrl = `${lanUrl}/api/stream/${mfId}/${q}/index.m3u8?token=${encodeURIComponent(castToken)}`;
       contentType = 'application/x-mpegurl';
     }
-
-    console.log('[CastPlayer] loadMedia url:', castUrl, 'contentType:', contentType);
 
     // Build subtitle list (only non-burn-in sidecar, absolute URLs)
     const subtitles = this.subtitleInfos

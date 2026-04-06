@@ -146,15 +146,14 @@ export class StreamingApiService {
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
 
-  /**
-   * Always-absolute URL for Cast (Chromecast needs full LAN hostname).
-   * Uses castServerUrl if configured, otherwise derives from current origin.
-   */
+  /** URLs absolues pour pistes Cast : base issue de cast-info (reloadCastStream). */
   private absoluteUrl(path: string): string {
-    if (this.serverConfig.isNative) return this.serverConfig.resolveUrl(path);
-    const lanUrl = this.castService.serverLanUrl();
-    if (lanUrl) return `${lanUrl}${path}`;
-    return `${window.location.origin}${path}`;
+    const base = this.castService.castStreamBaseUrl();
+    let out: string;
+    if (base) out = `${base}${path}`;
+    else if (this.serverConfig.isNative) out = this.serverConfig.resolveUrl(path);
+    else out = `${window.location.origin}${path}`;
+    return out;
   }
 
   private appendToken(url: string, token: string): string {

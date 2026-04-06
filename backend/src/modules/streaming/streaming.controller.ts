@@ -32,6 +32,7 @@ import { SubtitleBurnInService } from './subtitle-burn-in.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 
 const VALID_QUALITIES = new Set([...PROFILES.map((p) => p.name), 'remux']);
+const VALID_TRANSCODE_QUALITY = new Set(PROFILES.map((p) => p.name));
 const SEGMENT_RE = /^seg-\d{3,4}\.ts$/;
 
 function firstQueryString(
@@ -85,24 +86,6 @@ export class StreamingController {
   @Get('info/hw-accel')
   hwAccelInfo() {
     return { hwAccel: this.transcodingService.getDetectedHwAccel() };
-  }
-
-  /**
-   * Server URL accessible from the LAN (for Chromecast).
-   * Uses EXTERNAL_URL env var, or derives from the Host header.
-   */
-  @Get('info/server-url')
-  serverUrl(@Req() req: Request) {
-    if (process.env.EXTERNAL_URL) {
-      return { url: process.env.EXTERNAL_URL.replace(/\/+$/, '') };
-    }
-    // Derive from Host header (works when browser accesses via LAN IP)
-    const host = req.headers.host;
-    if (host) {
-      const proto = (req.headers['x-forwarded-proto'] as string) || 'http';
-      return { url: `${proto}://${host}` };
-    }
-    return { url: `http://localhost:${process.env.PORT || 3000}` };
   }
 
   /**

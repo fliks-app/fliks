@@ -28,6 +28,8 @@ import com.google.android.gms.cast.framework.media.RemoteMediaClient;
 import com.google.android.gms.common.images.WebImage;
 
 import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -47,42 +49,69 @@ import java.util.List;
 @CapacitorPlugin(name = "NativeCast")
 public class CastPlugin extends Plugin {
     private static final String TAG = "CastPlugin";
+
+    /** Cast APIs require the main (UI) thread; Capacitor invokes plugin methods on a background thread. */
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    private void runOnMainThread(Runnable r) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            r.run();
+        } else {
+            mainHandler.post(r);
+        }
+    }
+
     private CastContext castContext;
     private SessionManager sessionManager;
     private CastSession castSession;
     /** True between the user picking a device and the session starting/failing. */
     private volatile boolean sessionPending = false;
 
+    /**
+     * Cast session updates must stay on the main thread (same as Session / isConnected rules).
+     * Some Play Services versions invoke these callbacks off the UI thread.
+     */
     private final SessionManagerListener<CastSession> sessionListener = new SessionManagerListener<CastSession>() {
         @Override
         public void onSessionStarted(CastSession session, String sessionId) {
-            sessionPending = false;
-            castSession = session;
-            notifyJS("connected", true);
+            runOnMainThread(() -> {
+                sessionPending = false;
+                castSession = session;
+                notifyJS("connected", true);
+            });
         }
         @Override
         public void onSessionEnded(CastSession session, int error) {
-            sessionPending = false;
-            castSession = null;
-            notifyJS("connected", false);
+            runOnMainThread(() -> {
+                sessionPending = false;
+                castSession = null;
+                notifyJS("connected", false);
+            });
         }
         @Override
         public void onSessionResumed(CastSession session, boolean wasSuspended) {
-            sessionPending = false;
-            castSession = session;
-            notifyJS("connected", true);
+            runOnMainThread(() -> {
+                sessionPending = false;
+                castSession = session;
+                notifyJS("connected", true);
+            });
         }
         @Override
         public void onSessionSuspended(CastSession session, int reason) {}
         @Override
         public void onSessionStarting(CastSession session) {
+            // Must set immediately on the callback thread (volatile). If we only post to the main
+            // looper, MediaRouteChooserDialogFragment can be destroyed on the main thread before
+            // that runnable runs, and we wrongly fire castPickerDismissed (JS thinks user cancelled).
             sessionPending = true;
         }
         @Override
         public void onSessionStartFailed(CastSession session, int error) {
-            sessionPending = false;
-            notifyJS("connected", false);
-            notifyPickerDismissed(); // also reset connecting spinner
+            runOnMainThread(() -> {
+                sessionPending = false;
+                notifyJS("connected", false);
+                notifyPickerDismissed(); // also reset connecting spinner
+            });
         }
         @Override
         public void onSessionEnding(CastSession session) {}
@@ -92,9 +121,11 @@ public class CastPlugin extends Plugin {
         }
         @Override
         public void onSessionResumeFailed(CastSession session, int error) {
-            sessionPending = false;
-            notifyJS("connected", false);
-            notifyPickerDismissed();
+            runOnMainThread(() -> {
+                sessionPending = false;
+                notifyJS("connected", false);
+                notifyPickerDismissed();
+            });
         }
     };
 
@@ -122,7 +153,7 @@ public class CastPlugin extends Plugin {
 
     @PluginMethod()
     public void initialize(PluginCall call) {
-        getActivity().runOnUiThread(() -> {
+        runOnMainThread(() -> {
             try {
                 castContext = CastContext.getSharedInstance(getContext());
                 sessionManager = castContext.getSessionManager();
@@ -146,7 +177,7 @@ public class CastPlugin extends Plugin {
 
     @PluginMethod()
     public void isConnected(PluginCall call) {
-        getActivity().runOnUiThread(() -> {
+        runOnMainThread(() -> {
             boolean connected = castSession != null && castSession.isConnected();
             call.resolve(new JSObject().put("connected", connected));
         });
@@ -154,7 +185,7 @@ public class CastPlugin extends Plugin {
 
     @PluginMethod()
     public void requestSession(PluginCall call) {
-        getActivity().runOnUiThread(() -> {
+        runOnMainThread(() -> {
             try {
                 MediaRouteSelector selector = new MediaRouteSelector.Builder()
                     .addControlCategory(CastMediaControlIntent.categoryForCast(
@@ -171,12 +202,13 @@ public class CastPlugin extends Plugin {
                         public void onFragmentDestroyed(androidx.fragment.app.FragmentManager fm, androidx.fragment.app.Fragment f) {
                             if (f == dialog) {
                                 fm.unregisterFragmentLifecycleCallbacks(this);
-                                // Only notify dismiss if no session is starting or already connected.
-                                // If sessionPending=true, the user picked a device and we wait for
-                                // onSessionStarted/onSessionStartFailed to fire instead.
-                                if (!sessionPending && (castSession == null || !castSession.isConnected())) {
-                                    notifyPickerDismissed();
-                                }
+                                // Defer so any SessionManager callbacks already posted to the main queue
+                                // run first (ordering with sessionPending / castSession updates).
+                                mainHandler.post(() -> {
+                                    if (!sessionPending && (castSession == null || !castSession.isConnected())) {
+                                        notifyPickerDismissed();
+                                    }
+                                });
                             }
                         }
                     }, false);
@@ -192,10 +224,14 @@ public class CastPlugin extends Plugin {
 
     @PluginMethod()
     public void loadMedia(PluginCall call) {
-        getActivity().runOnUiThread(() -> doLoadMedia(call));
+        runOnMainThread(() -> doLoadMedia(call));
     }
 
     private void doLoadMedia(PluginCall call) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            runOnMainThread(() -> doLoadMedia(call));
+            return;
+        }
         if (castSession == null || !castSession.isConnected()) {
             call.reject("Not connected to Cast device");
             return;
@@ -279,7 +315,7 @@ public class CastPlugin extends Plugin {
 
         // Apply text track style after load (Default Media Receiver ignores it in MediaInfo)
         if (!tracks.isEmpty()) {
-            pollHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+            pollHandler = mainHandler;
             pollHandler.postDelayed(() -> {
                 try {
                     TextTrackStyle style = new TextTrackStyle();
@@ -306,7 +342,7 @@ public class CastPlugin extends Plugin {
 
     @PluginMethod()
     public void play(PluginCall call) {
-        getActivity().runOnUiThread(() -> {
+        runOnMainThread(() -> {
             RemoteMediaClient client = getClient();
             if (client != null) client.play();
             call.resolve();
@@ -315,7 +351,7 @@ public class CastPlugin extends Plugin {
 
     @PluginMethod()
     public void pause(PluginCall call) {
-        getActivity().runOnUiThread(() -> {
+        runOnMainThread(() -> {
             RemoteMediaClient client = getClient();
             if (client != null) client.pause();
             call.resolve();
@@ -324,7 +360,7 @@ public class CastPlugin extends Plugin {
 
     @PluginMethod()
     public void seek(PluginCall call) {
-        getActivity().runOnUiThread(() -> {
+        runOnMainThread(() -> {
             RemoteMediaClient client = getClient();
             if (client != null) {
                 double time = call.getDouble("time", 0.0);
@@ -338,7 +374,7 @@ public class CastPlugin extends Plugin {
 
     @PluginMethod()
     public void stop(PluginCall call) {
-        getActivity().runOnUiThread(() -> {
+        runOnMainThread(() -> {
             RemoteMediaClient client = getClient();
             if (client != null) client.stop();
             call.resolve();
@@ -347,7 +383,7 @@ public class CastPlugin extends Plugin {
 
     @PluginMethod()
     public void disconnect(PluginCall call) {
-        getActivity().runOnUiThread(() -> {
+        runOnMainThread(() -> {
             if (sessionManager != null) {
                 sessionManager.endCurrentSession(true);
             }
@@ -358,7 +394,7 @@ public class CastPlugin extends Plugin {
 
     @PluginMethod()
     public void setActiveSubtitle(PluginCall call) {
-        getActivity().runOnUiThread(() -> {
+        runOnMainThread(() -> {
             RemoteMediaClient client = getClient();
             if (client != null) {
                 int trackId = call.getInt("trackId", 0);
@@ -373,19 +409,27 @@ public class CastPlugin extends Plugin {
     }
 
     private RemoteMediaClient getClient() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            Log.w(TAG, "getClient() must run on main thread");
+            return null;
+        }
         if (castSession == null || !castSession.isConnected()) return null;
         return castSession.getRemoteMediaClient();
     }
 
-    private android.os.Handler pollHandler;
+    private Handler pollHandler;
     private Runnable pollRunnable;
 
     private void startMediaPolling(RemoteMediaClient client) {
         stopMediaPolling();
-        pollHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+        pollHandler = mainHandler;
         pollRunnable = new Runnable() {
             @Override
             public void run() {
+                if (Looper.myLooper() != Looper.getMainLooper()) {
+                    mainHandler.post(this);
+                    return;
+                }
                 try {
                     if (castSession == null || !castSession.isConnected()) return;
                     double time = client.getApproximateStreamPosition() / 1000.0;

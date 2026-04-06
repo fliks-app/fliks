@@ -15,6 +15,7 @@ import { JwtOrApiKeyGuard } from './guards/jwt-or-api-key.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
 import { ACCESS_TOKEN_COOKIE } from './auth.constants';
+import { resolveStreamPublicBaseUrl } from '../../common/stream-public-base-url.util';
 
 const NATIVE_ORIGINS = [
   'https://localhost',
@@ -96,11 +97,15 @@ export class AuthController {
     return this.authService.safeUser(user);
   }
 
-  /** Generate a short-lived token for Chromecast (15 min, read-only) */
-  @Post('cast-token')
+  /**
+   * Token court pour Chromecast + base d’URL des flux (EXTERNAL_URL / Host).
+   * À appeler juste avant d’envoyer la lecture au receiver (le token expire vite).
+   */
+  @Post('cast-info')
   @UseGuards(JwtOrApiKeyGuard)
-  castToken(@CurrentUser() user: User) {
+  castInfo(@CurrentUser() user: User, @Req() req: Request) {
     const token = this.authService.generateCastToken(user);
-    return { token };
+    const streamBaseUrl = resolveStreamPublicBaseUrl(req);
+    return { token, streamBaseUrl };
   }
 }

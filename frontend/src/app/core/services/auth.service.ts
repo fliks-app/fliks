@@ -58,12 +58,16 @@ export class AuthService {
     return u?.isAdmin || u?.permissions?.includes('users.manage') || false;
   });
 
-  /** Get a short-lived token for Chromecast (15 min) */
-  async getCastToken(): Promise<string> {
-    const res = await firstValueFrom(
-      this.http.post<{ token: string }>('/api/auth/cast-token', {}),
+  /**
+   * Juste avant le chargement Cast : token dédié (court) + base URL côté serveur.
+   */
+  async getCastInfo(): Promise<{ token: string; streamBaseUrl: string }> {
+    return firstValueFrom(
+      this.http.post<{ token: string; streamBaseUrl: string }>(
+        '/api/auth/cast-info',
+        {},
+      ),
     );
-    return res.token;
   }
 
   async login(username: string, password: string): Promise<LoginResponse> {

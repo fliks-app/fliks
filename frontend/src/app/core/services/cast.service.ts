@@ -1,7 +1,5 @@
-import { Injectable, inject, signal, OnDestroy } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { Injectable, signal, OnDestroy } from '@angular/core';
 import { Capacitor, registerPlugin } from '@capacitor/core';
-import { firstValueFrom } from 'rxjs';
 
 declare const cast: any;
 declare const chrome: any;
@@ -43,9 +41,9 @@ export class CastService implements OnDestroy {
   readonly duration = signal(0);
   readonly isPaused = signal(true);
   readonly mediaTitle = signal('');
-  readonly serverLanUrl = signal('');
+  /** Base pour sous-titres / URLs Cast ; renseignée dans reloadCastStream via cast-info. */
+  readonly castStreamBaseUrl = signal('');
 
-  private readonly http = inject(HttpClient);
   private readonly isNative = Capacitor.isNativePlatform();
 
   // Web-only
@@ -54,15 +52,16 @@ export class CastService implements OnDestroy {
   private remotePlayerController: any = null;
 
   constructor() {
-    firstValueFrom(this.http.get<{ url: string }>('/api/stream/info/server-url'))
-      .then(r => this.serverLanUrl.set(r.url))
-      .catch(() => {});
-
     if (this.isNative) {
       this.initNative();
     } else {
       this.initWeb();
     }
+  }
+
+  /** Appelé dans reloadCastStream juste après cast-info. */
+  setCastStreamBase(url: string) {
+    this.castStreamBaseUrl.set(url.replace(/\/+$/, ''));
   }
 
   ngOnDestroy() {}
@@ -93,7 +92,8 @@ export class CastService implements OnDestroy {
         this.duration.set(e.detail?.duration ?? 0);
         this.isPaused.set(e.detail?.isPaused ?? true);
       }) as EventListener);
-    } catch {
+    } catch (e) {
+      console.warn('NativeCast.initialize failed', e);
       this.isAvailable.set(false);
     }
   }
@@ -171,7 +171,6 @@ export class CastService implements OnDestroy {
   }
 
   async loadMedia(info: CastMediaInfo) {
-    console.log('[Cast] loadMedia:', info.url, 'contentType:', info.contentType, 'currentTime:', info.currentTime, 'native:', this.isNative);
     if (this.isNative) {
       try {
         await NativeCast.loadMedia({
@@ -184,9 +183,8 @@ export class CastService implements OnDestroy {
           subtitles: info.subtitles ?? [],
           activeSubtitleTrackId: info.activeSubtitleTrackId ?? 0,
         });
-        console.log('[Cast] NativeCast.loadMedia succeeded');
       } catch (err) {
-        console.error('[Cast] NativeCast.loadMedia failed:', err);
+        console.error('NativeCast.loadMedia failed:', err);
       }
       this.isPaused.set(false);
       this.mediaTitle.set(info.title);
@@ -199,7 +197,6 @@ export class CastService implements OnDestroy {
     const mediaInfo = new chrome.cast.media.MediaInfo(info.url, info.contentType);
     // HLS: use BUFFERED for VOD playlists, the Default Media Receiver handles it
     mediaInfo.streamType = chrome.cast.media.StreamType.BUFFERED;
-    console.log('[Cast] Web loadMedia:', info.url, 'contentType:', info.contentType, 'streamType: BUFFERED');
     mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata();
     mediaInfo.metadata.title = info.title;
     mediaInfo.metadata.subtitle = info.subtitle ?? '';
@@ -235,16 +232,14 @@ export class CastService implements OnDestroy {
     }
 
     try {
-      console.log('[Cast] Web session.loadMedia calling...');
       await this.session.loadMedia(request);
-      console.log('[Cast] Web session.loadMedia succeeded');
       this.mediaTitle.set(info.title);
       this.isPaused.set(false);
       if (info.activeSubtitleTrackId) {
         setTimeout(() => this.setActiveSubtitle(info.activeSubtitleTrackId!), 1500);
       }
     } catch (err) {
-      console.error('[Cast] Failed to load media:', err);
+      console.error('Cast loadMedia failed:', err);
     }
   }
 
@@ -289,6 +284,7 @@ export class CastService implements OnDestroy {
     else { cast.framework.CastContext.getInstance().endCurrentSession(true); }
     this.isConnected.set(false);
     this.session = null;
+    this.castStreamBaseUrl.set('');
   }
 
   setActiveSubtitle(trackId: number) {
