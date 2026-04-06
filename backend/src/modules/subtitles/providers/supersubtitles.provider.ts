@@ -32,7 +32,6 @@ interface EpisodeSubtitle {
   evadpakk: string;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
 interface SupersubtitlesSettings {}
 
 export class SupersubtitlesProvider implements SubtitleProviderInterface {

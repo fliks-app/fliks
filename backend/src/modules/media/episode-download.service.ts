@@ -157,9 +157,7 @@ export class EpisodeDownloadService {
     const indexerUnknownLang = new Map(
       indexers.map((ix) => [
         ix.id,
-        (ix.settings as Record<string, unknown>)?.unknownLanguageIsoCode as
-          | string
-          | undefined,
+        ix.settings?.unknownLanguageIsoCode as string | undefined,
       ]),
     );
 
@@ -255,7 +253,7 @@ export class EpisodeDownloadService {
       }
     }
 
-    const parsed = parseReleaseQuality(sourceTitle!);
+    const parsed = parseReleaseQuality(sourceTitle);
     if (!allowed.has(parsed.quality.id)) {
       throw new BadRequestException(
         `This release (${parsed.quality.name}) is not allowed by the series quality profile`,
@@ -275,7 +273,7 @@ export class EpisodeDownloadService {
     this.log.log(`Sending to qBittorrent: "${sourceTitle}" — ${downloadUrl}`);
     const torrentHash = await this.qbittorrent.addTorrentUrl(
       qbit,
-      downloadUrl!,
+      downloadUrl,
       'series',
     );
     this.log.log(`Grab successful for "${sourceTitle}" (hash=${torrentHash})`);
@@ -283,7 +281,7 @@ export class EpisodeDownloadService {
     const row = this.historyRepo.create({
       mediaId: media.id,
       downloadClientId: qbit.id,
-      sourceTitle: sourceTitle!,
+      sourceTitle: sourceTitle,
       torrentHash: torrentHash || undefined,
       quality: parsed.quality.name,
       status: 'grabbed',
@@ -406,9 +404,7 @@ export class EpisodeDownloadService {
     const indexerUnknownLang = new Map(
       indexers.map((ix) => [
         ix.id,
-        (ix.settings as Record<string, unknown>)?.unknownLanguageIsoCode as
-          | string
-          | undefined,
+        ix.settings?.unknownLanguageIsoCode as string | undefined,
       ]),
     );
     const defaultEpRuntime = media.runtime ?? 45;
@@ -543,9 +539,7 @@ export class EpisodeDownloadService {
     const indexerUnknownLang = new Map(
       indexers.map((ix) => [
         ix.id,
-        (ix.settings as Record<string, unknown>)?.unknownLanguageIsoCode as
-          | string
-          | undefined,
+        ix.settings?.unknownLanguageIsoCode as string | undefined,
       ]),
     );
 

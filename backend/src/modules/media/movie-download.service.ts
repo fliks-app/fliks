@@ -122,9 +122,7 @@ export class MovieDownloadService {
     const indexerUnknownLang = new Map(
       indexers.map((ix) => [
         ix.id,
-        (ix.settings as Record<string, unknown>)?.unknownLanguageIsoCode as
-          | string
-          | undefined,
+        ix.settings?.unknownLanguageIsoCode as string | undefined,
       ]),
     );
 

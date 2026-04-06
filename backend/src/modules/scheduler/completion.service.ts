@@ -5,7 +5,6 @@ import { DataSource, Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
-import { parseReleaseQuality } from '../media/release-quality.parser';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { DownloadHistory } from '../media/entities/download-history.entity';
@@ -26,6 +25,7 @@ import { SettingsService } from '../settings/settings.service';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
+import { MediaType } from '../../common/enums';
 
 @Injectable()
 export class CompletionService {
@@ -245,7 +245,7 @@ export class CompletionService {
     ];
 
     // Use qBittorrent API to get actual files of this torrent
-    let videoFiles: { filePath: string; size: number }[] = [];
+    const videoFiles: { filePath: string; size: number }[] = [];
 
     if (torrent._client) {
       const torrentFiles = await this.qbittorrent.getTorrentFiles(
@@ -313,7 +313,7 @@ export class CompletionService {
     // Ensure folderName is set
     const folderName =
       media.folderName ||
-      (media.type === 'movie'
+      (media.type === MediaType.MOVIE
         ? this.naming.applyMovieFolderFormat(movieFolderFormat, {
             title: media.title,
             originalTitle: media.originalTitle,
@@ -342,7 +342,8 @@ export class CompletionService {
 
     // For movies or single episode: import the largest file
     // For series with multiple files: import each file as a separate episode
-    const isSeasonPack = media.type === 'series' && videoFiles.length > 1;
+    const isSeasonPack =
+      media.type === MediaType.SERIES && videoFiles.length > 1;
     const filesToImport = isSeasonPack
       ? videoFiles
       : [videoFiles.reduce((a, b) => (a.size > b.size ? a : b))];
@@ -364,7 +365,7 @@ export class CompletionService {
       let destDir: string;
       let episodeId: number | undefined;
 
-      if (media.type === 'movie') {
+      if (media.type === MediaType.MOVIE) {
         newFilename = this.naming.applyMovieFormat(movieFormat, {
           title: media.title,
           originalTitle: media.originalTitle,
@@ -512,9 +513,11 @@ export class CompletionService {
 
     // Execute post-import script if configured
     try {
-      const [scriptSetting] = await this.dataSource.query(
-        `SELECT value FROM app_settings WHERE key = 'post_import_script' LIMIT 1`,
-      );
+      const scriptRows: { value: string | null }[] =
+        await this.dataSource.query(
+          `SELECT value FROM app_settings WHERE key = 'post_import_script' LIMIT 1`,
+        );
+      const scriptSetting = scriptRows[0];
       const script = scriptSetting?.value?.trim();
       if (script) {
         const { exec } = await import('child_process');
@@ -551,12 +554,14 @@ export class CompletionService {
    * renaming them to match the new video filename base.
    */
   private async getCompanionExts(): Promise<Set<string>> {
-    const [row] = await this.dataSource.query(
-      `SELECT value FROM app_settings WHERE key = 'companion_file_extensions' LIMIT 1`,
-    );
+    const companionRows: { value: string | null }[] =
+      await this.dataSource.query(
+        `SELECT value FROM app_settings WHERE key = 'companion_file_extensions' LIMIT 1`,
+      );
+    const row = companionRows[0];
     const raw = row?.value ?? CompletionService.DEFAULT_COMPANION_EXTS;
     return new Set(
-      (raw as string)
+      raw
         .split(',')
         .map((e) => e.trim().toLowerCase())
         .filter(Boolean)
@@ -739,14 +744,14 @@ export class CompletionService {
     let deleted = 0;
 
     for (const history of withHash) {
-      const entry = torrentMap.get(history.torrentHash!.toLowerCase());
+      const entry = torrentMap.get(history.torrentHash.toLowerCase());
       if (!entry) continue; // torrent already removed
 
       const { client, torrent } = entry;
       const indexer = history.indexerId
         ? indexerMap.get(history.indexerId)
         : undefined;
-      const settings = (indexer?.settings ?? {}) as Record<string, unknown>;
+      const settings = indexer?.settings ?? {};
       const targetRatio = Number(settings['seedRatio'] ?? 1);
       const maxRetentionDays =
         settings['maxRetentionDays'] != null

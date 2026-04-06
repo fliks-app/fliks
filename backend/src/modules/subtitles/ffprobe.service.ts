@@ -177,10 +177,10 @@ export class FfprobeService {
           language: s.tags?.language ?? 'und',
           title: s.tags?.title,
         }));
-    } catch (err) {
-      const e = err as any;
+    } catch (err: unknown) {
+      const e = err as { message?: string; stderr?: string };
       this.logger.warn(
-        `ffprobe streams detection failed for "${videoPath}": ${e.message}${e.stderr ? `\n  stderr: ${e.stderr}` : ''}`,
+        `ffprobe streams detection failed for "${videoPath}": ${e.message ?? String(err)}${e.stderr ? `\n  stderr: ${e.stderr}` : ''}`,
       );
       return [];
     }
@@ -275,9 +275,12 @@ export class FfprobeService {
         };
       }
       return { video, audio, subtitles, durationSeconds };
-    } catch (err) {
-      const e = err as any;
-      const message = e.stderr?.trim() || e.message || String(err);
+    } catch (err: unknown) {
+      const e = err as { message?: string; stderr?: string };
+      const message =
+        (typeof e.stderr === 'string' && e.stderr.trim()) ||
+        e.message ||
+        String(err);
       this.logger.warn(
         `ffprobe file info failed for "${videoPath}": ${message}`,
       );

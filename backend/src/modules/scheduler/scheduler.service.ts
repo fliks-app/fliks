@@ -321,7 +321,7 @@ export class SchedulerService implements OnModuleInit {
     }
 
     const connCheck = await this.qbittorrent.testConnection(
-      qbitClient.settings as Record<string, unknown>,
+      qbitClient.settings,
     );
     if (!connCheck.ok) {
       throw new Error(`Download client unreachable — ${connCheck.message}`);
@@ -583,7 +583,7 @@ export class SchedulerService implements OnModuleInit {
     }
 
     const connCheck = await this.qbittorrent.testConnection(
-      qbitClient.settings as Record<string, unknown>,
+      qbitClient.settings,
     );
     if (!connCheck.ok) {
       throw new Error(`Download client unreachable — ${connCheck.message}`);

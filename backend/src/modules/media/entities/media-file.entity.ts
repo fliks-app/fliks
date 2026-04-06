@@ -1,5 +1,6 @@
 import { Entity, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
+import type { MediaFileInfo } from '../../subtitles/ffprobe.service';
 import { Media } from './media.entity';
 
 @Entity('media_files')
@@ -28,5 +29,5 @@ export class MediaFile extends BaseEntity {
   language: string;
 
   @Column({ type: 'jsonb', nullable: true, default: null })
-  streamInfo: any;
+  streamInfo: MediaFileInfo | null;
 }

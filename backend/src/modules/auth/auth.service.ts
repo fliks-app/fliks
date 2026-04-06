@@ -14,6 +14,7 @@ import { LoginDto, RegisterDto } from './dto/login.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { MediaServerType } from '../../common/enums';
 import { DEFAULT_ROLES } from '../../common/constants/permissions';
+import type { PublicUser } from '../users/users.service';
 
 @Injectable()
 export class AuthService {
@@ -38,7 +39,9 @@ export class AuthService {
     return n * mult;
   }
 
-  async login(dto: LoginDto): Promise<{ accessToken: string; user: any }> {
+  async login(
+    dto: LoginDto,
+  ): Promise<{ accessToken: string; user: PublicUser }> {
     const serverType = dto.serverType ?? MediaServerType.LOCAL;
 
     if (serverType === MediaServerType.LOCAL) {
@@ -50,7 +53,7 @@ export class AuthService {
     );
   }
 
-  async register(dto: RegisterDto): Promise<any> {
+  async register(dto: RegisterDto): Promise<PublicUser> {
     const existing = await this.userRepo.findOne({
       where: { username: dto.username },
     });
@@ -99,20 +102,20 @@ export class AuthService {
   }
 
   /** Strip sensitive fields and add computed permissions. */
-  safeUser(user: User): any {
-    const { passwordHash, userRole, ...rest } = user as any;
+  safeUser(user: User): PublicUser {
+    const { passwordHash, userRole, ...rest } = user;
+    void passwordHash;
     return {
       ...rest,
       permissions: user.permissions,
-      role: user.userRole?.name ?? null,
-      isAdmin: user.isAdmin,
+      role: userRole?.name ?? null,
     };
   }
 
   private async localLogin(
     username: string,
     password: string,
-  ): Promise<{ accessToken: string; user: any }> {
+  ): Promise<{ accessToken: string; user: PublicUser }> {
     const user = await this.userRepo.findOne({
       where: { username },
       relations: ['userRole'],

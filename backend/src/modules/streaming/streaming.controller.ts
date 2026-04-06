@@ -13,24 +13,36 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import * as fs from 'fs';
+
+const execFileAsync = promisify(execFile);
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
-import { StreamingService } from './streaming.service';
+import { StreamingService, ResolvedFile } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
 import {
   TranscodingService,
   PROFILES,
   SessionContext,
-  BurnInSubtitle,
 } from './transcoding.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { SubtitleBurnInService } from './subtitle-burn-in.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
-import { User } from '../users/entities/user.entity';
 
 const VALID_QUALITIES = new Set([...PROFILES.map((p) => p.name), 'remux']);
 const SEGMENT_RE = /^seg-\d{3,4}\.ts$/;
+
+function firstQueryString(
+  query: Request['query'],
+  key: string,
+): string | undefined {
+  const v = query[key];
+  if (typeof v === 'string') return v;
+  if (Array.isArray(v) && typeof v[0] === 'string') return v[0];
+  return undefined;
+}
 
 @Controller('stream')
 @UseGuards(JwtOrApiKeyGuard)
@@ -48,11 +60,11 @@ export class StreamingController {
 
   private buildSessionContext(
     req: Request,
-    resolved: { media: any; mediaFile?: any },
+    resolved: ResolvedFile,
     mediaFileId: number,
   ): SessionContext {
-    const user = (req as any).user as User | undefined;
-    const si = resolved.mediaFile?.streamInfo as any;
+    const user = req.user;
+    const si = resolved.mediaFile.streamInfo;
     return {
       userId: user?.id,
       username: user?.username,
@@ -104,15 +116,15 @@ export class StreamingController {
     @Req() req: Request,
   ) {
     const resolved = await this.streamingService.resolveFile(mediaFileId);
-    const token = (req.query as any).token;
+    const token = firstQueryString(req.query, 'token');
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
-    const burnInSubtitleId = (req.query as any).burnInSubtitleId
-      ? parseInt((req.query as any).burnInSubtitleId, 10)
+    const burnInSubtitleRaw = firstQueryString(req.query, 'burnInSubtitleId');
+    const burnInSubtitleId = burnInSubtitleRaw
+      ? parseInt(burnInSubtitleRaw, 10)
       : undefined;
+    const audioStreamRaw = firstQueryString(req.query, 'audioStreamIndex');
     const audioStreamIndex =
-      (req.query as any).audioStreamIndex != null
-        ? parseInt((req.query as any).audioStreamIndex, 10)
-        : undefined;
+      audioStreamRaw != null ? parseInt(audioStreamRaw, 10) : undefined;
     const result = this.streamBuilder.evaluate(
       resolved,
       deviceProfile,
@@ -159,17 +171,17 @@ export class StreamingController {
     @Res() res: Response,
   ) {
     const resolved = await this.streamingService.resolveFile(mediaFileId);
-    const si = resolved.mediaFile.streamInfo as any;
+    const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
     const crop = v?.crop;
     // Use cropped dimensions if crop is active, otherwise original
     const w = crop?.width ?? v?.width ?? 1920;
     const h = crop?.height ?? v?.height ?? 1080;
 
-    const token = (req.query as any).token;
+    const token = firstQueryString(req.query, 'token');
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
 
-    const includeRemux = (req.query as any).remux === '1';
+    const includeRemux = firstQueryString(req.query, 'remux') === '1';
     const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
     const playlist = this.transcodingService.generateMasterPlaylist(
       mediaFileId,
@@ -228,16 +240,13 @@ export class StreamingController {
       throw new BadRequestException(`Invalid quality: ${quality}`);
     }
     const resolved = await this.streamingService.resolveFile(mediaFileId);
-    const si = resolved.mediaFile.streamInfo as any;
+    const si = resolved.mediaFile.streamInfo;
     let duration = si?.durationSeconds ?? 0;
 
     // If duration unknown, probe it on the fly
     if (!duration) {
       try {
-        const { execFile: ef } = require('child_process');
-        const { promisify } = require('util');
-        const exec = promisify(ef);
-        const { stdout } = await exec(
+        const { stdout } = await execFileAsync(
           'ffprobe',
           [
             '-v',
@@ -250,7 +259,7 @@ export class StreamingController {
           ],
           { timeout: 10_000 },
         );
-        duration = parseFloat(stdout.trim()) || 0;
+        duration = parseFloat(String(stdout).trim()) || 0;
       } catch (err) {
         this.log.warn(
           `Failed to probe duration for MediaFile #${mediaFileId}: ${err}`,
@@ -266,7 +275,7 @@ export class StreamingController {
     // Start transcoding/remuxing in the background (don't wait)
     const ctx = this.buildSessionContext(req, resolved, mediaFileId);
     if (quality === 'remux') {
-      const copyAudio = (req.query as any).copyAudio !== 'false';
+      const copyAudio = firstQueryString(req.query, 'copyAudio') !== 'false';
       void this.transcodingService.getOrCreateRemuxSession(
         mediaFileId,
         resolved.absolutePath,
@@ -284,7 +293,7 @@ export class StreamingController {
       );
     }
 
-    const token = (req.query as any).token;
+    const token = firstQueryString(req.query, 'token');
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
 
     // Generate a complete playlist upfront so shaka sees a VOD stream with seek support
@@ -377,7 +386,7 @@ export class StreamingController {
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
     @Req() req: Request,
   ) {
-    const user = (req as any).user as User | undefined;
+    const user = req.user;
     this.transcodingService.killSession(mediaFileId, user?.id);
     if (user) {
       this.activeStreamTracker.unregister(user.id, mediaFileId);
@@ -399,7 +408,7 @@ export class StreamingController {
     const resolved = await this.streamingService.resolveFile(mediaFileId);
 
     // Track direct play session
-    const user = (req as any).user as User | undefined;
+    const user = req.user;
     if (user) {
       this.activeStreamTracker.register(
         user.id,
@@ -411,7 +420,7 @@ export class StreamingController {
       );
     }
 
-    const duration = (resolved.mediaFile.streamInfo as any)?.durationSeconds;
+    const duration = resolved.mediaFile.streamInfo?.durationSeconds;
     if (duration) {
       res.setHeader('X-Content-Duration', String(duration));
       res.setHeader('Access-Control-Expose-Headers', 'X-Content-Duration');

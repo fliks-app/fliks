@@ -33,7 +33,6 @@ import { NamingService } from '../scheduler/naming.service';
 import {
   getAppQualityById,
   APP_QUALITIES,
-  AppQualityDefinition,
 } from '../../common/constants/app-qualities';
 
 import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
@@ -110,10 +109,10 @@ export class MediaService {
         dto.type === MediaType.MOVIE
           ? 'default_root_folder_movie'
           : 'default_root_folder_series';
-      const [row] = await this.dataSource.query(
+      const [row] = (await this.dataSource.query(
         `SELECT value FROM app_settings WHERE key = $1 LIMIT 1`,
         [defaultKey],
-      );
+      )) as { value: string | null }[];
       if (row?.value) {
         const rfId = Number(row.value);
         if (rfId) {
@@ -267,7 +266,9 @@ export class MediaService {
     const [data, total] = await qb.getManyAndCount();
 
     // For series: attach episode stats
-    const seriesIds = data.filter((m) => m.type === 'series').map((m) => m.id);
+    const seriesIds = data
+      .filter((m) => m.type === MediaType.SERIES)
+      .map((m) => m.id);
     let episodeStatsMap = new Map<
       number,
       { totalEpisodes: number; downloadedEpisodes: number }
@@ -364,7 +365,7 @@ export class MediaService {
 
   async update(id: number, dto: UpdateMediaDto): Promise<Media> {
     const media = await this.findOne(id);
-    const { tagIds, path, ...rest } = dto;
+    const { tagIds, path: _path, ...rest } = dto;
 
     Object.assign(media, rest);
 
@@ -472,7 +473,10 @@ export class MediaService {
         const d = String(v.getUTCDate()).padStart(2, '0');
         return `${y}-${m}-${d}`;
       }
-      return String(v).slice(0, 10);
+      if (typeof v === 'string') return v.slice(0, 10);
+      if (typeof v === 'number' || typeof v === 'bigint')
+        return String(v).slice(0, 10);
+      return null;
     }
     let start: string;
     let end: string;
@@ -994,12 +998,12 @@ export class MediaService {
     if (!media.path)
       throw new BadRequestException('No root folder set for this media');
 
-    const [movieFormatRow] = await this.dataSource.query(
+    const [movieFormatRow] = (await this.dataSource.query(
       `SELECT value FROM app_settings WHERE key = 'movie_format' LIMIT 1`,
-    );
-    const [seriesFormatRow] = await this.dataSource.query(
+    )) as { value: string | null }[];
+    const [seriesFormatRow] = (await this.dataSource.query(
       `SELECT value FROM app_settings WHERE key = 'series_format' LIMIT 1`,
-    );
+    )) as { value: string | null }[];
     const movieFormat =
       movieFormatRow?.value ||
       '{Movie Title} ({Release Year}) - {Quality Full}';
@@ -1188,7 +1192,7 @@ export class MediaService {
       }
 
       const sizeChanged = Number(dbFile.size) !== diskSize;
-      const si = dbFile.streamInfo as any;
+      const si = dbFile.streamInfo;
       const missingStreamInfo =
         !si ||
         si.error ||

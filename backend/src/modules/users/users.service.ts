@@ -16,6 +16,12 @@ import { Role } from '../roles/entities/role.entity';
 import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
 import { Action } from '../auth/casl/actions.enum';
 
+/** API shape: user without password hash, with role name instead of relation. */
+export type PublicUser = Omit<User, 'passwordHash' | 'userRole'> & {
+  role: string | null;
+  permissions: string[];
+};
+
 @Injectable()
 export class UsersService implements OnModuleInit {
   private readonly log = new Logger(UsersService.name);
@@ -47,7 +53,7 @@ export class UsersService implements OnModuleInit {
     );
   }
 
-  async findAll() {
+  async findAll(): Promise<PublicUser[]> {
     const users = await this.userRepo.find({
       order: { username: 'ASC' },
       relations: ['userRole'],
@@ -55,7 +61,7 @@ export class UsersService implements OnModuleInit {
     return users.map((u) => this.serialize(u));
   }
 
-  async findOne(id: number) {
+  async findOne(id: number): Promise<PublicUser> {
     const user = await this.userRepo.findOne({
       where: { id },
       relations: ['userRole'],
@@ -65,16 +71,17 @@ export class UsersService implements OnModuleInit {
   }
 
   /** Flatten userRole into a role name + strip passwordHash. */
-  private serialize(user: User) {
-    const { passwordHash, userRole, ...rest } = user as any;
+  private serialize(user: User): PublicUser {
+    const { passwordHash, userRole, ...rest } = user;
+    void passwordHash;
     return {
       ...rest,
-      role: user.userRole?.name ?? null,
+      role: userRole?.name ?? null,
       permissions: user.permissions,
     };
   }
 
-  async create(dto: CreateUserDto): Promise<User> {
+  async create(dto: CreateUserDto): Promise<PublicUser> {
     const existing = await this.userRepo.findOne({
       where: { username: dto.username },
     });
@@ -108,8 +115,12 @@ export class UsersService implements OnModuleInit {
     targetId: number,
     dto: UpdateUserDto,
     requester: User,
-  ): Promise<User> {
-    const target = await this.findOne(targetId);
+  ): Promise<PublicUser> {
+    const target = await this.userRepo.findOne({
+      where: { id: targetId },
+      relations: ['userRole'],
+    });
+    if (!target) throw new NotFoundException(`User #${targetId} not found`);
     const isSelf = requester.id === targetId;
     const ability = this.caslAbilityFactory.createForUser(requester);
     const isManager = ability.can(Action.Manage, User);
@@ -157,7 +168,8 @@ export class UsersService implements OnModuleInit {
   }
 
   async remove(id: number): Promise<void> {
-    const user = await this.findOne(id);
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException(`User #${id} not found`);
     await this.userRepo.remove(user);
   }
 }

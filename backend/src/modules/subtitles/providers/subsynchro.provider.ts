@@ -18,7 +18,6 @@ interface SubsynchroSearchItem {
   fichier: string;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
 interface SubsynchroSettings {}
 
 export class SubsynchroProvider implements SubtitleProviderInterface {

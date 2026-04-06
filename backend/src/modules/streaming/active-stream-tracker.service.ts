@@ -1,4 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import type { BurnInSubtitle } from './transcoding.service';
 
 export interface DirectPlaySession {
   userId: number;
@@ -76,7 +77,7 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.transcodeReasonsCache.get(mediaFileId) ?? [];
   }
 
-  private readonly burnInCache = new Map<number, any>();
+  private readonly burnInCache = new Map<number, BurnInSubtitle>();
 
   setTonemapping(mediaFileId: number, value: boolean) {
     this.tonemappingCache.set(mediaFileId, value);
@@ -86,7 +87,7 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.tonemappingCache.get(mediaFileId) ?? false;
   }
 
-  setBurnIn(mediaFileId: number, info: any) {
+  setBurnIn(mediaFileId: number, info: BurnInSubtitle | undefined) {
     if (info) {
       this.burnInCache.set(mediaFileId, info);
     } else {
@@ -94,7 +95,7 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  getBurnIn(mediaFileId: number): any {
+  getBurnIn(mediaFileId: number): BurnInSubtitle | undefined {
     return this.burnInCache.get(mediaFileId) ?? undefined;
   }
 

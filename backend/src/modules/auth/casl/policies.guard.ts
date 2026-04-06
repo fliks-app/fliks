@@ -1,5 +1,7 @@
 import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { Request } from 'express';
+import { User } from '../../users/entities/user.entity';
 import { CaslAbilityFactory, AppAbility } from './casl-ability.factory';
 import { CHECK_POLICIES_KEY, PolicyHandler } from './check-policies.decorator';
 
@@ -21,7 +23,9 @@ export class PoliciesGuard implements CanActivate {
       return true;
     }
 
-    const { user } = context.switchToHttp().getRequest();
+    const { user } = context
+      .switchToHttp()
+      .getRequest<Request & { user?: User }>();
     if (!user) {
       return false;
     }

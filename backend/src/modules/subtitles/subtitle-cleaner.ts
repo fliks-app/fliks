@@ -50,7 +50,7 @@ export function cleanSubtitle(
   const removeAds = options.removeAds !== false;
   const removeHiTags = options.removeHiTags ?? false;
 
-  let content = buffer.toString('utf-8');
+  const content = buffer.toString('utf-8');
 
   // Parse custom exclusion regexes
   const customPatterns = (options.customExclusions ?? [])

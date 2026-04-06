@@ -18,6 +18,7 @@ import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import * as fs from 'fs';
+import * as path from 'path';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
@@ -383,7 +384,7 @@ export class SystemController {
 
     for (const s of allSessions) {
       const mf = mediaFileMap.get(s.mediaFileId);
-      const si = mf?.streamInfo as any;
+      const si = mf?.streamInfo;
       const v = si?.video?.[0];
       const a = si?.audio?.[0];
 
@@ -464,8 +465,9 @@ export class SystemController {
         lastActivity: s.lastActivity,
         positionSeconds,
         durationSeconds,
-        container:
-          si?.container ?? (mf as any)?.relativePath?.split('.').pop() ?? null,
+        container: mf?.relativePath
+          ? path.extname(mf.relativePath).replace(/^\./, '') || null
+          : null,
         videoCodec: v?.codec?.toUpperCase() ?? null,
         videoResolution: resLabel,
         videoBitrate: v?.bitRate ?? null,

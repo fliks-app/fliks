@@ -7,6 +7,17 @@ import {
   MetadataDetails,
   SeasonDetails,
 } from '../interfaces/metadata-provider.interface';
+import type {
+  TmdbMovieDetailsResponse,
+  TmdbMovieListItem,
+  TmdbPaginated,
+  TmdbTvDetailsResponse,
+  TmdbTvEpisode,
+  TmdbTvListItem,
+  TmdbTvSeasonResponse,
+  TmdbTvShowWithSeasons,
+  TmdbNamed,
+} from './tmdb-api.types';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
@@ -19,7 +30,7 @@ export class TmdbProvider implements IMetadataProvider {
   constructor(private readonly config: ConfigService) {
     this.client = axios.create({
       baseURL: 'https://api.themoviedb.org/3',
-      params: { api_key: this.config.get('TMDB_API_KEY', '') },
+      params: { api_key: this.config.get<string>('TMDB_API_KEY', '') },
       timeout: 10000,
     });
   }
@@ -31,8 +42,11 @@ export class TmdbProvider implements IMetadataProvider {
     const params: Record<string, unknown> = { query, language: 'fr-FR' };
     if (year) params.year = year;
 
-    const { data } = await this.client.get('/search/movie', { params });
-    return data.results.map((r: any) => this.mapMovieResult(r));
+    const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
+      '/search/movie',
+      { params },
+    );
+    return data.results.map((r) => this.mapMovieResult(r));
   }
 
   async searchTvShow(
@@ -42,17 +56,23 @@ export class TmdbProvider implements IMetadataProvider {
     const params: Record<string, unknown> = { query, language: 'fr-FR' };
     if (year) params.first_air_date_year = year;
 
-    const { data } = await this.client.get('/search/tv', { params });
-    return data.results.map((r: any) => this.mapTvResult(r));
+    const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
+      '/search/tv',
+      { params },
+    );
+    return data.results.map((r) => this.mapTvResult(r));
   }
 
   async getMovieDetails(tmdbId: number): Promise<MetadataDetails> {
-    const { data } = await this.client.get(`/movie/${tmdbId}`, {
-      params: {
-        language: 'fr-FR',
-        append_to_response: 'external_ids,images,release_dates',
+    const { data } = await this.client.get<TmdbMovieDetailsResponse>(
+      `/movie/${tmdbId}`,
+      {
+        params: {
+          language: 'fr-FR',
+          append_to_response: 'external_ids,images,release_dates',
+        },
       },
-    });
+    );
 
     const dates = this.extractReleaseDates(data.release_dates?.results ?? []);
 
@@ -68,12 +88,12 @@ export class TmdbProvider implements IMetadataProvider {
       fanartUrl: data.backdrop_path
         ? `${TMDB_IMAGE_BASE}/original${data.backdrop_path}`
         : null,
-      rating: data.vote_average,
-      genres: data.genres?.map((g: any) => g.name) ?? [],
+      rating: data.vote_average ?? 0,
+      genres: data.genres?.map((g: TmdbNamed) => g.name) ?? [],
       mediaType: 'movie',
       imdbId: data.external_ids?.imdb_id ?? data.imdb_id ?? null,
-      runtime: data.runtime,
-      releaseDate: data.release_date,
+      runtime: data.runtime ?? null,
+      releaseDate: data.release_date ?? null,
       inCinemas: dates.inCinemas,
       digitalRelease: dates.digitalRelease,
       physicalRelease: dates.physicalRelease,
@@ -81,21 +101,23 @@ export class TmdbProvider implements IMetadataProvider {
       budget: data.budget || null,
       revenue: data.revenue || null,
       originalLanguage: data.original_language ?? null,
-      productionCountries: (data.production_countries ?? []).map(
-        (c: any) => c.name,
-      ),
-      productionCompanies: (data.production_companies ?? []).map(
-        (c: any) => c.name,
-      ),
+      productionCountries: (data.production_countries ?? []).map((c) => c.name),
+      productionCompanies: (data.production_companies ?? []).map((c) => c.name),
       voteCount: data.vote_count ?? null,
       popularity: data.popularity ?? null,
     };
   }
 
   async getTvShowDetails(tmdbId: number): Promise<MetadataDetails> {
-    const { data } = await this.client.get(`/tv/${tmdbId}`, {
-      params: { language: 'fr-FR', append_to_response: 'external_ids,images' },
-    });
+    const { data } = await this.client.get<TmdbTvDetailsResponse>(
+      `/tv/${tmdbId}`,
+      {
+        params: {
+          language: 'fr-FR',
+          append_to_response: 'external_ids,images',
+        },
+      },
+    );
     return {
       tmdbId: data.id,
       title: data.name,
@@ -108,23 +130,23 @@ export class TmdbProvider implements IMetadataProvider {
       fanartUrl: data.backdrop_path
         ? `${TMDB_IMAGE_BASE}/original${data.backdrop_path}`
         : null,
-      rating: data.vote_average,
-      genres: data.genres?.map((g: any) => g.name) ?? [],
+      rating: data.vote_average ?? 0,
+      genres: data.genres?.map((g: TmdbNamed) => g.name) ?? [],
       mediaType: 'series',
       imdbId: data.external_ids?.imdb_id ?? null,
       runtime: data.episode_run_time?.[0] ?? null,
-      releaseDate: data.first_air_date,
+      releaseDate: data.first_air_date ?? null,
       inCinemas: null,
       digitalRelease: null,
       physicalRelease: null,
-      status: this.mapTvStatus(data.status),
+      status: this.mapTvStatus(data.status ?? ''),
       budget: null,
       revenue: null,
       originalLanguage: data.original_language ?? null,
-      productionCountries: (data.origin_country ?? []) as string[],
+      productionCountries: data.origin_country ?? [],
       productionCompanies: [
-        ...(data.networks ?? []).map((n: any) => n.name),
-        ...(data.production_companies ?? []).map((c: any) => c.name),
+        ...(data.networks ?? []).map((n) => n.name),
+        ...(data.production_companies ?? []).map((c) => c.name),
       ],
       voteCount: data.vote_count ?? null,
       popularity: data.popularity ?? null,
@@ -137,27 +159,33 @@ export class TmdbProvider implements IMetadataProvider {
   async getTvSeasonStubs(
     tmdbId: number,
   ): Promise<{ seasonNumber: number; episodeCount: number }[]> {
-    const { data: show } = await this.client.get(`/tv/${tmdbId}`, {
-      params: { language: 'fr-FR' },
-    });
+    const { data: show } = await this.client.get<TmdbTvShowWithSeasons>(
+      `/tv/${tmdbId}`,
+      {
+        params: { language: 'fr-FR' },
+      },
+    );
     return (show.seasons ?? [])
-      .filter((s: { season_number: number }) => s.season_number > 0)
-      .map((s: { season_number: number; episode_count?: number }) => ({
+      .filter((s) => s.season_number > 0)
+      .map((s) => ({
         seasonNumber: s.season_number,
         episodeCount: s.episode_count ?? 0,
       }));
   }
 
   async getTvShowSeasons(tmdbId: number): Promise<SeasonDetails[]> {
-    const { data: show } = await this.client.get(`/tv/${tmdbId}`, {
-      params: { language: 'fr-FR' },
-    });
+    const { data: show } = await this.client.get<TmdbTvShowWithSeasons>(
+      `/tv/${tmdbId}`,
+      {
+        params: { language: 'fr-FR' },
+      },
+    );
 
     const seasons: SeasonDetails[] = [];
     for (const s of show.seasons ?? []) {
       if (s.season_number === 0) continue;
       try {
-        const { data: season } = await this.client.get(
+        const { data: season } = await this.client.get<TmdbTvSeasonResponse>(
           `/tv/${tmdbId}/season/${s.season_number}`,
           { params: { language: 'fr-FR' } },
         );
@@ -166,7 +194,7 @@ export class TmdbProvider implements IMetadataProvider {
           episodeCount: season.episodes?.length ?? 0,
           overview: season.overview || null,
           airDate: season.air_date || null,
-          episodes: (season.episodes ?? []).map((e: any) => ({
+          episodes: (season.episodes ?? []).map((e: TmdbTvEpisode) => ({
             episodeNumber: e.episode_number,
             title: e.name,
             overview: e.overview || null,
@@ -187,48 +215,66 @@ export class TmdbProvider implements IMetadataProvider {
   }
 
   async getTrendingMovies(): Promise<MetadataSearchResult[]> {
-    const { data } = await this.client.get('/trending/movie/week', {
-      params: { language: 'fr-FR' },
-    });
-    return data.results.map((r: any) => this.mapMovieResult(r));
+    const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
+      '/trending/movie/week',
+      {
+        params: { language: 'fr-FR' },
+      },
+    );
+    return data.results.map((r) => this.mapMovieResult(r));
   }
 
   async getPopularMovies(): Promise<MetadataSearchResult[]> {
-    const { data } = await this.client.get('/movie/popular', {
-      params: { language: 'fr-FR' },
-    });
-    return data.results.map((r: any) => this.mapMovieResult(r));
+    const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
+      '/movie/popular',
+      {
+        params: { language: 'fr-FR' },
+      },
+    );
+    return data.results.map((r) => this.mapMovieResult(r));
   }
 
   async getUpcomingMovies(): Promise<MetadataSearchResult[]> {
-    const { data } = await this.client.get('/movie/upcoming', {
-      params: { language: 'fr-FR', region: 'FR' },
-    });
-    return data.results.map((r: any) => this.mapMovieResult(r));
+    const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
+      '/movie/upcoming',
+      {
+        params: { language: 'fr-FR', region: 'FR' },
+      },
+    );
+    return data.results.map((r) => this.mapMovieResult(r));
   }
 
   async getTrendingTvShows(): Promise<MetadataSearchResult[]> {
-    const { data } = await this.client.get('/trending/tv/week', {
-      params: { language: 'fr-FR' },
-    });
-    return data.results.map((r: any) => this.mapTvResult(r));
+    const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
+      '/trending/tv/week',
+      {
+        params: { language: 'fr-FR' },
+      },
+    );
+    return data.results.map((r) => this.mapTvResult(r));
   }
 
   async getPopularTvShows(): Promise<MetadataSearchResult[]> {
-    const { data } = await this.client.get('/tv/popular', {
-      params: { language: 'fr-FR' },
-    });
-    return data.results.map((r: any) => this.mapTvResult(r));
+    const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
+      '/tv/popular',
+      {
+        params: { language: 'fr-FR' },
+      },
+    );
+    return data.results.map((r) => this.mapTvResult(r));
   }
 
   async getUpcomingTvShows(): Promise<MetadataSearchResult[]> {
-    const { data } = await this.client.get('/tv/on_the_air', {
-      params: { language: 'fr-FR' },
-    });
-    return data.results.map((r: any) => this.mapTvResult(r));
+    const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
+      '/tv/on_the_air',
+      {
+        params: { language: 'fr-FR' },
+      },
+    );
+    return data.results.map((r) => this.mapTvResult(r));
   }
 
-  private mapMovieResult(r: any): MetadataSearchResult {
+  private mapMovieResult(r: TmdbMovieListItem): MetadataSearchResult {
     return {
       tmdbId: r.id,
       title: r.title,
@@ -238,13 +284,13 @@ export class TmdbProvider implements IMetadataProvider {
       posterUrl: r.poster_path
         ? `${TMDB_IMAGE_BASE}/w500${r.poster_path}`
         : null,
-      rating: r.vote_average,
+      rating: r.vote_average ?? 0,
       genres: [],
       mediaType: 'movie',
     };
   }
 
-  private mapTvResult(r: any): MetadataSearchResult {
+  private mapTvResult(r: TmdbTvListItem): MetadataSearchResult {
     return {
       tmdbId: r.id,
       title: r.name,
@@ -254,7 +300,7 @@ export class TmdbProvider implements IMetadataProvider {
       posterUrl: r.poster_path
         ? `${TMDB_IMAGE_BASE}/w500${r.poster_path}`
         : null,
-      rating: r.vote_average,
+      rating: r.vote_average ?? 0,
       genres: [],
       mediaType: 'series',
     };

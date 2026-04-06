@@ -138,7 +138,7 @@ export class SubtitlesService {
   ): Promise<SubtitleFile> {
     const providers = await this.providerService.findEnabled();
     const provider = providers.find(
-      (p) => p.type === searchResult.providerType,
+      (p) => String(p.type) === searchResult.providerType,
     );
     if (!provider) throw new NotFoundException('No matching provider found');
 

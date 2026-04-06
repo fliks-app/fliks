@@ -29,7 +29,7 @@ export class StreamBuilderService {
     tokenParam: string,
     burnInSubtitleId?: number,
   ): PlaybackInfoResponse {
-    const si = resolved.mediaFile.streamInfo as any;
+    const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
     const a = si?.audio?.[0];
 
@@ -55,9 +55,9 @@ export class StreamBuilderService {
       audioLanguage: a?.language,
       durationSeconds: si?.durationSeconds,
       hdrFormat: v?.hdrFormat as string | undefined,
-      colorSpace: v?.colorSpace as string | undefined,
-      colorTransfer: v?.colorTransfer as string | undefined,
-      colorPrimaries: v?.colorPrimaries as string | undefined,
+      colorSpace: v?.colorSpace,
+      colorTransfer: v?.colorTransfer,
+      colorPrimaries: v?.colorPrimaries,
     };
 
     // HDR detection

@@ -537,7 +537,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     };
 
-    proc.stderr!.on('data', (chunk: Buffer) => {
+    proc.stderr.on('data', (chunk: Buffer) => {
       stderr += chunk.toString();
       checkReady();
     });
@@ -578,7 +578,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     };
 
     // Keep stderr reference on session for debugging
-    proc.stderr!.on('data', () => {
+    proc.stderr.on('data', () => {
       session.stderr = stderr;
     });
 
@@ -1100,7 +1100,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     };
 
-    proc.stderr!.on('data', (chunk: Buffer) => {
+    proc.stderr.on('data', (chunk: Buffer) => {
       stderr += chunk.toString();
       checkReady();
     });

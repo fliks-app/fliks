@@ -304,7 +304,7 @@ export class RequestsService {
       row.mediaId = media.id;
     } catch (err) {
       // If already in library, resolve the existing media ID
-      if ((err as any)?.status === 409) {
+      if (err?.status === 409) {
         const existing = await this.mediaService.findByTmdbId(
           row.tmdbId,
           row.mediaType,

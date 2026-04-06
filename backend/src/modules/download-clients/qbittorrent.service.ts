@@ -311,7 +311,7 @@ export class QbittorrentService {
     mediaType?: 'movie' | 'series',
   ): Promise<string> {
     torrentUrl = this.sanitizeUrl(torrentUrl);
-    const s = client.settings as Record<string, unknown>;
+    const s = client.settings;
     const base = this.buildBaseUrl(
       s as {
         host?: string;
