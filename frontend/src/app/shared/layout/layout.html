@@ -3,7 +3,7 @@
   <div class="drawer-content flex flex-col relative">
     <nav
       class="navbar lg:hidden fixed top-0 left-0 right-0 z-30 transition-all duration-300"
-      style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 + 8px)"
+      style="padding-top: calc(env(safe-area-inset-top, 0px) + 4px)"
       [class.-translate-y-full]="navbarHidden()"
       [class.bg-base-100]="!navbarTransparent()"
       [class.shadow-sm]="!navbarTransparent()"
@@ -24,12 +24,15 @@
       <div class="flex-1 min-w-0">
         @if (navbarTransparent()) {
           @if (navbar.heroTitle()) {
-            <span class="text-lg font-bold truncate pl-2 [text-shadow:0_1px_2px_rgb(0_0_0/0.45)]">{{
-              navbar.heroTitle()
-            }}</span>
+            <span
+              class="block min-w-0 pl-2 text-lg font-semibold truncate [text-shadow:0_1px_2px_rgb(0_0_0/0.45)]"
+              [attr.title]="navbar.heroTitle()"
+              >{{ navbar.heroTitle() }}</span>
           }
         } @else if (navbar.mobileNavTitle()) {
-          <span class="text-lg font-bold truncate pl-2">{{ navbar.mobileNavTitle() }}</span>
+          <span class="block min-w-0 pl-2 text-lg font-bold truncate" [attr.title]="navbar.mobileNavTitle()">{{
+            navbar.mobileNavTitle()
+          }}</span>
         } @else {
           <a class="btn btn-ghost text-xl" routerLink="/">{{ 'app.name' | translate }}</a>
         }
@@ -86,7 +89,7 @@
 
   <div class="drawer-side z-40">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
-    <aside class="bg-base-100 w-64 min-h-full flex flex-col" style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 + 8px)">
+    <aside class="bg-base-100 w-64 min-h-full flex flex-col" style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 + 12px)">
       <div class="p-4 border-b border-base-200">
         <a routerLink="/" class="text-2xl font-bold">{{ 'app.name' | translate }}</a>
       </div>

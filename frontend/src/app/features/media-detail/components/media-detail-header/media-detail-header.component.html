@@ -3,21 +3,23 @@
 <!-- ===== MOBILE layout (Emby-style) ===== -->
 <div class="lg:hidden">
   <!-- Fanart hero (extends behind navbar) -->
-  <div class="relative -mx-4 -mt-20">
+  <div class="relative -mx-4 -mt-20 media-detail-fanart-bleed">
     @if (m.fanartUrl) {
-      <img [src]="m.fanartUrl" alt="" class="w-full aspect-video landscape:max-h-[40vh] object-cover object-[50%_25%]" />
-      <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-transparent to-black/20"></div>
+      <img
+        [src]="m.fanartUrl"
+        alt=""
+        class="w-full min-h-[230px] h-[38svh] max-h-[53svh] landscape:min-h-0 landscape:h-auto landscape:max-h-[47vh] landscape:aspect-video object-cover object-[50%_25%]"
+      />
+      <div class="pointer-events-none absolute inset-0 bg-linear-to-t from-base-100 via-transparent to-black/20"></div>
     } @else {
-      <div class="w-full aspect-video bg-base-300"></div>
+      <div
+        class="w-full min-h-[230px] h-[38svh] max-h-[53svh] landscape:min-h-0 landscape:h-auto landscape:aspect-video landscape:max-h-[47vh] bg-base-300"
+      ></div>
     }
   </div>
 
-  <div class="px-1 -mt-8 relative z-10">
-    <!-- Title -->
-    <h1 class="sr-only text-2xl font-bold tracking-tight">{{ m.title }}</h1>
-    @if (m.originalTitle && m.originalTitle !== m.title) {
-      <p class="text-base-content/50 text-sm">{{ m.originalTitle }}</p>
-    }
+  <div class="px-1 -mt-16 relative z-10">
+    <h1 class="text-3xl font-semibold tracking-tight leading-tight">{{ m.title }}</h1>
 
     <!-- Badges: rating, year, runtime, genres -->
     <div class="flex flex-wrap items-center gap-1.5 mt-2 text-sm text-base-content/70">

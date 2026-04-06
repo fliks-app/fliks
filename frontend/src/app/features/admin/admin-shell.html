@@ -1,8 +1,12 @@
 <div class="drawer lg:drawer-open min-h-screen">
   <input id="admin-sidebar" type="checkbox" class="drawer-toggle" />
-  <div class="drawer-content flex flex-col">
+  <div class="drawer-content flex flex-col relative">
     <!-- Mobile top bar -->
-    <nav class="navbar bg-base-100 shadow-sm lg:hidden">
+    <nav
+      class="navbar bg-base-100 shadow-sm lg:hidden fixed top-0 left-0 right-0 z-30 transition-all duration-300"
+      style="padding-top: calc(env(safe-area-inset-top, 0px) + 4px)"
+      [class.-translate-y-full]="navbarHidden()"
+    >
       <div class="flex-none flex">
         <button class="btn btn-square btn-ghost" (click)="goBack()">
           <svg lucideChevronLeft class="h-5 w-5"></svg>
@@ -15,6 +19,7 @@
         <span class="text-lg font-bold">{{ 'admin.title' | translate }}</span>
       </div>
     </nav>
+    <div class="h-16 lg:hidden"></div>
     <main class="flex-1 p-4 lg:p-6">
       <router-outlet />
     </main>
@@ -22,7 +27,14 @@
 
   <div class="drawer-side z-40">
     <label for="admin-sidebar" class="drawer-overlay"></label>
-    <aside class="bg-base-100 w-64 min-h-full flex flex-col">
+    <aside
+      class="bg-base-100 w-64 min-h-full flex flex-col"
+      style="
+        padding-top: calc(env(safe-area-inset-top, 0px) / 2 + 12px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        padding-left: env(safe-area-inset-left, 0px);
+      "
+    >
       <div class="p-4 border-b border-base-200">
         <a routerLink="/" class="flex items-center gap-2 text-base-content/60 hover:text-base-content text-sm mb-2">
           <svg lucideChevronLeft class="h-4 w-4"></svg>

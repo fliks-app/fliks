@@ -3,7 +3,7 @@
 
 /* Native app (Capacitor): offset content from system bars */
 body.native {
-  padding-top: calc(env(safe-area-inset-top) / 2 + 8px);
+  padding-top: calc(env(safe-area-inset-top) / 2 + 12px);
   padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
@@ -15,6 +15,14 @@ body.native.immersive {
 /* Pages with hero fanart — content extends behind status bar */
 body.native.hero-page {
   padding-top: 0 !important;
+}
+
+/* Landscape: fanart edge-to-edge into side safe areas (browser + native); body/main padding keeps content safe */
+@media (orientation: landscape) {
+  body.hero-page .media-detail-fanart-bleed {
+    margin-left: calc(-1rem - env(safe-area-inset-left, 0px));
+    margin-right: calc(-1rem - env(safe-area-inset-right, 0px));
+  }
 }
 
 /* Mobile navbar: legibility of white icons on fanart (toolbar only — reset inside user menu panel) */
