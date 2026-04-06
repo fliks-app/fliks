@@ -65,6 +65,18 @@ export function seasonsVisibleWithDiskFilter(media: Media, onlyOnDisk: boolean):
 
 export type MediaFileRow = NonNullable<Media['files']>[number];
 
+/** Plus d’une version fichier → afficher un `<select>` pour choisir la qualité / la piste. */
+export function hasMultipleFileQualityChoices(files: MediaFileRow[]): boolean {
+  return files.length > 1;
+}
+
+/** Libellé d’option : qualité seule, ou qualité + taille si plusieurs fichiers ont la même étiquette. */
+export function fileQualityOptionLabel(f: MediaFileRow, siblings: MediaFileRow[]): string {
+  const same = siblings.filter((x) => x.quality === f.quality).length;
+  if (same > 1) return `${f.quality} · ${formatMediaDetailBytes(f.size)}`;
+  return f.quality;
+}
+
 /** Fichiers média explicitement liés à cet épisode (episodeId). */
 export function filesForEpisode(
   files: Media['files'],

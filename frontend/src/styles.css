@@ -19,7 +19,7 @@ body.native.hero-page {
 
 /* Landscape: fanart edge-to-edge into side safe areas (browser + native); body/main padding keeps content safe */
 @media (orientation: landscape) {
-  body.hero-page .media-detail-fanart-bleed {
+  body.hero-page .hero-fanart-bleed {
     margin-left: calc(-1rem - env(safe-area-inset-left, 0px));
     margin-right: calc(-1rem - env(safe-area-inset-right, 0px));
   }

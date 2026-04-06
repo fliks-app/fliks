@@ -2,21 +2,7 @@
 
 <!-- ===== MOBILE layout (Emby-style) ===== -->
 <div class="lg:hidden">
-  <!-- Fanart hero (extends behind navbar) -->
-  <div class="relative -mx-4 -mt-20 media-detail-fanart-bleed">
-    @if (m.fanartUrl) {
-      <img
-        [src]="m.fanartUrl"
-        alt=""
-        class="w-full min-h-[230px] h-[38svh] max-h-[53svh] landscape:min-h-0 landscape:h-auto landscape:max-h-[47vh] landscape:aspect-video object-cover object-[50%_25%]"
-      />
-      <div class="pointer-events-none absolute inset-0 bg-linear-to-t from-base-100 via-transparent to-black/20"></div>
-    } @else {
-      <div
-        class="w-full min-h-[230px] h-[38svh] max-h-[53svh] landscape:min-h-0 landscape:h-auto landscape:aspect-video landscape:max-h-[47vh] bg-base-300"
-      ></div>
-    }
-  </div>
+  <app-mobile-fanart-hero [fanartUrl]="m.fanartUrl" />
 
   <div class="px-1 -mt-16 relative z-10">
     <h1 class="text-3xl font-semibold tracking-tight leading-tight">{{ m.title }}</h1>
@@ -36,8 +22,8 @@
       }
     </div>
 
-    <!-- File info badges -->
-    @if (files().length > 1) {
+    <!-- Plusieurs qualités / versions → select -->
+    @if (qualitySelectVisible()) {
       <div class="mt-3">
         <select
           class="select select-bordered select-sm w-full"
@@ -45,15 +31,15 @@
           (ngModelChange)="selectedFileIdChange.emit($event)"
         >
           @for (f of files(); track f.id) {
-            <option [ngValue]="f.id">{{ f.quality }} — {{ formatBytes(f.size) }}</option>
+            <option [ngValue]="f.id">{{ qualityOptionLabel(f) }}</option>
           }
         </select>
       </div>
     } @else if (files().length === 1) {
-      <div class="flex flex-wrap gap-1.5 mt-3 text-xs">
-        <span class="badge badge-sm badge-ghost">{{ files()[0].quality }}</span>
-        <span class="badge badge-sm badge-ghost tabular-nums">{{ formatBytes(files()[0].size) }}</span>
-      </div>
+      <p class="mt-3 text-base">
+        <span class="text-base-content">{{ 'media_detail.episode_video_label' | translate }}</span
+        ><span class="text-base-content/55 tabular-nums">{{ files()[0].quality }}</span>
+      </p>
     }
 
     <!-- Series episode progress -->
@@ -188,19 +174,23 @@
         <p class="text-base-content/60 mt-1 text-lg">{{ m.originalTitle }}</p>
       }
 
-      @if (files().length > 1) {
+      @if (qualitySelectVisible()) {
         <div class="flex items-center gap-3 mt-3">
-          <select class="select select-bordered select-sm" [ngModel]="selectedFileId()" (ngModelChange)="selectedFileIdChange.emit($event)">
+          <select
+            class="select select-bordered select-sm w-full max-w-md"
+            [ngModel]="selectedFileId()"
+            (ngModelChange)="selectedFileIdChange.emit($event)"
+          >
             @for (f of files(); track f.id) {
-              <option [ngValue]="f.id">{{ f.quality }} — {{ formatBytes(f.size) }}</option>
+              <option [ngValue]="f.id">{{ qualityOptionLabel(f) }}</option>
             }
           </select>
         </div>
       } @else if (files().length === 1) {
-        <div class="flex flex-wrap gap-2 mt-3 text-xs">
-          <span class="badge badge-sm badge-ghost">{{ files()[0].quality }}</span>
-          <span class="badge badge-sm badge-ghost tabular-nums">{{ formatBytes(files()[0].size) }}</span>
-        </div>
+        <p class="mt-3 text-base">
+          <span class="text-base-content">{{ 'media_detail.episode_video_label' | translate }}</span
+          ><span class="text-base-content/55 tabular-nums">{{ files()[0].quality }}</span>
+        </p>
       }
 
       @if (m.type === 'series' && m.episodeStats) {

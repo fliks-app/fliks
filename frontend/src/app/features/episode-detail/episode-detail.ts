@@ -9,6 +9,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { PlayableMediaService } from '../../core/services/playable-media.service';
 import { SubtitleActionsService } from '../../core/services/subtitle-actions.service';
@@ -23,13 +24,16 @@ import { MediaDetailSubtitleSearchModalComponent } from '../media-detail/compone
 import { ReleasesModalComponent } from '../media-detail/components/releases-modal/releases-modal.component';
 import {
   displayMediaFilePath,
+  fileQualityOptionLabel,
   filesForEpisode,
   formatMediaDetailBytes,
+  hasMultipleFileQualityChoices,
   subtitlesForEpisode,
 } from '../media-detail/media-detail.utils';
 import type { MediaFileRow } from '../media-detail/media-detail.utils';
 import { AuthService } from '../../core/services/auth.service';
 import { NavbarService } from '../../core/services/navbar.service';
+import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart-hero';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
 import { SseService } from '../../core/services/sse.service';
@@ -49,9 +53,11 @@ import {
 @Component({
   selector: 'app-episode-detail',
   imports: [
+    DatePipe,
     RouterLink,
     FormsModule,
     TranslateModule,
+    MobileFanartHeroComponent,
     MediaDetailSubtitlesComponent,
     MediaFileInfoComponent,
     MediaDetailSubtitleSearchModalComponent,
@@ -145,6 +151,10 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
     return filesForEpisode(m.files, ep.id);
   });
 
+  readonly episodeQualitySelectVisible = computed(() =>
+    hasMultipleFileQualityChoices(this.episodeFiles()),
+  );
+
   /** Auto-select first file when episodeFiles change */
   private readonly autoSelectFileEffect = effect(() => {
     const files = this.episodeFiles();
@@ -193,7 +203,7 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.navbar.clearPageTitle();
+    this.navbar.leaveHeroPage();
   }
 
   private async loadData() {
@@ -237,7 +247,7 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
       } else {
         this.season.set(foundSeason);
         this.episode.set(foundEpisode);
-        this.navbar.setPageTitle(this.episodePageHeading(media, foundSeason!, foundEpisode));
+        this.navbar.enterHeroPage(this.episodePageHeading(media, foundSeason!, foundEpisode));
         // Load watched status
         const fileId = this.activeFileId();
         if (fileId) {
@@ -283,7 +293,7 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
       this.subtitles.set(subs);
       const s = this.season();
       const e = this.episode();
-      if (s && e) this.navbar.setPageTitle(this.episodePageHeading(updated, s, e));
+      if (s && e) this.navbar.enterHeroPage(this.episodePageHeading(updated, s, e));
     } finally {
       this.refreshLoading.set(false);
     }
@@ -477,6 +487,10 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
 
   formatBytes(bytes: number): string {
     return formatMediaDetailBytes(bytes);
+  }
+
+  qualityOptionLabel(f: MediaFileRow): string {
+    return fileQualityOptionLabel(f, this.episodeFiles());
   }
 
   async play(fromStart: boolean) {

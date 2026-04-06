@@ -1,4 +1,13 @@
-import { ChangeDetectionStrategy, Component, inject, input, output, signal, OnInit } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  input,
+  output,
+  signal,
+  OnInit,
+} from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -22,11 +31,17 @@ import { Media } from '../../../../core/services/api/media.service';
 import { PlayableMediaService } from '../../../../core/services/playable-media.service';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
 import type { MediaFileRow } from '../../media-detail.utils';
-import { formatMediaDetailBytes } from '../../media-detail.utils';
+import {
+  fileQualityOptionLabel,
+  formatMediaDetailBytes,
+  hasMultipleFileQualityChoices,
+} from '../../media-detail.utils';
+import { MobileFanartHeroComponent } from '../../../../shared/components/mobile-fanart-hero';
 
 @Component({
   selector: 'app-media-detail-header',
   imports: [
+    MobileFanartHeroComponent,
     DecimalPipe, FormsModule, RouterLink, TranslateModule,
     LucideChevronLeft, LucideFilm, LucideTrash2, LucideEllipsisVertical,
     LucideDownload, LucideSearch, LucideSettings, LucideFolder,
@@ -49,6 +64,8 @@ export class MediaDetailHeaderComponent implements OnInit {
   readonly monitoredLoading = input(false);
   readonly deleteLoading = input(false);
   readonly files = input<MediaFileRow[]>([]);
+  /** Plusieurs fichiers (ex. plusieurs qualités) → liste déroulante */
+  readonly qualitySelectVisible = computed(() => hasMultipleFileQualityChoices(this.files()));
   readonly selectedFileId = input<number | null>(null);
   readonly canGrab = input(false);
   readonly releasesLoading = input(false);
@@ -79,6 +96,10 @@ export class MediaDetailHeaderComponent implements OnInit {
 
   formatBytes(bytes: number): string {
     return formatMediaDetailBytes(bytes);
+  }
+
+  qualityOptionLabel(f: MediaFileRow): string {
+    return fileQualityOptionLabel(f, this.files());
   }
 
   async play(fromStart: boolean) {
