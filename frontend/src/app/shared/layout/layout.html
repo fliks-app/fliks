@@ -9,6 +9,7 @@
       [class.shadow-sm]="!navbarTransparent()"
       [class.bg-transparent]="navbarTransparent()"
       [class.text-white]="navbarTransparent()"
+      [class.nav-hero-icons]="navbarTransparent()"
     >
       <div class="flex-none flex">
         @if (canGoBack()) {
@@ -67,7 +68,11 @@
       }
       <app-user-menu />
     </div>
-    <main class="min-w-0 flex-1 overflow-x-hidden p-4 lg:p-6">
+    <!-- overflow-x-hidden makes overflow-y compute to auto, which clips negative-margin hero fanart under the transparent navbar -->
+    <main
+      class="min-w-0 flex-1 p-4 lg:p-6"
+      [class.overflow-x-hidden]="!navbar.isHeroPage()"
+    >
       <router-outlet />
     </main>
   </div>

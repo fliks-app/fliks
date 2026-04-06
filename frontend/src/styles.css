@@ -17,6 +17,14 @@ body.native.hero-page {
   padding-top: 0 !important;
 }
 
+/* Mobile navbar: legibility of white icons on fanart (toolbar only — reset inside user menu panel) */
+.nav-hero-icons svg {
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.28)) drop-shadow(0 0 2px rgb(0 0 0 / 0.12));
+}
+.nav-hero-icons .dropdown-content svg {
+  filter: none;
+}
+
 @theme {
   --breakpoint-3xl: 120rem;
   --breakpoint-4xl: 160rem;
