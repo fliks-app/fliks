@@ -14,7 +14,7 @@
 
   <div class="px-1 -mt-8 relative z-10">
     <!-- Title -->
-    <h1 class="text-2xl font-bold tracking-tight">{{ m.title }}</h1>
+    <h1 class="sr-only text-2xl font-bold tracking-tight">{{ m.title }}</h1>
     @if (m.originalTitle && m.originalTitle !== m.title) {
       <p class="text-base-content/50 text-sm">{{ m.originalTitle }}</p>
     }

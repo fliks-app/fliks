@@ -55,7 +55,7 @@
         <!-- Info -->
         <div class="flex flex-col gap-3 flex-1 min-w-0">
           <div>
-            <h1 class="text-2xl font-bold leading-tight">{{ m.title }}</h1>
+            <h1 class="sr-only lg:not-sr-only text-2xl font-bold leading-tight">{{ m.title }}</h1>
             <p class="text-base text-base-content/70 mt-1">
               <a [routerLink]="seriesRoute()" [queryParams]="{ season: s.seasonNumber }" class="hover:underline">
                 S{{ pad(s.seasonNumber) }}

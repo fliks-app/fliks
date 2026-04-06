@@ -32,21 +32,25 @@ export const routes: Routes = [
         pathMatch: 'full',
         loadComponent: () =>
           import('./features/home/home').then((m) => m.HomeComponent),
+        data: { titleKey: 'nav.home' },
       },
       {
         path: 'movies',
         loadComponent: () =>
           import('./features/movies/movies').then((m) => m.MoviesComponent),
+        data: { titleKey: 'movies.title' },
       },
       {
         path: 'series',
         loadComponent: () =>
           import('./features/series/series').then((m) => m.SeriesComponent),
+        data: { titleKey: 'series.title' },
       },
       {
         path: 'add',
         loadComponent: () =>
           import('./features/discover/discover').then((m) => m.DiscoverComponent),
+        data: { titleKey: 'discover.title' },
       },
       {
         path: 'add/movie/:tmdbId',
@@ -85,6 +89,7 @@ export const routes: Routes = [
         path: 'requests',
         loadComponent: () =>
           import('./features/requests/requests').then((m) => m.RequestsComponent),
+        data: { titleKey: 'requests.title' },
       },
       {
         path: 'activity',
@@ -97,6 +102,7 @@ export const routes: Routes = [
               import('./features/activity/queue/queue').then(
                 (m) => m.ActivityQueueComponent,
               ),
+            data: { titleKey: 'activity.title' },
           },
           {
             path: 'subtitles',
@@ -104,6 +110,7 @@ export const routes: Routes = [
               import('./features/activity/subtitles/subtitles').then(
                 (m) => m.ActivitySubtitlesComponent,
               ),
+            data: { titleKey: 'activity.tab_subtitles' },
           },
         ],
       },
@@ -111,6 +118,7 @@ export const routes: Routes = [
         path: 'calendar',
         loadComponent: () =>
           import('./features/calendar/calendar').then((m) => m.CalendarComponent),
+        data: { titleKey: 'calendar.title' },
       },
       {
         path: 'history',
@@ -118,6 +126,7 @@ export const routes: Routes = [
           import('./features/watch-history/watch-history').then(
             (m) => m.WatchHistoryComponent,
           ),
+        data: { titleKey: 'history.title' },
       },
       {
         path: 'playback-settings',
@@ -125,6 +134,7 @@ export const routes: Routes = [
           import('./features/playback-settings/playback-settings').then(
             (m) => m.PlaybackSettingsComponent,
           ),
+        data: { titleKey: 'playback_settings.title' },
       },
     ],
   },

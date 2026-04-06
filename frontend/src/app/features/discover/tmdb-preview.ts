@@ -5,6 +5,7 @@ import {
   inject,
   computed,
   OnInit,
+  OnDestroy,
   viewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -20,6 +21,7 @@ import { ProfilesService } from '../../core/services/api/profiles.service';
 import { RootFoldersApiService, RootFolder } from '../../core/services/api/root-folders-api.service';
 import { SettingsApiService } from '../../core/services/api/settings-api.service';
 import { ToastService } from '../../core/services/toast.service';
+import { NavbarService } from '../../core/services/navbar.service';
 import { RequestModalComponent } from './components/request-modal/request-modal.component';
 import { LucideFilm } from '@lucide/angular';
 
@@ -29,7 +31,7 @@ import { LucideFilm } from '@lucide/angular';
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tmdb-preview.html',
 })
-export class TmdbPreviewComponent implements OnInit {
+export class TmdbPreviewComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly metadata = inject(MetadataService);
@@ -38,6 +40,7 @@ export class TmdbPreviewComponent implements OnInit {
   private readonly settingsApi = inject(SettingsApiService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
+  private readonly navbar = inject(NavbarService);
   readonly auth = inject(AuthService);
 
   readonly media = signal<MetadataDetails | null>(null);
@@ -64,6 +67,10 @@ export class TmdbPreviewComponent implements OnInit {
 
   private readonly requestModal = viewChild(RequestModalComponent);
   readonly languageProfiles = signal<{ id: number; name: string }[]>([]);
+
+  ngOnDestroy() {
+    this.navbar.clearPageTitle();
+  }
 
   async ngOnInit() {
     const tmdbId = Number(this.route.snapshot.paramMap.get('tmdbId'));
@@ -105,6 +112,7 @@ export class TmdbPreviewComponent implements OnInit {
         ? await this.metadata.getTvDetails(tmdbId)
         : await this.metadata.getMovieDetails(tmdbId);
       this.media.set(details);
+      this.navbar.setPageTitle(details.title);
     } catch {
       this.error.set(this.translate.instant('discover.preview_error'));
     } finally {

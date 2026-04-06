@@ -34,7 +34,7 @@
       <div class="flex-1 space-y-4">
         <div class="flex items-start justify-between gap-4">
           <div>
-            <h1 class="text-3xl font-bold">{{ m.title }}</h1>
+            <h1 class="sr-only lg:not-sr-only text-3xl font-bold">{{ m.title }}</h1>
             @if (m.originalTitle && m.originalTitle !== m.title) {
               <p class="text-base-content/60 text-lg">{{ m.originalTitle }}</p>
             }

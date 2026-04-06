@@ -22,12 +22,16 @@
         </label>
       </div>
       <div class="flex-1 min-w-0">
-        @if (!navbarTransparent()) {
+        @if (navbarTransparent()) {
           @if (navbar.heroTitle()) {
-            <span class="text-lg font-bold truncate pl-2">{{ navbar.heroTitle() }}</span>
-          } @else {
-            <a class="btn btn-ghost text-xl" routerLink="/">{{ 'app.name' | translate }}</a>
+            <span class="text-lg font-bold truncate pl-2 [text-shadow:0_1px_2px_rgb(0_0_0/0.45)]">{{
+              navbar.heroTitle()
+            }}</span>
           }
+        } @else if (navbar.mobileNavTitle()) {
+          <span class="text-lg font-bold truncate pl-2">{{ navbar.mobileNavTitle() }}</span>
+        } @else {
+          <a class="btn btn-ghost text-xl" routerLink="/">{{ 'app.name' | translate }}</a>
         }
       </div>
       <div class="flex-none">

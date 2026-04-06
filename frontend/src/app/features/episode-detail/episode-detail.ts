@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  OnDestroy,
   OnInit,
   computed,
   effect,
@@ -28,6 +29,7 @@ import {
 } from '../media-detail/media-detail.utils';
 import type { MediaFileRow } from '../media-detail/media-detail.utils';
 import { AuthService } from '../../core/services/auth.service';
+import { NavbarService } from '../../core/services/navbar.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
 import { SseService } from '../../core/services/sse.service';
@@ -68,7 +70,7 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './episode-detail.html',
 })
-export class EpisodeDetailComponent implements OnInit {
+export class EpisodeDetailComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly mediaService = inject(MediaService);
   private readonly profilesApi = inject(ProfilesService);
@@ -80,6 +82,7 @@ export class EpisodeDetailComponent implements OnInit {
   readonly playable = inject(PlayableMediaService);
   private readonly subActions = inject(SubtitleActionsService);
   private readonly sse = inject(SseService);
+  private readonly navbar = inject(NavbarService);
   readonly watched = signal(false);
 
   /** React to SSE rescan events for this media */
@@ -189,6 +192,10 @@ export class EpisodeDetailComponent implements OnInit {
     this.loadData();
   }
 
+  ngOnDestroy() {
+    this.navbar.clearPageTitle();
+  }
+
   private async loadData() {
     const mediaId = Number(this.route.snapshot.paramMap.get('id'));
     const episodeId = Number(this.route.snapshot.paramMap.get('episodeId'));
@@ -230,6 +237,7 @@ export class EpisodeDetailComponent implements OnInit {
       } else {
         this.season.set(foundSeason);
         this.episode.set(foundEpisode);
+        this.navbar.setPageTitle(this.episodePageHeading(media, foundSeason!, foundEpisode));
         // Load watched status
         const fileId = this.activeFileId();
         if (fileId) {
@@ -241,6 +249,15 @@ export class EpisodeDetailComponent implements OnInit {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  private episodePageHeading(m: Media, s: Season, ep: Episode): string {
+    const sn = String(s.seasonNumber).padStart(2, '0');
+    const en = String(ep.episodeNumber).padStart(2, '0');
+    const epTitle = ep.title?.trim()
+      ? ep.title
+      : this.translate.instant('media_detail.ep_no_title');
+    return `${m.title} — S${sn}:E${en} — ${epTitle}`;
   }
 
   async refreshMetadata() {
@@ -264,6 +281,9 @@ export class EpisodeDetailComponent implements OnInit {
       }
       const subs = await this.subtitlesApi.getForMedia(m.id);
       this.subtitles.set(subs);
+      const s = this.season();
+      const e = this.episode();
+      if (s && e) this.navbar.setPageTitle(this.episodePageHeading(updated, s, e));
     } finally {
       this.refreshLoading.set(false);
     }

@@ -1,7 +1,7 @@
 <div class="flex min-w-0 max-w-full flex-col gap-3 overflow-x-hidden">
   <div class="flex items-center gap-2">
     <svg lucideHistory class="h-5 w-5"></svg>
-    <h1 class="text-xl font-bold">{{ 'history.title' | translate }}</h1>
+    <h1 class="sr-only lg:not-sr-only text-xl font-bold">{{ 'history.title' | translate }}</h1>
   </div>
 
   @if (loading()) {
