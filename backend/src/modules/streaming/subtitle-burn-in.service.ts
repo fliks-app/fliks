@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { StreamingService } from './streaming.service';
+import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execFile } from 'child_process';
@@ -56,12 +57,24 @@ export class SubtitleBurnInService {
     const videoPath = resolved.absolutePath;
     const isImage = IMAGE_BASED_CODECS.has(sub.codec ?? '');
 
-    if (sub.filePath) {
+    if (sub.relativePath) {
       // External subtitle file
+      const mediaPath = resolved.media.path ?? null;
+      const absolute = resolveSubtitleAbsolutePath(mediaPath, sub.relativePath);
+      if (!absolute) {
+        this.log.error(
+          `Burn-in subtitle #${subtitleId}: cannot resolve under media (relativePath="${sub.relativePath}")`,
+        );
+        throw new NotFoundException('Subtitle file not found on disk');
+      }
       let realPath: string;
       try {
-        realPath = await fs.realpath(sub.filePath);
-      } catch {
+        realPath = await fs.realpath(absolute);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        this.log.error(
+          `Burn-in subtitle #${subtitleId}: file missing at "${absolute}" (relativePath="${sub.relativePath}") (${detail})`,
+        );
         throw new NotFoundException('Subtitle file not found on disk');
       }
       return {

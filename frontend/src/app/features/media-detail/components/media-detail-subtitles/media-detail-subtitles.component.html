@@ -71,9 +71,9 @@
               @let sub = row.sub!;
               <tr>
                 <td class="font-medium">{{ sub.language }}</td>
-                <td class="text-sm text-base-content/60 truncate max-w-48" [title]="sub.filePath ?? ''">
-                  @if (sub.filePath) {
-                    {{ sub.filePath | subtitleFilename }}
+                <td class="text-sm text-base-content/60 truncate max-w-48" [title]="sub.relativePath ?? ''">
+                  @if (sub.relativePath) {
+                    {{ sub.relativePath | subtitleFilename }}
                   } @else if (sub.providerType === 'embedded') {
                     <span class="text-base-content/30">{{ 'media_detail.embedded' | translate }}</span>
                   } @else {
@@ -252,7 +252,7 @@
           @if (externalSubtitleRefs().length) {
             <optgroup [label]="'media_detail.sync_external_subtitles' | translate">
               @for (s of externalSubtitleRefs(); track s.id) {
-                <option [value]="'file:' + s.filePath">{{ s.language }} — {{ s.providerType }} ({{ s.status }})</option>
+                <option [value]="'file:' + s.relativePath">{{ s.language }} — {{ s.providerType }} ({{ s.status }})</option>
               }
             </optgroup>
           }

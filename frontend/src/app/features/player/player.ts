@@ -787,7 +787,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (sub.mediaFileId !== this.mediaFileId) continue;
         const isBitmap = bitmapCodecs.has(sub.codec ?? '');
 
-        if (sub.filePath) {
+        if (sub.relativePath) {
           const key = `ext-${sub.language}-${sub.forced}-${sub.hearingImpaired}`;
           if (seen.has(key)) continue;
           seen.add(key);

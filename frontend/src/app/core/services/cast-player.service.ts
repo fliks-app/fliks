@@ -306,7 +306,7 @@ export class CastPlayerService {
       for (const sub of subs) {
         if (sub.mediaFileId !== opts.mediaFileId) continue;
         const isBitmap = bitmapCodecs.has(sub.codec ?? '');
-        if (sub.filePath) {
+        if (sub.relativePath) {
           subtitleInfos.push({
             id: `ext-${sub.id}`, label: `${sub.language}${sub.forced ? ' (Forced)' : ''}`,
             language: sub.language, burnIn: false, subtitleDbId: sub.id,

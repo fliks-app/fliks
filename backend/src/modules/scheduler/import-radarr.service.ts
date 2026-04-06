@@ -18,11 +18,15 @@ import {
 } from './pg-restore-import.util';
 import {
   ensureRootFolderPathsExist,
+  parseLanguageFromPath,
+  parseSubtitleTags,
   resolveRootFolderFromArrPaths,
-} from './arr-import-path.util';
+  SUBTITLE_FILE_EXTENSIONS,
+  upsertImportedSubtitleFile,
+} from './utils/arr-import.util';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
-import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
+import { SubtitleProviderType } from '../../common/enums';
 import * as path from 'path';
 
 interface RadarrMovie {
@@ -213,6 +217,7 @@ export class ImportRadarrService {
         apiKey,
         movies,
         errors,
+        mode,
       );
     }
 
@@ -233,20 +238,18 @@ export class ImportRadarrService {
     apiKey: string,
     movies: RadarrMovie[],
     errors: string[],
+    mode: 'skip' | 'update',
   ): Promise<number> {
     let count = 0;
-    const SUBTITLE_EXTS = new Set(['.srt', '.ass', '.ssa', '.sub', '.vtt']);
 
     for (const movie of movies) {
       if (!movie.id || !movie.tmdbId) continue;
 
-      // Find the local media for this movie
       const media = await this.mediaRepo.findOne({
         where: { tmdbId: movie.tmdbId, type: MediaType.MOVIE },
       });
       if (!media) continue;
 
-      // Find a media file for this movie
       const mediaFile = await this.mediaFileRepo.findOne({
         where: { mediaId: media.id },
         order: { id: 'DESC' },
@@ -266,49 +269,26 @@ export class ImportRadarrService {
         for (const extra of extras) {
           if (extra.type !== 'subtitle') continue;
           const ext = path.extname(extra.relativePath).toLowerCase();
-          if (!SUBTITLE_EXTS.has(ext)) continue;
+          if (!SUBTITLE_FILE_EXTENSIONS.has(ext)) continue;
 
-          // Parse language from Radarr language object or filename
           const lang =
             extra.language?.name?.toLowerCase() ??
-            this.parseLanguageFromPath(extra.relativePath);
-
-          // Parse tags from filename (e.g. "movie.en.forced.srt" → ["forced"])
-          const tags = this.parseSubtitleTags(extra.relativePath);
+            parseLanguageFromPath(extra.relativePath);
+          const tags = parseSubtitleTags(extra.relativePath);
           const forced = tags.includes('forced');
-          const hearingImpaired =
-            tags.includes('sdh') || tags.includes('cc') || tags.includes('hi');
+          const relativePath = extra.relativePath?.trim() || null;
+          if (!relativePath) continue;
 
-          // Build absolute path from movie path + relative path
-          const filePath = movie.path
-            ? path.join(movie.path, extra.relativePath)
-            : null;
-
-          // Check if subtitle already exists
-          const existing = await this.subtitleRepo.findOne({
-            where: {
-              mediaFileId: mediaFile.id,
-              language: lang,
-              forced,
-              filePath: filePath ?? undefined,
-            },
+          count += await upsertImportedSubtitleFile(this.subtitleRepo, {
+            mediaId: media.id,
+            mediaFileId: mediaFile.id,
+            language: lang,
+            forced,
+            tags,
+            relativePath,
+            mode,
+            providerType: SubtitleProviderType.RADARR,
           });
-          if (existing) continue;
-
-          await this.subtitleRepo.save(
-            this.subtitleRepo.create({
-              mediaId: media.id,
-              mediaFileId: mediaFile.id,
-              language: lang,
-              forced,
-              hearingImpaired,
-              providerType: SubtitleProviderType.RADARR,
-              status: SubtitleStatus.DOWNLOADED,
-              filePath,
-              tags,
-            }),
-          );
-          count++;
         }
       } catch (e) {
         errors.push(`Subtitles for "${movie.title}": ${(e as Error).message}`);
@@ -317,70 +297,6 @@ export class ImportRadarrService {
 
     this.log.log(`Radarr subtitle import: ${count} subtitles imported`);
     return count;
-  }
-
-  private parseLanguageFromPath(relativePath: string): string {
-    // Try to extract language code from filename like "movie.en.srt" or "movie.fra.forced.srt"
-    const base = path.basename(relativePath, path.extname(relativePath));
-    const parts = base.split('.');
-    // Common 2-3 letter language codes
-    const langCodes = new Set([
-      'en',
-      'fr',
-      'de',
-      'es',
-      'it',
-      'pt',
-      'nl',
-      'ja',
-      'ko',
-      'zh',
-      'ru',
-      'ar',
-      'pl',
-      'sv',
-      'da',
-      'no',
-      'fi',
-      'eng',
-      'fra',
-      'fre',
-      'deu',
-      'ger',
-      'spa',
-      'ita',
-      'por',
-      'nld',
-      'dut',
-      'jpn',
-      'kor',
-      'zho',
-      'chi',
-      'rus',
-      'ara',
-      'pol',
-      'swe',
-      'dan',
-      'nor',
-      'fin',
-    ]);
-    for (let i = parts.length - 1; i >= 0; i--) {
-      const p = parts[i].toLowerCase();
-      if (langCodes.has(p)) return p;
-    }
-    return 'und';
-  }
-
-  private parseSubtitleTags(relativePath: string): string[] {
-    const base = path
-      .basename(relativePath, path.extname(relativePath))
-      .toLowerCase();
-    const tags: string[] = [];
-    if (base.includes('forced')) tags.push('forced');
-    if (base.includes('sdh')) tags.push('sdh');
-    if (base.includes('.cc') || base.includes('_cc')) tags.push('cc');
-    if (base.includes('.hi') || base.includes('_hi')) tags.push('hi');
-    return tags;
   }
 
   private async importQualityProfiles(

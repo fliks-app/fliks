@@ -119,7 +119,7 @@ export class EmbeddedSubtitleService {
         hearingImpaired: stream.hearingImpaired,
         providerType: SubtitleProviderType.EMBEDDED,
         providerFileId: undefined,
-        filePath: undefined,
+        relativePath: undefined,
         status: SubtitleStatus.EMBEDDED,
         score: 100,
         synced: false,

@@ -18,6 +18,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { FfprobeService } from './ffprobe.service';
 import { EventsService } from '../scheduler/events.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
+import { resolveSubtitleAbsolutePath } from './subtitle-path.util';
 
 const execFileAsync = promisify(execFile);
 const MAX_CONCURRENT = 2;
@@ -166,7 +167,19 @@ export class SubtitleSyncService {
       subtitle.mediaFileId,
     );
 
-    const subPath = subtitle.filePath!;
+    const mediaForSub = await this.mediaRepo.findOne({
+      where: { id: subtitle.mediaId },
+      relations: ['rootFolder'],
+    });
+    const subPath = resolveSubtitleAbsolutePath(
+      mediaForSub?.path ?? null,
+      subtitle.relativePath,
+    );
+    if (!subPath) {
+      throw new BadRequestException(
+        'Subtitle has no resolvable file path (check media root folder and relative path)',
+      );
+    }
 
     // Parse reference: 'auto', 'audio:3', 'subtitle:5', 'file:/path/to/sub.srt', or absolute path
     let refPath = mediaFilePath;
@@ -177,8 +190,21 @@ export class SubtitleSyncService {
       if (streamMatch) {
         refStreamIndex = Number(streamMatch[2]);
       } else if (fileMatch) {
-        // External subtitle file as reference (sub-to-sub sync)
-        refPath = fileMatch[1];
+        const raw = fileMatch[1];
+        if (path.isAbsolute(raw)) {
+          refPath = raw;
+        } else {
+          const abs = resolveSubtitleAbsolutePath(
+            mediaForSub?.path ?? null,
+            raw,
+          );
+          if (!abs) {
+            throw new BadRequestException(
+              `Invalid reference subtitle path: ${raw}`,
+            );
+          }
+          refPath = abs;
+        }
       } else {
         refPath = options.reference;
       }
@@ -317,10 +343,20 @@ export class SubtitleSyncService {
   async reencodeToUtf8(id: number): Promise<void> {
     const subtitle = await this.repo.findOne({ where: { id } });
     if (!subtitle) throw new NotFoundException(`SubtitleFile #${id} not found`);
-    if (!subtitle.filePath) return;
+    if (!subtitle.relativePath) return;
 
-    const buffer = await fs.readFile(subtitle.filePath);
+    const media = await this.mediaRepo.findOne({
+      where: { id: subtitle.mediaId },
+      relations: ['rootFolder'],
+    });
+    const abs = resolveSubtitleAbsolutePath(
+      media?.path ?? null,
+      subtitle.relativePath,
+    );
+    if (!abs) return;
+
+    const buffer = await fs.readFile(abs);
     const content = buffer.toString('utf-8');
-    await fs.writeFile(subtitle.filePath, content, 'utf-8');
+    await fs.writeFile(abs, content, 'utf-8');
   }
 }

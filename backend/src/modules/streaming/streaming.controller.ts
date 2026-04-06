@@ -185,6 +185,37 @@ export class StreamingController {
     res.send(playlist);
   }
 
+  // Subtitle VTT routes MUST be registered before :mediaFileId/:quality/* — otherwise
+  // paths like /123/subtitles/456 match :quality=:segment and fail with "Invalid quality: subtitles".
+
+  /** Extract an embedded subtitle stream as WebVTT (before :subtitleId so "embedded" is not parsed as id). */
+  @Get(':mediaFileId/subtitles/embedded/:streamIndex')
+  async embeddedSubtitle(
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Param('streamIndex', ParseIntPipe) streamIndex: number,
+    @Res() res: Response,
+  ) {
+    const stream = await this.subtitleStreamService.extractEmbeddedSubtitle(
+      mediaFileId,
+      streamIndex,
+    );
+    res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    stream.pipe(res);
+  }
+
+  /** Serve an external subtitle as WebVTT. */
+  @Get(':mediaFileId/subtitles/:subtitleId')
+  async subtitle(
+    @Param('subtitleId', ParseIntPipe) subtitleId: number,
+    @Res() res: Response,
+  ) {
+    const vtt = await this.subtitleStreamService.getSubtitleAsVtt(subtitleId);
+    res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.send(vtt);
+  }
+
   /** HLS variant playlist — pre-computed segment list based on known duration. */
   @Get(':mediaFileId/:quality/index.m3u8')
   async hlsPlaylist(
@@ -352,38 +383,6 @@ export class StreamingController {
       this.activeStreamTracker.unregister(user.id, mediaFileId);
     }
     return { ok: true };
-  }
-
-  // ---------------------------------------------------------------------------
-  // Subtitle endpoints
-  // ---------------------------------------------------------------------------
-
-  /** Serve an external subtitle as WebVTT. */
-  @Get(':mediaFileId/subtitles/:subtitleId')
-  async subtitle(
-    @Param('subtitleId', ParseIntPipe) subtitleId: number,
-    @Res() res: Response,
-  ) {
-    const vtt = await this.subtitleStreamService.getSubtitleAsVtt(subtitleId);
-    res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(vtt);
-  }
-
-  /** Extract an embedded subtitle stream as WebVTT. */
-  @Get(':mediaFileId/subtitles/embedded/:streamIndex')
-  async embeddedSubtitle(
-    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
-    @Param('streamIndex', ParseIntPipe) streamIndex: number,
-    @Res() res: Response,
-  ) {
-    const stream = await this.subtitleStreamService.extractEmbeddedSubtitle(
-      mediaFileId,
-      streamIndex,
-    );
-    res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    stream.pipe(res);
   }
 
   // ---------------------------------------------------------------------------

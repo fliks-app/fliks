@@ -38,8 +38,9 @@ export class SubtitleFile extends BaseEntity {
   @Column({ nullable: true })
   providerFileId: string;
 
-  @Column({ type: 'varchar', nullable: true })
-  filePath: string | null;
+  /** Path relative to Media.path (same convention as MediaFile.relativePath). DB column remains `filePath`. */
+  @Column({ name: 'filePath', type: 'varchar', nullable: true })
+  relativePath: string | null;
 
   @Column({
     type: 'enum',

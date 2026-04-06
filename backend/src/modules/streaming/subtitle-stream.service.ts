@@ -13,6 +13,7 @@ import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { StreamingService } from './streaming.service';
+import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
 
 const execFileAsync = promisify(execFile);
 
@@ -32,16 +33,30 @@ export class SubtitleStreamService {
   async getSubtitleAsVtt(subtitleId: number): Promise<string> {
     const sub = await this.subtitleFileRepo.findOne({
       where: { id: subtitleId },
+      relations: ['media', 'media.rootFolder'],
     });
-    if (!sub?.filePath) {
+    if (!sub?.relativePath) {
       throw new NotFoundException(`Subtitle #${subtitleId} not found`);
+    }
+
+    const mediaPath = sub.media?.path ?? null;
+    const absolute = resolveSubtitleAbsolutePath(mediaPath, sub.relativePath);
+    if (!absolute) {
+      this.log.error(
+        `Subtitle #${subtitleId}: cannot resolve path under media (mediaPath=${mediaPath ?? 'null'}, relativePath="${sub.relativePath}")`,
+      );
+      throw new NotFoundException(`Subtitle file not found on disk`);
     }
 
     // Validate the subtitle path resolves to a real location (no traversal via symlinks)
     let realSubPath: string;
     try {
-      realSubPath = await fs.realpath(sub.filePath);
-    } catch {
+      realSubPath = await fs.realpath(absolute);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      this.log.error(
+        `Subtitle #${subtitleId}: file missing or unreadable at resolved path "${absolute}" (stored relativePath="${sub.relativePath}") (${detail})`,
+      );
       throw new NotFoundException(`Subtitle file not found on disk`);
     }
 

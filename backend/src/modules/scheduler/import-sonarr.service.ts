@@ -18,11 +18,20 @@ import {
 } from './pg-restore-import.util';
 import {
   ensureRootFolderPathsExist,
+  parseLanguageFromPath,
+  parseSubtitleTags,
   resolveRootFolderFromArrPaths,
-} from './arr-import-path.util';
+  subtitlePathsBesideEpisode,
+  upsertImportedSubtitleFile,
+} from './utils/arr-import.util';
+import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
+import { MediaFile } from '../media/entities/media-file.entity';
+import { SubtitleProviderType } from '../../common/enums';
 import * as path from 'path';
 
 interface SonarrSeries {
+  /** Sonarr API series id (required for extra files / episode files) */
+  id?: number;
   title?: string;
   tmdbId?: number;
   tvdbId?: number;
@@ -50,11 +59,19 @@ interface RemoteQualityProfile {
   items: RemoteQualityItem[];
 }
 
+/** Sonarr API: episode file row (links video file to extras) */
+interface SonarrEpisodeFile {
+  id: number;
+  seriesId?: number;
+  relativePath: string;
+}
+
 export interface ApiImportResult {
   imported: number;
   errors: string[];
   rootFoldersCreated: string[];
   qualityProfilesCreated: string[];
+  subtitlesImported?: number;
 }
 
 @Injectable()
@@ -68,6 +85,10 @@ export class ImportSonarrService {
     private readonly rootFolderRepo: Repository<RootFolder>,
     @InjectRepository(QualityProfile)
     private readonly qpRepo: Repository<QualityProfile>,
+    @InjectRepository(SubtitleFile)
+    private readonly subtitleRepo: Repository<SubtitleFile>,
+    @InjectRepository(MediaFile)
+    private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly config: ConfigService,
   ) {}
 
@@ -75,7 +96,7 @@ export class ImportSonarrService {
     url: string,
     apiKey: string,
     mode: 'skip' | 'update' = 'skip',
-    _importSubtitles = false,
+    importSubtitles = false,
   ): Promise<ApiImportResult> {
     const baseUrl = url.replace(/\/+$/, '');
     let imported = 0;
@@ -178,15 +199,108 @@ export class ImportSonarrService {
       }
     }
 
+    let subtitlesImported = 0;
+    if (importSubtitles) {
+      subtitlesImported = await this.importSubtitlesFromSonarr(
+        baseUrl,
+        apiKey,
+        series,
+        errors,
+        mode,
+      );
+    }
+
     this.log.log(
-      `Sonarr API import: ${imported} imported, ${errors.length} errors`,
+      `Sonarr API import: ${imported} imported, ${subtitlesImported} subtitles, ${errors.length} errors`,
     );
     return {
       imported,
       errors,
       rootFoldersCreated,
       qualityProfilesCreated,
+      subtitlesImported,
     };
+  }
+
+  /**
+   * Sonarr v3 has no `/api/v3/extrafile` (unlike Radarr). We list episode files via
+   * the API, then scan each video’s folder for subtitle files beside the episode.
+   */
+  private async importSubtitlesFromSonarr(
+    baseUrl: string,
+    apiKey: string,
+    seriesList: SonarrSeries[],
+    errors: string[],
+    mode: 'skip' | 'update',
+  ): Promise<number> {
+    let count = 0;
+
+    for (const series of seriesList) {
+      if (!series.id) continue;
+
+      const tmdbId = Number(series.tmdbId || series.tvdbId);
+      if (!Number.isFinite(tmdbId)) continue;
+
+      const media = await this.mediaRepo.findOne({
+        where: { tmdbId, type: MediaType.SERIES },
+        relations: ['rootFolder'],
+      });
+      if (!media) continue;
+      if (!series.path) continue;
+      if (!media.path) continue;
+
+      try {
+        const epRes = await fetch(
+          `${baseUrl}/api/v3/episodefile?seriesId=${series.id}`,
+          { headers: { 'X-Api-Key': apiKey } },
+        );
+        if (!epRes.ok) continue;
+        const episodeFiles = (await epRes.json()) as SonarrEpisodeFile[];
+
+        for (const epFile of episodeFiles) {
+          const mediaFile = await this.mediaFileRepo.findOne({
+            where: {
+              mediaId: media.id,
+              relativePath: epFile.relativePath,
+            },
+          });
+          if (!mediaFile) continue;
+
+          const subtitlePaths = await subtitlePathsBesideEpisode(
+            series.path,
+            epFile.relativePath,
+          );
+
+          for (const absSubtitlePath of subtitlePaths) {
+            const relativeName = path.basename(absSubtitlePath);
+            const lang = parseLanguageFromPath(relativeName);
+            const tags = parseSubtitleTags(relativeName);
+            const forced = tags.includes('forced');
+            const rel = path.relative(media.path, absSubtitlePath);
+            if (!rel || rel.startsWith('..')) continue;
+
+            count += await upsertImportedSubtitleFile(this.subtitleRepo, {
+              mediaId: media.id,
+              mediaFileId: mediaFile.id,
+              episodeId: mediaFile.episodeId,
+              language: lang,
+              forced,
+              tags,
+              relativePath: rel,
+              mode,
+              providerType: SubtitleProviderType.SONARR,
+            });
+          }
+        }
+      } catch (e) {
+        errors.push(
+          `Subtitles for "${series.title ?? 'series'}": ${(e as Error).message}`,
+        );
+      }
+    }
+
+    this.log.log(`Sonarr subtitle import: ${count} subtitles imported`);
+    return count;
   }
 
   private async importQualityProfiles(

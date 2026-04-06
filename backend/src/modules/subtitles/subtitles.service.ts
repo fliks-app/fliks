@@ -24,6 +24,7 @@ import { computeMovieHash } from './moviehash';
 import { cleanSubtitle } from './subtitle-cleaner';
 import * as postProcess from './subtitle-post-processor';
 import { SettingsService } from '../settings/settings.service';
+import { resolveSubtitleAbsolutePath } from './subtitle-path.util';
 
 @Injectable()
 export class SubtitlesService {
@@ -221,6 +222,26 @@ export class SubtitlesService {
     await fs.writeFile(subtitlePath, buffer);
     this.logger.log(`Subtitle saved: ${subtitlePath}`);
 
+    const media = await this.mediaRepo.findOne({
+      where: { id: mediaId },
+      relations: ['rootFolder'],
+    });
+    if (!media?.path) {
+      throw new BadRequestException(
+        'Assign a root folder to this media before downloading subtitles',
+      );
+    }
+    const relativePath = path.relative(media.path, subtitlePath);
+    if (
+      !relativePath ||
+      relativePath.startsWith('..' + path.sep) ||
+      relativePath === '..'
+    ) {
+      throw new BadRequestException(
+        'Subtitle file would be outside the media folder; check root folder configuration',
+      );
+    }
+
     const subtitleFile = this.repo.create({
       mediaId,
       episodeId,
@@ -230,7 +251,7 @@ export class SubtitlesService {
       hearingImpaired: searchResult.hearingImpaired,
       providerType: provider.type,
       providerFileId: searchResult.providerFileId,
-      filePath: subtitlePath,
+      relativePath,
       status: SubtitleStatus.DOWNLOADED,
       score: searchResult.score,
       synced: false,
@@ -265,6 +286,16 @@ export class SubtitlesService {
     return path.join(media.path, mediaFile.relativePath);
   }
 
+  private async resolveSubtitleAbsolute(
+    sub: Pick<SubtitleFile, 'mediaId' | 'relativePath'>,
+  ): Promise<string | null> {
+    const media = await this.mediaRepo.findOne({
+      where: { id: sub.mediaId },
+      relations: ['rootFolder'],
+    });
+    return resolveSubtitleAbsolutePath(media?.path ?? null, sub.relativePath);
+  }
+
   async getSubtitlesForMedia(mediaId: number): Promise<SubtitleFile[]> {
     return this.repo.find({
       where: { mediaId },
@@ -286,11 +317,12 @@ export class SubtitlesService {
       throw new BadRequestException('Cannot delete an embedded subtitle');
     }
 
-    if (subtitle.filePath) {
+    const abs = await this.resolveSubtitleAbsolute(subtitle);
+    if (abs) {
       try {
-        await fs.unlink(subtitle.filePath);
+        await fs.unlink(abs);
       } catch {
-        this.logger.warn(`Could not delete file: ${subtitle.filePath}`);
+        this.logger.warn(`Could not delete file: ${abs}`);
       }
     }
 
@@ -307,11 +339,12 @@ export class SubtitlesService {
       throw new BadRequestException('Cannot upgrade an embedded subtitle');
     }
 
-    if (existing.filePath) {
+    const oldAbs = await this.resolveSubtitleAbsolute(existing);
+    if (oldAbs) {
       try {
-        await fs.unlink(existing.filePath);
+        await fs.unlink(oldAbs);
       } catch {
-        this.logger.warn(`Could not delete old file: ${existing.filePath}`);
+        this.logger.warn(`Could not delete old file: ${oldAbs}`);
       }
     }
 
@@ -379,15 +412,19 @@ export class SubtitlesService {
     const sub = await this.repo.findOne({ where: { id: subtitleId } });
     if (!sub)
       throw new NotFoundException(`SubtitleFile #${subtitleId} not found`);
-    if (!sub.filePath)
+    if (!sub.relativePath)
       throw new BadRequestException('Subtitle has no file path');
+
+    const abs = await this.resolveSubtitleAbsolute(sub);
+    if (!abs)
+      throw new NotFoundException('Subtitle file path could not be resolved');
 
     const paramsStr = params ? JSON.stringify(params) : '';
     this.logger.log(
-      `PostProcess #${subtitleId}: ${action}${paramsStr ? ` ${paramsStr}` : ''} on "${sub.filePath}"`,
+      `PostProcess #${subtitleId}: ${action}${paramsStr ? ` ${paramsStr}` : ''} on "${sub.relativePath}" → ${abs}`,
     );
 
-    let content = await fs.readFile(sub.filePath, 'utf-8');
+    let content = await fs.readFile(abs, 'utf-8');
     const sizeBefore = content.length;
 
     switch (action) {
@@ -439,7 +476,7 @@ export class SubtitlesService {
         );
     }
 
-    await fs.writeFile(sub.filePath, content, 'utf-8');
+    await fs.writeFile(abs, content, 'utf-8');
     sub.locked = true;
     await this.repo.save(sub);
     // Log a sample of the first timestamp to verify the change
