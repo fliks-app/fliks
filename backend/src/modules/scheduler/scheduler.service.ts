@@ -349,42 +349,25 @@ export class SchedulerService implements OnModuleInit {
     if (!missing.length) return;
 
     const today = new Date().toISOString().slice(0, 10);
-    this.eventsService.emit({
-      type: 'task.progress',
-      command: 'SearchMissing',
-      current: 0,
-      total: missing.length,
-      message: 'Searching movies...',
-    });
 
     for (let i = 0; i < missing.length; i++) {
       const media = missing[i];
+      this.eventsService.emit({
+        type: 'task.progress',
+        command: 'SearchMissing',
+        current: i,
+        total: missing.length,
+        message: media.title,
+      });
+
       // Skip if availability criteria not met
-      if (!this.isAvailable(media, today)) {
-        this.eventsService.emit({
-          type: 'task.progress',
-          command: 'SearchMissing',
-          current: i + 1,
-          total: missing.length,
-          message: media.title,
-        });
-        continue;
-      }
+      if (!this.isAvailable(media, today)) continue;
 
       // Skip if already grabbed and pending
       const pending = await this.historyRepo.findOne({
         where: { mediaId: media.id, status: 'grabbed' },
       });
-      if (pending) {
-        this.eventsService.emit({
-          type: 'task.progress',
-          command: 'SearchMissing',
-          current: i + 1,
-          total: missing.length,
-          message: media.title,
-        });
-        continue;
-      }
+      if (pending) continue;
 
       const query = [media.title, media.year].filter(Boolean).join(' ');
       const batches = await Promise.allSettled(
@@ -393,16 +376,7 @@ export class SchedulerService implements OnModuleInit {
       const results = batches.flatMap((r) =>
         r.status === 'fulfilled' ? r.value : [],
       );
-      if (!results.length) {
-        this.eventsService.emit({
-          type: 'task.progress',
-          command: 'SearchMissing',
-          current: i + 1,
-          total: missing.length,
-          message: media.title,
-        });
-        continue;
-      }
+      if (!results.length) continue;
 
       const pick = results[0];
       try {
@@ -432,14 +406,15 @@ export class SchedulerService implements OnModuleInit {
           `SearchMissing[movie]: grab failed for "${media.title}": ${(e as Error).message}`,
         );
       }
-      this.eventsService.emit({
-        type: 'task.progress',
-        command: 'SearchMissing',
-        current: i + 1,
-        total: missing.length,
-        message: media.title,
-      });
     }
+
+    this.eventsService.emit({
+      type: 'task.progress',
+      command: 'SearchMissing',
+      current: missing.length,
+      total: missing.length,
+      message: 'SearchMissing',
+    });
   }
 
   private async searchMissingEpisodes(
@@ -467,18 +442,19 @@ export class SchedulerService implements OnModuleInit {
 
     if (!episodes.length) return;
 
-    this.eventsService.emit({
-      type: 'task.progress',
-      command: 'SearchMissing',
-      current: 0,
-      total: episodes.length,
-      message: 'Searching episodes...',
-    });
-
     for (let i = 0; i < episodes.length; i++) {
       const ep = episodes[i];
       const season = (ep as any).season as Season;
       const media = (season as any).media as Media;
+      const epLabel = `S${String(season.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
+
+      this.eventsService.emit({
+        type: 'task.progress',
+        command: 'SearchMissing',
+        current: i,
+        total: episodes.length,
+        message: `${media.title} ${epLabel}`,
+      });
 
       // Skip if already grabbed
       const pending = await this.historyRepo
@@ -489,16 +465,7 @@ export class SchedulerService implements OnModuleInit {
           pattern: `%S${String(season.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}%`,
         })
         .getOne();
-      if (pending) {
-        this.eventsService.emit({
-          type: 'task.progress',
-          command: 'SearchMissing',
-          current: i + 1,
-          total: episodes.length,
-          message: media.title,
-        });
-        continue;
-      }
+      if (pending) continue;
 
       const batches = await Promise.allSettled(
         indexers.map((ix) =>
@@ -513,16 +480,7 @@ export class SchedulerService implements OnModuleInit {
       const results = batches.flatMap((r) =>
         r.status === 'fulfilled' ? r.value : [],
       );
-      if (!results.length) {
-        this.eventsService.emit({
-          type: 'task.progress',
-          command: 'SearchMissing',
-          current: i + 1,
-          total: episodes.length,
-          message: media.title,
-        });
-        continue;
-      }
+      if (!results.length) continue;
 
       const pick = results[0];
       try {
@@ -544,7 +502,6 @@ export class SchedulerService implements OnModuleInit {
             status: 'grabbed',
           }),
         );
-        const epLabel = `S${String(season.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
         this.log.log(
           `SearchMissing[series]: grabbed "${pick.title}" for "${media.title}" ${epLabel}`,
         );
@@ -553,14 +510,15 @@ export class SchedulerService implements OnModuleInit {
           `SearchMissing[series]: grab failed for "${media.title}" ep ${ep.id}: ${(e as Error).message}`,
         );
       }
-      this.eventsService.emit({
-        type: 'task.progress',
-        command: 'SearchMissing',
-        current: i + 1,
-        total: episodes.length,
-        message: media.title,
-      });
     }
+
+    this.eventsService.emit({
+      type: 'task.progress',
+      command: 'SearchMissing',
+      current: episodes.length,
+      total: episodes.length,
+      message: 'SearchMissing',
+    });
   }
 
   private async doRefreshMetadata(): Promise<void> {
@@ -573,16 +531,15 @@ export class SchedulerService implements OnModuleInit {
     const allMedia = await this.mediaRepo.find();
     let updated = 0;
 
-    this.eventsService.emit({
-      type: 'task.progress',
-      command: 'RefreshMetadata',
-      current: 0,
-      total: allMedia.length,
-      message: 'Refreshing metadata...',
-    });
-
     for (let i = 0; i < allMedia.length; i++) {
       const media = allMedia[i];
+      this.eventsService.emit({
+        type: 'task.progress',
+        command: 'RefreshMetadata',
+        current: i,
+        total: allMedia.length,
+        message: media.title,
+      });
       try {
         await this.mediaService.refreshMetadata(media.id);
         updated++;
@@ -591,12 +548,15 @@ export class SchedulerService implements OnModuleInit {
           `RefreshMetadata: failed for "${media.title}": ${(e as Error).message}`,
         );
       }
+    }
+
+    if (allMedia.length > 0) {
       this.eventsService.emit({
         type: 'task.progress',
         command: 'RefreshMetadata',
-        current: i + 1,
+        current: allMedia.length,
         total: allMedia.length,
-        message: media.title,
+        message: 'RefreshMetadata',
       });
     }
 
@@ -636,16 +596,15 @@ export class SchedulerService implements OnModuleInit {
       order: { order: 'ASC' },
     });
 
-    this.eventsService.emit({
-      type: 'task.progress',
-      command: 'RssSync',
-      current: 0,
-      total: indexers.length,
-      message: 'RSS sync...',
-    });
-
     for (let i = 0; i < indexers.length; i++) {
       const indexer = indexers[i];
+      this.eventsService.emit({
+        type: 'task.progress',
+        command: 'RssSync',
+        current: i,
+        total: indexers.length,
+        message: indexer.name,
+      });
       try {
         const results = await this.torznab.rssSearch(indexer);
         for (const release of results) {
@@ -698,14 +657,15 @@ export class SchedulerService implements OnModuleInit {
           `RssSync: indexer "${indexer.name}" failed: ${(e as Error).message}`,
         );
       }
-      this.eventsService.emit({
-        type: 'task.progress',
-        command: 'RssSync',
-        current: i + 1,
-        total: indexers.length,
-        message: indexer.name,
-      });
     }
+
+    this.eventsService.emit({
+      type: 'task.progress',
+      command: 'RssSync',
+      current: indexers.length,
+      total: indexers.length,
+      message: 'RssSync',
+    });
   }
 
   private async doRescanAll(): Promise<void> {
@@ -713,18 +673,17 @@ export class SchedulerService implements OnModuleInit {
       select: ['id', 'title'],
     });
 
-    this.eventsService.emit({
-      type: 'task.progress',
-      command: 'RescanAll',
-      current: 0,
-      total: allMedia.length,
-      message: 'Rescanning files...',
-    });
-
     let totalUpdated = 0;
     let skipped = 0;
     for (let i = 0; i < allMedia.length; i++) {
       const media = allMedia[i];
+      this.eventsService.emit({
+        type: 'task.progress',
+        command: 'RescanAll',
+        current: i,
+        total: allMedia.length,
+        message: media.title,
+      });
       try {
         const result = await this.mediaService.rescanFiles(media.id);
         totalUpdated += result.added + result.removed + result.updated;
@@ -734,12 +693,15 @@ export class SchedulerService implements OnModuleInit {
           `RescanAll: skipped "${media.title}" — ${(e as Error).message}`,
         );
       }
+    }
+
+    if (allMedia.length > 0) {
       this.eventsService.emit({
         type: 'task.progress',
         command: 'RescanAll',
-        current: i + 1,
+        current: allMedia.length,
         total: allMedia.length,
-        message: media.title,
+        message: 'RescanAll',
       });
     }
 
@@ -783,17 +745,16 @@ export class SchedulerService implements OnModuleInit {
       (m) => isIncomplete(m) || isStaleOrNever(m),
     );
 
-    this.eventsService.emit({
-      type: 'task.progress',
-      command: 'RefreshMissingMetadata',
-      current: 0,
-      total: candidates.length,
-      message: 'Refreshing missing metadata...',
-    });
-
     let updated = 0;
     for (let i = 0; i < candidates.length; i++) {
       const media = candidates[i];
+      this.eventsService.emit({
+        type: 'task.progress',
+        command: 'RefreshMissingMetadata',
+        current: i,
+        total: candidates.length,
+        message: media.title,
+      });
       try {
         await this.mediaService.refreshMetadata(media.id);
         updated++;
@@ -802,12 +763,15 @@ export class SchedulerService implements OnModuleInit {
           `RefreshMissingMetadata: failed for "${media.title}": ${(e as Error).message}`,
         );
       }
+    }
+
+    if (candidates.length > 0) {
       this.eventsService.emit({
         type: 'task.progress',
         command: 'RefreshMissingMetadata',
-        current: i + 1,
+        current: candidates.length,
         total: candidates.length,
-        message: media.title,
+        message: 'RefreshMissingMetadata',
       });
     }
 
@@ -839,18 +803,17 @@ export class SchedulerService implements OnModuleInit {
       return false;
     });
 
-    this.eventsService.emit({
-      type: 'task.progress',
-      command: 'RescanMissingFiles',
-      current: 0,
-      total: candidates.length,
-      message: 'Rescanning missing files...',
-    });
-
     let totalUpdated = 0;
     let skipped = 0;
     for (let i = 0; i < candidates.length; i++) {
       const media = candidates[i];
+      this.eventsService.emit({
+        type: 'task.progress',
+        command: 'RescanMissingFiles',
+        current: i,
+        total: candidates.length,
+        message: media.title,
+      });
       try {
         const result = await this.mediaService.rescanFiles(media.id);
         totalUpdated += result.added + result.removed + result.updated;
@@ -860,12 +823,15 @@ export class SchedulerService implements OnModuleInit {
           `RescanMissingFiles: skipped "${media.title}" — ${(e as Error).message}`,
         );
       }
+    }
+
+    if (candidates.length > 0) {
       this.eventsService.emit({
         type: 'task.progress',
         command: 'RescanMissingFiles',
-        current: i + 1,
+        current: candidates.length,
         total: candidates.length,
-        message: media.title,
+        message: 'RescanMissingFiles',
       });
     }
 
