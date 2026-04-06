@@ -115,6 +115,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         }),
       );
       void this.loadSubtitles(m.id);
+    } else if (event.type === 'rescan.completed') {
+      this.rescanLoading.set(false);
+      void this.reloadAfterRescan(m.id);
+    } else if (event.type === 'rescan.failed') {
+      this.rescanLoading.set(false);
     }
   });
 
@@ -486,26 +491,20 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!m) return;
     this.rescanLoading.set(true);
     try {
-      const result = await this.mediaService.rescanFiles(m.id);
-      if (result.added || result.removed || result.updated) {
-        // Reload media to get updated file list
-        const updated = await this.mediaService.getOne(m.id);
-        this.media.set(updated);
-        if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
-        await this.loadSubtitles(updated.id);
-      }
-      this.toast.success(
-        this.translate.instant('media_detail.rescan_ok', {
-          added: result.added,
-          removed: result.removed,
-          updated: result.updated,
-        }),
-      );
+      await this.mediaService.rescanFiles(m.id);
+      // rescanLoading is cleared by the SSE event handler (rescan.completed / rescan.failed)
     } catch {
-      // handled by global interceptor
-    } finally {
       this.rescanLoading.set(false);
     }
+  }
+
+  private async reloadAfterRescan(mediaId: number) {
+    try {
+      const updated = await this.mediaService.getOne(mediaId);
+      this.media.set(updated);
+      if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
+      await this.loadSubtitles(updated.id);
+    } catch { /* ignore */ }
   }
 
   selectSeason(seasonId: number) {

@@ -26,6 +26,7 @@ import {
 } from './utils/arr-import.util';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
+import { MediaService } from '../media/media.service';
 import { SubtitleProviderType } from '../../common/enums';
 import * as path from 'path';
 
@@ -83,6 +84,7 @@ export class ImportSonarrService {
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly config: ConfigService,
+    private readonly mediaService: MediaService,
   ) {}
 
   async importFromApi(
@@ -133,6 +135,8 @@ export class ImportSonarrService {
 
     const rootFolders = await this.rootFolderRepo.find();
 
+    const newSeriesIds: number[] = [];
+
     for (const s of series) {
       const title = s.title ?? '';
       const tmdbId = Number(s.tmdbId || s.tvdbId);
@@ -170,7 +174,7 @@ export class ImportSonarrService {
             qualityProfileId: localProfileId ?? exists.qualityProfileId,
           });
         } else {
-          await this.mediaRepo.save(
+          const saved = await this.mediaRepo.save(
             this.mediaRepo.create({
               title,
               tmdbId,
@@ -185,11 +189,20 @@ export class ImportSonarrService {
               qualityProfileId: localProfileId ?? undefined,
             }),
           );
+          newSeriesIds.push(saved.id);
         }
         imported++;
       } catch (e) {
         errors.push(`${title}: ${(e as Error).message}`);
       }
+    }
+
+    // Fetch seasons/episodes from TMDB for newly imported series (fire-and-forget)
+    if (newSeriesIds.length) {
+      this.log.log(
+        `Sonarr import: refreshing metadata for ${newSeriesIds.length} new series`,
+      );
+      void this.refreshNewSeries(newSeriesIds);
     }
 
     let subtitlesImported = 0;
@@ -477,6 +490,7 @@ export class ImportSonarrService {
           }
 
           const rootFolders = await this.rootFolderRepo.find();
+          const dumpNewIds: number[] = [];
 
           for (const row of rows) {
             const title = row.title ?? '';
@@ -510,7 +524,7 @@ export class ImportSonarrService {
                   folderName: folderName || undefined,
                 });
               } else {
-                await this.mediaRepo.save(
+                const saved = await this.mediaRepo.save(
                   this.mediaRepo.create({
                     title,
                     tmdbId: externalId,
@@ -522,11 +536,16 @@ export class ImportSonarrService {
                     folderName: folderName || undefined,
                   }),
                 );
+                dumpNewIds.push(saved.id);
               }
               imported++;
             } catch (e) {
               errors.push(`${title}: ${(e as Error).message}`);
             }
+          }
+
+          if (dumpNewIds.length) {
+            void this.refreshNewSeries(dumpNewIds);
           }
         },
       );
@@ -538,5 +557,21 @@ export class ImportSonarrService {
       `Sonarr import: ${imported} imported, ${errors.length} errors`,
     );
     return { imported, skipped: 0, errors };
+  }
+
+  /** Fetch seasons/episodes from TMDB for newly imported series (best-effort). */
+  private async refreshNewSeries(ids: number[]): Promise<void> {
+    for (const id of ids) {
+      try {
+        await this.mediaService.refreshMetadata(id);
+      } catch (e) {
+        this.log.warn(
+          `Could not refresh metadata for series #${id}: ${(e as Error).message}`,
+        );
+      }
+    }
+    this.log.log(
+      `Sonarr import: metadata refreshed for ${ids.length} new series`,
+    );
   }
 }

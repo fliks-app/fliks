@@ -30,6 +30,7 @@ import type { MediaFileRow } from '../media-detail/media-detail.utils';
 import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
+import { SseService } from '../../core/services/sse.service';
 import {
   LucideChevronLeft,
   LucideTrash2,
@@ -78,7 +79,24 @@ export class EpisodeDetailComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   readonly playable = inject(PlayableMediaService);
   private readonly subActions = inject(SubtitleActionsService);
+  private readonly sse = inject(SseService);
   readonly watched = signal(false);
+
+  /** React to SSE rescan events for this media */
+  private readonly sseEffect = effect(() => {
+    const event = this.sse.lastEvent();
+    const m = this.media();
+    if (!event || !m) return;
+    const eventMediaId = event['mediaId'] as number | undefined;
+    if (eventMediaId !== m.id) return;
+
+    if (event.type === 'rescan.completed') {
+      this.rescanLoading.set(false);
+      void this.reloadAfterRescan(m.id);
+    } else if (event.type === 'rescan.failed') {
+      this.rescanLoading.set(false);
+    }
+  });
 
   readonly loading = signal(true);
   readonly notFound = signal(false);
@@ -260,37 +278,30 @@ export class EpisodeDetailComponent implements OnInit {
     if (!m) return;
     this.rescanLoading.set(true);
     try {
-      const result = await this.mediaService.rescanFiles(m.id);
-      if (result.added || result.removed || result.updated) {
-        const updated = await this.mediaService.getOne(m.id);
-        this.media.set(updated);
-        // Re-resolve episode
-        const ep = this.episode();
-        if (ep) {
-          for (const s of updated.seasons ?? []) {
-            const freshEp = s.episodes?.find((e) => e.id === ep.id);
-            if (freshEp) {
-              this.season.set(s);
-              this.episode.set(freshEp);
-              break;
-            }
-          }
-        }
-        const subs = await this.subtitlesApi.getForMedia(m.id);
-        this.subtitles.set(subs);
-      }
-      this.toast.success(
-        this.translate.instant('media_detail.rescan_ok', {
-          added: result.added,
-          removed: result.removed,
-          updated: result.updated,
-        }),
-      );
+      await this.mediaService.rescanFiles(m.id);
     } catch {
-      // handled by global interceptor
-    } finally {
       this.rescanLoading.set(false);
     }
+  }
+
+  private async reloadAfterRescan(mediaId: number) {
+    try {
+      const updated = await this.mediaService.getOne(mediaId);
+      this.media.set(updated);
+      const ep = this.episode();
+      if (ep) {
+        for (const s of updated.seasons ?? []) {
+          const freshEp = s.episodes?.find((e) => e.id === ep.id);
+          if (freshEp) {
+            this.season.set(s);
+            this.episode.set(freshEp);
+            break;
+          }
+        }
+      }
+      const subs = await this.subtitlesApi.getForMedia(mediaId);
+      this.subtitles.set(subs);
+    } catch { /* ignore */ }
   }
 
   async toggleMonitored() {

@@ -52,7 +52,10 @@
     "subtitle_synced": "Sous-titre synchronisé avec succès.",
     "subtitle_downloaded": "Sous-titre téléchargé : {{title}} [{{lang}}]",
     "import_complete": "Import terminé : {{title}}",
-    "stalled_removed": "Torrent bloqué supprimé : {{title}}"
+    "stalled_removed": "Torrent bloqué supprimé : {{title}}",
+    "rescan_started": "Scan en cours : {{title}}",
+    "rescan_completed": "Scan terminé : {{title}} — {{added}} ajouté(s), {{removed}} supprimé(s), {{updated}} mis à jour",
+    "rescan_failed": "Erreur lors du scan : {{title}}"
   },
   "permissions": {
     "media.read": "Voir les médias",

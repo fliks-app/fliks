@@ -85,6 +85,26 @@ export class SseService implements OnDestroy {
           this.translate.instant('sse.stalled_removed', { title: event['title'] ?? '' }),
         );
         break;
+      case 'rescan.started':
+        this.toast.info(
+          this.translate.instant('sse.rescan_started', { title: event['title'] ?? '' }),
+        );
+        break;
+      case 'rescan.completed':
+        this.toast.success(
+          this.translate.instant('sse.rescan_completed', {
+            title: event['title'] ?? '',
+            added: event['added'] ?? 0,
+            removed: event['removed'] ?? 0,
+            updated: event['updated'] ?? 0,
+          }),
+        );
+        break;
+      case 'rescan.failed':
+        this.toast.error(
+          this.translate.instant('sse.rescan_failed', { title: event['title'] ?? '' }),
+        );
+        break;
     }
   }
 

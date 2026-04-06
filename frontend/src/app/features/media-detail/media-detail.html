@@ -58,7 +58,7 @@
         <app-media-file-info [file]="af" />
       }
 
-        @if (expectedKind() === 'series' && m.seasons?.length) {
+        @if (m.type === 'series' && m.seasons?.length) {
         <app-media-detail-seasons
           [media]="m"
           [selectedSeason]="activeSeason(m)"
@@ -81,8 +81,8 @@
 
       <app-media-detail-movie-download
         [media]="m"
-        [showUpgradeSection]="expectedKind() === 'movie' && !!m.files?.length && !!m.qualityProfile?.upgradeAllowed"
-        [showDownloadSection]="expectedKind() === 'movie'"
+        [showUpgradeSection]="m.type === 'movie' && !!m.files?.length && !!m.qualityProfile?.upgradeAllowed"
+        [showDownloadSection]="m.type === 'movie'"
         [canGrab]="canGrab()"
         [upgradeReleasesLoading]="upgradeReleasesLoading()"
         [upgradeGrabBusy]="upgradeGrabBusy()"

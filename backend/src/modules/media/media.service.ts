@@ -1137,6 +1137,50 @@ export class MediaService {
 
       const filename = path.basename(absPath);
 
+      // Fix missing episodeId for series files (e.g. imported from Sonarr without seasons)
+      if (media.type === MediaType.SERIES && dbFile.episodeId == null) {
+        const epNums = this.parseEpisodeNumbers(filename);
+        if (epNums) {
+          let season = await this.seasonRepo.findOne({
+            where: { mediaId: media.id, seasonNumber: epNums.season },
+          });
+          if (!season) {
+            season = await this.seasonRepo.save(
+              this.seasonRepo.create({
+                mediaId: media.id,
+                seasonNumber: epNums.season,
+                monitored: true,
+              }),
+            );
+            this.log.log(
+              `Rescan: created season ${epNums.season} for media #${mediaId}`,
+            );
+          }
+          let ep = await this.episodeRepo.findOne({
+            where: { seasonId: season.id, episodeNumber: epNums.episode },
+          });
+          if (!ep) {
+            ep = await this.episodeRepo.save(
+              this.episodeRepo.create({
+                seasonId: season.id,
+                episodeNumber: epNums.episode,
+                monitored: true,
+              }),
+            );
+            this.log.log(
+              `Rescan: created episode S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')} for media #${mediaId}`,
+            );
+          }
+          dbFile.episodeId = ep.id;
+          await this.mediaFileRepo.save(dbFile);
+          await this.episodeRepo.update(ep.id, { hasFile: true });
+          updated++;
+          this.log.log(
+            `Rescan: linked "${normPath}" to S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')} for media #${mediaId}`,
+          );
+        }
+      }
+
       const sizeChanged = Number(dbFile.size) !== diskSize;
       const si = dbFile.streamInfo as any;
       const missingStreamInfo =
@@ -1207,22 +1251,42 @@ export class MediaService {
 
       const filename = path.basename(absPath);
 
-      // Try to match episode for series
+      // Try to match episode for series — create season/episode on the fly if missing
       let episodeId: number | undefined;
       if (media.type === MediaType.SERIES) {
         const epNums = this.parseEpisodeNumbers(filename);
         if (epNums) {
-          const season = await this.seasonRepo.findOne({
+          let season = await this.seasonRepo.findOne({
             where: { mediaId: media.id, seasonNumber: epNums.season },
           });
-          if (season) {
-            const ep = await this.episodeRepo.findOne({
-              where: { seasonId: season.id, episodeNumber: epNums.episode },
-            });
-            if (ep) {
-              episodeId = ep.id;
-            }
+          if (!season) {
+            season = await this.seasonRepo.save(
+              this.seasonRepo.create({
+                mediaId: media.id,
+                seasonNumber: epNums.season,
+                monitored: true,
+              }),
+            );
+            this.log.log(
+              `Rescan: created season ${epNums.season} for media #${mediaId}`,
+            );
           }
+          let ep = await this.episodeRepo.findOne({
+            where: { seasonId: season.id, episodeNumber: epNums.episode },
+          });
+          if (!ep) {
+            ep = await this.episodeRepo.save(
+              this.episodeRepo.create({
+                seasonId: season.id,
+                episodeNumber: epNums.episode,
+                monitored: true,
+              }),
+            );
+            this.log.log(
+              `Rescan: created episode S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')} for media #${mediaId}`,
+            );
+          }
+          episodeId = ep.id;
         }
       }
 

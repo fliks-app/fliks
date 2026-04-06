@@ -234,18 +234,32 @@ export class DiskImportService {
     let episodeTitle: string | null = null;
 
     if (matched?.type === 'series' && epNums) {
-      const season = await this.seasonRepo.findOne({
+      let season = await this.seasonRepo.findOne({
         where: { mediaId: matched.id, seasonNumber: epNums.season },
       });
-      if (season) {
-        const ep = await this.episodeRepo.findOne({
-          where: { seasonId: season.id, episodeNumber: epNums.episode },
-        });
-        if (ep) {
-          episodeId = ep.id;
-          episodeTitle = ep.title ?? null;
-        }
+      if (!season) {
+        season = await this.seasonRepo.save(
+          this.seasonRepo.create({
+            mediaId: matched.id,
+            seasonNumber: epNums.season,
+            monitored: true,
+          }),
+        );
       }
+      let ep = await this.episodeRepo.findOne({
+        where: { seasonId: season.id, episodeNumber: epNums.episode },
+      });
+      if (!ep) {
+        ep = await this.episodeRepo.save(
+          this.episodeRepo.create({
+            seasonId: season.id,
+            episodeNumber: epNums.episode,
+            monitored: true,
+          }),
+        );
+      }
+      episodeId = ep.id;
+      episodeTitle = ep.title ?? null;
     }
 
     // Check if a file of equivalent or better quality already exists

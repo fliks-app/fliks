@@ -343,7 +343,7 @@ export class MediaService {
   }
 
   rescanFiles(id: number) {
-    return firstValueFrom(this.http.post<{ added: number; removed: number; updated: number }>(`/api/media/${id}/rescan`, {}));
+    return firstValueFrom(this.http.post<{ ok: boolean }>(`/api/media/${id}/rescan`, {}));
   }
 
 }

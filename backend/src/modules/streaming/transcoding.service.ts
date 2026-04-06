@@ -251,8 +251,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     for (const p of profiles) {
       const bw = parseInt(p.videoBitrate) * 1_000_000;
       const w = Math.min(p.maxWidth, sourceWidth);
-      // Compute height from source aspect ratio (matches ffmpeg scale=W:-2)
-      const h = Math.round((w * sourceHeight) / sourceWidth / 2) * 2;
+      // Compute height from source aspect ratio, aligned to 16px (matches ffmpeg scale=W:-16 for HW encoders)
+      const rawH = (w * sourceHeight) / sourceWidth;
+      const h = Math.floor(rawH / 16) * 16 || 16;
       lines.push(
         `#EXT-X-STREAM-INF:BANDWIDTH=${bw},RESOLUTION=${w}x${h},NAME="${p.name}"`,
         `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
@@ -780,7 +781,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-bufsize',
             String(bitrateNum * 4),
             '-vf',
-            `scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
+            `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
             '-g',
             String(SEGMENT_DURATION * 24),
             '-keyint_min',
@@ -801,7 +802,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-bufsize',
             String(bitrateNum * 4),
             '-vf',
-            `scale_vaapi=w=${w}:h=-2:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
+            `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
             '-g',
             String(SEGMENT_DURATION * 24),
             '-keyint_min',
@@ -819,7 +820,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-maxrate',
             profile.videoBitrate,
             '-vf',
-            `${hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
+            `${hwCropPrefix}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
             '-g',
             String(SEGMENT_DURATION * 24),
             '-keyint_min',
@@ -834,7 +835,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-maxrate',
             profile.videoBitrate,
             '-vf',
-            `${hwCropPrefix}scale_vaapi=w=${w}:h=-2:format=nv12`,
+            `${hwCropPrefix}scale_vaapi=w=${w}:h=-16:format=nv12`,
             '-g',
             String(SEGMENT_DURATION * 24),
             '-keyint_min',
@@ -862,6 +863,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             String(SEGMENT_DURATION * 24),
           );
         } else {
+          // Use scale_cuda to stay on GPU; force nv12 to avoid green bar with 10-bit HDR sources
+          const nvCropFilter = cropStr
+            ? `hwdownload,format=nv12,${cropStr},hwupload_cuda,`
+            : '';
           args.push(
             '-c:v',
             'h264_nvenc',
@@ -872,7 +877,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-maxrate',
             profile.videoBitrate,
             '-vf',
-            `${cpuCropPrefix}scale=${w}:-2`,
+            `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=nv12`,
             '-g',
             String(SEGMENT_DURATION * 24),
             '-keyint_min',
@@ -893,7 +898,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           '-bufsize',
           `${parseInt(profile.videoBitrate) * 2}M`,
           '-vf',
-          `${cpuCropPrefix}${tonemapCpu}scale=${w}:-2${burnInFilter}`,
+          `${cpuCropPrefix}${tonemapCpu}scale=${w}:-2:flags=lanczos,format=yuv420p${burnInFilter}`,
           // Force keyframes at segment boundaries + disable scene-change keyframes
           '-force_key_frames',
           `expr:gte(t,n_forced*${SEGMENT_DURATION})`,

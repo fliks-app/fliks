@@ -39,6 +39,7 @@ import { SubtitlesService } from '../subtitles/subtitles.service';
 import { SubtitleSyncService } from '../subtitles/subtitle-sync.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
+import { EventsService } from '../scheduler/events.service';
 
 @Controller('media')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
@@ -51,6 +52,7 @@ export class MediaController {
     private readonly subtitlesService: SubtitlesService,
     private readonly subtitleSync: SubtitleSyncService,
     private readonly ffprobe: FfprobeService,
+    private readonly eventsService: EventsService,
   ) {}
 
   @Post('import/tmdb')
@@ -236,8 +238,36 @@ export class MediaController {
 
   @Post(':id/rescan')
   @CheckPolicies((ability) => ability.can(Action.Update, Media))
-  rescanFiles(@Param('id', ParseIntPipe) id: number) {
-    return this.mediaService.rescanFiles(id);
+  async rescanFiles(@Param('id', ParseIntPipe) id: number) {
+    const media = await this.mediaService.findOne(id);
+    if (!media) throw new NotFoundException(`Media #${id} not found`);
+    const title = media.title;
+
+    this.eventsService.emit({ type: 'rescan.started', mediaId: id, title });
+
+    // Fire-and-forget: don't await
+    void this.mediaService.rescanFiles(id).then(
+      (result) => {
+        this.eventsService.emit({
+          type: 'rescan.completed',
+          mediaId: id,
+          title,
+          added: result.added,
+          removed: result.removed,
+          updated: result.updated,
+        });
+      },
+      (err) => {
+        this.eventsService.emit({
+          type: 'rescan.failed',
+          mediaId: id,
+          title,
+          error: (err as Error).message,
+        });
+      },
+    );
+
+    return { ok: true };
   }
 
   @Get(':id/subtitles')
