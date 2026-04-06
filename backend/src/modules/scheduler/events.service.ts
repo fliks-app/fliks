@@ -44,6 +44,8 @@ export type SseEvent =
       added: number;
       removed: number;
       updated: number;
+      subtitleRemovedMissing?: number;
+      subtitleRemovedDuplicates?: number;
     }
   | { type: 'rescan.failed'; mediaId: number; title: string; error: string }
   | {

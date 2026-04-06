@@ -259,6 +259,8 @@ export class MediaController {
           added: result.added,
           removed: result.removed,
           updated: result.updated,
+          subtitleRemovedMissing: result.subtitleRemovedMissing,
+          subtitleRemovedDuplicates: result.subtitleRemovedDuplicates,
         });
       },
       (err) => {

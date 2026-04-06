@@ -38,6 +38,7 @@ import {
 import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
+import { SubtitlesService } from '../subtitles/subtitles.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
@@ -69,6 +70,7 @@ export class MediaService {
     private readonly embeddedSubtitle: EmbeddedSubtitleService,
     private readonly mediaServers: MediaServersService,
     private readonly ffprobe: FfprobeService,
+    private readonly subtitles: SubtitlesService,
   ) {}
 
   async importFromTmdb(dto: ImportTmdbDto): Promise<Media> {
@@ -1159,7 +1161,13 @@ export class MediaService {
 
   async rescanFiles(
     mediaId: number,
-  ): Promise<{ added: number; removed: number; updated: number }> {
+  ): Promise<{
+    added: number;
+    removed: number;
+    updated: number;
+    subtitleRemovedMissing: number;
+    subtitleRemovedDuplicates: number;
+  }> {
     const media = await this.mediaRepo.findOne({
       where: { id: mediaId },
       relations: ['files'],
@@ -1548,6 +1556,25 @@ export class MediaService {
       }
     }
 
+    let subtitleRemovedMissing = 0;
+    let subtitleRemovedDuplicates = 0;
+    try {
+      const sub = await this.subtitles.reconcileSubtitleFilesAfterRescan(
+        mediaId,
+      );
+      subtitleRemovedMissing = sub.removedMissing;
+      subtitleRemovedDuplicates = sub.removedDuplicates;
+      if (subtitleRemovedMissing || subtitleRemovedDuplicates) {
+        this.log.log(
+          `Rescan: subtitles reconciled — media #${mediaId} removedMissing=${subtitleRemovedMissing} removedDuplicates=${subtitleRemovedDuplicates}`,
+        );
+      }
+    } catch (err) {
+      this.log.warn(
+        `Rescan: subtitle reconcile failed for media #${mediaId} — ${err instanceof Error ? err.message : err}`,
+      );
+    }
+
     this.log.log(
       `Rescan: finished — media #${mediaId} "${media.title}" added=${added} removed=${removed} updated=${updated}`,
     );
@@ -1564,7 +1591,13 @@ export class MediaService {
       });
     }
 
-    return { added, removed, updated };
+    return {
+      added,
+      removed,
+      updated,
+      subtitleRemovedMissing,
+      subtitleRemovedDuplicates,
+    };
   }
 
   private collectVideoFilesRecursive(

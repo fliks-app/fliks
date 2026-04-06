@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as fs from 'fs/promises';
+import { existsSync } from 'fs';
 import * as path from 'path';
 import { SubtitleFile } from './entities/subtitle-file.entity';
 import { SubtitleProviderStat } from './entities/subtitle-provider-stat.entity';
@@ -308,6 +309,94 @@ export class SubtitlesService {
       where: { mediaFileId },
       order: { language: 'ASC', score: 'DESC' },
     });
+  }
+
+  /**
+   * Called after a media rescan: drop DB rows for external subtitle files that no longer exist on disk,
+   * and remove duplicate entries (same path, or same media file + language + forced/HI) keeping the best row.
+   */
+  async reconcileSubtitleFilesAfterRescan(mediaId: number): Promise<{
+    removedMissing: number;
+    removedDuplicates: number;
+  }> {
+    let removedMissing = 0;
+    let removedDuplicates = 0;
+
+    const isExternalFile = (s: SubtitleFile) =>
+      s.providerType !== SubtitleProviderType.EMBEDDED;
+
+    const pickWinner = (a: SubtitleFile, b: SubtitleFile): number => {
+      if (a.locked !== b.locked) return a.locked ? -1 : 1;
+      if (a.score !== b.score) return b.score - a.score;
+      return b.id - a.id;
+    };
+
+    // 1) Stale rows: external subs whose file is gone or path is invalid
+    let subs = await this.repo.find({ where: { mediaId } });
+    for (const sub of subs) {
+      if (!isExternalFile(sub)) continue;
+      if (!sub.relativePath?.trim()) {
+        await this.repo.remove(sub);
+        removedMissing++;
+        continue;
+      }
+      const abs = await this.resolveSubtitleAbsolute(sub);
+      if (!abs || !existsSync(abs)) {
+        await this.repo.remove(sub);
+        removedMissing++;
+      }
+    }
+
+    subs = await this.repo.find({ where: { mediaId } });
+    const external = subs.filter(isExternalFile);
+
+    // 2) Duplicate relativePath (same file referenced more than once)
+    const byNormPath = new Map<string, SubtitleFile[]>();
+    for (const s of external) {
+      if (!s.relativePath?.trim()) continue;
+      const k = s.relativePath.replace(/\\/g, '/');
+      const list = byNormPath.get(k) ?? [];
+      list.push(s);
+      byNormPath.set(k, list);
+    }
+    for (const group of byNormPath.values()) {
+      if (group.length < 2) continue;
+      group.sort(pickWinner);
+      const [, ...losers] = group;
+      for (const row of losers) {
+        await this.repo.remove(row);
+        removedDuplicates++;
+      }
+    }
+
+    // 3) Logical duplicates: same media file + language + forced + HI, different paths — keep one file
+    subs = await this.repo.find({ where: { mediaId } });
+    const external2 = subs.filter(isExternalFile);
+    const byKey = new Map<string, SubtitleFile[]>();
+    for (const s of external2) {
+      if (!s.relativePath?.trim()) continue;
+      const key = `${s.mediaFileId}\0${s.language}\0${s.forced}\0${s.hearingImpaired}`;
+      const list = byKey.get(key) ?? [];
+      list.push(s);
+      byKey.set(key, list);
+    }
+    for (const group of byKey.values()) {
+      if (group.length < 2) continue;
+      group.sort(pickWinner);
+      const [, ...losers] = group;
+      for (const row of losers) {
+        try {
+          await this.deleteSubtitle(row.id);
+          removedDuplicates++;
+        } catch (err) {
+          this.logger.warn(
+            `reconcile: could not delete duplicate subtitle #${row.id}: ${(err as Error).message}`,
+          );
+        }
+      }
+    }
+
+    return { removedMissing, removedDuplicates };
   }
 
   async deleteSubtitle(id: number): Promise<void> {

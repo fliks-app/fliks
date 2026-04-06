@@ -88,16 +88,27 @@ export class SseService implements OnDestroy {
       case 'rescan.started':
         // Toast shown from media-detail / episode-detail when POST /rescan returns
         break;
-      case 'rescan.completed':
-        this.toast.success(
-          this.translate.instant('sse.rescan_completed', {
-            title: event['title'] ?? '',
-            added: event['added'] ?? 0,
-            removed: event['removed'] ?? 0,
-            updated: event['updated'] ?? 0,
-          }),
-        );
+      case 'rescan.completed': {
+        const base = this.translate.instant('sse.rescan_completed', {
+          title: event['title'] ?? '',
+          added: event['added'] ?? 0,
+          removed: event['removed'] ?? 0,
+          updated: event['updated'] ?? 0,
+        });
+        const sm = Number(event['subtitleRemovedMissing'] ?? 0);
+        const sd = Number(event['subtitleRemovedDuplicates'] ?? 0);
+        let msg = base;
+        if (sm || sd) {
+          msg +=
+            ' — ' +
+            this.translate.instant('sse.rescan_subtitles_cleaned', {
+              missing: sm,
+              duplicates: sd,
+            });
+        }
+        this.toast.success(msg);
         break;
+      }
       case 'rescan.failed':
         this.toast.error(
           this.translate.instant('sse.rescan_failed', { title: event['title'] ?? '' }),

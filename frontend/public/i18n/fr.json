@@ -56,6 +56,7 @@
     "stalled_removed": "Torrent bloqué supprimé : {{title}}",
     "rescan_started": "Scan en cours : {{title}}",
     "rescan_completed": "Scan terminé : {{title}} — {{added}} ajouté(s), {{removed}} supprimé(s), {{updated}} mis à jour",
+    "rescan_subtitles_cleaned": "{{missing}} entrée(s) sous-titre sans fichier supprimée(s), {{duplicates}} doublon(s) fusionné(s)",
     "rescan_failed": "Erreur lors du scan : {{title}}"
   },
   "permissions": {
