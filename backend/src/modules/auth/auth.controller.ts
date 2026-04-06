@@ -98,8 +98,8 @@ export class AuthController {
   }
 
   /**
-   * Token court pour Chromecast + base d’URL des flux (EXTERNAL_URL / Host).
-   * À appeler juste avant d’envoyer la lecture au receiver (le token expire vite).
+   * JWT Cast (4h) + base d’URL des flux (EXTERNAL_URL / Host).
+   * À appeler juste avant loadMedia côté client pour limiter l’écart avec les requêtes du receiver.
    */
   @Post('cast-info')
   @UseGuards(JwtOrApiKeyGuard)
