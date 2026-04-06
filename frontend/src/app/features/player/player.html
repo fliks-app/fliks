@@ -8,7 +8,7 @@
 >
   <!-- Fanart backdrop until video renders its first frame -->
   @if (!videoStarted()) {
-    <div class="absolute inset-0 z-[1]" [style.background-image]="fanartUrl() ? 'url(' + fanartUrl() + ')' : 'none'" style="background-size: cover; background-position: center; background-color: #000"></div>
+    <div class="absolute inset-0 z-1" [style.background-image]="fanartUrl() ? 'url(' + fanartUrl() + ')' : 'none'" style="background-size: cover; background-position: center; background-color: #000"></div>
   }
 
   <video

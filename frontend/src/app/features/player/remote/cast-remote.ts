@@ -7,7 +7,7 @@ import {
   output,
   signal,
 } from '@angular/core';
-import { CastService } from '../../core/services/cast.service';
+import { CastService } from '../../../core/services/cast.service';
 import {
   LucideCaptions,
   LucideCast,

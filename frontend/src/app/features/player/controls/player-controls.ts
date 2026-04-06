@@ -7,7 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
-import { formatTime, calcDragTime } from '../../core/utils/player.utils';
+import { formatTime, calcDragTime } from '../../../core/utils/player.utils';
 import {
   LucideCaptions,
   LucideChartNoAxesColumnIncreasing,
@@ -39,14 +39,11 @@ import {
     LucidePictureInPicture2,
     LucideRotateCcw,
     LucideRotateCw,
-    LucideSettings,
     LucideSkipForward,
     LucideCast,
     LucideHeadphones,
     LucideVolume2,
     LucideVolumeX,
-    LucideScan,
-    LucideMinimize,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player-controls.html',

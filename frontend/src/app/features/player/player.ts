@@ -14,7 +14,7 @@ import {
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/api/streaming-api.service';
-import { SubtitlesApiService, SubtitleFileRow } from '../../core/services/api/subtitles-api.service';
+import { SubtitlesApiService } from '../../core/services/api/subtitles-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
 import { BrowserDeviceProfileService } from '../../core/services/browser-device-profile.service';
 import { SseService } from '../../core/services/sse.service';
@@ -37,8 +37,8 @@ interface PipPlugin {
 const Pip = registerPlugin<PipPlugin>('Pip');
 import { LucideCircleAlert } from '@lucide/angular';
 import { CastAudioOption } from '../../core/services/cast-player.service';
-import { PlayerControlsComponent } from './player-controls';
-import { PlayerStatsOverlayComponent, PlayerStats } from './player-stats-overlay';
+import { PlayerControlsComponent } from './controls/player-controls';
+import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
 import shaka from 'shaka-player';
 
 interface SubtitleOption {
