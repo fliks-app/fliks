@@ -36,8 +36,10 @@ export class SystemStatusComponent implements OnInit {
     { name: 'RssSync', label: 'system.cmd_rss_sync' },
     { name: 'SearchMissing', label: 'system.cmd_search_missing' },
     { name: 'RefreshMetadata', label: 'system.cmd_refresh_metadata' },
+    { name: 'RefreshMissingMetadata', label: 'system.cmd_refresh_missing_metadata' },
     { name: 'ImportCompleted', label: 'system.cmd_import_completed' },
     { name: 'RescanAll', label: 'system.cmd_rescan_all' },
+    { name: 'RescanMissingFiles', label: 'system.cmd_rescan_missing_files' },
   ];
 
   constructor() {
@@ -107,5 +109,10 @@ export class SystemStatusComponent implements OnInit {
       case 'started': return 'badge-info';
       default: return 'badge-ghost';
     }
+  }
+
+  /** i18n key for known scheduler commands (progress bar + consistency with manual actions). */
+  commandLabelKey(commandName: string): string {
+    return this.availableCommands.find((c) => c.name === commandName)?.label ?? commandName;
   }
 }

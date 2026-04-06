@@ -73,6 +73,10 @@ export class Media extends BaseEntity {
   @Column({ nullable: true })
   posterUrl: string;
 
+  /** Set when metadata was last successfully pulled from TMDB (manual or scheduled refresh). */
+  @Column({ type: 'timestamptz', nullable: true })
+  metadataRefreshedAt: Date | null;
+
   @Column({ nullable: true })
   fanartUrl: string;
 

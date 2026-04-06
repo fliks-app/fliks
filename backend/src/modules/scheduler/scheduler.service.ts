@@ -195,6 +195,8 @@ export class SchedulerService implements OnModuleInit {
         (s) => s.name,
       ),
       'RescanAll',
+      'RefreshMissingMetadata',
+      'RescanMissingFiles',
     ];
     if (!known.includes(name)) {
       throw new Error(`Unknown command: ${name}. Valid: ${known.join(', ')}`);
@@ -280,6 +282,9 @@ export class SchedulerService implements OnModuleInit {
       else if (name === 'SubtitleUpgrade')
         await this.subtitleScheduler.upgradeSubtitles();
       else if (name === 'RescanAll') await this.doRescanAll();
+      else if (name === 'RefreshMissingMetadata')
+        await this.doRefreshMissingMetadata();
+      else if (name === 'RescanMissingFiles') await this.doRescanMissingFiles();
       await this.commandRepo.update(cmdId, {
         status: 'completed',
         endedOn: new Date(),
@@ -565,7 +570,7 @@ export class SchedulerService implements OnModuleInit {
       return;
     }
 
-    const allMedia = await this.mediaRepo.find({ where: { monitored: true } });
+    const allMedia = await this.mediaRepo.find();
     let updated = 0;
 
     this.eventsService.emit({
@@ -705,7 +710,6 @@ export class SchedulerService implements OnModuleInit {
 
   private async doRescanAll(): Promise<void> {
     const allMedia = await this.mediaRepo.find({
-      where: { monitored: true },
       select: ['id', 'title'],
     });
 
@@ -741,6 +745,132 @@ export class SchedulerService implements OnModuleInit {
 
     this.log.log(
       `RescanAll: scanned ${allMedia.length - skipped}/${allMedia.length} media, ${totalUpdated} change(s), ${skipped} skipped`,
+    );
+  }
+
+  /**
+   * Refresh metadata for media that are incomplete, never refreshed, or stale
+   * (see METADATA_STALE_AFTER_MONTHS).
+   */
+  private async doRefreshMissingMetadata(): Promise<void> {
+    const apiKey = this.config.get<string>('TMDB_API_KEY', '');
+    if (!apiKey?.trim()) {
+      this.log.warn('RefreshMissingMetadata: TMDB_API_KEY not configured');
+      return;
+    }
+
+    const staleMonthsRaw = this.config.get<string>(
+      'METADATA_STALE_AFTER_MONTHS',
+      '3',
+    );
+    const staleMonths = Math.max(1, Number.parseInt(staleMonthsRaw, 10) || 3);
+    const staleBefore = new Date();
+    staleBefore.setMonth(staleBefore.getMonth() - staleMonths);
+
+    const allMedia = await this.mediaRepo.find({
+      relations: ['seasons'],
+    });
+
+    const isIncomplete = (m: (typeof allMedia)[0]) =>
+      !m.posterUrl ||
+      !m.overview ||
+      (m.type === MediaType.SERIES && (!m.seasons || m.seasons.length === 0));
+
+    const isStaleOrNever = (m: (typeof allMedia)[0]) =>
+      m.metadataRefreshedAt == null || m.metadataRefreshedAt < staleBefore;
+
+    const candidates = allMedia.filter(
+      (m) => isIncomplete(m) || isStaleOrNever(m),
+    );
+
+    this.eventsService.emit({
+      type: 'task.progress',
+      command: 'RefreshMissingMetadata',
+      current: 0,
+      total: candidates.length,
+      message: 'Refreshing missing metadata...',
+    });
+
+    let updated = 0;
+    for (let i = 0; i < candidates.length; i++) {
+      const media = candidates[i];
+      try {
+        await this.mediaService.refreshMetadata(media.id);
+        updated++;
+      } catch (e) {
+        this.log.warn(
+          `RefreshMissingMetadata: failed for "${media.title}": ${(e as Error).message}`,
+        );
+      }
+      this.eventsService.emit({
+        type: 'task.progress',
+        command: 'RefreshMissingMetadata',
+        current: i + 1,
+        total: candidates.length,
+        message: media.title,
+      });
+    }
+
+    this.log.log(
+      `RefreshMissingMetadata: refreshed ${updated}/${candidates.length} titles (from ${allMedia.length} total)`,
+    );
+  }
+
+  /**
+   * Rescan files only for media that have a configured path but no files in DB,
+   * or media whose existing files have no episodeId (series with unlinked files).
+   */
+  private async doRescanMissingFiles(): Promise<void> {
+    const allMedia = await this.mediaRepo.find({
+      select: ['id', 'title', 'type', 'rootFolderId', 'folderName'],
+      relations: ['files', 'rootFolder'],
+    });
+
+    const candidates = allMedia.filter((m) => {
+      if (!m.path) return false;
+      // No files at all
+      if (!m.files || m.files.length === 0) return true;
+      // Series with unlinked files (missing episodeId)
+      if (
+        m.type === MediaType.SERIES &&
+        m.files.some((f) => f.episodeId == null)
+      )
+        return true;
+      return false;
+    });
+
+    this.eventsService.emit({
+      type: 'task.progress',
+      command: 'RescanMissingFiles',
+      current: 0,
+      total: candidates.length,
+      message: 'Rescanning missing files...',
+    });
+
+    let totalUpdated = 0;
+    let skipped = 0;
+    for (let i = 0; i < candidates.length; i++) {
+      const media = candidates[i];
+      try {
+        const result = await this.mediaService.rescanFiles(media.id);
+        totalUpdated += result.added + result.removed + result.updated;
+      } catch (e) {
+        skipped++;
+        this.log.warn(
+          `RescanMissingFiles: skipped "${media.title}" — ${(e as Error).message}`,
+        );
+      }
+      this.eventsService.emit({
+        type: 'task.progress',
+        command: 'RescanMissingFiles',
+        current: i + 1,
+        total: candidates.length,
+        message: media.title,
+      });
+    }
+
+    this.log.log(
+      `RescanMissingFiles: scanned ${candidates.length - skipped}/${candidates.length} media, ${totalUpdated} change(s) (from ${allMedia.length} total)`,
     );
   }
 

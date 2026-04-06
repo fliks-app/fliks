@@ -710,6 +710,10 @@ export class MediaService {
       );
     }
 
+    await this.mediaRepo.update(media.id, {
+      metadataRefreshedAt: new Date(),
+    });
+
     return this.findOne(media.id);
   }
 
@@ -925,6 +929,7 @@ export class MediaService {
   ): Promise<Media> {
     const row = this.mediaRepo.create({
       ...this.buildMediaFieldsFromTmdb(details, MediaType.MOVIE),
+      metadataRefreshedAt: new Date(),
       ...(qualityProfileId != null ? { qualityProfileId } : {}),
       ...(languageProfileId != null ? { languageProfileId } : {}),
       ...(rootFolderId ? { rootFolderId } : {}),
@@ -945,6 +950,7 @@ export class MediaService {
   ): Promise<Media> {
     const row = this.mediaRepo.create({
       ...this.buildMediaFieldsFromTmdb(details, MediaType.SERIES),
+      metadataRefreshedAt: new Date(),
       ...(qualityProfileId != null ? { qualityProfileId } : {}),
       ...(languageProfileId != null ? { languageProfileId } : {}),
       ...(rootFolderId ? { rootFolderId } : {}),
@@ -1324,7 +1330,7 @@ export class MediaService {
       }
     }
 
-    if (added || removed) {
+    if (added || removed || updated) {
       void this.mediaServers.dispatch('library.rescan', {
         title: media.title,
         path: media.path,

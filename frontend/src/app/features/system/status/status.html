@@ -51,7 +51,7 @@
   <div class="space-y-2 mt-4">
     @for (entry of sse.activeProgress() | keyvalue; track entry.key) {
       <div class="flex items-center gap-3">
-        <span class="text-sm font-medium w-32">{{ entry.value.command }}</span>
+        <span class="text-sm font-medium w-32 truncate" [title]="entry.value.command">{{ commandLabelKey(entry.value.command) | translate }}</span>
         <progress class="progress progress-primary flex-1" [value]="entry.value.current" [max]="entry.value.total"></progress>
         <span class="text-xs text-base-content/60 tabular-nums w-16 text-right">{{ entry.value.current }}/{{ entry.value.total }}</span>
         <span class="text-xs text-base-content/50 truncate w-52">{{ entry.value.message }}</span>
