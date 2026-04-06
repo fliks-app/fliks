@@ -113,6 +113,13 @@ export const routes: Routes = [
           import('./features/calendar/calendar').then((m) => m.CalendarComponent),
       },
       {
+        path: 'history',
+        loadComponent: () =>
+          import('./features/watch-history/watch-history').then(
+            (m) => m.WatchHistoryComponent,
+          ),
+      },
+      {
         path: 'playback-settings',
         loadComponent: () =>
           import('./features/playback-settings/playback-settings').then(

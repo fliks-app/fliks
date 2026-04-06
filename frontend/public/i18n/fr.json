@@ -87,7 +87,16 @@
     "administration": "Administration",
     "section_library": "Bibliothèque",
     "section_downloads": "Téléchargement",
-    "playback_settings": "Paramètres de lecture"
+    "playback_settings": "Paramètres de lecture",
+    "history": "Historique"
+  },
+  "history": {
+    "title": "Historique",
+    "empty": "Aucun historique de lecture.",
+    "completed": "Terminé",
+    "resume": "Reprendre",
+    "remove": "Supprimer de l'historique",
+    "mark_watched": "Marquer comme vu"
   },
   "admin": {
     "title": "Administration",

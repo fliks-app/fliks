@@ -37,6 +37,7 @@ import {
   LucideUserCog,
   LucideShield,
   LucideRepeat,
+  LucideHistory,
 } from '@lucide/angular';
 
 
@@ -48,7 +49,7 @@ import {
     LucideClipboardList, LucideDownload, LucideCalendar, LucideUpload,
     LucideArrowRightLeft, LucideLayoutGrid, LucideSettings, LucideUser,
     LucideSun, LucideMoon, LucideLogOut, LucideCast,
-    LucideUserCog, LucideShield, LucideRepeat,
+    LucideUserCog, LucideShield, LucideRepeat, LucideHistory,
     CastOverlayComponent,
     UserMenuComponent,
   ],

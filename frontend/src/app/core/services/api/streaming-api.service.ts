@@ -56,6 +56,23 @@ export interface PlaybackState {
   lastPlayedAt: string;
 }
 
+export interface WatchHistoryItem {
+  id: number;
+  mediaId: number;
+  mediaFileId: number;
+  episodeId: number | null;
+  positionSeconds: number;
+  durationSeconds: number;
+  progressPercent: number;
+  completed: boolean;
+  lastPlayedAt: string;
+  mediaTitle: string;
+  mediaType: string;
+  posterUrl: string | null;
+  fanartUrl: string | null;
+  episodeLabel: string | null;
+}
+
 export interface ContinueWatchingItem {
   id: number;
   mediaId: number;
@@ -221,7 +238,7 @@ export class StreamingApiService {
 
   getHistory(page = 1, limit = 25) {
     return firstValueFrom(
-      this.http.get<{ data: PlaybackState[]; total: number }>('/api/playback/history', {
+      this.http.get<{ data: WatchHistoryItem[]; total: number }>('/api/playback/history', {
         params: { page: String(page), limit: String(limit) },
       }),
     );

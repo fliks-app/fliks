@@ -3,6 +3,23 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PlaybackState } from './entities/playback-state.entity';
 
+export interface WatchHistoryItem {
+  id: number;
+  mediaId: number;
+  mediaFileId: number;
+  episodeId: number | null;
+  positionSeconds: number;
+  durationSeconds: number;
+  progressPercent: number;
+  completed: boolean;
+  lastPlayedAt: Date;
+  mediaTitle: string;
+  mediaType: string;
+  posterUrl: string | null;
+  fanartUrl: string | null;
+  episodeLabel: string | null;
+}
+
 export interface ContinueWatchingItem {
   id: number;
   mediaId: number;
@@ -201,14 +218,51 @@ export class PlaybackService {
     userId: number,
     page: number,
     limit: number,
-  ): Promise<{ data: PlaybackState[]; total: number }> {
-    const [data, total] = await this.repo.findAndCount({
-      where: { userId },
-      relations: ['media'],
-      order: { lastPlayedAt: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+  ): Promise<{ data: WatchHistoryItem[]; total: number }> {
+    // Deduplicate by mediaId: keep only the most recent playback per media
+    const countResult = await this.repo.query(
+      `SELECT COUNT(*) AS cnt FROM (
+         SELECT DISTINCT ON (ps."mediaId") ps.id
+         FROM playback_states ps
+         WHERE ps."userId" = $1
+         ORDER BY ps."mediaId", ps."lastPlayedAt" DESC
+       ) sub`,
+      [userId],
+    );
+    const total = Number(countResult[0]?.cnt ?? 0);
+
+    const data: WatchHistoryItem[] = await this.repo.query(
+      `SELECT
+         ps.id, ps."mediaId", ps."mediaFileId", ps."episodeId",
+         ps."positionSeconds", ps."durationSeconds", ps.completed,
+         ps."lastPlayedAt",
+         m.title AS "mediaTitle", m.type AS "mediaType",
+         m."posterUrl", m."fanartUrl",
+         CASE WHEN ps."durationSeconds" > 0
+              THEN ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)
+              ELSE 0 END AS "progressPercent",
+         CASE WHEN ps."episodeId" IS NOT NULL
+              THEN 'S' || LPAD(s."seasonNumber"::text, 2, '0') || 'E' || LPAD(e."episodeNumber"::text, 2, '0')
+                   || COALESCE(' - ' || e.title, '')
+              ELSE NULL END AS "episodeLabel"
+       FROM (
+         SELECT DISTINCT ON (ps2."mediaId") ps2.*
+         FROM playback_states ps2
+         WHERE ps2."userId" = $1
+         ORDER BY ps2."mediaId", ps2."lastPlayedAt" DESC
+       ) ps
+       JOIN media m ON m.id = ps."mediaId"
+       LEFT JOIN episodes e ON e.id = ps."episodeId"
+       LEFT JOIN seasons s ON s.id = e."seasonId"
+       ORDER BY ps."lastPlayedAt" DESC
+       LIMIT $2 OFFSET $3`,
+      [userId, limit, (page - 1) * limit],
+    );
+
+    for (const item of data) {
+      item.progressPercent = Number(item.progressPercent);
+    }
+
     return { data, total };
   }
 

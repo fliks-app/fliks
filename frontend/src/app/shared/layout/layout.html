@@ -67,7 +67,7 @@
       }
       <app-user-menu />
     </div>
-    <main class="flex-1 p-4 lg:p-6">
+    <main class="min-w-0 flex-1 overflow-x-hidden p-4 lg:p-6">
       <router-outlet />
     </main>
   </div>
@@ -111,6 +111,12 @@
             @if (seriesCount() > 0) {
               <span class="badge badge-sm badge-ghost">{{ seriesCount() }}</span>
             }
+          </a>
+        </li>
+        <li>
+          <a routerLink="/history" routerLinkActive="active">
+            <svg lucideHistory class="h-5 w-5"></svg>
+            {{ 'nav.history' | translate }}
           </a>
         </li>
 
