@@ -524,6 +524,7 @@ export class SchedulerService implements OnModuleInit {
     }
 
     const allMedia = await this.mediaRepo.find();
+    this.log.log(`RefreshMetadata: starting refresh for ${allMedia.length} media`);
     let updated = 0;
 
     for (let i = 0; i < allMedia.length; i++) {
@@ -535,6 +536,7 @@ export class SchedulerService implements OnModuleInit {
         total: allMedia.length,
         message: media.title,
       });
+      this.log.log(`RefreshMetadata: refreshing "${media.title}" (${i + 1}/${allMedia.length})`);
       try {
         await this.mediaService.refreshMetadata(media.id);
         updated++;

@@ -27,6 +27,9 @@ export class Person extends BaseEntity {
   @Column({ nullable: true })
   knownForDepartment: string;
 
+  @Column({ type: 'jsonb', default: '[]' })
+  departments: string[];
+
   @Column({ type: 'timestamptz', nullable: true })
   metadataRefreshedAt: Date | null;
 

@@ -350,10 +350,17 @@ export class MediaService {
         'files',
         'qualityProfile',
         'languageProfile',
+        'cast',
+        'cast.person',
+        'crew',
+        'crew.person',
       ],
     });
     if (!media) {
       throw new NotFoundException(`Media #${id} not found`);
+    }
+    if (media.cast?.length) {
+      media.cast.sort((a, b) => a.order - b.order);
     }
     if (media.seasons?.length) {
       media.seasons.sort((a, b) => a.seasonNumber - b.seasonNumber);
@@ -1038,13 +1045,32 @@ export class MediaService {
       );
     }
 
-    // Update search vectors for persons
+    // Update search vectors + departments for persons
     if (uniqueIds.length > 0) {
       const personIds = [...personMap.values()].map((p) => p.id);
       await this.dataSource.query(
         `UPDATE persons SET "searchVector" = to_tsvector('simple', name) WHERE id = ANY($1)`,
         [personIds],
       );
+
+      // Compute departments from current details and merge with existing
+      const deptMap = new Map<number, Set<string>>();
+      for (const c of details.cast) {
+        if (!deptMap.has(c.externalId)) deptMap.set(c.externalId, new Set());
+        deptMap.get(c.externalId)!.add('Acting');
+      }
+      for (const c of details.crew) {
+        if (!deptMap.has(c.externalId)) deptMap.set(c.externalId, new Set());
+        deptMap.get(c.externalId)!.add(c.department);
+      }
+      for (const [tmdbId, person] of personMap) {
+        const newDepts = deptMap.get(tmdbId);
+        if (!newDepts) continue;
+        const merged = new Set(person.departments ?? []);
+        for (const d of newDepts) merged.add(d);
+        const sorted = [...merged].sort();
+        await this.personRepo.update(person.id, { departments: sorted });
+      }
     }
 
     // Refresh stale person details (biography, birthday, etc.)

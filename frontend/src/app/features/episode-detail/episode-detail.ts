@@ -20,6 +20,7 @@ import { ProfilesService, LanguageProfile } from '../../core/services/api/profil
 import { SubtitlesApiService, SubtitleFileRow } from '../../core/services/api/subtitles-api.service';
 import { MediaDetailSubtitlesComponent } from '../media-detail/components/media-detail-subtitles/media-detail-subtitles.component';
 import { MediaFileInfoComponent } from '../../shared/components/media-file-info';
+import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { MediaDetailSubtitleSearchModalComponent } from '../media-detail/components/media-detail-subtitle-search-modal/media-detail-subtitle-search-modal.component';
 import { ReleasesModalComponent } from '../media-detail/components/releases-modal/releases-modal.component';
 import {
@@ -62,6 +63,7 @@ import {
     MediaFileInfoComponent,
     MediaDetailSubtitleSearchModalComponent,
     ReleasesModalComponent,
+    HorizontalScrollerComponent,
     LucideChevronLeft,
     LucideTrash2,
     LucideEllipsisVertical,

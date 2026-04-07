@@ -345,7 +345,12 @@
     "title": "Personnes",
     "empty": "Aucune personne dans la bibliothèque",
     "empty_hint": "Les personnes apparaissent automatiquement quand vous ajoutez des films ou séries",
-    "total": "Total"
+    "total": "Total",
+    "filter_all": "Tous les rôles",
+    "filter_cast": "Acteurs",
+    "filter_directing": "Réalisateurs",
+    "filter_writing": "Scénaristes",
+    "filter_production": "Producteurs"
   },
   "person_detail": {
     "local_credits": "Dans ma bibliothèque",
@@ -355,6 +360,8 @@
     "no_local_credits": "Aucun crédit local pour cette personne"
   },
   "media_detail": {
+    "cast": "Casting",
+    "crew": "Équipe technique",
     "episodes": "Épisodes",
     "back": "Retour à la liste",
     "refresh_metadata": "Rafraîchir les métadonnées",

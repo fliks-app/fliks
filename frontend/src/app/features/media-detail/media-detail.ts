@@ -9,7 +9,7 @@ import {
   OnDestroy,
   viewChild,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   MediaService,
@@ -41,6 +41,7 @@ import { ReleasesModalComponent } from './components/releases-modal/releases-mod
 import { MediaDetailProfilesModalComponent } from './components/media-detail-profiles-modal/media-detail-profiles-modal.component';
 import { MediaDetailRootFolderModalComponent } from './components/media-detail-root-folder-modal/media-detail-root-folder-modal.component';
 import { MediaDetailLibraryInfoComponent } from './components/media-detail-library-info/media-detail-library-info.component';
+import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import {
   filesForEpisode,
   filterSeasonEpisodesOnDisk,
@@ -77,6 +78,8 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     ReleasesModalComponent,
     MediaDetailProfilesModalComponent,
     MediaDetailRootFolderModalComponent,
+    HorizontalScrollerComponent,
+    RouterLink,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail.html',

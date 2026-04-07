@@ -37,6 +37,55 @@
 
       <app-media-detail-library-info [media]="m" />
 
+      @if (m.cast?.length || m.crew?.length) {
+        <div class="mt-8 flex flex-col gap-6">
+          @if (m.cast?.length) {
+            <app-horizontal-scroller [title]="'media_detail.cast' | translate">
+              @for (c of m.cast; track c.id) {
+                <a [routerLink]="['/persons', c.person.id]" class="shrink-0 w-20 sm:w-24 flex flex-col items-center gap-1.5 group">
+                  <div class="avatar">
+                    <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">
+                      @if (c.person.avatarUrl) {
+                        <img [src]="c.person.avatarUrl" [alt]="c.person.name" loading="lazy" />
+                      } @else {
+                        <div class="bg-base-300 flex items-center justify-center w-full h-full text-lg font-bold text-base-content/30">
+                          {{ c.person.name.charAt(0) }}
+                        </div>
+                      }
+                    </div>
+                  </div>
+                  <span class="text-xs text-center font-medium line-clamp-1 w-full">{{ c.person.name }}</span>
+                  @if (c.character) {
+                    <span class="text-[10px] text-base-content/50 text-center line-clamp-1 w-full -mt-1">{{ c.character }}</span>
+                  }
+                </a>
+              }
+            </app-horizontal-scroller>
+          }
+          @if (m.crew?.length) {
+            <app-horizontal-scroller [title]="'media_detail.crew' | translate">
+              @for (c of m.crew; track c.id) {
+                <a [routerLink]="['/persons', c.person.id]" class="shrink-0 w-20 sm:w-24 flex flex-col items-center gap-1.5 group">
+                  <div class="avatar">
+                    <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">
+                      @if (c.person.avatarUrl) {
+                        <img [src]="c.person.avatarUrl" [alt]="c.person.name" loading="lazy" />
+                      } @else {
+                        <div class="bg-base-300 flex items-center justify-center w-full h-full text-lg font-bold text-base-content/30">
+                          {{ c.person.name.charAt(0) }}
+                        </div>
+                      }
+                    </div>
+                  </div>
+                  <span class="text-xs text-center font-medium line-clamp-1 w-full">{{ c.person.name }}</span>
+                  <span class="text-[10px] text-base-content/50 text-center line-clamp-1 w-full -mt-1">{{ c.job }}</span>
+                </a>
+              }
+            </app-horizontal-scroller>
+          }
+        </div>
+      }
+
       @if (m.type === 'movie') {
         <app-media-detail-subtitles
           [subtitles]="selectedFileSubtitles()"

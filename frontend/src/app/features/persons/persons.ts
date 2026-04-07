@@ -36,8 +36,11 @@ export class PersonsComponent implements OnInit, OnDestroy {
   readonly list = new InfiniteScrollList<Person>();
   readonly loading = signal(false);
   readonly searchQuery = signal('');
+  readonly filterRole = signal('');
   readonly alphabet = ALPHABET;
   readonly activeLetter = signal('');
+
+  private allResults: Person[] = [];
 
   private readonly storageKey = 'fliks.filters.persons';
 
@@ -73,6 +76,11 @@ export class PersonsComponent implements OnInit, OnDestroy {
     this.load();
   }
 
+  onFilterRole(role: string) {
+    this.filterRole.set(role);
+    this.applyFilter();
+  }
+
   private syncQueryParams() {
     const params: Record<string, string> = {};
     if (this.searchQuery()) params['q'] = this.searchQuery();
@@ -99,9 +107,18 @@ export class PersonsComponent implements OnInit, OnDestroy {
     try {
       const results = await this.personsApi.search(this.searchQuery());
       results.sort((a, b) => a.name.localeCompare(b.name));
-      this.list.setItems(results);
+      this.allResults = results;
+      this.applyFilter();
     } finally {
       this.loading.set(false);
     }
+  }
+
+  private applyFilter() {
+    const role = this.filterRole();
+    const filtered = role
+      ? this.allResults.filter((p) => p.departments?.includes(role))
+      : this.allResults;
+    this.list.setItems(filtered);
   }
 }

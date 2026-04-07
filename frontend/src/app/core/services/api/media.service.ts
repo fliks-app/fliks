@@ -93,6 +93,8 @@ export interface Media {
   minimumAvailability?: 'announced' | 'inCinemas' | 'released';
   sizeOnDisk?: number;
   episodeStats?: { totalEpisodes: number; downloadedEpisodes: number };
+  cast?: { id: number; character: string; order: number; person: { id: number; name: string; avatarUrl: string | null } }[];
+  crew?: { id: number; job: string; department: string; person: { id: number; name: string; avatarUrl: string | null } }[];
 }
 
 export interface CalendarEntry {

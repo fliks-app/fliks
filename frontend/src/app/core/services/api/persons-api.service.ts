@@ -13,6 +13,7 @@ export interface Person {
   deathday: string | null;
   placeOfBirth: string | null;
   knownForDepartment: string | null;
+  departments: string[];
   metadataRefreshedAt: string | null;
 }
 
