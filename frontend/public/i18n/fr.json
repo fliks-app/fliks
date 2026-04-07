@@ -689,6 +689,23 @@
     "show_more": "Voir plus",
     "show_less": "Voir moins"
   },
+  "downloads": {
+    "title": "Téléchargements",
+    "download": "Télécharger",
+    "choose_quality": "Choisir la qualité",
+    "original": "Original",
+    "started": "Téléchargement lancé",
+    "error": "Erreur lors du téléchargement",
+    "empty": "Aucun téléchargement",
+    "empty_hint": "Téléchargez des films ou épisodes pour les regarder hors ligne",
+    "delete": "Supprimer",
+    "transcoding": "Transcodage en cours…",
+    "downloading": "Téléchargement en cours…",
+    "ready": "Prêt",
+    "failed": "Échec",
+    "offline": "Hors ligne",
+    "confirm_delete": "Supprimer ce téléchargement ? Le fichier sera supprimé de cet appareil."
+  },
   "settings": {
     "nav": {
       "general": "Général",

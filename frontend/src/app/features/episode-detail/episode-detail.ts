@@ -22,6 +22,11 @@ import { SubtitlesApiService, SubtitleFileRow } from '../../core/services/api/su
 import { MediaDetailSubtitlesComponent } from '../media-detail/components/media-detail-subtitles/media-detail-subtitles.component';
 import { MediaFileInfoComponent } from '../../shared/components/media-file-info';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
+import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
+import { DownloadsApiService } from '../../core/services/api/downloads-api.service';
+import { BrowserDeviceProfileService } from '../../core/services/browser-device-profile.service';
+import { DownloadCacheService } from '../../core/services/download-cache.service';
+import { OfflineStorageService } from '../../core/services/offline-storage.service';
 import { MediaDetailSubtitleSearchModalComponent } from '../media-detail/components/media-detail-subtitle-search-modal/media-detail-subtitle-search-modal.component';
 import { ReleasesModalComponent } from '../media-detail/components/releases-modal/releases-modal.component';
 import {
@@ -65,6 +70,7 @@ import {
     MediaDetailSubtitleSearchModalComponent,
     ReleasesModalComponent,
     HorizontalScrollerComponent,
+    DownloadQualityModalComponent,
     LucideChevronLeft,
     LucideTrash2,
     LucideEllipsisVertical,
@@ -90,6 +96,11 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
   private readonly translate = inject(TranslateService);
   readonly playable = inject(PlayableMediaService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly downloadsApi = inject(DownloadsApiService);
+  private readonly downloadCache = inject(DownloadCacheService);
+  private readonly deviceProfile = inject(BrowserDeviceProfileService);
+  private readonly offlineStorage = inject(OfflineStorageService);
+  private readonly downloadModal = viewChild<DownloadQualityModalComponent>('downloadModal');
   private readonly subActions = inject(SubtitleActionsService);
   private readonly sse = inject(SseService);
   private readonly navbar = inject(NavbarService);
@@ -541,4 +552,34 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
     return String(n).padStart(2, '0');
   }
 
+  openDownloadModal() {
+    const fileId = this.selectedFileId();
+    if (fileId) this.downloadModal()?.open(fileId);
+  }
+
+  async onDownload(ev: { mediaFileId: number; quality: string }) {
+    try {
+      const dp = this.deviceProfile.getProfile();
+      const task = await this.downloadsApi.create(ev.mediaFileId, ev.quality, {
+        supportsHdr: dp.supportsHdr,
+        audioCodecs: dp.directPlayProfiles[0]?.audioCodecs,
+        maxAudioChannels: dp.maxAudioChannels,
+      });
+      this.toast.success(this.translate.instant('downloads.started'));
+      if (task.status === 'ready') {
+        this.downloadCache.markDownloading(task.id);
+        const url = this.downloadsApi.getFileUrl(task.id);
+        this.offlineStorage.download(
+          url,
+          `download-${task.mediaFileId}`,
+          (pct) => this.downloadCache.updateProgress(task.id, pct),
+        ).then(
+          () => this.downloadCache.markDone(task.id),
+          () => this.downloadCache.markDone(task.id),
+        );
+      }
+    } catch {
+      this.toast.error(this.translate.instant('downloads.error'));
+    }
+  }
 }

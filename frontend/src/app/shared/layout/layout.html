@@ -131,6 +131,12 @@
                 </a>
               </li>
               <li>
+                <a routerLink="/downloads" routerLinkActive="active" (click)="resetNavHistory()">
+                  <svg lucideDownload class="h-5 w-5"></svg>
+                  {{ 'downloads.title' | translate }}
+                </a>
+              </li>
+              <li>
                 <a routerLink="/history" routerLinkActive="active" (click)="resetNavHistory()">
                   <svg lucideHistory class="h-5 w-5"></svg>
                   {{ 'nav.history' | translate }}
@@ -222,6 +228,12 @@
           <a routerLink="/persons" routerLinkActive="active">
             <svg lucideUsers class="h-5 w-5"></svg>
             {{ 'nav.persons' | translate }}
+          </a>
+        </li>
+        <li>
+          <a routerLink="/downloads" routerLinkActive="active">
+            <svg lucideDownload class="h-5 w-5"></svg>
+            {{ 'downloads.title' | translate }}
           </a>
         </li>
         <li>

@@ -34,6 +34,7 @@ import { SubtitlesModule } from '../subtitles/subtitles.module';
 import { SettingsModule } from '../settings/settings.module';
 import { MediaServersModule } from '../media-servers/media-servers.module';
 import { StreamingModule } from '../streaming/streaming.module';
+import { DownloadsModule } from '../downloads/downloads.module';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 
 @Module({
@@ -64,6 +65,7 @@ import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
     SettingsModule,
     MediaServersModule,
     StreamingModule,
+    DownloadsModule,
   ],
   controllers: [CommandsController, SystemController],
   providers: [

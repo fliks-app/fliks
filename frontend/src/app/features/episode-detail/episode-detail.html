@@ -98,6 +98,13 @@
             >
               <svg lucideTrash2 class="h-5 w-5"></svg>
             </button>
+            <button
+              class="btn btn-ghost btn-square"
+              (click)="openDownloadModal()"
+              [title]="'downloads.download' | translate"
+            >
+              <svg lucideDownload class="h-5 w-5"></svg>
+            </button>
           }
           <div class="dropdown dropdown-end" [class.ml-auto]="!selectedFileId()">
             <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-circle">
@@ -324,6 +331,14 @@
               >
                 <svg lucideTrash2 class="h-4 w-4"></svg>
               </button>
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm btn-square"
+                (click)="openDownloadModal()"
+                [title]="'downloads.download' | translate"
+              >
+                <svg lucideDownload class="h-4 w-4"></svg>
+              </button>
             }
             <div class="dropdown dropdown-end">
               <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
@@ -511,4 +526,6 @@
       (grab)="grabRelease($event.release, $event.index)"
     />
   }
+
+  <app-download-quality-modal #downloadModal (download)="onDownload($event)" />
 </div>

@@ -20,6 +20,10 @@ import { BrowserDeviceProfileService } from '../../core/services/browser-device-
 import { SseService } from '../../core/services/sse.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
+import { OfflineStorageService } from '../../core/services/offline-storage.service';
+import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
+import { NetworkService } from '../../core/services/network.service';
+import { DownloadCacheService } from '../../core/services/download-cache.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { parseAudioIndex } from '../../core/utils/player.utils';
 import { Capacitor, registerPlugin } from '@capacitor/core';
@@ -104,6 +108,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly offlineStorage = inject(OfflineStorageService);
+  private readonly offlineSync = inject(OfflinePlaybackSyncService);
+  private readonly network = inject(NetworkService);
+  private readonly dlCache = inject(DownloadCacheService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly mediaService = inject(MediaService);
   private readonly deviceProfileService = inject(BrowserDeviceProfileService);
@@ -201,6 +209,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // Media info
   private mediaFileId = 0;
   private mediaId = 0;
+  private isOfflinePlayback = false;
   private episodeId: number | undefined;
   private media: Media | null = null;
   private activeBurnInId: number | null = null;
@@ -453,8 +462,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     });
 
     try {
-      // Load media info
-      if (this.mediaId) {
+      // Check for offline file early to set flag before any API calls
+      const offlineCheck = await this.offlineStorage.getLocalUrl(`download-${this.mediaFileId}`).catch(() => null);
+      if (offlineCheck) this.isOfflinePlayback = true;
+
+      // Load media info (skip if offline)
+      if (this.mediaId && !this.isOfflinePlayback) {
         const media = await this.mediaService.getOne(this.mediaId);
         this.media = media;
         this.mediaTitle.set(media.title);
@@ -493,76 +506,83 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         });
       }
 
-      // Ask the backend to decide how to play this file
-      const deviceProfile = this.deviceProfileService.getProfile();
-      this.playbackInfo = await this.streamingApi.getPlaybackInfo(this.mediaFileId, deviceProfile);
-      const pi = this.playbackInfo;
-
-      // Map backend decision to our mode signal
-      if (pi.playMethod === 'DirectPlay') {
-        this.playbackMode.set('direct');
-      } else if (pi.playMethod === 'DirectStream') {
-        this.playbackMode.set('remux');
-      } else {
-        this.playbackMode.set('transcode');
-      }
-
-      // Use HW accel info from the playback decision
-      this.hwAccel.set(pi.hwAccel);
-
-      // object-fit: contain handles aspect ratio via the video's intrinsic dimensions.
-      // Do NOT set aspect-ratio CSS — it conflicts with width:100%/height:100% and
-      // causes the video to shrink instead of filling the container.
-
-      // Build quality options
-      this.buildQualityOptions(pi);
-      this.applySavedQualityPreferenceFromStorage();
-
-      const mode = this.playbackMode();
-      console.log('[Player] mediaFileId:', this.mediaFileId, 'mode:', pi.playMethod,
-        'videoCopy:', pi.videoCopyStream, 'audioCopy:', pi.audioCopyStream,
-        'reasons:', pi.transcodeReasons.map(r => r.flag).join(', '));
-
       video.addEventListener('error', () => {
         const e = video.error;
         console.error('[Player] Video error:', e?.code, e?.message);
         this.error.set(e?.message ?? `Video error code ${e?.code}`);
       });
 
-      if (mode === 'direct') {
-        // Direct play via shaka (needed for subtitle track support)
-        const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
-        console.log('[Player] Direct URL:', streamUrl);
-        await this.player.load(streamUrl, undefined, 'video/mp4');
+      if (this.isOfflinePlayback) {
+        // Offline: load via Shaka for subtitle track support (addTextTrackAsync)
+        console.log('[Player] Playing offline file via Shaka');
+        this.playbackMode.set('direct');
+        await this.player.load(offlineCheck!, undefined, 'video/mp4');
       } else {
-        // HLS (both remux and transcode use HLS delivery)
-        this.player.configure({
-          streaming: {
-            retryParameters: {
-              timeout: 60_000,
-              maxAttempts: 5,
-              baseDelay: 1000,
-            },
-          },
-          manifest: {
-            retryParameters: {
-              timeout: 30_000,
-              maxAttempts: 5,
-              baseDelay: 1000,
-            },
-          },
-        } as any);
+        // Ask the backend to decide how to play this file
+        const deviceProfile = this.deviceProfileService.getProfile();
+        this.playbackInfo = await this.streamingApi.getPlaybackInfo(this.mediaFileId, deviceProfile);
+        const pi = this.playbackInfo;
 
-        const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId);
-        console.log('[Player] HLS URL:', hlsUrl);
-        await this.player.load(hlsUrl);
+        // Map backend decision to our mode signal
+        if (pi.playMethod === 'DirectPlay') {
+          this.playbackMode.set('direct');
+        } else if (pi.playMethod === 'DirectStream') {
+          this.playbackMode.set('remux');
+        } else {
+          this.playbackMode.set('transcode');
+        }
+
+        // Use HW accel info from the playback decision
+        this.hwAccel.set(pi.hwAccel);
+
+        // Build quality options
+        this.buildQualityOptions(pi);
+        this.applySavedQualityPreferenceFromStorage();
+
+        const mode = this.playbackMode();
+        console.log('[Player] mediaFileId:', this.mediaFileId, 'mode:', pi.playMethod,
+          'videoCopy:', pi.videoCopyStream, 'audioCopy:', pi.audioCopyStream,
+          'reasons:', pi.transcodeReasons.map(r => r.flag).join(', '));
+
+        if (mode === 'direct') {
+          const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
+          console.log('[Player] Direct URL:', streamUrl);
+          await this.player.load(streamUrl, undefined, 'video/mp4');
+        } else {
+          this.player.configure({
+            streaming: {
+              retryParameters: {
+                timeout: 60_000,
+                maxAttempts: 5,
+                baseDelay: 1000,
+              },
+            },
+            manifest: {
+              retryParameters: {
+                timeout: 30_000,
+                maxAttempts: 5,
+                baseDelay: 1000,
+              },
+            },
+          } as any);
+
+          const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId);
+          console.log('[Player] HLS URL:', hlsUrl);
+          await this.player.load(hlsUrl);
+        }
       }
 
       this.applyQualityPreferenceAfterLoad();
 
-      // Load subtitles + auto-select last used language
-      await this.loadSubtitles();
-      this.loadAudioTracks();
+      if (this.isOfflinePlayback) {
+        // Offline: load VTT subtitle files from local storage
+        await this.loadOfflineSubtitles();
+        this.loadAudioTracks();
+      } else {
+        // Load subtitles + auto-select last used language
+        await this.loadSubtitles();
+        this.loadAudioTracks();
+      }
       const savedLang = localStorage.getItem('player.subtitleLang');
       if (savedLang) {
         const savedForced = localStorage.getItem('player.subtitleForced') === '1';
@@ -574,7 +594,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Resume position
       if (resumeTime != null) {
         video.currentTime = resumeTime;
-      } else {
+      } else if (!this.isOfflinePlayback) {
         try {
           const state = await this.streamingApi.getPlaybackState(this.mediaFileId);
           if (state && !state.completed && state.positionSeconds > 10) {
@@ -913,6 +933,33 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  /** Load VTT subtitle files from offline storage — same method as online (addTextTrackAsync). */
+  private async loadOfflineSubtitles() {
+    if (!this.player) return;
+
+    const cached = this.dlCache.load();
+    const task = cached.find((t) => t.mediaFileId === this.mediaFileId);
+    if (!task?.subtitles?.length) return;
+
+    const options: SubtitleOption[] = [];
+    for (let i = 0; i < task.subtitles.length; i++) {
+      const sub = task.subtitles[i];
+      const key = `download-${task.mediaFileId}-sub-${sub.filename}`;
+      const vttUrl = await this.offlineStorage.getSmallFileUrl(key);
+      if (!vttUrl) continue;
+
+      options.push({
+        id: `offline-${i}`,
+        label: `${sub.language}${sub.forced ? ' (Forced)' : ''}`,
+        url: vttUrl,
+        language: sub.language,
+        burnIn: false,
+        forced: sub.forced,
+      });
+    }
+    this.availableSubtitles.set(options);
+  }
+
   /** Load audio tracks from Shaka variant tracks (works in both direct play and HLS) */
   private loadAudioTracks() {
     if (!this.player) return;
@@ -979,8 +1026,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.subtitlePickerOpen.set(false);
       localStorage.setItem('player.subtitleLang', '');
       localStorage.removeItem('player.subtitleForced');
-      // If burn-in was active, reload stream without it
-      if (this.activeBurnInId) {
+      if (!this.isOfflinePlayback && this.activeBurnInId) {
         this.activeBurnInId = null;
         await this.reloadStream();
       }
@@ -999,10 +1045,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
 
     try {
-      // Client-side: add text track via Shaka
       if (this.activeBurnInId) {
         this.activeBurnInId = null;
-        await this.reloadStream();
+        if (!this.isOfflinePlayback) await this.reloadStream();
       }
       const track = await this.player.addTextTrackAsync(
         sub.url,
@@ -1121,15 +1166,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       dur = isFinite(video.duration) ? video.duration : this.duration();
     }
 
-    try {
-      await this.streamingApi.updatePlaybackState(this.mediaFileId, {
-        positionSeconds: pos,
-        durationSeconds: dur || 0,
-        mediaId: this.mediaId,
-        episodeId: this.episodeId,
-      });
-    } catch {
-      // Ignore save errors
+    const payload = {
+      positionSeconds: pos,
+      durationSeconds: dur || 0,
+      mediaId: this.mediaId,
+      episodeId: this.episodeId,
+    };
+
+    if (this.network.isOnline()) {
+      try {
+        await this.streamingApi.updatePlaybackState(this.mediaFileId, payload);
+      } catch {
+        // API failed — queue for later
+        this.offlineSync.queue({ mediaFileId: this.mediaFileId, ...payload });
+      }
+    } else {
+      this.offlineSync.queue({ mediaFileId: this.mediaFileId, ...payload });
     }
   }
 

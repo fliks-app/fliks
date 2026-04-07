@@ -20,7 +20,7 @@
         [monitoredLoading]="monitoredLoading()"
         [deleteLoading]="deleteLoading()"
         [files]="mediaFiles()"
-        [selectedFileId]="selectedFileId()"
+        [selectedFileId]="activeFileId()"
         [canGrab]="canGrab()"
         [releasesLoading]="releasesLoading()"
         [grabBusy]="grabBusy()"
@@ -34,6 +34,7 @@
         (grabBest)="grabBest()"
         (deleteFile)="deleteFile($event.fileId, $event.deleteOnDisk)"
         (rescanFiles)="rescanFiles()"
+        (openDownload)="openDownloadModal()"
       />
 
       <app-media-detail-library-info [media]="m" />
@@ -194,8 +195,9 @@
         (selectedRootFolderIdChange)="selectedRootFolderId.set($event)"
         (save)="saveRootFolder()"
       />
+      <app-download-quality-modal #downloadModal (download)="onDownload($event)" />
     </div>
-   
+
   }
 </div>
 

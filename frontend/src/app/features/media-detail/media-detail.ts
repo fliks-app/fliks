@@ -46,6 +46,11 @@ import { MediaDetailProfilesModalComponent } from './components/media-detail-pro
 import { MediaDetailRootFolderModalComponent } from './components/media-detail-root-folder-modal/media-detail-root-folder-modal.component';
 import { MediaDetailLibraryInfoComponent } from './components/media-detail-library-info/media-detail-library-info.component';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
+import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
+import { DownloadsApiService } from '../../core/services/api/downloads-api.service';
+import { BrowserDeviceProfileService } from '../../core/services/browser-device-profile.service';
+import { DownloadCacheService } from '../../core/services/download-cache.service';
+import { OfflineStorageService } from '../../core/services/offline-storage.service';
 import {
   filesForEpisode,
   filterSeasonEpisodesOnDisk,
@@ -83,6 +88,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     MediaDetailProfilesModalComponent,
     MediaDetailRootFolderModalComponent,
     HorizontalScrollerComponent,
+    DownloadQualityModalComponent,
     RouterLink,
     NgTemplateOutlet,
   ],
@@ -104,6 +110,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly sse = inject(SseService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly downloadsApi = inject(DownloadsApiService);
+  private readonly downloadCache = inject(DownloadCacheService);
+  private readonly deviceProfile = inject(BrowserDeviceProfileService);
+  private readonly offlineStorage = inject(OfflineStorageService);
+  private readonly downloadModal = viewChild<DownloadQualityModalComponent>('downloadModal');
   /** Same SSE payload must run handlers once; `media` updates (e.g. after rescan) re-run this effect. */
   private lastHandledSseEvent: SseEvent | null = null;
 
@@ -542,6 +553,37 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       );
     } finally {
       this.refreshLoading.set(false);
+    }
+  }
+
+  openDownloadModal() {
+    const fileId = this.selectedFileId();
+    if (fileId) this.downloadModal()?.open(fileId);
+  }
+
+  async onDownload(ev: { mediaFileId: number; quality: string }) {
+    try {
+      const dp = this.deviceProfile.getProfile();
+      const task = await this.downloadsApi.create(ev.mediaFileId, ev.quality, {
+        supportsHdr: dp.supportsHdr,
+        audioCodecs: dp.directPlayProfiles[0]?.audioCodecs,
+        maxAudioChannels: dp.maxAudioChannels,
+      });
+      this.toast.success(this.translate.instant('downloads.started'));
+      if (task.status === 'ready') {
+        this.downloadCache.markDownloading(task.id);
+        const url = this.downloadsApi.getFileUrl(task.id);
+        this.offlineStorage.download(
+          url,
+          `download-${task.mediaFileId}`,
+          (pct) => this.downloadCache.updateProgress(task.id, pct),
+        ).then(
+          () => this.downloadCache.markDone(task.id),
+          () => this.downloadCache.markDone(task.id),
+        );
+      }
+    } catch {
+      this.toast.error(this.translate.instant('downloads.error'));
     }
   }
 

@@ -47,6 +47,12 @@ export const routes: Routes = [
         data: { titleKey: 'series.title' },
       },
       {
+        path: 'downloads',
+        loadComponent: () =>
+          import('./features/downloads/downloads').then((m) => m.DownloadsComponent),
+        data: { titleKey: 'downloads.title' },
+      },
+      {
         path: 'persons',
         loadComponent: () =>
           import('./features/persons/persons').then((m) => m.PersonsComponent),

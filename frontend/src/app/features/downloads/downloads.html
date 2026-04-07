@@ -1,0 +1,64 @@
+<div class="flex flex-col gap-4">
+  <h1 class="sr-only lg:not-sr-only text-2xl font-bold">{{ 'downloads.title' | translate }}</h1>
+
+  @if (loading()) {
+    <div class="flex justify-center py-12">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (items().length === 0) {
+    <div class="text-center py-12 text-base-content/50">
+      <svg lucideDownload class="h-12 w-12 mx-auto mb-3 opacity-30"></svg>
+      <p class="text-lg">{{ 'downloads.empty' | translate }}</p>
+      <p class="text-sm mt-2">{{ 'downloads.empty_hint' | translate }}</p>
+    </div>
+  } @else {
+    <div class="flex flex-col gap-3">
+      @for (task of items(); track task.id) {
+        <div class="card card-side bg-base-100 shadow-sm border border-base-200 p-3 gap-3 items-center">
+          <!-- Poster -->
+          <div class="w-16 h-24 shrink-0 rounded overflow-hidden bg-base-300">
+            @if (task.media?.posterUrl) {
+              <img [src]="task.media!.posterUrl" [alt]="task.media!.title" class="w-full h-full object-cover" />
+            }
+          </div>
+
+          <!-- Info -->
+          <div class="flex-1 min-w-0">
+            <h3 class="font-medium text-sm line-clamp-1">{{ task.media?.title ?? '—' }}</h3>
+            @if (task.episodeLabel) {
+              <p class="text-xs text-base-content/60 line-clamp-1">{{ task.episodeLabel }}</p>
+            }
+            <p class="text-xs text-base-content/50 mt-0.5">{{ task.quality }} · {{ formatSize(task.fileSize) }}</p>
+
+            @if (task.status === 'transcoding' || task.status === 'remuxing') {
+              <progress class="progress progress-primary w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
+              <p class="text-[10px] text-base-content/40 mt-0.5">{{ statusLabel(task.status) | translate }} {{ task.progress }}%</p>
+            } @else if (task.status === 'downloading') {
+              <progress class="progress progress-info w-full h-1.5 mt-2" [value]="task.downloadProgress ?? 0" max="100"></progress>
+              <p class="text-[10px] text-base-content/40 mt-0.5">{{ 'downloads.downloading' | translate }} {{ task.downloadProgress ?? 0 }}%</p>
+            } @else if (task.status === 'failed') {
+              <div class="flex items-center gap-1 mt-1 text-error text-xs">
+                <svg lucideAlertCircle class="h-3 w-3"></svg>
+                {{ 'downloads.failed' | translate }}
+              </div>
+            } @else if (task.status === 'ready') {
+              <span class="badge badge-sm badge-success mt-1">{{ 'downloads.ready' | translate }}</span>
+            }
+          </div>
+
+          <!-- Actions -->
+          <div class="flex items-center gap-1 shrink-0">
+            @if (task.status === 'ready') {
+              <button class="btn btn-ghost btn-sm btn-square" (click)="playOffline(task)">
+                <svg lucidePlay class="h-4 w-4"></svg>
+              </button>
+            }
+            <button class="btn btn-ghost btn-sm btn-square text-error" (click)="deleteItem(task)">
+              <svg lucideTrash2 class="h-4 w-4"></svg>
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

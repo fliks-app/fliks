@@ -96,6 +96,7 @@ export class MediaDetailHeaderComponent implements OnInit {
   readonly grabBest = output<void>();
   readonly deleteFile = output<{ fileId: number; deleteOnDisk: boolean }>();
   readonly rescanFiles = output<void>();
+  readonly openDownload = output<void>();
 
   async ngOnInit() {
     const fileId = this.selectedFileId();

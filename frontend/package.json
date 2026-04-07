@@ -27,6 +27,7 @@
     "@capacitor/app": "^8.1.0",
     "@capacitor/cli": "^7.6.1",
     "@capacitor/core": "^8.3.0",
+    "@capacitor/filesystem": "^8.1.2",
     "@capacitor/keyboard": "^8.0.2",
     "@capacitor/preferences": "^8.0.1",
     "@lucide/angular": "^1.7.0",
