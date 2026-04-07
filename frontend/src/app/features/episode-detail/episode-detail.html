@@ -412,11 +412,11 @@
       </div>
     </div>
 
-    @if (media()?.cast?.length || media()?.crew?.length) {
+    @if (cast().length || crew().length) {
       <div class="mt-8 flex flex-col gap-6">
-        @if (media()?.cast?.length) {
+        @if (cast().length) {
           <app-horizontal-scroller [title]="'media_detail.cast' | translate">
-            @for (c of media()!.cast!; track c.id) {
+            @for (c of cast(); track c.id) {
               <a [routerLink]="['/persons', c.person.id]" class="shrink-0 w-20 sm:w-24 flex flex-col items-center gap-1.5 group">
                 <div class="avatar">
                   <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">
@@ -437,9 +437,9 @@
             }
           </app-horizontal-scroller>
         }
-        @if (media()?.crew?.length) {
+        @if (crew().length) {
           <app-horizontal-scroller [title]="'media_detail.crew' | translate">
-            @for (c of media()!.crew!; track c.id) {
+            @for (c of crew(); track c.id) {
               <a [routerLink]="['/persons', c.person.id]" class="shrink-0 w-20 sm:w-24 flex flex-col items-center gap-1.5 group">
                 <div class="avatar">
                   <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">

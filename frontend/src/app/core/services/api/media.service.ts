@@ -93,8 +93,20 @@ export interface Media {
   minimumAvailability?: 'announced' | 'inCinemas' | 'released';
   sizeOnDisk?: number;
   episodeStats?: { totalEpisodes: number; downloadedEpisodes: number };
-  cast?: { id: number; character: string; order: number; person: { id: number; name: string; avatarUrl: string | null } }[];
-  crew?: { id: number; job: string; department: string; person: { id: number; name: string; avatarUrl: string | null } }[];
+}
+
+export interface MediaCastEntry {
+  id: number;
+  character: string;
+  order: number;
+  person: { id: number; name: string; avatarUrl: string | null };
+}
+
+export interface MediaCrewEntry {
+  id: number;
+  job: string;
+  department: string;
+  person: { id: number; name: string; avatarUrl: string | null };
 }
 
 export interface CalendarEntry {
@@ -201,6 +213,14 @@ export class MediaService {
 
   getOne(id: number) {
     return firstValueFrom(this.http.get<Media>(`/api/media/${id}`));
+  }
+
+  getCast(id: number) {
+    return firstValueFrom(this.http.get<MediaCastEntry[]>(`/api/media/${id}/cast`));
+  }
+
+  getCrew(id: number) {
+    return firstValueFrom(this.http.get<MediaCrewEntry[]>(`/api/media/${id}/crew`));
   }
 
   getAppQualities() {

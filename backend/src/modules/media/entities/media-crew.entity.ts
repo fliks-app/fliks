@@ -1,9 +1,11 @@
-import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Media } from './media.entity';
 import { Person } from './person.entity';
 
 @Entity('media_crew')
+@Index(['media'])
+@Index(['person'])
 export class MediaCrew extends BaseEntity {
   @ManyToOne(() => Media, { onDelete: 'CASCADE' })
   @JoinColumn()

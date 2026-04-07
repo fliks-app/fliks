@@ -9,6 +9,7 @@ import {
   OnDestroy,
   viewChild,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
@@ -17,6 +18,8 @@ import {
   Season,
   Episode,
   MovieRelease,
+  MediaCastEntry,
+  MediaCrewEntry,
 } from '../../core/services/api/media.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ProfilesService, LanguageProfile } from '../../core/services/api/profiles.service';
@@ -80,6 +83,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     MediaDetailRootFolderModalComponent,
     HorizontalScrollerComponent,
     RouterLink,
+    NgTemplateOutlet,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail.html',
@@ -128,6 +132,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   });
 
   readonly media = signal<Media | null>(null);
+  readonly cast = signal<MediaCastEntry[]>([]);
+  readonly crew = signal<MediaCrewEntry[]>([]);
   readonly mediaFiles = computed(() => {
     const m = this.media();
     if (!m) return [];
@@ -324,6 +330,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       }
       this.media.set(m);
       this.navbarService.enterHeroPage(m.title);
+      // Load cast/crew async — doesn't block page render
+      this.mediaService.getCast(m.id).then((c) => this.cast.set(c)).catch(() => {});
+      this.mediaService.getCrew(m.id).then((c) => this.crew.set(c)).catch(() => {});
       if (m.type === 'series' && m.seasons?.length) {
         this.syncActiveSeasonForSeriesFilter();
       } else {

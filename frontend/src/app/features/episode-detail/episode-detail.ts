@@ -15,7 +15,7 @@ import { PlayableMediaService } from '../../core/services/playable-media.service
 import { SubtitleActionsService } from '../../core/services/subtitle-actions.service';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { Media, MediaService, Season, Episode } from '../../core/services/api/media.service';
+import { Media, MediaService, Season, Episode, MediaCastEntry, MediaCrewEntry } from '../../core/services/api/media.service';
 import { ProfilesService, LanguageProfile } from '../../core/services/api/profiles.service';
 import { SubtitlesApiService, SubtitleFileRow } from '../../core/services/api/subtitles-api.service';
 import { MediaDetailSubtitlesComponent } from '../media-detail/components/media-detail-subtitles/media-detail-subtitles.component';
@@ -109,6 +109,8 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
   readonly loading = signal(true);
   readonly notFound = signal(false);
   readonly media = signal<Media | null>(null);
+  readonly cast = signal<MediaCastEntry[]>([]);
+  readonly crew = signal<MediaCrewEntry[]>([]);
   readonly season = signal<Season | null>(null);
   readonly episode = signal<Episode | null>(null);
 
@@ -232,6 +234,9 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
 
       this.media.set(media);
       this.subtitles.set(subs);
+      // Load cast/crew async
+      this.mediaService.getCast(mediaId).then((c) => this.cast.set(c)).catch(() => {});
+      this.mediaService.getCrew(mediaId).then((c) => this.crew.set(c)).catch(() => {});
 
       let foundSeason: Season | null = null;
       let foundEpisode: Episode | null = null;

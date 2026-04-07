@@ -219,14 +219,10 @@ export class PlaybackService {
     page: number,
     limit: number,
   ): Promise<{ data: WatchHistoryItem[]; total: number }> {
-    // Deduplicate by mediaId: keep only the most recent playback per media
     const countResult = await this.repo.query(
-      `SELECT COUNT(*) AS cnt FROM (
-         SELECT DISTINCT ON (ps."mediaId") ps.id
-         FROM playback_states ps
-         WHERE ps."userId" = $1
-         ORDER BY ps."mediaId", ps."lastPlayedAt" DESC
-       ) sub`,
+      `SELECT COUNT(*) AS cnt
+       FROM playback_states ps
+       WHERE ps."userId" = $1 AND ps."positionSeconds" >= 10`,
       [userId],
     );
     const total = Number(countResult[0]?.cnt ?? 0);
@@ -245,15 +241,11 @@ export class PlaybackService {
               THEN 'S' || LPAD(s."seasonNumber"::text, 2, '0') || 'E' || LPAD(e."episodeNumber"::text, 2, '0')
                    || COALESCE(' - ' || e.title, '')
               ELSE NULL END AS "episodeLabel"
-       FROM (
-         SELECT DISTINCT ON (ps2."mediaId") ps2.*
-         FROM playback_states ps2
-         WHERE ps2."userId" = $1
-         ORDER BY ps2."mediaId", ps2."lastPlayedAt" DESC
-       ) ps
+       FROM playback_states ps
        JOIN media m ON m.id = ps."mediaId"
        LEFT JOIN episodes e ON e.id = ps."episodeId"
        LEFT JOIN seasons s ON s.id = e."seasonId"
+       WHERE ps."userId" = $1 AND ps."positionSeconds" >= 10
        ORDER BY ps."lastPlayedAt" DESC
        LIMIT $2 OFFSET $3`,
       [userId, limit, (page - 1) * limit],

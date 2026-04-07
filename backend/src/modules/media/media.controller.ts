@@ -454,6 +454,18 @@ export class MediaController {
     return this.mediaService.findOne(id);
   }
 
+  @Get(':id/cast')
+  @CheckPolicies((ability) => ability.can(Action.Read, Media))
+  getCast(@Param('id', ParseIntPipe) id: number) {
+    return this.mediaService.getCast(id);
+  }
+
+  @Get(':id/crew')
+  @CheckPolicies((ability) => ability.can(Action.Read, Media))
+  getCrew(@Param('id', ParseIntPipe) id: number) {
+    return this.mediaService.getCrew(id);
+  }
+
   @Put(':id')
   @CheckPolicies((ability) => ability.can(Action.Update, Media))
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateMediaDto) {

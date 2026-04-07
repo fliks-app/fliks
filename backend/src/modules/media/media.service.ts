@@ -340,6 +340,21 @@ export class MediaService {
     return this.mediaRepo.findOne({ where: { tmdbId, type } });
   }
 
+  async getCast(mediaId: number): Promise<MediaCast[]> {
+    return this.castRepo.find({
+      where: { media: { id: mediaId } },
+      relations: ['person'],
+      order: { order: 'ASC' },
+    });
+  }
+
+  async getCrew(mediaId: number): Promise<MediaCrew[]> {
+    return this.crewRepo.find({
+      where: { media: { id: mediaId } },
+      relations: ['person'],
+    });
+  }
+
   async findOne(id: number): Promise<Media> {
     const media = await this.mediaRepo.findOne({
       where: { id },
@@ -350,17 +365,10 @@ export class MediaService {
         'files',
         'qualityProfile',
         'languageProfile',
-        'cast',
-        'cast.person',
-        'crew',
-        'crew.person',
       ],
     });
     if (!media) {
       throw new NotFoundException(`Media #${id} not found`);
-    }
-    if (media.cast?.length) {
-      media.cast.sort((a, b) => a.order - b.order);
     }
     if (media.seasons?.length) {
       media.seasons.sort((a, b) => a.seasonNumber - b.seasonNumber);
