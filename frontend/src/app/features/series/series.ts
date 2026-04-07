@@ -7,6 +7,8 @@ import {
   Injector,
   OnInit,
   OnDestroy,
+  ElementRef,
+  ViewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -16,6 +18,7 @@ import { StreamingApiService } from '../../core/services/api/streaming-api.servi
 import { ProfilesService, QualityProfile } from '../../core/services/api/profiles.service';
 import { MediaCardComponent } from '../../shared/components/media-card';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
+import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideSlidersHorizontal } from '@lucide/angular';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -36,27 +39,30 @@ export class SeriesComponent implements OnInit, OnDestroy {
   private readonly injector = inject(Injector);
   private readonly scrollKey = 'series';
 
-  readonly allSeries = signal<Media[]>([]);
+  readonly list = new InfiniteScrollList<Media>();
   readonly watchedIds = signal<Set<number>>(new Set());
-  readonly total = signal(0);
   readonly loading = signal(false);
   readonly searchQuery = signal('');
   readonly sortBy = signal('title');
   readonly filterMonitored = signal<'' | 'true' | 'false'>('');
   readonly filterStatus = signal('');
 
-  readonly monitoredCount = computed(() => this.allSeries().filter((m) => m.monitored).length);
+  readonly monitoredCount = computed(() => this.list.all().filter((m) => m.monitored).length);
   readonly totalEpisodes = computed(() =>
-    this.allSeries().reduce((sum, m) => sum + (m.episodeStats?.totalEpisodes ?? 0), 0),
+    this.list.all().reduce((sum, m) => sum + (m.episodeStats?.totalEpisodes ?? 0), 0),
   );
   readonly downloadedEpisodes = computed(() =>
-    this.allSeries().reduce((sum, m) => sum + (m.episodeStats?.downloadedEpisodes ?? 0), 0),
+    this.list.all().reduce((sum, m) => sum + (m.episodeStats?.downloadedEpisodes ?? 0), 0),
   );
 
   readonly alphabet = ALPHABET;
   readonly activeLetter = signal('');
   readonly filtersOpen = signal(false);
   readonly hasActiveFilters = computed(() => this.filterMonitored() !== '' || this.filterStatus() !== '' || this.sortBy() !== 'title');
+
+  @ViewChild('sentinel') set sentinelRef(ref: ElementRef<HTMLElement> | undefined) {
+    this.list.observeSentinel(ref);
+  }
 
   // Bulk editing
   readonly selectedIds = signal<Set<number>>(new Set());
@@ -82,21 +88,12 @@ export class SeriesComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.scrollMemory.deactivate();
+    this.list.destroy();
   }
 
   scrollToLetter(letter: string) {
     this.activeLetter.set(letter);
-    const items = this.allSeries();
-    const index = items.findIndex((m) => {
-      const firstChar = (m.title || '').charAt(0).toUpperCase();
-      if (letter === '#') return !/[A-Z]/.test(firstChar);
-      return firstChar === letter;
-    });
-    if (index < 0) return;
-    const target = document.getElementById(`series-${items[index].id}`);
-    if (!target) return;
-    const top = target.getBoundingClientRect().top + window.scrollY;
-    window.scrollTo({ top, behavior: 'smooth' });
+    this.list.scrollToLetter(letter, (m) => m.title, 'series');
   }
 
   onSearch(query: string) {
@@ -120,7 +117,7 @@ export class SeriesComponent implements OnInit, OnDestroy {
   }
 
   selectAll() {
-    this.selectedIds.set(new Set(this.allSeries().map((m) => m.id)));
+    this.selectedIds.set(new Set(this.list.all().map((m) => m.id)));
   }
 
   deselectAll() {
@@ -216,8 +213,7 @@ export class SeriesComponent implements OnInit, OnDestroy {
         }),
         this.streamingApi.getWatchedMediaIds().catch(() => [] as number[]),
       ]);
-      this.allSeries.set(res.data);
-      this.total.set(res.total);
+      this.list.setItems(res.data);
       this.watchedIds.set(new Set(watchedIds));
     } finally {
       this.loading.set(false);

@@ -4,6 +4,65 @@ export interface TmdbNamed {
   name: string;
 }
 
+export interface TmdbCastMember {
+  id: number;
+  name: string;
+  character: string;
+  profile_path?: string | null;
+  order: number;
+}
+
+export interface TmdbCrewMember {
+  id: number;
+  name: string;
+  job: string;
+  department: string;
+  profile_path?: string | null;
+}
+
+export interface TmdbVideo {
+  key: string;
+  site: string;
+  type: string;
+  name: string;
+  official: boolean;
+}
+
+export interface TmdbKeyword {
+  id: number;
+  name: string;
+}
+
+export interface TmdbPersonDetailsResponse {
+  id: number;
+  name: string;
+  biography: string;
+  birthday?: string | null;
+  deathday?: string | null;
+  place_of_birth?: string | null;
+  profile_path?: string | null;
+  known_for_department: string;
+}
+
+export interface TmdbPersonCreditItem {
+  id: number;
+  title?: string;
+  name?: string;
+  media_type: 'movie' | 'tv';
+  character?: string;
+  job?: string;
+  department?: string;
+  poster_path?: string | null;
+  release_date?: string;
+  first_air_date?: string;
+  vote_average?: number;
+}
+
+export interface TmdbPersonCombinedCreditsResponse {
+  cast: TmdbPersonCreditItem[];
+  crew: TmdbPersonCreditItem[];
+}
+
 export interface TmdbMovieListItem {
   id: number;
   title: string;
@@ -52,9 +111,13 @@ export interface TmdbMovieDetailsResponse {
   production_companies?: { name: string }[];
   vote_count?: number;
   popularity?: number;
+  tagline?: string;
   external_ids?: { imdb_id?: string | null };
   imdb_id?: string;
   release_dates?: { results?: TmdbReleaseDateCountry[] };
+  credits?: { cast?: TmdbCastMember[]; crew?: TmdbCrewMember[] };
+  videos?: { results?: TmdbVideo[] };
+  keywords?: { keywords?: TmdbKeyword[] };
 }
 
 export interface TmdbTvDetailsResponse {
@@ -74,8 +137,12 @@ export interface TmdbTvDetailsResponse {
   origin_country?: string[];
   networks?: { name: string }[];
   production_companies?: { name: string }[];
+  tagline?: string;
   vote_count?: number;
   popularity?: number;
+  credits?: { cast?: TmdbCastMember[]; crew?: TmdbCrewMember[] };
+  videos?: { results?: TmdbVideo[] };
+  keywords?: { results?: TmdbKeyword[] };
 }
 
 export interface TmdbTvSeasonStub {

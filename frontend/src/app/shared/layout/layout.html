@@ -125,6 +125,12 @@
           <div class="absolute bottom-full right-2 mb-2 bg-base-100 rounded-box shadow-xl border border-base-200 min-w-48 z-50">
             <ul class="menu p-2 gap-0.5">
               <li>
+                <a routerLink="/persons" routerLinkActive="active" (click)="resetNavHistory()">
+                  <svg lucideUsers class="h-5 w-5"></svg>
+                  {{ 'nav.persons' | translate }}
+                </a>
+              </li>
+              <li>
                 <a routerLink="/history" routerLinkActive="active" (click)="resetNavHistory()">
                   <svg lucideHistory class="h-5 w-5"></svg>
                   {{ 'nav.history' | translate }}
@@ -210,6 +216,12 @@
             @if (seriesCount() > 0) {
               <span class="badge badge-sm badge-ghost">{{ seriesCount() }}</span>
             }
+          </a>
+        </li>
+        <li>
+          <a routerLink="/persons" routerLinkActive="active">
+            <svg lucideUsers class="h-5 w-5"></svg>
+            {{ 'nav.persons' | translate }}
           </a>
         </li>
         <li>

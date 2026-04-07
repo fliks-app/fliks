@@ -6,6 +6,8 @@ import {
   MetadataSearchResult,
   MetadataDetails,
   SeasonDetails,
+  PersonDetails,
+  PersonCombinedCredits,
 } from '../interfaces/metadata-provider.interface';
 import type {
   TmdbMovieDetailsResponse,
@@ -17,6 +19,8 @@ import type {
   TmdbTvSeasonResponse,
   TmdbTvShowWithSeasons,
   TmdbNamed,
+  TmdbPersonDetailsResponse,
+  TmdbPersonCombinedCreditsResponse,
 } from './tmdb-api.types';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
@@ -69,7 +73,7 @@ export class TmdbProvider implements IMetadataProvider {
       {
         params: {
           language: 'fr-FR',
-          append_to_response: 'external_ids,images,release_dates',
+          append_to_response: 'external_ids,images,release_dates,credits,videos,keywords',
         },
       },
     );
@@ -105,6 +109,32 @@ export class TmdbProvider implements IMetadataProvider {
       productionCompanies: (data.production_companies ?? []).map((c) => c.name),
       voteCount: data.vote_count ?? null,
       popularity: data.popularity ?? null,
+      tagline: data.tagline || null,
+      cast: (data.credits?.cast ?? []).map((c) => ({
+        externalId: c.id,
+        name: c.name,
+        character: c.character,
+        avatarUrl: c.profile_path
+          ? `${TMDB_IMAGE_BASE}/w185${c.profile_path}`
+          : null,
+        order: c.order,
+      })),
+      crew: (data.credits?.crew ?? []).map((c) => ({
+        externalId: c.id,
+        name: c.name,
+        job: c.job,
+        department: c.department,
+        avatarUrl: c.profile_path
+          ? `${TMDB_IMAGE_BASE}/w185${c.profile_path}`
+          : null,
+      })),
+      videos: (data.videos?.results ?? []).map((v) => ({
+        key: v.key,
+        site: v.site,
+        type: v.type,
+        name: v.name,
+      })),
+      keywords: (data.keywords?.keywords ?? []).map((k) => k.name),
     };
   }
 
@@ -114,7 +144,7 @@ export class TmdbProvider implements IMetadataProvider {
       {
         params: {
           language: 'fr-FR',
-          append_to_response: 'external_ids,images',
+          append_to_response: 'external_ids,images,credits,videos,keywords',
         },
       },
     );
@@ -150,6 +180,32 @@ export class TmdbProvider implements IMetadataProvider {
       ],
       voteCount: data.vote_count ?? null,
       popularity: data.popularity ?? null,
+      tagline: data.tagline || null,
+      cast: (data.credits?.cast ?? []).map((c) => ({
+        externalId: c.id,
+        name: c.name,
+        character: c.character,
+        avatarUrl: c.profile_path
+          ? `${TMDB_IMAGE_BASE}/w185${c.profile_path}`
+          : null,
+        order: c.order,
+      })),
+      crew: (data.credits?.crew ?? []).map((c) => ({
+        externalId: c.id,
+        name: c.name,
+        job: c.job,
+        department: c.department,
+        avatarUrl: c.profile_path
+          ? `${TMDB_IMAGE_BASE}/w185${c.profile_path}`
+          : null,
+      })),
+      videos: (data.videos?.results ?? []).map((v) => ({
+        key: v.key,
+        site: v.site,
+        type: v.type,
+        name: v.name,
+      })),
+      keywords: (data.keywords?.results ?? []).map((k) => k.name),
     };
   }
 
@@ -272,6 +328,60 @@ export class TmdbProvider implements IMetadataProvider {
       },
     );
     return data.results.map((r) => this.mapTvResult(r));
+  }
+
+  async getPersonDetails(externalId: number): Promise<PersonDetails> {
+    const { data } = await this.client.get<TmdbPersonDetailsResponse>(
+      `/person/${externalId}`,
+      { params: { language: 'fr-FR' } },
+    );
+    return {
+      externalId: data.id,
+      name: data.name,
+      biography: data.biography,
+      birthday: data.birthday ?? null,
+      deathday: data.deathday ?? null,
+      placeOfBirth: data.place_of_birth ?? null,
+      avatarUrl: data.profile_path
+        ? `${TMDB_IMAGE_BASE}/w500${data.profile_path}`
+        : null,
+      knownForDepartment: data.known_for_department,
+    };
+  }
+
+  async getPersonCredits(
+    externalId: number,
+  ): Promise<PersonCombinedCredits> {
+    const { data } =
+      await this.client.get<TmdbPersonCombinedCreditsResponse>(
+        `/person/${externalId}/combined_credits`,
+        { params: { language: 'fr-FR' } },
+      );
+    return {
+      cast: data.cast.map((c) => ({
+        externalId: c.id,
+        title: c.title ?? c.name ?? '',
+        mediaType: c.media_type === 'tv' ? 'series' : 'movie',
+        character: c.character,
+        posterUrl: c.poster_path
+          ? `${TMDB_IMAGE_BASE}/w500${c.poster_path}`
+          : null,
+        releaseDate: c.release_date ?? c.first_air_date ?? null,
+        rating: c.vote_average ?? 0,
+      })),
+      crew: data.crew.map((c) => ({
+        externalId: c.id,
+        title: c.title ?? c.name ?? '',
+        mediaType: c.media_type === 'tv' ? 'series' : 'movie',
+        job: c.job,
+        department: c.department,
+        posterUrl: c.poster_path
+          ? `${TMDB_IMAGE_BASE}/w500${c.poster_path}`
+          : null,
+        releaseDate: c.release_date ?? c.first_air_date ?? null,
+        rating: c.vote_average ?? 0,
+      })),
+    };
   }
 
   private mapMovieResult(r: TmdbMovieListItem): MetadataSearchResult {

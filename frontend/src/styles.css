@@ -50,6 +50,12 @@ body.native.hero-page {
   --breakpoint-5xl: 240rem;
 }
 
+/* Skip rendering of off-screen grid items — massive perf win for long lists */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 10rem;
+}
+
 @keyframes slide-in-right {
   from {
     opacity: 0;

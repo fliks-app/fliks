@@ -2,6 +2,7 @@ import {
   Entity,
   Column,
   ManyToOne,
+  OneToOne,
   OneToMany,
   ManyToMany,
   JoinTable,
@@ -21,6 +22,9 @@ import { RootFolder } from '../../root-folders/entities/root-folder.entity';
 import { Tag } from '../../tags/entities/tag.entity';
 import { Season } from './season.entity';
 import { MediaFile } from './media-file.entity';
+import { MediaMetadata } from './media-metadata.entity';
+import { MediaCast } from './media-cast.entity';
+import { MediaCrew } from './media-crew.entity';
 
 @Entity('media')
 @Index('idx_media_search_vector', { synchronize: false })
@@ -128,6 +132,15 @@ export class Media extends BaseEntity {
   @ManyToMany(() => Tag, { eager: true })
   @JoinTable({ name: 'media_tags' })
   tags: Tag[];
+
+  @OneToOne(() => MediaMetadata, (mm) => mm.media, { cascade: true, eager: true })
+  metadata: MediaMetadata;
+
+  @OneToMany(() => MediaCast, (mc) => mc.media, { cascade: true })
+  cast: MediaCast[];
+
+  @OneToMany(() => MediaCrew, (mc) => mc.media, { cascade: true })
+  crew: MediaCrew[];
 
   @OneToMany(() => Season, (season) => season.media, { cascade: true })
   seasons: Season[];

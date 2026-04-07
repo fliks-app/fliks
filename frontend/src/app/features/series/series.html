@@ -77,7 +77,7 @@
     <div class="flex justify-center py-12">
       <span class="loading loading-spinner loading-lg"></span>
     </div>
-  } @else if (allSeries().length === 0) {
+  } @else if (list.visible().length === 0) {
     <div class="text-center py-12 text-base-content/50">
       <p class="text-lg">{{ 'series.empty' | translate }}</p>
       <p class="text-sm mt-2">{{ 'series.empty_hint' | translate }}</p>
@@ -91,7 +91,7 @@
     }
     <div class="flex gap-2">
       <div class="flex-1 min-w-0 pr-6 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-1.5 sm:gap-4">
-        @for (show of allSeries(); track show.id) {
+        @for (show of list.visible(); track show.id) {
           @if (bulkMode()) {
             <div
               class="relative cursor-pointer cv-auto"
@@ -140,6 +140,12 @@
         }
       </nav>
     </div>
+
+    @if (list.hasMore()) {
+      <div #sentinel class="flex justify-center py-4">
+        <span class="loading loading-spinner loading-sm"></span>
+      </div>
+    }
   }
 
   @if (bulkMode() && selectedIds().size > 0) {
@@ -176,7 +182,7 @@
     </div>
   }
 
-  @if (allSeries().length > 0) {
+  @if (list.visible().length > 0) {
     <div class="flex flex-wrap items-start justify-between gap-6 mt-6 px-2 py-3 border-t border-base-200 text-sm text-base-content/70">
       <div class="flex flex-col gap-1">
         <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-green-500"></span> {{ 'legend.downloaded_monitored' | translate }}</div>
@@ -186,10 +192,10 @@
         <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-blue-400"></span> {{ 'legend.unreleased' | translate }}</div>
       </div>
       <div class="flex flex-wrap gap-x-8 gap-y-1">
-        <div><span class="font-semibold">{{ 'legend.series' | translate }}</span> {{ total() }}</div>
+        <div><span class="font-semibold">{{ 'legend.series' | translate }}</span> {{ list.total() }}</div>
         <div><span class="font-semibold">{{ 'legend.episodes' | translate }}</span> {{ downloadedEpisodes() }} / {{ totalEpisodes() }}</div>
         <div><span class="font-semibold">{{ 'legend.monitored' | translate }}</span> {{ monitoredCount() }}</div>
-        <div><span class="font-semibold">{{ 'legend.unmonitored' | translate }}</span> {{ total() - monitoredCount() }}</div>
+        <div><span class="font-semibold">{{ 'legend.unmonitored' | translate }}</span> {{ list.total() - monitoredCount() }}</div>
       </div>
     </div>
   }

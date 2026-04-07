@@ -20,6 +20,7 @@ import { SubtitlesModule } from './modules/subtitles/subtitles.module';
 import { MediaServersModule } from './modules/media-servers/media-servers.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { StreamingModule } from './modules/streaming/streaming.module';
+import { PersonsModule } from './modules/persons/persons.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 
@@ -60,6 +61,7 @@ import { join } from 'path';
     AuthModule,
     UsersModule,
     MediaModule,
+    PersonsModule,
     ProfilesModule,
     TagsModule,
     MetadataProvidersModule,

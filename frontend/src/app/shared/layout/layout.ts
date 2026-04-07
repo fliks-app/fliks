@@ -52,6 +52,7 @@ import {
   LucideRepeat,
   LucideHistory,
   LucideEllipsisVertical,
+  LucideUsers,
 } from '@lucide/angular';
 
 
@@ -64,7 +65,7 @@ import {
     LucideArrowRightLeft, LucideLayoutGrid, LucideSettings, LucideUser,
     LucideSun, LucideMoon, LucideLogOut, LucideCast,
     LucideUserCog, LucideShield, LucideRepeat, LucideHistory,
-    LucideEllipsisVertical,
+    LucideEllipsisVertical, LucideUsers,
     CastOverlayComponent,
     UserMenuComponent,
   ],

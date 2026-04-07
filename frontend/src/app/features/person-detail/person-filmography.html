@@ -1,0 +1,66 @@
+@if (loading()) {
+  <div class="flex justify-center py-6">
+    <span class="loading loading-spinner loading-md"></span>
+  </div>
+} @else if (credits(); as pc) {
+  @if (pc.cast.length > 0) {
+    <div>
+      <h2 class="text-lg font-semibold mb-3">{{ 'person_detail.as_actor' | translate }}</h2>
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-1.5 sm:gap-4">
+        @for (c of pc.cast; track c.externalId + (c.character || '')) {
+          <div class="card bg-base-100 shadow-md relative overflow-hidden">
+            <figure class="relative aspect-2/3 bg-base-300">
+              @if (c.posterUrl) {
+                <img [src]="c.posterUrl" [alt]="c.title" class="w-full h-full object-cover" loading="lazy" />
+              } @else {
+                <div class="flex items-center justify-center w-full h-full text-base-content/30">
+                  <svg lucideFilm class="h-16 w-16" [strokeWidth]="1.5"></svg>
+                </div>
+              }
+            </figure>
+            <div class="block px-3 py-2 text-center h-14">
+              <h3 class="text-sm font-medium line-clamp-1">{{ c.title }}</h3>
+              <p class="text-xs text-base-content/50 line-clamp-1">
+                @if (c.character) {
+                  {{ c.character }}
+                } @else if (c.releaseDate) {
+                  {{ c.releaseDate | slice:0:4 }}
+                }
+              </p>
+            </div>
+            <div class="absolute bottom-0 left-0 right-0 h-1 bg-base-100 pointer-events-none">
+              <div class="h-full bg-base-300 w-full"></div>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+  @if (pc.crew.length > 0) {
+    <div>
+      <h2 class="text-lg font-semibold mb-3">{{ 'person_detail.as_crew' | translate }}</h2>
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-1.5 sm:gap-4">
+        @for (c of pc.crew; track c.externalId + (c.job || '')) {
+          <div class="card bg-base-100 shadow-md relative overflow-hidden">
+            <figure class="relative aspect-2/3 bg-base-300">
+              @if (c.posterUrl) {
+                <img [src]="c.posterUrl" [alt]="c.title" class="w-full h-full object-cover" loading="lazy" />
+              } @else {
+                <div class="flex items-center justify-center w-full h-full text-base-content/30">
+                  <svg lucideFilm class="h-16 w-16" [strokeWidth]="1.5"></svg>
+                </div>
+              }
+            </figure>
+            <div class="block px-3 py-2 text-center h-14">
+              <h3 class="text-sm font-medium line-clamp-1">{{ c.title }}</h3>
+              <p class="text-xs text-base-content/50 line-clamp-1">{{ c.job }}</p>
+            </div>
+            <div class="absolute bottom-0 left-0 right-0 h-1 bg-base-100 pointer-events-none">
+              <div class="h-full bg-base-300 w-full"></div>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+}

@@ -1,0 +1,89 @@
+<div class="flex flex-col gap-4">
+  <!-- Header -->
+  <div class="flex flex-col gap-3">
+    <h1 class="sr-only lg:not-sr-only text-2xl font-bold">{{ 'persons.title' | translate }}</h1>
+    <!-- Search -->
+    <div class="flex gap-2 items-center">
+      <div class="relative flex-1">
+        <svg lucideSearch class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-base-content/40 pointer-events-none z-10"></svg>
+        <input
+          type="text"
+          [placeholder]="'common.search' | translate"
+          class="input input-bordered input-sm w-full pl-9"
+          [ngModel]="searchQuery()"
+          (ngModelChange)="onSearch($event)"
+        />
+      </div>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-12">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (list.visible().length === 0) {
+    <div class="text-center py-12 text-base-content/50">
+      <svg lucideUsers class="h-12 w-12 mx-auto mb-3 opacity-30"></svg>
+      <p class="text-lg">{{ 'persons.empty' | translate }}</p>
+      <p class="text-sm mt-2">{{ 'persons.empty_hint' | translate }}</p>
+    </div>
+  } @else {
+    <div class="flex gap-2">
+      <div class="flex-1 min-w-0 pr-6 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3 sm:gap-4">
+        @for (person of list.visible(); track person.id) {
+          <a
+            [id]="'person-' + person.id"
+            [routerLink]="'/persons/' + person.id"
+            class="flex flex-col items-center gap-2 group cursor-pointer"
+          >
+            <div class="avatar">
+              <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">
+                @if (person.avatarUrl) {
+                  <img [src]="person.avatarUrl" [alt]="person.name" loading="lazy" />
+                } @else {
+                  <div class="bg-base-300 flex items-center justify-center w-full h-full text-2xl font-bold text-base-content/30">
+                    {{ person.name.charAt(0) }}
+                  </div>
+                }
+              </div>
+            </div>
+            <span class="text-xs sm:text-sm text-center font-medium truncate w-full">{{ person.name }}</span>
+            @if (person.knownForDepartment) {
+              <span class="text-[10px] text-base-content/50 -mt-1.5 truncate w-full text-center">{{ person.knownForDepartment }}</span>
+            }
+          </a>
+        }
+      </div>
+
+      <!-- Alphabet sidebar -->
+      <nav class="fixed right-3 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-0 select-none">
+        @for (letter of alphabet; track letter) {
+          <button
+            type="button"
+            class="text-[10px] font-medium w-4 h-4 flex items-center justify-center rounded transition-colors"
+            [class.bg-primary]="activeLetter() === letter"
+            [class.text-primary-content]="activeLetter() === letter"
+            [class.text-base-content/60]="activeLetter() !== letter"
+            [class.hover:bg-primary/20]="activeLetter() !== letter"
+            (click)="scrollToLetter(letter)"
+          >
+            {{ letter }}
+          </button>
+        }
+      </nav>
+    </div>
+
+    <!-- Sentinel for infinite scroll -->
+    @if (list.hasMore()) {
+      <div #sentinel class="flex justify-center py-4">
+        <span class="loading loading-spinner loading-sm"></span>
+      </div>
+    }
+  }
+
+  @if (list.total() > 0) {
+    <div class="flex items-center gap-6 mt-6 px-2 py-3 border-t border-base-200 text-sm text-base-content/70">
+      <div><span class="font-semibold">{{ 'persons.total' | translate }}</span> {{ list.total() }}</div>
+    </div>
+  }
+</div>

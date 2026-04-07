@@ -7,6 +7,8 @@ import {
   Injector,
   OnInit,
   OnDestroy,
+  ElementRef,
+  ViewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -16,6 +18,7 @@ import { StreamingApiService } from '../../core/services/api/streaming-api.servi
 import { ProfilesService, QualityProfile } from '../../core/services/api/profiles.service';
 import { MediaCardComponent } from '../../shared/components/media-card';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
+import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideSlidersHorizontal } from '@lucide/angular';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -36,23 +39,26 @@ export class MoviesComponent implements OnInit, OnDestroy {
   private readonly injector = inject(Injector);
   private readonly scrollKey = 'movies';
 
-  readonly allMovies = signal<Media[]>([]);
+  readonly list = new InfiniteScrollList<Media>();
   /** Media IDs fully watched (see GET /api/playback/watched-ids). */
   readonly watchedIds = signal<Set<number>>(new Set());
-  readonly total = signal(0);
   readonly loading = signal(false);
   readonly searchQuery = signal('');
   readonly sortBy = signal('title');
   readonly filterMonitored = signal<'' | 'true' | 'false'>('');
   readonly filterStatus = signal('');
 
-  readonly monitoredCount = computed(() => this.allMovies().filter((m) => m.monitored).length);
-  readonly movieFileCount = computed(() => this.allMovies().filter((m) => (m.files?.length ?? 0) > 0).length);
+  readonly monitoredCount = computed(() => this.list.all().filter((m) => m.monitored).length);
+  readonly movieFileCount = computed(() => this.list.all().filter((m) => (m.files?.length ?? 0) > 0).length);
 
   readonly alphabet = ALPHABET;
   readonly activeLetter = signal('');
   readonly filtersOpen = signal(false);
   readonly hasActiveFilters = computed(() => this.filterMonitored() !== '' || this.filterStatus() !== '' || this.sortBy() !== 'title');
+
+  @ViewChild('sentinel') set sentinelRef(ref: ElementRef<HTMLElement> | undefined) {
+    this.list.observeSentinel(ref);
+  }
 
   // Bulk editing
   readonly selectedIds = signal<Set<number>>(new Set());
@@ -78,21 +84,12 @@ export class MoviesComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.scrollMemory.deactivate();
+    this.list.destroy();
   }
 
   scrollToLetter(letter: string) {
     this.activeLetter.set(letter);
-    const items = this.allMovies();
-    const index = items.findIndex((m) => {
-      const firstChar = (m.title || '').charAt(0).toUpperCase();
-      if (letter === '#') return !/[A-Z]/.test(firstChar);
-      return firstChar === letter;
-    });
-    if (index < 0) return;
-    const target = document.getElementById(`movie-${items[index].id}`);
-    if (!target) return;
-    const top = target.getBoundingClientRect().top + window.scrollY;
-    window.scrollTo({ top, behavior: 'smooth' });
+    this.list.scrollToLetter(letter, (m) => m.title, 'movie');
   }
 
   onSearch(query: string) {
@@ -116,7 +113,7 @@ export class MoviesComponent implements OnInit, OnDestroy {
   }
 
   selectAll() {
-    this.selectedIds.set(new Set(this.allMovies().map((m) => m.id)));
+    this.selectedIds.set(new Set(this.list.all().map((m) => m.id)));
   }
 
   deselectAll() {
@@ -212,8 +209,7 @@ export class MoviesComponent implements OnInit, OnDestroy {
         }),
         this.streamingApi.getWatchedMediaIds().catch(() => [] as number[]),
       ]);
-      this.allMovies.set(res.data);
-      this.total.set(res.total);
+      this.list.setItems(res.data);
       this.watchedIds.set(new Set(watchedIds));
     } finally {
       this.loading.set(false);

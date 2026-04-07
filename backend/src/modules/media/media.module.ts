@@ -5,6 +5,10 @@ import { Season } from './entities/season.entity';
 import { Episode } from './entities/episode.entity';
 import { MediaFile } from './entities/media-file.entity';
 import { DownloadHistory } from './entities/download-history.entity';
+import { MediaMetadata } from './entities/media-metadata.entity';
+import { Person } from './entities/person.entity';
+import { MediaCast } from './entities/media-cast.entity';
+import { MediaCrew } from './entities/media-crew.entity';
 import { Tag } from '../tags/entities/tag.entity';
 import { MediaService } from './media.service';
 import { MediaController } from './media.controller';
@@ -32,6 +36,10 @@ import { FliksSchedulerModule } from '../scheduler/scheduler.module';
       Episode,
       MediaFile,
       DownloadHistory,
+      MediaMetadata,
+      Person,
+      MediaCast,
+      MediaCrew,
       Tag,
       RootFolder,
     ]),

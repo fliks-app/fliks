@@ -95,7 +95,8 @@
     "playback_settings": "Paramètres de lecture",
     "history": "Historique",
     "more": "Plus",
-    "change_server": "Changer de serveur"
+    "change_server": "Changer de serveur",
+    "persons": "Personnes"
   },
   "history": {
     "title": "Historique",
@@ -339,6 +340,19 @@
     "bulk_quality_profile": "Profil de qualité",
     "bulk_monitored": "Surveillance",
     "no_results_letter": "Aucune série pour cette lettre."
+  },
+  "persons": {
+    "title": "Personnes",
+    "empty": "Aucune personne dans la bibliothèque",
+    "empty_hint": "Les personnes apparaissent automatiquement quand vous ajoutez des films ou séries",
+    "total": "Total"
+  },
+  "person_detail": {
+    "local_credits": "Dans ma bibliothèque",
+    "all_credits": "Toute la filmographie",
+    "as_actor": "En tant qu'acteur",
+    "as_crew": "En tant qu'équipe technique",
+    "no_local_credits": "Aucun crédit local pour cette personne"
   },
   "media_detail": {
     "episodes": "Épisodes",
@@ -664,7 +678,9 @@
     "disabled": "Désactivé",
     "prev": "Préc.",
     "next": "Suiv.",
-    "error": "Erreur"
+    "error": "Erreur",
+    "show_more": "Voir plus",
+    "show_less": "Voir moins"
   },
   "settings": {
     "nav": {

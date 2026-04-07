@@ -13,6 +13,10 @@ import { MediaFile } from './entities/media-file.entity';
 import { Season } from './entities/season.entity';
 import { Episode } from './entities/episode.entity';
 import { DownloadHistory } from './entities/download-history.entity';
+import { MediaMetadata } from './entities/media-metadata.entity';
+import { Person } from './entities/person.entity';
+import { MediaCast } from './entities/media-cast.entity';
+import { MediaCrew } from './entities/media-crew.entity';
 import { Tag } from '../tags/entities/tag.entity';
 import { CreateMediaDto } from './dto/create-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
@@ -62,6 +66,14 @@ export class MediaService {
     private readonly historyRepo: Repository<DownloadHistory>,
     @InjectRepository(RootFolder)
     private readonly rootFolderRepo: Repository<RootFolder>,
+    @InjectRepository(MediaMetadata)
+    private readonly metadataRepo: Repository<MediaMetadata>,
+    @InjectRepository(Person)
+    private readonly personRepo: Repository<Person>,
+    @InjectRepository(MediaCast)
+    private readonly castRepo: Repository<MediaCast>,
+    @InjectRepository(MediaCrew)
+    private readonly crewRepo: Repository<MediaCrew>,
     private readonly dataSource: DataSource,
     private readonly tmdb: TmdbProvider,
     private readonly config: ConfigService,
@@ -695,11 +707,13 @@ export class MediaService {
       await this.mediaRepo.update(media.id, {
         ...this.buildMediaFieldsFromTmdb(details, MediaType.MOVIE),
       });
+      await this.persistMediaMetadata(media, details);
     } else {
       const details = await this.tmdb.getTvShowDetails(media.tmdbId);
       await this.mediaRepo.update(media.id, {
         ...this.buildMediaFieldsFromTmdb(details, MediaType.SERIES),
       });
+      await this.persistMediaMetadata(media, details);
       await this.refreshSeriesEpisodes(media);
     }
 
@@ -927,6 +941,137 @@ export class MediaService {
     };
   }
 
+  private async persistMediaMetadata(
+    media: Media,
+    details: MetadataDetails,
+  ): Promise<void> {
+    // Upsert MediaMetadata
+    const existing = await this.metadataRepo.findOne({
+      where: { media: { id: media.id } },
+    });
+    const metaFields = {
+      budget: details.budget ?? undefined,
+      revenue: details.revenue ?? undefined,
+      tagline: details.tagline ?? undefined,
+      popularity: details.popularity ?? undefined,
+      voteCount: details.voteCount ?? undefined,
+      originalLanguage: details.originalLanguage ?? undefined,
+      productionCountries: details.productionCountries,
+      productionCompanies: details.productionCompanies,
+      videos: details.videos,
+      keywords: details.keywords,
+    };
+    if (existing) {
+      await this.metadataRepo.update(existing.id, metaFields);
+    } else {
+      await this.metadataRepo.save(
+        this.metadataRepo.create({ media, ...metaFields } as MediaMetadata),
+      );
+    }
+
+    // Upsert Persons + replace cast/crew
+    const personMap = new Map<number, Person>();
+    const allExternalIds = [
+      ...details.cast.map((c) => c.externalId),
+      ...details.crew.map((c) => c.externalId),
+    ];
+    const uniqueIds = [...new Set(allExternalIds)];
+
+    if (uniqueIds.length > 0) {
+      const existingPersons = await this.personRepo
+        .createQueryBuilder('p')
+        .where('p.tmdbId IN (:...ids)', { ids: uniqueIds })
+        .getMany();
+      for (const p of existingPersons) personMap.set(p.tmdbId, p);
+
+      // Create missing persons
+      const missingIds = uniqueIds.filter((id) => !personMap.has(id));
+      const allCredits = [...details.cast, ...details.crew];
+      for (const id of missingIds) {
+        const credit = allCredits.find((c) => c.externalId === id);
+        if (!credit) continue;
+        const person = await this.personRepo.save(
+          this.personRepo.create({
+            tmdbId: id,
+            name: credit.name,
+            avatarUrl: credit.avatarUrl ?? undefined,
+          }),
+        );
+        personMap.set(id, person);
+      }
+
+      // Update existing persons' name/avatarUrl
+      for (const p of existingPersons) {
+        const credit = allCredits.find((c) => c.externalId === p.tmdbId);
+        if (credit && (credit.name !== p.name || credit.avatarUrl !== p.avatarUrl)) {
+          await this.personRepo.update(p.id, {
+            name: credit.name,
+            avatarUrl: credit.avatarUrl ?? undefined,
+          });
+        }
+      }
+    }
+
+    // Replace cast
+    await this.castRepo.delete({ media: { id: media.id } });
+    if (details.cast.length > 0) {
+      await this.castRepo.insert(
+        details.cast.map((c) => ({
+          media: { id: media.id },
+          person: { id: personMap.get(c.externalId)?.id },
+          character: c.character,
+          order: c.order,
+        })),
+      );
+    }
+
+    // Replace crew
+    await this.crewRepo.delete({ media: { id: media.id } });
+    if (details.crew.length > 0) {
+      await this.crewRepo.insert(
+        details.crew.map((c) => ({
+          media: { id: media.id },
+          person: { id: personMap.get(c.externalId)?.id },
+          job: c.job,
+          department: c.department,
+        })),
+      );
+    }
+
+    // Update search vectors for persons
+    if (uniqueIds.length > 0) {
+      const personIds = [...personMap.values()].map((p) => p.id);
+      await this.dataSource.query(
+        `UPDATE persons SET "searchVector" = to_tsvector('simple', name) WHERE id = ANY($1)`,
+        [personIds],
+      );
+    }
+
+    // Refresh stale person details (biography, birthday, etc.)
+    const refreshThreshold = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    for (const person of personMap.values()) {
+      const needsRefresh =
+        !person.metadataRefreshedAt ||
+        person.metadataRefreshedAt.getTime() < refreshThreshold;
+      if (!needsRefresh) continue;
+      try {
+        const pd = await this.tmdb.getPersonDetails(person.tmdbId);
+        await this.personRepo.update(person.id, {
+          name: pd.name,
+          avatarUrl: pd.avatarUrl ?? undefined,
+          biography: pd.biography,
+          birthday: pd.birthday ?? undefined,
+          deathday: pd.deathday ?? undefined,
+          placeOfBirth: pd.placeOfBirth ?? undefined,
+          knownForDepartment: pd.knownForDepartment,
+          metadataRefreshedAt: new Date(),
+        });
+      } catch {
+        // Skip failed person detail fetches
+      }
+    }
+  }
+
   private async persistImportedMovie(
     details: MetadataDetails,
     qualityProfileId: number | null,
@@ -944,6 +1089,7 @@ export class MediaService {
     });
     const saved = await this.mediaRepo.save(row);
     await this.updateSearchVector(saved.id);
+    await this.persistMediaMetadata(saved, details);
     return this.findOne(saved.id);
   }
 
@@ -988,6 +1134,7 @@ export class MediaService {
     }
 
     await this.updateSearchVector(saved.id);
+    await this.persistMediaMetadata(saved, details);
     return this.findOne(saved.id);
   }
 

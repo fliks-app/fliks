@@ -47,6 +47,35 @@ export const routes: Routes = [
         data: { titleKey: 'series.title' },
       },
       {
+        path: 'persons',
+        loadComponent: () =>
+          import('./features/persons/persons').then((m) => m.PersonsComponent),
+        data: { titleKey: 'persons.title' },
+      },
+      {
+        path: 'persons/:id',
+        loadComponent: () =>
+          import('./features/person-detail/person-detail').then(
+            (m) => m.PersonDetailComponent,
+          ),
+        children: [
+          {
+            path: '',
+            loadComponent: () =>
+              import('./features/person-detail/person-library').then(
+                (m) => m.PersonLibraryComponent,
+              ),
+          },
+          {
+            path: 'filmography',
+            loadComponent: () =>
+              import('./features/person-detail/person-filmography').then(
+                (m) => m.PersonFilmographyComponent,
+              ),
+          },
+        ],
+      },
+      {
         path: 'search',
         loadComponent: () =>
           import('./features/search/search').then((m) => m.SearchComponent),

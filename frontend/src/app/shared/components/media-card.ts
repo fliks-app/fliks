@@ -32,6 +32,8 @@ export class MediaCardComponent {
   readonly watchedChange = output<void>();
   /** `grid`: liste films/séries ; `poster`: bandeau horizontal (accueil). */
   readonly variant = input<MediaCardVariant>('grid');
+  /** When set, replaces the status/quality subtitle line. */
+  readonly subtitle = input<string | undefined>(undefined);
 
   readonly isPoster = computed(() => this.variant() === 'poster');
 

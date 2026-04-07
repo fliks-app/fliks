@@ -95,7 +95,9 @@
     class="block px-3 py-2 text-center h-14 relative z-[3] md:z-auto"
   >
     <h3 class="text-sm font-medium line-clamp-1">{{ media().title }}</h3>
-    @if (isPoster()) {
+    @if (subtitle()) {
+      <p class="text-xs text-base-content/50 line-clamp-1">{{ subtitle() }}</p>
+    } @else if (isPoster()) {
       <p class="text-xs text-base-content/50 line-clamp-1">{{ media().year }}</p>
     } @else {
       <p class="text-xs text-base-content/60 line-clamp-1">

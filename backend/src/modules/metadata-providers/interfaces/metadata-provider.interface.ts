@@ -26,6 +26,62 @@ export interface MetadataDetails extends MetadataSearchResult {
   productionCompanies: string[];
   voteCount: number | null;
   popularity: number | null;
+  tagline: string | null;
+  cast: MetadataCastItem[];
+  crew: MetadataCrewItem[];
+  videos: MetadataVideo[];
+  keywords: string[];
+}
+
+export interface MetadataCastItem {
+  externalId: number;
+  name: string;
+  character: string;
+  avatarUrl: string | null;
+  order: number;
+}
+
+export interface MetadataCrewItem {
+  externalId: number;
+  name: string;
+  job: string;
+  department: string;
+  avatarUrl: string | null;
+}
+
+export interface MetadataVideo {
+  key: string;
+  site: string;
+  type: string;
+  name: string;
+}
+
+export interface PersonDetails {
+  externalId: number;
+  name: string;
+  biography: string;
+  birthday: string | null;
+  deathday: string | null;
+  placeOfBirth: string | null;
+  avatarUrl: string | null;
+  knownForDepartment: string;
+}
+
+export interface PersonCreditItem {
+  externalId: number;
+  title: string;
+  mediaType: 'movie' | 'series';
+  character?: string;
+  job?: string;
+  department?: string;
+  posterUrl: string | null;
+  releaseDate: string | null;
+  rating: number;
+}
+
+export interface PersonCombinedCredits {
+  cast: PersonCreditItem[];
+  crew: PersonCreditItem[];
 }
 
 export interface SeasonDetails {
@@ -53,4 +109,6 @@ export interface IMetadataProvider {
   getMovieDetails(tmdbId: number): Promise<MetadataDetails>;
   getTvShowDetails(tmdbId: number): Promise<MetadataDetails>;
   getTvShowSeasons(tmdbId: number): Promise<SeasonDetails[]>;
+  getPersonDetails(externalId: number): Promise<PersonDetails>;
+  getPersonCredits(externalId: number): Promise<PersonCombinedCredits>;
 }
