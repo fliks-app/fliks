@@ -129,10 +129,12 @@
           <button
             type="button"
             class="text-[10px] font-medium w-4 h-4 flex items-center justify-center rounded transition-colors"
-            [class.bg-primary]="activeLetter() === letter"
-            [class.text-primary-content]="activeLetter() === letter"
-            [class.text-base-content/60]="activeLetter() !== letter"
-            [class.hover:bg-primary/20]="activeLetter() !== letter"
+            [class.bg-primary]="list.activeLetter() === letter"
+            [class.text-primary-content]="list.activeLetter() === letter"
+            [class.text-base-content/60]="list.activeLetter() !== letter && list.availableLetters().has(letter)"
+            [class.text-base-content/15]="!list.availableLetters().has(letter)"
+            [class.hover:bg-primary/20]="list.activeLetter() !== letter && list.availableLetters().has(letter)"
+            [disabled]="!list.availableLetters().has(letter)"
             (click)="scrollToLetter(letter)"
           >
             {{ letter }}

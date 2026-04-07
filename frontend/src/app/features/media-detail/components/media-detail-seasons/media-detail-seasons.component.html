@@ -45,6 +45,7 @@
       <app-horizontal-scroller [title]="'media_detail.episodes' | translate">
         @for (ep of filteredEpisodes(); track ep.id) {
           <a
+            [id]="'episode-' + ep.id"
             [routerLink]="episodeRoute(ep)"
             class="shrink-0 w-56 sm:w-64 group text-left rounded-xl overflow-hidden border border-base-200 bg-base-100 hover:border-primary hover:shadow-lg transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             [class.opacity-55]="!ep.monitored"
@@ -66,9 +67,13 @@
               <div class="absolute top-1.5 left-1.5">
                 <span class="badge badge-sm badge-neutral font-mono">{{ ep.episodeNumber }}</span>
               </div>
-              @if (ep.hasFile) {
-                <div class="absolute top-1.5 right-1.5" [title]="'media_detail.has_file' | translate">
-                  <span class="badge badge-sm badge-success">✓</span>
+              @if (watchedEpisodeIds().has(ep.id)) {
+                <div class="absolute top-1.5 right-1.5">
+                  <svg lucideCircleCheck class="h-5 w-5 text-success drop-shadow"></svg>
+                </div>
+              } @else if (!ep.hasFile) {
+                <div class="absolute top-1.5 right-1.5">
+                  <svg lucideCircleX class="h-5 w-5 text-error/60 drop-shadow"></svg>
                 </div>
               }
             </div>

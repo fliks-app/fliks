@@ -12,6 +12,7 @@ import {
 import { DatePipe } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { PlayableMediaService } from '../../core/services/playable-media.service';
+import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { SubtitleActionsService } from '../../core/services/subtitle-actions.service';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -88,6 +89,7 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   readonly playable = inject(PlayableMediaService);
+  private readonly streamingApi = inject(StreamingApiService);
   private readonly subActions = inject(SubtitleActionsService);
   private readonly sse = inject(SseService);
   private readonly navbar = inject(NavbarService);
@@ -113,6 +115,7 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
   readonly crew = signal<MediaCrewEntry[]>([]);
   readonly season = signal<Season | null>(null);
   readonly episode = signal<Episode | null>(null);
+  readonly resumeLabel = signal<string | null>(null);
 
   readonly subtitles = signal<SubtitleFileRow[]>([]);
   readonly subtitlesLoading = signal(false);
@@ -259,6 +262,21 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
         const fileId = this.activeFileId();
         if (fileId) {
           this.playable.loadWatchedState(fileId).then(v => this.watched.set(v));
+          this.streamingApi.getPlaybackState(fileId).then((ps) => {
+            if (ps && !ps.completed && ps.positionSeconds > 10) {
+              const s = Math.floor(ps.positionSeconds);
+              const h = Math.floor(s / 3600);
+              const m = Math.floor((s % 3600) / 60);
+              const sec = s % 60;
+              this.resumeLabel.set(
+                h > 0
+                  ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+                  : `${m}:${String(sec).padStart(2, '0')}`,
+              );
+            } else {
+              this.resumeLabel.set(null);
+            }
+          }).catch(() => {});
         }
       }
     } catch {

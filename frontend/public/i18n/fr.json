@@ -28,6 +28,7 @@
   "player": {
     "play": "Lire",
     "play_from_start": "Depuis le début",
+    "resume_at": "Reprendre à {{time}}",
     "pause": "Pause",
     "next_episode": "Épisode suivant",
     "prev_episode": "Épisode précédent",
@@ -431,7 +432,6 @@
     "seasons_filter_empty": "Aucune saison avec épisode sur disque.",
     "seasons_section": "Saisons & épisodes",
     "season": "Saison",
-    "episodes": "épisodes",
     "col_ep": "Ep.",
     "col_title": "Titre",
     "col_airdate": "Diffusion",

@@ -2,7 +2,9 @@ import { Component, ChangeDetectionStrategy, signal, inject } from '@angular/cor
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { Capacitor } from '@capacitor/core';
 import { AuthService } from '../../core/services/auth.service';
+import { ServerConfigService } from '../../core/services/server-config.service';
 
 @Component({
   selector: 'app-login',
@@ -15,6 +17,9 @@ export class LoginComponent {
   private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
   private readonly translate = inject(TranslateService);
+  private readonly serverConfig = inject(ServerConfigService);
+
+  readonly isNative = Capacitor.isNativePlatform();
 
   readonly error = signal('');
   readonly loading = signal(false);
@@ -42,5 +47,10 @@ export class LoginComponent {
         httpErr.error?.message ?? this.translate.instant('login.error'),
       );
     }
+  }
+
+  async changeServer() {
+    await this.serverConfig.clear();
+    void this.router.navigate(['/setup']);
   }
 }

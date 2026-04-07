@@ -36,6 +36,15 @@ export interface ContinueWatchingItem {
   episodeLabel: string | null;
 }
 
+export interface MediaResumeInfo {
+  mediaFileId: number;
+  episodeId: number | null;
+  positionSeconds: number;
+  durationSeconds: number;
+  seasonNumber?: number;
+  episodeNumber?: number;
+}
+
 @Injectable()
 export class PlaybackService {
   constructor(
@@ -48,6 +57,52 @@ export class PlaybackService {
     mediaFileId: number,
   ): Promise<PlaybackState | null> {
     return this.repo.findOne({ where: { userId, mediaFileId } });
+  }
+
+  async getMediaResumeInfo(
+    userId: number,
+    mediaId: number,
+  ): Promise<MediaResumeInfo | null> {
+    const rows: MediaResumeInfo[] = await this.repo.query(
+      `SELECT
+         ps."mediaFileId", ps."episodeId",
+         ps."positionSeconds", ps."durationSeconds",
+         s."seasonNumber", e."episodeNumber"
+       FROM playback_states ps
+       LEFT JOIN episodes e ON e.id = ps."episodeId"
+       LEFT JOIN seasons s ON s.id = e."seasonId"
+       WHERE ps."userId" = $1
+         AND ps."mediaId" = $2
+         AND ps.completed = false
+         AND ps."positionSeconds" > 10
+       ORDER BY ps."lastPlayedAt" DESC
+       LIMIT 1`,
+      [userId, mediaId],
+    );
+    if (!rows.length) return null;
+    const r = rows[0];
+    return {
+      mediaFileId: r.mediaFileId,
+      episodeId: r.episodeId,
+      positionSeconds: Number(r.positionSeconds),
+      durationSeconds: Number(r.durationSeconds),
+      seasonNumber: r.seasonNumber ?? undefined,
+      episodeNumber: r.episodeNumber ?? undefined,
+    };
+  }
+
+  async getWatchedEpisodeIds(
+    userId: number,
+    mediaId: number,
+  ): Promise<number[]> {
+    const rows: { episodeId: number }[] = await this.repo.query(
+      `SELECT DISTINCT ps."episodeId"
+       FROM playback_states ps
+       WHERE ps."userId" = $1 AND ps."mediaId" = $2
+         AND ps.completed = true AND ps."episodeId" IS NOT NULL`,
+      [userId, mediaId],
+    );
+    return rows.map((r) => r.episodeId);
   }
 
   async updateState(
@@ -266,29 +321,21 @@ export class PlaybackService {
   async getWatchedMediaIds(userId: number): Promise<number[]> {
     const rows: { id: number }[] = await this.repo.query(
       `
-      SELECT DISTINCT m.id FROM media m
-      WHERE m.type = 'movie'
-        AND EXISTS (
-          SELECT 1 FROM playback_states ps
-          WHERE ps."userId" = $1 AND ps."mediaId" = m.id AND ps.completed = true
-        )
+      SELECT DISTINCT ps."mediaId" AS id
+      FROM playback_states ps
+      JOIN media m ON m.id = ps."mediaId"
+      WHERE ps."userId" = $1 AND ps.completed = true AND m.type = 'movie'
+
       UNION
-      SELECT m.id FROM media m
-      WHERE m.type = 'series'
-        AND EXISTS (
-          SELECT 1 FROM seasons s
-          JOIN episodes e ON e."seasonId" = s.id
-          WHERE s."mediaId" = m.id AND s."seasonNumber" > 0 AND e."hasFile" = true
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM seasons s
-          JOIN episodes e ON e."seasonId" = s.id
-          WHERE s."mediaId" = m.id AND s."seasonNumber" > 0 AND e."hasFile" = true
-            AND NOT EXISTS (
-              SELECT 1 FROM playback_states ps
-              WHERE ps."userId" = $1 AND ps."episodeId" = e.id AND ps.completed = true
-            )
-        )
+
+      SELECT s."mediaId" AS id
+      FROM seasons s
+      JOIN episodes e ON e."seasonId" = s.id
+      LEFT JOIN playback_states ps
+        ON ps."userId" = $1 AND ps."episodeId" = e.id AND ps.completed = true
+      WHERE s."seasonNumber" > 0 AND e."hasFile" = true
+      GROUP BY s."mediaId"
+      HAVING COUNT(*) = COUNT(ps.id)
       `,
       [userId],
     );

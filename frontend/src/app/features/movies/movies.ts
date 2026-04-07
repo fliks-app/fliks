@@ -52,7 +52,6 @@ export class MoviesComponent implements OnInit, OnDestroy {
   readonly movieFileCount = computed(() => this.list.all().filter((m) => (m.files?.length ?? 0) > 0).length);
 
   readonly alphabet = ALPHABET;
-  readonly activeLetter = signal('');
   readonly filtersOpen = signal(false);
   readonly hasActiveFilters = computed(() => this.filterMonitored() !== '' || this.filterStatus() !== '' || this.sortBy() !== 'title');
 
@@ -77,6 +76,7 @@ export class MoviesComponent implements OnInit, OnDestroy {
     this.sortBy.set(qp.get('sortBy') ?? stored['sortBy'] ?? 'title');
 
     this.scrollMemory.activate(this.scrollKey);
+    this.list.trackScroll('movie');
     this.syncQueryParams();
     this.load().then(() => this.scrollMemory.restore(this.scrollKey, this.injector));
     this.profilesService.getQualityProfiles().then((p) => this.qualityProfiles.set(p));
@@ -88,7 +88,6 @@ export class MoviesComponent implements OnInit, OnDestroy {
   }
 
   scrollToLetter(letter: string) {
-    this.activeLetter.set(letter);
     this.list.scrollToLetter(letter, (m) => m.title, 'movie');
   }
 
@@ -209,7 +208,7 @@ export class MoviesComponent implements OnInit, OnDestroy {
         }),
         this.streamingApi.getWatchedMediaIds().catch(() => [] as number[]),
       ]);
-      this.list.setItems(res.data);
+      this.list.setItems(res.data, (m) => m.title);
       this.watchedIds.set(new Set(watchedIds));
     } finally {
       this.loading.set(false);

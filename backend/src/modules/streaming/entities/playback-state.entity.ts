@@ -8,6 +8,7 @@ import { MediaFile } from '../../media/entities/media-file.entity';
 @Unique(['userId', 'mediaFileId'])
 @Index(['userId', 'mediaId', 'completed'])
 @Index(['userId', 'completed', 'lastPlayedAt'])
+@Index(['userId', 'episodeId', 'completed'])
 export class PlaybackState extends BaseEntity {
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })

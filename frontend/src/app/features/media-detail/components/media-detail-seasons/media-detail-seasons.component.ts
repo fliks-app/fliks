@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
+import { LucideCircleCheck, LucideCircleX } from '@lucide/angular';
 import { HorizontalScrollerComponent } from '../../../../shared/components/horizontal-scroller';
 import {
   Episode,
@@ -23,7 +24,7 @@ import {
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, RouterLink, HorizontalScrollerComponent],
+  imports: [TranslateModule, RouterLink, HorizontalScrollerComponent, LucideCircleCheck, LucideCircleX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
@@ -42,6 +43,7 @@ export class MediaDetailSeasonsComponent {
   readonly seasonReleasesOpenId = input<number | null>(null);
   readonly seasonGrabBusy = input<string | null>(null);
   readonly seasonBusyId = input<number | null>(null);
+  readonly watchedEpisodeIds = input<Set<number>>(new Set());
   readonly canGrab = input(false);
   readonly isAdmin = input(false);
 

@@ -38,7 +38,6 @@ export class PersonsComponent implements OnInit, OnDestroy {
   readonly searchQuery = signal('');
   readonly filterRole = signal('');
   readonly alphabet = ALPHABET;
-  readonly activeLetter = signal('');
 
   private allResults: Person[] = [];
 
@@ -54,6 +53,7 @@ export class PersonsComponent implements OnInit, OnDestroy {
     this.searchQuery.set(qp.get('q') ?? stored['q'] ?? '');
 
     this.scrollMemory.activate(this.scrollKey);
+    this.list.trackScroll('person');
     this.syncQueryParams();
     this.load().then(() =>
       this.scrollMemory.restore(this.scrollKey, this.injector),
@@ -66,7 +66,6 @@ export class PersonsComponent implements OnInit, OnDestroy {
   }
 
   scrollToLetter(letter: string) {
-    this.activeLetter.set(letter);
     this.list.scrollToLetter(letter, (p) => p.name, 'person');
   }
 
@@ -119,6 +118,6 @@ export class PersonsComponent implements OnInit, OnDestroy {
     const filtered = role
       ? this.allResults.filter((p) => p.departments?.includes(role))
       : this.allResults;
-    this.list.setItems(filtered);
+    this.list.setItems(filtered, (p) => p.name);
   }
 }

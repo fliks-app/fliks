@@ -45,6 +45,12 @@
           </button>
         </div>
       </form>
+
+      @if (isNative) {
+        <button class="btn btn-ghost btn-sm w-full mt-2" (click)="changeServer()">
+          {{ 'nav.change_server' | translate }}
+        </button>
+      }
     </div>
   </div>
 </div>

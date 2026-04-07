@@ -12,6 +12,7 @@
     <div class="flex flex-col gap-6">
       <app-media-detail-header
         [media]="m"
+        [resumeInfo]="resumeInfo()"
         [backRoute]="['/', backSegment()]"
         [canEditProfiles]="canEditProfiles()"
         [isAdmin]="isAdmin()"
@@ -65,6 +66,7 @@
         <app-media-detail-seasons
           [media]="m"
           [selectedSeason]="activeSeason(m)"
+          [watchedEpisodeIds]="watchedEpisodeIds()"
           [activeSeasonId]="activeSeasonId()"
           [episodesHasFileOnly]="episodesHasFileOnly()"
           [filteredEpisodes]="activeSeason(m) ? filteredSeasonEpisodes(activeSeason(m)!) : []"

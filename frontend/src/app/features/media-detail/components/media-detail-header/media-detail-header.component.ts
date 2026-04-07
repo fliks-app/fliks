@@ -28,6 +28,7 @@ import {
   LucideCircleCheck,
 } from '@lucide/angular';
 import { Media } from '../../../../core/services/api/media.service';
+import { MediaResumeInfo } from '../../../../core/services/api/streaming-api.service';
 import { PlayableMediaService } from '../../../../core/services/playable-media.service';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
 import type { MediaFileRow } from '../../media-detail.utils';
@@ -70,6 +71,20 @@ export class MediaDetailHeaderComponent implements OnInit {
   readonly canGrab = input(false);
   readonly releasesLoading = input(false);
   readonly grabBusy = input<string | null>(null);
+  readonly resumeInfo = input<MediaResumeInfo | null>(null);
+
+  readonly resumeLabel = computed(() => {
+    const info = this.resumeInfo();
+    if (!info) return null;
+    const s = Math.floor(info.positionSeconds);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    const time = h > 0
+      ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+      : `${m}:${String(sec).padStart(2, '0')}`;
+    return time;
+  });
 
   readonly openProfiles = output<void>();
   readonly openRootFolder = output<void>();

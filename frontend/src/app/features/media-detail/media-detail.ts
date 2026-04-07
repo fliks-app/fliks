@@ -34,6 +34,7 @@ import {
 } from '../../core/services/api/subtitles-api.service';
 import { SubtitleActionsService } from '../../core/services/subtitle-actions.service';
 import { NavbarService } from '../../core/services/navbar.service';
+import { StreamingApiService, MediaResumeInfo } from '../../core/services/api/streaming-api.service';
 import { MediaDetailHeaderComponent } from './components/media-detail-header/media-detail-header.component';
 import { MediaDetailSubtitlesComponent } from './components/media-detail-subtitles/media-detail-subtitles.component';
 import { MediaFileInfoComponent } from '../../shared/components/media-file-info';
@@ -102,6 +103,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly sse = inject(SseService);
+  private readonly streamingApi = inject(StreamingApiService);
   /** Same SSE payload must run handlers once; `media` updates (e.g. after rescan) re-run this effect. */
   private lastHandledSseEvent: SseEvent | null = null;
 
@@ -134,6 +136,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly media = signal<Media | null>(null);
   readonly cast = signal<MediaCastEntry[]>([]);
   readonly crew = signal<MediaCrewEntry[]>([]);
+  readonly resumeInfo = signal<MediaResumeInfo | null>(null);
+  readonly watchedEpisodeIds = signal<Set<number>>(new Set());
   readonly mediaFiles = computed(() => {
     const m = this.media();
     if (!m) return [];
@@ -333,8 +337,51 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // Load cast/crew async — doesn't block page render
       this.mediaService.getCast(m.id).then((c) => this.cast.set(c)).catch(() => {});
       this.mediaService.getCrew(m.id).then((c) => this.crew.set(c)).catch(() => {});
+      // Load resume + watched episodes for series
+      const [resumeInfo, watchedIds] = await Promise.all([
+        this.streamingApi.getMediaResumeInfo(m.id).catch(() => null),
+        m.type === 'series'
+          ? this.streamingApi.getWatchedEpisodeIds(m.id).catch(() => [] as number[])
+          : Promise.resolve([] as number[]),
+      ]);
+      this.resumeInfo.set(resumeInfo);
+      const watchedSet = new Set(watchedIds);
+      this.watchedEpisodeIds.set(watchedSet);
+
+      // Series: select season from resume, then scroll to first unwatched
+      let resumeHandled = false;
+      if (m.type === 'series' && resumeInfo?.episodeId && m.seasons?.length) {
+        for (const s of m.seasons) {
+          if (s.episodes?.some((e) => e.id === resumeInfo.episodeId)) {
+            this.activeSeasonId.set(s.id);
+            this.persistActiveSeason(s.id);
+            resumeHandled = true;
+            break;
+          }
+        }
+      }
+
       if (m.type === 'series' && m.seasons?.length) {
-        this.syncActiveSeasonForSeriesFilter();
+        if (!resumeHandled) this.syncActiveSeasonForSeriesFilter();
+        // Scroll to first unwatched episode in active season
+        const seasonId = this.activeSeasonId();
+        const activeSeason = m.seasons.find((s) => s.id === seasonId);
+        if (activeSeason?.episodes?.length) {
+          const firstUnwatched = activeSeason.episodes.find((e) => e.hasFile && !watchedSet.has(e.id));
+          if (firstUnwatched) {
+            requestAnimationFrame(() => {
+              const el = document.getElementById(`episode-${firstUnwatched.id}`);
+              if (!el) return;
+              const scroller = el.parentElement;
+              if (scroller && scroller.scrollWidth > scroller.clientWidth) {
+                const elRect = el.getBoundingClientRect();
+                const scrollerRect = scroller.getBoundingClientRect();
+                const offset = elRect.left - scrollerRect.left + scroller.scrollLeft - scroller.clientWidth / 2 + el.offsetWidth / 2;
+                scroller.scrollTo({ left: offset, behavior: 'smooth' });
+              }
+            });
+          }
+        }
       } else {
         this.activeSeasonId.set(null);
       }

@@ -76,7 +76,11 @@
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
-              {{ 'player.play' | translate }}
+              @if (resumeLabel()) {
+                {{ 'player.resume_at' | translate:{ time: resumeLabel() } }}
+              } @else {
+                {{ 'player.play' | translate }}
+              }
             </button>
             <button
               class="btn btn-ghost btn-square"
@@ -100,7 +104,7 @@
               <svg lucideEllipsisVertical class="h-5 w-5"></svg>
             </div>
             <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-56 p-2 shadow-lg">
-              @if (selectedFileId()) {
+              @if (selectedFileId() && resumeLabel()) {
                 <li>
                   <a class="flex items-center gap-3" (click)="play(true)">
                     <svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>
@@ -290,10 +294,12 @@
 
           <div class="flex flex-wrap items-center gap-2 pt-1">
             @if (selectedFileId()) {
-              <button class="btn btn-ghost btn-sm gap-1" (click)="play(true)">
-                <svg lucideRotateCcw class="h-4 w-4"></svg>
-                {{ 'player.play_from_start' | translate }}
-              </button>
+              @if (resumeLabel()) {
+                <button class="btn btn-ghost btn-sm gap-1" (click)="play(true)">
+                  <svg lucideRotateCcw class="h-4 w-4"></svg>
+                  {{ 'player.play_from_start' | translate }}
+                </button>
+              }
               <button class="btn btn-primary btn-sm gap-1" (click)="play(false)">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M8 5v14l11-7z" />

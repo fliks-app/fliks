@@ -59,6 +59,15 @@ export interface PlaybackInfoResponse {
   };
 }
 
+export interface MediaResumeInfo {
+  mediaFileId: number;
+  episodeId: number | null;
+  positionSeconds: number;
+  durationSeconds: number;
+  seasonNumber?: number;
+  episodeNumber?: number;
+}
+
 export interface PlaybackState {
   id: number;
   mediaId: number;
@@ -220,6 +229,18 @@ export class StreamingApiService {
   stopSessions(mediaFileId: number) {
     return firstValueFrom(
       this.http.delete(`/api/stream/${mediaFileId}/sessions`),
+    );
+  }
+
+  getWatchedEpisodeIds(mediaId: number) {
+    return firstValueFrom(
+      this.http.get<number[]>(`/api/playback/media/${mediaId}/watched-episodes`),
+    );
+  }
+
+  getMediaResumeInfo(mediaId: number) {
+    return firstValueFrom(
+      this.http.get<MediaResumeInfo | null>(`/api/playback/media/${mediaId}`),
     );
   }
 

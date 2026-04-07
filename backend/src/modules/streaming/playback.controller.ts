@@ -47,6 +47,24 @@ export class PlaybackController {
     );
   }
 
+  @Get('media/:mediaId/watched-episodes')
+  getWatchedEpisodeIds(
+    @Req() req: Request,
+    @Param('mediaId', ParseIntPipe) mediaId: number,
+  ) {
+    const user = req.user as User;
+    return this.playbackService.getWatchedEpisodeIds(user.id, mediaId);
+  }
+
+  @Get('media/:mediaId')
+  getMediaResumeInfo(
+    @Req() req: Request,
+    @Param('mediaId', ParseIntPipe) mediaId: number,
+  ) {
+    const user = req.user as User;
+    return this.playbackService.getMediaResumeInfo(user.id, mediaId);
+  }
+
   @Get(':mediaFileId')
   getState(
     @Req() req: Request,
