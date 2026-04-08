@@ -421,56 +421,16 @@ export class DownloadsService {
     });
 
     const crop = (video as any)?.crop as { width: number; height: number; x: number; y: number } | undefined;
-
-    // Use shared builder for video+audio args, output as MP4
-    const baseArgs = this.transcoding.buildFfmpegArgs(
+    const args = this.buildFullFileFfmpegArgs(
       inputPath,
-      profile,
       outputFile,
+      profile,
       hwAccel,
-      0,     // startSegment
       isHdr,
-      undefined, // burnIn
-      undefined, // audioStreamIndex
+      subtitles,
+      resolved,
       crop,
-      'mp4',
     );
-
-    // Insert subtitle inputs + mapping before the output args (-movflags +faststart output.mp4)
-    // The last 3 elements are: -movflags, +faststart, outputPath
-    const outputArgs = baseArgs.splice(-3);
-    const args = baseArgs;
-
-    // Add external subtitle file inputs
-    const extSubs = subtitles.filter((s) => s.relativePath);
-    for (const sub of extSubs) {
-      const subPath = path.resolve(resolved.media.path!, sub.relativePath!);
-      args.push('-i', subPath);
-    }
-
-    // Explicit mapping needed: adding subtitle -map overrides ffmpeg auto-mapping
-    args.push('-map', '0:v:0', '-map', '0:a');
-
-    // Map embedded text subtitles (skip image-based)
-    const embeddedInfo = resolved.mediaFile.streamInfo;
-    const embeddedSubs = embeddedInfo?.subtitles ?? [];
-    const textSubs = embeddedSubs.filter(
-      (s) => !BITMAP_SUB_CODECS.has(s.codec),
-    );
-    for (const s of textSubs) {
-      const idx = embeddedSubs.indexOf(s);
-      args.push('-map', `0:s:${idx}`);
-    }
-    // Map external subtitle files (inputs 1, 2, ...)
-    for (let i = 0; i < extSubs.length; i++) {
-      args.push('-map', `${i + 1}:0`);
-    }
-    if (textSubs.length > 0 || extSubs.length > 0) {
-      args.push('-c:s', 'mov_text');
-    }
-
-    // Re-append output args
-    args.push(...outputArgs);
 
     this.log.log(
       `Download #${taskId}: ffmpeg args: ${args.join(' ')}`,
@@ -576,6 +536,120 @@ export class DownloadsService {
    * Extract each text subtitle stream as a separate .vtt file.
    * Returns array of { index, language, path } for successfully extracted subs.
    */
+  private buildFullFileFfmpegArgs(
+    inputPath: string,
+    outputPath: string,
+    profile: { maxWidth: number; videoBitrate: string; audioBitrate: string },
+    hwAccel: string,
+    isHdr: boolean,
+    subtitles: SubtitleFile[],
+    resolved: ResolvedFile,
+    crop?: { width: number; height: number; x: number; y: number },
+  ): string[] {
+    const args: string[] = ['-y', '-hide_banner', '-loglevel', 'info'];
+
+    // Hardware acceleration input
+    const effectiveHw = crop && (hwAccel === 'qsv' || hwAccel === 'vaapi') ? 'vaapi' : hwAccel;
+    switch (effectiveHw) {
+      case 'qsv':
+        args.push(
+          '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
+          '-init_hw_device', 'qsv=qs@va',
+          '-hwaccel', 'vaapi', '-hwaccel_output_format', 'vaapi',
+          '-hwaccel_device', 'va',
+        );
+        if (isHdr) args.push('-init_hw_device', 'opencl=ocl:0.0', '-filter_hw_device', 'ocl');
+        break;
+      case 'vaapi':
+        args.push(
+          '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
+          '-hwaccel', 'vaapi', '-hwaccel_output_format', 'vaapi',
+          '-hwaccel_device', 'va',
+        );
+        if (isHdr) args.push('-init_hw_device', 'opencl=ocl:0.0', '-filter_hw_device', 'ocl');
+        break;
+      case 'nvenc':
+        args.push('-hwaccel', 'cuda');
+        if (!isHdr && !crop) args.push('-hwaccel_output_format', 'cuda');
+        break;
+    }
+
+    args.push('-i', inputPath);
+
+    // External subtitle file inputs
+    const extSubs = subtitles.filter((s) => s.relativePath);
+    for (const sub of extSubs) {
+      args.push('-i', path.resolve(resolved.media.path!, sub.relativePath!));
+    }
+
+    // Video filter chain
+    const w = profile.maxWidth;
+    const cropF = crop ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},` : '';
+    const hwCrop = crop ? `hwdownload,format=nv12,${cropF}hwupload=derive_device=vaapi,` : '';
+
+    switch (effectiveHw) {
+      case 'qsv':
+        args.push('-c:v', 'h264_qsv');
+        if (isHdr) {
+          args.push('-vf', `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`);
+        } else {
+          args.push('-vf', `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`);
+        }
+        break;
+      case 'vaapi':
+        args.push('-c:v', 'h264_vaapi');
+        if (isHdr) {
+          args.push('-vf', `${hwCrop}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`);
+        } else if (crop) {
+          args.push('-vf', `${hwCrop}scale_vaapi=w=${w}:h=-16:format=nv12`);
+        } else {
+          args.push('-vf', `scale_vaapi=w=${w}:h=-16:format=nv12`);
+        }
+        break;
+      case 'nvenc':
+        args.push('-c:v', 'h264_nvenc', '-preset', 'p4');
+        if (isHdr) {
+          args.push('-vf', `hwdownload,format=p010le,${cropF}zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=${w}:-2`);
+        } else if (crop) {
+          args.push('-vf', `hwdownload,format=nv12,${cropF}scale=${w}:-2,format=yuv420p`);
+        } else {
+          args.push('-vf', `scale_cuda=w=${w}:h=-2:format=nv12`);
+        }
+        break;
+      default: // CPU
+        args.push('-c:v', 'libx264', '-preset', 'veryfast');
+        if (isHdr) {
+          args.push('-vf', `${cropF}zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=${w}:-2:flags=lanczos`);
+        } else {
+          args.push('-vf', `${cropF}scale=${w}:-2:flags=lanczos,format=yuv420p`);
+        }
+    }
+
+    args.push('-b:v', profile.videoBitrate, '-maxrate', profile.videoBitrate);
+
+    // Audio → AAC stereo
+    args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
+
+    // Explicit mapping (required when adding subtitle maps)
+    args.push('-map', '0:v:0', '-map', '0:a');
+
+    // Text-based subtitle tracks as mov_text
+    const embeddedSubs = resolved.mediaFile.streamInfo?.subtitles ?? [];
+    const textSubs = embeddedSubs.filter((s) => !BITMAP_SUB_CODECS.has(s.codec));
+    for (const s of textSubs) {
+      args.push('-map', `0:s:${embeddedSubs.indexOf(s)}`);
+    }
+    for (let i = 0; i < extSubs.length; i++) {
+      args.push('-map', `${i + 1}:0`);
+    }
+    if (textSubs.length > 0 || extSubs.length > 0) {
+      args.push('-c:s', 'mov_text');
+    }
+
+    args.push('-movflags', '+faststart', outputPath);
+    return args;
+  }
+
   private async extractSubtitlesAsVtt(
     inputPath: string,
     taskId: number,

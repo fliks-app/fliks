@@ -105,30 +105,89 @@ export class AuthService {
   /** Pour le garde de route : vérifie le cookie/token et charge l'utilisateur si besoin. */
   ensureAuthenticated(): Observable<boolean> {
     if (this._user()) return of(true);
+
+    // Fast path: if we have a cached user (from previous login), use it immediately
+    // and validate the token in background (no blocking)
+    const cached = this.loadCachedUser();
+
     if (this.serverConfig.isNative && !this._accessToken) {
-      // Load token from persistent storage before making the API call
       return new Observable<boolean>((subscriber) => {
         this.loadToken().then((token) => {
           this._accessToken = token;
-          this.http.get<User>('/api/auth/me').pipe(
-            tap((u) => this._user.set(u)),
-            map(() => true as boolean),
-            catchError(() => {
-              this._user.set(null);
-              return of(false);
-            }),
-          ).subscribe(subscriber);
+          if (cached && token) {
+            // Instant: use cached user, validate in background
+            this._user.set(cached);
+            subscriber.next(true);
+            subscriber.complete();
+            this.validateTokenInBackground();
+          } else {
+            // No cache: must wait for API
+            this.http.get<User>('/api/auth/me').pipe(
+              tap((u) => { this._user.set(u); this.cacheUser(u); }),
+              map(() => true as boolean),
+              catchError((err) => this.handleAuthError(err)),
+            ).subscribe(subscriber);
+          }
         });
       });
     }
+
+    if (cached) {
+      // Instant: use cached user, validate in background
+      this._user.set(cached);
+      this.validateTokenInBackground();
+      return of(true);
+    }
+
     return this.http.get<User>('/api/auth/me').pipe(
-      tap((u) => this._user.set(u)),
+      tap((u) => { this._user.set(u); this.cacheUser(u); }),
       map(() => true),
-      catchError(() => {
-        this._user.set(null);
-        return of(false);
-      }),
+      catchError((err) => this.handleAuthError(err)),
     );
+  }
+
+  /** Validate token in background — if 401, force logout. Network errors are ignored. */
+  private validateTokenInBackground() {
+    this.http.get<User>('/api/auth/me').subscribe({
+      next: (u) => { this._user.set(u); this.cacheUser(u); },
+      error: (err) => {
+        const status = (err as { status?: number })?.status ?? 0;
+        if (status === 401 || status === 403) {
+          this._user.set(null);
+          localStorage.removeItem('fliks.cachedUser');
+        }
+        // Network errors: ignore (already using cached user)
+      },
+    });
+  }
+
+  /** Distinguish 401 (expired token → logout) from network error (offline → keep user). */
+  private handleAuthError(err: unknown): Observable<boolean> {
+    const status = (err as { status?: number })?.status ?? 0;
+    if (status === 401 || status === 403) {
+      // Token expired or invalid → force logout
+      this._user.set(null);
+      return of(false);
+    }
+    // Network error (status 0, timeout, unreachable) → try cached user
+    const cached = this.loadCachedUser();
+    if (cached) {
+      this._user.set(cached);
+      return of(true); // Allow navigation in offline mode
+    }
+    this._user.set(null);
+    return of(false);
+  }
+
+  private cacheUser(user: User) {
+    try { localStorage.setItem('fliks.cachedUser', JSON.stringify(user)); } catch {}
+  }
+
+  private loadCachedUser(): User | null {
+    try {
+      const raw = localStorage.getItem('fliks.cachedUser');
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
   }
 
   async logout(): Promise<void> {

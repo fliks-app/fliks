@@ -661,29 +661,21 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   // Private
   // ---------------------------------------------------------------------------
 
-  /**
-   * Build FFmpeg args for transcoding. Shared between HLS streaming and full-file downloads.
-   * @param output   For HLS: directory path. For MP4: file path.
-   * @param format   'hls' (segments) or 'mp4' (single file).
-   */
-  buildFfmpegArgs(
+  private buildFfmpegArgs(
     inputPath: string,
     profile: TranscodeProfile,
-    output: string,
+    outputDir: string,
     hwAccel: HwAccelType,
     startSegment = 0,
     tonemap = false,
     burnIn?: BurnInSubtitle,
     audioStreamIndex?: number,
     crop?: { width: number; height: number; x: number; y: number },
-    format: 'hls' | 'mp4' = 'hls',
   ): string[] {
-    const args = format === 'mp4'
-      ? ['-y', '-hide_banner', '-loglevel', 'info']
-      : ['-hide_banner', '-loglevel', 'warning'];
+    const args = ['-hide_banner', '-loglevel', 'warning'];
 
-    // Seek to start position if needed (HLS only)
-    if (format === 'hls' && startSegment > 0) {
+    // Seek to start position if needed
+    if (startSegment > 0) {
       const seekSeconds = startSegment * SEGMENT_DURATION;
       args.push('-ss', String(seekSeconds));
     }
@@ -937,33 +929,22 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     }
     args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
 
-    // Output format
-    if (format === 'mp4') {
-      // Remove HLS-specific args that hurt MP4 performance
-      const hlsArgs = new Set(['-g', '-keyint_min', '-force_key_frames', '-sc_threshold:v:0']);
-      for (let i = args.length - 1; i >= 0; i--) {
-        if (hlsArgs.has(args[i])) {
-          args.splice(i, 2); // remove flag + value
-        }
-      }
-      args.push('-movflags', '+faststart', output);
-    } else {
-      args.push(
-        '-f',
-        'hls',
-        '-hls_time',
-        String(SEGMENT_DURATION),
-        '-hls_list_size',
-        '0',
-        '-start_number',
-        String(startSegment),
-        '-hls_segment_filename',
-        path.join(output, 'seg-%04d.ts'),
-        '-hls_flags',
-        'independent_segments',
-        path.join(output, 'index.m3u8'),
-      );
-    }
+    // HLS output
+    args.push(
+      '-f',
+      'hls',
+      '-hls_time',
+      String(SEGMENT_DURATION),
+      '-hls_list_size',
+      '0',
+      '-start_number',
+      String(startSegment),
+      '-hls_segment_filename',
+      path.join(outputDir, 'seg-%04d.ts'),
+      '-hls_flags',
+      'independent_segments',
+      path.join(outputDir, 'index.m3u8'),
+    );
 
     return args;
   }

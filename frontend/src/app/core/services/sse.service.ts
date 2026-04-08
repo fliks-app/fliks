@@ -27,6 +27,7 @@ export class SseService implements OnDestroy {
   readonly activeProgress = signal<Map<string, TaskProgress>>(new Map());
   readonly lastEvent = signal<SseEvent | null>(null);
   private eventSource: EventSource | null = null;
+  private retryDelay = 5000;
 
   connect() {
     if (this.eventSource) return;
@@ -49,10 +50,19 @@ export class SseService implements OnDestroy {
         this.handleEvent(data);
       } catch { /* ignore parse errors */ }
     };
+    this.retryDelay = 5000; // Reset on successful connection
+    this.eventSource.onopen = () => { this.retryDelay = 5000; };
     this.eventSource.onerror = () => {
       this.eventSource?.close();
       this.eventSource = null;
-      setTimeout(() => this.connect(), 5000);
+      if (!navigator.onLine) {
+        // Offline — wait for online event instead of polling
+        window.addEventListener('online', () => this.connect(), { once: true });
+        return;
+      }
+      // Exponential backoff: 5s → 10s → 20s → 30s max
+      setTimeout(() => this.connect(), this.retryDelay);
+      this.retryDelay = Math.min(this.retryDelay * 2, 30_000);
     };
   }
 

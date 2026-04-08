@@ -515,8 +515,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (this.isOfflinePlayback) {
         // Offline: load via Shaka for subtitle track support (addTextTrackAsync)
         console.log('[Player] Playing offline file via Shaka');
+        console.log('[Player] Offline URL type:', offlineCheck!.substring(0, 30));
         this.playbackMode.set('direct');
         await this.player.load(offlineCheck!, undefined, 'video/mp4');
+        const seekRange = this.player.seekRange();
+        console.log('[Player] Seek range after load:', seekRange);
+        console.log('[Player] Buffered ranges:', video.buffered.length, video.buffered.length > 0 ? `${video.buffered.start(0)}-${video.buffered.end(0)}` : 'none');
+        console.log('[Player] Duration:', video.duration, 'Seekable:', video.seekable.length > 0 ? `${video.seekable.start(0)}-${video.seekable.end(0)}` : 'none');
       } else {
         // Ask the backend to decide how to play this file
         const deviceProfile = this.deviceProfileService.getProfile();

@@ -37,6 +37,9 @@
           }}</span>
         } @else {
           <a class="btn btn-ghost text-xl" routerLink="/">{{ 'app.name' | translate }}</a>
+          @if (!networkService.isOnline()) {
+            <span class="badge badge-sm badge-warning">{{ 'downloads.offline' | translate }}</span>
+          }
         }
       </div>
       <div class="flex-none">
@@ -185,6 +188,9 @@
     <aside class="bg-base-100 w-64 min-h-full flex flex-col" style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 + 12px)">
       <div class="p-4 border-b border-base-200">
         <a routerLink="/" class="text-2xl font-bold">{{ 'app.name' | translate }}</a>
+        @if (!networkService.isOnline()) {
+          <span class="badge badge-sm badge-warning ml-2">{{ 'downloads.offline' | translate }}</span>
+        }
       </div>
 
       <ul class="menu p-4 flex-1 gap-0.5 min-w-64">

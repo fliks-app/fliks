@@ -26,6 +26,8 @@ import { ThemeService } from '../../core/services/theme.service';
 import { CastService } from '../../core/services/cast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
+import { DownloadManagerService } from '../../core/services/download-manager.service';
+import { NetworkService } from '../../core/services/network.service';
 import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
 import { UserMenuComponent } from '../components/user-menu';
 import {
@@ -80,6 +82,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly requestsService = inject(RequestsService);
   readonly serverConfig = inject(ServerConfigService);
   private readonly sse = inject(SseService);
+  private readonly downloadManager = inject(DownloadManagerService);
+  readonly networkService = inject(NetworkService);
   readonly castService = inject(CastService);
   readonly navbar = inject(NavbarService);
   readonly castPlayer = inject(CastPlayerService);
@@ -153,8 +157,16 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private navCount = 0;
 
   ngOnInit() {
-    this.refreshCounts();
-    this.sse.connect();
+    if (navigator.onLine) {
+      this.refreshCounts();
+      this.sse.connect();
+    } else {
+      window.addEventListener('online', () => {
+        this.refreshCounts();
+        this.sse.connect();
+      }, { once: true });
+    }
+    // DownloadManagerService is activated by injection (effect in constructor)
     window.addEventListener('scroll', this.onScroll, { passive: true });
     if (this.isNative) {
       Keyboard.addListener('keyboardWillShow', () => this.keyboardOpen.set(true));

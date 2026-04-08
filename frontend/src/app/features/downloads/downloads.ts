@@ -42,30 +42,37 @@ export class DownloadsComponent implements OnInit {
   private readonly baseTasks = signal<DownloadTask[]>([]);
   readonly loading = signal(true);
 
-  /** React to SSE download events */
+  /** React to SSE download events — UI refresh only (device download handled by DownloadManagerService) */
   private readonly sseEffect = effect(() => {
     const event = this.sse.lastEvent();
     if (!event) return;
     if (event.type === 'download.progress') {
       const downloadId = event['downloadId'] as number;
       const progress = event['progress'] as number;
-      this.baseTasks.update((tasks) =>
-        tasks.map((t) =>
-          t.id === downloadId ? { ...t, progress, status: 'transcoding' } : t,
-        ),
-      );
+      this.baseTasks.update((tasks) => {
+        // Update if exists, otherwise add as new task
+        if (tasks.some((t) => t.id === downloadId)) {
+          return tasks.map((t) =>
+            t.id === downloadId ? { ...t, progress, status: 'transcoding' } : t,
+          );
+        }
+        // Task not in list yet — reload to pick it up
+        void this.load();
+        return tasks;
+      });
     } else if (event.type === 'download.ready') {
-      const { downloadId } = event as any;
+      const downloadId = event['downloadId'] as number;
       this.baseTasks.update((tasks) =>
         tasks.map((t) =>
           t.id === downloadId ? { ...t, status: 'ready', progress: 100 } : t,
         ),
       );
-      // Auto-start device download
-      const task = this.baseTasks().find((t) => t.id === downloadId);
-      if (task) void this.startDeviceDownload(task);
+      // If task wasn't in the list, reload
+      if (!this.baseTasks().some((t) => t.id === downloadId)) {
+        void this.load();
+      }
     } else if (event.type === 'download.failed') {
-      const { downloadId } = event as any;
+      const downloadId = event['downloadId'] as number;
       this.baseTasks.update((tasks) =>
         tasks.map((t) =>
           t.id === downloadId ? { ...t, status: 'failed' } : t,
@@ -90,64 +97,46 @@ export class DownloadsComponent implements OnInit {
   }
 
   async load() {
-    this.loading.set(true);
+    // Show cached data instantly (no loading spinner for cached content)
+    const cached = this.downloadCache.load();
+    if (cached.length) {
+      await this.applyFilter(cached);
+      this.loading.set(false);
+    }
+
+    // Then try API in background for fresh data
     try {
-      let list: DownloadTask[];
-      try {
-        list = await this.downloadsApi.list();
-      } catch {
-        list = this.downloadCache.load();
-      }
-      const filtered: DownloadTask[] = [];
-      for (const task of list) {
-        if (
-          task.status === 'transcoding' ||
-          task.status === 'remuxing' ||
-          task.status === 'pending'
-        ) {
-          filtered.push(task);
-        } else if (task.status === 'ready') {
-          if (this.downloadCache.isDownloading(task.id)) {
-            filtered.push(task);
-          } else {
-            const hasLocal = await this.offlineStorage.has(
-              `download-${task.mediaFileId}`,
-            );
-            if (hasLocal) filtered.push(task);
-          }
-        }
-      }
-      this.baseTasks.set(filtered);
-      this.downloadCache.save(filtered);
+      const list = await this.downloadsApi.list();
+      this.downloadCache.save(list);
+      await this.applyFilter(list);
+    } catch {
+      // Offline — cached data already displayed
     } finally {
       this.loading.set(false);
     }
   }
 
-  private async startDeviceDownload(task: DownloadTask) {
-    this.downloadCache.markDownloading(task.id);
-    const url = this.downloadsApi.getFileUrl(task.id);
-    try {
-      await this.offlineStorage.download(
-        url,
-        `download-${task.mediaFileId}`,
-        (pct) => this.downloadCache.updateProgress(task.id, pct),
-      );
-      // Also download VTT subtitle files
-      if (task.subtitles?.length) {
-        for (const sub of task.subtitles) {
-          const subUrl = this.downloadsApi.getSubtitleUrl(task.id, sub.filename);
-          await this.offlineStorage.downloadSmallFile(
-            subUrl,
-            `download-${task.mediaFileId}-sub-${sub.filename}`,
-          ).catch(() => {});
+  private async applyFilter(list: DownloadTask[]) {
+    const filtered: DownloadTask[] = [];
+    for (const task of list) {
+      if (
+        task.status === 'transcoding' ||
+        task.status === 'remuxing' ||
+        task.status === 'pending'
+      ) {
+        filtered.push(task);
+      } else if (task.status === 'ready') {
+        if (this.downloadCache.isDownloading(task.id)) {
+          filtered.push(task);
+        } else {
+          const hasLocal = await this.offlineStorage.has(
+            `download-${task.mediaFileId}`,
+          );
+          if (hasLocal) filtered.push(task);
         }
       }
-      // Notify server that client has the file
-      await this.downloadsApi.ackDownloaded(task.id).catch(() => {});
-    } finally {
-      this.downloadCache.markDone(task.id);
     }
+    this.baseTasks.set(filtered);
   }
 
   async deleteItem(task: DownloadTask) {

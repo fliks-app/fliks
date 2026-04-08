@@ -565,6 +565,10 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
         audioCodecs: dp.directPlayProfiles[0]?.audioCodecs,
         maxAudioChannels: dp.maxAudioChannels,
       });
+      this.downloadCache.save([
+        ...this.downloadCache.load().filter((t) => t.id !== task.id),
+        task,
+      ]);
       this.toast.success(this.translate.instant('downloads.started'));
       if (task.status === 'ready') {
         this.downloadCache.markDownloading(task.id);

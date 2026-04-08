@@ -569,6 +569,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         audioCodecs: dp.directPlayProfiles[0]?.audioCodecs,
         maxAudioChannels: dp.maxAudioChannels,
       });
+      // Persist task immediately for recovery after app restart
+      this.downloadCache.save([
+        ...this.downloadCache.load().filter((t) => t.id !== task.id),
+        task,
+      ]);
       this.toast.success(this.translate.instant('downloads.started'));
       if (task.status === 'ready') {
         this.downloadCache.markDownloading(task.id);
