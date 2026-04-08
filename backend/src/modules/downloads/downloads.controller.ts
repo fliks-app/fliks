@@ -5,6 +5,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -34,6 +35,7 @@ export class DownloadsController {
     @Body() body: {
       mediaFileId: number;
       quality: string;
+      deviceId?: string;
       deviceProfile?: {
         supportsHdr?: boolean;
         audioCodecs?: string[];
@@ -42,13 +44,13 @@ export class DownloadsController {
     },
   ) {
     const user = req.user as User;
-    return this.downloads.create(user.id, body.mediaFileId, body.quality, body.deviceProfile);
+    return this.downloads.create(user.id, body.mediaFileId, body.quality, body.deviceProfile, body.deviceId);
   }
 
   @Get()
-  list(@Req() req: Request) {
+  list(@Req() req: Request, @Query('deviceId') deviceId?: string) {
     const user = req.user as User;
-    return this.downloads.list(user.id);
+    return this.downloads.list(user.id, deviceId);
   }
 
   @Get(':id')

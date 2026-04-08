@@ -64,16 +64,20 @@ export class DownloadManagerService {
 
     if (event.type === 'download.progress') {
       const id = event['downloadId'] as number;
+      // Ignore events from other devices
+      if (!this.titles.has(id) && !this.cache.has(id)) return;
       const pct = event['progress'] as number;
       const info = this.titles.get(id);
       this.notif.show(id, info?.title ?? 'Transcodage', pct, 'transcoding');
       this.emitEvent('progress', id, pct);
     } else if (event.type === 'download.ready') {
       const id = event['downloadId'] as number;
+      if (!this.titles.has(id) && !this.cache.has(id)) return;
       this.emitEvent('ready', id, 100);
       void this.handleReadyWeb(id);
     } else if (event.type === 'download.failed') {
       const id = event['downloadId'] as number;
+      if (!this.titles.has(id) && !this.cache.has(id)) return;
       const info = this.titles.get(id);
       this.notif.show(id, info?.title ?? 'Téléchargement', 0, 'error');
       this.emitEvent('failed', id, 0);

@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { ServerConfigService } from '../server-config.service';
 import { AuthService } from '../auth.service';
+import { DeviceIdService } from '../device-id.service';
 
 export interface DownloadTask {
   id: number;
@@ -36,6 +37,7 @@ export class DownloadsApiService {
   private readonly http = inject(HttpClient);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly auth = inject(AuthService);
+  private readonly device = inject(DeviceIdService);
 
   getQualities(mediaFileId: number) {
     return firstValueFrom(
@@ -49,12 +51,18 @@ export class DownloadsApiService {
     maxAudioChannels?: number;
   }) {
     return firstValueFrom(
-      this.http.post<DownloadTask>('/api/downloads', { mediaFileId, quality, deviceProfile }),
+      this.http.post<DownloadTask>('/api/downloads', {
+        mediaFileId, quality, deviceProfile, deviceId: this.device.deviceId,
+      }),
     );
   }
 
   list() {
-    return firstValueFrom(this.http.get<DownloadTask[]>('/api/downloads'));
+    return firstValueFrom(
+      this.http.get<DownloadTask[]>('/api/downloads', {
+        params: { deviceId: this.device.deviceId },
+      }),
+    );
   }
 
   getOne(id: number) {

@@ -5,7 +5,7 @@ import { Media } from '../../media/entities/media.entity';
 import { MediaFile } from '../../media/entities/media-file.entity';
 
 @Entity('download_tasks')
-@Index(['userId', 'status'])
+@Index(['userId', 'deviceId', 'status'])
 export class DownloadTask extends BaseEntity {
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
@@ -13,6 +13,10 @@ export class DownloadTask extends BaseEntity {
 
   @Column()
   userId: number;
+
+  /** UUID identifying the device that created this download */
+  @Column({ nullable: true })
+  deviceId: string;
 
   @ManyToOne(() => Media, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'mediaId' })

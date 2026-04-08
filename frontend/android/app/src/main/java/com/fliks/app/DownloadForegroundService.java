@@ -46,8 +46,6 @@ public class DownloadForegroundService extends Service {
     /** New id so devices get a fresh channel (IMPORTANCE cannot be upgraded on an existing channel). */
     static final String CHANNEL_ID = "fliks_downloads_fgs";
     static final int NOTIFICATION_ID = 888888;
-    public static final String NOTIFICATION_GROUP_KEY = "fliks_downloads";
-    private static final String GROUP_KEY = NOTIFICATION_GROUP_KEY;
     private static final long POLL_INTERVAL_SECONDS = 5;
 
     private static DownloadForegroundService instance;
@@ -113,6 +111,14 @@ public class DownloadForegroundService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent != null && "REPOST".equals(intent.getAction())) {
+            // User swiped the notification (Samsung One UI) — re-post it immediately
+            if (primaryTaskId > 0) {
+                updateSingleNotification(primaryTaskId);
+            }
+            return START_STICKY;
+        }
+
         if (intent != null && "STOP".equals(intent.getAction())) {
             stopPolling();
             releaseWakeLock();
@@ -549,9 +555,10 @@ public class DownloadForegroundService extends Service {
             .setAutoCancel(false)
             .setOnlyAlertOnce(true)
             .setSilent(true)
-            .setGroup(GROUP_KEY)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .setContentIntent(getLaunchIntent());
+            .setContentIntent(getLaunchIntent())
+            .setDeleteIntent(getRepostIntent());
 
         if (sortKey != null) builder.setSortKey(sortKey);
         if (episode != null && !episode.isEmpty()) builder.setContentText(episode);
@@ -564,7 +571,7 @@ public class DownloadForegroundService extends Service {
         }
 
         Notification n = builder.build();
-        n.flags |= Notification.FLAG_ONGOING_EVENT;
+        n.flags |= Notification.FLAG_ONGOING_EVENT | Notification.FLAG_NO_CLEAR;
         return n;
     }
 
@@ -575,6 +582,14 @@ public class DownloadForegroundService extends Service {
     private PendingIntent getLaunchIntent() {
         Intent launchIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
         return PendingIntent.getActivity(this, 0, launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
+
+    /** PendingIntent that re-posts the notification when Samsung One UI allows user to swipe it */
+    private PendingIntent getRepostIntent() {
+        Intent intent = new Intent(this, DownloadForegroundService.class);
+        intent.setAction("REPOST");
+        return PendingIntent.getService(this, 1, intent,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
@@ -615,6 +630,7 @@ public class DownloadForegroundService extends Service {
             NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID, "Téléchargements", NotificationManager.IMPORTANCE_DEFAULT);
             channel.setDescription("Progression des téléchargements");
+            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             channel.enableLights(false);
             channel.enableVibration(false);
             channel.setSound(null, null);

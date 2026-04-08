@@ -205,14 +205,15 @@ export class DownloadsService implements OnModuleInit {
     mediaFileId: number,
     quality: string,
     deviceProfile?: { supportsHdr?: boolean; audioCodecs?: string[]; maxAudioChannels?: number },
+    deviceId?: string,
   ): Promise<DownloadTask> {
     const resolved = await this.streaming.resolveFile(mediaFileId);
     const file = resolved.mediaFile;
 
-    // Check for existing task
-    const existing = await this.taskRepo.findOne({
-      where: { userId, mediaFileId, quality },
-    });
+    // Check for existing task (scoped by device when provided)
+    const where: Record<string, any> = { userId, mediaFileId, quality };
+    if (deviceId) where.deviceId = deviceId;
+    const existing = await this.taskRepo.findOne({ where });
     if (existing && existing.status !== 'failed') {
       return existing;
     }
@@ -236,6 +237,7 @@ export class DownloadsService implements OnModuleInit {
 
     const task = this.taskRepo.create({
       userId,
+      deviceId,
       mediaId: file.mediaId,
       episodeId: file.episodeId ?? undefined,
       mediaFileId,
@@ -255,9 +257,11 @@ export class DownloadsService implements OnModuleInit {
     return saved;
   }
 
-  async list(userId: number): Promise<DownloadTask[]> {
+  async list(userId: number, deviceId?: string): Promise<DownloadTask[]> {
+    const where: Record<string, any> = { userId };
+    if (deviceId) where.deviceId = deviceId;
     return this.taskRepo.find({
-      where: { userId },
+      where,
       relations: ['media'],
       order: { createdAt: 'DESC' },
     });
@@ -412,8 +416,8 @@ export class DownloadsService implements OnModuleInit {
       ].filter(Boolean).join(' + ');
       this.log.log(`Download #${taskId}: ${reasons} → full transcode`);
       const sourceHeight = video?.height ?? 1080;
-      // Find profile matching source resolution (last one whose maxHeight ≤ sourceHeight, or first)
-      const matchProfile = [...PROFILES].reverse().find((p) => p.maxHeight <= sourceHeight) ?? PROFILES[0];
+      // Find highest-quality profile that fits the source resolution
+      const matchProfile = PROFILES.find((p) => p.maxHeight <= sourceHeight) ?? PROFILES[0];
       return this.runTranscode(taskId, resolved, matchProfile.name, deviceProfile);
     }
 
@@ -669,7 +673,8 @@ export class DownloadsService implements OnModuleInit {
     resolved: ResolvedFile,
     crop?: { width: number; height: number; x: number; y: number },
   ): string[] {
-    const args: string[] = ['-y', '-hide_banner', '-loglevel', 'info'];
+    const args: string[] = ['-y', '-hide_banner', '-loglevel', 'info',
+      '-threads', '4', '-filter_threads', '1'];
 
     // Hardware acceleration input
     const effectiveHw = crop && (hwAccel === 'qsv' || hwAccel === 'vaapi') ? 'vaapi' : hwAccel;
@@ -748,10 +753,15 @@ export class DownloadsService implements OnModuleInit {
         }
     }
 
-    args.push('-b:v', profile.videoBitrate, '-maxrate', profile.videoBitrate);
+    // Rate control: cap VBV buffer to prevent unbounded memory growth on long encodes
+    const bufsize = `${parseInt(profile.videoBitrate) * 2}${profile.videoBitrate.replace(/[0-9.]/g, '')}`;
+    args.push('-b:v', profile.videoBitrate, '-maxrate', profile.videoBitrate, '-bufsize', bufsize);
 
     // Audio → AAC stereo
     args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
+
+    // Limit muxer packet queue — prevents unbounded memory growth during full-file encodes
+    args.push('-max_muxing_queue_size', '4096');
 
     // Explicit mapping (required when adding subtitle maps)
     args.push('-map', '0:v:0', '-map', '0:a');

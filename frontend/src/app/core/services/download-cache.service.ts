@@ -55,6 +55,10 @@ export class DownloadCacheService {
     }
   }
 
+  has(taskId: number): boolean {
+    return this.isDownloading(taskId) || this.load().some((t) => t.id === taskId);
+  }
+
   remove(taskId: number) {
     const tasks = this.load().filter((t) => t.id !== taskId);
     this.save(tasks);
