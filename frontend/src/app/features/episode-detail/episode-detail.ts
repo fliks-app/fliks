@@ -23,11 +23,7 @@ import { MediaDetailSubtitlesComponent } from '../media-detail/components/media-
 import { MediaFileInfoComponent } from '../../shared/components/media-file-info';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
-import { DownloadsApiService } from '../../core/services/api/downloads-api.service';
-import { BrowserDeviceProfileService } from '../../core/services/browser-device-profile.service';
-import { DownloadCacheService } from '../../core/services/download-cache.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
-import { OfflineStorageService } from '../../core/services/offline-storage.service';
 import { MediaDetailSubtitleSearchModalComponent } from '../media-detail/components/media-detail-subtitle-search-modal/media-detail-subtitle-search-modal.component';
 import { ReleasesModalComponent } from '../media-detail/components/releases-modal/releases-modal.component';
 import {
@@ -97,11 +93,7 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
   private readonly translate = inject(TranslateService);
   readonly playable = inject(PlayableMediaService);
   private readonly streamingApi = inject(StreamingApiService);
-  private readonly downloadsApi = inject(DownloadsApiService);
-  private readonly downloadCache = inject(DownloadCacheService);
-  private readonly deviceProfile = inject(BrowserDeviceProfileService);
   private readonly downloadManager = inject(DownloadManagerService);
-  private readonly offlineStorage = inject(OfflineStorageService);
   private readonly downloadModal = viewChild<DownloadQualityModalComponent>('downloadModal');
   private readonly subActions = inject(SubtitleActionsService);
   private readonly sse = inject(SseService);
@@ -561,42 +553,18 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
 
   async onDownload(ev: { mediaFileId: number; quality: string }) {
     try {
-      const dp = this.deviceProfile.getProfile();
-      const task = await this.downloadsApi.create(ev.mediaFileId, ev.quality, {
-        supportsHdr: dp.supportsHdr,
-        audioCodecs: dp.directPlayProfiles[0]?.audioCodecs,
-        maxAudioChannels: dp.maxAudioChannels,
-      });
       const m = this.media();
       const ep = this.episode();
       const s = this.season();
-      if (m) {
-        let dlTitle = m.title;
-        if (s && ep) {
-          const sn = String(s.seasonNumber).padStart(2, '0');
-          const en = String(ep.episodeNumber).padStart(2, '0');
-          dlTitle += ` — S${sn}E${en}`;
-          if (ep.title) dlTitle += ` ${ep.title}`;
-        }
-        this.downloadManager.onDownloadCreated(task.id, dlTitle, task.status);
+      const title = m?.title ?? 'Téléchargement';
+      let episode: string | undefined;
+      if (s && ep) {
+        const sn = String(s.seasonNumber).padStart(2, '0');
+        const en = String(ep.episodeNumber).padStart(2, '0');
+        episode = `S${sn}E${en}`;
+        if (ep.title) episode += ` ${ep.title}`;
       }
-      this.downloadCache.save([
-        ...this.downloadCache.load().filter((t) => t.id !== task.id),
-        task,
-      ]);
-      this.toast.success(this.translate.instant('downloads.started'));
-      if (task.status === 'ready') {
-        this.downloadCache.markDownloading(task.id);
-        const url = this.downloadsApi.getFileUrl(task.id);
-        this.offlineStorage.download(
-          url,
-          `download-${task.mediaFileId}`,
-          (pct) => this.downloadCache.updateProgress(task.id, pct),
-        ).then(
-          () => this.downloadCache.markDone(task.id),
-          () => this.downloadCache.markDone(task.id),
-        );
-      }
+      await this.downloadManager.createDownload(ev.mediaFileId, ev.quality, title, episode);
     } catch {
       this.toast.error(this.translate.instant('downloads.error'));
     }

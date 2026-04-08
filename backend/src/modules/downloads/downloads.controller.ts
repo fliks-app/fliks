@@ -9,6 +9,7 @@ import {
   Res,
   UseGuards,
   ParseIntPipe,
+  NotFoundException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
@@ -64,6 +65,9 @@ export class DownloadsController {
   ) {
     const user = req.user as User;
     const filePath = await this.downloads.getFilePath(user.id, id);
+    if (!fs.existsSync(filePath)) {
+      throw new NotFoundException(`Download file not found`);
+    }
     const stat = fs.statSync(filePath);
     const filename = path.basename(filePath);
 

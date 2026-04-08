@@ -37,6 +37,27 @@ export class OfflineStorageService {
     return this.deleteWeb(key);
   }
 
+  /**
+   * Get the native filesystem path for a download key (Android only).
+   * Returns null on web.
+   */
+  async getNativeDestPath(key: string): Promise<string | null> {
+    if (!this.isNative) return null;
+    try {
+      const { Filesystem, Directory } = await getFs();
+      await this.ensureDir();
+      // Get the real filesystem URI and extract the path
+      const uri = await Filesystem.getUri({
+        path: this.filePath(key),
+        directory: Directory.Documents,
+      });
+      // uri.uri is like "file:///data/user/0/com.fliks.app/files/Documents/fliks-downloads/download-42.mp4"
+      return uri.uri.replace('file://', '');
+    } catch {
+      return null;
+    }
+  }
+
   /** Download a small text file (VTT subtitle) and store locally. */
   async downloadSmallFile(url: string, key: string): Promise<void> {
     const response = await fetch(url, {

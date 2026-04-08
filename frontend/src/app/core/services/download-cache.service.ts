@@ -2,11 +2,14 @@ import { Injectable, signal } from '@angular/core';
 import { DownloadTask } from './api/downloads-api.service';
 
 const STORAGE_KEY = 'fliks.downloads.cache';
-const DISMISSED_KEY = 'fliks.downloads.dismissed';
 
+/**
+ * Tracks device download progress (in-memory signals) and
+ * persists task list for offline access (localStorage).
+ */
 @Injectable({ providedIn: 'root' })
 export class DownloadCacheService {
-  /** Task IDs currently downloading to device, with progress % */
+  /** Active device downloads with progress % */
   readonly activeDownloads = signal<Map<number, number>>(new Map());
 
   markDownloading(taskId: number) {
@@ -33,14 +36,16 @@ export class DownloadCacheService {
     return this.activeDownloads().get(taskId) ?? 0;
   }
 
+  /** Persist task list for offline recovery */
   save(tasks: DownloadTask[]) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
     } catch {
-      // quota exceeded — ignore
+      // quota exceeded
     }
   }
 
+  /** Load cached task list (for offline) */
   load(): DownloadTask[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -53,22 +58,5 @@ export class DownloadCacheService {
   remove(taskId: number) {
     const tasks = this.load().filter((t) => t.id !== taskId);
     this.save(tasks);
-    this.markDismissed(taskId);
-  }
-
-  /** Mark a task as dismissed by user — won't be re-notified on recovery */
-  markDismissed(taskId: number) {
-    const ids = this.getDismissed();
-    ids.add(taskId);
-    try { localStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids])); } catch {}
-  }
-
-  getDismissed(): Set<number> {
-    try {
-      const raw = localStorage.getItem(DISMISSED_KEY);
-      return raw ? new Set(JSON.parse(raw)) : new Set();
-    } catch {
-      return new Set();
-    }
   }
 }

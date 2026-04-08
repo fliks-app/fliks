@@ -24,6 +24,76 @@ import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
+/**
+ * Run an FFmpeg command with reliable progress tracking via `-progress pipe:1`.
+ * Parses structured `out_time_us` from stdout (not affected by pipe buffering).
+ * Stderr is kept for error diagnostics only.
+ */
+function runFfmpegWithProgress(
+  args: string[],
+  durationSeconds: number,
+  onProgress: (pct: number) => void,
+  onJobRef: (kill: () => void) => void,
+  onJobDone: () => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const fullArgs = [...args.slice(0, -1), '-progress', 'pipe:1', args[args.length - 1]];
+    const proc = spawn('ffmpeg', fullArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+    onJobRef(() => proc.kill('SIGTERM'));
+
+    let lastPct = -1;
+    let stdoutBuf = '';
+    proc.stdout!.on('data', (chunk: Buffer) => {
+      stdoutBuf += chunk.toString();
+      // Process complete lines
+      const lines = stdoutBuf.split('\n');
+      stdoutBuf = lines.pop() ?? '';
+      for (const line of lines) {
+        const m = line.match(/^out_time_us=(\d+)/);
+        if (m) {
+          const secs = parseInt(m[1]) / 1_000_000;
+          const pct = durationSeconds > 0
+            ? Math.min(99, Math.round((secs / durationSeconds) * 100))
+            : 0;
+          if (pct !== lastPct && pct >= 0) {
+            lastPct = pct;
+            onProgress(pct);
+          }
+        }
+      }
+    });
+
+    // Keep stderr for error diagnostics
+    let stderrTail = '';
+    proc.stderr!.on('data', (chunk: Buffer) => {
+      stderrTail = (stderrTail + chunk.toString()).slice(-4096);
+    });
+
+    proc.on('close', (code) => {
+      onJobDone();
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg exited with code ${code}\n${stderrTail}`));
+    });
+    proc.on('error', (err) => {
+      onJobDone();
+      reject(err);
+    });
+  });
+}
+
+/** Probe output file duration (seconds). Returns 0 on failure. */
+async function probeOutputDuration(filePath: string): Promise<number> {
+  return new Promise((resolve) => {
+    const proc = spawn('ffprobe', [
+      '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', filePath,
+    ]);
+    let out = '';
+    proc.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+    proc.on('close', () => resolve(parseFloat(out) || 0));
+    proc.on('error', () => resolve(0));
+  });
+}
+
 /** Image-based subtitle codecs that cannot be converted to mov_text */
 const BITMAP_SUB_CODECS = new Set([
   'hdmv_pgs_subtitle',
@@ -371,49 +441,20 @@ export class DownloadsService implements OnModuleInit {
     const duration = info?.durationSeconds ?? 0;
 
     try {
-      await new Promise<void>((resolve, reject) => {
-        const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
-        this.activeJobs.set(taskId, { kill: () => proc.kill('SIGTERM') });
-
-        let stderrTail = '';
-        let lastPct = -1;
-        proc.stderr.on('data', (chunk: Buffer) => {
-          stderrTail = (stderrTail + chunk.toString()).slice(-2048);
-          const match = stderrTail.match(/time=(\d+):(\d+):(\d+)/g);
-          if (match) {
-            const last = match[match.length - 1];
-            const parts = last.match(/time=(\d+):(\d+):(\d+)/);
-            if (parts) {
-              const secs =
-                parseInt(parts[1]) * 3600 +
-                parseInt(parts[2]) * 60 +
-                parseInt(parts[3]);
-              const pct = duration > 0
-                ? Math.min(99, Math.round((secs / duration) * 100))
-                : 0;
-              if (pct !== lastPct) {
-                lastPct = pct;
-                void this.taskRepo.update(taskId, { progress: pct });
-                this.events.emit({
-                  type: 'download.progress',
-                  downloadId: taskId,
-                  progress: pct,
-                });
-              }
-            }
-          }
-        });
-
-        proc.on('close', (code) => {
-          this.activeJobs.delete(taskId);
-          if (code === 0) resolve();
-          else reject(new Error(`ffmpeg remux exited with code ${code}`));
-        });
-        proc.on('error', (err) => {
-          this.activeJobs.delete(taskId);
-          reject(err);
-        });
-      });
+      await runFfmpegWithProgress(
+        args,
+        duration,
+        (pct) => {
+          void this.taskRepo.update(taskId, { progress: pct });
+          this.events.emit({
+            type: 'download.progress',
+            downloadId: taskId,
+            progress: pct,
+          });
+        },
+        (kill) => this.activeJobs.set(taskId, { kill }),
+        () => this.activeJobs.delete(taskId),
+      );
 
       // Extract subtitles as separate VTT files
       const vttFiles = await this.extractSubtitlesAsVtt(
@@ -426,6 +467,14 @@ export class DownloadsService implements OnModuleInit {
         forced: v.forced,
         filename: path.basename(v.path),
       }));
+
+      // Verify output duration — HW decoders can silently truncate
+      const outDuration = await probeOutputDuration(outputFile);
+      if (duration > 0 && outDuration > 0 && outDuration < duration * 0.9) {
+        throw new Error(
+          `Output truncated: ${Math.round(outDuration)}s / ${Math.round(duration)}s (${Math.round((outDuration / duration) * 100)}%)`,
+        );
+      }
 
       const stat = await fs.stat(outputFile);
       await this.taskRepo.update(taskId, {
@@ -506,50 +555,20 @@ export class DownloadsService implements OnModuleInit {
     this.log.log(`Download #${taskId}: duration=${duration}s`);
 
     try {
-      await new Promise<void>((resolve, reject) => {
-        const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
-        this.activeJobs.set(taskId, { kill: () => proc.kill('SIGTERM') });
-
-        let stderrTail = '';
-        let lastPct = -1;
-        proc.stderr.on('data', (chunk: Buffer) => {
-          stderrTail = (stderrTail + chunk.toString()).slice(-2048);
-          const match = stderrTail.match(/time=(\d+):(\d+):(\d+)/g);
-          if (match) {
-            const last = match[match.length - 1];
-            const parts = last.match(/time=(\d+):(\d+):(\d+)/);
-            if (parts) {
-              const secs =
-                parseInt(parts[1]) * 3600 +
-                parseInt(parts[2]) * 60 +
-                parseInt(parts[3]);
-              const pct = duration > 0
-                ? Math.min(99, Math.round((secs / duration) * 100))
-                : -1; // unknown duration
-              if (pct !== lastPct) {
-                lastPct = pct;
-                const emitPct = pct >= 0 ? pct : 0;
-                void this.taskRepo.update(taskId, { progress: emitPct });
-                this.events.emit({
-                  type: 'download.progress',
-                  downloadId: taskId,
-                  progress: emitPct,
-                });
-              }
-            }
-          }
-        });
-
-        proc.on('close', (code) => {
-          this.activeJobs.delete(taskId);
-          if (code === 0) resolve();
-          else reject(new Error(`ffmpeg exited with code ${code}`));
-        });
-        proc.on('error', (err) => {
-          this.activeJobs.delete(taskId);
-          reject(err);
-        });
-      });
+      await runFfmpegWithProgress(
+        args,
+        duration,
+        (pct) => {
+          void this.taskRepo.update(taskId, { progress: pct });
+          this.events.emit({
+            type: 'download.progress',
+            downloadId: taskId,
+            progress: pct,
+          });
+        },
+        (kill) => this.activeJobs.set(taskId, { kill }),
+        () => this.activeJobs.delete(taskId),
+      );
 
       // Extract subtitles as separate VTT files
       const embeddedSubs = resolved.mediaFile.streamInfo?.subtitles ?? [];
@@ -563,6 +582,14 @@ export class DownloadsService implements OnModuleInit {
         forced: v.forced,
         filename: path.basename(v.path),
       }));
+
+      // Verify output duration — HW decoders can silently truncate
+      const outDuration = await probeOutputDuration(outputFile);
+      if (duration > 0 && outDuration > 0 && outDuration < duration * 0.9) {
+        throw new Error(
+          `Output truncated: ${Math.round(outDuration)}s / ${Math.round(duration)}s (${Math.round((outDuration / duration) * 100)}%)`,
+        );
+      }
 
       const stat = await fs.stat(outputFile);
       await this.taskRepo.update(taskId, {
