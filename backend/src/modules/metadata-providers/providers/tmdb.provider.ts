@@ -73,7 +73,8 @@ export class TmdbProvider implements IMetadataProvider {
       {
         params: {
           language: 'fr-FR',
-          append_to_response: 'external_ids,images,release_dates,credits,videos,keywords',
+          append_to_response:
+            'external_ids,images,release_dates,credits,videos,keywords',
         },
       },
     );
@@ -349,14 +350,11 @@ export class TmdbProvider implements IMetadataProvider {
     };
   }
 
-  async getPersonCredits(
-    externalId: number,
-  ): Promise<PersonCombinedCredits> {
-    const { data } =
-      await this.client.get<TmdbPersonCombinedCreditsResponse>(
-        `/person/${externalId}/combined_credits`,
-        { params: { language: 'fr-FR' } },
-      );
+  async getPersonCredits(externalId: number): Promise<PersonCombinedCredits> {
+    const { data } = await this.client.get<TmdbPersonCombinedCreditsResponse>(
+      `/person/${externalId}/combined_credits`,
+      { params: { language: 'fr-FR' } },
+    );
     return {
       cast: data.cast.map((c) => ({
         externalId: c.id,

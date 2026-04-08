@@ -133,7 +133,10 @@ export class Media extends BaseEntity {
   @JoinTable({ name: 'media_tags' })
   tags: Tag[];
 
-  @OneToOne(() => MediaMetadata, (mm) => mm.media, { cascade: true, eager: true })
+  @OneToOne(() => MediaMetadata, (mm) => mm.media, {
+    cascade: true,
+    eager: true,
+  })
   metadata: MediaMetadata;
 
   @OneToMany(() => MediaCast, (mc) => mc.media, { cascade: true })

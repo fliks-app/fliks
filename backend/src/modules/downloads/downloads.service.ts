@@ -15,10 +15,7 @@ import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { Season } from '../media/entities/season.entity';
 import { StreamingService, ResolvedFile } from '../streaming/streaming.service';
-import {
-  TranscodingService,
-  PROFILES,
-} from '../streaming/transcoding.service';
+import { TranscodingService, PROFILES } from '../streaming/transcoding.service';
 import { EventsService } from '../scheduler/events.service';
 import { spawn } from 'child_process';
 import * as path from 'path';
@@ -37,8 +34,15 @@ function runFfmpegWithProgress(
   onJobDone: () => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const fullArgs = [...args.slice(0, -1), '-progress', 'pipe:1', args[args.length - 1]];
-    const proc = spawn('ffmpeg', fullArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const fullArgs = [
+      ...args.slice(0, -1),
+      '-progress',
+      'pipe:1',
+      args[args.length - 1],
+    ];
+    const proc = spawn('ffmpeg', fullArgs, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     onJobRef(() => proc.kill('SIGTERM'));
 
     let lastPct = -1;
@@ -52,9 +56,10 @@ function runFfmpegWithProgress(
         const m = line.match(/^out_time_us=(\d+)/);
         if (m) {
           const secs = parseInt(m[1]) / 1_000_000;
-          const pct = durationSeconds > 0
-            ? Math.min(99, Math.round((secs / durationSeconds) * 100))
-            : 0;
+          const pct =
+            durationSeconds > 0
+              ? Math.min(99, Math.round((secs / durationSeconds) * 100))
+              : 0;
           if (pct !== lastPct && pct >= 0) {
             lastPct = pct;
             onProgress(pct);
@@ -85,10 +90,18 @@ function runFfmpegWithProgress(
 async function probeOutputDuration(filePath: string): Promise<number> {
   return new Promise((resolve) => {
     const proc = spawn('ffprobe', [
-      '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', filePath,
+      '-v',
+      'error',
+      '-show_entries',
+      'format=duration',
+      '-of',
+      'csv=p=0',
+      filePath,
     ]);
     let out = '';
-    proc.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+    proc.stdout.on('data', (d: Buffer) => {
+      out += d.toString();
+    });
     proc.on('close', () => resolve(parseFloat(out) || 0));
     proc.on('error', () => resolve(0));
   });
@@ -159,9 +172,15 @@ export class DownloadsService implements OnModuleInit {
       }
       await this.taskRepo.update(
         stale.map((t) => t.id),
-        { status: 'failed', error: 'Server restarted during processing', outputPath: undefined as any },
+        {
+          status: 'failed',
+          error: 'Server restarted during processing',
+          outputPath: undefined as any,
+        },
       );
-      this.log.warn(`Marked ${stale.length} in-progress downloads as failed (server restart)`);
+      this.log.warn(
+        `Marked ${stale.length} in-progress downloads as failed (server restart)`,
+      );
     }
   }
 
@@ -187,9 +206,12 @@ export class DownloadsService implements OnModuleInit {
       const videoBps = this.parseBitrate(p.videoBitrate);
       const audioBps = this.parseBitrate(p.audioBitrate);
       const duration = info?.durationSeconds ?? 0;
-      const estimated = duration > 0
-        ? Math.floor(((videoBps + audioBps) * duration) / 8)
-        : Math.floor(fileSize * (videoBps / Math.max(sourceBitrate, videoBps)));
+      const estimated =
+        duration > 0
+          ? Math.floor(((videoBps + audioBps) * duration) / 8)
+          : Math.floor(
+              fileSize * (videoBps / Math.max(sourceBitrate, videoBps)),
+            );
       qualities.push({
         key: p.name,
         label: `${p.name} (~${this.formatSize(estimated)})`,
@@ -204,7 +226,11 @@ export class DownloadsService implements OnModuleInit {
     userId: number,
     mediaFileId: number,
     quality: string,
-    deviceProfile?: { supportsHdr?: boolean; audioCodecs?: string[]; maxAudioChannels?: number },
+    deviceProfile?: {
+      supportsHdr?: boolean;
+      audioCodecs?: string[];
+      maxAudioChannels?: number;
+    },
     deviceId?: string,
   ): Promise<DownloadTask> {
     const resolved = await this.streaming.resolveFile(mediaFileId);
@@ -222,7 +248,9 @@ export class DownloadsService implements OnModuleInit {
     }
 
     let episodeLabel: string | undefined;
-    this.log.log(`Download create: mediaFileId=${mediaFileId}, episodeId=${file.episodeId ?? 'null'}`);
+    this.log.log(
+      `Download create: mediaFileId=${mediaFileId}, episodeId=${file.episodeId ?? 'null'}`,
+    );
     if (file.episodeId) {
       const ep = await this.episodeRepo.findOne({
         where: { id: file.episodeId },
@@ -280,11 +308,17 @@ export class DownloadsService implements OnModuleInit {
   async retry(
     userId: number,
     taskId: number,
-    deviceProfile?: { supportsHdr?: boolean; audioCodecs?: string[]; maxAudioChannels?: number },
+    deviceProfile?: {
+      supportsHdr?: boolean;
+      audioCodecs?: string[];
+      maxAudioChannels?: number;
+    },
   ): Promise<DownloadTask> {
     const task = await this.getOne(userId, taskId);
     if (task.status !== 'failed' && task.status !== 'expired') {
-      throw new BadRequestException('Only failed or expired downloads can be retried');
+      throw new BadRequestException(
+        'Only failed or expired downloads can be retried',
+      );
     }
 
     // Clean up any leftover output file
@@ -401,130 +435,158 @@ export class DownloadsService implements OnModuleInit {
   private async runRemux(
     taskId: number,
     resolved: ResolvedFile,
-    deviceProfile: { supportsHdr?: boolean; audioCodecs?: string[]; maxAudioChannels?: number },
+    deviceProfile: {
+      supportsHdr?: boolean;
+      audioCodecs?: string[];
+      maxAudioChannels?: number;
+    },
   ): Promise<void> {
     // If source needs video processing (HDR tonemap or crop), force full transcode
     const info = resolved.mediaFile.streamInfo;
     const video = info?.video?.[0];
-    const isHdr = video?.colorSpace === 'bt2020nc' || (video?.bitDepth ?? 0) >= 10;
+    const isHdr =
+      video?.colorSpace === 'bt2020nc' || (video?.bitDepth ?? 0) >= 10;
     const hasCrop = video && (video as any).crop;
-    const needsTranscode = (isHdr && deviceProfile.supportsHdr === false) || hasCrop;
+    const needsTranscode =
+      (isHdr && deviceProfile.supportsHdr === false) || hasCrop;
     if (needsTranscode) {
       const reasons = [
         isHdr && deviceProfile.supportsHdr === false ? 'HDR→SDR tonemap' : '',
         hasCrop ? 'crop black bars' : '',
-      ].filter(Boolean).join(' + ');
+      ]
+        .filter(Boolean)
+        .join(' + ');
       this.log.log(`Download #${taskId}: ${reasons} → full transcode`);
       const sourceHeight = video?.height ?? 1080;
       // Find highest-quality profile that fits the source resolution
-      const matchProfile = PROFILES.find((p) => p.maxHeight <= sourceHeight) ?? PROFILES[0];
-      return this.runTranscode(taskId, resolved, matchProfile.name, deviceProfile);
+      const matchProfile =
+        PROFILES.find((p) => p.maxHeight <= sourceHeight) ?? PROFILES[0];
+      return this.runTranscode(
+        taskId,
+        resolved,
+        matchProfile.name,
+        deviceProfile,
+      );
     }
 
     await this.acquireSlot();
-    this.log.log(`Download #${taskId}: slot acquired (${this.runningCount}/${MAX_CONCURRENT_DOWNLOADS})`);
-    try {
-    await fs.mkdir(this.cachePath, { recursive: true });
-    const outputFile = path.join(this.cachePath, `dl-${taskId}-remux.mp4`);
-    const inputPath = resolved.absolutePath;
-
-    // Collect external subtitles
-    const subtitles = await this.subtitleRepo.find({
-      where: { mediaFileId: resolved.mediaFile.id },
-    });
-    const extSubs = subtitles.filter((s) => s.relativePath);
-
-    const args: string[] = ['-y', '-hide_banner', '-loglevel', 'info'];
-    args.push('-i', inputPath);
-
-    // Add external subtitle files as inputs
-    for (const sub of extSubs) {
-      const subPath = path.resolve(resolved.media.path!, sub.relativePath!);
-      args.push('-i', subPath);
-    }
-
-    // Copy video, transcode audio to AAC
-    args.push('-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ac', '2');
-
-    // Map video + audio from input 0
-    args.push('-map', '0:v:0', '-map', '0:a');
-
-    // Map text-based embedded subtitle streams (skip image-based PGS/VOBSUB)
-    const embeddedSubs = resolved.mediaFile.streamInfo?.subtitles ?? [];
-    const textSubs = embeddedSubs.filter(
-      (s) => !BITMAP_SUB_CODECS.has(s.codec),
+    this.log.log(
+      `Download #${taskId}: slot acquired (${this.runningCount}/${MAX_CONCURRENT_DOWNLOADS})`,
     );
-    for (const s of textSubs) {
-      args.push('-map', `0:s:${embeddedSubs.indexOf(s)}`);
-    }
-    for (let i = 0; i < extSubs.length; i++) {
-      args.push('-map', `${i + 1}:0`);
-    }
-    if (textSubs.length > 0 || extSubs.length > 0) {
-      args.push('-c:s', 'mov_text');
-    }
-
-    args.push('-movflags', '+faststart', outputFile);
-
-    this.log.log(`Download #${taskId}: starting remux — ffmpeg ${args.join(' ')}`);
-    await this.taskRepo.update(taskId, { status: 'remuxing' });
-
-    const duration = info?.durationSeconds ?? 0;
-
     try {
-      await runFfmpegWithProgress(
-        args,
-        duration,
-        (pct) => {
-          void this.taskRepo.update(taskId, { progress: pct });
-          this.events.emit({
-            type: 'download.progress',
-            downloadId: taskId,
-            progress: pct,
-          });
-        },
-        (kill) => this.activeJobs.set(taskId, { kill }),
-        () => this.activeJobs.delete(taskId),
-      );
+      await fs.mkdir(this.cachePath, { recursive: true });
+      const outputFile = path.join(this.cachePath, `dl-${taskId}-remux.mp4`);
+      const inputPath = resolved.absolutePath;
 
-      // Extract subtitles as separate VTT files
-      const vttFiles = await this.extractSubtitlesAsVtt(
-        inputPath,
-        taskId,
-        resolved.mediaFile.streamInfo?.subtitles ?? [],
-      );
-      const subtitleMeta = vttFiles.map((v) => ({
-        language: v.language,
-        forced: v.forced,
-        filename: path.basename(v.path),
-      }));
+      // Collect external subtitles
+      const subtitles = await this.subtitleRepo.find({
+        where: { mediaFileId: resolved.mediaFile.id },
+      });
+      const extSubs = subtitles.filter((s) => s.relativePath);
 
-      // Verify output duration — HW decoders can silently truncate
-      const outDuration = await probeOutputDuration(outputFile);
-      if (duration > 0 && outDuration > 0 && outDuration < duration * 0.9) {
-        throw new Error(
-          `Output truncated: ${Math.round(outDuration)}s / ${Math.round(duration)}s (${Math.round((outDuration / duration) * 100)}%)`,
-        );
+      const args: string[] = ['-y', '-hide_banner', '-loglevel', 'info'];
+      args.push('-i', inputPath);
+
+      // Add external subtitle files as inputs
+      for (const sub of extSubs) {
+        const subPath = path.resolve(resolved.media.path!, sub.relativePath!);
+        args.push('-i', subPath);
       }
 
-      const stat = await fs.stat(outputFile);
-      await this.taskRepo.update(taskId, {
-        status: 'ready',
-        progress: 100,
-        outputPath: outputFile,
-        fileSize: stat.size,
-        subtitles: subtitleMeta.length ? subtitleMeta : undefined,
-      });
-      this.events.emit({ type: 'download.progress', downloadId: taskId, progress: 100 });
-      this.events.emit({ type: 'download.ready', downloadId: taskId });
-      this.log.log(`Download #${taskId}: remux complete (${this.formatSize(stat.size)}), ${subtitleMeta.length} VTT subs`);
-    } catch (err) {
-      const msg = (err as Error).message;
-      await this.taskRepo.update(taskId, { status: 'failed', error: msg });
-      this.events.emit({ type: 'download.failed', downloadId: taskId, error: msg });
-      this.log.warn(`Download #${taskId}: remux failed: ${msg}`);
-      await fs.unlink(outputFile).catch(() => {});
-    }
+      // Copy video, transcode audio to AAC
+      args.push('-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ac', '2');
+
+      // Map video + audio from input 0
+      args.push('-map', '0:v:0', '-map', '0:a');
+
+      // Map text-based embedded subtitle streams (skip image-based PGS/VOBSUB)
+      const embeddedSubs = resolved.mediaFile.streamInfo?.subtitles ?? [];
+      const textSubs = embeddedSubs.filter(
+        (s) => !BITMAP_SUB_CODECS.has(s.codec),
+      );
+      for (const s of textSubs) {
+        args.push('-map', `0:s:${embeddedSubs.indexOf(s)}`);
+      }
+      for (let i = 0; i < extSubs.length; i++) {
+        args.push('-map', `${i + 1}:0`);
+      }
+      if (textSubs.length > 0 || extSubs.length > 0) {
+        args.push('-c:s', 'mov_text');
+      }
+
+      args.push('-movflags', '+faststart', outputFile);
+
+      this.log.log(
+        `Download #${taskId}: starting remux — ffmpeg ${args.join(' ')}`,
+      );
+      await this.taskRepo.update(taskId, { status: 'remuxing' });
+
+      const duration = info?.durationSeconds ?? 0;
+
+      try {
+        await runFfmpegWithProgress(
+          args,
+          duration,
+          (pct) => {
+            void this.taskRepo.update(taskId, { progress: pct });
+            this.events.emit({
+              type: 'download.progress',
+              downloadId: taskId,
+              progress: pct,
+            });
+          },
+          (kill) => this.activeJobs.set(taskId, { kill }),
+          () => this.activeJobs.delete(taskId),
+        );
+
+        // Extract subtitles as separate VTT files
+        const vttFiles = await this.extractSubtitlesAsVtt(
+          inputPath,
+          taskId,
+          resolved.mediaFile.streamInfo?.subtitles ?? [],
+        );
+        const subtitleMeta = vttFiles.map((v) => ({
+          language: v.language,
+          forced: v.forced,
+          filename: path.basename(v.path),
+        }));
+
+        // Verify output duration — HW decoders can silently truncate
+        const outDuration = await probeOutputDuration(outputFile);
+        if (duration > 0 && outDuration > 0 && outDuration < duration * 0.9) {
+          throw new Error(
+            `Output truncated: ${Math.round(outDuration)}s / ${Math.round(duration)}s (${Math.round((outDuration / duration) * 100)}%)`,
+          );
+        }
+
+        const stat = await fs.stat(outputFile);
+        await this.taskRepo.update(taskId, {
+          status: 'ready',
+          progress: 100,
+          outputPath: outputFile,
+          fileSize: stat.size,
+          subtitles: subtitleMeta.length ? subtitleMeta : undefined,
+        });
+        this.events.emit({
+          type: 'download.progress',
+          downloadId: taskId,
+          progress: 100,
+        });
+        this.events.emit({ type: 'download.ready', downloadId: taskId });
+        this.log.log(
+          `Download #${taskId}: remux complete (${this.formatSize(stat.size)}), ${subtitleMeta.length} VTT subs`,
+        );
+      } catch (err) {
+        const msg = (err as Error).message;
+        await this.taskRepo.update(taskId, { status: 'failed', error: msg });
+        this.events.emit({
+          type: 'download.failed',
+          downloadId: taskId,
+          error: msg,
+        });
+        this.log.warn(`Download #${taskId}: remux failed: ${msg}`);
+        await fs.unlink(outputFile).catch(() => {});
+      }
     } finally {
       this.releaseSlot();
     }
@@ -534,7 +596,11 @@ export class DownloadsService implements OnModuleInit {
     taskId: number,
     resolved: ResolvedFile,
     quality: string,
-    deviceProfile: { supportsHdr?: boolean; audioCodecs?: string[]; maxAudioChannels?: number } = {},
+    deviceProfile: {
+      supportsHdr?: boolean;
+      audioCodecs?: string[];
+      maxAudioChannels?: number;
+    } = {},
   ): Promise<void> {
     const profile = PROFILES.find((p) => p.name === quality);
     if (!profile) {
@@ -546,118 +612,124 @@ export class DownloadsService implements OnModuleInit {
     }
 
     await this.acquireSlot();
-    this.log.log(`Download #${taskId}: slot acquired (${this.runningCount}/${MAX_CONCURRENT_DOWNLOADS})`);
-    try {
-    await fs.mkdir(this.cachePath, { recursive: true });
-    const outputFile = path.join(
-      this.cachePath,
-      `dl-${taskId}-${quality}.mp4`,
-    );
-
-    const inputPath = resolved.absolutePath;
-    const info = resolved.mediaFile.streamInfo;
-    const video = info?.video?.[0];
-    const isHdr =
-      video?.colorSpace === 'bt2020nc' || video?.bitDepth === 10;
-
-    // Use detected hardware acceleration
-    const hwAccel = this.transcoding.getDetectedHwAccel();
-
-    // Collect external subtitles
-    const subtitles = await this.subtitleRepo.find({
-      where: { mediaFileId: resolved.mediaFile.id },
-    });
-
-    const crop = (video as any)?.crop as { width: number; height: number; x: number; y: number } | undefined;
-    const args = this.buildFullFileFfmpegArgs(
-      inputPath,
-      outputFile,
-      profile,
-      hwAccel,
-      isHdr,
-      subtitles,
-      resolved,
-      crop,
-    );
-
     this.log.log(
-      `Download #${taskId}: ffmpeg args: ${args.join(' ')}`,
+      `Download #${taskId}: slot acquired (${this.runningCount}/${MAX_CONCURRENT_DOWNLOADS})`,
     );
-    this.log.log(
-      `Download #${taskId}: starting transcode to ${quality} (${hwAccel}), embedded subs: ${(resolved.mediaFile.streamInfo?.subtitles ?? []).length}, text: ${(resolved.mediaFile.streamInfo?.subtitles ?? []).filter((s) => !BITMAP_SUB_CODECS.has(s.codec)).length}, external: ${subtitles.filter((s) => s.relativePath).length}`,
-    );
-    await this.taskRepo.update(taskId, { status: 'transcoding' });
-
-    const duration = info?.durationSeconds ?? 0;
-    this.log.log(`Download #${taskId}: duration=${duration}s`);
-
     try {
-      await runFfmpegWithProgress(
-        args,
-        duration,
-        (pct) => {
-          void this.taskRepo.update(taskId, { progress: pct });
-          this.events.emit({
-            type: 'download.progress',
-            downloadId: taskId,
-            progress: pct,
-          });
-        },
-        (kill) => this.activeJobs.set(taskId, { kill }),
-        () => this.activeJobs.delete(taskId),
+      await fs.mkdir(this.cachePath, { recursive: true });
+      const outputFile = path.join(
+        this.cachePath,
+        `dl-${taskId}-${quality}.mp4`,
       );
 
-      // Extract subtitles as separate VTT files
-      const embeddedSubs = resolved.mediaFile.streamInfo?.subtitles ?? [];
-      const vttFiles = await this.extractSubtitlesAsVtt(
-        resolved.absolutePath,
-        taskId,
-        embeddedSubs,
-      );
-      const subtitleMeta = vttFiles.map((v) => ({
-        language: v.language,
-        forced: v.forced,
-        filename: path.basename(v.path),
-      }));
+      const inputPath = resolved.absolutePath;
+      const info = resolved.mediaFile.streamInfo;
+      const video = info?.video?.[0];
+      const isHdr = video?.colorSpace === 'bt2020nc' || video?.bitDepth === 10;
 
-      // Verify output duration — HW decoders can silently truncate
-      const outDuration = await probeOutputDuration(outputFile);
-      if (duration > 0 && outDuration > 0 && outDuration < duration * 0.9) {
-        throw new Error(
-          `Output truncated: ${Math.round(outDuration)}s / ${Math.round(duration)}s (${Math.round((outDuration / duration) * 100)}%)`,
+      // Use detected hardware acceleration
+      const hwAccel = this.transcoding.getDetectedHwAccel();
+
+      // Collect external subtitles
+      const subtitles = await this.subtitleRepo.find({
+        where: { mediaFileId: resolved.mediaFile.id },
+      });
+
+      const crop = (video as any)?.crop as
+        | { width: number; height: number; x: number; y: number }
+        | undefined;
+      const args = this.buildFullFileFfmpegArgs(
+        inputPath,
+        outputFile,
+        profile,
+        hwAccel,
+        isHdr,
+        subtitles,
+        resolved,
+        crop,
+      );
+
+      this.log.log(`Download #${taskId}: ffmpeg args: ${args.join(' ')}`);
+      this.log.log(
+        `Download #${taskId}: starting transcode to ${quality} (${hwAccel}), embedded subs: ${(resolved.mediaFile.streamInfo?.subtitles ?? []).length}, text: ${(resolved.mediaFile.streamInfo?.subtitles ?? []).filter((s) => !BITMAP_SUB_CODECS.has(s.codec)).length}, external: ${subtitles.filter((s) => s.relativePath).length}`,
+      );
+      await this.taskRepo.update(taskId, { status: 'transcoding' });
+
+      const duration = info?.durationSeconds ?? 0;
+      this.log.log(`Download #${taskId}: duration=${duration}s`);
+
+      try {
+        await runFfmpegWithProgress(
+          args,
+          duration,
+          (pct) => {
+            void this.taskRepo.update(taskId, { progress: pct });
+            this.events.emit({
+              type: 'download.progress',
+              downloadId: taskId,
+              progress: pct,
+            });
+          },
+          (kill) => this.activeJobs.set(taskId, { kill }),
+          () => this.activeJobs.delete(taskId),
         );
-      }
 
-      const stat = await fs.stat(outputFile);
-      await this.taskRepo.update(taskId, {
-        status: 'ready',
-        progress: 100,
-        outputPath: outputFile,
-        fileSize: stat.size,
-        subtitles: subtitleMeta.length ? subtitleMeta : undefined,
-      });
-      this.events.emit({ type: 'download.progress', downloadId: taskId, progress: 100 });
-      this.events.emit({ type: 'download.ready', downloadId: taskId });
-      this.log.log(`Download #${taskId}: transcode complete (${this.formatSize(stat.size)}), ${subtitleMeta.length} VTT subs`);
-    } catch (err) {
-      const msg = (err as Error).message;
-      await this.taskRepo.update(taskId, {
-        status: 'failed',
-        error: msg,
-      });
-      this.events.emit({
-        type: 'download.failed',
-        downloadId: taskId,
-        error: msg,
-      });
-      this.log.warn(`Download #${taskId}: transcode failed: ${msg}`);
-      await fs.unlink(outputFile).catch(() => {});
-    }
+        // Extract subtitles as separate VTT files
+        const embeddedSubs = resolved.mediaFile.streamInfo?.subtitles ?? [];
+        const vttFiles = await this.extractSubtitlesAsVtt(
+          resolved.absolutePath,
+          taskId,
+          embeddedSubs,
+        );
+        const subtitleMeta = vttFiles.map((v) => ({
+          language: v.language,
+          forced: v.forced,
+          filename: path.basename(v.path),
+        }));
+
+        // Verify output duration — HW decoders can silently truncate
+        const outDuration = await probeOutputDuration(outputFile);
+        if (duration > 0 && outDuration > 0 && outDuration < duration * 0.9) {
+          throw new Error(
+            `Output truncated: ${Math.round(outDuration)}s / ${Math.round(duration)}s (${Math.round((outDuration / duration) * 100)}%)`,
+          );
+        }
+
+        const stat = await fs.stat(outputFile);
+        await this.taskRepo.update(taskId, {
+          status: 'ready',
+          progress: 100,
+          outputPath: outputFile,
+          fileSize: stat.size,
+          subtitles: subtitleMeta.length ? subtitleMeta : undefined,
+        });
+        this.events.emit({
+          type: 'download.progress',
+          downloadId: taskId,
+          progress: 100,
+        });
+        this.events.emit({ type: 'download.ready', downloadId: taskId });
+        this.log.log(
+          `Download #${taskId}: transcode complete (${this.formatSize(stat.size)}), ${subtitleMeta.length} VTT subs`,
+        );
+      } catch (err) {
+        const msg = (err as Error).message;
+        await this.taskRepo.update(taskId, {
+          status: 'failed',
+          error: msg,
+        });
+        this.events.emit({
+          type: 'download.failed',
+          downloadId: taskId,
+          error: msg,
+        });
+        this.log.warn(`Download #${taskId}: transcode failed: ${msg}`);
+        await fs.unlink(outputFile).catch(() => {});
+      }
     } finally {
       this.releaseSlot();
     }
   }
-
 
   /**
    * Extract each text subtitle stream as a separate .vtt file.
@@ -673,28 +745,60 @@ export class DownloadsService implements OnModuleInit {
     resolved: ResolvedFile,
     crop?: { width: number; height: number; x: number; y: number },
   ): string[] {
-    const args: string[] = ['-y', '-hide_banner', '-loglevel', 'info',
-      '-threads', '4', '-filter_threads', '1'];
+    const args: string[] = [
+      '-y',
+      '-hide_banner',
+      '-loglevel',
+      'info',
+      '-threads',
+      '4',
+      '-filter_threads',
+      '1',
+    ];
 
     // Hardware acceleration input
-    const effectiveHw = crop && (hwAccel === 'qsv' || hwAccel === 'vaapi') ? 'vaapi' : hwAccel;
+    const effectiveHw =
+      crop && (hwAccel === 'qsv' || hwAccel === 'vaapi') ? 'vaapi' : hwAccel;
     switch (effectiveHw) {
       case 'qsv':
         args.push(
-          '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
-          '-init_hw_device', 'qsv=qs@va',
-          '-hwaccel', 'vaapi', '-hwaccel_output_format', 'vaapi',
-          '-hwaccel_device', 'va',
+          '-init_hw_device',
+          'vaapi=va:/dev/dri/renderD128',
+          '-init_hw_device',
+          'qsv=qs@va',
+          '-hwaccel',
+          'vaapi',
+          '-hwaccel_output_format',
+          'vaapi',
+          '-hwaccel_device',
+          'va',
         );
-        if (isHdr) args.push('-init_hw_device', 'opencl=ocl:0.0', '-filter_hw_device', 'ocl');
+        if (isHdr)
+          args.push(
+            '-init_hw_device',
+            'opencl=ocl:0.0',
+            '-filter_hw_device',
+            'ocl',
+          );
         break;
       case 'vaapi':
         args.push(
-          '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
-          '-hwaccel', 'vaapi', '-hwaccel_output_format', 'vaapi',
-          '-hwaccel_device', 'va',
+          '-init_hw_device',
+          'vaapi=va:/dev/dri/renderD128',
+          '-hwaccel',
+          'vaapi',
+          '-hwaccel_output_format',
+          'vaapi',
+          '-hwaccel_device',
+          'va',
         );
-        if (isHdr) args.push('-init_hw_device', 'opencl=ocl:0.0', '-filter_hw_device', 'ocl');
+        if (isHdr)
+          args.push(
+            '-init_hw_device',
+            'opencl=ocl:0.0',
+            '-filter_hw_device',
+            'ocl',
+          );
         break;
       case 'nvenc':
         args.push('-hwaccel', 'cuda');
@@ -712,22 +816,35 @@ export class DownloadsService implements OnModuleInit {
 
     // Video filter chain
     const w = profile.maxWidth;
-    const cropF = crop ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},` : '';
-    const hwCrop = crop ? `hwdownload,format=nv12,${cropF}hwupload=derive_device=vaapi,` : '';
+    const cropF = crop
+      ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},`
+      : '';
+    const hwCrop = crop
+      ? `hwdownload,format=nv12,${cropF}hwupload=derive_device=vaapi,`
+      : '';
 
     switch (effectiveHw) {
       case 'qsv':
         args.push('-c:v', 'h264_qsv');
         if (isHdr) {
-          args.push('-vf', `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`);
+          args.push(
+            '-vf',
+            `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
+          );
         } else {
-          args.push('-vf', `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`);
+          args.push(
+            '-vf',
+            `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
+          );
         }
         break;
       case 'vaapi':
         args.push('-c:v', 'h264_vaapi');
         if (isHdr) {
-          args.push('-vf', `${hwCrop}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`);
+          args.push(
+            '-vf',
+            `${hwCrop}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
+          );
         } else if (crop) {
           args.push('-vf', `${hwCrop}scale_vaapi=w=${w}:h=-16:format=nv12`);
         } else {
@@ -737,9 +854,15 @@ export class DownloadsService implements OnModuleInit {
       case 'nvenc':
         args.push('-c:v', 'h264_nvenc', '-preset', 'p4');
         if (isHdr) {
-          args.push('-vf', `hwdownload,format=p010le,${cropF}zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=${w}:-2`);
+          args.push(
+            '-vf',
+            `hwdownload,format=p010le,${cropF}zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=${w}:-2`,
+          );
         } else if (crop) {
-          args.push('-vf', `hwdownload,format=nv12,${cropF}scale=${w}:-2,format=yuv420p`);
+          args.push(
+            '-vf',
+            `hwdownload,format=nv12,${cropF}scale=${w}:-2,format=yuv420p`,
+          );
         } else {
           args.push('-vf', `scale_cuda=w=${w}:h=-2:format=nv12`);
         }
@@ -747,15 +870,28 @@ export class DownloadsService implements OnModuleInit {
       default: // CPU
         args.push('-c:v', 'libx264', '-preset', 'veryfast');
         if (isHdr) {
-          args.push('-vf', `${cropF}zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=${w}:-2:flags=lanczos`);
+          args.push(
+            '-vf',
+            `${cropF}zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=${w}:-2:flags=lanczos`,
+          );
         } else {
-          args.push('-vf', `${cropF}scale=${w}:-2:flags=lanczos,format=yuv420p`);
+          args.push(
+            '-vf',
+            `${cropF}scale=${w}:-2:flags=lanczos,format=yuv420p`,
+          );
         }
     }
 
     // Rate control: cap VBV buffer to prevent unbounded memory growth on long encodes
     const bufsize = `${parseInt(profile.videoBitrate) * 2}${profile.videoBitrate.replace(/[0-9.]/g, '')}`;
-    args.push('-b:v', profile.videoBitrate, '-maxrate', profile.videoBitrate, '-bufsize', bufsize);
+    args.push(
+      '-b:v',
+      profile.videoBitrate,
+      '-maxrate',
+      profile.videoBitrate,
+      '-bufsize',
+      bufsize,
+    );
 
     // Audio → AAC stereo
     args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
@@ -768,7 +904,9 @@ export class DownloadsService implements OnModuleInit {
 
     // Text-based subtitle tracks as mov_text
     const embeddedSubs = resolved.mediaFile.streamInfo?.subtitles ?? [];
-    const textSubs = embeddedSubs.filter((s) => !BITMAP_SUB_CODECS.has(s.codec));
+    const textSubs = embeddedSubs.filter(
+      (s) => !BITMAP_SUB_CODECS.has(s.codec),
+    );
     for (const s of textSubs) {
       args.push('-map', `0:s:${embeddedSubs.indexOf(s)}`);
     }
@@ -786,34 +924,72 @@ export class DownloadsService implements OnModuleInit {
   private async extractSubtitlesAsVtt(
     inputPath: string,
     taskId: number,
-    subtitles: { streamIndex: number; codec: string; language: string; forced: boolean }[],
-  ): Promise<{ index: number; language: string; forced: boolean; path: string }[]> {
+    subtitles: {
+      streamIndex: number;
+      codec: string;
+      language: string;
+      forced: boolean;
+    }[],
+  ): Promise<
+    { index: number; language: string; forced: boolean; path: string }[]
+  > {
     const textSubs = subtitles.filter((s) => !BITMAP_SUB_CODECS.has(s.codec));
     if (!textSubs.length) return [];
 
-    const results: { index: number; language: string; forced: boolean; path: string }[] = [];
+    const results: {
+      index: number;
+      language: string;
+      forced: boolean;
+      path: string;
+    }[] = [];
     for (const sub of textSubs) {
-      const vttPath = path.join(this.cachePath, `dl-${taskId}-sub-${sub.streamIndex}.vtt`);
+      const vttPath = path.join(
+        this.cachePath,
+        `dl-${taskId}-sub-${sub.streamIndex}.vtt`,
+      );
       try {
         await new Promise<void>((resolve, reject) => {
-          const proc = spawn('ffmpeg', [
-            '-y', '-hide_banner', '-loglevel', 'error',
-            '-i', inputPath,
-            '-map', `0:${sub.streamIndex}`,
-            '-c:s', 'webvtt',
-            vttPath,
-          ], { stdio: ['ignore', 'ignore', 'pipe'] });
+          const proc = spawn(
+            'ffmpeg',
+            [
+              '-y',
+              '-hide_banner',
+              '-loglevel',
+              'error',
+              '-i',
+              inputPath,
+              '-map',
+              `0:${sub.streamIndex}`,
+              '-c:s',
+              'webvtt',
+              vttPath,
+            ],
+            { stdio: ['ignore', 'ignore', 'pipe'] },
+          );
           let err = '';
-          proc.stderr.on('data', (c: Buffer) => { err += c.toString(); });
-          proc.on('close', (code) => code === 0 ? resolve() : reject(new Error(err || `exit ${code}`)));
+          proc.stderr.on('data', (c: Buffer) => {
+            err += c.toString();
+          });
+          proc.on('close', (code) =>
+            code === 0 ? resolve() : reject(new Error(err || `exit ${code}`)),
+          );
           proc.on('error', reject);
         });
-        results.push({ index: sub.streamIndex, language: sub.language, forced: sub.forced, path: vttPath });
+        results.push({
+          index: sub.streamIndex,
+          language: sub.language,
+          forced: sub.forced,
+          path: vttPath,
+        });
       } catch (e) {
-        this.log.warn(`Download #${taskId}: failed to extract sub stream ${sub.streamIndex}: ${(e as Error).message}`);
+        this.log.warn(
+          `Download #${taskId}: failed to extract sub stream ${sub.streamIndex}: ${(e as Error).message}`,
+        );
       }
     }
-    this.log.log(`Download #${taskId}: extracted ${results.length}/${textSubs.length} subtitle tracks as VTT`);
+    this.log.log(
+      `Download #${taskId}: extracted ${results.length}/${textSubs.length} subtitle tracks as VTT`,
+    );
     return results;
   }
 

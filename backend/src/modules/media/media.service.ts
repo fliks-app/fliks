@@ -1018,7 +1018,10 @@ export class MediaService {
       // Update existing persons' name/avatarUrl
       for (const p of existingPersons) {
         const credit = allCredits.find((c) => c.externalId === p.tmdbId);
-        if (credit && (credit.name !== p.name || credit.avatarUrl !== p.avatarUrl)) {
+        if (
+          credit &&
+          (credit.name !== p.name || credit.avatarUrl !== p.avatarUrl)
+        ) {
           await this.personRepo.update(p.id, {
             name: credit.name,
             avatarUrl: credit.avatarUrl ?? undefined,
@@ -1260,9 +1263,7 @@ export class MediaService {
     if (!normPath) return;
     const absPath = path.join(mediaDir, normPath);
     if (!fs.existsSync(absPath)) {
-      this.log.warn(
-        `enrichMediaFileFromDisk: file not on disk — "${absPath}"`,
-      );
+      this.log.warn(`enrichMediaFileFromDisk: file not on disk — "${absPath}"`);
       return;
     }
 
@@ -1279,9 +1280,7 @@ export class MediaService {
 
     const filename = path.basename(absPath);
 
-    let streamInfo: Awaited<
-      ReturnType<FfprobeService['detectMediaFileInfo']>
-    >;
+    let streamInfo: Awaited<ReturnType<FfprobeService['detectMediaFileInfo']>>;
     try {
       streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
       if (streamInfo?.video?.[0]) {
@@ -1340,9 +1339,7 @@ export class MediaService {
     '.flv',
   ]);
 
-  async rescanFiles(
-    mediaId: number,
-  ): Promise<{
+  async rescanFiles(mediaId: number): Promise<{
     added: number;
     removed: number;
     updated: number;
@@ -1740,9 +1737,8 @@ export class MediaService {
     let subtitleRemovedMissing = 0;
     let subtitleRemovedDuplicates = 0;
     try {
-      const sub = await this.subtitles.reconcileSubtitleFilesAfterRescan(
-        mediaId,
-      );
+      const sub =
+        await this.subtitles.reconcileSubtitleFilesAfterRescan(mediaId);
       subtitleRemovedMissing = sub.removedMissing;
       subtitleRemovedDuplicates = sub.removedDuplicates;
       if (subtitleRemovedMissing || subtitleRemovedDuplicates) {

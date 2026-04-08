@@ -152,7 +152,10 @@ export class DiskImportService {
         }
 
         if (!media.path) continue; // Skip if we can't compute a path
-        const relativePath = relativePathUnderMediaRoot(media.path, entry.filePath);
+        const relativePath = relativePathUnderMediaRoot(
+          media.path,
+          entry.filePath,
+        );
         if (!relativePath) {
           this.logger.error(
             `Disk import: file outside media folder — mediaId=${media.id} mediaPath=${media.path} filePath=${entry.filePath}`,

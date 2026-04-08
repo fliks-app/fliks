@@ -39,6 +39,11 @@ import { AuthModule } from '../auth/auth.module';
     ActiveStreamTracker,
     SubtitleBurnInService,
   ],
-  exports: [PlaybackService, TranscodingService, StreamingService, ActiveStreamTracker],
+  exports: [
+    PlaybackService,
+    TranscodingService,
+    StreamingService,
+    ActiveStreamTracker,
+  ],
 })
 export class StreamingModule {}

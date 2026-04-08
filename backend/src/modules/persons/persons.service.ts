@@ -36,10 +36,7 @@ export class PersonsService {
     return this.personRepo
       .createQueryBuilder('p')
       .where(`p."searchVector" @@ to_tsquery('simple', :q)`, { q: tsQuery })
-      .orderBy(
-        `ts_rank(p."searchVector", to_tsquery('simple', :q))`,
-        'DESC',
-      )
+      .orderBy(`ts_rank(p."searchVector", to_tsquery('simple', :q))`, 'DESC')
       .limit(50)
       .getMany();
   }

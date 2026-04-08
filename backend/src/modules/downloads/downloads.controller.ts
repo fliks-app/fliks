@@ -32,7 +32,8 @@ export class DownloadsController {
   @Post()
   create(
     @Req() req: Request,
-    @Body() body: {
+    @Body()
+    body: {
       mediaFileId: number;
       quality: string;
       deviceId?: string;
@@ -44,7 +45,13 @@ export class DownloadsController {
     },
   ) {
     const user = req.user as User;
-    return this.downloads.create(user.id, body.mediaFileId, body.quality, body.deviceProfile, body.deviceId);
+    return this.downloads.create(
+      user.id,
+      body.mediaFileId,
+      body.quality,
+      body.deviceProfile,
+      body.deviceId,
+    );
   }
 
   @Get()
@@ -107,10 +114,7 @@ export class DownloadsController {
       res.status(404).send('Subtitle not found');
       return;
     }
-    const filePath = path.join(
-      path.dirname(task.outputPath || ''),
-      filename,
-    );
+    const filePath = path.join(path.dirname(task.outputPath || ''), filename);
     res.setHeader('Content-Type', 'text/vtt');
     fs.createReadStream(filePath).pipe(res);
   }
@@ -119,7 +123,14 @@ export class DownloadsController {
   retry(
     @Req() req: Request,
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { deviceProfile?: { supportsHdr?: boolean; audioCodecs?: string[]; maxAudioChannels?: number } },
+    @Body()
+    body: {
+      deviceProfile?: {
+        supportsHdr?: boolean;
+        audioCodecs?: string[];
+        maxAudioChannels?: number;
+      };
+    },
   ) {
     const user = req.user as User;
     return this.downloads.retry(user.id, id, body.deviceProfile);
