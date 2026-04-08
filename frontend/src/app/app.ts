@@ -4,6 +4,8 @@ import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { AuthService } from './core/services/auth.service';
 import { CastPlayerService } from './core/services/cast-player.service';
+import { SseService } from './core/services/sse.service';
+import { DownloadManagerService } from './core/services/download-manager.service';
 import { ToastContainerComponent } from './shared/components/toast-container';
 import { ConfirmationModalComponent } from './shared/components/confirmation-modal';
 
@@ -16,7 +18,10 @@ import { ConfirmationModalComponent } from './shared/components/confirmation-mod
 export class App implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly castPlayer = inject(CastPlayerService);
+  private readonly sse = inject(SseService);
+  private readonly dlManager = inject(DownloadManagerService);
   private backButtonListener?: { remove: () => Promise<void> };
+  private resumeListener?: { remove: () => Promise<void> };
 
   ngOnInit() {
     this.auth.hydrateFromServer();
@@ -37,10 +42,19 @@ export class App implements OnInit, OnDestroy {
       }).then((handle) => {
         this.backButtonListener = handle;
       });
+
+      // Reconnect SSE + sync downloads when app comes back from background
+      CapApp.addListener('resume', () => {
+        this.sse.reconnect();
+        this.dlManager.syncAfterResume();
+      }).then((handle) => {
+        this.resumeListener = handle;
+      });
     }
   }
 
   ngOnDestroy() {
     this.backButtonListener?.remove();
+    this.resumeListener?.remove();
   }
 }

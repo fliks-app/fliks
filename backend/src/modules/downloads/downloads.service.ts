@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -38,7 +39,7 @@ export interface DownloadQuality {
 }
 
 @Injectable()
-export class DownloadsService {
+export class DownloadsService implements OnModuleInit {
   private readonly log = new Logger(DownloadsService.name);
   private readonly cachePath: string;
   /** Active transcode processes — keyed by task ID */
@@ -62,6 +63,30 @@ export class DownloadsService {
       'DOWNLOAD_CACHE_PATH',
       '/tmp/fliks-downloads',
     );
+  }
+
+  async onModuleInit() {
+    // Mark any in-progress tasks as failed (server restarted, ffmpeg processes are gone)
+    const stale = await this.taskRepo.find({
+      where: [
+        { status: 'transcoding' },
+        { status: 'remuxing' },
+        { status: 'pending' },
+      ],
+    });
+    if (stale.length) {
+      for (const task of stale) {
+        // Clean up partial output files
+        if (task.outputPath) {
+          await fs.unlink(task.outputPath).catch(() => {});
+        }
+      }
+      await this.taskRepo.update(
+        stale.map((t) => t.id),
+        { status: 'failed', error: 'Server restarted during processing', outputPath: undefined as any },
+      );
+      this.log.warn(`Marked ${stale.length} in-progress downloads as failed (server restart)`);
+    }
   }
 
   async getAvailableQualities(mediaFileId: number): Promise<DownloadQuality[]> {
@@ -120,6 +145,7 @@ export class DownloadsService {
     }
 
     let episodeLabel: string | undefined;
+    this.log.log(`Download create: mediaFileId=${mediaFileId}, episodeId=${file.episodeId ?? 'null'}`);
     if (file.episodeId) {
       const ep = await this.episodeRepo.findOne({
         where: { id: file.episodeId },
@@ -169,6 +195,45 @@ export class DownloadsService {
     if (!task) throw new NotFoundException(`Download #${taskId} not found`);
     if (task.userId !== userId) throw new ForbiddenException();
     return task;
+  }
+
+  async retry(
+    userId: number,
+    taskId: number,
+    deviceProfile?: { supportsHdr?: boolean; audioCodecs?: string[]; maxAudioChannels?: number },
+  ): Promise<DownloadTask> {
+    const task = await this.getOne(userId, taskId);
+    if (task.status !== 'failed' && task.status !== 'expired') {
+      throw new BadRequestException('Only failed or expired downloads can be retried');
+    }
+
+    // Clean up any leftover output file
+    if (task.outputPath) {
+      await fs.unlink(task.outputPath).catch(() => {});
+    }
+
+    // Reset task state
+    await this.taskRepo.update(task.id, {
+      status: 'pending',
+      progress: 0,
+      outputPath: undefined,
+      error: undefined,
+      fileSize: undefined,
+      subtitles: undefined,
+      clientDownloadedAt: undefined,
+    });
+
+    // Re-resolve file and restart workflow
+    const resolved = await this.streaming.resolveFile(task.mediaFileId);
+    const dp = deviceProfile ?? {};
+
+    if (task.quality === 'original') {
+      void this.runRemux(task.id, resolved, dp);
+    } else {
+      void this.runTranscode(task.id, resolved, task.quality, dp);
+    }
+
+    return this.getOne(userId, taskId);
   }
 
   async getFilePath(userId: number, taskId: number): Promise<string> {
@@ -277,7 +342,7 @@ export class DownloadsService {
       args.push('-i', subPath);
     }
 
-    // Copy video, transcode audio to AAC for universal compatibility
+    // Copy video, transcode audio to AAC
     args.push('-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ac', '2');
 
     // Map video + audio from input 0
@@ -288,12 +353,8 @@ export class DownloadsService {
     const textSubs = embeddedSubs.filter(
       (s) => !BITMAP_SUB_CODECS.has(s.codec),
     );
-    this.log.log(
-      `Download #${taskId}: embedded subs: ${embeddedSubs.length} total, ${textSubs.length} text-based, ${extSubs.length} external`,
-    );
     for (const s of textSubs) {
-      const idx = embeddedSubs.indexOf(s);
-      args.push('-map', `0:s:${idx}`);
+      args.push('-map', `0:s:${embeddedSubs.indexOf(s)}`);
     }
     for (let i = 0; i < extSubs.length; i++) {
       args.push('-map', `${i + 1}:0`);
@@ -358,7 +419,7 @@ export class DownloadsService {
       const vttFiles = await this.extractSubtitlesAsVtt(
         inputPath,
         taskId,
-        embeddedSubs,
+        resolved.mediaFile.streamInfo?.subtitles ?? [],
       );
       const subtitleMeta = vttFiles.map((v) => ({
         language: v.language,
@@ -374,6 +435,7 @@ export class DownloadsService {
         fileSize: stat.size,
         subtitles: subtitleMeta.length ? subtitleMeta : undefined,
       });
+      this.events.emit({ type: 'download.progress', downloadId: taskId, progress: 100 });
       this.events.emit({ type: 'download.ready', downloadId: taskId });
       this.log.log(`Download #${taskId}: remux complete (${this.formatSize(stat.size)}), ${subtitleMeta.length} VTT subs`);
     } catch (err) {
@@ -510,10 +572,8 @@ export class DownloadsService {
         fileSize: stat.size,
         subtitles: subtitleMeta.length ? subtitleMeta : undefined,
       });
-      this.events.emit({
-        type: 'download.ready',
-        downloadId: taskId,
-      });
+      this.events.emit({ type: 'download.progress', downloadId: taskId, progress: 100 });
+      this.events.emit({ type: 'download.ready', downloadId: taskId });
       this.log.log(`Download #${taskId}: transcode complete (${this.formatSize(stat.size)}), ${subtitleMeta.length} VTT subs`);
     } catch (err) {
       const msg = (err as Error).message;

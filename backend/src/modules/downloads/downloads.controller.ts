@@ -109,6 +109,16 @@ export class DownloadsController {
     fs.createReadStream(filePath).pipe(res);
   }
 
+  @Post(':id/retry')
+  retry(
+    @Req() req: Request,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { deviceProfile?: { supportsHdr?: boolean; audioCodecs?: string[]; maxAudioChannels?: number } },
+  ) {
+    const user = req.user as User;
+    return this.downloads.retry(user.id, id, body.deviceProfile);
+  }
+
   @Post(':id/ack')
   async ackDownloaded(
     @Req() req: Request,

@@ -53,6 +53,11 @@
                 <svg lucidePlay class="h-4 w-4"></svg>
               </button>
             }
+            @if (task.status === 'failed') {
+              <button class="btn btn-ghost btn-sm btn-square" (click)="retryItem(task)" [title]="'downloads.retry' | translate">
+                <svg lucideRotateCcw class="h-4 w-4"></svg>
+              </button>
+            }
             <button class="btn btn-ghost btn-sm btn-square text-error" (click)="deleteItem(task)">
               <svg lucideTrash2 class="h-4 w-4"></svg>
             </button>

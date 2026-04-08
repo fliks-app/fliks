@@ -65,6 +65,16 @@ export class DownloadsApiService {
     return firstValueFrom(this.http.delete<void>(`/api/downloads/${id}`));
   }
 
+  retry(id: number, deviceProfile?: {
+    supportsHdr?: boolean;
+    audioCodecs?: string[];
+    maxAudioChannels?: number;
+  }) {
+    return firstValueFrom(
+      this.http.post<DownloadTask>(`/api/downloads/${id}/retry`, { deviceProfile }),
+    );
+  }
+
   /** Notify server that client has downloaded the file */
   ackDownloaded(id: number) {
     return firstValueFrom(

@@ -704,7 +704,8 @@
     "ready": "Prêt",
     "failed": "Échec",
     "offline": "Hors ligne",
-    "confirm_delete": "Supprimer ce téléchargement ? Le fichier sera supprimé de cet appareil."
+    "confirm_delete": "Supprimer ce téléchargement ? Le fichier sera supprimé de cet appareil.",
+    "retry": "Réessayer"
   },
   "settings": {
     "nav": {

@@ -26,6 +26,7 @@ import { DownloadQualityModalComponent } from '../../shared/components/download-
 import { DownloadsApiService } from '../../core/services/api/downloads-api.service';
 import { BrowserDeviceProfileService } from '../../core/services/browser-device-profile.service';
 import { DownloadCacheService } from '../../core/services/download-cache.service';
+import { DownloadManagerService } from '../../core/services/download-manager.service';
 import { OfflineStorageService } from '../../core/services/offline-storage.service';
 import { MediaDetailSubtitleSearchModalComponent } from '../media-detail/components/media-detail-subtitle-search-modal/media-detail-subtitle-search-modal.component';
 import { ReleasesModalComponent } from '../media-detail/components/releases-modal/releases-modal.component';
@@ -99,6 +100,7 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
   private readonly downloadsApi = inject(DownloadsApiService);
   private readonly downloadCache = inject(DownloadCacheService);
   private readonly deviceProfile = inject(BrowserDeviceProfileService);
+  private readonly downloadManager = inject(DownloadManagerService);
   private readonly offlineStorage = inject(OfflineStorageService);
   private readonly downloadModal = viewChild<DownloadQualityModalComponent>('downloadModal');
   private readonly subActions = inject(SubtitleActionsService);
@@ -565,6 +567,19 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
         audioCodecs: dp.directPlayProfiles[0]?.audioCodecs,
         maxAudioChannels: dp.maxAudioChannels,
       });
+      const m = this.media();
+      const ep = this.episode();
+      const s = this.season();
+      if (m) {
+        let dlTitle = m.title;
+        if (s && ep) {
+          const sn = String(s.seasonNumber).padStart(2, '0');
+          const en = String(ep.episodeNumber).padStart(2, '0');
+          dlTitle += ` — S${sn}E${en}`;
+          if (ep.title) dlTitle += ` ${ep.title}`;
+        }
+        this.downloadManager.onDownloadCreated(task.id, dlTitle, task.status);
+      }
       this.downloadCache.save([
         ...this.downloadCache.load().filter((t) => t.id !== task.id),
         task,

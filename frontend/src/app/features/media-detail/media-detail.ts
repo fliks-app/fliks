@@ -50,6 +50,7 @@ import { DownloadQualityModalComponent } from '../../shared/components/download-
 import { DownloadsApiService } from '../../core/services/api/downloads-api.service';
 import { BrowserDeviceProfileService } from '../../core/services/browser-device-profile.service';
 import { DownloadCacheService } from '../../core/services/download-cache.service';
+import { DownloadManagerService } from '../../core/services/download-manager.service';
 import { OfflineStorageService } from '../../core/services/offline-storage.service';
 import {
   filesForEpisode,
@@ -113,6 +114,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly downloadsApi = inject(DownloadsApiService);
   private readonly downloadCache = inject(DownloadCacheService);
   private readonly deviceProfile = inject(BrowserDeviceProfileService);
+  private readonly downloadManager = inject(DownloadManagerService);
   private readonly offlineStorage = inject(OfflineStorageService);
   private readonly downloadModal = viewChild<DownloadQualityModalComponent>('downloadModal');
   /** Same SSE payload must run handlers once; `media` updates (e.g. after rescan) re-run this effect. */
@@ -569,6 +571,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         audioCodecs: dp.directPlayProfiles[0]?.audioCodecs,
         maxAudioChannels: dp.maxAudioChannels,
       });
+      // Start foreground service + show notification immediately
+      const m = this.media();
+      if (m) this.downloadManager.onDownloadCreated(task.id, m.title, task.status);
       // Persist task immediately for recovery after app restart
       this.downloadCache.save([
         ...this.downloadCache.load().filter((t) => t.id !== task.id),

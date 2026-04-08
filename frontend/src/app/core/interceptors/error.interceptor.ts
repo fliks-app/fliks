@@ -10,9 +10,10 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
-      // Skip: i18n files, parse errors, network/timeout errors, any error while offline
-      const isNetworkError = err.status === 0 || err.status === 408 || err.status === 502 || err.status === 503 || err.status === 504 || (err as any).name === 'TimeoutError';
-      if (req.url.includes('/i18n/') || err.status === 200 || isNetworkError || !navigator.onLine) {
+      // Show toasts for client errors (400-499 except 408) + 500
+      // Skip: i18n, network errors, gateway errors, timeouts, offline
+      const showToast = (err.status >= 400 && err.status < 500 && err.status !== 408) || err.status === 500;
+      if (!showToast || req.url.includes('/i18n/')) {
         return throwError(() => err);
       }
       const message = extractMessage(err, translate);

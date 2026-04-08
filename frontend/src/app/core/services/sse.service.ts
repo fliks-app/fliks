@@ -29,6 +29,16 @@ export class SseService implements OnDestroy {
   private eventSource: EventSource | null = null;
   private retryDelay = 5000;
 
+  /** Force reconnect (e.g. after app resume from background) */
+  reconnect() {
+    if (this.eventSource) {
+      this.eventSource.close();
+      this.eventSource = null;
+    }
+    this.retryDelay = 5000;
+    this.connect();
+  }
+
   connect() {
     if (this.eventSource) return;
 

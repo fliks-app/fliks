@@ -18,7 +18,8 @@ import { DownloadCacheService } from '../../core/services/download-cache.service
 import { SseService } from '../../core/services/sse.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { TranslateService } from '@ngx-translate/core';
-import { LucideDownload, LucideTrash2, LucidePlay, LucideAlertCircle } from '@lucide/angular';
+import { LucideDownload, LucideTrash2, LucidePlay, LucideAlertCircle, LucideRotateCcw } from '@lucide/angular';
+import { BrowserDeviceProfileService } from '../../core/services/browser-device-profile.service';
 
 export interface DisplayDownloadTask extends DownloadTask {
   downloadProgress?: number;
@@ -26,7 +27,7 @@ export interface DisplayDownloadTask extends DownloadTask {
 
 @Component({
   selector: 'app-downloads',
-  imports: [TranslateModule, LucideDownload, LucideTrash2, LucidePlay, LucideAlertCircle],
+  imports: [TranslateModule, LucideDownload, LucideTrash2, LucidePlay, LucideAlertCircle, LucideRotateCcw],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './downloads.html',
 })
@@ -38,6 +39,7 @@ export class DownloadsComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
+  private readonly deviceProfile = inject(BrowserDeviceProfileService);
 
   private readonly baseTasks = signal<DownloadTask[]>([]);
   readonly loading = signal(true);
@@ -122,7 +124,8 @@ export class DownloadsComponent implements OnInit {
       if (
         task.status === 'transcoding' ||
         task.status === 'remuxing' ||
-        task.status === 'pending'
+        task.status === 'pending' ||
+        task.status === 'failed'
       ) {
         filtered.push(task);
       } else if (task.status === 'ready') {
@@ -137,6 +140,22 @@ export class DownloadsComponent implements OnInit {
       }
     }
     this.baseTasks.set(filtered);
+  }
+
+  async retryItem(task: DownloadTask) {
+    try {
+      const dp = this.deviceProfile.getProfile();
+      const updated = await this.downloadsApi.retry(task.id, {
+        supportsHdr: dp.supportsHdr,
+        audioCodecs: dp.directPlayProfiles[0]?.audioCodecs,
+        maxAudioChannels: dp.maxAudioChannels,
+      });
+      this.baseTasks.update((list) =>
+        list.map((t) => (t.id === task.id ? updated : t)),
+      );
+    } catch {
+      // ignore
+    }
   }
 
   async deleteItem(task: DownloadTask) {
