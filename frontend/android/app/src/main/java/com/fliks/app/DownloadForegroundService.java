@@ -9,7 +9,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.util.Log;
 
@@ -33,15 +35,19 @@ import org.json.JSONObject;
 /**
  * Foreground Service for download/transcode progress.
  *
- * Each task has a STABLE notification ID: NOTIFICATION_ID + taskId.
- * The foreground service is bound to one of them (the primary).
- * When primary completes, another task is promoted via startForeground(newId).
+ * One stable notification id per download task: {@link #notificationIdForTask(int)}.
+ * The same notification is updated for the whole lifecycle (transcode → download → terminé);
+ * we never post a second id for the same media. The foreground binding uses the primary task's id;
+ * other tasks use notify() on their id. Placeholder {@link #NOTIFICATION_ID} is cancelled when the
+ * first real task binds.
  */
 public class DownloadForegroundService extends Service {
     private static final String TAG = "DownloadFgService";
-    static final String CHANNEL_ID = "fliks_downloads";
+    /** New id so devices get a fresh channel (IMPORTANCE cannot be upgraded on an existing channel). */
+    static final String CHANNEL_ID = "fliks_downloads_fgs";
     static final int NOTIFICATION_ID = 888888;
-    private static final String GROUP_KEY = "fliks_downloads";
+    public static final String NOTIFICATION_GROUP_KEY = "fliks_downloads";
+    private static final String GROUP_KEY = NOTIFICATION_GROUP_KEY;
     private static final long POLL_INTERVAL_SECONDS = 5;
 
     private static DownloadForegroundService instance;
@@ -79,8 +85,22 @@ public class DownloadForegroundService extends Service {
 
     public static DownloadForegroundService getInstance() { return instance; }
 
-    /** Stable notification ID for a task */
-    private int notifId(int tid) { return NOTIFICATION_ID + tid; }
+    /** Stable notification id for a download task (shared with {@link DownloadNotificationPlugin}). */
+    public static int notificationIdForTask(int taskId) {
+        return NOTIFICATION_ID + taskId;
+    }
+
+    private int notifId(int tid) {
+        return notificationIdForTask(tid);
+    }
+
+    private void runOnMain(Runnable r) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            r.run();
+        } else {
+            new Handler(Looper.getMainLooper()).post(r);
+        }
+    }
 
     @Override
     public void onCreate() {
@@ -127,8 +147,11 @@ public class DownloadForegroundService extends Service {
             // First task or new task: set as primary if needed
             if (primaryTaskId == -1) {
                 primaryTaskId = tid;
-                // Rebind foreground to this task's notification ID
-                startForeground(notifId(tid), buildTaskNotification(ts.sortKey, title, 0, ts.status, episode));
+                final TaskState bound = ts;
+                runOnMain(() -> {
+                    NotificationManagerCompat.from(DownloadForegroundService.this).cancel(NOTIFICATION_ID);
+                    startForeground(notifId(tid), buildTaskNotification(bound.sortKey, title, 0, bound.status, episode));
+                });
             }
         } else {
             if (title != null && !title.isEmpty()) ts.title = title;
@@ -174,10 +197,12 @@ public class DownloadForegroundService extends Service {
     }
 
     public void cancelTaskNotification(int tid) {
-        boolean wasPrimary = (tid == primaryTaskId);
-        activeTasks.remove(tid);
-        NotificationManagerCompat.from(this).cancel(notifId(tid));
-        if (wasPrimary) promoteOrStop();
+        runOnMain(() -> {
+            boolean wasPrimary = (tid == primaryTaskId);
+            activeTasks.remove(tid);
+            NotificationManagerCompat.from(DownloadForegroundService.this).cancel(notifId(tid));
+            if (wasPrimary) promoteOrStop();
+        });
     }
 
     public void startNativeDownload(String url, String token, String destPath,
@@ -210,34 +235,62 @@ public class DownloadForegroundService extends Service {
 
     // ===== NOTIFICATIONS =====
 
-    /** Update a single task's notification */
+    /**
+     * Publish current {@link TaskState} for this task. Primary task updates the foreground
+     * notification in place ({@link #startForeground}); others use {@code notify} on the same stable id.
+     */
     private void updateSingleNotification(int tid) {
-        TaskState ts = activeTasks.get(tid);
-        if (ts == null) return;
-        NotificationManagerCompat.from(this).notify(
-            notifId(tid),
-            buildTaskNotification(ts.sortKey, ts.title, ts.progress, ts.status, ts.episode));
+        runOnMain(() -> {
+            TaskState ts = activeTasks.get(tid);
+            if (ts == null) return;
+            Notification n = buildTaskNotification(ts.sortKey, ts.title, ts.progress, ts.status, ts.episode);
+            int nid = notifId(tid);
+            if (tid == primaryTaskId) {
+                startForeground(nid, n);
+            } else {
+                NotificationManagerCompat.from(DownloadForegroundService.this).notify(nid, n);
+            }
+        });
     }
 
-    /** Handle task completion/failure */
+    /**
+     * Handle task completion/failure (main thread).
+     * Updates the existing notification in place: startForeground(sameId, terminal) then DETACH,
+     * so the system keeps one notification that morphs from ongoing → Terminé (notify-after-detach
+     * was unreliable on some devices when stopSelf() followed immediately).
+     */
     private void postTerminal(int tid, String title, String status, String episode) {
+        // if (Looper.myLooper() != Looper.getMainLooper()) {
+        //     new Handler(Looper.getMainLooper()).post(() -> postTerminal(tid, title, status, episode));
+        //     return;
+        // }
         boolean wasPrimary = (tid == primaryTaskId);
-        TaskState old = activeTasks.get(tid);
-        String sortKey = old != null ? old.sortKey : null;
-        activeTasks.remove(tid);
-
+        TaskState ts = activeTasks.get(tid);
         NotificationManagerCompat nm = NotificationManagerCompat.from(this);
-        Notification termNotif = buildTaskNotification(sortKey, title, 0, status, episode);
+        int nid = notifId(tid);
+
+        Notification termNotif;
+        if (ts != null) {
+            if (title != null && !title.isEmpty()) ts.title = title;
+            if (episode != null) ts.episode = episode;
+            ts.status = status;
+            ts.progress = 0;
+            termNotif = buildTaskNotification(ts.sortKey, ts.title, ts.progress, ts.status, ts.episode);
+        } else {
+            termNotif = buildTaskNotification(null, title, 0, status, episode);
+        }
 
         if (wasPrimary) {
-            // Detach foreground FIRST so notification can become ongoing=false
+            startForeground(nid, termNotif);
             stopForeground(STOP_FOREGROUND_DETACH);
-            // Replace with terminal notification (now dismissible)
-            nm.notify(notifId(tid), termNotif);
-            // Promote another task or stop
-            promoteOrStop();
         } else {
-            nm.notify(notifId(tid), termNotif);
+            nm.notify(nid, termNotif);
+        }
+
+        activeTasks.remove(tid);
+
+        if (wasPrimary) {
+            promoteOrStop();
         }
     }
 
@@ -385,7 +438,8 @@ public class DownloadForegroundService extends Service {
                 out.write(buffer, 0, bytesRead);
                 downloaded += bytesRead;
                 if (contentLength > 0) {
-                    int pct = (int) (downloaded * 100 / contentLength);
+                    int pct = (int) (downloaded * 100L / contentLength);
+                    if (pct > 100) pct = 100;
                     if (pct != lastPct) {
                         lastPct = pct;
                         if (ts != null) { ts.progress = pct; ts.status = "downloading"; }
@@ -404,8 +458,21 @@ public class DownloadForegroundService extends Service {
             conn.disconnect();
             downloading = false;
 
-            Log.d(TAG, "Download complete: " + destPath + " (" + downloaded + " bytes)");
-            emitToWebView("downloadComplete", tid, 100, "complete");
+            // Stream finished successfully: always show 100% (Content-Length often mismatches body size).
+            if (ts != null) {
+                ts.progress = 100;
+                ts.status = "downloading";
+            }
+            updateSingleNotification(tid);
+            emitToWebView("downloadProgress", tid, 100, "downloading");
+
+            // Update the notification to show the complete state
+            // Pause for 1 second to prevent the notification from being throttled
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Log.w(TAG, "Thread sleep interrupted: " + e.getMessage());
+            }
             postTerminal(tid, title, "complete", episode);
         } catch (Exception e) {
             downloading = false;
@@ -433,7 +500,7 @@ public class DownloadForegroundService extends Service {
 
     Notification buildTaskNotification(String sortKey, String mediaTitle, int progress, String status, String episode) {
         int color; int icon; String subText; String prefix;
-        boolean ongoing; boolean showProgress;
+        boolean showProgress;
 
         switch (status != null ? status : "") {
             case "transcoding": case "remuxing":
@@ -441,56 +508,66 @@ public class DownloadForegroundService extends Service {
                 icon = android.R.drawable.ic_popup_sync;
                 subText = "⚙ Transcodage";
                 prefix = progress + "% — ";
-                ongoing = true; showProgress = true;
+                showProgress = true;
                 break;
             case "downloading":
                 color = Color.parseColor("#00BCD4");
                 icon = android.R.drawable.stat_sys_download;
                 subText = "⬇ Téléchargement";
                 prefix = progress + "% — ";
-                ongoing = true; showProgress = true;
+                showProgress = true;
                 break;
             case "complete":
                 color = Color.parseColor("#4CAF50");
                 icon = android.R.drawable.stat_sys_download_done;
                 subText = "✓ Terminé";
                 prefix = "Terminé — ";
-                ongoing = false; showProgress = false;
+                showProgress = false;
                 break;
             case "error":
                 color = Color.parseColor("#F44336");
                 icon = android.R.drawable.stat_notify_error;
                 subText = "✗ Échec";
                 prefix = "Échec — ";
-                ongoing = false; showProgress = false;
+                showProgress = false;
                 break;
             default:
                 color = Color.parseColor("#2196F3");
                 icon = android.R.drawable.stat_sys_download;
                 subText = ""; prefix = "";
-                ongoing = true; showProgress = true;
+                showProgress = true;
         }
 
+        // Ongoing + no autoCancel.
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(icon)
             .setContentTitle(prefix + (mediaTitle != null ? mediaTitle : ""))
             .setSubText(subText)
             .setColor(color)
-            .setOngoing(ongoing)
+            .setCategory(Notification.CATEGORY_PROGRESS)
+            .setOngoing(true)
+            .setAutoCancel(false)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setGroup(GROUP_KEY)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentIntent(getLaunchIntent());
 
         if (sortKey != null) builder.setSortKey(sortKey);
         if (episode != null && !episode.isEmpty()) builder.setContentText(episode);
-        if (showProgress && progress >= 0) builder.setProgress(100, progress, false);
-        if (!ongoing) builder.setAutoCancel(true);
+        if (showProgress && progress >= 0) {
+            builder.setProgress(100, progress, false);
+        }
+        if (!showProgress) {
+            // Remove progress bar when switching to terminal state (complete / error).
+            builder.setProgress(0, 0, false);
+        }
 
-        return builder.build();
+        Notification n = builder.build();
+        n.flags |= Notification.FLAG_ONGOING_EVENT;
+        return n;
     }
 
-    // Convenience for places that don't have a sortKey
     Notification buildTaskNotification(String mediaTitle, int progress, String status, String episode) {
         return buildTaskNotification(null, mediaTitle, progress, status, episode);
     }
@@ -536,7 +613,7 @@ public class DownloadForegroundService extends Service {
     private void ensureChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
-                CHANNEL_ID, "Téléchargements", NotificationManager.IMPORTANCE_LOW);
+                CHANNEL_ID, "Téléchargements", NotificationManager.IMPORTANCE_DEFAULT);
             channel.setDescription("Progression des téléchargements");
             channel.enableLights(false);
             channel.enableVibration(false);

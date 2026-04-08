@@ -2,10 +2,8 @@ package com.fliks.app;
 
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Color;
 import android.os.Build;
-
-import androidx.core.app.NotificationCompat;
+import android.util.Log;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -20,6 +18,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  */
 @CapacitorPlugin(name = "DownloadNotification")
 public class DownloadNotificationPlugin extends Plugin {
+
+    private static final String TAG = "DownloadNotification";
 
     private static DownloadNotificationPlugin instance;
 
@@ -47,103 +47,12 @@ public class DownloadNotificationPlugin extends Plugin {
         if (service != null) {
             service.showTaskNotification(taskId, title, progress, status, episode);
         } else {
-            showStandaloneNotification(taskId, title, progress, status, episode);
+            // Web: plugin not loaded. Android: createDownload/recover never call show() on native;
+            // only setPollingConfig / nativeDownload after startService(). This branch is unexpected on Android.
+            Log.w(TAG, "show ignored: DownloadForegroundService not running");
         }
 
         call.resolve();
-    }
-
-    /** Notification before the foreground service starts (replaced once service is up) */
-    private void showStandaloneNotification(int taskId, String mediaTitle, int progress, String status, String episode) {
-        ensureChannel();
-
-        int color; int icon; String subText; String prefix;
-        boolean ongoing; boolean showProg;
-
-        switch (status) {
-            case "transcoding":
-                color = Color.parseColor("#2196F3");
-                icon = android.R.drawable.ic_popup_sync;
-                subText = "⚙ Transcodage";
-                prefix = progress + "% — ";
-                ongoing = true; showProg = true;
-                break;
-            case "downloading":
-                color = Color.parseColor("#00BCD4");
-                icon = android.R.drawable.stat_sys_download;
-                subText = "⬇ Téléchargement";
-                prefix = progress + "% — ";
-                ongoing = true; showProg = true;
-                break;
-            case "complete":
-                color = Color.parseColor("#4CAF50");
-                icon = android.R.drawable.stat_sys_download_done;
-                subText = "✓ Terminé";
-                prefix = "Terminé — ";
-                ongoing = false; showProg = false;
-                break;
-            case "error":
-                color = Color.parseColor("#F44336");
-                icon = android.R.drawable.stat_notify_error;
-                subText = "✗ Échec";
-                prefix = "Échec — ";
-                ongoing = false; showProg = false;
-                break;
-            default:
-                color = Color.parseColor("#2196F3");
-                icon = android.R.drawable.stat_sys_download;
-                subText = ""; prefix = "";
-                ongoing = true; showProg = true;
-        }
-
-        Intent launchIntent = getContext().getPackageManager().getLaunchIntentForPackage(getContext().getPackageName());
-        android.app.PendingIntent contentIntent = android.app.PendingIntent.getActivity(
-            getContext(), 0, launchIntent,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE
-        );
-
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(getContext(), DownloadForegroundService.CHANNEL_ID)
-            .setSmallIcon(icon)
-            .setContentTitle(prefix + mediaTitle)
-            .setSubText(subText)
-            .setColor(color)
-            .setOngoing(ongoing)
-            .setOnlyAlertOnce(true)
-            .setSilent(true)
-            .setContentIntent(contentIntent);
-
-        if (episode != null && !episode.isEmpty()) {
-            builder.setContentText(episode);
-        }
-        if (showProg && progress >= 0) {
-            builder.setProgress(100, progress, false);
-        }
-        if (!ongoing) {
-            builder.setAutoCancel(true);
-        }
-
-        // Same ID as foreground service — will be replaced when service starts
-        android.app.NotificationManager manager = (android.app.NotificationManager)
-            getContext().getSystemService(Context.NOTIFICATION_SERVICE);
-        if (manager != null) {
-            manager.notify(DownloadForegroundService.NOTIFICATION_ID, builder.build());
-        }
-    }
-
-    private boolean channelCreated = false;
-    private void ensureChannel() {
-        if (channelCreated) return;
-        channelCreated = true;
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            android.app.NotificationChannel channel = new android.app.NotificationChannel(
-                DownloadForegroundService.CHANNEL_ID,
-                "Téléchargements",
-                android.app.NotificationManager.IMPORTANCE_LOW
-            );
-            channel.setSound(null, null);
-            android.app.NotificationManager manager = getContext().getSystemService(android.app.NotificationManager.class);
-            if (manager != null) manager.createNotificationChannel(channel);
-        }
     }
 
     /** Return all active task states from Java service — single source of truth for WebView sync */
@@ -173,7 +82,7 @@ public class DownloadNotificationPlugin extends Plugin {
             android.app.NotificationManager manager = (android.app.NotificationManager)
                 getContext().getSystemService(Context.NOTIFICATION_SERVICE);
             if (manager != null) {
-                manager.cancel(DownloadForegroundService.NOTIFICATION_ID + Math.abs(taskId));
+                manager.cancel(DownloadForegroundService.notificationIdForTask(taskId));
             }
         }
         call.resolve();

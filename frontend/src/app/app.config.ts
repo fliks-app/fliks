@@ -4,6 +4,7 @@ import {
   provideBrowserGlobalErrorListeners,
   provideZonelessChangeDetection,
 } from '@angular/core';
+import { Capacitor } from '@capacitor/core';
 import { provideServiceWorker } from '@angular/service-worker';
 import { provideRouter, withInMemoryScrolling } from '@angular/router';
 import { HttpBackend, provideHttpClient, withInterceptors } from '@angular/common/http';
@@ -32,7 +33,7 @@ export const appConfig: ApplicationConfig = {
       fallbackLang: 'fr',
     }),
     provideServiceWorker('ngsw-worker.js', {
-      enabled: !isDevMode(),
+      enabled: !isDevMode() && Capacitor.getPlatform() === 'web',
       registrationStrategy: 'registerWhenStable:30000',
     }),
   ],

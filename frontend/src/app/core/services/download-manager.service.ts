@@ -35,6 +35,7 @@ export interface DownloadEvent {
 @Injectable({ providedIn: 'root' })
 export class DownloadManagerService {
   private readonly isNative = Capacitor.isNativePlatform();
+  private readonly isAndroid = Capacitor.getPlatform() === 'android';
   private readonly sse = inject(SseService);
   private readonly api = inject(DownloadsApiService);
   private readonly storage = inject(OfflineStorageService);
@@ -337,7 +338,10 @@ export class DownloadManagerService {
 
   private decActive() {
     this.activeCount = Math.max(0, this.activeCount - 1);
-    if (this.activeCount === 0) {
+    // Android: DownloadForegroundService already calls stopSelf() when the task queue is empty.
+    // Calling stopService() here relaunches the service with STOP and runs cancel(NOTIFICATION_ID),
+    // which can remove the "Terminé" notification when taskId maps to that id.
+    if (this.activeCount === 0 && !this.isAndroid) {
       this.notif.stopService();
     }
   }

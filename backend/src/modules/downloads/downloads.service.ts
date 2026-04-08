@@ -94,6 +94,9 @@ async function probeOutputDuration(filePath: string): Promise<number> {
   });
 }
 
+/** Max concurrent FFmpeg download transcodes (remux + transcode combined) */
+const MAX_CONCURRENT_DOWNLOADS = 2;
+
 /** Image-based subtitle codecs that cannot be converted to mov_text */
 const BITMAP_SUB_CODECS = new Set([
   'hdmv_pgs_subtitle',
@@ -114,6 +117,9 @@ export class DownloadsService implements OnModuleInit {
   private readonly cachePath: string;
   /** Active transcode processes — keyed by task ID */
   private readonly activeJobs = new Map<number, { kill: () => void }>();
+  /** Concurrency control for FFmpeg download processes */
+  private runningCount = 0;
+  private readonly waitQueue: Array<() => void> = [];
 
   constructor(
     @InjectRepository(DownloadTask)
@@ -366,6 +372,24 @@ export class DownloadsService implements OnModuleInit {
     await this.taskRepo.remove(task);
   }
 
+  /** Wait until a concurrency slot is available */
+  private acquireSlot(): Promise<void> {
+    if (this.runningCount < MAX_CONCURRENT_DOWNLOADS) {
+      this.runningCount++;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => this.waitQueue.push(resolve));
+  }
+
+  private releaseSlot(): void {
+    const next = this.waitQueue.shift();
+    if (next) {
+      next(); // hand the slot to the next waiter
+    } else {
+      this.runningCount--;
+    }
+  }
+
   /**
    * Fast remux: copy video+audio streams, convert subtitles to mov_text.
    * No re-encoding — typically takes seconds even for large files.
@@ -393,6 +417,9 @@ export class DownloadsService implements OnModuleInit {
       return this.runTranscode(taskId, resolved, matchProfile.name, deviceProfile);
     }
 
+    await this.acquireSlot();
+    this.log.log(`Download #${taskId}: slot acquired (${this.runningCount}/${MAX_CONCURRENT_DOWNLOADS})`);
+    try {
     await fs.mkdir(this.cachePath, { recursive: true });
     const outputFile = path.join(this.cachePath, `dl-${taskId}-remux.mp4`);
     const inputPath = resolved.absolutePath;
@@ -494,6 +521,9 @@ export class DownloadsService implements OnModuleInit {
       this.log.warn(`Download #${taskId}: remux failed: ${msg}`);
       await fs.unlink(outputFile).catch(() => {});
     }
+    } finally {
+      this.releaseSlot();
+    }
   }
 
   private async runTranscode(
@@ -511,6 +541,9 @@ export class DownloadsService implements OnModuleInit {
       return;
     }
 
+    await this.acquireSlot();
+    this.log.log(`Download #${taskId}: slot acquired (${this.runningCount}/${MAX_CONCURRENT_DOWNLOADS})`);
+    try {
     await fs.mkdir(this.cachePath, { recursive: true });
     const outputFile = path.join(
       this.cachePath,
@@ -615,6 +648,9 @@ export class DownloadsService implements OnModuleInit {
       });
       this.log.warn(`Download #${taskId}: transcode failed: ${msg}`);
       await fs.unlink(outputFile).catch(() => {});
+    }
+    } finally {
+      this.releaseSlot();
     }
   }
 
