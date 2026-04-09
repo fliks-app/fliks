@@ -62,6 +62,7 @@ export class DownloadsComponent implements OnInit, OnDestroy {
   private readonly baseTasks = signal<DownloadTask[]>([]);
   readonly loading = signal(true);
 
+
   /**
    * Java service state — synced on every load().
    * Key = taskId, Value = { progress, status } from Java's activeTasks.
@@ -83,11 +84,21 @@ export class DownloadsComponent implements OnInit, OnDestroy {
     }
   }) : null;
 
+  /** Native: react to complete/failed events for immediate UI update */
+  private readonly nativeEventEffect = this.isNative ? effect(() => {
+    const event = this.dlManager.lastDownloadEvent();
+    if (!event) return;
+    if (event.type === 'complete') {
+      this.cache.markLocal(event.taskId);
+    }
+  }) : null;
+
   /** Derived: merge server tasks with native state (native always wins) */
   readonly items = computed<DisplayDownloadTask[]>(() => {
     const tasks = this.baseTasks();
     const native = this.nativeState();
     const active = this.cache.activeDownloads();
+    const localIds = this.cache.localTaskIds();
 
     return tasks.map((task) => {
       const ns = native.get(task.id);
@@ -97,9 +108,18 @@ export class DownloadsComponent implements OnInit, OnDestroy {
         }
         return { ...task, status: ns.status, progress: ns.progress } as DisplayDownloadTask;
       }
-      // Web fallback: JS download progress from cache
-      if (task.status === 'ready' && active.has(task.id)) {
-        return { ...task, status: 'downloading', downloadProgress: active.get(task.id) ?? 0 };
+      // Server "ready" = transcode done. Only show "ready" if file is on device.
+      if (task.status === 'ready') {
+        if (localIds.has(task.id)) {
+          return task; // File on device — show "ready" (playable)
+        }
+        // File not on device — show "downloading" (recover/native will start it)
+        if (this.isNative) {
+          return { ...task, status: 'downloading' as const, downloadProgress: 0 };
+        }
+        if (active.has(task.id)) {
+          return { ...task, status: 'downloading', downloadProgress: active.get(task.id) ?? 0 };
+        }
       }
       return task;
     });
@@ -146,7 +166,9 @@ export class DownloadsComponent implements OnInit, OnDestroy {
     const tasks = await this.notif.getActiveTasks();
     const next = new Map<number, { progress: number; status: string }>();
     for (const t of tasks) {
-      next.set(t.taskId, { progress: t.progress, status: t.status });
+      // Java uses "error" internally; UI template expects "failed"
+      const status = t.status === 'error' ? 'failed' : t.status;
+      next.set(t.taskId, { progress: t.progress, status });
     }
 
     // Detect tasks that disappeared from Java (completed/failed) — reload from server
@@ -187,6 +209,7 @@ export class DownloadsComponent implements OnInit, OnDestroy {
     });
     if (!confirmed) return;
     await this.dlManager.deleteDownload(task);
+    this.cache.removeLocal(task.id);
     this.baseTasks.update((list) => list.filter((t) => t.id !== task.id));
   }
 

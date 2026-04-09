@@ -2,6 +2,7 @@ import { Injectable, signal } from '@angular/core';
 import { DownloadTask } from './api/downloads-api.service';
 
 const STORAGE_KEY = 'fliks.downloads.cache';
+const LOCAL_IDS_KEY = 'fliks.downloads.localIds';
 
 /**
  * Tracks device download progress (in-memory signals) and
@@ -11,6 +12,34 @@ const STORAGE_KEY = 'fliks.downloads.cache';
 export class DownloadCacheService {
   /** Active device downloads with progress % */
   readonly activeDownloads = signal<Map<number, number>>(new Map());
+
+  /** Task IDs whose file is on device — persisted in localStorage */
+  readonly localTaskIds = signal<Set<number>>(this.loadLocalIds());
+
+  private loadLocalIds(): Set<number> {
+    try {
+      const raw = localStorage.getItem(LOCAL_IDS_KEY);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch { return new Set(); }
+  }
+
+  private persistLocalIds() {
+    localStorage.setItem(LOCAL_IDS_KEY, JSON.stringify([...this.localTaskIds()]));
+  }
+
+  markLocal(taskId: number) {
+    this.localTaskIds.update((s) => new Set(s).add(taskId));
+    this.persistLocalIds();
+  }
+
+  removeLocal(taskId: number) {
+    this.localTaskIds.update((s) => { const n = new Set(s); n.delete(taskId); return n; });
+    this.persistLocalIds();
+  }
+
+  isLocal(taskId: number): boolean {
+    return this.localTaskIds().has(taskId);
+  }
 
   markDownloading(taskId: number) {
     this.activeDownloads.update((m) => new Map(m).set(taskId, 0));

@@ -135,11 +135,34 @@ public class DownloadForegroundService extends Service {
         if (!started) {
             started = true;
             acquireWakeLock();
-            // Placeholder — replaced by first updateSingleNotification call
             startForeground(NOTIFICATION_ID, buildTaskNotification(null, "Téléchargement", 0, "downloading", null));
             startPolling();
             Log.d(TAG, "Foreground service started");
         }
+
+        // Handle config passed via Intent extras (no race — processed in onStartCommand)
+        if (intent != null && "POLL".equals(intent.getAction())) {
+            setPollingConfig(
+                intent.getStringExtra("baseUrl"),
+                intent.getStringExtra("token"),
+                intent.getIntExtra("taskId", -1),
+                intent.getStringExtra("title"),
+                intent.getStringExtra("episode"),
+                intent.getStringExtra("fileUrl"),
+                intent.getStringExtra("destPath"),
+                intent.getLongExtra("expectedSize", 0)
+            );
+        } else if (intent != null && "DOWNLOAD".equals(intent.getAction())) {
+            startNativeDownload(
+                intent.getStringExtra("url"),
+                intent.getStringExtra("token"),
+                intent.getStringExtra("destPath"),
+                intent.getLongExtra("expectedSize", 0),
+                intent.getStringExtra("title"),
+                intent.getIntExtra("taskId", -1)
+            );
+        }
+
         return START_STICKY;
     }
 
@@ -162,6 +185,11 @@ public class DownloadForegroundService extends Service {
         } else {
             if (title != null && !title.isEmpty()) ts.title = title;
             if (episode != null) ts.episode = episode;
+            // Reset error tasks so retry works (re-enters transcoding/downloading flow)
+            if ("error".equals(ts.status)) {
+                ts.status = "transcoding";
+                ts.progress = 0;
+            }
         }
         return ts;
     }
@@ -293,23 +321,34 @@ public class DownloadForegroundService extends Service {
             nm.notify(nid, termNotif);
         }
 
-        activeTasks.remove(tid);
-
-        if (wasPrimary) {
-            promoteOrStop();
+        if ("error".equals(status)) {
+            // Keep error tasks in activeTasks so getActiveTasks() reports them to the UI.
+            // They are removed on retry (ensureTask resets) or delete (cancelTaskNotification).
+            if (wasPrimary) promoteOrStop();
+        } else {
+            activeTasks.remove(tid);
+            if (wasPrimary) promoteOrStop();
         }
     }
 
-    /** Promote another active task as foreground, or stop service */
+    /** Promote another active (non-error) task as foreground, or stop service */
     private void promoteOrStop() {
-        if (activeTasks.isEmpty()) {
+        // Find a non-error task to promote
+        int nextId = -1;
+        for (TaskState ts : activeTasks.values()) {
+            if (!"error".equals(ts.status)) {
+                nextId = ts.id;
+                break;
+            }
+        }
+        if (nextId < 0) {
+            // Only error tasks remain — service can stop (error notifications are detached)
             primaryTaskId = -1;
             stopSelf();
         } else {
-            primaryTaskId = activeTasks.keySet().iterator().next();
+            primaryTaskId = nextId;
             TaskState next = activeTasks.get(primaryTaskId);
             if (next != null) {
-                // startForeground rebinds the service to this notification ID
                 startForeground(notifId(primaryTaskId),
                     buildTaskNotification(next.sortKey, next.title, next.progress, next.status, next.episode));
             }
@@ -479,6 +518,7 @@ public class DownloadForegroundService extends Service {
             } catch (InterruptedException e) {
                 Log.w(TAG, "Thread sleep interrupted: " + e.getMessage());
             }
+            emitToWebView("downloadComplete", tid, 100, "complete");
             postTerminal(tid, title, "complete", episode);
         } catch (Exception e) {
             downloading = false;

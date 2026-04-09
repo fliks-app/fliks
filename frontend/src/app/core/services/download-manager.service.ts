@@ -100,11 +100,20 @@ export class DownloadManagerService {
     }
   });
 
+  private recovered = false;
+
+  /** Recover once auth is ready (token needed for API calls and native polling) */
+  private readonly authEffect = effect(() => {
+    if (this.auth.isAuthenticated() && !this.recovered) {
+      this.recovered = true;
+      void this.recover();
+    }
+  });
+
   constructor() {
-    this.notif.stopService();
-    this.notif.dismissAll();
-    void this.recover();
-    window.addEventListener('online', () => void this.recover());
+    window.addEventListener('online', () => {
+      if (this.recovered) void this.recover();
+    });
   }
 
   // ===== PUBLIC API =====
@@ -124,6 +133,7 @@ export class DownloadManagerService {
 
     this.titles.set(task.id, { title, episode });
     this.persistTask(task);
+
     this.incActive();
 
     if (task.status === 'ready') {
@@ -154,6 +164,7 @@ export class DownloadManagerService {
       maxAudioChannels: dp.maxAudioChannels,
     });
     this.persistTask(task);
+
     this.incActive();
     const info = this.titles.get(taskId);
     const title = info?.title ?? task.media?.title ?? 'Téléchargement';
@@ -260,6 +271,7 @@ export class DownloadManagerService {
       // Will be handled by syncAfterResume
     } finally {
       this.cache.markDone(taskId);
+
       this.decActive();
     }
   }
@@ -365,23 +377,15 @@ export class DownloadManagerService {
       }
     }
 
-    for (const t of tasks) {
-      if (t.status === 'failed' || t.status === 'expired') {
-        this.api.delete(t.id).catch(() => {});
-      }
+    // Prune localTaskIds for tasks gone from server
+    const serverIds = new Set(tasks.map((t) => t.id));
+    for (const id of this.cache.localTaskIds()) {
+      if (!serverIds.has(id)) this.cache.removeLocal(id);
     }
 
     for (const t of tasks) {
-      if (t.status === 'ready') {
-        const hasLocal = await this.storage.has(`download-${t.mediaFileId}`);
-        if (!hasLocal) {
-          this.incActive();
-          if (this.isNative) {
-            void this.startNativeDownload(t);
-          } else {
-            void this.handleReadyWeb(t.id);
-          }
-        }
+      if (t.status === 'failed' || t.status === 'expired') {
+        this.api.delete(t.id).catch(() => {});
       } else if (t.status === 'transcoding' || t.status === 'remuxing') {
         this.incActive();
         if (this.isNative) {
@@ -389,6 +393,19 @@ export class DownloadManagerService {
         } else {
           const info = this.titles.get(t.id);
           this.notif.show(t.id, info?.title ?? 'Transcodage', t.progress ?? 0, t.status, info?.episode);
+        }
+      } else if (t.status === 'ready') {
+        const hasLocal = await this.storage.has(`download-${t.mediaFileId}`);
+        if (hasLocal) {
+          this.cache.markLocal(t.id);
+        } else {
+          this.cache.removeLocal(t.id);
+          this.incActive();
+          if (this.isNative) {
+            void this.startNativeDownload(t);
+          } else {
+            void this.handleReadyWeb(t.id);
+          }
         }
       }
     }

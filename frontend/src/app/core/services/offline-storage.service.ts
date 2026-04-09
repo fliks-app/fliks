@@ -49,9 +49,9 @@ export class OfflineStorageService {
       // Get the real filesystem URI and extract the path
       const uri = await Filesystem.getUri({
         path: this.filePath(key),
-        directory: Directory.Documents,
+        directory: Directory.Data,
       });
-      // uri.uri is like "file:///data/user/0/com.fliks.app/files/Documents/fliks-downloads/download-42.mp4"
+      // uri.uri is like "file:///data/user/0/com.fliks.app/files/fliks-downloads/download-42.mp4"
       return uri.uri.replace('file://', '');
     } catch {
       return null;
@@ -72,7 +72,7 @@ export class OfflineStorageService {
       await Filesystem.writeFile({
         path: `fliks-downloads/${key}`,
         data: text,
-        directory: Directory.Documents,
+        directory: Directory.Data,
         encoding: 'utf8' as any,
       });
     } else {
@@ -88,7 +88,7 @@ export class OfflineStorageService {
         const { Filesystem, Directory } = await getFs();
         const result = await Filesystem.readFile({
           path: `fliks-downloads/${key}`,
-          directory: Directory.Documents,
+          directory: Directory.Data,
           encoding: 'utf8' as any,
         });
         const blob = new Blob([result.data as string], { type: 'text/vtt' });
@@ -125,7 +125,7 @@ export class OfflineStorageService {
       const { Filesystem, Directory } = await getFs();
       await Filesystem.mkdir({
         path: 'fliks-downloads',
-        directory: Directory.Documents,
+        directory: Directory.Data,
         recursive: true,
       });
     } catch {
@@ -162,7 +162,7 @@ export class OfflineStorageService {
         try {
           const stat = await Filesystem.stat({
             path: this.filePath(key),
-            directory: Directory.Documents,
+            directory: Directory.Data,
           });
           const pct = Math.min(99, Math.round((stat.size / expectedSize) * 100));
           onProgress(pct);
@@ -176,7 +176,7 @@ export class OfflineStorageService {
       const result = await Filesystem.downloadFile({
         url,
         path: this.filePath(key),
-        directory: Directory.Documents,
+        directory: Directory.Data,
         headers: { Authorization: `Bearer ${this.auth.accessToken}` },
       });
 
@@ -188,7 +188,7 @@ export class OfflineStorageService {
 
       const uri = await Filesystem.getUri({
         path: this.filePath(key),
-        directory: Directory.Documents,
+        directory: Directory.Data,
       });
       return Capacitor.convertFileSrc(uri.uri);
     } finally {
@@ -201,7 +201,7 @@ export class OfflineStorageService {
       const { Filesystem, Directory } = await getFs();
       await Filesystem.stat({
         path: this.filePath(key),
-        directory: Directory.Documents,
+        directory: Directory.Data,
       });
       return true;
     } catch {
@@ -215,7 +215,7 @@ export class OfflineStorageService {
       const { Filesystem, Directory } = await getFs();
       const result = await Filesystem.getUri({
         path: this.filePath(key),
-        directory: Directory.Documents,
+        directory: Directory.Data,
       });
       return Capacitor.convertFileSrc(result.uri);
     } catch {
@@ -228,7 +228,7 @@ export class OfflineStorageService {
       const { Filesystem, Directory } = await getFs();
       await Filesystem.deleteFile({
         path: this.filePath(key),
-        directory: Directory.Documents,
+        directory: Directory.Data,
       });
     } catch {
       // File doesn't exist — fine
