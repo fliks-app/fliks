@@ -146,6 +146,24 @@ export class StreamingApiService {
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
 
+  /** Build authenticated thumbnail sprite image URL */
+  getThumbnailSpriteUrl(mediaFileId: number): string {
+    const base = this.serverConfig.isNative
+      ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/thumbnails/sprite.jpg`)
+      : `/api/stream/${mediaFileId}/thumbnails/sprite.jpg`;
+    const token = this.auth.accessToken;
+    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+  }
+
+  /** Build authenticated thumbnail sprite metadata URL */
+  getThumbnailMetadataUrl(mediaFileId: number): string {
+    const base = this.serverConfig.isNative
+      ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/thumbnails/sprite.json`)
+      : `/api/stream/${mediaFileId}/thumbnails/sprite.json`;
+    const token = this.auth.accessToken;
+    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+  }
+
   /** Build authenticated embedded subtitle URL */
   getEmbeddedSubtitleUrl(mediaFileId: number, streamIndex: number): string {
     const base = this.serverConfig.isNative

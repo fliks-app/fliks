@@ -40,6 +40,7 @@ import {
 } from '../../common/constants/app-qualities';
 
 import { ImageService } from '../images/image.service';
+import { ThumbnailService } from '../streaming/thumbnail.service';
 import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
@@ -85,6 +86,7 @@ export class MediaService {
     private readonly ffprobe: FfprobeService,
     private readonly subtitles: SubtitlesService,
     private readonly imageService: ImageService,
+    private readonly thumbnailService: ThumbnailService,
   ) {}
 
   async importFromTmdb(dto: ImportTmdbDto): Promise<Media> {
@@ -750,11 +752,97 @@ export class MediaService {
       );
     }
 
+    // Generate thumbnail sprites for all files
+    // Build episode labels for series files
+    const episodeLabelMap = new Map<number, string>();
+    if (media.type === MediaType.SERIES) {
+      const seasons = await this.seasonRepo.find({
+        where: { mediaId: media.id },
+        relations: ['episodes'],
+      });
+      for (const s of seasons) {
+        for (const ep of s.episodes ?? []) {
+          const sn = String(s.seasonNumber).padStart(2, '0');
+          const en = String(ep.episodeNumber).padStart(2, '0');
+          episodeLabelMap.set(ep.id, `S${sn}E${en} — ${ep.title ?? ''}`);
+        }
+      }
+    }
+
+    for (const file of files) {
+      const dur = file.streamInfo?.durationSeconds;
+      const absPath = media.path && file.relativePath
+        ? path.join(media.path, file.relativePath)
+        : null;
+      if (dur && absPath) {
+        const label = file.episodeId
+          ? episodeLabelMap.get(file.episodeId) ?? media.title
+          : media.title;
+        void this.thumbnailService.getOrGenerate(file.id, absPath, dur, label, true);
+      }
+    }
+
     await this.mediaRepo.update(media.id, {
       metadataRefreshedAt: new Date(),
     });
 
     return this.findOne(media.id);
+  }
+
+  async refreshEpisodeMetadata(mediaId: number, episodeId: number): Promise<Media> {
+    const episode = await this.episodeRepo.findOne({
+      where: { id: episodeId },
+      relations: ['season'],
+    });
+    if (!episode) throw new NotFoundException(`Episode #${episodeId} not found`);
+
+    const media = await this.mediaRepo.findOne({ where: { id: mediaId } });
+    if (!media) throw new NotFoundException(`Media #${mediaId} not found`);
+
+    const key = this.config.get<string>('TMDB_API_KEY', '');
+    if (!key?.trim()) {
+      throw new BadRequestException('TMDB API key is not configured');
+    }
+
+    // Fetch only the relevant season from TMDB
+    const tmdbSeason = await this.tmdb.getTvSeason(media.tmdbId, episode.season.seasonNumber);
+    const tmdbEp = tmdbSeason.episodes.find((e) => e.episodeNumber === episode.episodeNumber);
+
+    if (tmdbEp) {
+      const updates: Partial<Episode> = {};
+      if (tmdbEp.title && tmdbEp.title !== episode.title) updates.title = tmdbEp.title;
+      if (tmdbEp.overview && tmdbEp.overview !== episode.overview) updates.overview = tmdbEp.overview;
+      if (tmdbEp.airDate && tmdbEp.airDate !== episode.airDate) updates.airDate = tmdbEp.airDate;
+      if (tmdbEp.runtime != null && tmdbEp.runtime !== episode.runtime) updates.runtime = tmdbEp.runtime;
+      if (Object.keys(updates).length > 0) {
+        await this.episodeRepo.update(episode.id, updates);
+      }
+      if (tmdbEp.stillUrl) {
+        await this.downloadEpisodeStill(episode.id, tmdbEp.stillUrl);
+      }
+    }
+
+    // Refresh embedded subtitles & thumbnails for episode files only
+    const files = await this.mediaFileRepo.find({
+      where: { mediaId, episodeId },
+    });
+    const sn = String(episode.season.seasonNumber).padStart(2, '0');
+    const en = String(episode.episodeNumber).padStart(2, '0');
+    const epTitle = tmdbEp?.title ?? episode.title ?? '';
+    const label = `S${sn}E${en} — ${epTitle}`;
+
+    for (const file of files) {
+      await this.embeddedSubtitle.detectAndStore(mediaId, file.id, episodeId);
+      const dur = file.streamInfo?.durationSeconds;
+      const absPath = media.path && file.relativePath
+        ? path.join(media.path, file.relativePath)
+        : null;
+      if (dur && absPath) {
+        void this.thumbnailService.getOrGenerate(file.id, absPath, dur, label, true);
+      }
+    }
+
+    return this.findOne(mediaId);
   }
 
   private async refreshSeriesEpisodes(media: Media): Promise<void> {
@@ -946,7 +1034,6 @@ export class MediaService {
       imdbId: details.imdbId ?? undefined,
       overview: details.overview ?? undefined,
       status: this.mapTmdbStatusToMediaStatus(type, details.status),
-      monitored: true,
       posterUrl: details.posterUrl ?? undefined,
       fanartUrl: details.fanartUrl ?? undefined,
       rating: details.rating ?? undefined,
@@ -1206,6 +1293,7 @@ export class MediaService {
   ): Promise<Media> {
     const row = this.mediaRepo.create({
       ...this.buildMediaFieldsFromTmdb(details, MediaType.MOVIE),
+      monitored: true,
       metadataRefreshedAt: new Date(),
       ...(qualityProfileId != null ? { qualityProfileId } : {}),
       ...(languageProfileId != null ? { languageProfileId } : {}),
@@ -1229,6 +1317,7 @@ export class MediaService {
   ): Promise<Media> {
     const row = this.mediaRepo.create({
       ...this.buildMediaFieldsFromTmdb(details, MediaType.SERIES),
+      monitored: true,
       metadataRefreshedAt: new Date(),
       ...(qualityProfileId != null ? { qualityProfileId } : {}),
       ...(languageProfileId != null ? { languageProfileId } : {}),
@@ -1375,11 +1464,14 @@ export class MediaService {
       streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
       if (streamInfo?.video?.[0]) {
         try {
+          const v = streamInfo.video[0];
           const crop = await this.ffprobe.detectCrop(
             absPath,
             streamInfo.durationSeconds,
+            v.width,
+            v.height,
           );
-          if (crop) streamInfo.video[0].crop = crop;
+          if (crop) v.crop = crop;
         } catch (err) {
           this.log.warn(
             `enrichMediaFileFromDisk: detectCrop failed for "${normPath}" (metadata otherwise kept)`,
@@ -1616,81 +1708,55 @@ export class MediaService {
         }
       }
 
-      const sizeChanged = Number(dbFile.size) !== diskSize;
-      const si = dbFile.streamInfo;
-      const missingStreamInfo =
-        !si ||
-        si.error ||
-        (!si.video?.length && !si.audio?.length) ||
-        !('subtitles' in si) ||
-        !('durationSeconds' in si);
-      const missingColorInfo =
-        si?.video?.[0] &&
-        (!('colorTransfer' in (si.video[0] ?? {})) ||
-          (si.video[0].colorTransfer === 'smpte2084' &&
-            !si.video[0].hdrFormat));
-      // Check if quality needs correction (e.g. was parsed from filename, now use ffprobe)
-      const expectedQuality = this.resolveQuality(
-        filename,
-        si?.video?.[0]?.height,
-        si?.video?.[0]?.width,
-      );
-      const qualityStale =
-        dbFile.quality !== expectedQuality && si?.video?.[0]?.height;
-
-      if (
-        sizeChanged ||
-        missingStreamInfo ||
-        missingColorInfo ||
-        qualityStale
-      ) {
-        dbFile.size = diskSize;
-        let streamInfo = si;
-        if (sizeChanged || missingStreamInfo || missingColorInfo) {
+      // Always re-probe streamInfo on rescan
+      dbFile.size = diskSize;
+      let streamInfo: Awaited<ReturnType<FfprobeService['detectMediaFileInfo']>>;
+      try {
+        streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
+        if (streamInfo?.video?.[0]) {
           try {
-            streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
-            if (streamInfo?.video?.[0]) {
-              try {
-                const crop = await this.ffprobe.detectCrop(
-                  absPath,
-                  streamInfo.durationSeconds,
-                );
-                if (crop) streamInfo.video[0].crop = crop;
-              } catch (err) {
-                this.log.warn(
-                  `Rescan[media #${mediaId}]: detectCrop failed on refresh "${normPath}" abs="${absPath}" (metadata otherwise kept)`,
-                  err instanceof Error ? err.stack : err,
-                );
-              }
-            }
-            dbFile.streamInfo = streamInfo;
+            const v = streamInfo.video[0];
+            const crop = await this.ffprobe.detectCrop(
+              absPath,
+              streamInfo.durationSeconds,
+              v.width,
+              v.height,
+            );
+            if (crop) v.crop = crop;
           } catch (err) {
-            this.log.error(
-              `Rescan[media #${mediaId}]: ffprobe failed on refresh "${normPath}" abs="${absPath}"`,
+            this.log.warn(
+              `Rescan[media #${mediaId}]: detectCrop failed on refresh "${normPath}" abs="${absPath}" (metadata otherwise kept)`,
               err instanceof Error ? err.stack : err,
             );
-            continue;
           }
         }
-        const qualityName = this.resolveQuality(
-          filename,
-          streamInfo?.video?.[0]?.height,
-          streamInfo?.video?.[0]?.width,
+        dbFile.streamInfo = streamInfo;
+      } catch (err) {
+        this.log.error(
+          `Rescan[media #${mediaId}]: ffprobe failed on refresh "${normPath}" abs="${absPath}"`,
+          err instanceof Error ? err.stack : err,
         );
-        dbFile.quality = qualityName;
-        try {
-          await this.mediaFileRepo.save(dbFile);
-          updated++;
-          this.log.log(
-            `Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${qualityName})`,
-          );
-        } catch (err) {
-          this.log.error(
-            `Rescan[media #${mediaId}]: failed to save refreshed metadata for "${normPath}"`,
-            err instanceof Error ? err.stack : err,
-          );
-        }
+        continue;
       }
+      const qualityName = this.resolveQuality(
+        filename,
+        streamInfo?.video?.[0]?.height,
+        streamInfo?.video?.[0]?.width,
+      );
+      dbFile.quality = qualityName;
+      try {
+        await this.mediaFileRepo.save(dbFile);
+        updated++;
+        this.log.log(
+          `Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${qualityName})`,
+        );
+      } catch (err) {
+        this.log.error(
+          `Rescan[media #${mediaId}]: failed to save refreshed metadata for "${normPath}"`,
+          err instanceof Error ? err.stack : err,
+        );
+      }
+
     }
 
     // 5. Add new files found on disk but not in DB
@@ -1774,11 +1840,14 @@ export class MediaService {
         streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
         if (streamInfo?.video?.[0]) {
           try {
+            const v = streamInfo.video[0];
             const crop = await this.ffprobe.detectCrop(
               absPath,
               streamInfo.durationSeconds,
+              v.width,
+              v.height,
             );
-            if (crop) streamInfo.video[0].crop = crop;
+            if (crop) v.crop = crop;
           } catch (err) {
             this.log.warn(
               `Rescan[media #${mediaId}]: detectCrop failed for "${relativePath}" abs="${absPath}" (file still imported)`,
@@ -1799,7 +1868,7 @@ export class MediaService {
         streamInfo.video?.[0]?.width,
       );
       try {
-        await this.mediaFileRepo.save(
+        const savedFile = await this.mediaFileRepo.save(
           this.mediaFileRepo.create({
             mediaId: media.id,
             episodeId,

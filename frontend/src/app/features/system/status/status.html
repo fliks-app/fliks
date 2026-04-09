@@ -53,7 +53,7 @@
       <div class="flex items-center gap-3">
         <span class="text-sm font-medium w-32 truncate" [title]="entry.value.command">{{ commandLabelKey(entry.value.command) | translate }}</span>
         <progress class="progress progress-primary flex-1" [value]="entry.value.current" [max]="entry.value.total"></progress>
-        <span class="text-xs text-base-content/60 tabular-nums w-16 text-right">{{ entry.value.current }}/{{ entry.value.total }}</span>
+        <span class="text-xs text-base-content/60 tabular-nums w-16 text-right">{{ entry.value.total > 0 ? (entry.value.current / entry.value.total * 100 | number:'1.0-0') + '%' : '0%' }}</span>
         <span class="text-xs text-base-content/50 truncate w-52">{{ entry.value.message }}</span>
       </div>
     }
@@ -100,7 +100,12 @@
         <tbody>
           @for (cmd of commands(); track cmd.id) {
             <tr>
-              <td class="font-medium">{{ cmd.name }}</td>
+              <td class="font-medium">
+                {{ commandLabelKey(cmd.name) | translate }}
+                @if (cmd.body?.['mediaTitle']) {
+                  <span class="text-xs text-base-content/50 ml-1">— {{ cmd.body?.['mediaTitle'] }}</span>
+                }
+              </td>
               <td class="text-sm text-base-content/60">{{ cmd.trigger }}</td>
               <td><span class="badge badge-sm" [ngClass]="statusClass(cmd.status)">{{ cmd.status }}</span></td>
               <td class="text-sm text-base-content/60 tabular-nums">{{ cmd.startedOn | date:'dd/MM HH:mm:ss' }}</td>

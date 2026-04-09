@@ -16,6 +16,7 @@
     class="player-video"
     playsinline
     [class.opacity-0]="!videoStarted()"
+    [style.object-fit]="fillScreen() ? 'cover' : 'contain'"
   ></video>
 
   @if (error()) {
@@ -68,13 +69,18 @@
     (selectSubtitle)="onSelectSubtitleById($event)"
     (selectQuality)="onSelectQualityById($event)"
     (selectAudioTrack)="onSelectAudioTrack($event)"
+    [statsVisible]="statsVisible()"
     (toggleStats)="statsVisible.set(!statsVisible())"
+    (toggleFillScreen)="fillScreen.set(!fillScreen())"
+    [fillScreen]="fillScreen()"
     (speedChange)="onSpeedChange($event)"
     (back)="onBack()"
     [castAvailable]="castService.isAvailable()"
     [castConnected]="castService.isConnected()"
     [castConnecting]="castService.connecting()"
     (toggleCast)="onToggleCast()"
+    [spriteUrl]="spriteUrl()"
+    [spriteMetadata]="spriteMetadata()"
   />
   }
 

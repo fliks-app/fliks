@@ -9,6 +9,7 @@ import { promisify } from 'util';
 import { existsSync } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
+import { TRANSCODE_DIR } from '../../common/constants/paths';
 
 const execFileAsync = promisify(execFile);
 
@@ -168,7 +169,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   private readonly locks = new Map<string, Promise<void>>();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private detectedHwAccel: HwAccelType = 'none';
-  private cachePath = '/tmp/fliks-stream';
+  private cachePath = path.join(TRANSCODE_DIR, 'stream');
 
   async onModuleInit() {
     // Ensure cache directory exists

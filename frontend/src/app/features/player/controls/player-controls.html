@@ -123,13 +123,13 @@
           </button>
           <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-3 px-1 min-w-56 max-h-[75vh] overflow-y-auto mb-2">
             <div class="text-center text-white/70 text-xs font-medium mb-2">Sous-titres</div>
-            <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle.emit(null)">
+            <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle.emit(null); closeDropdown($event)">
               <svg lucideCaptions class="h-4 w-4 text-white/50 shrink-0"></svg>
               <span class="flex-1 text-left">Désactivé</span>
               @if (!activeSubtitleId()) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
             </button>
             @for (sub of availableSubtitles(); track sub.id) {
-              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle.emit(sub.id)">
+              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle.emit(sub.id); closeDropdown($event)">
                 <svg lucideCaptions class="h-4 w-4 text-white/50 shrink-0"></svg>
                 <span class="flex-1 text-left">{{ sub.label }}@if (sub.burnIn) { <span class="text-warning/70 text-[10px] ml-1">gravé</span> }</span>
                 @if (activeSubtitleId() === sub.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
@@ -146,7 +146,7 @@
             <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-3 px-1 min-w-56 max-h-[75vh] overflow-y-auto mb-2">
               <div class="text-center text-white/70 text-xs font-medium mb-2">Piste audio</div>
               @for (track of availableAudioTracks(); track track.id) {
-                <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectAudioTrack.emit(track.id)">
+                <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectAudioTrack.emit(track.id); closeDropdown($event)">
                   <svg lucideHeadphones class="h-4 w-4 text-white/50 shrink-0"></svg>
                   <span class="flex-1 text-left">{{ track.label }}</span>
                   @if (activeAudioTrackId() === track.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
@@ -155,34 +155,26 @@
             </div>
           </div>
         }
-        <!-- lucide:chart-no-axes-column-increasing -->
-        <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" (click)="toggleStats.emit()">
-          <svg lucideChartNoAxesColumnIncreasing class="h-5 w-5"></svg>
-        </button>
-        <!-- Quality dropdown -->
-        <div class="dropdown dropdown-top dropdown-end">
-          <button tabindex="0" type="button" class="btn btn-ghost btn-sm text-white/80 text-sm">{{ activeQualityLabel() }}</button>
-          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-3 px-1 min-w-56 max-h-[75vh] overflow-y-auto mb-2">
-            <div class="text-center text-white/70 text-xs font-medium mb-2">Qualité</div>
-            @for (q of availableQualities(); track q.id) {
-              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectQuality.emit(q.id)">
-                <span class="flex-1 text-left">{{ q.label }}</span>
-                @if (activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
-              </button>
-            }
-          </div>
-        </div>
         <!-- Speed dropdown -->
         <div class="dropdown dropdown-top dropdown-end">
           <button tabindex="0" type="button" class="btn btn-ghost btn-sm text-white/80 text-sm">{{ playbackRate() }}x</button>
           <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-3 px-1 min-w-44 max-h-[75vh] overflow-y-auto mb-2">
             <div class="text-center text-white/70 text-xs font-medium mb-2">Vitesse</div>
             @for (r of speedOptions; track r) {
-              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="speedChange.emit(r)">
+              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="speedChange.emit(r); closeDropdown($event)">
                 <span class="flex-1 text-left">{{ r }}x</span>
                 @if (playbackRate() === r) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
               </button>
             }
+          </div>
+        </div>
+        <!-- Settings dropdown -->
+        <div class="dropdown dropdown-top dropdown-end">
+          <button tabindex="0" type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" (click)="openSettings()">
+            <svg lucideSettings class="h-5 w-5"></svg>
+          </button>
+          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl min-w-56 max-h-[75vh] overflow-hidden mb-2">
+            <ng-container [ngTemplateOutlet]="settingsMenu"></ng-container>
           </div>
         </div>
       </div>
@@ -193,7 +185,43 @@
   <div
     class="group relative w-full h-6 flex items-center cursor-pointer touch-none"
     (pointerdown)="onProgressDown($event)"
+    (pointermove)="onProgressHover($event)"
+    (pointerleave)="onProgressLeave()"
   >
+    <!-- Seek tooltip -->
+    @if ((hovering() || dragging()) && duration()) {
+      <div
+        class="absolute bottom-full mb-3 pointer-events-none z-50 -translate-x-1/2"
+        [style.left]="tooltipLeft()"
+      >
+        <div class="bg-neutral/95 backdrop-blur-sm rounded-lg shadow-2xl overflow-hidden">
+          @if (spriteUrl() && spriteMetadata()) {
+            <div class="relative">
+              <div
+                class="bg-no-repeat"
+                [style.width.px]="spriteMetadata()!.thumbWidth * 1.5"
+                [style.height.px]="spriteMetadata()!.thumbHeight * 1.5"
+                [style.background-image]="'url(' + spriteUrl() + ')'"
+                [style.background-position]="thumbnailBgPositionScaled()"
+                [style.background-size]="spriteBgSizeScaled()"
+              ></div>
+              <div class="absolute bottom-0 inset-x-0 text-center pb-1 pt-3 bg-gradient-to-t from-black/70 to-transparent">
+                <span class="text-white text-xs tabular-nums font-medium drop-shadow">
+                  {{ formatTime(dragging() ? dragTime() : hoverTime()) }}
+                </span>
+              </div>
+            </div>
+          } @else {
+            <div class="px-3 py-1.5 text-center">
+              <span class="text-white text-xs tabular-nums font-medium">
+                {{ formatTime(dragging() ? dragTime() : hoverTime()) }}
+              </span>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
     <div class="relative w-full h-2 group-hover:h-2.5 transition-all rounded-full bg-white/20 overflow-hidden">
       <!-- Buffered -->
       <div
@@ -258,13 +286,13 @@
           </button>
           <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[75vh] overflow-y-auto mb-2">
             <div class="text-center text-white/70 text-sm font-medium mb-3">Sous-titres</div>
-            <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle.emit(null)">
+            <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle.emit(null); closeDropdown($event)">
               <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
               <span class="flex-1 text-left">Désactivé</span>
               @if (!activeSubtitleId()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
             </button>
             @for (sub of availableSubtitles(); track sub.id) {
-              <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle.emit(sub.id)">
+              <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle.emit(sub.id); closeDropdown($event)">
                 <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
                 <span class="flex-1 text-left">{{ sub.label }}@if (sub.burnIn) { <span class="text-warning/70 text-[10px] ml-1">gravé</span> }</span>
                 @if (activeSubtitleId() === sub.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
@@ -281,7 +309,7 @@
             <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[75vh] overflow-y-auto mb-2">
               <div class="text-center text-white/70 text-sm font-medium mb-3">Piste audio</div>
               @for (track of availableAudioTracks(); track track.id) {
-                <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectAudioTrack.emit(track.id)">
+                <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectAudioTrack.emit(track.id); closeDropdown($event)">
                   <svg lucideHeadphones class="h-5 w-5 text-white/50 shrink-0"></svg>
                   <span class="flex-1 text-left">{{ track.label }}</span>
                   @if (activeAudioTrackId() === track.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
@@ -290,34 +318,26 @@
             </div>
           </div>
         }
-        <!-- lucide:chart-no-axes-column-increasing -->
-        <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" (click)="toggleStats.emit()">
-          <svg lucideChartNoAxesColumnIncreasing class="h-6 w-6"></svg>
-        </button>
-        <!-- Quality dropdown -->
-        <div class="dropdown dropdown-top dropdown-end">
-          <button tabindex="0" type="button" class="btn btn-ghost btn-md text-white/80">{{ activeQualityLabel() }}</button>
-          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[75vh] overflow-y-auto mb-2">
-            <div class="text-center text-white/70 text-sm font-medium mb-3">Qualité</div>
-            @for (q of availableQualities(); track q.id) {
-              <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectQuality.emit(q.id)">
-                <span class="flex-1 text-left">{{ q.label }}</span>
-                @if (activeQualityId() === q.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
-              </button>
-            }
-          </div>
-        </div>
         <!-- Speed dropdown -->
         <div class="dropdown dropdown-top dropdown-end">
           <button tabindex="0" type="button" class="btn btn-ghost btn-md text-white/80">{{ playbackRate() }}x</button>
           <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-48 max-h-[75vh] overflow-y-auto mb-2">
             <div class="text-center text-white/70 text-sm font-medium mb-3">Vitesse</div>
             @for (r of speedOptions; track r) {
-              <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="speedChange.emit(r)">
+              <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="speedChange.emit(r); closeDropdown($event)">
                 <span class="flex-1 text-left">{{ r }}x</span>
                 @if (playbackRate() === r) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
               </button>
             }
+          </div>
+        </div>
+        <!-- Settings dropdown -->
+        <div class="dropdown dropdown-top dropdown-end">
+          <button tabindex="0" type="button" class="btn btn-ghost btn-md btn-circle text-white/80" (click)="openSettings()">
+            <svg lucideSettings class="h-6 w-6"></svg>
+          </button>
+          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl min-w-64 max-h-[75vh] overflow-hidden mb-2">
+            <ng-container [ngTemplateOutlet]="settingsMenu"></ng-container>
           </div>
         </div>
         <!-- lucide:maximize -->
@@ -328,3 +348,45 @@
     </div>
   }
 </div>
+
+<!-- Shared settings menu template -->
+<ng-template #settingsMenu>
+  <!-- mousedown prevents blur → keeps dropdown open on click -->
+  <div (mousedown)="$event.preventDefault()">
+    @if (settingsPanel() === 'main') {
+      <div class="py-2 px-1">
+        <!-- Quality row → opens sub-panel -->
+        <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="settingsPanel.set('quality')">
+          <span class="flex-1 text-left">Qualité</span>
+          <span class="text-white/50 text-xs">{{ activeQualityLabel() }}</span>
+          <svg lucideChevronRight class="h-4 w-4 text-white/40 shrink-0"></svg>
+        </button>
+        <!-- Fill screen -->
+        <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="toggleFillScreen.emit()">
+          <span class="flex-1 text-left">Remplir l'écran</span>
+          @if (fillScreen()) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+        </button>
+        <!-- Stats -->
+        <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="toggleStats.emit(); closeDropdown($event)">
+          <span class="flex-1 text-left">Statistiques pour les nerds</span>
+          @if (statsVisible()) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+        </button>
+      </div>
+    } @else if (settingsPanel() === 'quality') {
+      <div class="py-2 px-1">
+        <!-- Back header -->
+        <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 mb-1" (click)="settingsPanel.set('main')">
+          <svg lucideArrowLeft class="h-4 w-4 text-white/60 shrink-0"></svg>
+          <span class="font-medium">Qualité</span>
+        </button>
+        <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
+        @for (q of availableQualities(); track q.id) {
+          <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectQuality.emit(q.id); closeDropdown($event)">
+            <span class="flex-1 text-left">{{ q.label }}</span>
+            @if (activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+          </button>
+        }
+      </div>
+    }
+  </div>
+</ng-template>

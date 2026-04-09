@@ -21,10 +21,10 @@ services:
       CHOKIDAR_USEPOLLING: "1"
       CHOKIDAR_INTERVAL: "1000"
     volumes:
+      - /mnt/data/fliks/volumes/images:/app/images
       - ./backend:/app
       - /mnt/data/fliks/volumes/downloads:/downloads
       - /mnt/data/fliks/volumes/medias:/medias
-      - /mnt/data/fliks/volumes/images:/app/images
     devices:
       - /dev/dri:/dev/dri
     group_add:

@@ -28,6 +28,7 @@ import { NamingService } from '../scheduler/naming.service';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { FliksSchedulerModule } from '../scheduler/scheduler.module';
 import { ImageModule } from '../images/image.module';
+import { StreamingModule } from '../streaming/streaming.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { ImageModule } from '../images/image.module';
     MediaServersModule,
     forwardRef(() => FliksSchedulerModule),
     ImageModule,
+    StreamingModule,
   ],
   controllers: [MediaController],
   providers: [

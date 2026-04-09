@@ -5,14 +5,19 @@ import {
   input,
   output,
   signal,
+  TemplateRef,
+  viewChild,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { TranslateModule } from '@ngx-translate/core';
-import { formatTime, calcDragTime } from '../../../core/utils/player.utils';
+import { formatTime, calcDragTime, calcHoverPercent, SpriteMetadata } from '../../../core/utils/player.utils';
 import {
   LucideCaptions,
   LucideChartNoAxesColumnIncreasing,
   LucideCheck,
   LucideChevronLeft,
+  LucideChevronRight,
+  LucideArrowLeft,
   LucideMaximize,
   LucidePictureInPicture2,
   LucideRotateCcw,
@@ -44,6 +49,12 @@ import {
     LucideHeadphones,
     LucideVolume2,
     LucideVolumeX,
+    LucideScan,
+    LucideMinimize,
+    LucideSettings,
+    LucideChevronRight,
+    LucideArrowLeft,
+    NgTemplateOutlet,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player-controls.html',
@@ -75,6 +86,10 @@ export class PlayerControlsComponent {
   readonly castAvailable = input(false);
   readonly castConnected = input(false);
   readonly castConnecting = input(false);
+  readonly spriteUrl = input<string | null>(null);
+  readonly spriteMetadata = input<SpriteMetadata | null>(null);
+  readonly fillScreen = input(false);
+  readonly statsVisible = input(false);
   readonly togglePlay = output<void>();
   readonly tapOverlay = output<void>();
   readonly seek = output<number>();
@@ -93,8 +108,12 @@ export class PlayerControlsComponent {
   readonly back = output<void>();
   readonly selectAudioTrack = output<string>();
   readonly toggleCast = output<void>();
+  readonly toggleFillScreen = output<void>();
 
   readonly speedOptions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+
+  /** Settings dropdown panel navigation */
+  readonly settingsPanel = signal<'main' | 'quality'>('main');
 
   // Progress bar drag state
   readonly dragging = signal(false);
@@ -103,7 +122,61 @@ export class PlayerControlsComponent {
   readonly seekPending = signal(false);
   private seekTarget = 0;
 
+  // Hover state for tooltip
+  readonly hovering = signal(false);
+  readonly hoverTime = signal(0);
+  readonly hoverPercent = signal(0);
+
   readonly formatTime = formatTime;
+
+  /** CSS background-position to show the correct thumbnail in the sprite */
+  readonly thumbnailBgPosition = computed(() => {
+    const meta = this.spriteMetadata();
+    if (!meta) return '0 0';
+    const time = this.dragging() ? this.dragTime() : this.hoverTime();
+    const index = Math.min(Math.floor(time / meta.interval), meta.count - 1);
+    const col = index % meta.columns;
+    const row = Math.floor(index / meta.columns);
+    return `-${col * meta.thumbWidth}px -${row * meta.thumbHeight}px`;
+  });
+
+  /** CSS background-size for the sprite image */
+  readonly spriteBgSize = computed(() => {
+    const meta = this.spriteMetadata();
+    if (!meta) return 'auto';
+    const rows = Math.ceil(meta.count / meta.columns);
+    return `${meta.columns * meta.thumbWidth}px ${rows * meta.thumbHeight}px`;
+  });
+
+  private static readonly SCALE = 1.5;
+
+  /** Scaled background-position (1.5x) */
+  readonly thumbnailBgPositionScaled = computed(() => {
+    const meta = this.spriteMetadata();
+    if (!meta) return '0 0';
+    const s = PlayerControlsComponent.SCALE;
+    const time = this.dragging() ? this.dragTime() : this.hoverTime();
+    const index = Math.min(Math.floor(time / meta.interval), meta.count - 1);
+    const col = index % meta.columns;
+    const row = Math.floor(index / meta.columns);
+    return `-${col * meta.thumbWidth * s}px -${row * meta.thumbHeight * s}px`;
+  });
+
+  /** Scaled background-size (1.5x) */
+  readonly spriteBgSizeScaled = computed(() => {
+    const meta = this.spriteMetadata();
+    if (!meta) return 'auto';
+    const s = PlayerControlsComponent.SCALE;
+    const rows = Math.ceil(meta.count / meta.columns);
+    return `${meta.columns * meta.thumbWidth * s}px ${rows * meta.thumbHeight * s}px`;
+  });
+
+  /** Clamped tooltip left position (keeps tooltip within bar bounds) */
+  readonly tooltipLeft = computed(() => {
+    const pct = this.dragging() ? this.displayPercent() : this.hoverPercent();
+    // 120px = half tooltip width (~240px at 160*1.5). Clamp via CSS calc.
+    return `clamp(120px, ${pct}%, calc(100% - 120px))`;
+  });
 
   formatRemaining(current: number, total: number): string {
     if (!total || !isFinite(total)) return '';
@@ -169,5 +242,29 @@ export class PlayerControlsComponent {
 
   private updateDragFromPointer(e: PointerEvent, bar: HTMLElement) {
     this.dragTime.set(calcDragTime(e, bar, this.duration()));
+  }
+
+  onProgressHover(event: PointerEvent) {
+    if (this.dragging()) return; // drag already tracks position
+    const bar = event.currentTarget as HTMLElement;
+    this.hovering.set(true);
+    this.hoverTime.set(calcDragTime(event, bar, this.duration()));
+    this.hoverPercent.set(calcHoverPercent(event, bar));
+  }
+
+  onProgressLeave() {
+    this.hovering.set(false);
+  }
+
+  /** Close a daisyUI tabindex dropdown by blurring its trigger. */
+  closeDropdown(event: Event) {
+    const el = (event.target as HTMLElement).closest('.dropdown');
+    if (el) (el.querySelector('[tabindex]') as HTMLElement)?.blur();
+    this.settingsPanel.set('main');
+  }
+
+  /** Reset settings panel when opening the dropdown. */
+  openSettings() {
+    this.settingsPanel.set('main');
   }
 }

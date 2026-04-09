@@ -366,6 +366,10 @@ export class MediaService {
     return firstValueFrom(this.http.post<Media>(`/api/media/${id}/refresh`, {}));
   }
 
+  refreshEpisodeMetadata(mediaId: number, episodeId: number) {
+    return firstValueFrom(this.http.post<Media>(`/api/media/${mediaId}/episodes/${episodeId}/refresh`, {}));
+  }
+
   rescanFiles(id: number) {
     return firstValueFrom(this.http.post<{ ok: boolean }>(`/api/media/${id}/rescan`, {}));
   }

@@ -26,6 +26,7 @@ import {
   PROFILES,
   SessionContext,
 } from './transcoding.service';
+import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { SubtitleBurnInService } from './subtitle-burn-in.service';
@@ -56,6 +57,7 @@ export class StreamingController {
     private readonly streamBuilder: StreamBuilderService,
     private readonly activeStreamTracker: ActiveStreamTracker,
     private readonly subtitleBurnIn: SubtitleBurnInService,
+    private readonly thumbnailService: ThumbnailService,
   ) {}
 
   private buildSessionContext(
@@ -139,6 +141,56 @@ export class StreamingController {
     }
     this.activeStreamTracker.setAudioStreamIndex(mediaFileId, audioStreamIndex);
     return result;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Thumbnail sprite endpoints
+  // ---------------------------------------------------------------------------
+
+  @Get(':mediaFileId/thumbnails/sprite.json')
+  async thumbnailMeta(
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Res() res: Response,
+  ) {
+    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const duration = resolved.mediaFile.streamInfo?.durationSeconds;
+    if (!duration) return res.status(404).json({ error: 'no duration' });
+
+    const meta = await this.thumbnailService.getOrGenerate(
+      mediaFileId,
+      resolved.absolutePath,
+      duration,
+      resolved.media.title,
+    );
+    if (!meta) return res.status(404).json({ error: 'generation failed' });
+
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.json(meta);
+  }
+
+  @Get(':mediaFileId/thumbnails/sprite.jpg')
+  async thumbnailSprite(
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Res() res: Response,
+  ) {
+    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const duration = resolved.mediaFile.streamInfo?.durationSeconds;
+    if (!duration) return res.status(404).end();
+
+    const meta = await this.thumbnailService.getOrGenerate(
+      mediaFileId,
+      resolved.absolutePath,
+      duration,
+      resolved.media.title,
+    );
+    if (!meta) return res.status(404).end();
+
+    const spritePath = this.thumbnailService.getSpritePath(mediaFileId);
+    if (!fs.existsSync(spritePath)) return res.status(404).end();
+
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('Content-Type', 'image/jpeg');
+    res.sendFile(spritePath);
   }
 
   // ---------------------------------------------------------------------------

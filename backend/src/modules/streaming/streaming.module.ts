@@ -15,6 +15,8 @@ import { StreamBuilderService } from './stream-builder.service';
 import { PlaybackService } from './playback.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { SubtitleBurnInService } from './subtitle-burn-in.service';
+import { ThumbnailService } from './thumbnail.service';
+import { Command } from '../scheduler/entities/command.entity';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
@@ -26,6 +28,7 @@ import { AuthModule } from '../auth/auth.module';
       SubtitleFile,
       Episode,
       Season,
+      Command,
     ]),
     AuthModule,
   ],
@@ -38,12 +41,14 @@ import { AuthModule } from '../auth/auth.module';
     PlaybackService,
     ActiveStreamTracker,
     SubtitleBurnInService,
+    ThumbnailService,
   ],
   exports: [
     PlaybackService,
     TranscodingService,
     StreamingService,
     ActiveStreamTracker,
+    ThumbnailService,
   ],
 })
 export class StreamingModule {}

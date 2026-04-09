@@ -56,8 +56,12 @@ export class SseService implements OnDestroy {
     this.eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data) as SseEvent;
-        this.lastEvent.set(data);
         this.handleEvent(data);
+        // Don't update lastEvent for high-frequency progress events
+        // (they are handled via activeProgress signal instead)
+        if (data.type !== 'task.progress') {
+          this.lastEvent.set(data);
+        }
       } catch { /* ignore parse errors */ }
     };
     this.retryDelay = 5000; // Reset on successful connection

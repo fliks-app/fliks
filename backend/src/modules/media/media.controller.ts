@@ -239,6 +239,15 @@ export class MediaController {
     return this.mediaService.refreshMetadata(id);
   }
 
+  @Post(':id/episodes/:episodeId/refresh')
+  @CheckPolicies((ability) => ability.can(Action.Update, Media))
+  refreshEpisodeMetadata(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('episodeId', ParseIntPipe) episodeId: number,
+  ) {
+    return this.mediaService.refreshEpisodeMetadata(id, episodeId);
+  }
+
   @Post(':id/rescan')
   @CheckPolicies((ability) => ability.can(Action.Update, Media))
   async rescanFiles(@Param('id', ParseIntPipe) id: number) {

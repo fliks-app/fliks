@@ -230,6 +230,29 @@ export class TmdbProvider implements IMetadataProvider {
       }));
   }
 
+  async getTvSeason(tmdbId: number, seasonNumber: number): Promise<SeasonDetails> {
+    const { data: season } = await this.client.get<TmdbTvSeasonResponse>(
+      `/tv/${tmdbId}/season/${seasonNumber}`,
+      { params: { language: 'fr-FR' } },
+    );
+    return {
+      seasonNumber: season.season_number,
+      episodeCount: season.episodes?.length ?? 0,
+      overview: season.overview || null,
+      airDate: season.air_date || null,
+      episodes: (season.episodes ?? []).map((e: TmdbTvEpisode) => ({
+        episodeNumber: e.episode_number,
+        title: e.name,
+        overview: e.overview || null,
+        airDate: e.air_date || null,
+        runtime: e.runtime ?? null,
+        stillUrl: e.still_path
+          ? `${TMDB_IMAGE_BASE}/w780${e.still_path}`
+          : null,
+      })),
+    };
+  }
+
   async getTvShowSeasons(tmdbId: number): Promise<SeasonDetails[]> {
     const { data: show } = await this.client.get<TmdbTvShowWithSeasons>(
       `/tv/${tmdbId}`,

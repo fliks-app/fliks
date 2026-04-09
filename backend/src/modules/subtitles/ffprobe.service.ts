@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import * as path from 'path';
 
 const execFileAsync = promisify(execFile);
 
@@ -336,7 +337,11 @@ export class FfprobeService {
   async detectCrop(
     videoPath: string,
     durationSeconds?: number,
+    originalWidth?: number,
+    originalHeight?: number,
   ): Promise<CropInfo | null> {
+    const label = path.basename(videoPath);
+    this.logger.log(`cropdetect started for "${label}" (${originalWidth}x${originalHeight})`);
     try {
       // Sample at 3 different timestamps to avoid false positives (dark scenes, credits)
       const dur = durationSeconds ?? 600;
@@ -400,10 +405,15 @@ export class FfprobeService {
       if (parts.length !== 4) return null;
       const [w, h, x, y] = parts;
 
-      // Only crop if bars are significant (> 20px on each side)
-      // and the crop doesn't reduce width (only vertical bars)
-      if (y < 20 && x < 20) return null;
+      // Only crop if bars are significant (> 40px total removed on at least one axis)
+      const totalVerticalCrop = originalHeight ? originalHeight - h : y * 2;
+      const totalHorizontalCrop = originalWidth ? originalWidth - w : x * 2;
+      if (totalVerticalCrop < 40 && totalHorizontalCrop < 40) {
+        this.logger.log(`cropdetect "${label}": no crop needed (detected ${bestCrop}, total crop: ${totalVerticalCrop}v/${totalHorizontalCrop}h)`);
+        return null;
+      }
 
+      this.logger.log(`cropdetect "${label}": crop needed → ${w}:${h}:${x}:${y} (removing ${totalVerticalCrop}px vertical, ${totalHorizontalCrop}px horizontal)`);
       return { width: w, height: h, x, y };
     } catch (err) {
       this.logger.warn(`cropdetect failed for ${videoPath}: ${err}`);

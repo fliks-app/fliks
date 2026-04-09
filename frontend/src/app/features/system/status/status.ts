@@ -1,20 +1,20 @@
 import {
   Component, ChangeDetectionStrategy, signal, inject, OnInit, effect,
 } from '@angular/core';
-import { DatePipe, NgClass, KeyValuePipe } from '@angular/common';
+import { DatePipe, DecimalPipe, NgClass, KeyValuePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { SseService } from '../../../core/services/sse.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 
-interface CommandEntry { id: number; name: string; status: string; trigger: string; startedOn: string; endedOn?: string; }
+interface CommandEntry { id: number; name: string; status: string; trigger: string; startedOn: string; endedOn?: string; body?: Record<string, unknown>; }
 interface ServiceStatus { name: string; ok: boolean; message?: string; }
 interface HealthReport { version: string; uptimeSeconds: number; database: ServiceStatus; indexers: { enabled: number; total: number }; downloadClients: ServiceStatus[]; }
 
 @Component({
   selector: 'app-system-status',
-  imports: [TranslateModule, DatePipe, NgClass, KeyValuePipe],
+  imports: [TranslateModule, DatePipe, DecimalPipe, NgClass, KeyValuePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './status.html',
 })
@@ -40,6 +40,7 @@ export class SystemStatusComponent implements OnInit {
     { name: 'ImportCompleted', label: 'system.cmd_import_completed' },
     { name: 'RescanAll', label: 'system.cmd_rescan_all' },
     { name: 'RescanMissingFiles', label: 'system.cmd_rescan_missing_files' },
+    { name: 'GenerateSprite', label: 'system.cmd_generate_sprite' },
   ];
 
   constructor() {
@@ -113,6 +114,7 @@ export class SystemStatusComponent implements OnInit {
 
   /** i18n key for known scheduler commands (progress bar + consistency with manual actions). */
   commandLabelKey(commandName: string): string {
-    return this.availableCommands.find((c) => c.name === commandName)?.label ?? commandName;
+    const baseName = commandName.split(':')[0];
+    return this.availableCommands.find((c) => c.name === baseName)?.label ?? commandName;
   }
 }

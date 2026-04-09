@@ -302,21 +302,19 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
 
   async refreshMetadata() {
     const m = this.media();
-    if (!m) return;
+    const ep = this.episode();
+    if (!m || !ep) return;
     this.refreshLoading.set(true);
     try {
-      const updated = await this.mediaService.refreshMetadata(m.id);
+      const updated = await this.mediaService.refreshEpisodeMetadata(m.id, ep.id);
       this.media.set(updated);
       // Re-resolve episode from refreshed data
-      const ep = this.episode();
-      if (ep) {
-        for (const s of updated.seasons ?? []) {
-          const freshEp = s.episodes?.find((e) => e.id === ep.id);
-          if (freshEp) {
-            this.season.set(s);
-            this.episode.set(freshEp);
-            break;
-          }
+      for (const s of updated.seasons ?? []) {
+        const freshEp = s.episodes?.find((e) => e.id === ep.id);
+        if (freshEp) {
+          this.season.set(s);
+          this.episode.set(freshEp);
+          break;
         }
       }
       const subs = await this.subtitlesApi.getForMedia(m.id);

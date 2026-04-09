@@ -25,7 +25,7 @@ import { OfflinePlaybackSyncService } from '../../core/services/offline-playback
 import { NetworkService } from '../../core/services/network.service';
 import { DownloadCacheService } from '../../core/services/download-cache.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
-import { parseAudioIndex } from '../../core/utils/player.utils';
+import { parseAudioIndex, SpriteMetadata } from '../../core/utils/player.utils';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 interface ImmersivePlugin {
@@ -141,10 +141,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly bufferedEnd = signal(0);
   readonly inPipMode = signal(false);
   readonly statsVisible = signal(false);
+  readonly fillScreen = signal(false);
   /** Forces stats recomputation while overlay is open (e.g. Shaka getStats, paused playback). */
   private readonly statsRefreshTick = signal(0);
   readonly subtitlePickerOpen = signal(false);
   readonly qualityPickerOpen = signal(false);
+  readonly spriteUrl = signal<string | null>(null);
+  readonly spriteMetadata = signal<SpriteMetadata | null>(null);
   readonly activeSubtitleId = signal<string | null>(null);
   readonly activeQualityId = signal('auto');
   readonly activeResolution = signal('');
@@ -627,6 +630,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Save position every 10 seconds + immediately on seek
       this.saveInterval = setInterval(() => this.savePosition(), 10_000);
       video.addEventListener('seeked', () => this.savePosition());
+
+      // Load thumbnail sprite metadata (non-blocking)
+      this.loadSpriteMetadata();
       video.addEventListener('playing', () => this.videoStarted.set(true), { once: true });
 
       // Update stats every second
@@ -1427,6 +1433,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private getStreamInfo() {
     const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
     return file?.streamInfo as any;
+  }
+
+  private async loadSpriteMetadata(): Promise<void> {
+    try {
+      const url = this.streamingApi.getThumbnailMetadataUrl(this.mediaFileId);
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const meta: SpriteMetadata = await res.json();
+      this.spriteMetadata.set(meta);
+      this.spriteUrl.set(this.streamingApi.getThumbnailSpriteUrl(this.mediaFileId));
+    } catch {
+      // Sprite not available, tooltip will show time only
+    }
   }
 
 }

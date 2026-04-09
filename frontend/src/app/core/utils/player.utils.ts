@@ -16,6 +16,20 @@ export function calcDragTime(e: PointerEvent, bar: HTMLElement, duration: number
   return ratio * (duration || 0);
 }
 
+export interface SpriteMetadata {
+  interval: number;
+  columns: number;
+  thumbWidth: number;
+  thumbHeight: number;
+  count: number;
+}
+
+/** Calculate hover percent from a pointer event on a progress bar. */
+export function calcHoverPercent(e: PointerEvent, bar: HTMLElement): number {
+  const rect = bar.getBoundingClientRect();
+  return Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+}
+
 /** Parse audio stream index from track ID (e.g., 'audio-2' → 2). */
 export function parseAudioIndex(trackId: string): number {
   return parseInt(trackId.replace(/^(si-|shaka-|audio-)/, ''), 10);
