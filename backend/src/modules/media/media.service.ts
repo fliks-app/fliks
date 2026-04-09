@@ -39,6 +39,7 @@ import {
   APP_QUALITIES,
 } from '../../common/constants/app-qualities';
 
+import { ImageService } from '../images/image.service';
 import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
@@ -83,6 +84,7 @@ export class MediaService {
     private readonly mediaServers: MediaServersService,
     private readonly ffprobe: FfprobeService,
     private readonly subtitles: SubtitlesService,
+    private readonly imageService: ImageService,
   ) {}
 
   async importFromTmdb(dto: ImportTmdbDto): Promise<Media> {
@@ -722,12 +724,14 @@ export class MediaService {
       await this.mediaRepo.update(media.id, {
         ...this.buildMediaFieldsFromTmdb(details, MediaType.MOVIE),
       });
+      await this.downloadMediaImages(media.id, details);
       await this.persistMediaMetadata(media, details);
     } else {
       const details = await this.tmdb.getTvShowDetails(media.tmdbId);
       await this.mediaRepo.update(media.id, {
         ...this.buildMediaFieldsFromTmdb(details, MediaType.SERIES),
       });
+      await this.downloadMediaImages(media.id, details);
       await this.persistMediaMetadata(media, details);
       await this.refreshSeriesEpisodes(media);
     }
@@ -787,24 +791,29 @@ export class MediaService {
             updates.overview = ep.overview;
           if (ep.airDate && ep.airDate !== existing.airDate)
             updates.airDate = ep.airDate;
-          if (ep.stillUrl != null && ep.stillUrl !== existing.stillUrl)
-            updates.stillUrl = ep.stillUrl ?? undefined;
           if (ep.runtime != null && ep.runtime !== existing.runtime)
             updates.runtime = ep.runtime;
           if (Object.keys(updates).length > 0) {
             await this.episodeRepo.update(existing.id, updates);
           }
+          if (ep.stillUrl) {
+            await this.downloadEpisodeStill(existing.id, ep.stillUrl);
+          }
         } else {
-          await this.episodeRepo.insert({
-            seasonId: dbSeason.id,
-            episodeNumber: ep.episodeNumber,
-            title: ep.title || undefined,
-            overview: ep.overview || undefined,
-            airDate: ep.airDate || undefined,
-            runtime: ep.runtime ?? undefined,
-            stillUrl: ep.stillUrl || undefined,
-            monitored: true,
-          });
+          const inserted = await this.episodeRepo.save(
+            this.episodeRepo.create({
+              seasonId: dbSeason.id,
+              episodeNumber: ep.episodeNumber,
+              title: ep.title || undefined,
+              overview: ep.overview || undefined,
+              airDate: ep.airDate || undefined,
+              runtime: ep.runtime ?? undefined,
+              monitored: true,
+            }),
+          );
+          if (ep.stillUrl) {
+            await this.downloadEpisodeStill(inserted.id, ep.stillUrl);
+          }
         }
       }
     }
@@ -956,6 +965,74 @@ export class MediaService {
     };
   }
 
+  /**
+   * Download poster + fanart from TMDB and update the media row with local paths.
+   */
+  private async downloadMediaImages(
+    mediaId: number,
+    details: MetadataDetails,
+  ): Promise<void> {
+    const updates: Partial<Media> = {};
+
+    if (details.posterUrl) {
+      const local = await this.imageService.downloadAndStore(
+        details.posterUrl,
+        'media',
+        mediaId,
+        'poster',
+      );
+      if (local) updates.posterUrl = local;
+    }
+    if (details.fanartUrl) {
+      const local = await this.imageService.downloadAndStore(
+        details.fanartUrl,
+        'media',
+        mediaId,
+        'fanart',
+      );
+      if (local) updates.fanartUrl = local;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await this.mediaRepo.update(mediaId, updates);
+    }
+  }
+
+  /**
+   * Download a person avatar from TMDB and update the person row.
+   */
+  private async downloadPersonAvatar(
+    personId: number,
+    avatarUrl: string,
+  ): Promise<string | null> {
+    const local = await this.imageService.downloadAndStore(
+      avatarUrl,
+      'person',
+      personId,
+    );
+    if (local) {
+      await this.personRepo.update(personId, { avatarUrl: local });
+    }
+    return local;
+  }
+
+  /**
+   * Download an episode still from TMDB and update the episode row.
+   */
+  private async downloadEpisodeStill(
+    episodeId: number,
+    stillUrl: string,
+  ): Promise<void> {
+    const local = await this.imageService.downloadAndStore(
+      stillUrl,
+      'episode',
+      episodeId,
+    );
+    if (local) {
+      await this.episodeRepo.update(episodeId, { stillUrl: local });
+    }
+  }
+
   private async persistMediaMetadata(
     media: Media,
     details: MetadataDetails,
@@ -1009,23 +1086,29 @@ export class MediaService {
           this.personRepo.create({
             tmdbId: id,
             name: credit.name,
-            avatarUrl: credit.avatarUrl ?? undefined,
           }),
         );
+        if (credit.avatarUrl) {
+          await this.downloadPersonAvatar(person.id, credit.avatarUrl);
+        }
         personMap.set(id, person);
       }
 
       // Update existing persons' name/avatarUrl
       for (const p of existingPersons) {
         const credit = allCredits.find((c) => c.externalId === p.tmdbId);
-        if (
-          credit &&
-          (credit.name !== p.name || credit.avatarUrl !== p.avatarUrl)
-        ) {
-          await this.personRepo.update(p.id, {
-            name: credit.name,
-            avatarUrl: credit.avatarUrl ?? undefined,
-          });
+        if (!credit) continue;
+        const updates: Partial<Person> = {};
+        if (credit.name !== p.name) updates.name = credit.name;
+        if (credit.avatarUrl) {
+          const local = await this.downloadPersonAvatar(
+            p.id,
+            credit.avatarUrl,
+          );
+          if (local) updates.avatarUrl = local;
+        }
+        if (Object.keys(updates).length > 0) {
+          await this.personRepo.update(p.id, updates);
         }
       }
     }
@@ -1093,9 +1176,14 @@ export class MediaService {
       if (!needsRefresh) continue;
       try {
         const pd = await this.tmdb.getPersonDetails(person.tmdbId);
+        let localAvatar: string | undefined;
+        if (pd.avatarUrl) {
+          const dl = await this.downloadPersonAvatar(person.id, pd.avatarUrl);
+          if (dl) localAvatar = dl;
+        }
         await this.personRepo.update(person.id, {
           name: pd.name,
-          avatarUrl: pd.avatarUrl ?? undefined,
+          ...(localAvatar ? { avatarUrl: localAvatar } : {}),
           biography: pd.biography,
           birthday: pd.birthday ?? undefined,
           deathday: pd.deathday ?? undefined,
@@ -1125,6 +1213,7 @@ export class MediaService {
       ...(folderName ? { folderName } : {}),
     });
     const saved = await this.mediaRepo.save(row);
+    await this.downloadMediaImages(saved.id, details);
     await this.updateSearchVector(saved.id);
     await this.persistMediaMetadata(saved, details);
     return this.findOne(saved.id);
@@ -1147,6 +1236,7 @@ export class MediaService {
       ...(folderName ? { folderName } : {}),
     });
     const saved = await this.mediaRepo.save(row);
+    await this.downloadMediaImages(saved.id, details);
 
     for (const sd of seasons) {
       const season = this.seasonRepo.create({

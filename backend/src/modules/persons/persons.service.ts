@@ -6,6 +6,7 @@ import { MediaCast } from '../media/entities/media-cast.entity';
 import { MediaCrew } from '../media/entities/media-crew.entity';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
 import { PersonCombinedCredits } from '../metadata-providers/interfaces/metadata-provider.interface';
+import { ImageService } from '../images/image.service';
 
 /** Refresh person details if older than 7 days. */
 const REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -21,6 +22,7 @@ export class PersonsService {
     private readonly crewRepo: Repository<MediaCrew>,
     private readonly dataSource: DataSource,
     private readonly tmdb: TmdbProvider,
+    private readonly imageService: ImageService,
   ) {}
 
   async search(query: string): Promise<Person[]> {
@@ -81,9 +83,18 @@ export class PersonsService {
 
     try {
       const details = await this.tmdb.getPersonDetails(person.tmdbId);
+      let localAvatar: string | undefined;
+      if (details.avatarUrl) {
+        const dl = await this.imageService.downloadAndStore(
+          details.avatarUrl,
+          'person',
+          person.id,
+        );
+        if (dl) localAvatar = dl;
+      }
       const updates = {
         name: details.name,
-        avatarUrl: details.avatarUrl ?? undefined,
+        ...(localAvatar ? { avatarUrl: localAvatar } : {}),
         biography: details.biography,
         birthday: details.birthday ?? undefined,
         deathday: details.deathday ?? undefined,

@@ -24,6 +24,7 @@ services:
       - ./backend:/app
       - /mnt/data/fliks/volumes/downloads:/downloads
       - /mnt/data/fliks/volumes/medias:/medias
+      - /mnt/data/fliks/volumes/images:/app/images
     devices:
       - /dev/dri:/dev/dri
     group_add:

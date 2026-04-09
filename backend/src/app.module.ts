@@ -22,6 +22,7 @@ import { RolesModule } from './modules/roles/roles.module';
 import { StreamingModule } from './modules/streaming/streaming.module';
 import { PersonsModule } from './modules/persons/persons.module';
 import { DownloadsModule } from './modules/downloads/downloads.module';
+import { ImageModule } from './modules/images/image.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 
@@ -79,6 +80,7 @@ import { join } from 'path';
     MediaServersModule,
     RolesModule,
     StreamingModule,
+    ImageModule,
   ],
 })
 export class AppModule {}

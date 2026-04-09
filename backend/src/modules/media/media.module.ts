@@ -27,6 +27,7 @@ import { DiskImportService } from './disk-import.service';
 import { NamingService } from '../scheduler/naming.service';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { FliksSchedulerModule } from '../scheduler/scheduler.module';
+import { ImageModule } from '../images/image.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { FliksSchedulerModule } from '../scheduler/scheduler.module';
     SubtitlesModule,
     MediaServersModule,
     forwardRef(() => FliksSchedulerModule),
+    ImageModule,
   ],
   controllers: [MediaController],
   providers: [
