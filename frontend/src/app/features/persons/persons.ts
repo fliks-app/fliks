@@ -16,12 +16,13 @@ import { PersonsApiService, Person } from '../../core/services/api/persons-api.s
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideUsers } from '@lucide/angular';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 @Component({
   selector: 'app-persons',
-  imports: [FormsModule, TranslateModule, RouterLink, LucideSearch, LucideUsers],
+  imports: [FormsModule, TranslateModule, RouterLink, ResolveUrlPipe, LucideSearch, LucideUsers],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './persons.html',
 })

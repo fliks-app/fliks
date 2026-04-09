@@ -2,12 +2,13 @@ import { Component, ChangeDetectionStrategy, inject, signal, computed, OnInit } 
 import { Router } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck } from '@lucide/angular';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { PlaybackState, StreamingApiService, WatchHistoryItem } from '../../core/services/api/streaming-api.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 
 @Component({
   selector: 'app-watch-history',
-  imports: [TranslateModule, LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck],
+  imports: [TranslateModule, ResolveUrlPipe, LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './watch-history.html',
 })

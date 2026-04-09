@@ -25,7 +25,9 @@ import { OfflinePlaybackSyncService } from '../../core/services/offline-playback
 import { NetworkService } from '../../core/services/network.service';
 import { DownloadCacheService } from '../../core/services/download-cache.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
+import { ServerConfigService } from '../../core/services/server-config.service';
 import { parseAudioIndex, SpriteMetadata } from '../../core/utils/player.utils';
+import { PlayerSettingsService, normalizeLang } from '../../core/services/player-settings.service';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 interface ImmersivePlugin {
@@ -119,6 +121,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly authService = inject(AuthService);
   readonly castService = inject(CastService);
   private readonly castPlayerService = inject(CastPlayerService);
+  private readonly serverConfig = inject(ServerConfigService);
+  private readonly playerSettings = inject(PlayerSettingsService);
 
   private readonly videoEl = viewChild<ElementRef<HTMLVideoElement>>('videoElement');
   private readonly containerEl = viewChild<ElementRef<HTMLDivElement>>('playerContainer');
@@ -152,7 +156,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly activeQualityId = signal('auto');
   readonly activeResolution = signal('');
   readonly activeAudioTrackId = signal<string | null>(null);
-  readonly availableAudioTracks = signal<{ id: string; label: string }[]>([]);
+  readonly availableAudioTracks = signal<{ id: string; label: string; language: string }[]>([]);
   readonly availableSubtitles = signal<SubtitleOption[]>([]);
   readonly availableQualities = signal<QualityOption[]>([]);
 
@@ -474,7 +478,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const media = await this.mediaService.getOne(this.mediaId);
         this.media = media;
         this.mediaTitle.set(media.title);
-        if (media.fanartUrl) this.fanartUrl.set(media.fanartUrl);
+        if (media.fanartUrl) this.fanartUrl.set(this.serverConfig.resolveUrl(media.fanartUrl));
 
         // Build episode title (e.g. "S2:E3 - Episode Name")
         const file = media.files?.find((f: any) => f.id === this.mediaFileId);
@@ -500,8 +504,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Set MediaSession metadata (Android notification, PiP, recent apps)
       if ('mediaSession' in navigator) {
         const artwork: MediaImage[] = [];
-        if (this.media?.posterUrl) artwork.push({ src: this.media.posterUrl, sizes: '300x450', type: 'image/jpeg' });
-        if (this.media?.fanartUrl) artwork.push({ src: this.media.fanartUrl, sizes: '1280x720', type: 'image/jpeg' });
+        if (this.media?.posterUrl) artwork.push({ src: this.serverConfig.resolveUrl(this.media.posterUrl), sizes: '300x450', type: 'image/jpeg' });
+        if (this.media?.fanartUrl) artwork.push({ src: this.serverConfig.resolveUrl(this.media.fanartUrl), sizes: '1280x720', type: 'image/jpeg' });
         navigator.mediaSession.metadata = new MediaMetadata({
           title: this.episodeTitle() || this.mediaTitle(),
           artist: this.episodeTitle() ? this.mediaTitle() : undefined,
@@ -526,9 +530,47 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         console.log('[Player] Buffered ranges:', video.buffered.length, video.buffered.length > 0 ? `${video.buffered.start(0)}-${video.buffered.end(0)}` : 'none');
         console.log('[Player] Duration:', video.duration, 'Seekable:', video.seekable.length > 0 ? `${video.seekable.start(0)}-${video.seekable.end(0)}` : 'none');
       } else {
-        // Ask the backend to decide how to play this file
+        // ── Pre-compute all preferences BEFORE starting any backend stream ──
+
+        // 1. Determine resume position
+        let startTime: number | undefined = resumeTime ?? undefined;
+        if (startTime == null) {
+          try {
+            const state = await this.streamingApi.getPlaybackState(this.mediaFileId);
+            if (state && !state.completed && state.positionSeconds > 10) {
+              startTime = state.positionSeconds;
+            }
+          } catch { /* no saved state */ }
+        }
+
+        // 2. Determine preferred audio stream index from settings + streamInfo
+        const audioSettings = this.playerSettings.get();
+        let preselectedAudioIndex: number | undefined;
+        if (!audioSettings.useDefaultAudioStream) {
+          const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
+          const si = file?.streamInfo as any;
+          const audioStreams: any[] = si?.audio ?? [];
+
+          if (audioSettings.rememberAudioSelections) {
+            const saved = this.playerSettings.getRememberedAudioTrack(this.mediaFileId);
+            if (saved != null) {
+              preselectedAudioIndex = parseAudioIndex(saved);
+            }
+          }
+          if (preselectedAudioIndex == null && audioSettings.preferredAudioLanguage) {
+            const idx = audioStreams.findIndex(
+              (a: any) => normalizeLang(a.language) === audioSettings.preferredAudioLanguage,
+            );
+            if (idx >= 0) preselectedAudioIndex = idx;
+          }
+        }
+        this.activeAudioStreamIndex = preselectedAudioIndex;
+
+        // 3. Ask the backend to decide how to play — pass audio index upfront
         const deviceProfile = this.deviceProfileService.getProfile();
-        this.playbackInfo = await this.streamingApi.getPlaybackInfo(this.mediaFileId, deviceProfile);
+        this.playbackInfo = await this.streamingApi.getPlaybackInfo(
+          this.mediaFileId, deviceProfile, undefined, preselectedAudioIndex,
+        );
         const pi = this.playbackInfo;
 
         // Map backend decision to our mode signal
@@ -540,54 +582,66 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           this.playbackMode.set('transcode');
         }
 
-        // Use HW accel info from the playback decision
         this.hwAccel.set(pi.hwAccel);
 
-        // Build quality options
+        // 4. Build quality options and apply saved preference BEFORE load
         this.buildQualityOptions(pi);
         this.applySavedQualityPreferenceFromStorage();
 
         const mode = this.playbackMode();
         console.log('[Player] mediaFileId:', this.mediaFileId, 'mode:', pi.playMethod,
           'videoCopy:', pi.videoCopyStream, 'audioCopy:', pi.audioCopyStream,
-          'reasons:', pi.transcodeReasons.map(r => r.flag).join(', '));
+          'reasons:', pi.transcodeReasons.map(r => r.flag).join(', '),
+          'startTime:', startTime, 'audioIdx:', preselectedAudioIndex);
 
+        // 5. Configure Shaka ABR BEFORE load so it picks the right variant immediately
         if (mode === 'direct') {
           const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
-          console.log('[Player] Direct URL:', streamUrl);
-          await this.player.load(streamUrl, undefined, 'video/mp4');
+          await this.player.load(streamUrl, startTime, 'video/mp4');
         } else {
+          // Pre-configure ABR to avoid starting at 360p then switching
+          const savedQuality = this.activeQualityId();
+          const qualityOption = this.availableQualities().find(q => q.id === savedQuality);
+          if (savedQuality === 'auto') {
+            this.configureAutoAbrForHls();
+          } else if (qualityOption && qualityOption.height > 0) {
+            this.player.configure({
+              abr: { enabled: false },
+              restrictions: { minHeight: qualityOption.height, maxHeight: qualityOption.height },
+            } as any);
+          }
+
           this.player.configure({
             streaming: {
-              retryParameters: {
-                timeout: 60_000,
-                maxAttempts: 5,
-                baseDelay: 1000,
-              },
+              retryParameters: { timeout: 60_000, maxAttempts: 5, baseDelay: 1000 },
             },
             manifest: {
-              retryParameters: {
-                timeout: 30_000,
-                maxAttempts: 5,
-                baseDelay: 1000,
-              },
+              retryParameters: { timeout: 30_000, maxAttempts: 5, baseDelay: 1000 },
             },
           } as any);
 
           const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId);
-          console.log('[Player] HLS URL:', hlsUrl);
           await this.player.load(hlsUrl);
+        }
+
+        // Resume position — wait for first data before seeking
+        if (startTime) {
+          if (video.readyState >= 1) {
+            video.currentTime = startTime;
+          } else {
+            video.addEventListener('loadedmetadata', () => {
+              video.currentTime = startTime!;
+            }, { once: true });
+          }
         }
       }
 
       this.applyQualityPreferenceAfterLoad();
 
       if (this.isOfflinePlayback) {
-        // Offline: load VTT subtitle files from local storage
         await this.loadOfflineSubtitles();
         this.loadAudioTracks();
       } else {
-        // Load subtitles + auto-select last used language
         await this.loadSubtitles();
         this.loadAudioTracks();
       }
@@ -597,20 +651,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const match = this.availableSubtitles().find(s => s.language === savedLang && !!s.forced === savedForced)
           ?? this.availableSubtitles().find(s => s.language === savedLang);
         if (match) await this.selectSubtitle(match);
-      }
-
-      // Resume position
-      if (resumeTime != null) {
-        video.currentTime = resumeTime;
-      } else if (!this.isOfflinePlayback) {
-        try {
-          const state = await this.streamingApi.getPlaybackState(this.mediaFileId);
-          if (state && !state.completed && state.positionSeconds > 10) {
-            video.currentTime = state.positionSeconds;
-          }
-        } catch {
-          // No saved state
-        }
       }
 
       // If Cast is already connected (user connected from navbar), send to Cast
@@ -996,9 +1036,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           const tracks = si.audio.map((a: any, i: number) => ({
             id: `si-${i}`,
             label: `${a.language ?? 'und'}${a.title ? ' - ' + a.title : ''} (${(a.codec ?? '').toUpperCase()}${a.channels ? ' ' + a.channels + 'ch' : ''})`,
+            language: normalizeLang(a.language),
           }));
           this.availableAudioTracks.set(tracks);
           this.activeAudioTrackId.set(tracks[0].id);
+          this.autoSelectAudioTrack(tracks);
         }
         return;
       }
@@ -1006,6 +1048,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const tracks = Array.from(seen.entries()).map(([audioId, v]) => ({
         id: `shaka-${audioId}`,
         label: `${v.language ?? 'und'} (${v.audioCodec ?? '?'}${v.channelsCount ? ' ' + v.channelsCount + 'ch' : ''})`,
+        language: normalizeLang(v.language),
       }));
 
       this.availableAudioTracks.set(tracks);
@@ -1014,15 +1057,47 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (active?.audioId != null) {
         this.activeAudioTrackId.set(`shaka-${active.audioId}`);
       }
+      this.autoSelectAudioTrack(tracks);
     }, 2000);
+  }
+
+  /** Auto-select audio track based on user preferences. */
+  private autoSelectAudioTrack(tracks: { id: string; language: string }[]) {
+    const settings = this.playerSettings.get();
+    if (settings.useDefaultAudioStream) return;
+    // Skip if audio was already pre-selected during init (avoids reloading the stream)
+    if (this.activeAudioStreamIndex != null) return;
+
+    // Priority 1: remembered selection for this file
+    if (settings.rememberAudioSelections) {
+      const saved = this.playerSettings.getRememberedAudioTrack(this.mediaFileId);
+      if (saved && tracks.some((t) => t.id === saved)) {
+        this.onSelectAudioTrack(saved);
+        return;
+      }
+    }
+
+    // Priority 2: preferred language
+    if (settings.preferredAudioLanguage) {
+      const match = tracks.find(
+        (t) => t.language === settings.preferredAudioLanguage,
+      );
+      if (match && match.id !== this.activeAudioTrackId()) {
+        this.onSelectAudioTrack(match.id);
+      }
+    }
   }
 
   private activeAudioStreamIndex: number | undefined;
 
   async onSelectAudioTrack(trackId: string) {
     this.activeAudioTrackId.set(trackId);
-
     this.activeAudioStreamIndex = parseAudioIndex(trackId);
+
+    // Remember selection if enabled
+    if (this.playerSettings.get().rememberAudioSelections) {
+      this.playerSettings.saveRememberedAudioTrack(this.mediaFileId, trackId);
+    }
 
     // Reload the stream with the new audio track
     await this.reloadStream();

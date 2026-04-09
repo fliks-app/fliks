@@ -2,6 +2,7 @@ import { Component, ChangeDetectionStrategy, signal, inject, OnInit } from '@ang
 import { SlicePipe } from '@angular/common';
 import { TranslateModule } from '@ngx-translate/core';
 import { LucideFilm, LucideTv } from '@lucide/angular';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import {
   PersonsApiService,
   PersonProviderCredits,
@@ -10,7 +11,7 @@ import { PersonDetailComponent } from './person-detail';
 
 @Component({
   selector: 'app-person-filmography',
-  imports: [TranslateModule, SlicePipe, LucideFilm, LucideTv],
+  imports: [TranslateModule, SlicePipe, ResolveUrlPipe, LucideFilm, LucideTv],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './person-filmography.html',
 })

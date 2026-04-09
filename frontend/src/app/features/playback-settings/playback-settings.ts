@@ -2,22 +2,32 @@ import { Component, ChangeDetectionStrategy, inject, signal, OnInit } from '@ang
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { CastSettingsService, CastSettings } from '../../core/services/cast-settings.service';
+import { PlayerSettingsService, PlayerSettings } from '../../core/services/player-settings.service';
 import { ToastService } from '../../core/services/toast.service';
-import { LucideCast } from '@lucide/angular';
+import { LucideCast, LucidePlay } from '@lucide/angular';
 
 @Component({
   selector: 'app-playback-settings',
-  imports: [FormsModule, TranslateModule, LucideCast],
+  imports: [FormsModule, TranslateModule, LucideCast, LucidePlay],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './playback-settings.html',
 })
 export class PlaybackSettingsComponent implements OnInit {
   private readonly castSettings = inject(CastSettingsService);
+  private readonly playerSettings = inject(PlayerSettingsService);
   private readonly toast = inject(ToastService);
 
+  readonly activeTab = signal<'player' | 'cast'>('player');
+
+  // Cast settings
   readonly hdr = signal(false);
   readonly maxQuality = signal('1080p');
   readonly audioChannels = signal(2);
+
+  // Player settings
+  readonly preferredAudioLanguage = signal('');
+  readonly useDefaultAudioStream = signal(false);
+  readonly rememberAudioSelections = signal(false);
 
   readonly qualityOptions = [
     { value: 'original', label: 'Original' },
@@ -33,20 +43,50 @@ export class PlaybackSettingsComponent implements OnInit {
     { value: 8, label: 'Surround 7.1' },
   ];
 
+  readonly languageOptions = [
+    { value: '', label: 'Aucune préférence' },
+    { value: 'fra', label: 'Français' },
+    { value: 'eng', label: 'English' },
+    { value: 'jpn', label: '日本語 (Japanese)' },
+    { value: 'deu', label: 'Deutsch (German)' },
+    { value: 'spa', label: 'Español (Spanish)' },
+    { value: 'ita', label: 'Italiano (Italian)' },
+    { value: 'por', label: 'Português (Portuguese)' },
+    { value: 'kor', label: '한국어 (Korean)' },
+    { value: 'zho', label: '中文 (Chinese)' },
+    { value: 'rus', label: 'Русский (Russian)' },
+    { value: 'ara', label: 'العربية (Arabic)' },
+  ];
+
   ngOnInit() {
-    const s = this.castSettings.get();
-    this.hdr.set(s.hdr);
-    this.maxQuality.set(s.maxQuality);
-    this.audioChannels.set(s.audioChannels);
+    const c = this.castSettings.get();
+    this.hdr.set(c.hdr);
+    this.maxQuality.set(c.maxQuality);
+    this.audioChannels.set(c.audioChannels);
+
+    const p = this.playerSettings.get();
+    this.preferredAudioLanguage.set(p.preferredAudioLanguage);
+    this.useDefaultAudioStream.set(p.useDefaultAudioStream);
+    this.rememberAudioSelections.set(p.rememberAudioSelections);
   }
 
-  save() {
+  saveCast() {
     const settings: CastSettings = {
       hdr: this.hdr(),
       maxQuality: this.maxQuality(),
       audioChannels: this.audioChannels(),
     };
     this.castSettings.save(settings);
+    this.toast.success('Paramètres enregistrés');
+  }
+
+  savePlayer() {
+    const settings: PlayerSettings = {
+      preferredAudioLanguage: this.preferredAudioLanguage(),
+      useDefaultAudioStream: this.useDefaultAudioStream(),
+      rememberAudioSelections: this.rememberAudioSelections(),
+    };
+    this.playerSettings.save(settings);
     this.toast.success('Paramètres enregistrés');
   }
 }

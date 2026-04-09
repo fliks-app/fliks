@@ -5,6 +5,7 @@ import { TranslateModule } from '@ngx-translate/core';
 import { LucideFilm, LucidePlay, LucideEye, LucideEyeOff } from '@lucide/angular';
 import { Media } from '../../core/services/api/media.service';
 import { PlayableMediaService } from '../../core/services/playable-media.service';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { pickPlayContext } from '../utils/media-play.util';
 
 export type MediaStatus =
@@ -19,7 +20,7 @@ export type MediaCardVariant = 'grid' | 'poster';
 
 @Component({
   selector: 'app-media-card',
-  imports: [RouterLink, NgClass, TranslateModule, LucideFilm, LucidePlay, LucideEye, LucideEyeOff],
+  imports: [RouterLink, NgClass, TranslateModule, ResolveUrlPipe, LucideFilm, LucidePlay, LucideEye, LucideEyeOff],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-card.html',
 })

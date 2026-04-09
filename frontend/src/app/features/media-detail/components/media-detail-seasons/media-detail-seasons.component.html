@@ -52,10 +52,10 @@
           >
             <div class="aspect-video bg-base-300 relative overflow-hidden">
               @if (ep.stillUrl) {
-                <img [src]="ep.stillUrl" [alt]="" class="w-full h-full object-cover" loading="lazy" />
+                <img [src]="ep.stillUrl | resolveUrl" [alt]="" class="w-full h-full object-cover" loading="lazy" />
               } @else if (m.posterUrl) {
                 <img
-                  [src]="m.posterUrl"
+                  [src]="m.posterUrl | resolveUrl"
                   alt=""
                   class="w-full h-full object-cover opacity-35 group-hover:opacity-50 transition-opacity scale-105"
                 />

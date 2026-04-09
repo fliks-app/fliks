@@ -306,7 +306,9 @@ export class StreamingController {
       return;
     }
 
-    // Start transcoding/remuxing in the background (don't wait)
+    // Start transcoding from segment 0 in the background so the first segment
+    // is ready when Shaka requests it. If the player seeks, the segment endpoint
+    // will restart the transcode at the correct position.
     const ctx = this.buildSessionContext(req, resolved, mediaFileId);
     if (quality === 'remux') {
       const copyAudio = firstQueryString(req.query, 'copyAudio') !== 'false';

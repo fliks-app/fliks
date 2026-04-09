@@ -9,7 +9,7 @@
   >
     @if (media().posterUrl) {
       <img
-        [src]="media().posterUrl"
+        [src]="media().posterUrl | resolveUrl"
         [alt]="media().title"
         class="w-full h-full object-cover"
         loading="lazy"

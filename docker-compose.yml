@@ -22,7 +22,13 @@ services:
       CHOKIDAR_INTERVAL: "1000"
     volumes:
       - /mnt/data/fliks/volumes/images:/app/images
-      - ./backend:/app
+      - ./backend/src:/app/src
+      - ./backend/assets:/app/assets
+      - ./backend/scripts:/app/scripts
+      - ./backend/tsconfig.json:/app/tsconfig.json
+      - ./backend/tsconfig.build.json:/app/tsconfig.build.json
+      - ./backend/nest-cli.json:/app/nest-cli.json
+      - ./backend/package.json:/app/package.json
       - /mnt/data/fliks/volumes/downloads:/downloads
       - /mnt/data/fliks/volumes/medias:/medias
     devices:

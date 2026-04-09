@@ -210,7 +210,7 @@
             <div class="avatar">
               <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">
                 @if (c.person.avatarUrl) {
-                  <img [src]="c.person.avatarUrl" [alt]="c.person.name" loading="lazy" />
+                  <img [src]="c.person.avatarUrl | resolveUrl" [alt]="c.person.name" loading="lazy" />
                 } @else {
                   <div class="bg-base-300 flex items-center justify-center w-full h-full text-lg font-bold text-base-content/30">
                     {{ c.person.name.charAt(0) }}
@@ -233,7 +233,7 @@
             <div class="avatar">
               <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">
                 @if (c.person.avatarUrl) {
-                  <img [src]="c.person.avatarUrl" [alt]="c.person.name" loading="lazy" />
+                  <img [src]="c.person.avatarUrl | resolveUrl" [alt]="c.person.name" loading="lazy" />
                 } @else {
                   <div class="bg-base-300 flex items-center justify-center w-full h-full text-lg font-bold text-base-content/30">
                     {{ c.person.name.charAt(0) }}

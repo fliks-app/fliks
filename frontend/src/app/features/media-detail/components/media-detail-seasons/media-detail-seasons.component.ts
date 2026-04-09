@@ -9,6 +9,7 @@ import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { LucideCircleCheck, LucideCircleX } from '@lucide/angular';
 import { HorizontalScrollerComponent } from '../../../../shared/components/horizontal-scroller';
+import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
 import {
   Episode,
   Media,
@@ -24,7 +25,7 @@ import {
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, RouterLink, HorizontalScrollerComponent, LucideCircleCheck, LucideCircleX],
+  imports: [TranslateModule, RouterLink, ResolveUrlPipe, HorizontalScrollerComponent, LucideCircleCheck, LucideCircleX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })

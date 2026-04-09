@@ -210,7 +210,7 @@
     <div class="hidden lg:block relative">
       @if (m.fanartUrl) {
         <div class="absolute inset-0 -mx-4 -mt-6 lg:-mx-6 overflow-hidden">
-          <img [src]="m.fanartUrl" alt="" class="w-full h-full object-cover object-[50%_25%]" />
+          <img [src]="m.fanartUrl | resolveUrl" alt="" class="w-full h-full object-cover object-[50%_25%]" />
           <div class="absolute inset-0 bg-base-100/80"></div>
           <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-base-100/30 to-base-100/50"></div>
         </div>
@@ -233,13 +233,13 @@
         <div class="shrink-0 lg:w-[30%]">
           @if (ep.stillUrl) {
             <img
-              [src]="ep.stillUrl"
+              [src]="ep.stillUrl | resolveUrl"
               [alt]="ep.title ?? ''"
               class="w-full rounded-xl object-cover aspect-video"
             />
           } @else if (m.fanartUrl) {
             <img
-              [src]="m.fanartUrl"
+              [src]="m.fanartUrl | resolveUrl"
               [alt]="m.title"
               class="w-full rounded-xl object-cover aspect-video opacity-60"
             />
@@ -442,7 +442,7 @@
                 <div class="avatar">
                   <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">
                     @if (c.person.avatarUrl) {
-                      <img [src]="c.person.avatarUrl" [alt]="c.person.name" loading="lazy" />
+                      <img [src]="c.person.avatarUrl | resolveUrl" [alt]="c.person.name" loading="lazy" />
                     } @else {
                       <div class="bg-base-300 flex items-center justify-center w-full h-full text-lg font-bold text-base-content/30">
                         {{ c.person.name.charAt(0) }}
@@ -465,7 +465,7 @@
                 <div class="avatar">
                   <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">
                     @if (c.person.avatarUrl) {
-                      <img [src]="c.person.avatarUrl" [alt]="c.person.name" loading="lazy" />
+                      <img [src]="c.person.avatarUrl | resolveUrl" [alt]="c.person.name" loading="lazy" />
                     } @else {
                       <div class="bg-base-300 flex items-center justify-center w-full h-full text-lg font-bold text-base-content/30">
                         {{ c.person.name.charAt(0) }}

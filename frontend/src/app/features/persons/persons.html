@@ -50,7 +50,7 @@
             <div class="avatar">
               <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">
                 @if (person.avatarUrl) {
-                  <img [src]="person.avatarUrl" [alt]="person.name" loading="lazy" />
+                  <img [src]="person.avatarUrl | resolveUrl" [alt]="person.name" loading="lazy" />
                 } @else {
                   <div class="bg-base-300 flex items-center justify-center w-full h-full text-2xl font-bold text-base-content/30">
                     {{ person.name.charAt(0) }}

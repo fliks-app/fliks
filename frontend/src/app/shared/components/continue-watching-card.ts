@@ -4,19 +4,20 @@ import { LucideFilm, LucidePlay, LucideX } from '@lucide/angular';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { ContinueWatchingItem } from '../../core/services/api/streaming-api.service';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 @Component({
   selector: 'app-continue-watching-card',
-  imports: [LucideFilm, LucidePlay, LucideX],
+  imports: [ResolveUrlPipe, LucideFilm, LucidePlay, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="shrink-0 w-56 sm:w-64 group relative">
       <button type="button" (click)="play()" class="block w-full cursor-pointer text-left">
         <figure class="relative aspect-video bg-base-300 rounded-lg overflow-hidden shadow-md transition-shadow duration-200 ease-out group-hover:shadow-xl">
           @if (item().fanartUrl) {
-            <img [src]="item().fanartUrl" [alt]="item().mediaTitle" class="w-full h-full object-cover" loading="lazy" />
+            <img [src]="item().fanartUrl | resolveUrl" [alt]="item().mediaTitle" class="w-full h-full object-cover" loading="lazy" />
           } @else if (item().posterUrl) {
-            <img [src]="item().posterUrl" [alt]="item().mediaTitle" class="w-full h-full object-cover" loading="lazy" />
+            <img [src]="item().posterUrl | resolveUrl" [alt]="item().mediaTitle" class="w-full h-full object-cover" loading="lazy" />
           } @else {
             <div class="flex items-center justify-center w-full h-full text-base-content/30">
               <svg lucideFilm class="h-10 w-10" [strokeWidth]="1.5"></svg>

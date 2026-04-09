@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 /**
  * Mobile-only hero image (series fanart, episode still, etc.) — extends under the transparent navbar
@@ -6,11 +7,12 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  */
 @Component({
   selector: 'app-mobile-fanart-hero',
+  imports: [ResolveUrlPipe],
   template: `
     <div class="relative -mx-4 -mt-4 hero-fanart-bleed">
       @if (fanartUrl()) {
         <img
-          [src]="fanartUrl()!"
+          [src]="fanartUrl()! | resolveUrl"
           [alt]="imageAlt()"
           class="w-full min-h-[230px] h-[38svh] max-h-[53svh] landscape:min-h-0 landscape:h-auto landscape:max-h-[47vh] landscape:aspect-video object-cover object-[50%_25%]"
         />

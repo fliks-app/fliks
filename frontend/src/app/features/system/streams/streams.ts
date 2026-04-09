@@ -12,10 +12,11 @@ import { TranslateModule } from '@ngx-translate/core';
 import { StreamsApiService, ActiveStream } from '../../../core/services/api/streams-api.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { LucidePause, LucidePlay, LucideSquare } from '@lucide/angular';
+import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 
 @Component({
   selector: 'app-system-streams',
-  imports: [NgClass, UpperCasePipe, RouterLink, TranslateModule, LucidePause, LucidePlay, LucideSquare],
+  imports: [NgClass, UpperCasePipe, RouterLink, TranslateModule, ResolveUrlPipe, LucidePause, LucidePlay, LucideSquare],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './streams.html',
 })

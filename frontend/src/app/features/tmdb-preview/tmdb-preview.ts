@@ -27,10 +27,11 @@ import { ImportModalComponent } from './components/import-modal/import-modal.com
 import { MediaType } from '../../core/enums/media-type.enum';
 import { LucideFilm, LucideChevronLeft } from '@lucide/angular';
 import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart-hero';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, LucideFilm, LucideChevronLeft],
+  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, ResolveUrlPipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, LucideFilm, LucideChevronLeft],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tmdb-preview.html',
 })

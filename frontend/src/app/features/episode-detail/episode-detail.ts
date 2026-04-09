@@ -53,6 +53,7 @@ import {
   LucideFileText,
   LucideCircleCheck,
 } from '@lucide/angular';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 @Component({
   selector: 'app-episode-detail',
@@ -61,6 +62,7 @@ import {
     RouterLink,
     FormsModule,
     TranslateModule,
+    ResolveUrlPipe,
     MobileFanartHeroComponent,
     MediaDetailSubtitlesComponent,
     MediaFileInfoComponent,

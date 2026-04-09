@@ -127,7 +127,14 @@
     "cast_max_quality": "Qualité maximale",
     "cast_max_quality_hint": "Limite la résolution envoyée au Chromecast.",
     "cast_audio": "Audio",
-    "cast_audio_hint": "Nombre de canaux audio. Stéréo si votre TV n'a pas de système surround."
+    "cast_audio_hint": "Nombre de canaux audio. Stéréo si votre TV n'a pas de système surround.",
+    "tab_player": "Lecteur",
+    "player_preferred_lang": "Langue audio préférée",
+    "player_preferred_lang_hint": "Le lecteur sélectionnera automatiquement une piste audio dans cette langue si disponible.",
+    "player_use_default": "Utiliser la piste audio par défaut",
+    "player_use_default_hint": "Ignorer les préférences de langue et toujours utiliser la piste audio par défaut du fichier.",
+    "player_remember_audio": "Mémoriser les sélections audio",
+    "player_remember_audio_hint": "Le lecteur se souviendra de la piste audio choisie pour chaque fichier."
   },
   "import_disk": {
     "title": "Import manuel depuis le disque",

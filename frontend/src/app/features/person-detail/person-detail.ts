@@ -15,10 +15,11 @@ import {
   PersonDetail,
 } from '../../core/services/api/persons-api.service';
 import { LucideChevronLeft } from '@lucide/angular';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 @Component({
   selector: 'app-person-detail',
-  imports: [TranslateModule, RouterLink, RouterLinkActive, RouterOutlet, LucideChevronLeft],
+  imports: [TranslateModule, RouterLink, RouterLinkActive, RouterOutlet, ResolveUrlPipe, LucideChevronLeft],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './person-detail.html',
 })

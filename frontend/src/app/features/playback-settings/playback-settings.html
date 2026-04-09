@@ -6,79 +6,154 @@
 
   <!-- Tabs -->
   <div role="tablist" class="tabs tabs-bordered">
-    <a role="tab" class="tab tab-active">
+    <a role="tab" class="tab" [class.tab-active]="activeTab() === 'player'" (click)="activeTab.set('player')">
+      <svg lucidePlay class="h-4 w-4 mr-2"></svg>
+      {{ 'playback_settings.tab_player' | translate }}
+    </a>
+    <a role="tab" class="tab" [class.tab-active]="activeTab() === 'cast'" (click)="activeTab.set('cast')">
       <svg lucideCast class="h-4 w-4 mr-2"></svg>
       Chromecast
     </a>
   </div>
 
-  <!-- Chromecast settings -->
-  <div class="card bg-base-100 border border-base-200">
-    <div class="card-body gap-5">
+  <!-- Player settings -->
+  @if (activeTab() === 'player') {
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-5">
 
-      <!-- HDR -->
-      <div class="form-control">
-        <label class="label cursor-pointer justify-start gap-4">
-          <input
-            type="checkbox"
-            class="toggle toggle-primary"
-            [ngModel]="hdr()"
-            (ngModelChange)="hdr.set($event)"
-          />
-          <div>
-            <span class="label-text font-medium">{{ 'playback_settings.cast_hdr' | translate }}</span>
-            <p class="text-xs text-base-content/50 mt-0.5">{{ 'playback_settings.cast_hdr_hint' | translate }}</p>
+        <!-- Preferred audio language -->
+        <label class="form-control w-full max-w-xs">
+          <div class="label">
+            <span class="label-text font-medium">{{ 'playback_settings.player_preferred_lang' | translate }}</span>
+          </div>
+          <select
+            class="select select-bordered w-full"
+            [ngModel]="preferredAudioLanguage()"
+            (ngModelChange)="preferredAudioLanguage.set($event)"
+          >
+            @for (l of languageOptions; track l.value) {
+              <option [value]="l.value">{{ l.label }}</option>
+            }
+          </select>
+          <div class="label">
+            <span class="label-text-alt text-base-content/50">{{ 'playback_settings.player_preferred_lang_hint' | translate }}</span>
           </div>
         </label>
+
+        <div class="divider my-0"></div>
+
+        <!-- Use default audio stream -->
+        <div class="form-control">
+          <label class="label cursor-pointer justify-start gap-4">
+            <input
+              type="checkbox"
+              class="toggle toggle-primary"
+              [ngModel]="useDefaultAudioStream()"
+              (ngModelChange)="useDefaultAudioStream.set($event)"
+            />
+            <div>
+              <span class="label-text font-medium">{{ 'playback_settings.player_use_default' | translate }}</span>
+              <p class="text-xs text-base-content/50 mt-0.5">{{ 'playback_settings.player_use_default_hint' | translate }}</p>
+            </div>
+          </label>
+        </div>
+
+        <div class="divider my-0"></div>
+
+        <!-- Remember audio selections -->
+        <div class="form-control">
+          <label class="label cursor-pointer justify-start gap-4">
+            <input
+              type="checkbox"
+              class="toggle toggle-primary"
+              [ngModel]="rememberAudioSelections()"
+              (ngModelChange)="rememberAudioSelections.set($event)"
+            />
+            <div>
+              <span class="label-text font-medium">{{ 'playback_settings.player_remember_audio' | translate }}</span>
+              <p class="text-xs text-base-content/50 mt-0.5">{{ 'playback_settings.player_remember_audio_hint' | translate }}</p>
+            </div>
+          </label>
+        </div>
+
+        <!-- Save -->
+        <div class="card-actions justify-end pt-2">
+          <button class="btn btn-primary" (click)="savePlayer()">{{ 'common.save' | translate }}</button>
+        </div>
+
       </div>
-
-      <div class="divider my-0"></div>
-
-      <!-- Max quality -->
-      <label class="form-control w-full max-w-xs">
-        <div class="label">
-          <span class="label-text font-medium">{{ 'playback_settings.cast_max_quality' | translate }}</span>
-        </div>
-        <select
-          class="select select-bordered w-full"
-          [ngModel]="maxQuality()"
-          (ngModelChange)="maxQuality.set($event)"
-        >
-          @for (q of qualityOptions; track q.value) {
-            <option [value]="q.value">{{ q.label }}</option>
-          }
-        </select>
-        <div class="label">
-          <span class="label-text-alt text-base-content/50">{{ 'playback_settings.cast_max_quality_hint' | translate }}</span>
-        </div>
-      </label>
-
-      <div class="divider my-0"></div>
-
-      <!-- Audio channels -->
-      <label class="form-control w-full max-w-xs">
-        <div class="label">
-          <span class="label-text font-medium">{{ 'playback_settings.cast_audio' | translate }}</span>
-        </div>
-        <select
-          class="select select-bordered w-full"
-          [ngModel]="audioChannels()"
-          (ngModelChange)="audioChannels.set(+$event)"
-        >
-          @for (a of audioOptions; track a.value) {
-            <option [ngValue]="a.value">{{ a.label }}</option>
-          }
-        </select>
-        <div class="label">
-          <span class="label-text-alt text-base-content/50">{{ 'playback_settings.cast_audio_hint' | translate }}</span>
-        </div>
-      </label>
-
-      <!-- Save -->
-      <div class="card-actions justify-end pt-2">
-        <button class="btn btn-primary" (click)="save()">{{ 'common.save' | translate }}</button>
-      </div>
-
     </div>
-  </div>
+  }
+
+  <!-- Chromecast settings -->
+  @if (activeTab() === 'cast') {
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-5">
+
+        <!-- HDR -->
+        <div class="form-control">
+          <label class="label cursor-pointer justify-start gap-4">
+            <input
+              type="checkbox"
+              class="toggle toggle-primary"
+              [ngModel]="hdr()"
+              (ngModelChange)="hdr.set($event)"
+            />
+            <div>
+              <span class="label-text font-medium">{{ 'playback_settings.cast_hdr' | translate }}</span>
+              <p class="text-xs text-base-content/50 mt-0.5">{{ 'playback_settings.cast_hdr_hint' | translate }}</p>
+            </div>
+          </label>
+        </div>
+
+        <div class="divider my-0"></div>
+
+        <!-- Max quality -->
+        <label class="form-control w-full max-w-xs">
+          <div class="label">
+            <span class="label-text font-medium">{{ 'playback_settings.cast_max_quality' | translate }}</span>
+          </div>
+          <select
+            class="select select-bordered w-full"
+            [ngModel]="maxQuality()"
+            (ngModelChange)="maxQuality.set($event)"
+          >
+            @for (q of qualityOptions; track q.value) {
+              <option [value]="q.value">{{ q.label }}</option>
+            }
+          </select>
+          <div class="label">
+            <span class="label-text-alt text-base-content/50">{{ 'playback_settings.cast_max_quality_hint' | translate }}</span>
+          </div>
+        </label>
+
+        <div class="divider my-0"></div>
+
+        <!-- Audio channels -->
+        <label class="form-control w-full max-w-xs">
+          <div class="label">
+            <span class="label-text font-medium">{{ 'playback_settings.cast_audio' | translate }}</span>
+          </div>
+          <select
+            class="select select-bordered w-full"
+            [ngModel]="audioChannels()"
+            (ngModelChange)="audioChannels.set(+$event)"
+          >
+            @for (a of audioOptions; track a.value) {
+              <option [ngValue]="a.value">{{ a.label }}</option>
+            }
+          </select>
+          <div class="label">
+            <span class="label-text-alt text-base-content/50">{{ 'playback_settings.cast_audio_hint' | translate }}</span>
+          </div>
+        </label>
+
+        <!-- Save -->
+        <div class="card-actions justify-end pt-2">
+          <button class="btn btn-primary" (click)="saveCast()">{{ 'common.save' | translate }}</button>
+        </div>
+
+      </div>
+    </div>
+  }
 </div>

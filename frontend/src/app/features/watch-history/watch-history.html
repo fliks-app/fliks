@@ -24,9 +24,9 @@
           >
             <div class="absolute inset-0 overflow-hidden rounded-md">
               @if (item.fanartUrl) {
-                <img [src]="item.fanartUrl" [alt]="item.mediaTitle" class="h-full w-full object-cover" loading="lazy" />
+                <img [src]="item.fanartUrl | resolveUrl" [alt]="item.mediaTitle" class="h-full w-full object-cover" loading="lazy" />
               } @else if (item.posterUrl) {
-                <img [src]="item.posterUrl" [alt]="item.mediaTitle" class="h-full w-full object-cover" loading="lazy" />
+                <img [src]="item.posterUrl | resolveUrl" [alt]="item.mediaTitle" class="h-full w-full object-cover" loading="lazy" />
               } @else {
                 <div class="flex h-full w-full items-center justify-center text-base-content/30">
                   @if (item.mediaType === 'series') {

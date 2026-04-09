@@ -4,7 +4,7 @@
 >
   <figure class="relative aspect-2/3 bg-base-300">
     @if (row().posterUrl) {
-      <img [src]="row().posterUrl" [alt]="row().title" class="w-full h-full object-cover" />
+      <img [src]="row().posterUrl | resolveUrl" [alt]="row().title" class="w-full h-full object-cover" />
     } @else {
       <div class="flex items-center justify-center w-full h-full text-base-content/30">
         <svg lucideFilm class="h-14 w-14"></svg>

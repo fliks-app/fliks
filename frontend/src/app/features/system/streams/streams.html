@@ -13,7 +13,7 @@
         <!-- Header: poster + title + time -->
         <div class="flex gap-3 p-3 pb-0">
           @if (s.posterUrl) {
-            <img [src]="s.posterUrl" class="w-14 h-20 rounded object-cover shrink-0" alt="" />
+            <img [src]="s.posterUrl | resolveUrl" class="w-14 h-20 rounded object-cover shrink-0" alt="" />
           } @else {
             <div class="w-14 h-20 rounded bg-base-300 shrink-0"></div>
           }

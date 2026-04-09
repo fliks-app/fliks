@@ -38,11 +38,13 @@ import {
   hasMultipleFileQualityChoices,
 } from '../../media-detail.utils';
 import { MobileFanartHeroComponent } from '../../../../shared/components/mobile-fanart-hero';
+import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
 
 @Component({
   selector: 'app-media-detail-header',
   imports: [
     MobileFanartHeroComponent,
+    ResolveUrlPipe,
     DecimalPipe, FormsModule, RouterLink, TranslateModule,
     LucideChevronLeft, LucideFilm, LucideTrash2, LucideEllipsisVertical,
     LucideDownload, LucideSearch, LucideSettings, LucideFolder,

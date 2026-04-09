@@ -9,6 +9,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
+import { BottomSheetComponent } from '../../../shared/components/bottom-sheet';
 import { TranslateModule } from '@ngx-translate/core';
 import { formatTime, calcDragTime, calcHoverPercent, SpriteMetadata } from '../../../core/utils/player.utils';
 import {
@@ -55,6 +56,7 @@ import {
     LucideChevronRight,
     LucideArrowLeft,
     NgTemplateOutlet,
+    BottomSheetComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player-controls.html',
@@ -114,6 +116,18 @@ export class PlayerControlsComponent {
 
   /** Settings dropdown panel navigation */
   readonly settingsPanel = signal<'main' | 'quality'>('main');
+
+  /** Mobile bottom sheet state */
+  readonly activeSheet = signal<'subtitles' | 'audio' | 'speed' | 'settings' | null>(null);
+
+  openSheet(sheet: 'subtitles' | 'audio' | 'speed' | 'settings') {
+    if (sheet === 'settings') this.settingsPanel.set('main');
+    this.activeSheet.set(sheet);
+  }
+
+  closeSheet() {
+    this.activeSheet.set(null);
+  }
 
   // Progress bar drag state
   readonly dragging = signal(false);
