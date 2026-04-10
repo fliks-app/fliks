@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -10,10 +10,12 @@ import { CaslAbilityFactory } from './casl/casl-ability.factory';
 import { PoliciesGuard } from './casl/policies.guard';
 import { User } from '../users/entities/user.entity';
 import { Role } from '../roles/entities/role.entity';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, Role]),
+    forwardRef(() => SettingsModule),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

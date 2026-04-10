@@ -71,7 +71,7 @@ export class PersonsService {
   async getProviderCredits(id: number): Promise<PersonCombinedCredits> {
     const person = await this.personRepo.findOne({ where: { id } });
     if (!person) throw new NotFoundException(`Person #${id} not found`);
-    return this.tmdb.getPersonCredits(person.tmdbId);
+    return this.tmdb.getPersonCredits(String(person.tmdbId));
   }
 
   private async ensureDetailsLoaded(person: Person): Promise<void> {
@@ -82,7 +82,7 @@ export class PersonsService {
     if (!needsRefresh) return;
 
     try {
-      const details = await this.tmdb.getPersonDetails(person.tmdbId);
+      const details = await this.tmdb.getPersonDetails(String(person.tmdbId));
       let localAvatar: string | undefined;
       if (details.avatarUrl) {
         const dl = await this.imageService.downloadAndStore(

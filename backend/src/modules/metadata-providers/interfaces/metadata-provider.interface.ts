@@ -1,5 +1,8 @@
 export interface MetadataSearchResult {
   tmdbId: number;
+  tvdbId?: number | null;
+  imdbId?: string | null;
+  provider: string;
   title: string;
   originalTitle: string;
   overview: string;
@@ -12,6 +15,7 @@ export interface MetadataSearchResult {
 
 export interface MetadataDetails extends MetadataSearchResult {
   imdbId: string | null;
+  tvdbId: number | null;
   fanartUrl: string | null;
   runtime: number | null;
   releaseDate: string | null;
@@ -101,14 +105,21 @@ export interface EpisodeDetails {
   stillUrl: string | null;
 }
 
+export interface ExternalIdResult {
+  id: string;
+  mediaType: 'movie' | 'series';
+}
+
 export interface IMetadataProvider {
   readonly name: string;
+  readonly supportsPersonLookup: boolean;
 
   searchMovie(query: string, year?: number): Promise<MetadataSearchResult[]>;
   searchTvShow(query: string, year?: number): Promise<MetadataSearchResult[]>;
-  getMovieDetails(tmdbId: number): Promise<MetadataDetails>;
-  getTvShowDetails(tmdbId: number): Promise<MetadataDetails>;
-  getTvShowSeasons(tmdbId: number): Promise<SeasonDetails[]>;
-  getPersonDetails(externalId: number): Promise<PersonDetails>;
-  getPersonCredits(externalId: number): Promise<PersonCombinedCredits>;
+  getMovieDetails(externalId: string): Promise<MetadataDetails>;
+  getTvShowDetails(externalId: string): Promise<MetadataDetails>;
+  getTvShowSeasons(externalId: string): Promise<SeasonDetails[]>;
+  getPersonDetails(externalId: string): Promise<PersonDetails>;
+  getPersonCredits(externalId: string): Promise<PersonCombinedCredits>;
+  findByExternalId?(source: string, id: string): Promise<ExternalIdResult | null>;
 }

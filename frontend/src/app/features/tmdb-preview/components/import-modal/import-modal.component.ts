@@ -41,6 +41,8 @@ export class ImportModalComponent {
   readonly title = signal('');
   readonly mediaType = signal<MediaType>('movie');
   readonly tmdbId = signal(0);
+  readonly provider = signal('tmdb');
+  readonly externalId = signal('');
   readonly importing = signal(false);
   readonly error = signal('');
   readonly loading = signal(false);
@@ -56,10 +58,12 @@ export class ImportModalComponent {
     this.rootFolders().filter((f) => f.mediaTypes.includes(this.mediaType())),
   );
 
-  async open(params: { title: string; mediaType: MediaType; tmdbId: number }) {
+  async open(params: { title: string; mediaType: MediaType; tmdbId: number; provider?: string; externalId?: string }) {
     this.title.set(params.title);
     this.mediaType.set(params.mediaType);
     this.tmdbId.set(params.tmdbId);
+    this.provider.set(params.provider ?? 'tmdb');
+    this.externalId.set(params.externalId ?? String(params.tmdbId));
     this.error.set('');
     this.importing.set(false);
     this.dialogEl()?.nativeElement.showModal();
@@ -102,13 +106,14 @@ export class ImportModalComponent {
     this.importing.set(true);
     this.error.set('');
     try {
-      const saved = await this.metadata.importFromTmdb(
-        this.mediaType(),
-        this.tmdbId(),
-        this.selectedQualityProfileId() ?? undefined,
-        this.selectedLanguageProfileId() ?? undefined,
-        this.selectedRootFolderId() ?? undefined,
-      );
+      const saved = await this.metadata.importMedia({
+        type: this.mediaType(),
+        externalId: this.externalId(),
+        provider: this.provider(),
+        qualityProfileId: this.selectedQualityProfileId() ?? undefined,
+        languageProfileId: this.selectedLanguageProfileId() ?? undefined,
+        rootFolderId: this.selectedRootFolderId() ?? undefined,
+      });
       this.toast.success(this.translate.instant('discover.import_success'));
       this.close();
       this.imported.emit();

@@ -48,6 +48,9 @@ export class Media extends BaseEntity {
   @Column({ nullable: true })
   imdbId: string;
 
+  @Column({ type: 'int', nullable: true })
+  tvdbId: number;
+
   @Column({ type: 'text', nullable: true })
   overview: string;
 

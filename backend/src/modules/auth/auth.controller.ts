@@ -16,6 +16,7 @@ import { CurrentUser } from './decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
 import { ACCESS_TOKEN_COOKIE } from './auth.constants';
 import { resolveStreamPublicBaseUrl } from '../../common/stream-public-base-url.util';
+import { SettingsService } from '../settings/settings.service';
 
 const NATIVE_ORIGINS = [
   'https://localhost',
@@ -66,7 +67,10 @@ function clearOpts(req: Request) {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly settingsService: SettingsService,
+  ) {}
 
   @Post('login')
   async login(
@@ -103,9 +107,10 @@ export class AuthController {
    */
   @Post('cast-info')
   @UseGuards(JwtOrApiKeyGuard)
-  castInfo(@CurrentUser() user: User, @Req() req: Request) {
+  async castInfo(@CurrentUser() user: User, @Req() req: Request) {
     const token = this.authService.generateCastToken(user);
-    const streamBaseUrl = resolveStreamPublicBaseUrl(req);
+    const publicUrl = await this.settingsService.get('public_url');
+    const streamBaseUrl = resolveStreamPublicBaseUrl(req, publicUrl);
     return { token, streamBaseUrl };
   }
 }

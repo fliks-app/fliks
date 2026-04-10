@@ -209,6 +209,8 @@ export class SchedulerService implements OnModuleInit {
       'RescanAll',
       'RefreshMissingMetadata',
       'RescanMissingFiles',
+      'GenerateSprites',
+      'GenerateMissingSprites',
     ];
     if (!known.includes(name)) {
       throw new Error(`Unknown command: ${name}. Valid: ${known.join(', ')}`);
@@ -602,51 +604,34 @@ export class SchedulerService implements OnModuleInit {
       episodeLabelMap.set(ep.id, `S${sn}E${en} — ${ep.title ?? ''}`);
     }
 
-    let generated = 0;
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    // Fire all at once — ThumbnailService queue handles concurrency (2 max)
+    // skipTracking=true avoids creating individual Command records
+    const promises = files.map((file) => {
       const dur = file.streamInfo?.durationSeconds;
       const absPath =
         file.media?.path && file.relativePath
           ? path.join(file.media.path, file.relativePath)
           : null;
-      if (!dur || !absPath) continue;
+      if (!dur || !absPath) return Promise.resolve(null);
 
       const label = file.episodeId
         ? episodeLabelMap.get(file.episodeId) ?? file.media?.title ?? ''
         : file.media?.title ?? '';
 
-      this.eventsService.emit({
-        type: 'task.progress',
-        command: commandName,
-        current: i,
-        total: files.length,
-        message: label,
-      });
-
-      try {
-        await this.thumbnailService.getOrGenerate(
-          file.id,
-          absPath,
-          dur,
-          label,
-          force,
-        );
-        generated++;
-      } catch (e) {
-        this.log.warn(
-          `${commandName}: failed for file ${file.id}: ${(e as Error).message}`,
-        );
-      }
-    }
-
-    this.eventsService.emit({
-      type: 'task.progress',
-      command: commandName,
-      current: files.length,
-      total: files.length,
-      message: commandName,
+      return this.thumbnailService
+        .getOrGenerate(file.id, absPath, dur, label, force, true)
+        .catch((e) => {
+          this.log.warn(
+            `${commandName}: failed for file ${file.id}: ${(e as Error).message}`,
+          );
+          return null;
+        });
     });
+
+    const results = await Promise.allSettled(promises);
+    const generated = results.filter(
+      (r) => r.status === 'fulfilled' && r.value != null,
+    ).length;
 
     this.log.log(
       `${commandName}: generated ${generated}/${files.length} sprites`,

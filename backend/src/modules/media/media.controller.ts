@@ -22,6 +22,7 @@ import { CreateMediaDto } from './dto/create-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
 import { SearchMediaDto } from './dto/search-media.dto';
 import { ImportTmdbDto } from './dto/import-tmdb.dto';
+import { ImportMediaDto } from './dto/import-media.dto';
 import { GrabMovieDto } from './dto/grab-movie.dto';
 import { ScanFolderDto } from './dto/scan-folder.dto';
 import { ConfirmDiskImportDto } from './dto/confirm-disk-import.dto';
@@ -62,6 +63,12 @@ export class MediaController {
   @CheckPolicies((ability) => ability.can(Action.Create, Media))
   importFromTmdb(@Body() dto: ImportTmdbDto) {
     return this.mediaService.importFromTmdb(dto);
+  }
+
+  @Post('import')
+  @CheckPolicies((ability) => ability.can(Action.Create, Media))
+  importMedia(@Body() dto: ImportMediaDto) {
+    return this.mediaService.importMedia(dto);
   }
 
   @Post('import/disk/scan')

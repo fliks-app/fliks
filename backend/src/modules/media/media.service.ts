@@ -22,11 +22,14 @@ import { CreateMediaDto } from './dto/create-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
 import { SearchMediaDto } from './dto/search-media.dto';
 import { ImportTmdbDto } from './dto/import-tmdb.dto';
+import { ImportMediaDto } from './dto/import-media.dto';
 import { UpdateMediaProfilesDto } from './dto/update-media-profiles.dto';
 import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
+import { MetadataProviderRegistry } from '../metadata-providers/metadata-provider.registry';
 import {
+  IMetadataProvider,
   MetadataDetails,
   SeasonDetails,
 } from '../metadata-providers/interfaces/metadata-provider.interface';
@@ -78,6 +81,7 @@ export class MediaService {
     private readonly crewRepo: Repository<MediaCrew>,
     private readonly dataSource: DataSource,
     private readonly tmdb: TmdbProvider,
+    private readonly providerRegistry: MetadataProviderRegistry,
     private readonly config: ConfigService,
     private readonly profiles: ProfilesService,
     private readonly naming: NamingService,
@@ -162,7 +166,7 @@ export class MediaService {
     const fmtMap = Object.fromEntries(fmtRows.map((r) => [r.key, r.value]));
 
     if (dto.type === MediaType.MOVIE) {
-      const details = await this.tmdb.getMovieDetails(dto.tmdbId);
+      const details = await this.tmdb.getMovieDetails(String(dto.tmdbId));
       const movieFolderFormat =
         fmtMap['naming_movie_folder_format'] ??
         '{Movie Title} ({Release Year})';
@@ -181,8 +185,8 @@ export class MediaService {
       );
     }
 
-    const details = await this.tmdb.getTvShowDetails(dto.tmdbId);
-    const seasons = await this.tmdb.getTvShowSeasons(dto.tmdbId);
+    const details = await this.tmdb.getTvShowDetails(String(dto.tmdbId));
+    const seasons = await this.tmdb.getTvShowSeasons(String(dto.tmdbId));
     const seriesFolderFormat =
       fmtMap['naming_series_folder_format'] ?? '{Series Title}';
     const folderName = this.naming.applySeriesFolderFormat(seriesFolderFormat, {
@@ -198,6 +202,97 @@ export class MediaService {
       resolvedRootFolderId,
       folderName,
     );
+  }
+
+  /**
+   * Import media from any provider (TMDB, TVDB).
+   * Cross-references IDs between providers when possible.
+   */
+  async importMedia(dto: ImportMediaDto): Promise<Media> {
+    const provider = await this.providerRegistry.resolve(dto.provider ?? null);
+
+    // Check for existing media (by any known ID)
+    const existingCheck: any[] = [];
+    if (dto.provider === 'tmdb' || !dto.provider) {
+      existingCheck.push({ tmdbId: parseInt(dto.externalId, 10), type: dto.type });
+    }
+    if (dto.provider === 'tvdb') {
+      existingCheck.push({ tvdbId: parseInt(dto.externalId, 10), type: dto.type });
+    }
+    if (existingCheck.length) {
+      const existing = await this.mediaRepo.findOne({ where: existingCheck });
+      if (existing) {
+        throw new ConflictException('This title is already in the library');
+      }
+    }
+
+    const qualityProfileId = await this.profiles.resolveQualityProfileIdForImport(dto.qualityProfileId);
+    const languageProfileId = await this.profiles.resolveLanguageProfileIdForImport(dto.languageProfileId);
+
+    // Resolve root folder
+    let resolvedRootFolderId: number | undefined;
+    if (dto.rootFolderId) {
+      const rf = await this.rootFolderRepo.findOne({ where: { id: dto.rootFolderId } });
+      if (rf && rf.mediaTypes?.includes(dto.type)) resolvedRootFolderId = rf.id;
+    }
+    if (!resolvedRootFolderId) {
+      const defaultKey = dto.type === MediaType.MOVIE ? 'default_root_folder_movie' : 'default_root_folder_series';
+      const [row] = (await this.dataSource.query(
+        `SELECT value FROM app_settings WHERE key = $1 LIMIT 1`,
+        [defaultKey],
+      )) as { value: string | null }[];
+      if (row?.value) {
+        const rfId = Number(row.value);
+        if (rfId) {
+          const rf = await this.rootFolderRepo.findOne({ where: { id: rfId } });
+          if (rf && rf.mediaTypes?.includes(dto.type)) resolvedRootFolderId = rf.id;
+        }
+      }
+    }
+    if (!resolvedRootFolderId) {
+      throw new BadRequestException('No compatible root folder found.');
+    }
+
+    // Load folder format settings
+    const fmtKeys = ['naming_movie_folder_format', 'naming_series_folder_format'];
+    const fmtRows: { key: string; value: string }[] = await this.dataSource.query(
+      `SELECT key, value FROM app_settings WHERE key = ANY($1)`,
+      [fmtKeys],
+    );
+    const fmtMap = Object.fromEntries(fmtRows.map((r) => [r.key, r.value]));
+
+    // Fetch details from provider
+    if (dto.type === MediaType.MOVIE) {
+      const details = await provider.getMovieDetails(dto.externalId);
+      // Cross-reference: if we got a tvdbId but no tmdbId, try to resolve via TMDB
+      if (!details.tmdbId && details.tvdbId && this.tmdb.findByExternalId) {
+        const cross = await this.tmdb.findByExternalId('tvdb', String(details.tvdbId));
+        if (cross) details.tmdbId = parseInt(cross.id, 10);
+      }
+      const movieFolderFormat = fmtMap['naming_movie_folder_format'] ?? '{Movie Title} ({Release Year})';
+      const folderName = this.naming.applyMovieFolderFormat(movieFolderFormat, {
+        title: details.title,
+        originalTitle: details.originalTitle,
+        year: details.year,
+        tmdbId: details.tmdbId,
+      });
+      return this.persistImportedMovie(details, qualityProfileId, languageProfileId, resolvedRootFolderId, folderName);
+    }
+
+    const details = await provider.getTvShowDetails(dto.externalId);
+    const seasons = await provider.getTvShowSeasons(dto.externalId);
+    // Cross-reference
+    if (!details.tmdbId && details.tvdbId && this.tmdb.findByExternalId) {
+      const cross = await this.tmdb.findByExternalId('tvdb', String(details.tvdbId));
+      if (cross) details.tmdbId = parseInt(cross.id, 10);
+    }
+    const seriesFolderFormat = fmtMap['naming_series_folder_format'] ?? '{Series Title}';
+    const folderName = this.naming.applySeriesFolderFormat(seriesFolderFormat, {
+      seriesTitle: details.title,
+      year: details.year,
+      tmdbId: details.tmdbId,
+    });
+    return this.persistImportedSeries(details, seasons, qualityProfileId, languageProfileId, resolvedRootFolderId, folderName);
   }
 
   async create(dto: CreateMediaDto): Promise<Media> {
@@ -716,20 +811,24 @@ export class MediaService {
     const media = await this.mediaRepo.findOne({ where: { id } });
     if (!media) throw new NotFoundException(`Media #${id} not found`);
 
-    const key = this.config.get<string>('TMDB_API_KEY', '');
-    if (!key?.trim()) {
-      throw new BadRequestException('TMDB API key is not configured');
-    }
+    const { provider, externalId } = await this.resolveProviderForMedia(media);
+
+    this.log.log(`refreshMetadata: "${media.title}" using provider=${provider.name} externalId=${externalId}`);
 
     if (media.type === MediaType.MOVIE) {
-      const details = await this.tmdb.getMovieDetails(media.tmdbId);
+      const details = await provider.getMovieDetails(externalId);
+      // Cross-ref to fill missing IDs
+      if (!media.tvdbId && details.tvdbId) await this.mediaRepo.update(media.id, { tvdbId: details.tvdbId });
+      if (!media.tmdbId && details.tmdbId) await this.mediaRepo.update(media.id, { tmdbId: details.tmdbId });
       await this.mediaRepo.update(media.id, {
         ...this.buildMediaFieldsFromTmdb(details, MediaType.MOVIE),
       });
       await this.downloadMediaImages(media.id, details);
       await this.persistMediaMetadata(media, details);
     } else {
-      const details = await this.tmdb.getTvShowDetails(media.tmdbId);
+      const details = await provider.getTvShowDetails(externalId);
+      if (!media.tvdbId && details.tvdbId) await this.mediaRepo.update(media.id, { tvdbId: details.tvdbId });
+      if (!media.tmdbId && details.tmdbId) await this.mediaRepo.update(media.id, { tmdbId: details.tmdbId });
       await this.mediaRepo.update(media.id, {
         ...this.buildMediaFieldsFromTmdb(details, MediaType.SERIES),
       });
@@ -799,14 +898,18 @@ export class MediaService {
     const media = await this.mediaRepo.findOne({ where: { id: mediaId } });
     if (!media) throw new NotFoundException(`Media #${mediaId} not found`);
 
-    const key = this.config.get<string>('TMDB_API_KEY', '');
-    if (!key?.trim()) {
-      throw new BadRequestException('TMDB API key is not configured');
-    }
+    const { provider, externalId } = await this.resolveProviderForMedia(media);
 
-    // Fetch only the relevant season from TMDB
-    const tmdbSeason = await this.tmdb.getTvSeason(media.tmdbId, episode.season.seasonNumber);
-    const tmdbEp = tmdbSeason.episodes.find((e) => e.episodeNumber === episode.episodeNumber);
+    // TMDB has a single-season endpoint; other providers use full seasons fetch
+    let tmdbEp: import('../metadata-providers/interfaces/metadata-provider.interface').EpisodeDetails | undefined;
+    if (provider.name === 'tmdb') {
+      const tmdbSeason = await this.tmdb.getTvSeason(externalId, episode.season.seasonNumber);
+      tmdbEp = tmdbSeason.episodes.find((e) => e.episodeNumber === episode.episodeNumber);
+    } else {
+      const allSeasons = await provider.getTvShowSeasons(externalId);
+      const season = allSeasons.find((s) => s.seasonNumber === episode.season.seasonNumber);
+      tmdbEp = season?.episodes.find((e) => e.episodeNumber === episode.episodeNumber);
+    }
 
     if (tmdbEp) {
       const updates: Partial<Episode> = {};
@@ -846,7 +949,8 @@ export class MediaService {
   }
 
   private async refreshSeriesEpisodes(media: Media): Promise<void> {
-    const tmdbSeasons = await this.tmdb.getTvShowSeasons(media.tmdbId);
+    const { provider, externalId } = await this.resolveProviderForMedia(media);
+    const tmdbSeasons = await provider.getTvShowSeasons(externalId);
     const dbSeasons = await this.seasonRepo.find({
       where: { mediaId: media.id },
       relations: ['episodes'],
@@ -1017,6 +1121,118 @@ export class MediaService {
     return m[s] ?? MediaStatus.TBA;
   }
 
+  /**
+   * Resolve which metadata provider + external ID to use for a media.
+   * Priority: root folder preferred provider → existing IDs → fallback.
+   * Cross-references IDs between providers if needed.
+   */
+  private async resolveProviderForMedia(
+    media: Media,
+  ): Promise<{ provider: IMetadataProvider; externalId: string }> {
+    const label = `"${media.title}" (#${media.id})`;
+
+    // 1. Root folder preferred provider
+    if (media.rootFolderId) {
+      const rf = await this.rootFolderRepo.findOne({ where: { id: media.rootFolderId } });
+      const pref = rf?.preferredProvider;
+      if (pref) {
+        this.log.log(`resolveProvider: ${label} — root folder prefers ${pref}`);
+        if (await this.providerRegistry.isAvailable(pref)) {
+          const p = this.providerRegistry.get(pref)!;
+          const resolved = await this.resolveExternalIdForProvider(media, p, pref);
+          if (resolved) {
+            this.log.log(`resolveProvider: ${label} — using ${pref} with id=${resolved}`);
+            return { provider: p, externalId: resolved };
+          }
+          this.log.warn(`resolveProvider: ${label} — preferred ${pref} but no matching ID found, falling back`);
+        } else {
+          this.log.warn(`resolveProvider: ${label} — preferred ${pref} but not available (no API key?)`);
+        }
+      }
+    }
+
+    // 2. Fallback: use whichever ID + provider is available
+    if (media.tmdbId && (await this.providerRegistry.isAvailable('tmdb'))) {
+      this.log.log(`resolveProvider: ${label} — fallback to tmdb (tmdbId=${media.tmdbId})`);
+      return { provider: this.tmdb, externalId: String(media.tmdbId) };
+    }
+    if (media.tvdbId && (await this.providerRegistry.isAvailable('tvdb'))) {
+      this.log.log(`resolveProvider: ${label} — fallback to tvdb (tvdbId=${media.tvdbId})`);
+      return { provider: this.providerRegistry.get('tvdb')!, externalId: String(media.tvdbId) };
+    }
+    if (media.tmdbId) {
+      this.log.log(`resolveProvider: ${label} — fallback to tmdb (tmdbId=${media.tmdbId}, unchecked availability)`);
+      return { provider: this.tmdb, externalId: String(media.tmdbId) };
+    }
+    throw new BadRequestException('No provider ID available for this media');
+  }
+
+  /**
+   * Find the external ID for a given provider on a media.
+   * If the media doesn't have the matching ID, cross-reference via other providers.
+   */
+  private async resolveExternalIdForProvider(
+    media: Media,
+    provider: IMetadataProvider,
+    providerName: string,
+  ): Promise<string | null> {
+    const label = `"${media.title}" (#${media.id})`;
+
+    // Direct match
+    if (providerName === 'tmdb' && media.tmdbId) return String(media.tmdbId);
+    if (providerName === 'tvdb' && media.tvdbId) return String(media.tvdbId);
+
+    this.log.log(`crossRef: ${label} — need ${providerName} ID, attempting cross-reference`);
+
+    // Cross-reference: need to find the missing ID
+    if (providerName === 'tvdb' && !media.tvdbId) {
+      if (media.imdbId && provider.findByExternalId) {
+        this.log.log(`crossRef: ${label} — trying TVDB lookup via imdbId=${media.imdbId}`);
+        const cross = await provider.findByExternalId('imdb', media.imdbId);
+        if (cross) {
+          this.log.log(`crossRef: ${label} — found tvdbId=${cross.id} via IMDB`);
+          await this.mediaRepo.update(media.id, { tvdbId: parseInt(cross.id, 10) });
+          return cross.id;
+        }
+      }
+      if (media.tmdbId) {
+        this.log.log(`crossRef: ${label} — trying TMDB external_ids for tvdbId (tmdbId=${media.tmdbId})`);
+        const details = media.type === MediaType.MOVIE
+          ? await this.tmdb.getMovieDetails(String(media.tmdbId))
+          : await this.tmdb.getTvShowDetails(String(media.tmdbId));
+        if (details.tvdbId) {
+          this.log.log(`crossRef: ${label} — found tvdbId=${details.tvdbId} via TMDB`);
+          await this.mediaRepo.update(media.id, { tvdbId: details.tvdbId });
+          return String(details.tvdbId);
+        }
+      }
+    }
+
+    if (providerName === 'tmdb' && !media.tmdbId) {
+      if (media.imdbId && this.tmdb.findByExternalId) {
+        this.log.log(`crossRef: ${label} — trying TMDB find via imdbId=${media.imdbId}`);
+        const cross = await this.tmdb.findByExternalId('imdb', media.imdbId);
+        if (cross) {
+          this.log.log(`crossRef: ${label} — found tmdbId=${cross.id} via IMDB`);
+          await this.mediaRepo.update(media.id, { tmdbId: parseInt(cross.id, 10) });
+          return cross.id;
+        }
+      }
+      if (media.tvdbId && this.tmdb.findByExternalId) {
+        this.log.log(`crossRef: ${label} — trying TMDB find via tvdbId=${media.tvdbId}`);
+        const cross = await this.tmdb.findByExternalId('tvdb', String(media.tvdbId));
+        if (cross) {
+          this.log.log(`crossRef: ${label} — found tmdbId=${cross.id} via TVDB`);
+          await this.mediaRepo.update(media.id, { tmdbId: parseInt(cross.id, 10) });
+          return cross.id;
+        }
+      }
+    }
+
+    this.log.warn(`crossRef: ${label} — cross-reference failed for ${providerName}`);
+    return null;
+  }
+
   private buildMediaFieldsFromTmdb(
     details: MetadataDetails,
     type: MediaType,
@@ -1030,7 +1246,8 @@ export class MediaService {
       originalTitle: details.originalTitle ?? details.title,
       year,
       type,
-      tmdbId: details.tmdbId,
+      tmdbId: details.tmdbId || undefined,
+      tvdbId: details.tvdbId ?? undefined,
       imdbId: details.imdbId ?? undefined,
       overview: details.overview ?? undefined,
       status: this.mapTmdbStatusToMediaStatus(type, details.status),
@@ -1262,7 +1479,7 @@ export class MediaService {
         person.metadataRefreshedAt.getTime() < refreshThreshold;
       if (!needsRefresh) continue;
       try {
-        const pd = await this.tmdb.getPersonDetails(person.tmdbId);
+        const pd = await this.tmdb.getPersonDetails(String(person.tmdbId));
         let localAvatar: string | undefined;
         if (pd.avatarUrl) {
           const dl = await this.downloadPersonAvatar(person.id, pd.avatarUrl);

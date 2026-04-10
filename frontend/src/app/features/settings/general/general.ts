@@ -22,22 +22,43 @@ export class GeneralSettingsComponent implements OnInit {
   private readonly toast = inject(ToastService);
 
   readonly loading = signal(true);
-  readonly saving = signal(false);
   readonly error = signal('');
 
+  // Server
+  readonly serverName = signal('');
+  readonly publicUrl = signal('');
+  readonly savingServer = signal(false);
+
+  // Providers
   readonly tmdbApiKey = signal('');
+  readonly tvdbApiKey = signal('');
+  readonly tvdbPin = signal('');
+  readonly savingProviders = signal(false);
+
+  // Automation
   readonly searchMissingAuto = signal('true');
   readonly rssSyncInterval = signal('15');
-  readonly postImportScript = signal('');
   readonly companionFileExtensions = signal('');
+  readonly savingAutomation = signal(false);
+
+  // Stalled
   readonly stalledDeleteEnabled = signal('false');
   readonly stalledDeleteAfterMinutes = signal('60');
   readonly stalledSearchAfterDelete = signal('true');
+  readonly savingStalled = signal(false);
+
+  // Post-import
+  readonly postImportScript = signal('');
+  readonly savingPostImport = signal(false);
 
   async ngOnInit() {
     try {
       const map = await this.api.getAll();
+      this.serverName.set(map['server_name'] ?? '');
+      this.publicUrl.set(map['public_url'] ?? '');
       this.tmdbApiKey.set(map['tmdb_api_key'] ?? '');
+      this.tvdbApiKey.set(map['tvdb_api_key'] ?? '');
+      this.tvdbPin.set(map['tvdb_pin'] ?? '');
       this.searchMissingAuto.set(map['search_missing_auto'] ?? 'true');
       this.rssSyncInterval.set(map['rss_sync_interval'] ?? '15');
       this.postImportScript.set(map['post_import_script'] ?? '');
@@ -55,25 +76,58 @@ export class GeneralSettingsComponent implements OnInit {
     }
   }
 
-  async save() {
-    this.saving.set(true);
-    this.error.set('');
+  async saveServer() {
+    this.savingServer.set(true);
+    try {
+      await this.api.setBulk({
+        server_name: this.serverName(),
+        public_url: this.publicUrl(),
+      });
+      this.toast.success(this.translate.instant('settings.general.saved'));
+    } catch { /* interceptor */ } finally { this.savingServer.set(false); }
+  }
+
+  async saveProviders() {
+    this.savingProviders.set(true);
     try {
       await this.api.setBulk({
         tmdb_api_key: this.tmdbApiKey(),
+        tvdb_api_key: this.tvdbApiKey(),
+        tvdb_pin: this.tvdbPin() || null,
+      });
+      this.toast.success(this.translate.instant('settings.general.saved'));
+    } catch { /* interceptor */ } finally { this.savingProviders.set(false); }
+  }
+
+  async saveAutomation() {
+    this.savingAutomation.set(true);
+    try {
+      await this.api.setBulk({
         search_missing_auto: this.searchMissingAuto(),
         rss_sync_interval: this.rssSyncInterval(),
-        post_import_script: this.postImportScript(),
         companion_file_extensions: this.companionFileExtensions(),
+      });
+      this.toast.success(this.translate.instant('settings.general.saved'));
+    } catch { /* interceptor */ } finally { this.savingAutomation.set(false); }
+  }
+
+  async saveStalled() {
+    this.savingStalled.set(true);
+    try {
+      await this.api.setBulk({
         stalled_delete_enabled: this.stalledDeleteEnabled(),
         stalled_delete_after_minutes: this.stalledDeleteAfterMinutes(),
         stalled_search_after_delete: this.stalledSearchAfterDelete(),
       });
       this.toast.success(this.translate.instant('settings.general.saved'));
-    } catch {
-      // handled by global error interceptor
-    } finally {
-      this.saving.set(false);
-    }
+    } catch { /* interceptor */ } finally { this.savingStalled.set(false); }
+  }
+
+  async savePostImport() {
+    this.savingPostImport.set(true);
+    try {
+      await this.api.setBulk({ post_import_script: this.postImportScript() });
+      this.toast.success(this.translate.instant('settings.general.saved'));
+    } catch { /* interceptor */ } finally { this.savingPostImport.set(false); }
   }
 }

@@ -14,4 +14,8 @@ export class UpdateRootFolderDto {
   @IsArray()
   @IsEnum(MediaType, { each: true })
   mediaTypes?: MediaType[];
+
+  @IsOptional()
+  @IsString()
+  preferredProvider?: string | null;
 }

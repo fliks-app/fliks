@@ -161,8 +161,10 @@ export class SearchComponent implements AfterViewInit, OnDestroy {
       const prefix = row.existingMediaType === 'series' ? '/series' : '/movies';
       void this.router.navigate([prefix, row.existingMediaId]);
     } else {
+      const provider = row.provider ?? 'tmdb';
+      const externalId = provider === 'tvdb' ? String(row.tvdbId ?? row.tmdbId) : String(row.tmdbId);
       const prefix = row.mediaType === 'series' ? '/add/tv' : '/add/movie';
-      void this.router.navigate([prefix, row.tmdbId]);
+      void this.router.navigate([prefix, provider, externalId]);
     }
   }
 }

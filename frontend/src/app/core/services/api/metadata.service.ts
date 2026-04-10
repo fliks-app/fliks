@@ -6,6 +6,9 @@ import { Media } from './media.service';
 
 export interface MetadataSearchResult {
   tmdbId: number;
+  tvdbId?: number | null;
+  imdbId?: string | null;
+  provider: string;
   title: string;
   originalTitle: string;
   overview: string;
@@ -20,6 +23,7 @@ export interface MetadataSearchResult {
 
 export interface MetadataDetails extends MetadataSearchResult {
   imdbId: string | null;
+  tvdbId: number | null;
   fanartUrl: string | null;
   runtime: number | null;
   releaseDate: string | null;
@@ -90,6 +94,14 @@ export class MetadataService {
     );
   }
 
+  /** Provider-aware detail fetch */
+  getDetails(provider: string, mediaType: 'movie' | 'series', externalId: string) {
+    const segment = mediaType === 'series' ? 'tv' : 'movie';
+    return firstValueFrom(
+      this.http.get<MetadataDetails>(`/api/metadata/${provider}/${segment}/${externalId}`),
+    );
+  }
+
   importFromTmdb(
     type: MediaType,
     tmdbId: number,
@@ -105,5 +117,17 @@ export class MetadataService {
     if (languageProfileId != null) body.languageProfileId = languageProfileId;
     if (rootFolderId != null) body.rootFolderId = rootFolderId;
     return firstValueFrom(this.http.post<Media>('/api/media/import/tmdb', body));
+  }
+
+  /** Provider-aware import */
+  importMedia(opts: {
+    type: MediaType;
+    externalId: string;
+    provider: string;
+    qualityProfileId?: number;
+    languageProfileId?: number;
+    rootFolderId?: number;
+  }) {
+    return firstValueFrom(this.http.post<Media>('/api/media/import', opts));
   }
 }

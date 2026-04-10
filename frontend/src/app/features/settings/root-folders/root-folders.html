@@ -41,6 +41,9 @@
                     @if (folder.mediaTypes.includes('series')) {
                       <span class="badge badge-outline badge-sm">{{ 'settings.root_folders.media_type_series' | translate }}</span>
                     }
+                    @if (folder.preferredProvider) {
+                      <span class="badge badge-primary badge-sm">{{ folder.preferredProvider | uppercase }}</span>
+                    }
                   </div>
                   @if (folder.accessible) {
                     <p class="text-sm text-base-content/60 mt-1">
@@ -183,6 +186,19 @@
           </label>
         </div>
       </div>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.root_folders.field_provider' | translate }}</span>
+        <select class="select select-bordered select-sm w-full"
+          [ngModel]="formProvider()" (ngModelChange)="formProvider.set($event || null)">
+          @for (opt of providerOptions; track opt.value) {
+            <option [ngValue]="opt.value">{{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}</option>
+          }
+        </select>
+        <div class="label">
+          <span class="label-text-alt text-base-content/50">{{ 'settings.root_folders.provider_hint' | translate }}</span>
+        </div>
+      </label>
 
     </div>
 

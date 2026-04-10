@@ -88,6 +88,17 @@ export const routes: Routes = [
         data: { titleKey: 'search.title' },
       },
       {
+        path: 'add/movie/:provider/:externalId',
+        loadComponent: () =>
+          import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),
+      },
+      {
+        path: 'add/tv/:provider/:externalId',
+        loadComponent: () =>
+          import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),
+      },
+      // Backward compat: /add/movie/:tmdbId → defaults to tmdb provider
+      {
         path: 'add/movie/:tmdbId',
         loadComponent: () =>
           import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),

@@ -22,7 +22,7 @@ export interface SpriteMetadata {
 
 const BASE_DIR = path.join(process.cwd(), 'images', 'thumbnails');
 const COLUMNS = 10;
-const THUMB_WIDTH = 160;
+const THUMB_WIDTH = 240;
 
 /** Max concurrent sprite generations */
 const SPRITE_CONCURRENCY = 2;
@@ -32,6 +32,7 @@ interface QueueItem {
   absolutePath: string;
   durationSeconds: number;
   mediaTitle?: string;
+  skipTracking?: boolean;
   resolve: (meta: SpriteMetadata | null) => void;
 }
 
@@ -54,6 +55,7 @@ export class ThumbnailService {
     durationSeconds: number,
     mediaTitle?: string,
     force = false,
+    skipTracking = false,
   ): Promise<SpriteMetadata | null> {
     const dir = path.join(BASE_DIR, String(mediaFileId));
     const metaPath = path.join(dir, 'sprite.json');
@@ -71,7 +73,7 @@ export class ThumbnailService {
     }
 
     const promise = new Promise<SpriteMetadata | null>((resolve) => {
-      this.queue.push({ mediaFileId, absolutePath, durationSeconds, mediaTitle, resolve });
+      this.queue.push({ mediaFileId, absolutePath, durationSeconds, mediaTitle, skipTracking, resolve });
       this.processQueue();
     });
 
@@ -92,7 +94,7 @@ export class ThumbnailService {
     while (this.running < SPRITE_CONCURRENCY && this.queue.length > 0) {
       const item = this.queue.shift()!;
       this.running++;
-      this.generate(item.mediaFileId, item.absolutePath, item.durationSeconds, item.mediaTitle)
+      this.generate(item.mediaFileId, item.absolutePath, item.durationSeconds, item.mediaTitle, item.skipTracking)
         .then((meta) => item.resolve(meta))
         .catch(() => item.resolve(null))
         .finally(() => {
@@ -107,6 +109,7 @@ export class ThumbnailService {
     absolutePath: string,
     durationSeconds: number,
     mediaTitle?: string,
+    skipTracking = false,
   ): Promise<SpriteMetadata | null> {
     const dir = path.join(BASE_DIR, String(mediaFileId));
     const framesDir = path.join(TRANSCODE_DIR, 'sprites', String(mediaFileId));
@@ -123,17 +126,20 @@ export class ThumbnailService {
       `Generating sprite for ${label}: ${count} thumbs @ ${interval}s interval...`,
     );
 
-    // Record task in DB
-    const cmd = await this.commandRepo.save(
-      this.commandRepo.create({
-        name: 'GenerateSprite',
-        status: 'running',
-        trigger: 'system',
-        startedOn: new Date(),
-        body: { mediaFileId, mediaTitle: label },
-      }),
-    );
-    this.eventsService.emit({ type: 'command.started', name: 'GenerateSprite' });
+    // Record task in DB (skip when called from batch command)
+    let cmd: Command | null = null;
+    if (!skipTracking) {
+      cmd = await this.commandRepo.save(
+        this.commandRepo.create({
+          name: 'GenerateSprite',
+          status: 'running',
+          trigger: 'system',
+          startedOn: new Date(),
+          body: { mediaFileId, mediaTitle: label },
+        }),
+      );
+      this.eventsService.emit({ type: 'command.started', name: 'GenerateSprite' });
+    }
 
     await fsp.mkdir(framesDir, { recursive: true });
     await fsp.mkdir(dir, { recursive: true });
@@ -149,7 +155,7 @@ export class ThumbnailService {
         '-q:v', '3',
         '-y',
         spritePath,
-      ], { timeout: 60_000 });
+      ], { timeout: Math.max(60_000, count * 200) });
 
       // Read actual dimensions via ffprobe
       let thumbHeight: number;
@@ -180,21 +186,24 @@ export class ThumbnailService {
         `Generated sprite for ${label}: ${count} thumbs @ ${interval}s interval`,
       );
 
-      cmd.status = 'completed';
-      cmd.endedOn = new Date();
-      await this.commandRepo.save(cmd);
-      this.eventsService.emit({ type: 'command.completed', name: 'GenerateSprite', status: 'completed' });
+      if (cmd) {
+        cmd.status = 'completed';
+        cmd.endedOn = new Date();
+        await this.commandRepo.save(cmd);
+        this.eventsService.emit({ type: 'command.completed', name: 'GenerateSprite', status: 'completed' });
+      }
 
       return meta;
     } catch (err) {
       this.log.warn(`Sprite generation failed for ${label}: ${err.message}`);
-      cmd.status = 'failed';
-      cmd.endedOn = new Date();
-      await this.commandRepo.save(cmd);
-      this.eventsService.emit({ type: 'command.completed', name: 'GenerateSprite', status: 'failed' });
+      if (cmd) {
+        cmd.status = 'failed';
+        cmd.endedOn = new Date();
+        await this.commandRepo.save(cmd);
+        this.eventsService.emit({ type: 'command.completed', name: 'GenerateSprite', status: 'failed' });
+      }
       return null;
     } finally {
-      // Emit progress completion
       this.eventsService.emit({
         type: 'task.progress',
         command: progressKey,
@@ -257,18 +266,20 @@ export class ThumbnailService {
         reject(err);
       });
 
-      // Timeout 10 min
+      // Timeout: 10 min minimum, scales with duration (3× real-time as safety margin)
+      const timeoutMs = Math.max(10 * 60 * 1000, totalSeconds * 3 * 1000);
       setTimeout(() => {
         proc.kill('SIGKILL');
         clearInterval(timer);
         reject(new Error('Frame extraction timed out'));
-      }, 10 * 60 * 1000);
+      }, timeoutMs);
     });
   }
 
   private pickInterval(duration: number): number {
     if (duration < 300) return 2;
     if (duration <= 3600) return 5;
-    return 10;
+    if (duration <= 7200) return 10;
+    return 15;
   }
 }

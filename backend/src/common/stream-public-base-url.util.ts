@@ -1,9 +1,16 @@
 import { Request } from 'express';
 
 /**
- * Base publique pour les URLs de stream atteignables par Chromecast (EXTERNAL_URL ou Host).
+ * Base publique pour les URLs de stream atteignables par Chromecast.
+ * Priority: DB setting `public_url` > EXTERNAL_URL env > Host header > localhost.
  */
-export function resolveStreamPublicBaseUrl(req: Request): string {
+export function resolveStreamPublicBaseUrl(
+  req: Request,
+  publicUrl?: string | null,
+): string {
+  if (publicUrl) {
+    return publicUrl.replace(/\/+$/, '');
+  }
   if (process.env.EXTERNAL_URL) {
     return process.env.EXTERNAL_URL.replace(/\/+$/, '');
   }

@@ -9,9 +9,57 @@
       <span class="loading loading-spinner loading-lg"></span>
     </div>
   } @else {
+
+    <!-- Server -->
     <div class="card bg-base-100 border border-base-200">
       <div class="card-body gap-5">
-        <h2 class="card-title text-base">{{ 'settings.general.section_metadata' | translate }}</h2>
+        <h2 class="card-title text-base">{{ 'settings.general.section_server' | translate }}</h2>
+
+        <label class="form-control w-full max-w-md">
+          <div class="label">
+            <span class="label-text">{{ 'settings.general.server_name' | translate }}</span>
+          </div>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="serverName()"
+            (ngModelChange)="serverName.set($event)"
+            placeholder="Fliks"
+          />
+          <div class="label">
+            <span class="label-text-alt text-base-content/50">{{ 'settings.general.server_name_hint' | translate }}</span>
+          </div>
+        </label>
+
+        <label class="form-control w-full max-w-md">
+          <div class="label">
+            <span class="label-text">{{ 'settings.general.public_url' | translate }}</span>
+          </div>
+          <input
+            type="url"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="publicUrl()"
+            (ngModelChange)="publicUrl.set($event)"
+            placeholder="https://fliks.example.com"
+          />
+          <div class="label">
+            <span class="label-text-alt text-base-content/50">{{ 'settings.general.public_url_hint' | translate }}</span>
+          </div>
+        </label>
+
+        <div class="card-actions justify-end">
+          <button type="button" class="btn btn-primary" (click)="saveServer()" [disabled]="savingServer()">
+            @if (savingServer()) { <span class="loading loading-spinner loading-sm"></span> }
+            {{ 'common.save' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Providers -->
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-5">
+        <h2 class="card-title text-base">{{ 'settings.general.section_providers' | translate }}</h2>
 
         <label class="form-control w-full max-w-md">
           <div class="label">
@@ -30,6 +78,50 @@
         </label>
 
         <div class="divider my-0"></div>
+
+        <label class="form-control w-full max-w-md">
+          <div class="label">
+            <span class="label-text">{{ 'settings.general.tvdb_api_key' | translate }}</span>
+          </div>
+          <input
+            type="password"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="tvdbApiKey()"
+            (ngModelChange)="tvdbApiKey.set($event)"
+            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+          />
+          <div class="label">
+            <span class="label-text-alt text-base-content/50">{{ 'settings.general.tvdb_api_key_hint' | translate }}</span>
+          </div>
+        </label>
+
+        <label class="form-control w-full max-w-md">
+          <div class="label">
+            <span class="label-text">{{ 'settings.general.tvdb_pin' | translate }}</span>
+          </div>
+          <input
+            type="password"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="tvdbPin()"
+            (ngModelChange)="tvdbPin.set($event)"
+          />
+          <div class="label">
+            <span class="label-text-alt text-base-content/50">{{ 'settings.general.tvdb_pin_hint' | translate }}</span>
+          </div>
+        </label>
+
+        <div class="card-actions justify-end">
+          <button type="button" class="btn btn-primary" (click)="saveProviders()" [disabled]="savingProviders()">
+            @if (savingProviders()) { <span class="loading loading-spinner loading-sm"></span> }
+            {{ 'common.save' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Automation -->
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-5">
         <h2 class="card-title text-base">{{ 'settings.general.section_automation' | translate }}</h2>
 
         <label class="form-control w-full max-w-xs">
@@ -71,7 +163,18 @@
           </div>
         </label>
 
-        <div class="divider my-0"></div>
+        <div class="card-actions justify-end">
+          <button type="button" class="btn btn-primary" (click)="saveAutomation()" [disabled]="savingAutomation()">
+            @if (savingAutomation()) { <span class="loading loading-spinner loading-sm"></span> }
+            {{ 'common.save' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stalled -->
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-5">
         <h2 class="card-title text-base">{{ 'settings.general.section_stalled' | translate }}</h2>
 
         <label class="label cursor-pointer justify-start gap-3">
@@ -107,7 +210,18 @@
           </label>
         }
 
-        <div class="divider my-0"></div>
+        <div class="card-actions justify-end">
+          <button type="button" class="btn btn-primary" (click)="saveStalled()" [disabled]="savingStalled()">
+            @if (savingStalled()) { <span class="loading loading-spinner loading-sm"></span> }
+            {{ 'common.save' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Post-import -->
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-5">
         <h2 class="card-title text-base">{{ 'settings.general.section_post_import' | translate }}</h2>
 
         <label class="form-control w-full">
@@ -118,24 +232,17 @@
           <span class="label-text-alt text-base-content/50">{{ 'settings.general.post_import_script_vars' | translate }}</span>
         </label>
 
-        @if (error()) {
-          <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
-        }
-
         <div class="card-actions justify-end">
-          <button
-            type="button"
-            class="btn btn-primary"
-            (click)="save()"
-            [disabled]="saving()"
-          >
-            @if (saving()) {
-              <span class="loading loading-spinner loading-sm"></span>
-            }
+          <button type="button" class="btn btn-primary" (click)="savePostImport()" [disabled]="savingPostImport()">
+            @if (savingPostImport()) { <span class="loading loading-spinner loading-sm"></span> }
             {{ 'common.save' | translate }}
           </button>
         </div>
       </div>
     </div>
+
+    @if (error()) {
+      <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
+    }
   }
 </div>

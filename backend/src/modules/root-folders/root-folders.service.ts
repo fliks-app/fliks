@@ -49,6 +49,7 @@ export class RootFoldersService {
       path: dto.path,
       label: dto.label,
       mediaTypes: dto.mediaTypes ?? [MediaType.MOVIE, MediaType.SERIES],
+      preferredProvider: dto.preferredProvider ?? null,
     });
     const saved = await this.repo.save(row);
     return this.enrich(saved);
@@ -82,6 +83,7 @@ export class RootFoldersService {
       folder.path = dto.path;
     }
     if (dto.label !== undefined) folder.label = dto.label;
+    if (dto.preferredProvider !== undefined) folder.preferredProvider = dto.preferredProvider;
     if (dto.mediaTypes !== undefined) {
       await this.checkDefaultConflict(id, folder.mediaTypes, dto.mediaTypes);
       folder.mediaTypes = dto.mediaTypes;

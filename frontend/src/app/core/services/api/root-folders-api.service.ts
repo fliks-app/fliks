@@ -7,6 +7,7 @@ export interface RootFolder {
   path: string;
   label?: string;
   mediaTypes: ('movie' | 'series')[];
+  preferredProvider: string | null;
   freeSpace: number;
   totalSpace: number;
   accessible: boolean;
@@ -20,11 +21,11 @@ export class RootFoldersApiService {
     return firstValueFrom(this.http.get<RootFolder[]>('/api/root-folders'));
   }
 
-  create(body: { path: string; label?: string; mediaTypes?: ('movie' | 'series')[] }) {
+  create(body: { path: string; label?: string; mediaTypes?: ('movie' | 'series')[]; preferredProvider?: string | null }) {
     return firstValueFrom(this.http.post<RootFolder>('/api/root-folders', body));
   }
 
-  update(id: number, body: { path?: string; label?: string; mediaTypes?: ('movie' | 'series')[] }) {
+  update(id: number, body: { path?: string; label?: string; mediaTypes?: ('movie' | 'series')[]; preferredProvider?: string | null }) {
     return firstValueFrom(this.http.patch<RootFolder>(`/api/root-folders/${id}`, body));
   }
 

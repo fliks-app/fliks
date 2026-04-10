@@ -12,4 +12,7 @@ export class RootFolder extends BaseEntity {
 
   @Column({ type: 'jsonb', default: [MediaType.MOVIE, MediaType.SERIES] })
   mediaTypes: MediaType[];
+
+  @Column({ type: 'varchar', nullable: true, default: null })
+  preferredProvider: string | null;
 }

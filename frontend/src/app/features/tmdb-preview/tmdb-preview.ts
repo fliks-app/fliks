@@ -62,6 +62,18 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     return url.startsWith('/add/tv') ? 'series' : 'movie';
   });
 
+  /** Provider from route param (e.g. /add/movie/tvdb/123) or default to 'tmdb' */
+  readonly provider = computed(() => {
+    return this.route.snapshot.paramMap.get('provider') ?? 'tmdb';
+  });
+
+  /** External ID from route — either :externalId or legacy :tmdbId */
+  readonly externalId = computed(() => {
+    return this.route.snapshot.paramMap.get('externalId')
+      ?? this.route.snapshot.paramMap.get('tmdbId')
+      ?? '';
+  });
+
   readonly compatibleRootFolders = computed(() =>
     this.rootFolders().filter((f) => f.mediaTypes.includes(this.type())),
   );
@@ -78,8 +90,9 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
-    const tmdbId = Number(this.route.snapshot.paramMap.get('tmdbId'));
     const type = this.type();
+    const provider = this.provider();
+    const externalId = this.externalId();
 
     const r = this.auth.user()?.role;
     if (r === 'admin' || r === 'user') {
@@ -113,9 +126,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     }
 
     try {
-      const details = type === 'series'
-        ? await this.metadata.getTvDetails(tmdbId)
-        : await this.metadata.getMovieDetails(tmdbId);
+      const details = await this.metadata.getDetails(provider, type, externalId);
       this.media.set(details);
       this.navbar.enterHeroPage(details.title);
     } catch {
@@ -131,12 +142,15 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     this.importing.set(true);
     this.error.set('');
     try {
-      const saved = await this.metadata.importFromTmdb(
-        this.type(),
-        m.tmdbId,
-        this.selectedQualityProfileId() ?? undefined,
-        this.selectedRootFolderId() ?? undefined,
-      );
+      const provider = this.provider();
+      const externalId = this.externalId();
+      const saved = await this.metadata.importMedia({
+        type: this.type() as MediaType,
+        externalId,
+        provider,
+        qualityProfileId: this.selectedQualityProfileId() ?? undefined,
+        rootFolderId: this.selectedRootFolderId() ?? undefined,
+      });
       this.toast.success(this.translate.instant('discover.import_success'));
       const prefix = saved.type === 'movie' ? '/movies' : '/series';
       void this.router.navigate([prefix, saved.id]);
@@ -161,6 +175,8 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
       title: m.title,
       mediaType: this.type() as MediaType,
       tmdbId: m.tmdbId,
+      provider: this.provider(),
+      externalId: this.externalId(),
     });
   }
 

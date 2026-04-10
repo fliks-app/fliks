@@ -9,6 +9,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { UpperCasePipe } from '@angular/common';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   RootFoldersApiService,
@@ -19,7 +20,7 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 
 @Component({
   selector: 'app-root-folders-settings',
-  imports: [FormsModule, TranslateModule],
+  imports: [FormsModule, TranslateModule, UpperCasePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './root-folders.html',
 })
@@ -50,6 +51,12 @@ export class RootFoldersSettingsComponent implements OnInit {
   readonly formLabel = signal('');
   readonly formMovies = signal(true);
   readonly formSeries = signal(true);
+  readonly formProvider = signal<string | null>(null);
+  readonly providerOptions = [
+    { value: null, labelKey: 'settings.root_folders.provider_auto' },
+    { value: 'tmdb', label: 'TMDB' },
+    { value: 'tvdb', label: 'TVDB' },
+  ];
   readonly saving = signal(false);
   readonly saveError = signal('');
 
@@ -96,6 +103,7 @@ export class RootFoldersSettingsComponent implements OnInit {
     this.formLabel.set('');
     this.formMovies.set(true);
     this.formSeries.set(true);
+    this.formProvider.set(null);
     this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -106,6 +114,7 @@ export class RootFoldersSettingsComponent implements OnInit {
     this.formLabel.set(folder.label ?? '');
     this.formMovies.set(folder.mediaTypes.includes('movie'));
     this.formSeries.set(folder.mediaTypes.includes('series'));
+    this.formProvider.set(folder.preferredProvider ?? null);
     this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -132,10 +141,11 @@ export class RootFoldersSettingsComponent implements OnInit {
     this.saveError.set('');
     try {
       const id = this.editingId();
+      const preferredProvider = this.formProvider() || null;
       if (id !== null) {
-        await this.api.update(id, { path, label: this.formLabel().trim() || undefined, mediaTypes });
+        await this.api.update(id, { path, label: this.formLabel().trim() || undefined, mediaTypes, preferredProvider });
       } else {
-        await this.api.create({ path, label: this.formLabel().trim() || undefined, mediaTypes });
+        await this.api.create({ path, label: this.formLabel().trim() || undefined, mediaTypes, preferredProvider });
       }
       this.closeForm();
       await this.reload();
