@@ -58,7 +58,15 @@
         <h2 class="text-lg font-semibold mb-3">{{ 'search.section_library' | translate }}</h2>
         <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-3 sm:gap-4">
           @for (media of state.localResults(); track media.id) {
-            <app-media-card [media]="media" />
+            <app-media-card
+              [imageUrl]="media.posterUrl"
+              [title]="media.title"
+              [subtitle]="(media.monitored ? ('media_card.monitored' | translate) : ('media_card.unmonitored' | translate))"
+              [rating]="media.rating"
+              [link]="['/' + (media.type === 'movie' ? 'movies' : 'series'), '' + media.id]"
+              [barStatus]="computeBarStatus(media)"
+              [barPercent]="computeBarPercent(media)"
+            />
           }
         </div>
       </div>
@@ -74,7 +82,14 @@
         <h2 class="text-lg font-semibold mb-3">{{ 'search.section_discover' | translate }}</h2>
         <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-3 sm:gap-4">
           @for (row of state.filteredExternalResults(); track row.tmdbId) {
-            <app-discover-card [row]="row" [status]="cardStatus(row)" (clicked)="onExternalCardClick($event)" />
+            <app-media-card
+              [imageUrl]="row.posterUrl"
+              [title]="row.title"
+              [subtitle]="'' + (row.year ?? '')"
+              [rating]="row.rating"
+              [badge]="cardStatus(row)"
+              (clicked)="onExternalCardClick(row)"
+            />
           }
         </div>
       </div>

@@ -42,46 +42,19 @@
     } @else if (filteredEpisodes().length > 0) {
       <app-horizontal-scroller [title]="'media_detail.episodes' | translate">
         @for (ep of filteredEpisodes(); track ep.id) {
-          <a
+          <app-media-card [aspect]="'landscape'"
             [id]="'episode-' + ep.id"
-            [routerLink]="episodeRoute(ep)"
-            class="shrink-0 w-56 sm:w-64 group text-left rounded-xl overflow-hidden border border-base-200 bg-base-100 hover:border-primary hover:shadow-lg transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            [class.opacity-55]="!ep.monitored"
-          >
-            <div class="aspect-video bg-base-300 relative overflow-hidden">
-              @if (ep.stillUrl) {
-                <img [src]="ep.stillUrl | resolveUrl" [alt]="" class="w-full h-full object-cover" loading="lazy" />
-              } @else if (m.posterUrl) {
-                <img
-                  [src]="m.posterUrl | resolveUrl"
-                  alt=""
-                  class="w-full h-full object-cover opacity-35 group-hover:opacity-50 transition-opacity scale-105"
-                />
-              } @else {
-                <div class="absolute inset-0 flex items-center justify-center text-2xl font-bold text-base-content/15">
-                  {{ ep.episodeNumber }}
-                </div>
-              }
-              <div class="absolute top-1.5 left-1.5">
-                <span class="badge badge-sm badge-neutral font-mono">{{ ep.episodeNumber }}</span>
-              </div>
-              @if (watchedEpisodeIds().has(ep.id)) {
-                <div class="absolute top-1.5 right-1.5">
-                  <svg lucideCircleCheck class="h-5 w-5 text-success drop-shadow"></svg>
-                </div>
-              } @else if (!ep.hasFile) {
-                <div class="absolute top-1.5 right-1.5">
-                  <svg lucideCircleX class="h-5 w-5 text-error/60 drop-shadow"></svg>
-                </div>
-              }
-            </div>
-            <div class="p-2.5">
-              <p class="font-medium text-sm line-clamp-1 leading-snug">
-                {{ ep.title ?? ('media_detail.ep_no_title' | translate) }}
-              </p>
-              <p class="text-xs text-base-content/50 mt-0.5">{{ ep.airDate ?? '—' }}</p>
-            </div>
-          </a>
+            [imageUrl]="ep.stillUrl ?? m.posterUrl"
+            [imageBlurred]="!ep.stillUrl && !!m.posterUrl"
+            [title]="ep.title ?? ('media_detail.ep_no_title' | translate)"
+            [subtitle]="ep.airDate ?? '—'"
+            [topLeftBadge]="'' + ep.episodeNumber"
+            [status]="watchedEpisodeIds().has(ep.id) ? 'watched' : (!ep.hasFile ? 'missing' : null)"
+            [link]="['/series', '' + m.id]"
+            [subtitleLink]="episodeRoute(ep)"
+            [dimmed]="!ep.monitored"
+            (clicked)="null"
+          />
         }
       </app-horizontal-scroller>
     }

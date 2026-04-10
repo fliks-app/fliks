@@ -20,13 +20,13 @@ import { AuthService } from '../../core/services/auth.service';
 import { RequestsService, FliksRequestStatus } from '../../core/services/api/requests.service';
 import { SearchStateService } from '../../core/services/search-state.service';
 import { MediaType } from '../../core/enums/media-type.enum';
-import { MediaCardComponent } from '../../shared/components/media-card';
-import { DiscoverCardComponent, CardStatus } from '../../shared/components/discover-card/discover-card.component';
+import { MediaCardComponent, CardBadge } from '../../shared/components/media-card';
+import { computeMediaBarStatus, computeMediaBarPercent } from '../../shared/utils/media-status.util';
 import { LucideSearch, LucideX, LucideSettings } from '@lucide/angular';
 
 @Component({
   selector: 'app-search',
-  imports: [FormsModule, TranslateModule, MediaCardComponent, DiscoverCardComponent, LucideSearch, LucideX, LucideSettings],
+  imports: [FormsModule, TranslateModule, MediaCardComponent, LucideSearch, LucideX, LucideSettings],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './search.html',
 })
@@ -147,7 +147,10 @@ export class SearchComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  cardStatus(row: MetadataSearchResult): CardStatus {
+  readonly computeBarStatus = computeMediaBarStatus;
+  readonly computeBarPercent = computeMediaBarPercent;
+
+  cardStatus(row: MetadataSearchResult): CardBadge {
     if (row.existingMediaId) return 'library';
     const reqStatus = this.requestedTmdbIds().get(row.tmdbId);
     if (!reqStatus) return null;

@@ -106,17 +106,25 @@
                 (change)="toggleSelect(show.id)"
               />
               <app-media-card
-                [media]="show"
-                [watched]="watchedIds().has(show.id)"
-                (watchedChange)="refreshWatchedIds()"
+                [imageUrl]="show.posterUrl"
+                [title]="show.title"
+                [subtitle]="(show.monitored ? ('media_card.monitored' | translate) : ('media_card.unmonitored' | translate)) + (show.qualityProfile ? ' — ' + show.qualityProfile.name : '')"
+                [rating]="show.rating"
+                [link]="['/series', '' + show.id]"
+                [barStatus]="computeBarStatus(show)"
+                [barPercent]="computeBarPercent(show)"
               />
             </div>
           } @else {
             <div class="" [id]="'series-' + show.id">
               <app-media-card
-                [media]="show"
-                [watched]="watchedIds().has(show.id)"
-                (watchedChange)="refreshWatchedIds()"
+                [imageUrl]="show.posterUrl"
+                [title]="show.title"
+                [subtitle]="(show.monitored ? ('media_card.monitored' | translate) : ('media_card.unmonitored' | translate)) + (show.qualityProfile ? ' — ' + show.qualityProfile.name : '')"
+                [rating]="show.rating"
+                [link]="['/series', '' + show.id]"
+                [barStatus]="computeBarStatus(show)"
+                [barPercent]="computeBarPercent(show)"
               />
             </div>
           }

@@ -17,6 +17,7 @@ import { MediaService, Media } from '../../core/services/api/media.service';
 import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { ProfilesService, QualityProfile } from '../../core/services/api/profiles.service';
 import { MediaCardComponent } from '../../shared/components/media-card';
+import { computeMediaBarStatus, computeMediaBarPercent } from '../../shared/utils/media-status.util';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideSlidersHorizontal } from '@lucide/angular';
@@ -30,6 +31,8 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
   templateUrl: './series.html',
 })
 export class SeriesComponent implements OnInit, OnDestroy {
+  readonly computeBarStatus = computeMediaBarStatus;
+  readonly computeBarPercent = computeMediaBarPercent;
   private readonly mediaService = inject(MediaService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly profilesService = inject(ProfilesService);

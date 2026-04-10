@@ -21,7 +21,16 @@
     @if (continueWatching().length) {
       <app-horizontal-scroller [title]="'home.continue_watching' | translate">
         @for (item of continueWatching(); track item.id) {
-          <app-continue-watching-card [item]="item" (remove)="removeContinueWatching($event)" />
+          <app-media-card [aspect]="'landscape'"
+            [imageUrl]="item.fanartUrl ?? item.posterUrl"
+            [title]="item.mediaTitle"
+            [subtitle]="item.episodeLabel ?? undefined"
+            [progressPercent]="item.progressPercent"
+            [link]="item.episodeId ? ['/series', '' + item.mediaId, 'episode', '' + item.episodeId] : ['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId]"
+            [dismissable]="true"
+            (clicked)="playContinueWatching(item)"
+            (dismissed)="removeContinueWatching(item)"
+          />
         }
       </app-horizontal-scroller>
     }
@@ -31,10 +40,13 @@
       <app-horizontal-scroller [title]="'home.recent_movies' | translate">
         @for (m of recentMovies(); track m.id) {
           <app-media-card
-            [media]="m"
-            [variant]="'poster'"
-            [watched]="watchedIds().has(m.id)"
-            (watchedChange)="refreshWatchedIds()"
+            class="shrink-0 w-28 sm:w-36"
+            [imageUrl]="m.posterUrl"
+            [title]="m.title"
+            [subtitle]="'' + (m.year ?? '')"
+            [rating]="m.rating"
+            [link]="['/movies', '' + m.id]"
+            [playable]="!!(m.files?.length)"
           />
         }
       </app-horizontal-scroller>
@@ -45,10 +57,12 @@
       <app-horizontal-scroller [title]="'home.recent_series' | translate">
         @for (s of recentSeries(); track s.id) {
           <app-media-card
-            [media]="s"
-            [variant]="'poster'"
-            [watched]="watchedIds().has(s.id)"
-            (watchedChange)="refreshWatchedIds()"
+            class="shrink-0 w-28 sm:w-36"
+            [imageUrl]="s.posterUrl"
+            [title]="s.title"
+            [subtitle]="'' + (s.year ?? '')"
+            [rating]="s.rating"
+            [link]="['/series', '' + s.id]"
           />
         }
       </app-horizontal-scroller>
