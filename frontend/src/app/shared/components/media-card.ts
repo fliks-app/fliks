@@ -24,13 +24,13 @@ export type CardStatus = 'watched' | 'missing' | null;
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div
-      class="group relative"
+      class="relative"
       [class.opacity-55]="dimmed()"
       [class]="aspect() === 'landscape' ? 'shrink-0 w-56 sm:w-64' : ''"
     >
       <!-- Image -->
       <figure
-        class="relative bg-base-300 rounded-lg overflow-hidden shadow-md group-hover:shadow-xl transition-shadow cursor-pointer"
+        class="group relative bg-base-300 rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow cursor-pointer"
         [class.aspect-2/3]="aspect() === 'portrait'"
         [class.aspect-video]="aspect() === 'landscape'"
         (click)="clicked.emit()"
