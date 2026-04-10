@@ -36,10 +36,10 @@ import {
             <div class="w-10 h-10 rounded-full bg-base-300 flex items-center justify-center shrink-0">
               <svg lucideUser class="h-5 w-5 text-base-content/40"></svg>
             </div>
-            <div class="min-w-0 flex-1">
+            <a routerLink="/account" class="min-w-0 flex-1 hover:underline cursor-pointer">
               <p class="font-semibold truncate">{{ user.username }}</p>
               <p class="text-xs text-base-content/50">{{ user.role }}</p>
-            </div>
+            </a>
             <button type="button" class="btn btn-ghost btn-sm btn-circle shrink-0" (click)="themeService.toggle(); $event.stopPropagation()">
               @if (themeService.theme() === 'dark') {
                 <svg lucideSun class="h-4 w-4"></svg>

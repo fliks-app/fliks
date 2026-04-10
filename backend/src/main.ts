@@ -37,6 +37,10 @@ async function bootstrap() {
     credentials: true,
   });
 
+  // Trust reverse proxy headers (X-Forwarded-For) so req.ip is the real client IP
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.set('trust proxy', true);
+
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
     new ValidationPipe({

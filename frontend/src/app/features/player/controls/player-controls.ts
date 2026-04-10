@@ -19,6 +19,7 @@ import {
   LucideChevronLeft,
   LucideChevronRight,
   LucideArrowLeft,
+  LucideExternalLink,
   LucideMaximize,
   LucidePictureInPicture2,
   LucideRotateCcw,
@@ -55,6 +56,7 @@ import {
     LucideSettings,
     LucideChevronRight,
     LucideArrowLeft,
+    LucideExternalLink,
     NgTemplateOutlet,
     BottomSheetComponent,
   ],
@@ -111,11 +113,15 @@ export class PlayerControlsComponent {
   readonly selectAudioTrack = output<string>();
   readonly toggleCast = output<void>();
   readonly toggleFillScreen = output<void>();
+  readonly openMedia = output<void>();
 
   readonly speedOptions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
   /** Settings dropdown panel navigation */
   readonly settingsPanel = signal<'main' | 'quality'>('main');
+
+  /** True when any desktop dropdown is open — prevents play/pause on backdrop click. */
+  readonly hasOpenDropdown = signal(false);
 
   /** Mobile bottom sheet state */
   readonly activeSheet = signal<'subtitles' | 'audio' | 'speed' | 'settings' | null>(null);
@@ -275,7 +281,11 @@ export class PlayerControlsComponent {
     const el = (event.target as HTMLElement).closest('.dropdown');
     if (el) (el.querySelector('[tabindex]') as HTMLElement)?.blur();
     this.settingsPanel.set('main');
+    this.hasOpenDropdown.set(false);
   }
+
+  onDropdownFocus() { this.hasOpenDropdown.set(true); }
+  onDropdownBlur() { this.hasOpenDropdown.set(false); }
 
   /** Reset settings panel when opening the dropdown. */
   openSettings() {

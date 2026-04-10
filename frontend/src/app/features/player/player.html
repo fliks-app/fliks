@@ -72,6 +72,7 @@
     [statsVisible]="statsVisible()"
     (toggleStats)="statsVisible.set(!statsVisible())"
     (toggleFillScreen)="fillScreen.set(!fillScreen())"
+    (openMedia)="onOpenMedia()"
     [fillScreen]="fillScreen()"
     (speedChange)="onSpeedChange($event)"
     (back)="onBack()"

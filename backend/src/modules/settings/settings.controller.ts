@@ -1,4 +1,5 @@
-import { Controller, Get, Put, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Body, Param, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
 import { IsString, IsOptional, IsObject } from 'class-validator';
 import { SettingsService } from './settings.service';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
@@ -27,6 +28,15 @@ export class SettingsController {
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   getAll() {
     return this.service.getAll();
+  }
+
+  /** Return the client's IP as seen by the server. */
+  @Get('my-ip')
+  @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
+  getMyIp(@Req() req: Request) {
+    const raw = req.ip ?? '';
+    const ipv4 = raw.replace(/^::ffff:/, '');
+    return { ip: ipv4, ipv6: raw !== ipv4 ? raw : undefined };
   }
 
   @Get(':key')

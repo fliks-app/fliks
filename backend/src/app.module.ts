@@ -1,5 +1,6 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { IpWhitelistMiddleware } from './common/middleware/ip-whitelist.middleware';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -83,4 +84,8 @@ import { join } from 'path';
     ImageModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(IpWhitelistMiddleware).forRoutes('*');
+  }
+}

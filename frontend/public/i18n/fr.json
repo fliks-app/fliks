@@ -72,6 +72,16 @@
     "settings.access": "Accès aux paramètres",
     "users.manage": "Gérer les utilisateurs"
   },
+  "account": {
+    "title": "Mon compte",
+    "subtitle": "Gérez les paramètres de votre compte",
+    "change_password": "Changer le mot de passe",
+    "new_password": "Nouveau mot de passe",
+    "confirm_password": "Confirmer le mot de passe",
+    "password_hint": "8 caractères minimum",
+    "password_mismatch": "Les mots de passe ne correspondent pas",
+    "save_success": "Mot de passe modifié avec succès"
+  },
   "nav": {
     "home": "Accueil",
     "statistics": "Statistiques",
@@ -97,7 +107,8 @@
     "history": "Historique",
     "more": "Plus",
     "change_server": "Changer de serveur",
-    "persons": "Personnes"
+    "persons": "Personnes",
+    "account": "Mon compte"
   },
   "history": {
     "title": "Historique",
@@ -134,7 +145,28 @@
     "player_use_default": "Utiliser la piste audio par défaut",
     "player_use_default_hint": "Ignorer les préférences de langue et toujours utiliser la piste audio par défaut du fichier.",
     "player_remember_audio": "Mémoriser les sélections audio",
-    "player_remember_audio_hint": "Le lecteur se souviendra de la piste audio choisie pour chaque fichier."
+    "player_remember_audio_hint": "Le lecteur se souviendra de la piste audio choisie pour chaque fichier.",
+    "tab_subtitles": "Sous-titres",
+    "sub_preferred_lang": "Langue préférée pour les sous-titres",
+    "sub_mode": "Mode des sous-titres",
+    "sub_mode_hint": "Les sous-titres correspondant à la langue préférée seront affichés lorsque l'audio sera dans une langue étrangère.",
+    "sub_mode_off": "Désactivé",
+    "sub_mode_intelligent": "Intelligent",
+    "sub_mode_always": "Toujours",
+    "sub_remember": "Se souvenir des sélections de sous-titres",
+    "sub_remember_hint": "Les sélections de sous-titres seront enregistrées pour chaque vidéo et réappliquées si la vidéo est de nouveau lue.",
+    "sub_clear_saved": "Vider les sélections de piste enregistrées",
+    "sub_appearance_title": "Apparence des sous-titres",
+    "sub_appearance_hint": "Ces paramètres ne s'appliqueront pas aux sous-titres graphiques (PGS, DVD etc) ou aux sous-titres qui ont leurs propres styles incorporés (ASS/SSA).",
+    "sub_size": "Taille du texte",
+    "sub_color": "Couleur du texte",
+    "sub_shadow": "Ombre portée",
+    "sub_bg": "Couleur du fond",
+    "sub_position_title": "Position des sous-titres",
+    "sub_bottom_margin": "Position du bord inférieur",
+    "sub_bottom_margin_hint": "Définit la position verticale des sous-titres par rapport au bas de l'écran.",
+    "sub_top_margin": "Position du bord supérieur",
+    "sub_top_margin_hint": "Définit la position verticale maximale autorisée par rapport au haut de l'écran. Cette fonction est utilisée lorsque les sous-titres contiennent des instructions de positionnement en haut de l'écran."
   },
   "import_disk": {
     "title": "Import manuel depuis le disque",
@@ -695,7 +727,9 @@
     "next": "Suiv.",
     "error": "Erreur",
     "show_more": "Voir plus",
-    "show_less": "Voir moins"
+    "show_less": "Voir moins",
+    "copy": "Copier",
+    "copied": "Copié"
   },
   "downloads": {
     "title": "Téléchargements",
@@ -737,7 +771,34 @@
       "server": "Serveur",
       "subtitle_providers": "Fournisseurs de sous-titres",
       "subtitles": "Sous-titres",
-      "schedulers": "Tâches planifiées"
+      "schedulers": "Tâches planifiées",
+      "network": "Réseau & Sécurité"
+    },
+    "network": {
+      "title": "Réseau & Sécurité",
+      "subtitle": "Configuration du reverse proxy pour restreindre l'accès à votre serveur tout en maintenant la compatibilité Chromecast.",
+      "status": "État",
+      "status_active": "Actif",
+      "status_pending": "En attente de confirmation",
+      "status_inactive": "Inactif",
+      "confirm_title": "Confirmez que vous avez toujours accès",
+      "confirm_hint": "Si vous ne confirmez pas dans le temps imparti, la restriction sera automatiquement désactivée pour éviter de vous bloquer.",
+      "confirm_btn": "Je confirme, j'ai accès",
+      "ip_title": "Restriction d'accès par IP",
+      "ip_hint": "Bloquer toutes les requêtes API et l'accès au frontend pour les IP hors des ranges autorisés. Les routes de connexion restent accessibles.",
+      "ip_ranges": "Ranges IP autorisés (CIDR)",
+      "ip_ranges_hint": "Un range par ligne au format CIDR. Exemple : 192.168.0.0/16 pour tout le réseau local. Pensez à inclure votre IP publique si vous accédez via un domaine.",
+      "activate_btn": "Activer la restriction",
+      "deactivate_btn": "Désactiver la restriction",
+      "reset_btn": "Réinitialiser",
+      "my_ip_btn": "Mon IP",
+      "expose_cast": "Exposer les routes Chromecast",
+      "expose_cast_hint": "Permet au Chromecast de fonctionner même depuis une IP non autorisée. Seules les routes de streaming, images et authentification Cast sont exposées (protégées par token JWT).",
+      "cast_routes_title": "Routes utilisées par le Chromecast",
+      "cast_routes_hint": "Le Chromecast se connecte directement au serveur. Ces routes doivent rester accessibles depuis les IP autorisées.",
+      "col_method": "Méthode",
+      "col_route": "Route",
+      "col_description": "Description"
     },
     "general": {
       "title": "Paramètres généraux",

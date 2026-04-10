@@ -126,6 +126,7 @@ export class PlaybackService {
       state.positionSeconds = pos;
       if (dur > 0) state.durationSeconds = dur;
       state.completed = completed;
+      state.hiddenFromContinueWatching = false;
       state.lastPlayedAt = new Date();
     } else {
       state = this.repo.create({
@@ -157,6 +158,7 @@ export class PlaybackService {
        JOIN media m ON m.id = ps."mediaId"
        WHERE ps."userId" = $1
          AND ps.completed = false
+         AND ps."hiddenFromContinueWatching" = false
          AND ps."positionSeconds" > 0
          AND m.type = 'movie'
        ORDER BY ps."mediaId", ps."lastPlayedAt" DESC`,
@@ -173,12 +175,13 @@ export class PlaybackService {
     //    Uses a lateral join to efficiently find the next episode per series.
     const seriesItems: ContinueWatchingItem[] = await this.repo.query(
       `WITH user_series AS (
-        -- Most recent playback per series
+        -- Most recent playback per series (exclude hidden)
         SELECT DISTINCT ON (ps."mediaId")
                ps."mediaId", ps."lastPlayedAt"
         FROM playback_states ps
         JOIN media m ON m.id = ps."mediaId"
         WHERE ps."userId" = $1 AND m.type = 'series'
+          AND ps."hiddenFromContinueWatching" = false
         ORDER BY ps."mediaId", ps."lastPlayedAt" DESC
       ),
       last_completed AS (
@@ -193,18 +196,17 @@ export class PlaybackService {
         ORDER BY ps."mediaId", ps."lastPlayedAt" DESC
       ),
       in_progress AS (
-        -- Episodes started but not completed (no completed episode exists for that series)
+        -- Most recently played in-progress episode per series (regardless of other completed episodes)
         SELECT DISTINCT ON (ps."mediaId")
                ps."mediaId", ps."episodeId", ps."mediaFileId",
                ps."positionSeconds", ps."durationSeconds"
         FROM playback_states ps
         WHERE ps."userId" = $1
           AND ps.completed = false AND ps."positionSeconds" > 0 AND ps."episodeId" IS NOT NULL
-          AND ps."mediaId" NOT IN (SELECT "mediaId" FROM last_completed)
         ORDER BY ps."mediaId", ps."lastPlayedAt" DESC
       ),
       next_ep AS (
-        -- For series with a completed episode: find the next unwatched episode
+        -- For series with a completed episode but NO in-progress episode: find the next unwatched episode
         SELECT lc."mediaId",
                (SELECT e.id FROM episodes e
                 JOIN seasons s ON s.id = e."seasonId"
@@ -214,14 +216,15 @@ export class PlaybackService {
                 ORDER BY s."seasonNumber", e."episodeNumber" LIMIT 1
                ) AS "episodeId"
         FROM last_completed lc
+        WHERE lc."mediaId" NOT IN (SELECT "mediaId" FROM in_progress)
       ),
       combined AS (
-        -- Merge: next episode after completed OR in-progress episode
-        SELECT ne."mediaId", ne."episodeId", NULL::int AS "mediaFileId", 0.0 AS "positionSeconds", 0.0 AS "durationSeconds"
-        FROM next_ep ne WHERE ne."episodeId" IS NOT NULL
-        UNION ALL
+        -- In-progress takes priority; next-ep only for series with no in-progress episode
         SELECT ip."mediaId", ip."episodeId", ip."mediaFileId", ip."positionSeconds", ip."durationSeconds"
         FROM in_progress ip
+        UNION ALL
+        SELECT ne."mediaId", ne."episodeId", NULL::int AS "mediaFileId", 0.0 AS "positionSeconds", 0.0 AS "durationSeconds"
+        FROM next_ep ne WHERE ne."episodeId" IS NOT NULL
       )
       SELECT
         COALESCE(ps_next.id, 0) AS id,
@@ -369,14 +372,14 @@ export class PlaybackService {
     return this.repo.save(state);
   }
 
-  /** Mark all playback states for a media as completed (hides from continue watching). */
+  /** Hide a media from "continue watching" without altering completed/position state. */
   async hideFromContinueWatching(
     userId: number,
     mediaId: number,
   ): Promise<void> {
     await this.repo.update(
       { userId, mediaId },
-      { completed: true, positionSeconds: 0 },
+      { hiddenFromContinueWatching: true },
     );
   }
 }

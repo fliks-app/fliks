@@ -164,6 +164,12 @@ export const routes: Routes = [
         data: { titleKey: 'history.title' },
       },
       {
+        path: 'account',
+        loadComponent: () =>
+          import('./features/account/account').then((m) => m.AccountComponent),
+        data: { titleKey: 'account.title' },
+      },
+      {
         path: 'playback-settings',
         loadComponent: () =>
           import('./features/playback-settings/playback-settings').then(
@@ -235,6 +241,7 @@ export const routes: Routes = [
           { path: 'delay-profiles', loadComponent: () => import('./features/settings/delay-profiles/delay-profiles').then((m) => m.DelayProfilesComponent) },
           { path: 'schedulers', loadComponent: () => import('./features/settings/schedulers/schedulers').then((m) => m.SchedulersComponent) },
           { path: 'auto-approval', loadComponent: () => import('./features/settings/auto-approval/auto-approval').then((m) => m.AutoApprovalSettingsComponent) },
+          { path: 'network', loadComponent: () => import('./features/settings/network/network').then((m) => m.NetworkSettingsComponent) },
         ],
       },
     ],

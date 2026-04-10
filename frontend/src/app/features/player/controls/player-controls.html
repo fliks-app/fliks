@@ -58,7 +58,7 @@
 <!-- ===== CENTER OVERLAY (tap zone) ===== -->
 <div
   class="absolute inset-0 z-30 flex items-center justify-center"
-  (click)="isNative() ? tapOverlay.emit() : togglePlay.emit()"
+  (click)="isNative() ? tapOverlay.emit() : hasOpenDropdown() ? null : togglePlay.emit()"
   (dblclick)="isNative() ? null : toggleFullscreen.emit()"
 >
   <!-- Mobile: big center controls (rewind / play / forward) -->
@@ -230,7 +230,7 @@
       <!-- Right: action buttons -->
       <div class="flex items-center gap-1.5">
         <!-- Subtitles dropdown -->
-        <div class="dropdown dropdown-top dropdown-end">
+        <div class="dropdown dropdown-top dropdown-end" (focusin)="onDropdownFocus()" (focusout)="onDropdownBlur()">
           <button tabindex="0" type="button" class="btn btn-ghost btn-md btn-circle text-white/80">
             <svg lucideCaptions class="h-6 w-6"></svg>
           </button>
@@ -252,7 +252,7 @@
         </div>
         <!-- Audio track dropdown (desktop) -->
         @if (availableAudioTracks().length > 1) {
-          <div class="dropdown dropdown-top dropdown-end">
+          <div class="dropdown dropdown-top dropdown-end" (focusin)="onDropdownFocus()" (focusout)="onDropdownBlur()">
             <button tabindex="0" type="button" class="btn btn-ghost btn-md btn-circle text-white/80">
               <svg lucideHeadphones class="h-6 w-6"></svg>
             </button>
@@ -269,7 +269,7 @@
           </div>
         }
         <!-- Speed dropdown -->
-        <div class="dropdown dropdown-top dropdown-end">
+        <div class="dropdown dropdown-top dropdown-end" (focusin)="onDropdownFocus()" (focusout)="onDropdownBlur()">
           <button tabindex="0" type="button" class="btn btn-ghost btn-md text-white/80">{{ playbackRate() }}x</button>
           <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-48 max-h-[75vh] overflow-y-auto mb-2">
             <div class="text-center text-white/70 text-sm font-medium mb-3">Vitesse</div>
@@ -282,7 +282,7 @@
           </div>
         </div>
         <!-- Settings dropdown -->
-        <div class="dropdown dropdown-top dropdown-end">
+        <div class="dropdown dropdown-top dropdown-end" (focusin)="onDropdownFocus()" (focusout)="onDropdownBlur()">
           <button tabindex="0" type="button" class="btn btn-ghost btn-md btn-circle text-white/80" (click)="openSettings()">
             <svg lucideSettings class="h-6 w-6"></svg>
           </button>
@@ -361,6 +361,11 @@
         <span class="flex-1 text-left">Statistiques pour les nerds</span>
         @if (statsVisible()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
       </button>
+      <div class="divider my-1 before:bg-white/10 after:bg-white/10"></div>
+      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="openMedia.emit(); closeSheet()">
+        <svg lucideExternalLink class="h-5 w-5 text-white/40 shrink-0"></svg>
+        <span class="flex-1 text-left">Ouvrir le média</span>
+      </button>
     } @else if (settingsPanel() === 'quality') {
       <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10 mb-1" (click)="settingsPanel.set('main')">
         <svg lucideArrowLeft class="h-4 w-4 text-white/50 shrink-0"></svg>
@@ -398,6 +403,12 @@
         <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="toggleStats.emit(); closeDropdown($event)">
           <span class="flex-1 text-left">Statistiques pour les nerds</span>
           @if (statsVisible()) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+        </button>
+        <div class="divider my-1 before:bg-white/10 after:bg-white/10"></div>
+        <!-- Open media page -->
+        <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="openMedia.emit(); closeDropdown($event)">
+          <svg lucideExternalLink class="h-4 w-4 text-white/40 shrink-0"></svg>
+          <span class="flex-1 text-left">Ouvrir le média</span>
         </button>
       </div>
     } @else if (settingsPanel() === 'quality') {

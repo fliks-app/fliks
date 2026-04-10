@@ -219,6 +219,7 @@ export class DownloadsComponent implements OnInit, OnDestroy {
       queryParams: {
         mediaId: task.mediaId,
         ...(task.episodeId ? { episodeId: task.episodeId } : {}),
+        offline: '1',
       },
     });
   }

@@ -1,18 +1,41 @@
 import { Injectable, signal } from '@angular/core';
 
 export interface PlayerSettings {
-  preferredAudioLanguage: string; // ISO 639-2/B: 'fra', 'eng', 'jpn', '' = none
+  // Audio
+  preferredAudioLanguage: string;
   useDefaultAudioStream: boolean;
   rememberAudioSelections: boolean;
+  // Subtitles
+  preferredSubtitleLanguage: string;
+  subtitleMode: 'off' | 'intelligent' | 'always';
+  rememberSubtitleSelections: boolean;
+  // Subtitle appearance
+  subtitleSize: string;
+  subtitleColor: string;
+  subtitleShadow: string;
+  subtitleBackground: string;
+  // Subtitle position
+  subtitleBottomMargin: number;
+  subtitleTopMargin: number;
 }
 
 const SETTINGS_KEY = 'player.settings';
-const SELECTIONS_KEY = 'player.audioSelections';
+const AUDIO_SELECTIONS_KEY = 'player.audioSelections';
+const SUB_SELECTIONS_KEY = 'player.subtitleSelections';
 
 const DEFAULTS: PlayerSettings = {
   preferredAudioLanguage: '',
   useDefaultAudioStream: false,
-  rememberAudioSelections: false,
+  rememberAudioSelections: true,
+  preferredSubtitleLanguage: '',
+  subtitleMode: 'intelligent',
+  rememberSubtitleSelections: true,
+  subtitleSize: 'normal',
+  subtitleColor: 'white',
+  subtitleShadow: 'drop',
+  subtitleBackground: 'transparent',
+  subtitleBottomMargin: 10,
+  subtitleTopMargin: 5,
 };
 
 /** Map ISO 639-1 (2-letter) to ISO 639-2/B (3-letter) for language matching. */
@@ -28,6 +51,29 @@ export function normalizeLang(code: string | undefined): string {
   const lower = code.toLowerCase();
   return ISO_MAP[lower] ?? lower;
 }
+
+// ── Subtitle appearance maps ──
+
+export const SUBTITLE_SIZE_MAP: Record<string, string> = {
+  small: '0.7em', normal: '0.9em', large: '1.2em', xlarge: '1.5em',
+};
+
+export const SUBTITLE_COLOR_MAP: Record<string, string> = {
+  white: '#ffffff', yellow: '#ffff00', green: '#00ff00', cyan: '#00ffff',
+};
+
+export const SUBTITLE_SHADOW_MAP: Record<string, string> = {
+  none: 'none',
+  drop: '0 2px 4px rgba(0,0,0,0.9)',
+  outline: '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000',
+  raised: '0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7), 1px 1px 2px rgba(0,0,0,0.8)',
+};
+
+export const SUBTITLE_BG_MAP: Record<string, string> = {
+  transparent: 'transparent',
+  semi: 'rgba(0,0,0,0.5)',
+  black: 'rgba(0,0,0,0.9)',
+};
 
 @Injectable({ providedIn: 'root' })
 export class PlayerSettingsService {
@@ -50,23 +96,64 @@ export class PlayerSettingsService {
     return this.settings();
   }
 
+  // ── Audio track memory ──
+
   getRememberedAudioTrack(mediaFileId: number): string | null {
+    return this.getFromMap(AUDIO_SELECTIONS_KEY, mediaFileId);
+  }
+
+  saveRememberedAudioTrack(mediaFileId: number, trackId: string) {
+    this.saveToMap(AUDIO_SELECTIONS_KEY, mediaFileId, trackId);
+  }
+
+  // ── Subtitle track memory ──
+
+  getRememberedSubtitleTrack(mediaFileId: number): string | null {
+    return this.getFromMap(SUB_SELECTIONS_KEY, mediaFileId);
+  }
+
+  saveRememberedSubtitleTrack(mediaFileId: number, trackId: string | null) {
+    if (trackId == null) {
+      this.removeFromMap(SUB_SELECTIONS_KEY, mediaFileId);
+    } else {
+      this.saveToMap(SUB_SELECTIONS_KEY, mediaFileId, trackId);
+    }
+  }
+
+  clearRememberedSubtitleTracks() {
+    localStorage.removeItem(SUB_SELECTIONS_KEY);
+  }
+
+  // ── Helpers ──
+
+  private getFromMap(key: string, id: number): string | null {
     try {
-      const raw = localStorage.getItem(SELECTIONS_KEY);
+      const raw = localStorage.getItem(key);
       if (raw) {
         const map: Record<string, string> = JSON.parse(raw);
-        return map[String(mediaFileId)] ?? null;
+        return map[String(id)] ?? null;
       }
     } catch { /* ignore */ }
     return null;
   }
 
-  saveRememberedAudioTrack(mediaFileId: number, trackId: string) {
+  private saveToMap(key: string, id: number, value: string) {
     try {
-      const raw = localStorage.getItem(SELECTIONS_KEY);
+      const raw = localStorage.getItem(key);
       const map: Record<string, string> = raw ? JSON.parse(raw) : {};
-      map[String(mediaFileId)] = trackId;
-      localStorage.setItem(SELECTIONS_KEY, JSON.stringify(map));
+      map[String(id)] = value;
+      localStorage.setItem(key, JSON.stringify(map));
+    } catch { /* ignore */ }
+  }
+
+  private removeFromMap(key: string, id: number) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const map: Record<string, string> = JSON.parse(raw);
+        delete map[String(id)];
+        localStorage.setItem(key, JSON.stringify(map));
+      }
     } catch { /* ignore */ }
   }
 }

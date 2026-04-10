@@ -23,8 +23,12 @@ export class SettingsApiService {
     return firstValueFrom(this.http.put<AppSetting>(`/api/settings/${key}`, { value }));
   }
 
-  setBulk(settings: Record<string, string>) {
+  setBulk(settings: Record<string, string | null>) {
     return firstValueFrom(this.http.put<{ ok: boolean }>('/api/settings', { data: settings }));
+  }
+
+  getMyIp() {
+    return firstValueFrom(this.http.get<{ ip: string; ipv6?: string }>('/api/settings/my-ip'));
   }
 
   delete(key: string) {

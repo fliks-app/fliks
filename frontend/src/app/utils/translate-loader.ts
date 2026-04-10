@@ -13,7 +13,7 @@ export function translateBrowserLoaderFactory(
   const http = new HttpClient(backend);
   return {
     getTranslation(lang: string): Observable<TranslationObject> {
-      return http.get<TranslationObject>(`/i18n/${lang}.json`);
+      return http.get<TranslationObject>(`/i18n/${lang}.json?v=${Date.now()}`);
     },
   };
 }

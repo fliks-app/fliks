@@ -27,7 +27,10 @@ import { DownloadCacheService } from '../../core/services/download-cache.service
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { parseAudioIndex, SpriteMetadata } from '../../core/utils/player.utils';
-import { PlayerSettingsService, normalizeLang } from '../../core/services/player-settings.service';
+import {
+  PlayerSettingsService, normalizeLang,
+  SUBTITLE_SIZE_MAP, SUBTITLE_COLOR_MAP, SUBTITLE_SHADOW_MAP, SUBTITLE_BG_MAP,
+} from '../../core/services/player-settings.service';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 interface ImmersivePlugin {
@@ -80,14 +83,8 @@ const ABR_MIN_HEIGHT_PREFERENCE = 720;
   imports: [TranslateModule, LucideCircleAlert, PlayerControlsComponent, PlayerStatsOverlayComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player.html',
+  encapsulation: ViewEncapsulation.None,
   styles: [`
-    video::cue {
-      font-size: 0.9em;
-      background: transparent !important;
-      background-color: transparent !important;
-      text-shadow: 0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7), 1px 1px 2px rgba(0,0,0,0.8);
-      line-height: 1.4;
-    }
     .player-container {
       position: fixed;
       inset: 0;
@@ -104,7 +101,6 @@ const ABR_MIN_HEIGHT_PREFERENCE = 720;
       object-fit: contain;
     }
   `],
-  encapsulation: ViewEncapsulation.None,
 })
 export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
@@ -130,6 +126,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private saveInterval: ReturnType<typeof setInterval> | null = null;
   private controlsTimeout: ReturnType<typeof setTimeout> | null = null;
   private statsInterval: ReturnType<typeof setInterval> | null = null;
+
+  private subtitleStyleEl: HTMLStyleElement | null = null;
 
   // State
   readonly loading = signal(true);
@@ -469,8 +467,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     });
 
     try {
-      // Check for offline file early to set flag before any API calls
-      const offlineCheck = await this.offlineStorage.getLocalUrl(`download-${this.mediaFileId}`).catch(() => null);
+      // Only use offline playback if explicitly requested via query param (e.g. from downloads page)
+      const offlineCheck = qp['offline'] === '1'
+        ? await this.offlineStorage.getLocalUrl(`download-${this.mediaFileId}`).catch(() => null)
+        : null;
       if (offlineCheck) this.isOfflinePlayback = true;
 
       // Load media info (skip if offline)
@@ -522,26 +522,38 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (this.isOfflinePlayback) {
         // Offline: load via Shaka for subtitle track support (addTextTrackAsync)
         console.log('[Player] Playing offline file via Shaka');
-        console.log('[Player] Offline URL type:', offlineCheck!.substring(0, 30));
         this.playbackMode.set('direct');
-        await this.player.load(offlineCheck!, undefined, 'video/mp4');
-        const seekRange = this.player.seekRange();
-        console.log('[Player] Seek range after load:', seekRange);
-        console.log('[Player] Buffered ranges:', video.buffered.length, video.buffered.length > 0 ? `${video.buffered.start(0)}-${video.buffered.end(0)}` : 'none');
-        console.log('[Player] Duration:', video.duration, 'Seekable:', video.seekable.length > 0 ? `${video.seekable.start(0)}-${video.seekable.end(0)}` : 'none');
+
+        // Determine resume position for offline playback
+        let offlineStartTime: number | undefined = resumeTime ?? undefined;
+        if (offlineStartTime == null) {
+          try {
+            const state = await this.streamingApi.getPlaybackState(this.mediaFileId);
+            if (state && !state.completed && state.positionSeconds > 10) {
+              offlineStartTime = state.positionSeconds;
+            }
+          } catch { /* offline — state may not be available */ }
+        }
+
+        await this.player.load(offlineCheck!, offlineStartTime, 'video/mp4');
       } else {
         // ── Pre-compute all preferences BEFORE starting any backend stream ──
 
         // 1. Determine resume position
         let startTime: number | undefined = resumeTime ?? undefined;
+        console.log('[Player] resumeTime from URL:', resumeTime);
         if (startTime == null) {
           try {
             const state = await this.streamingApi.getPlaybackState(this.mediaFileId);
+            console.log('[Player] PlaybackState from API:', state);
             if (state && !state.completed && state.positionSeconds > 10) {
               startTime = state.positionSeconds;
             }
-          } catch { /* no saved state */ }
+          } catch (err) {
+            console.warn('[Player] getPlaybackState failed:', err);
+          }
         }
+        console.log('[Player] Final startTime:', startTime);
 
         // 2. Determine preferred audio stream index from settings + streamInfo
         const audioSettings = this.playerSettings.get();
@@ -624,14 +636,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           await this.player.load(hlsUrl);
         }
 
-        // Resume position — wait for first data before seeking
-        if (startTime) {
-          if (video.readyState >= 1) {
-            video.currentTime = startTime;
+        // Resume position — wait until Shaka has buffered enough to accept a seek
+        if (startTime != null && startTime > 0) {
+          const doSeek = () => {
+            console.log('[Player] Seeking to resume position:', startTime);
+            video.currentTime = startTime!;
+          };
+          if (video.readyState >= 2) {
+            doSeek();
           } else {
-            video.addEventListener('loadedmetadata', () => {
-              video.currentTime = startTime!;
-            }, { once: true });
+            video.addEventListener('canplay', doSeek, { once: true });
           }
         }
       }
@@ -645,13 +659,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         await this.loadSubtitles();
         this.loadAudioTracks();
       }
-      const savedLang = localStorage.getItem('player.subtitleLang');
-      if (savedLang) {
-        const savedForced = localStorage.getItem('player.subtitleForced') === '1';
-        const match = this.availableSubtitles().find(s => s.language === savedLang && !!s.forced === savedForced)
-          ?? this.availableSubtitles().find(s => s.language === savedLang);
-        if (match) await this.selectSubtitle(match);
-      }
+      await this.autoSelectSubtitle();
 
       // If Cast is already connected (user connected from navbar), send to Cast
       if (this.castService.isConnected()) {
@@ -671,7 +679,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.saveInterval = setInterval(() => this.savePosition(), 10_000);
       video.addEventListener('seeked', () => this.savePosition());
 
-      // Load thumbnail sprite metadata (non-blocking)
+      // Apply subtitle appearance + load thumbnail sprite metadata (non-blocking)
+      this.applySubtitleStyle();
       this.loadSpriteMetadata();
       video.addEventListener('playing', () => this.videoStarted.set(true), { once: true });
 
@@ -716,6 +725,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.stopStreamingSessions();
     }
     this.player?.destroy();
+    this.removeSubtitleStyle();
     if (this.saveInterval) clearInterval(this.saveInterval);
     if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
     if (this.statsInterval) clearInterval(this.statsInterval);
@@ -912,6 +922,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   onBack() {
     this.savePosition();
     window.history.back();
+  }
+
+  onOpenMedia() {
+    this.savePosition();
+    const kind = this.media?.type === 'series' ? 'series' : 'movies';
+    if (this.episodeId && kind === 'series') {
+      this.router.navigate(['/series', this.mediaId, 'episode', this.episodeId]);
+    } else {
+      this.router.navigate(['/' + kind, this.mediaId]);
+    }
   }
 
   // Subtitles
@@ -1152,6 +1172,69 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.activeSubtitleId.set(sub.id);
     this.subtitlePickerOpen.set(false);
     localStorage.setItem('player.subtitleLang', sub.language);
+
+    // Remember selection if enabled
+    if (this.playerSettings.get().rememberSubtitleSelections) {
+      this.playerSettings.saveRememberedSubtitleTrack(this.mediaFileId, sub.id);
+    }
+  }
+
+  /** Auto-select subtitle based on user preferences (mode: off/intelligent/always).
+   *  Burn-in subtitles are excluded to avoid triggering a stream reload during init. */
+  private async autoSelectSubtitle() {
+    const settings = this.playerSettings.get();
+    // Exclude burn-in subs (PGS, DVD, etc.) — selecting them calls reloadStream() to bake
+    // the subtitle into the video server-side, which kills the active transcode session.
+    // During init the transcode just started (possibly with a seek), so reloading would
+    // spawn a 3rd ffmpeg process and cause Shaka error 1003. Users can still pick burn-in
+    // subs manually from the subtitle menu.
+    const subs = this.availableSubtitles().filter((s) => !s.burnIn);
+    if (!subs.length && !this.availableSubtitles().length) return;
+
+    // Priority 1: remembered selection (only non-burn-in)
+    if (settings.rememberSubtitleSelections) {
+      const savedId = this.playerSettings.getRememberedSubtitleTrack(this.mediaFileId);
+      if (savedId) {
+        const match = subs.find((s) => s.id === savedId);
+        if (match) { await this.selectSubtitle(match); return; }
+      }
+    }
+
+    if (settings.subtitleMode === 'off') return;
+
+    const prefLang = settings.preferredSubtitleLanguage;
+    if (!prefLang) {
+      // Fallback: try old localStorage key for migration
+      const oldLang = localStorage.getItem('player.subtitleLang');
+      if (oldLang) {
+        const match = subs.find((s) => s.language === oldLang);
+        if (match) await this.selectSubtitle(match);
+      }
+      return;
+    }
+
+    const findMatch = () =>
+      subs.find((s) => s.language === prefLang && !s.forced)
+      ?? subs.find((s) => s.language === prefLang);
+
+    if (settings.subtitleMode === 'always') {
+      const match = findMatch();
+      if (match) await this.selectSubtitle(match);
+      return;
+    }
+
+    // Intelligent mode: show subtitles only when audio language differs from preferred
+    if (settings.subtitleMode === 'intelligent') {
+      const audioTracks = this.availableAudioTracks();
+      const activeAudioId = this.activeAudioTrackId();
+      const activeAudio = audioTracks.find((t) => t.id === activeAudioId);
+      const audioLang = activeAudio?.language ?? 'und';
+
+      if (audioLang !== prefLang && audioLang !== 'und') {
+        const match = findMatch();
+        if (match) await this.selectSubtitle(match);
+      }
+    }
   }
 
   // Keyboard handler
@@ -1508,6 +1591,38 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private getStreamInfo() {
     const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
     return file?.streamInfo as any;
+  }
+
+  /** Inject dynamic video::cue CSS based on subtitle appearance settings. */
+  private applySubtitleStyle() {
+    const s = this.playerSettings.get();
+    const fontSize = SUBTITLE_SIZE_MAP[s.subtitleSize] ?? '0.9em';
+    const color = SUBTITLE_COLOR_MAP[s.subtitleColor] ?? '#ffffff';
+    const shadow = SUBTITLE_SHADOW_MAP[s.subtitleShadow] ?? 'none';
+    const bg = SUBTITLE_BG_MAP[s.subtitleBackground] ?? 'transparent';
+
+    const css = `video::cue {
+  font-size: ${fontSize} !important;
+  color: ${color} !important;
+  background: ${bg} !important;
+  background-color: ${bg} !important;
+  text-shadow: ${shadow};
+  line-height: 1.4;
+}`;
+
+    if (!this.subtitleStyleEl) {
+      this.subtitleStyleEl = document.createElement('style');
+      document.head.appendChild(this.subtitleStyleEl);
+    }
+    this.subtitleStyleEl.textContent = css;
+  }
+
+  /** Remove injected subtitle style on destroy. */
+  private removeSubtitleStyle() {
+    if (this.subtitleStyleEl) {
+      this.subtitleStyleEl.remove();
+      this.subtitleStyleEl = null;
+    }
   }
 
   private async loadSpriteMetadata(): Promise<void> {

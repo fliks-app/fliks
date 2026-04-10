@@ -43,6 +43,9 @@ export class PlaybackState extends BaseEntity {
   @Column({ default: false })
   completed: boolean;
 
+  @Column({ default: false })
+  hiddenFromContinueWatching: boolean;
+
   @Column({ type: 'timestamptz', default: () => 'NOW()' })
   lastPlayedAt: Date;
 }
