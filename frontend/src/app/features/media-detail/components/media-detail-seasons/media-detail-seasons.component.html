@@ -50,10 +50,10 @@
             [subtitle]="ep.airDate ?? '—'"
             [topLeftBadge]="'' + ep.episodeNumber"
             [status]="watchedEpisodeIds().has(ep.id) ? 'watched' : (!ep.hasFile ? 'missing' : null)"
-            [link]="['/series', '' + m.id]"
-            [subtitleLink]="episodeRoute(ep)"
+            [link]="episodeRoute(ep)"
+            [playable]="ep.hasFile"
             [dimmed]="!ep.monitored"
-            (clicked)="null"
+            (played)="playEpisode(ep)"
           />
         }
       </app-horizontal-scroller>

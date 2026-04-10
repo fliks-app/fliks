@@ -105,29 +105,11 @@
                 (click)="$event.stopPropagation()"
                 (change)="toggleSelect(movie.id)"
               />
-              <app-media-card
-                [imageUrl]="movie.posterUrl"
-                [title]="movie.title"
-                [subtitle]="(movie.monitored ? ('media_card.monitored' | translate) : ('media_card.unmonitored' | translate)) + (movie.qualityProfile ? ' — ' + movie.qualityProfile.name : '')"
-                [rating]="movie.rating"
-                [link]="['/movies', '' + movie.id]"
-                [playable]="!!(movie.files?.length)"
-                [barStatus]="computeBarStatus(movie)"
-                [barPercent]="computeBarPercent(movie)"
-              />
+              <app-media-card [media]="movie" [showMonitoredLabel]="true" />
             </div>
           } @else {
             <div class="" [id]="'movie-' + movie.id">
-              <app-media-card
-                [imageUrl]="movie.posterUrl"
-                [title]="movie.title"
-                [subtitle]="(movie.monitored ? ('media_card.monitored' | translate) : ('media_card.unmonitored' | translate)) + (movie.qualityProfile ? ' — ' + movie.qualityProfile.name : '')"
-                [rating]="movie.rating"
-                [link]="['/movies', '' + movie.id]"
-                [playable]="!!(movie.files?.length)"
-                [barStatus]="computeBarStatus(movie)"
-                [barPercent]="computeBarPercent(movie)"
-              />
+              <app-media-card [media]="movie" [showMonitoredLabel]="true" />
             </div>
           }
         }

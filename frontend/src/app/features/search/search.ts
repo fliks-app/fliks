@@ -20,8 +20,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { RequestsService, FliksRequestStatus } from '../../core/services/api/requests.service';
 import { SearchStateService } from '../../core/services/search-state.service';
 import { MediaType } from '../../core/enums/media-type.enum';
-import { MediaCardComponent, CardBadge } from '../../shared/components/media-card';
-import { computeMediaBarStatus, computeMediaBarPercent } from '../../shared/utils/media-status.util';
+import { MediaCardComponent, CardBadge } from '../../shared/components/media-card/media-card';
 import { LucideSearch, LucideX, LucideSettings } from '@lucide/angular';
 
 @Component({
@@ -146,9 +145,6 @@ export class SearchComponent implements AfterViewInit, OnDestroy {
       this.state.externalLoading.set(false);
     }
   }
-
-  readonly computeBarStatus = computeMediaBarStatus;
-  readonly computeBarPercent = computeMediaBarPercent;
 
   cardStatus(row: MetadataSearchResult): CardBadge {
     if (row.existingMediaId) return 'library';

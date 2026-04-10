@@ -42,12 +42,8 @@
         @for (m of recentMovies(); track m.id) {
           <app-media-card
             class="shrink-0 w-28 sm:w-36"
-            [imageUrl]="m.posterUrl"
-            [title]="m.title"
+            [media]="m"
             [subtitle]="'' + (m.year ?? '')"
-            [rating]="m.rating"
-            [link]="['/movies', '' + m.id]"
-            [playable]="!!(m.files?.length)"
           />
         }
       </app-horizontal-scroller>
@@ -59,11 +55,8 @@
         @for (s of recentSeries(); track s.id) {
           <app-media-card
             class="shrink-0 w-28 sm:w-36"
-            [imageUrl]="s.posterUrl"
-            [title]="s.title"
+            [media]="s"
             [subtitle]="'' + (s.year ?? '')"
-            [rating]="s.rating"
-            [link]="['/series', '' + s.id]"
           />
         }
       </app-horizontal-scroller>

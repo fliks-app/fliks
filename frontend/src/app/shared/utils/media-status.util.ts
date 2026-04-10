@@ -1,5 +1,5 @@
 import { Media } from '../../core/services/api/media.service';
-import { BarStatus } from '../components/media-card';
+import { BarStatus } from '../components/media-card/media-card';
 
 /** Compute the status bar state for a media item. */
 export function computeMediaBarStatus(m: Media): BarStatus {

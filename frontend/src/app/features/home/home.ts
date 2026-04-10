@@ -7,7 +7,7 @@ import { StreamingApiService, ContinueWatchingItem } from '../../core/services/a
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
-import { MediaCardComponent } from '../../shared/components/media-card';
+import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 
 @Component({

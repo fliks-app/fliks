@@ -1,6 +1,6 @@
 import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
-import { MediaCardComponent } from '../../shared/components/media-card';
+import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { PersonDetailComponent } from './person-detail';
 
 @Component({

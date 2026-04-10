@@ -2,14 +2,15 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  inject,
   input,
   output,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { LucideCircleCheck, LucideCircleX } from '@lucide/angular';
 import { HorizontalScrollerComponent } from '../../../../shared/components/horizontal-scroller';
-import { MediaCardComponent } from '../../../../shared/components/media-card';
+import { MediaCardComponent } from '../../../../shared/components/media-card/media-card';
 import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
 import {
   Episode,
@@ -31,6 +32,7 @@ import {
   templateUrl: './media-detail-seasons.component.html',
 })
 export class MediaDetailSeasonsComponent {
+  private readonly router = inject(Router);
   readonly media = input.required<Media>();
   readonly selectedSeason = input<Season | null>(null);
   readonly activeSeasonId = input.required<number | null>();
@@ -75,5 +77,15 @@ export class MediaDetailSeasonsComponent {
 
   episodeRoute(ep: Episode): string[] {
     return ['/series', String(this.media().id), 'episode', String(ep.id)];
+  }
+
+  playEpisode(ep: Episode) {
+    const files = this.trackedFilesForEpisode(ep.id);
+    if (files.length) {
+      const m = this.media();
+      void this.router.navigate(['/watch', files[0].id], {
+        queryParams: { mediaId: m.id, episodeId: ep.id },
+      });
+    }
   }
 }
