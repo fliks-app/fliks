@@ -1,4 +1,5 @@
 import { Injectable, signal } from '@angular/core';
+import { parseAudioIndex } from '../utils/player.utils';
 
 export interface PlayerSettings {
   // Audio
@@ -94,6 +95,37 @@ export class PlayerSettingsService {
 
   get(): PlayerSettings {
     return this.settings();
+  }
+
+  /**
+   * Resolve the preferred audio stream index for a media file.
+   * Used by both the local player and Cast to ensure consistent audio selection.
+   */
+  resolveAudioStreamIndex(
+    mediaFileId: number,
+    audioStreams: { language?: string }[],
+  ): number | undefined {
+    const s = this.get();
+    if (s.useDefaultAudioStream) return undefined;
+
+    // Priority 1: remembered selection for this file
+    if (s.rememberAudioSelections) {
+      const saved = this.getRememberedAudioTrack(mediaFileId);
+      if (saved != null) return parseAudioIndex(saved);
+    }
+
+    // Priority 2: preferred language
+    if (s.preferredAudioLanguage) {
+      const idx = audioStreams.findIndex(
+        (a) => normalizeLang(a.language) === s.preferredAudioLanguage,
+      );
+      if (idx >= 0) return idx;
+    }
+
+    // Priority 3: default to first stream for multi-audio files
+    if (audioStreams.length > 1) return 0;
+
+    return undefined;
   }
 
   // ── Audio track memory ──

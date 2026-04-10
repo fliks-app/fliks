@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { MediaFile } from '../media/entities/media-file.entity';
 import { PlaybackState } from './entities/playback-state.entity';
 
 export interface WatchHistoryItem {
@@ -50,6 +51,8 @@ export class PlaybackService {
   constructor(
     @InjectRepository(PlaybackState)
     private readonly repo: Repository<PlaybackState>,
+    @InjectRepository(MediaFile)
+    private readonly mediaFileRepo: Repository<MediaFile>,
   ) {}
 
   async getState(
@@ -355,16 +358,24 @@ export class PlaybackService {
     let state = await this.repo.findOne({ where: { userId, mediaFileId } });
     if (state) {
       state.completed = !state.completed;
-      if (state.completed) state.positionSeconds = 0;
+      if (state.completed) {
+        if (!state.durationSeconds) {
+          const file = await this.mediaFileRepo.findOne({ where: { id: mediaFileId } });
+          state.durationSeconds = file?.streamInfo?.durationSeconds ?? 0;
+        }
+        state.positionSeconds = 0;
+      }
       state.lastPlayedAt = new Date();
     } else {
+      const file = await this.mediaFileRepo.findOne({ where: { id: mediaFileId } });
+      const duration = file?.streamInfo?.durationSeconds ?? 0;
       state = this.repo.create({
         userId,
         mediaFileId,
         mediaId,
         episodeId,
         positionSeconds: 0,
-        durationSeconds: 0,
+        durationSeconds: duration,
         completed: true,
         lastPlayedAt: new Date(),
       });

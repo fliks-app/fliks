@@ -163,19 +163,51 @@ export const routes: Routes = [
           ),
         data: { titleKey: 'history.title' },
       },
+    ],
+  },
+  // Account settings — own layout with sidebar
+  {
+    path: 'account',
+    loadComponent: () =>
+      import('./features/account/account-shell').then((m) => m.AccountShellComponent),
+    canActivate: [serverConfigGuard, authGuard],
+    children: [
+      { path: '', pathMatch: 'full', redirectTo: 'password' },
       {
-        path: 'account',
+        path: 'password',
         loadComponent: () =>
           import('./features/account/account').then((m) => m.AccountComponent),
-        data: { titleKey: 'account.title' },
+      },
+    ],
+  },
+  // App settings — own layout with sidebar
+  {
+    path: 'app-settings',
+    loadComponent: () =>
+      import('./features/app-settings/app-settings-shell').then((m) => m.AppSettingsShellComponent),
+    canActivate: [serverConfigGuard, authGuard],
+    children: [
+      { path: '', pathMatch: 'full', redirectTo: 'player' },
+      {
+        path: 'player',
+        loadComponent: () =>
+          import('./features/playback-settings/player-settings').then(
+            (m) => m.PlayerSettingsPageComponent,
+          ),
       },
       {
-        path: 'playback-settings',
+        path: 'subtitles',
         loadComponent: () =>
-          import('./features/playback-settings/playback-settings').then(
-            (m) => m.PlaybackSettingsComponent,
+          import('./features/playback-settings/subtitle-settings').then(
+            (m) => m.SubtitleSettingsPageComponent,
           ),
-        data: { titleKey: 'playback_settings.title' },
+      },
+      {
+        path: 'cast',
+        loadComponent: () =>
+          import('./features/playback-settings/cast-settings').then(
+            (m) => m.CastSettingsPageComponent,
+          ),
       },
     ],
   },

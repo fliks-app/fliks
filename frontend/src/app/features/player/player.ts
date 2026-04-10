@@ -556,26 +556,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         console.log('[Player] Final startTime:', startTime);
 
         // 2. Determine preferred audio stream index from settings + streamInfo
-        const audioSettings = this.playerSettings.get();
-        let preselectedAudioIndex: number | undefined;
-        if (!audioSettings.useDefaultAudioStream) {
-          const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
-          const si = file?.streamInfo as any;
-          const audioStreams: any[] = si?.audio ?? [];
-
-          if (audioSettings.rememberAudioSelections) {
-            const saved = this.playerSettings.getRememberedAudioTrack(this.mediaFileId);
-            if (saved != null) {
-              preselectedAudioIndex = parseAudioIndex(saved);
-            }
-          }
-          if (preselectedAudioIndex == null && audioSettings.preferredAudioLanguage) {
-            const idx = audioStreams.findIndex(
-              (a: any) => normalizeLang(a.language) === audioSettings.preferredAudioLanguage,
-            );
-            if (idx >= 0) preselectedAudioIndex = idx;
-          }
-        }
+        const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
+        const audioStreams: { language?: string }[] = (file?.streamInfo as any)?.audio ?? [];
+        const preselectedAudioIndex = this.playerSettings.resolveAudioStreamIndex(
+          this.mediaFileId, audioStreams,
+        );
         this.activeAudioStreamIndex = preselectedAudioIndex;
 
         // 3. Ask the backend to decide how to play — pass audio index upfront

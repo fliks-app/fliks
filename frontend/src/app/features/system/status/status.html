@@ -65,11 +65,27 @@
   <div class="card-body gap-4">
     <h2 class="card-title text-base">{{ 'system.commands_title' | translate }}</h2>
     <div class="flex flex-wrap gap-2">
-      @for (cmd of availableCommands; track cmd.name) {
-        <button type="button" class="btn btn-outline btn-sm" (click)="trigger(cmd.name)" [disabled]="triggering() !== null">
-          @if (triggering() === cmd.name) { <span class="loading loading-spinner loading-xs"></span> }
-          {{ cmd.label | translate }}
-        </button>
+      @for (item of commandItems; track $index) {
+        @if (item.type === 'single') {
+          <button type="button" class="btn btn-outline btn-sm" (click)="trigger(item.name)" [disabled]="triggering() !== null">
+            @if (triggering() === item.name) { <span class="loading loading-spinner loading-xs"></span> }
+            {{ item.label | translate }}
+          </button>
+        } @else {
+          <div class="dropdown dropdown-bottom">
+            <div tabindex="0" role="button" class="btn btn-outline btn-sm">{{ item.label | translate }} ▾</div>
+            <ul tabindex="0" class="dropdown-content z-10 menu p-1 shadow-lg bg-base-200 rounded-lg min-w-48 mt-1">
+              @for (sub of item.items; track sub.name) {
+                <li>
+                  <button type="button" (click)="trigger(sub.name)" [disabled]="triggering() !== null" class="text-sm">
+                    @if (triggering() === sub.name) { <span class="loading loading-spinner loading-xs"></span> }
+                    {{ sub.label | translate }}
+                  </button>
+                </li>
+              }
+            </ul>
+          </div>
+        }
       }
     </div>
   </div>

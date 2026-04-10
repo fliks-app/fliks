@@ -6,6 +6,7 @@ import { SubtitlesApiService } from './api/subtitles-api.service';
 import { AuthService } from './auth.service';
 import { BrowserDeviceProfileService, DeviceProfile } from './browser-device-profile.service';
 import { ServerConfigService } from './server-config.service';
+import { PlayerSettingsService } from './player-settings.service';
 
 export interface CastSubtitleOption {
   id: string;
@@ -49,6 +50,7 @@ export class CastPlayerService {
   private readonly authService = inject(AuthService);
   private readonly deviceProfile = inject(BrowserDeviceProfileService);
   private readonly serverConfig = inject(ServerConfigService);
+  private readonly playerSettings = inject(PlayerSettingsService);
 
   /** Chromecast device profile — only H264 + AAC, forces transcode for incompatible codecs. */
   /** Chromecast profile — force full transcode to guarantee H264+AAC HLS output. */
@@ -275,8 +277,14 @@ export class CastPlayerService {
   }) {
     const castProfile = this.getCastDeviceProfile();
 
+    // Resolve preferred audio stream index from user settings
+    const audioStreams: { language?: string }[] = opts.streamInfo?.audio ?? [];
+    const audioIndex = this.playerSettings.resolveAudioStreamIndex(
+      opts.mediaFileId, audioStreams,
+    );
+
     // Fetch playback info
-    const pi = await this.streamingApi.getPlaybackInfo(opts.mediaFileId, castProfile);
+    const pi = await this.streamingApi.getPlaybackInfo(opts.mediaFileId, castProfile, undefined, audioIndex);
     const mode: 'direct' | 'remux' | 'transcode' =
       pi.playMethod === 'DirectPlay' ? 'direct' :
       pi.playMethod === 'DirectStream' ? 'remux' : 'transcode';
@@ -351,9 +359,9 @@ export class CastPlayerService {
       audioTracks,
       activeQualityId: 'auto',
       activeSubtitleId: null,
-      activeAudioTrackId: null,
+      activeAudioTrackId: audioIndex != null ? `audio-${audioIndex}` : (audioTracks[0]?.id ?? null),
       activeBurnInId: null,
-      activeAudioStreamIndex: undefined,
+      activeAudioStreamIndex: audioIndex,
     });
 
     await this.reloadCastStream(opts.startTime ?? 0);

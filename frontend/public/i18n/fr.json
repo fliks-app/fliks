@@ -82,6 +82,20 @@
     "password_mismatch": "Les mots de passe ne correspondent pas",
     "save_success": "Mot de passe modifié avec succès"
   },
+  "account_settings": {
+    "title": "Paramètres du compte",
+    "nav": {
+      "password": "Mot de passe"
+    }
+  },
+  "app_settings": {
+    "title": "Paramètres",
+    "nav": {
+      "player": "Lecture",
+      "subtitles": "Sous-titres",
+      "cast": "Chromecast"
+    }
+  },
   "nav": {
     "home": "Accueil",
     "statistics": "Statistiques",
@@ -101,6 +115,8 @@
     "logout": "Se déconnecter",
     "switch_user": "Changer d'utilisateur",
     "administration": "Administration",
+    "account_settings": "Paramètres du compte",
+    "app_settings": "Paramètres de l'application",
     "section_library": "Bibliothèque",
     "section_downloads": "Téléchargement",
     "playback_settings": "Paramètres de lecture",
@@ -467,6 +483,7 @@
     "episode_progress": "Progression des épisodes",
     "ep_no_overview": "Aucun synopsis pour cet épisode.",
     "episodes_only_with_file": "Épisodes sur disque uniquement",
+    "episodes_available_only": "Épisodes disponibles uniquement",
     "episodes_filter_empty": "Aucun épisode avec fichier pour cette saison.",
     "seasons_filter_empty": "Aucune saison avec épisode sur disque.",
     "seasons_section": "Saisons & épisodes",
@@ -672,7 +689,11 @@
     "cmd_import_completed": "Importer les téléchargements terminés",
     "cmd_rescan_all": "Rescanner tous les fichiers",
     "cmd_rescan_missing_files": "Rescanner les fichiers manquants",
-    "cmd_generate_sprite": "Génération des miniatures",
+    "cmd_generate_sprites": "Générer les sprites",
+    "cmd_generate_missing_sprites": "Générer les sprites manquants",
+    "cmd_group_metadata": "Métadonnées",
+    "cmd_group_rescan": "Rescan",
+    "cmd_group_sprites": "Sprites",
     "recent_commands": "Historique des tâches",
     "no_commands": "Aucune tâche récente.",
     "col_command": "Tâche",

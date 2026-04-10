@@ -32,16 +32,31 @@ export class SystemStatusComponent implements OnInit {
   readonly loading = signal(true);
   readonly triggering = signal<string | null>(null);
 
-  readonly availableCommands = [
-    { name: 'RssSync', label: 'system.cmd_rss_sync' },
-    { name: 'SearchMissing', label: 'system.cmd_search_missing' },
-    { name: 'RefreshMetadata', label: 'system.cmd_refresh_metadata' },
-    { name: 'RefreshMissingMetadata', label: 'system.cmd_refresh_missing_metadata' },
-    { name: 'ImportCompleted', label: 'system.cmd_import_completed' },
-    { name: 'RescanAll', label: 'system.cmd_rescan_all' },
-    { name: 'RescanMissingFiles', label: 'system.cmd_rescan_missing_files' },
-    { name: 'GenerateSprite', label: 'system.cmd_generate_sprite' },
+  readonly commandItems: (
+    | { type: 'single'; name: string; label: string }
+    | { type: 'group'; label: string; items: { name: string; label: string }[] }
+  )[] = [
+    { type: 'single', name: 'RssSync', label: 'system.cmd_rss_sync' },
+    { type: 'single', name: 'SearchMissing', label: 'system.cmd_search_missing' },
+    { type: 'group', label: 'system.cmd_group_metadata', items: [
+      { name: 'RefreshMetadata', label: 'system.cmd_refresh_metadata' },
+      { name: 'RefreshMissingMetadata', label: 'system.cmd_refresh_missing_metadata' },
+    ]},
+    { type: 'single', name: 'ImportCompleted', label: 'system.cmd_import_completed' },
+    { type: 'group', label: 'system.cmd_group_rescan', items: [
+      { name: 'RescanAll', label: 'system.cmd_rescan_all' },
+      { name: 'RescanMissingFiles', label: 'system.cmd_rescan_missing_files' },
+    ]},
+    { type: 'group', label: 'system.cmd_group_sprites', items: [
+      { name: 'GenerateSprites', label: 'system.cmd_generate_sprites' },
+      { name: 'GenerateMissingSprites', label: 'system.cmd_generate_missing_sprites' },
+    ]},
   ];
+
+  /** Flat list for label lookups in command history. */
+  readonly availableCommands = this.commandItems.flatMap(item =>
+    item.type === 'single' ? [item] : item.items,
+  );
 
   constructor() {
     effect(() => {

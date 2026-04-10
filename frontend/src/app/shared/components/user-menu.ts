@@ -51,7 +51,8 @@ import {
         }
         <!-- Menu items -->
         <ul class="menu w-full p-2">
-          <li><a routerLink="/playback-settings" class="flex items-center gap-3 w-full"><svg lucideSettings class="h-4 w-4 opacity-60"></svg>{{ 'nav.playback_settings' | translate }}</a></li>
+          <li><a routerLink="/account" class="flex items-center gap-3 w-full"><svg lucideUser class="h-4 w-4 opacity-60"></svg>{{ 'nav.account_settings' | translate }}</a></li>
+          <li><a routerLink="/app-settings" class="flex items-center gap-3 w-full"><svg lucideSettings class="h-4 w-4 opacity-60"></svg>{{ 'nav.app_settings' | translate }}</a></li>
           @if (auth.canAccessSettings()) {
             <li><a routerLink="/admin" class="flex items-center gap-3 w-full"><svg lucideShield class="h-4 w-4 opacity-60"></svg>{{ 'nav.administration' | translate }}</a></li>
           }

@@ -778,7 +778,7 @@ export class MediaService {
         const label = file.episodeId
           ? episodeLabelMap.get(file.episodeId) ?? media.title
           : media.title;
-        void this.thumbnailService.getOrGenerate(file.id, absPath, dur, label, true);
+        void this.thumbnailService.getOrGenerate(file.id, absPath, dur, label);
       }
     }
 
@@ -838,7 +838,7 @@ export class MediaService {
         ? path.join(media.path, file.relativePath)
         : null;
       if (dur && absPath) {
-        void this.thumbnailService.getOrGenerate(file.id, absPath, dur, label, true);
+        void this.thumbnailService.getOrGenerate(file.id, absPath, dur, label);
       }
     }
 

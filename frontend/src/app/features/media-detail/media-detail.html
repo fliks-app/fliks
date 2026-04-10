@@ -9,7 +9,7 @@
       <p class="text-lg">{{ 'media_detail.not_found' | translate }}</p>
     </div>
   } @else if (media(); as m) {
-    <div class="flex flex-col gap-6">
+    <div class="flex flex-col">
       <app-media-detail-header
         [media]="m"
         [resumeInfo]="resumeInfo()"
@@ -36,8 +36,6 @@
         (rescanFiles)="rescanFiles()"
         (openDownload)="openDownloadModal()"
       />
-
-      <app-media-detail-library-info [media]="m" />
 
       @if (m.type === 'movie' && (cast().length || crew().length)) {
         <ng-container *ngTemplateOutlet="castCrewBlock" />
@@ -88,6 +86,8 @@
       @if (m.type === 'series' && (cast().length || crew().length)) {
         <ng-container *ngTemplateOutlet="castCrewBlock" />
       }
+
+      <app-media-detail-library-info [media]="m" />
 
       <app-media-detail-movie-download
         [media]="m"

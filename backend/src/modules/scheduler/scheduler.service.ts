@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { In } from 'typeorm';
@@ -23,6 +24,8 @@ import { NamingService } from './naming.service';
 import { DelayProfile } from '../profiles/entities/delay-profile.entity';
 import { EventsService } from './events.service';
 import { DownloadsService } from '../downloads/downloads.service';
+import { MediaFile } from '../media/entities/media-file.entity';
+import { ThumbnailService } from '../streaming/thumbnail.service';
 
 @Injectable()
 export class SchedulerService implements OnModuleInit {
@@ -53,6 +56,9 @@ export class SchedulerService implements OnModuleInit {
     private readonly eventsService: EventsService,
     private readonly subtitleScheduler: SubtitleSchedulerService,
     private readonly downloadsService: DownloadsService,
+    @InjectRepository(MediaFile)
+    private readonly mediaFileRepo: Repository<MediaFile>,
+    private readonly thumbnailService: ThumbnailService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -292,6 +298,8 @@ export class SchedulerService implements OnModuleInit {
       else if (name === 'RefreshMissingMetadata')
         await this.doRefreshMissingMetadata();
       else if (name === 'RescanMissingFiles') await this.doRescanMissingFiles();
+      else if (name === 'GenerateSprites') await this.doGenerateSprites(true);
+      else if (name === 'GenerateMissingSprites') await this.doGenerateSprites(false);
       await this.commandRepo.update(cmdId, {
         status: 'completed',
         endedOn: new Date(),
@@ -575,6 +583,73 @@ export class SchedulerService implements OnModuleInit {
 
     this.log.log(
       `RefreshMetadata: updated ${updated}/${allMedia.length} titles`,
+    );
+  }
+
+  private async doGenerateSprites(force: boolean): Promise<void> {
+    const commandName = force ? 'GenerateSprites' : 'GenerateMissingSprites';
+    const files = await this.mediaFileRepo.find({ relations: ['media'] });
+    this.log.log(`${commandName}: processing ${files.length} files`);
+
+    // Build episode labels
+    const episodeLabelMap = new Map<number, string>();
+    const episodes = await this.episodeRepo.find({
+      relations: ['season'],
+    });
+    for (const ep of episodes) {
+      const sn = String(ep.season.seasonNumber).padStart(2, '0');
+      const en = String(ep.episodeNumber).padStart(2, '0');
+      episodeLabelMap.set(ep.id, `S${sn}E${en} — ${ep.title ?? ''}`);
+    }
+
+    let generated = 0;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const dur = file.streamInfo?.durationSeconds;
+      const absPath =
+        file.media?.path && file.relativePath
+          ? path.join(file.media.path, file.relativePath)
+          : null;
+      if (!dur || !absPath) continue;
+
+      const label = file.episodeId
+        ? episodeLabelMap.get(file.episodeId) ?? file.media?.title ?? ''
+        : file.media?.title ?? '';
+
+      this.eventsService.emit({
+        type: 'task.progress',
+        command: commandName,
+        current: i,
+        total: files.length,
+        message: label,
+      });
+
+      try {
+        await this.thumbnailService.getOrGenerate(
+          file.id,
+          absPath,
+          dur,
+          label,
+          force,
+        );
+        generated++;
+      } catch (e) {
+        this.log.warn(
+          `${commandName}: failed for file ${file.id}: ${(e as Error).message}`,
+        );
+      }
+    }
+
+    this.eventsService.emit({
+      type: 'task.progress',
+      command: commandName,
+      current: files.length,
+      total: files.length,
+      message: commandName,
+    });
+
+    this.log.log(
+      `${commandName}: generated ${generated}/${files.length} sprites`,
     );
   }
 
