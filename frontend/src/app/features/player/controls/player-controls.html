@@ -149,8 +149,8 @@
             <div class="relative">
               <div
                 class="bg-no-repeat"
-                [style.width.px]="spriteMetadata()!.thumbWidth * 1.5"
-                [style.height.px]="spriteMetadata()!.thumbHeight * 1.5"
+                [style.width.px]="previewWidth()"
+                [style.height.px]="previewHeight()"
                 [style.background-image]="'url(' + spriteUrl() + ')'"
                 [style.background-position]="thumbnailBgPositionScaled()"
                 [style.background-size]="spriteBgSizeScaled()"

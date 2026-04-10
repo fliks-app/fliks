@@ -36,12 +36,14 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 interface ImmersivePlugin {
   enter(options?: { displayBehindNotch?: boolean }): Promise<void>;
   exit(): Promise<void>;
+  setLightStatusBar(options: { light: boolean }): Promise<void>;
 }
 const Immersive = registerPlugin<ImmersivePlugin>('Immersive');
 
 interface PipPlugin {
   enter(): Promise<void>;
   setAutoEnter(options: { enabled: boolean }): Promise<void>;
+  updatePlaybackState(options: { playing: boolean }): Promise<void>;
 }
 const Pip = registerPlugin<PipPlugin>('Pip');
 import { LucideCircleAlert } from '@lucide/angular';
@@ -142,6 +144,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly buffering = signal(false);
   readonly bufferedEnd = signal(0);
   readonly inPipMode = signal(false);
+  private readonly isLandscape = signal(screen.orientation?.type?.startsWith('landscape') ?? false);
   readonly statsVisible = signal(false);
   readonly fillScreen = signal(false);
   /** Forces stats recomputation while overlay is open (e.g. Shaka getStats, paused playback). */
@@ -209,6 +212,28 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       else if (cmd.action === 'play' && video && video.paused) video.play();
       else if (cmd.action === 'stop') this.onBack();
     }
+  });
+
+  // Immersive mode: landscape=always, portrait=only while playing with controls hidden
+  private readonly immersiveEffect = effect(() => {
+    if (!this.isNative || this.inPipMode()) return;
+    const landscape = this.isLandscape();
+    const shouldBeImmersive = landscape || (!this.paused() && !this.controlsVisible());
+    if (shouldBeImmersive) {
+      Immersive.enter({ displayBehindNotch: true }).catch(() => {});
+      document.body.classList.add('immersive');
+    } else {
+      Immersive.exit().catch(() => {});
+      document.body.classList.remove('immersive');
+      // Player bg is black → white status bar icons
+      Immersive.setLightStatusBar({ light: false }).catch(() => {});
+    }
+  });
+
+  // Sync play/pause state to PiP action button
+  private readonly pipPlaybackEffect = effect(() => {
+    if (!this.isNative) return;
+    Pip.updatePlaybackState({ playing: !this.paused() }).catch(() => {});
   });
 
   // Media info
@@ -402,12 +427,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   });
 
   async ngAfterViewInit() {
-    // On native (Android/iOS), immersive fullscreen: landscape + hide all system bars
-    // TODO: read displayBehindNotch from user settings when settings are implemented
+    // On native: listen to orientation changes (immersive handled by effect)
     if (this.isNative) {
-      (screen.orientation as any)?.lock?.('landscape').catch(() => {});
-      Immersive.enter({ displayBehindNotch: true }).catch(() => {});
-      document.body.classList.add('immersive');
+      screen.orientation?.addEventListener('change', this.onOrientationChange);
     }
 
     shaka.polyfill.installAll();
@@ -698,7 +720,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // PiP mode change listener (native Android)
     if (this.isNative) {
       window.addEventListener('pipModeChanged', this.onPipModeChanged as EventListener);
-      // Auto-enter PiP when user swipes home (Android 12+)
+      window.addEventListener('pipAction', this.onPipAction as EventListener);
+      // Auto-enter PiP when user swipes home
       Pip.setAutoEnter({ enabled: true }).catch(() => {});
     }
   }
@@ -718,11 +741,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     window.removeEventListener('beforeunload', this.onBeforeUnload);
     // Restore system UI when leaving player
     if (this.isNative) {
-      screen.orientation?.unlock();
+      screen.orientation?.removeEventListener('change', this.onOrientationChange);
       Immersive.exit().catch(() => {});
       document.body.classList.remove('immersive');
       Pip.setAutoEnter({ enabled: false }).catch(() => {});
       window.removeEventListener('pipModeChanged', this.onPipModeChanged as EventListener);
+      window.removeEventListener('pipAction', this.onPipAction as EventListener);
     }
   }
 
@@ -1342,11 +1366,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private onPipModeChanged = (e: Event) => {
     const isInPip = (e as CustomEvent).detail?.isInPipMode ?? false;
     this.inPipMode.set(isInPip);
-    if (!isInPip) {
-      // Exiting PiP: restore immersive mode
-      Immersive.enter({ displayBehindNotch: true }).catch(() => {});
-      document.body.classList.add('immersive');
+  };
+
+  private onPipAction = (e: Event) => {
+    const action = (e as CustomEvent).detail?.action;
+    if (action === 'togglePlayback') {
+      const video = this.videoEl()?.nativeElement;
+      if (video) {
+        if (video.paused) video.play();
+        else video.pause();
+      }
     }
+  };
+
+  private onOrientationChange = () => {
+    this.isLandscape.set(screen.orientation?.type?.startsWith('landscape') ?? false);
   };
 
   onCloseStats() {

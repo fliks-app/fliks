@@ -168,13 +168,30 @@ export class PlayerControlsComponent {
     return `${meta.columns * meta.thumbWidth}px ${rows * meta.thumbHeight}px`;
   });
 
-  private static readonly SCALE = 1.5;
+  private readonly previewScale = computed(() => {
+    const meta = this.spriteMetadata();
+    if (!meta) return 1.5;
+    const maxW = window.innerWidth < 640 ? 176 : 224; // sm breakpoint: w-44 / w-56
+    return Math.min(1.5, maxW / meta.thumbWidth);
+  });
 
-  /** Scaled background-position (1.5x) */
+  protected readonly previewWidth = computed(() => {
+    const meta = this.spriteMetadata();
+    if (!meta) return 0;
+    return meta.thumbWidth * this.previewScale();
+  });
+
+  protected readonly previewHeight = computed(() => {
+    const meta = this.spriteMetadata();
+    if (!meta) return 0;
+    return meta.thumbHeight * this.previewScale();
+  });
+
+  /** Scaled background-position */
   readonly thumbnailBgPositionScaled = computed(() => {
     const meta = this.spriteMetadata();
     if (!meta) return '0 0';
-    const s = PlayerControlsComponent.SCALE;
+    const s = this.previewScale();
     const time = this.dragging() ? this.dragTime() : this.hoverTime();
     const index = Math.min(Math.floor(time / meta.interval), meta.count - 1);
     const col = index % meta.columns;
@@ -182,11 +199,11 @@ export class PlayerControlsComponent {
     return `-${col * meta.thumbWidth * s}px -${row * meta.thumbHeight * s}px`;
   });
 
-  /** Scaled background-size (1.5x) */
+  /** Scaled background-size */
   readonly spriteBgSizeScaled = computed(() => {
     const meta = this.spriteMetadata();
     if (!meta) return 'auto';
-    const s = PlayerControlsComponent.SCALE;
+    const s = this.previewScale();
     const rows = Math.ceil(meta.count / meta.columns);
     return `${meta.columns * meta.thumbWidth * s}px ${rows * meta.thumbHeight * s}px`;
   });
@@ -194,8 +211,8 @@ export class PlayerControlsComponent {
   /** Clamped tooltip left position (keeps tooltip within bar bounds) */
   readonly tooltipLeft = computed(() => {
     const pct = this.dragging() ? this.displayPercent() : this.hoverPercent();
-    // 120px = half tooltip width (~240px at 160*1.5). Clamp via CSS calc.
-    return `clamp(120px, ${pct}%, calc(100% - 120px))`;
+    const half = this.previewWidth() / 2 || 120;
+    return `clamp(${half}px, ${pct}%, calc(100% - ${half}px))`;
   });
 
   formatRemaining(current: number, total: number): string {
