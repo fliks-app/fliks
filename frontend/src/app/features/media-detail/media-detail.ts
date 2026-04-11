@@ -355,6 +355,14 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       const watchedSet = new Set(watchedIds);
       this.watchedEpisodeIds.set(watchedSet);
 
+      // Pre-select the last-played file if available
+      if (resumeInfo?.mediaFileId) {
+        const files = m.files ?? [];
+        if (files.some((f) => f.id === resumeInfo.mediaFileId)) {
+          this.selectedFileId.set(resumeInfo.mediaFileId);
+        }
+      }
+
       // Series: select season from resume, then scroll to first unwatched
       let resumeHandled = false;
       if (m.type === 'series' && resumeInfo?.episodeId && m.seasons?.length) {

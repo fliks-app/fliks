@@ -262,23 +262,24 @@ export class StreamingApiService {
     );
   }
 
-  getPlaybackState(mediaFileId: number) {
+  getPlaybackState(mediaId: number, episodeId?: number) {
+    const params = episodeId ? `?episodeId=${episodeId}` : '';
     return firstValueFrom(
-      this.http.get<PlaybackState | null>(`/api/playback/${mediaFileId}`),
+      this.http.get<PlaybackState | null>(`/api/playback/media/${mediaId}/state${params}`),
     );
   }
 
   updatePlaybackState(
-    mediaFileId: number,
+    mediaId: number,
     body: {
       positionSeconds: number;
       durationSeconds: number;
-      mediaId: number;
+      mediaFileId: number;
       episodeId?: number;
     },
   ) {
     return firstValueFrom(
-      this.http.put<PlaybackState>(`/api/playback/${mediaFileId}`, body),
+      this.http.put<PlaybackState>(`/api/playback/media/${mediaId}/state`, body),
     );
   }
 
@@ -296,9 +297,10 @@ export class StreamingApiService {
     );
   }
 
-  deletePlaybackState(mediaFileId: number) {
+  deletePlaybackState(mediaId: number, episodeId?: number) {
+    const params = episodeId ? `?episodeId=${episodeId}` : '';
     return firstValueFrom(
-      this.http.delete<void>(`/api/playback/${mediaFileId}`),
+      this.http.delete<void>(`/api/playback/media/${mediaId}/state${params}`),
     );
   }
 
@@ -306,9 +308,9 @@ export class StreamingApiService {
     return firstValueFrom(this.http.get<number[]>('/api/playback/watched-ids'));
   }
 
-  toggleWatched(mediaFileId: number, mediaId: number, episodeId?: number) {
+  toggleWatched(mediaId: number, mediaFileId: number, episodeId?: number) {
     return firstValueFrom(
-      this.http.post<PlaybackState>(`/api/playback/${mediaFileId}/toggle-watched`, { mediaId, episodeId }),
+      this.http.post<PlaybackState>(`/api/playback/media/${mediaId}/toggle-watched`, { mediaFileId, episodeId }),
     );
   }
 

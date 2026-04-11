@@ -1,11 +1,10 @@
-import { Entity, Column, ManyToOne, JoinColumn, Unique, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { User } from '../../users/entities/user.entity';
 import { Media } from '../../media/entities/media.entity';
 import { MediaFile } from '../../media/entities/media-file.entity';
 
 @Entity('playback_states')
-@Unique(['userId', 'mediaFileId'])
 @Index(['userId', 'mediaId', 'completed'])
 @Index(['userId', 'completed', 'lastPlayedAt'])
 @Index(['userId', 'episodeId', 'completed'])
@@ -24,11 +23,12 @@ export class PlaybackState extends BaseEntity {
   @Column()
   mediaId: number;
 
-  @ManyToOne(() => MediaFile, { onDelete: 'CASCADE' })
+  /** Last played file — used to know which file to resume on the detail page. */
+  @ManyToOne(() => MediaFile, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'mediaFileId' })
   mediaFile: MediaFile;
 
-  @Column()
+  @Column({ nullable: true })
   mediaFileId: number;
 
   @Column({ nullable: true })

@@ -265,12 +265,18 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
         this.season.set(foundSeason);
         this.episode.set(foundEpisode);
         this.navbar.enterHeroPage(this.episodePageHeading(media, foundSeason!, foundEpisode));
-        // Load watched status
-        const fileId = this.activeFileId();
-        if (fileId) {
-          this.playable.loadWatchedState(fileId).then(v => this.watched.set(v));
-          this.streamingApi.getPlaybackState(fileId).then((ps) => {
-            if (ps && !ps.completed && ps.positionSeconds > 10) {
+        // Load watched status + pre-select last-played file
+        this.playable.loadWatchedState(media.id, foundEpisode.id).then(v => this.watched.set(v));
+        this.streamingApi.getPlaybackState(media.id, foundEpisode.id).then((ps) => {
+          if (ps) {
+            // Pre-select the last-played file
+            if (ps.mediaFileId) {
+              const files = this.episodeFiles();
+              if (files.some((f) => f.id === ps.mediaFileId)) {
+                this.selectedFileId.set(ps.mediaFileId);
+              }
+            }
+            if (!ps.completed && ps.positionSeconds > 10) {
               const s = Math.floor(ps.positionSeconds);
               const h = Math.floor(s / 3600);
               const m = Math.floor((s % 3600) / 60);
@@ -283,8 +289,8 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
             } else {
               this.resumeLabel.set(null);
             }
-          }).catch(() => {});
-        }
+          }
+        }).catch(() => {});
       }
     } catch {
       this.notFound.set(true);
@@ -512,7 +518,7 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
     const fileId = this.selectedFileId();
     const m = this.media();
     if (!fileId || !m) return;
-    try { this.watched.set(await this.playable.toggleWatched(fileId, m.id, this.episode()?.id)); } catch { /* ignore */ }
+    try { this.watched.set(await this.playable.toggleWatched(m.id, fileId, this.episode()?.id)); } catch { /* ignore */ }
   }
 
   formatBytes(bytes: number): string {

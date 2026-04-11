@@ -101,15 +101,15 @@ export class MediaDetailHeaderComponent implements OnInit {
   readonly openDownload = output<void>();
 
   async ngOnInit() {
-    const fileId = this.selectedFileId();
-    if (fileId) this.watched.set(await this.playable.loadWatchedState(fileId));
+    const m = this.media();
+    if (m) this.watched.set(await this.playable.loadWatchedState(m.id));
   }
 
   async toggleWatched() {
     const fileId = this.selectedFileId();
     const m = this.media();
     if (!fileId || !m) return;
-    try { this.watched.set(await this.playable.toggleWatched(fileId, m.id)); } catch { /* ignore */ }
+    try { this.watched.set(await this.playable.toggleWatched(m.id, fileId)); } catch { /* ignore */ }
   }
 
   formatBytes(bytes: number): string {

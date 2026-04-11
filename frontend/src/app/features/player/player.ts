@@ -505,7 +505,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       let startTime: number | undefined = resumeTime ?? undefined;
       if (startTime == null) {
         try {
-          const playbackState = await this.streamingApi.getPlaybackState(this.mediaFileId);
+          const playbackState = await this.streamingApi.getPlaybackState(this.mediaId, this.episodeId);
           if (playbackState && !playbackState.completed && playbackState.positionSeconds > 10) {
             startTime = playbackState.positionSeconds;
           }
@@ -1332,18 +1332,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const payload = {
       positionSeconds: pos,
       durationSeconds: dur || 0,
-      mediaId: this.mediaId,
+      mediaFileId: this.mediaFileId,
       episodeId: this.episodeId,
     };
 
     if (this.network.isOnline()) {
       try {
-        await this.streamingApi.updatePlaybackState(this.mediaFileId, payload);
+        await this.streamingApi.updatePlaybackState(this.mediaId, payload);
       } catch {
-        this.offlineSync.queue({ mediaFileId: this.mediaFileId, ...payload });
+        this.offlineSync.queue({ mediaId: this.mediaId, ...payload });
       }
     } else {
-      this.offlineSync.queue({ mediaFileId: this.mediaFileId, ...payload });
+      this.offlineSync.queue({ mediaId: this.mediaId, ...payload });
     }
   }
 

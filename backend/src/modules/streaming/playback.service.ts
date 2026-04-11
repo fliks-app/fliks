@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MediaFile } from '../media/entities/media-file.entity';
@@ -7,7 +7,7 @@ import { PlaybackState } from './entities/playback-state.entity';
 export interface WatchHistoryItem {
   id: number;
   mediaId: number;
-  mediaFileId: number;
+  mediaFileId: number | null;
   episodeId: number | null;
   positionSeconds: number;
   durationSeconds: number;
@@ -24,7 +24,7 @@ export interface WatchHistoryItem {
 export interface ContinueWatchingItem {
   id: number;
   mediaId: number;
-  mediaFileId: number;
+  mediaFileId: number | null;
   episodeId: number | null;
   positionSeconds: number;
   durationSeconds: number;
@@ -38,7 +38,7 @@ export interface ContinueWatchingItem {
 }
 
 export interface MediaResumeInfo {
-  mediaFileId: number;
+  mediaFileId: number | null;
   episodeId: number | null;
   positionSeconds: number;
   durationSeconds: number;
@@ -47,7 +47,9 @@ export interface MediaResumeInfo {
 }
 
 @Injectable()
-export class PlaybackService {
+export class PlaybackService implements OnModuleInit {
+  private readonly log = new Logger(PlaybackService.name);
+
   constructor(
     @InjectRepository(PlaybackState)
     private readonly repo: Repository<PlaybackState>,
@@ -55,11 +57,82 @@ export class PlaybackService {
     private readonly mediaFileRepo: Repository<MediaFile>,
   ) {}
 
+  async onModuleInit() {
+    await this.deduplicateAndCreateIndexes();
+  }
+
+  /**
+   * Deduplicate legacy rows (multiple per mediaId+episodeId) and create partial unique indexes.
+   * Safe to run repeatedly — uses IF NOT EXISTS.
+   */
+  private async deduplicateAndCreateIndexes() {
+    try {
+      // Delete duplicates: for each (userId, mediaId, episodeId) group, keep only the most recent row
+      const deleted = await this.repo.query(`
+        DELETE FROM playback_states ps
+        USING (
+          SELECT "userId", "mediaId", COALESCE("episodeId", 0) AS eid,
+                 MAX(id) AS keep_id
+          FROM playback_states
+          GROUP BY "userId", "mediaId", COALESCE("episodeId", 0)
+          HAVING COUNT(*) > 1
+        ) dups
+        WHERE ps."userId" = dups."userId"
+          AND ps."mediaId" = dups."mediaId"
+          AND COALESCE(ps."episodeId", 0) = dups.eid
+          AND ps.id != dups.keep_id
+        RETURNING ps.id
+      `);
+      if (deleted?.length) {
+        this.log.log(
+          `Deduplicated ${deleted.length} legacy playback_states rows`,
+        );
+      }
+
+      // Drop the old unique constraint if it still exists
+      await this.repo.query(`
+        ALTER TABLE playback_states
+        DROP CONSTRAINT IF EXISTS "UQ_playback_states_userId_mediaFileId"
+      `).catch(() => {});
+      // TypeORM may name it differently
+      await this.repo.query(`
+        DROP INDEX IF EXISTS "UQ_playback_states_userId_mediaFileId"
+      `).catch(() => {});
+
+      // Create partial unique indexes
+      await this.repo.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_playback_user_movie
+        ON playback_states ("userId", "mediaId")
+        WHERE "episodeId" IS NULL
+      `);
+      await this.repo.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_playback_user_episode
+        ON playback_states ("userId", "episodeId")
+        WHERE "episodeId" IS NOT NULL
+      `);
+    } catch (err) {
+      this.log.warn(`Failed to create playback unique indexes: ${err}`);
+    }
+  }
+
+  /** Find state by media/episode (the new primary lookup). */
+  private findState(
+    userId: number,
+    mediaId: number,
+    episodeId?: number,
+  ): Promise<PlaybackState | null> {
+    const where: Record<string, any> = { userId, mediaId };
+    if (episodeId) where.episodeId = episodeId;
+    else where.episodeId = null as any;
+    return this.repo.findOne({ where });
+  }
+
   async getState(
     userId: number,
-    mediaFileId: number,
+    mediaId: number,
+    episodeId?: number,
   ): Promise<PlaybackState | null> {
-    return this.repo.findOne({ where: { userId, mediaFileId } });
+    return this.findState(userId, mediaId, episodeId);
   }
 
   async getMediaResumeInfo(
@@ -110,19 +183,18 @@ export class PlaybackService {
 
   async updateState(
     userId: number,
-    mediaFileId: number,
+    mediaId: number,
     body: {
       positionSeconds: number;
       durationSeconds: number;
-      mediaId: number;
+      mediaFileId: number;
       episodeId?: number;
     },
   ): Promise<PlaybackState> {
-    let state = await this.repo.findOne({ where: { userId, mediaFileId } });
+    let state = await this.findState(userId, mediaId, body.episodeId);
 
     const dur = body.durationSeconds ?? 0;
     const pos = body.positionSeconds ?? 0;
-    // Completed if within 30s of end OR past 90% (like Jellyfin's MaxResumePct)
     const completed = dur > 0 && (pos >= dur - 30 || pos >= dur * 0.9);
 
     if (state) {
@@ -131,11 +203,12 @@ export class PlaybackService {
       state.completed = completed;
       state.hiddenFromContinueWatching = false;
       state.lastPlayedAt = new Date();
+      state.mediaFileId = body.mediaFileId;
     } else {
       state = this.repo.create({
         userId,
-        mediaFileId,
-        mediaId: body.mediaId,
+        mediaId,
+        mediaFileId: body.mediaFileId,
         episodeId: body.episodeId,
         positionSeconds: pos,
         durationSeconds: dur || 0,
@@ -148,9 +221,9 @@ export class PlaybackService {
   }
 
   async getContinueWatching(userId: number): Promise<ContinueWatchingItem[]> {
-    // 1. Movies: in-progress, deduplicated by mediaId (1 query)
+    // 1. Movies: in-progress, one per media (guaranteed unique by new schema)
     const movies: ContinueWatchingItem[] = await this.repo.query(
-      `SELECT DISTINCT ON (ps."mediaId")
+      `SELECT
               ps.id, ps."mediaId", ps."mediaFileId", ps."episodeId",
               ps."positionSeconds", ps."durationSeconds", ps."lastPlayedAt",
               m.title AS "mediaTitle", m."posterUrl", m."fanartUrl",
@@ -164,7 +237,7 @@ export class PlaybackService {
          AND ps."hiddenFromContinueWatching" = false
          AND ps."positionSeconds" > 0
          AND m.type = 'movie'
-       ORDER BY ps."mediaId", ps."lastPlayedAt" DESC`,
+       ORDER BY ps."lastPlayedAt" DESC`,
       [userId],
     );
     for (const m of movies) {
@@ -173,12 +246,9 @@ export class PlaybackService {
       m.progressPercent = Number(m.progressPercent);
     }
 
-    // 2. Series "next up" (1 query):
-    //    For each series the user has watched, find the next episode after the last completed one.
-    //    Uses a lateral join to efficiently find the next episode per series.
+    // 2. Series "next up"
     const seriesItems: ContinueWatchingItem[] = await this.repo.query(
       `WITH user_series AS (
-        -- Most recent playback per series (exclude hidden)
         SELECT DISTINCT ON (ps."mediaId")
                ps."mediaId", ps."lastPlayedAt"
         FROM playback_states ps
@@ -188,7 +258,6 @@ export class PlaybackService {
         ORDER BY ps."mediaId", ps."lastPlayedAt" DESC
       ),
       last_completed AS (
-        -- Last completed episode per series (season/episode numbers)
         SELECT DISTINCT ON (ps."mediaId")
                ps."mediaId", ps."episodeId",
                s."seasonNumber", e."episodeNumber"
@@ -199,7 +268,6 @@ export class PlaybackService {
         ORDER BY ps."mediaId", ps."lastPlayedAt" DESC
       ),
       in_progress AS (
-        -- Most recently played in-progress episode per series (regardless of other completed episodes)
         SELECT DISTINCT ON (ps."mediaId")
                ps."mediaId", ps."episodeId", ps."mediaFileId",
                ps."positionSeconds", ps."durationSeconds"
@@ -209,7 +277,6 @@ export class PlaybackService {
         ORDER BY ps."mediaId", ps."lastPlayedAt" DESC
       ),
       next_ep AS (
-        -- For series with a completed episode but NO in-progress episode: find the next unwatched episode
         SELECT lc."mediaId",
                (SELECT e.id FROM episodes e
                 JOIN seasons s ON s.id = e."seasonId"
@@ -222,7 +289,6 @@ export class PlaybackService {
         WHERE lc."mediaId" NOT IN (SELECT "mediaId" FROM in_progress)
       ),
       combined AS (
-        -- In-progress takes priority; next-ep only for series with no in-progress episode
         SELECT ip."mediaId", ip."episodeId", ip."mediaFileId", ip."positionSeconds", ip."durationSeconds"
         FROM in_progress ip
         UNION ALL
@@ -255,7 +321,7 @@ export class PlaybackService {
         WHERE mf2."mediaId" = c."mediaId" AND mf2."episodeId" = c."episodeId"
         ORDER BY mf2.id DESC LIMIT 1
       ) mf ON c."mediaFileId" IS NULL
-      LEFT JOIN playback_states ps_next ON ps_next."userId" = $1 AND ps_next."mediaFileId" = COALESCE(c."mediaFileId", mf.id)
+      LEFT JOIN playback_states ps_next ON ps_next."userId" = $1 AND ps_next."mediaId" = c."mediaId" AND ps_next."episodeId" = c."episodeId"
       WHERE COALESCE(ps_next.completed, false) = false
         AND COALESCE(c."mediaFileId", mf.id) IS NOT NULL`,
       [userId],
@@ -265,7 +331,6 @@ export class PlaybackService {
       s.progressPercent = Number(s.progressPercent);
     }
 
-    // 3. Merge and sort by lastPlayedAt
     return [...movies, ...seriesItems]
       .sort(
         (a, b) =>
@@ -280,6 +345,7 @@ export class PlaybackService {
     page: number,
     limit: number,
   ): Promise<{ data: WatchHistoryItem[]; total: number }> {
+    // No dedup needed — one state per (mediaId, episodeId) by design
     const countResult = await this.repo.query(
       `SELECT COUNT(*) AS cnt
        FROM playback_states ps
@@ -319,11 +385,17 @@ export class PlaybackService {
     return { data, total };
   }
 
-  async deleteState(userId: number, mediaFileId: number): Promise<void> {
-    await this.repo.delete({ userId, mediaFileId });
+  async deleteState(
+    userId: number,
+    mediaId: number,
+    episodeId?: number,
+  ): Promise<void> {
+    const where: Record<string, any> = { userId, mediaId };
+    if (episodeId) where.episodeId = episodeId;
+    else where.episodeId = null as any;
+    await this.repo.delete(where);
   }
 
-  /** Return mediaIds the user has fully watched (movies: any completed file; series: all hasFile episodes completed). */
   async getWatchedMediaIds(userId: number): Promise<number[]> {
     const rows: { id: number }[] = await this.repo.query(
       `
@@ -348,31 +420,35 @@ export class PlaybackService {
     return rows.map((r) => r.id);
   }
 
-  /** Toggle watched status for a specific media file. */
   async toggleWatched(
     userId: number,
-    mediaFileId: number,
     mediaId: number,
+    mediaFileId: number,
     episodeId?: number,
   ): Promise<PlaybackState> {
-    let state = await this.repo.findOne({ where: { userId, mediaFileId } });
+    let state = await this.findState(userId, mediaId, episodeId);
     if (state) {
       state.completed = !state.completed;
       if (state.completed) {
-        if (!state.durationSeconds) {
-          const file = await this.mediaFileRepo.findOne({ where: { id: mediaFileId } });
+        if (!state.durationSeconds && state.mediaFileId) {
+          const file = await this.mediaFileRepo.findOne({
+            where: { id: state.mediaFileId },
+          });
           state.durationSeconds = file?.streamInfo?.durationSeconds ?? 0;
         }
         state.positionSeconds = 0;
       }
       state.lastPlayedAt = new Date();
+      if (mediaFileId) state.mediaFileId = mediaFileId;
     } else {
-      const file = await this.mediaFileRepo.findOne({ where: { id: mediaFileId } });
+      const file = await this.mediaFileRepo.findOne({
+        where: { id: mediaFileId },
+      });
       const duration = file?.streamInfo?.durationSeconds ?? 0;
       state = this.repo.create({
         userId,
-        mediaFileId,
         mediaId,
+        mediaFileId,
         episodeId,
         positionSeconds: 0,
         durationSeconds: duration,
@@ -383,7 +459,6 @@ export class PlaybackService {
     return this.repo.save(state);
   }
 
-  /** Hide a media from "continue watching" without altering completed/position state. */
   async hideFromContinueWatching(
     userId: number,
     mediaId: number,

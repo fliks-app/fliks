@@ -47,16 +47,16 @@ export class PlayableMediaService {
     }
   }
 
-  /** Toggle watched status for a media file. Returns the new completed state. */
-  async toggleWatched(fileId: number, mediaId: number, episodeId?: number): Promise<boolean> {
-    const state = await this.streamingApi.toggleWatched(fileId, mediaId, episodeId);
+  /** Toggle watched status for a media/episode. Returns the new completed state. */
+  async toggleWatched(mediaId: number, fileId: number, episodeId?: number): Promise<boolean> {
+    const state = await this.streamingApi.toggleWatched(mediaId, fileId, episodeId);
     return state.completed;
   }
 
-  /** Load the watched state for a media file. */
-  async loadWatchedState(fileId: number): Promise<boolean> {
+  /** Load the watched state for a media/episode. */
+  async loadWatchedState(mediaId: number, episodeId?: number): Promise<boolean> {
     try {
-      const ps = await this.streamingApi.getPlaybackState(fileId);
+      const ps = await this.streamingApi.getPlaybackState(mediaId, episodeId);
       return ps?.completed ?? false;
     } catch {
       return false;

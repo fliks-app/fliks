@@ -302,10 +302,10 @@ export class CastPlayerService {
     const dur = this.cast.duration();
     if (!pos || pos < 1) return;
     try {
-      await this.streamingApi.updatePlaybackState(mfId, {
+      await this.streamingApi.updatePlaybackState(mId, {
         positionSeconds: pos,
         durationSeconds: dur || 0,
-        mediaId: mId,
+        mediaFileId: mfId,
         episodeId: this.episodeId(),
       });
     } catch { /* ignore */ }
@@ -473,7 +473,7 @@ export class CastPlayerService {
     let startTime = opts.startTime;
     if (startTime == null) {
       try {
-        const state = await this.streamingApi.getPlaybackState(opts.mediaFileId);
+        const state = await this.streamingApi.getPlaybackState(opts.mediaId, opts.episodeId);
         if (state && !state.completed && state.positionSeconds > 10) {
           startTime = state.positionSeconds;
         }

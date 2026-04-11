@@ -56,6 +56,7 @@ export class PlaybackController {
     return this.playbackService.getWatchedEpisodeIds(user.id, mediaId);
   }
 
+  /** Resume info — which episode/file to resume for a media. */
   @Get('media/:mediaId')
   getMediaResumeInfo(
     @Req() req: Request,
@@ -65,56 +66,64 @@ export class PlaybackController {
     return this.playbackService.getMediaResumeInfo(user.id, mediaId);
   }
 
-  @Get(':mediaFileId')
+  /** Get playback state for a specific media (movie) or episode. */
+  @Get('media/:mediaId/state')
   getState(
     @Req() req: Request,
-    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Param('mediaId', ParseIntPipe) mediaId: number,
+    @Query('episodeId') episodeIdRaw?: string,
   ) {
     const user = req.user as User;
-    return this.playbackService.getState(user.id, mediaFileId);
+    const episodeId = episodeIdRaw ? parseInt(episodeIdRaw, 10) : undefined;
+    return this.playbackService.getState(user.id, mediaId, episodeId);
   }
 
-  @Put(':mediaFileId')
+  /** Update playback state (position, duration, file). */
+  @Put('media/:mediaId/state')
   updateState(
     @Req() req: Request,
-    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Param('mediaId', ParseIntPipe) mediaId: number,
     @Body()
     body: {
       positionSeconds: number;
       durationSeconds: number;
-      mediaId: number;
+      mediaFileId: number;
       episodeId?: number;
     },
   ) {
     const user = req.user as User;
-    return this.playbackService.updateState(user.id, mediaFileId, body);
+    return this.playbackService.updateState(user.id, mediaId, body);
   }
 
-  @Post(':mediaFileId/toggle-watched')
+  /** Toggle watched/unwatched for a media or episode. */
+  @Post('media/:mediaId/toggle-watched')
   toggleWatched(
     @Req() req: Request,
-    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
-    @Body() body: { mediaId: number; episodeId?: number },
+    @Param('mediaId', ParseIntPipe) mediaId: number,
+    @Body() body: { mediaFileId: number; episodeId?: number },
   ) {
     const user = req.user as User;
     return this.playbackService.toggleWatched(
       user.id,
-      mediaFileId,
-      body.mediaId,
+      mediaId,
+      body.mediaFileId,
       body.episodeId,
     );
   }
 
-  @Delete(':mediaFileId')
+  /** Delete playback state for a media or episode. */
+  @Delete('media/:mediaId/state')
   deleteState(
     @Req() req: Request,
-    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Param('mediaId', ParseIntPipe) mediaId: number,
+    @Query('episodeId') episodeIdRaw?: string,
   ) {
     const user = req.user as User;
-    return this.playbackService.deleteState(user.id, mediaFileId);
+    const episodeId = episodeIdRaw ? parseInt(episodeIdRaw, 10) : undefined;
+    return this.playbackService.deleteState(user.id, mediaId, episodeId);
   }
 
-  /** Remove a media from continue watching (marks all episodes as completed). */
+  /** Remove a media from continue watching. */
   @Delete('hide/:mediaId')
   hideFromContinueWatching(
     @Req() req: Request,

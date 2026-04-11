@@ -3,8 +3,8 @@ import { StreamingApiService } from './api/streaming-api.service';
 import { NetworkService } from './network.service';
 
 interface PendingUpdate {
-  mediaFileId: number;
   mediaId: number;
+  mediaFileId: number;
   episodeId?: number;
   positionSeconds: number;
   durationSeconds: number;
@@ -23,13 +23,14 @@ export class OfflinePlaybackSyncService {
 
   queue(update: PendingUpdate) {
     const pending = this.loadPending();
-    // Replace existing entry for same file (keep latest position)
-    const idx = pending.findIndex((p) => p.mediaFileId === update.mediaFileId);
+    // Replace existing entry for same media+episode (keep latest position)
+    const idx = pending.findIndex(
+      (p) => p.mediaId === update.mediaId && p.episodeId === update.episodeId,
+    );
     if (idx >= 0) pending[idx] = update;
     else pending.push(update);
     this.savePending(pending);
 
-    // Try to flush immediately if online
     if (this.network.isOnline()) {
       void this.flush();
     }
@@ -42,10 +43,10 @@ export class OfflinePlaybackSyncService {
     const remaining: PendingUpdate[] = [];
     for (const update of pending) {
       try {
-        await this.streamingApi.updatePlaybackState(update.mediaFileId, {
+        await this.streamingApi.updatePlaybackState(update.mediaId, {
           positionSeconds: update.positionSeconds,
           durationSeconds: update.durationSeconds,
-          mediaId: update.mediaId,
+          mediaFileId: update.mediaFileId,
           episodeId: update.episodeId,
         });
       } catch {

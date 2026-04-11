@@ -86,8 +86,8 @@ export class WatchHistoryComponent implements OnInit {
   async markWatched(item: WatchHistoryItem) {
     try {
       const state = await this.streamingApi.toggleWatched(
-        item.mediaFileId,
         item.mediaId,
+        item.mediaFileId,
         item.episodeId ?? undefined,
       );
       this.items.update(list =>
@@ -103,7 +103,7 @@ export class WatchHistoryComponent implements OnInit {
     });
     if (!confirmed) return;
     try {
-      await this.streamingApi.deletePlaybackState(item.mediaFileId);
+      await this.streamingApi.deletePlaybackState(item.mediaId, item.episodeId ?? undefined);
       this.items.update(list => list.filter(i => i.id !== item.id));
       this.total.update(t => t - 1);
     } catch { /* ignore */ }
