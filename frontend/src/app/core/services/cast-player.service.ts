@@ -132,10 +132,7 @@ export class CastPlayerService {
     this.episodeId.set(opts.episodeId);
     this.mediaTitle.set(opts.mediaTitle);
     this.episodeTitle.set(opts.episodeTitle);
-    // Resolve relative URLs to absolute (needed on mobile where origin is localhost)
-    this.fanartUrl.set(
-      opts.fanartUrl ? this.serverConfig.resolveUrl(opts.fanartUrl) : null,
-    );
+    this.fanartUrl.set(opts.fanartUrl ?? null);
     this.playbackMode.set(opts.playbackMode);
     this.subtitleInfos = opts.subtitles;
     this.activeQualityId.set(opts.activeQualityId);
@@ -380,6 +377,8 @@ export class CastPlayerService {
         if (!fanartUrl && media.fanartUrl) fanartUrl = media.fanartUrl;
       } catch { /* ignore — will proceed without streamInfo */ }
     }
+    // Resolve relative URLs to absolute (needed on mobile where origin is localhost)
+    if (fanartUrl) fanartUrl = this.serverConfig.resolveUrl(fanartUrl);
 
     // Resolve preferred audio stream index from user settings
     const audioStreams: { language?: string }[] = streamInfo?.audio ?? [];

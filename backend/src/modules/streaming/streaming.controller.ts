@@ -296,12 +296,15 @@ export class StreamingController {
     const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
     const audioStreams: { language?: string; title?: string }[] =
       si?.audio ?? [];
-    // Use EXT-X-MEDIA only when the client needs it (Shaka on web).
+    // Use EXT-X-MEDIA only when the client needs it (Shaka on web) AND supports fMP4.
     // Native players (ExoPlayer/AVPlayer) handle multi-audio from muxed TS.
+    // Cast (TS) can't handle separate fMP4 audio renditions.
     const clientMuxesAudio =
       this.activeStreamTracker.getMultiAudioMuxed(mediaFileId);
+    const fmp4Supported =
+      this.activeStreamTracker.getFmp4Supported(mediaFileId);
     const useExtXMedia =
-      audioStreams.length > 1 && !clientMuxesAudio;
+      audioStreams.length > 1 && !clientMuxesAudio && fmp4Supported;
     const playlist = this.transcodingService.generateMasterPlaylist(
       mediaFileId,
       w,
@@ -533,8 +536,9 @@ export class StreamingController {
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
     const basePath = `/api/stream/${mediaFileId}/${quality}`;
     const useFmp4 = this.activeStreamTracker.getFmp4Supported(mediaFileId);
+    // var_stream_map (subdirectories) only active with fMP4 + multi-audio
     const multiAudio =
-      this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1;
+      this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 && useFmp4;
 
     let playlist: string;
     if (useFmp4) {
@@ -585,7 +589,8 @@ export class StreamingController {
         req.user?.id,
       );
       if (existing) {
-        const ma = this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1;
+        const fmp4 = this.activeStreamTracker.getFmp4Supported(mediaFileId);
+        const ma = this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 && fmp4;
         const initFile = ma ? `0/${segment}` : segment;
         const initPath = await this.transcodingService.getSegmentPath(
           existing,
@@ -622,10 +627,11 @@ export class StreamingController {
             ctx,
           );
 
-    // With var_stream_map, video segments are in subdirectory "0/"
-    const multiAudio =
-      this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1;
-    const segName = multiAudio ? `0/${segment}` : segment;
+    // With var_stream_map (fMP4 + multi-audio), video segments are in subdirectory "0/"
+    const varStreamMap =
+      this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
+      this.activeStreamTracker.getFmp4Supported(mediaFileId);
+    const segName = varStreamMap ? `0/${segment}` : segment;
 
     const segPath = await this.transcodingService.getSegmentPath(
       session,
