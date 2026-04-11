@@ -767,21 +767,23 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return session;
   }
 
-  killSession(mediaFileId: number, userId?: number) {
+  async killSession(mediaFileId: number, userId?: number) {
     const key = sessionKey(mediaFileId, userId);
+    const promises: Promise<void>[] = [];
     const session = this.sessions.get(key);
     if (session) {
       this.sessions.delete(key);
-      this.gracefulKill(session);
+      promises.push(this.killAndClean(session.process, session.cachePath));
     }
     // Also kill associated audio sessions
     const audioPrefix = `${key}-a`;
     for (const [id, s] of this.sessions) {
       if (id.startsWith(audioPrefix)) {
         this.sessions.delete(id);
-        this.gracefulKill(s);
+        promises.push(this.killAndClean(s.process, s.cachePath));
       }
     }
+    await Promise.all(promises);
   }
 
   /** Kill a session by its map key (used by admin dashboard). */
@@ -1074,7 +1076,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     }
 
     // ── Audio mapping + HLS output ──
-    const useVarStreamMap = videoOnly && audioStreams && audioStreams.length > 1;
+    // var_stream_map requires fMP4. For TS clients (Cast), fall back to single-audio.
+    const useVarStreamMap = useFmp4 && videoOnly && audioStreams && audioStreams.length > 1;
 
     if (useVarStreamMap) {
       // Single FFmpeg process for video + all audio renditions (perfect sync).

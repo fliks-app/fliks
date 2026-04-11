@@ -534,6 +534,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         );
         this.activeAudioStreamIndex = preselectedAudioIndex;
 
+        // Kill any stale session (e.g. Cast used TS, now player needs fMP4, or vice versa)
+        await this.streamingApi.stopSessions(this.mediaFileId).catch(() => {});
+
         // Ask the backend to decide how to play
         const deviceProfile = this.deviceProfileService.getProfile();
         this.playbackInfo = await this.streamingApi.getPlaybackInfo(

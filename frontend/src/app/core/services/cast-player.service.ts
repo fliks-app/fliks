@@ -9,6 +9,7 @@ import { ServerConfigService } from './server-config.service';
 import { parseAudioIndex } from '../utils/player.utils';
 import { PlayerSettingsService } from './player-settings.service';
 import { TrackManagerService } from './track-manager.service';
+import { MediaService } from './api/media.service';
 
 export interface CastSubtitleOption {
   id: string;
@@ -56,6 +57,7 @@ export class CastPlayerService {
   private readonly serverConfig = inject(ServerConfigService);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly trackManager = inject(TrackManagerService);
+  private readonly mediaService = inject(MediaService);
 
   /** Chromecast device profile — only H264 + AAC, forces transcode for incompatible codecs. */
   /** Chromecast profile — force full transcode to guarantee H264+AAC HLS output. */
@@ -159,8 +161,9 @@ export class CastPlayerService {
     this.startPositionSaving();
   }
 
-  /** Clear Cast media state (on disconnect). */
+  /** Clear Cast media state (on disconnect/stop). Saves position first. */
   clear() {
+    this.saveCastPosition(); // Save final position before clearing
     this.stopPositionSaving();
     this.hasMedia.set(false);
     this.expanded.set(false);
@@ -170,6 +173,9 @@ export class CastPlayerService {
   async reloadCastStream(positionOverride?: number) {
     const mfId = this.mediaFileId();
     if (!mfId) return;
+
+    // Kill any existing session — Cast uses TS while desktop uses fMP4.
+    await this.streamingApi.stopSessions(mfId).catch(() => {});
 
     const castProfile = this.getCastDeviceProfile();
 
@@ -222,12 +228,11 @@ export class CastPlayerService {
       castUrl = this.streamingApi.getAbsoluteStreamUrl(mfId, castToken);
       contentType = 'video/mp4';
     } else if (castMode === 'remux') {
-      // Always transcode audio for Cast (Chromecast only supports AAC)
-      castUrl = `${lanUrl}/api/stream/${mfId}/remux/index.m3u8?token=${encodeURIComponent(castToken)}&copyAudio=false`;
+      castUrl = `${lanUrl}/api/stream/${mfId}/remux/index.m3u8?token=${encodeURIComponent(castToken)}&copyAudio=false&startAt=${Math.floor(currentPos)}`;
       contentType = 'application/x-mpegurl';
     } else {
       const q = transcodeQuality ?? '1080p';
-      castUrl = `${lanUrl}/api/stream/${mfId}/${q}/index.m3u8?token=${encodeURIComponent(castToken)}`;
+      castUrl = `${lanUrl}/api/stream/${mfId}/${q}/index.m3u8?token=${encodeURIComponent(castToken)}&startAt=${Math.floor(currentPos)}`;
       contentType = 'application/x-mpegurl';
     }
 
@@ -277,10 +282,6 @@ export class CastPlayerService {
       trackId, this.availableAudioTracks(), this.mediaId(), 0,
     );
 
-    // Kill existing session — audio is muxed in the TS segments,
-    // so a new session with the new audio track is needed.
-    const mfId = this.mediaFileId();
-    if (mfId) this.streamingApi.stopSessions(mfId).catch(() => {});
     await this.reloadCastStream();
   }
 
@@ -349,8 +350,6 @@ export class CastPlayerService {
   async changeBurnIn(subtitleDbId: number | null) {
     if (this.activeBurnInId === subtitleDbId) return;
     this.activeBurnInId = subtitleDbId;
-    const mfId = this.mediaFileId();
-    if (mfId) this.streamingApi.stopSessions(mfId).catch(() => {});
     await this.reloadCastStream();
   }
 
@@ -370,8 +369,20 @@ export class CastPlayerService {
   }) {
     const castProfile = this.getCastDeviceProfile();
 
+    // Fetch media info if streamInfo not provided (e.g. from "Continue Watching")
+    let streamInfo = opts.streamInfo;
+    let fanartUrl = opts.fanartUrl ?? null;
+    if (!streamInfo) {
+      try {
+        const media = await this.mediaService.getOne(opts.mediaId);
+        const file = media.files?.find((f: any) => f.id === opts.mediaFileId);
+        streamInfo = file?.streamInfo;
+        if (!fanartUrl && media.fanartUrl) fanartUrl = media.fanartUrl;
+      } catch { /* ignore — will proceed without streamInfo */ }
+    }
+
     // Resolve preferred audio stream index from user settings
-    const audioStreams: { language?: string }[] = opts.streamInfo?.audio ?? [];
+    const audioStreams: { language?: string }[] = streamInfo?.audio ?? [];
     const audioIndex = this.playerSettings.resolveAudioStreamIndex(
       opts.mediaFileId, audioStreams, opts.mediaId,
     );
@@ -428,7 +439,7 @@ export class CastPlayerService {
 
     // Build audio tracks from streamInfo
     const audioTracks: CastAudioOption[] = [];
-    const si = opts.streamInfo;
+    const si = streamInfo;
     if (si?.audio?.length) {
       for (let i = 0; i < si.audio.length; i++) {
         const a = si.audio[i];
@@ -447,7 +458,7 @@ export class CastPlayerService {
       episodeId: opts.episodeId,
       mediaTitle: opts.title,
       episodeTitle: opts.episodeTitle ?? '',
-      fanartUrl: opts.fanartUrl ?? null,
+      fanartUrl,
       playbackMode: mode,
       subtitles: subtitleInfos,
       qualities,

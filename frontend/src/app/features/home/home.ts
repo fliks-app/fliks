@@ -56,7 +56,7 @@ export class HomeComponent implements OnInit {
         episodeId: item.episodeId ?? undefined,
         title: item.mediaTitle,
         episodeTitle: item.episodeLabel ?? undefined,
-        fanartUrl: item.posterUrl,
+        fanartUrl: item.fanartUrl ?? item.posterUrl,
       });
       this.castPlayer.expanded.set(true);
     } else {

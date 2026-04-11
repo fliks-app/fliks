@@ -106,8 +106,11 @@ export class StreamingController {
       audioStreamIndex:
         this.activeStreamTracker.getAudioStreamIndex(mediaFileId),
       crop: si?.video?.[0]?.crop ?? undefined,
+      // videoOnly only makes sense with fMP4 (var_stream_map produces separate audio).
+      // For TS (Cast), audio must stay muxed in the video stream.
       videoOnly:
-        this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1,
+        this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
+        this.activeStreamTracker.getFmp4Supported(mediaFileId),
       // Pass audio stream info for var_stream_map (single FFmpeg, multi-output)
       audioStreams:
         this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1
@@ -492,13 +495,18 @@ export class StreamingController {
       return;
     }
 
-    // Only pre-start if no session exists yet — Shaka loads ALL variant playlists
-    // in parallel and each call would kill the previous session (same key per user+file).
+    // Pre-start transcoding so the first segment is ready when the player requests it.
+    // Only if no session already exists (Shaka loads multiple playlists in parallel).
     const existing = this.transcodingService.getExistingSession(
       mediaFileId,
       req.user?.id,
     );
     if (!existing || existing.process.exitCode !== null) {
+      // startAt query param: Cast passes the resume position so we pre-start at the right segment
+      const startAtRaw = firstQueryString(req.query, 'startAt');
+      const startAtSec = startAtRaw ? parseInt(startAtRaw, 10) : 0;
+      const startSegment = startAtSec > 0 ? Math.floor(startAtSec / 6) : 0;
+
       const ctx = this.buildSessionContext(req, resolved, mediaFileId);
       if (quality === 'remux') {
         const copyAudio =
@@ -507,7 +515,7 @@ export class StreamingController {
           mediaFileId,
           resolved.absolutePath,
           copyAudio,
-          0,
+          startSegment,
           ctx,
         );
       } else {
@@ -515,7 +523,7 @@ export class StreamingController {
           mediaFileId,
           quality,
           resolved.absolutePath,
-          0,
+          startSegment,
           ctx,
         );
       }
@@ -639,12 +647,12 @@ export class StreamingController {
 
   /** Stop the transcoding session for this user + media file (called on player close / page unload). */
   @Delete(':mediaFileId/sessions')
-  stopSessions(
+  async stopSessions(
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
     @Req() req: Request,
   ) {
     const user = req.user;
-    this.transcodingService.killSession(mediaFileId, user?.id);
+    await this.transcodingService.killSession(mediaFileId, user?.id);
     if (user) {
       this.activeStreamTracker.unregister(user.id, mediaFileId);
     }
