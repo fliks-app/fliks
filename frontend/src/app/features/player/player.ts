@@ -666,6 +666,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         });
       }
 
+      // Hide controls after autoplay starts
+      this.resetHideTimer();
+
       // Save position every 10s + immediately on seek
       this.saveInterval = setInterval(() => this.savePosition(), 10_000);
       const video = this.videoEl()?.nativeElement;
@@ -831,6 +834,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private isDropdownOpen(): boolean {
+    // Check via signals (reliable on mobile)
+    if (this.subtitlePickerOpen() || this.qualityPickerOpen()) return true;
+    // Check via DOM (DaisyUI dropdowns use focus-within)
+    const container = this.containerEl()?.nativeElement;
+    if (container?.querySelector('.dropdown:focus-within')) return true;
     const active = document.activeElement;
     return !!active && !!active.closest('.dropdown');
   }
@@ -839,8 +847,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   onTogglePlay() {
     if (!this.engine) return;
-    if (this.paused()) this.engine.play().catch(() => {});
-    else this.engine.pause().catch(() => {});
+    if (this.paused()) {
+      this.engine.play().catch(() => {});
+      this.resetHideTimer();
+    } else {
+      this.engine.pause().catch(() => {});
+    }
   }
 
   onSeek(time: number) {
@@ -1074,6 +1086,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   async onSelectAudioTrack(trackId: string) {
     this.activeAudioTrackId.set(trackId);
     this.activeAudioStreamIndex = parseAudioIndex(trackId);
+    this.resetHideTimer();
 
     // Save selection
     this.trackManager.saveAudioSelection(
@@ -1092,6 +1105,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   async selectSubtitle(sub: SubtitleOption | null) {
     if (!this.engine) return;
+    this.resetHideTimer();
 
     if (!sub) {
       try { this.engine.setTextVisibility(false); } catch {}
@@ -1230,6 +1244,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (option) {
       this.qualityManager.selectQuality(option, this.engine, this.playbackMode());
     }
+    this.resetHideTimer();
   }
 
   onSelectSubtitleById(id: string | null) {
