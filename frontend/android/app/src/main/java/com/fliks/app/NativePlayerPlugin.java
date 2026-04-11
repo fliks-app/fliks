@@ -8,6 +8,7 @@ import android.view.Gravity;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
@@ -89,6 +90,9 @@ public class NativePlayerPlugin extends Plugin {
             webView.setBackgroundColor(Color.TRANSPARENT);
             webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
+            // Keep screen on during playback
+            getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
             call.resolve();
         });
     }
@@ -108,6 +112,8 @@ public class NativePlayerPlugin extends Plugin {
                 aspectFrame = null;
                 textureView = null;
             }
+            // Allow screen to sleep again
+            getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             call.resolve();
         });
     }
