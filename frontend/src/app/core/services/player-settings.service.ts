@@ -152,6 +152,10 @@ export class PlayerSettingsService {
     }
   }
 
+  clearRememberedAudioTracks() {
+    localStorage.removeItem(AUDIO_SELECTIONS_KEY);
+  }
+
   clearRememberedSubtitleTracks() {
     localStorage.removeItem(SUB_SELECTIONS_KEY);
   }

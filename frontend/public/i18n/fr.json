@@ -162,6 +162,7 @@
     "player_use_default_hint": "Ignorer les préférences de langue et toujours utiliser la piste audio par défaut du fichier.",
     "player_remember_audio": "Mémoriser les sélections audio",
     "player_remember_audio_hint": "Le lecteur se souviendra de la piste audio choisie pour chaque fichier.",
+    "player_clear_saved": "Vider les sélections audio enregistrées",
     "tab_subtitles": "Sous-titres",
     "sub_preferred_lang": "Langue préférée pour les sous-titres",
     "sub_mode": "Mode des sous-titres",
@@ -751,7 +752,9 @@
     "show_more": "Voir plus",
     "show_less": "Voir moins",
     "copy": "Copier",
-    "copied": "Copié"
+    "copied": "Copié",
+    "settings_saved": "Paramètres enregistrés",
+    "selections_cleared": "Sélections effacées"
   },
   "downloads": {
     "title": "Téléchargements",
@@ -820,7 +823,16 @@
       "cast_routes_hint": "Le Chromecast se connecte directement au serveur. Ces routes doivent rester accessibles depuis les IP autorisées.",
       "col_method": "Méthode",
       "col_route": "Route",
-      "col_description": "Description"
+      "col_description": "Description",
+      "error_no_ranges": "Ajoutez au moins un range IP",
+      "error_activate": "Erreur lors de l'activation",
+      "success_activate": "Restriction IP activée",
+      "error_activate_revoked": "Erreur — la restriction a peut-être été révoquée",
+      "success_deactivate": "Restriction IP désactivée",
+      "error_deactivate": "Erreur lors de la désactivation",
+      "error_confirm_expired": "Confirmation expirée — restriction désactivée automatiquement",
+      "error_save": "Erreur lors de la sauvegarde",
+      "error_fetch_ip": "Impossible de récupérer l'IP"
     },
     "general": {
       "title": "Paramètres généraux",

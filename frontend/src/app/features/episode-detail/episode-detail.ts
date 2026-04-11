@@ -402,9 +402,9 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
     this.epGrabBusy.set('best');
     try {
       await this.mediaService.grabEpisode(m.id, ep.id, {});
-      this.toast.success('Téléchargement lancé');
+      this.toast.success(this.translate.instant('downloads.started'));
     } catch {
-      this.toast.error('Erreur lors du téléchargement');
+      this.toast.error(this.translate.instant('downloads.error'));
     } finally {
       this.epGrabBusy.set(null);
     }
@@ -422,10 +422,10 @@ export class EpisodeDetailComponent implements OnInit, OnDestroy {
         sourceTitle: release.title,
       });
       this.epGrabState.update((s) => new Map(s).set(key, 'ok'));
-      this.toast.success('Téléchargement lancé');
+      this.toast.success(this.translate.instant('downloads.started'));
     } catch {
       this.epGrabState.update((s) => new Map(s).set(key, 'error'));
-      this.toast.error('Erreur lors du téléchargement');
+      this.toast.error(this.translate.instant('downloads.error'));
     } finally {
       this.epGrabBusy.set(null);
     }

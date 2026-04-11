@@ -202,21 +202,21 @@ export const routes: Routes = [
       {
         path: 'player',
         loadComponent: () =>
-          import('./features/playback-settings/player-settings').then(
+          import('./features/playback-settings/player-settings/player-settings').then(
             (m) => m.PlayerSettingsPageComponent,
           ),
       },
       {
         path: 'subtitles',
         loadComponent: () =>
-          import('./features/playback-settings/subtitle-settings').then(
+          import('./features/playback-settings/subtitle-settings/subtitle-settings').then(
             (m) => m.SubtitleSettingsPageComponent,
           ),
       },
       {
         path: 'cast',
         loadComponent: () =>
-          import('./features/playback-settings/cast-settings').then(
+          import('./features/playback-settings/cast-settings/cast-settings').then(
             (m) => m.CastSettingsPageComponent,
           ),
       },

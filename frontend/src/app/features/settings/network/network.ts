@@ -1,6 +1,6 @@
 import { Component, ChangeDetectionStrategy, signal, inject, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
@@ -32,6 +32,7 @@ const CAST_ROUTES = [
 export class NetworkSettingsComponent implements OnInit, OnDestroy {
   private readonly settingsApi = inject(SettingsApiService);
   private readonly toast = inject(ToastService);
+  private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
 
   readonly castRoutes = CAST_ROUTES;
@@ -75,7 +76,7 @@ export class NetworkSettingsComponent implements OnInit, OnDestroy {
       .filter(Boolean);
 
     if (!rangesArray.length) {
-      this.toast.error('Ajoutez au moins un range IP');
+      this.toast.error(this.translate.instant('network.error_no_ranges'));
       this.saving.set(false);
       return;
     }
@@ -91,7 +92,7 @@ export class NetworkSettingsComponent implements OnInit, OnDestroy {
       this.enabled.set('pending');
       this.startCountdown();
     } catch {
-      this.toast.error('Erreur lors de l\'activation');
+      this.toast.error(this.translate.instant('network.error_activate'));
     }
     this.saving.set(false);
   }
@@ -104,9 +105,9 @@ export class NetworkSettingsComponent implements OnInit, OnDestroy {
       });
       this.enabled.set('true');
       this.stopCountdown();
-      this.toast.success('Restriction IP activée');
+      this.toast.success(this.translate.instant('network.success_activate'));
     } catch {
-      this.toast.error('Erreur — la restriction a peut-être été révoquée');
+      this.toast.error(this.translate.instant('network.error_activate_revoked'));
       this.enabled.set('false');
       this.stopCountdown();
     }
@@ -120,9 +121,9 @@ export class NetworkSettingsComponent implements OnInit, OnDestroy {
       });
       this.enabled.set('false');
       this.stopCountdown();
-      this.toast.success('Restriction IP désactivée');
+      this.toast.success(this.translate.instant('network.success_deactivate'));
     } catch {
-      this.toast.error('Erreur lors de la désactivation');
+      this.toast.error(this.translate.instant('network.error_deactivate'));
     }
   }
 
@@ -134,7 +135,7 @@ export class NetworkSettingsComponent implements OnInit, OnDestroy {
       if (v <= 0) {
         this.stopCountdown();
         this.enabled.set('false');
-        this.toast.error('Confirmation expirée — restriction désactivée automatiquement');
+        this.toast.error(this.translate.instant('network.error_confirm_expired'));
       }
     }, 1000);
   }
@@ -149,9 +150,9 @@ export class NetworkSettingsComponent implements OnInit, OnDestroy {
         ip_whitelist_ranges: JSON.stringify(rangesArray),
         ip_whitelist_expose_cast: this.exposeCast() ? 'true' : 'false',
       });
-      this.toast.success('Paramètres enregistrés');
+      this.toast.success(this.translate.instant('common.settings_saved'));
     } catch {
-      this.toast.error('Erreur lors de la sauvegarde');
+      this.toast.error(this.translate.instant('network.error_save'));
     }
   }
 
@@ -165,7 +166,7 @@ export class NetworkSettingsComponent implements OnInit, OnDestroy {
       this.myIp.set(res.ip);
       this.myIpv6.set(res.ipv6 ?? null);
     } catch {
-      this.toast.error('Impossible de récupérer l\'IP');
+      this.toast.error(this.translate.instant('network.error_fetch_ip'));
     }
   }
 
