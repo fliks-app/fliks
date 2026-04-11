@@ -104,6 +104,17 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     number | undefined
   >();
 
+  /** Number of audio streams per media file — used to decide multi-audio HLS mode */
+  private readonly audioStreamCountCache = new Map<number, number>();
+
+  setAudioStreamCount(mediaFileId: number, count: number) {
+    this.audioStreamCountCache.set(mediaFileId, count);
+  }
+
+  getAudioStreamCount(mediaFileId: number): number {
+    return this.audioStreamCountCache.get(mediaFileId) ?? 0;
+  }
+
   setAudioStreamIndex(mediaFileId: number, index: number | undefined) {
     if (index != null) this.audioStreamIndexCache.set(mediaFileId, index);
     else this.audioStreamIndexCache.delete(mediaFileId);

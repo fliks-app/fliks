@@ -46,6 +46,8 @@ export interface SessionContext {
   audioStreamIndex?: number;
   /** Crop info for removing hardcoded black bars */
   crop?: { width: number; height: number; x: number; y: number };
+  /** When true, produce video-only segments (audio served separately via EXT-X-MEDIA) */
+  videoOnly?: boolean;
 }
 
 export interface TranscodeSession {
@@ -70,11 +72,22 @@ export interface TranscodeSession {
   actualHwAccel?: HwAccelType;
   /** FFmpeg stderr output (for debugging HW accel failures) */
   stderr?: string;
+  /** True for audio-only sessions (multi-audio HLS renditions) */
+  isAudioOnly?: boolean;
 }
 
 /** Build the session map key: one transcode per user per file (like Jellyfin/Plex). */
 function sessionKey(mediaFileId: number, userId?: number): string {
   return userId != null ? `${mediaFileId}-u${userId}` : `${mediaFileId}-anon`;
+}
+
+/** Build audio session key: separate audio-only session per audio track index. */
+function audioSessionKey(
+  mediaFileId: number,
+  audioIndex: number,
+  userId?: number,
+): string {
+  return `${sessionKey(mediaFileId, userId)}-a${audioIndex}`;
 }
 
 export type HwAccelType = 'vaapi' | 'nvenc' | 'qsv' | 'none';
@@ -246,14 +259,40 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     tokenParam: string,
     includeRemux = false,
     sourceBitrate?: number,
+    audioStreams?: { language?: string; title?: string }[],
   ): string {
+    const multiAudio = audioStreams && audioStreams.length > 1;
     const lines = ['#EXTM3U'];
+
+    // Multi-audio: declare alternate audio renditions via EXT-X-MEDIA
+    if (multiAudio) {
+      for (let i = 0; i < audioStreams.length; i++) {
+        const a = audioStreams[i];
+        const lang = a.language || 'und';
+        const name = a.title || lang;
+        const isDefault = i === 0 ? 'YES' : 'NO';
+        lines.push(
+          `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${name}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
+        );
+      }
+    }
+
+    // When multi-audio, Shaka requires CODECS on EXT-X-STREAM-INF to validate browser support.
+    // Transcoded = H.264 High + AAC-LC. Remux = source video codec + AAC-LC.
+    const audioAttr = multiAudio ? ',AUDIO="audio"' : '';
+    const transcodeCodecs = multiAudio
+      ? ',CODECS="avc1.640028,mp4a.40.2"'
+      : '';
 
     // Add remux variant (original quality, no video re-encoding) as highest quality
     if (includeRemux) {
       const bw = sourceBitrate ?? 20_000_000; // fallback to 20 Mbps if unknown
+      // Remux keeps source video codec; use avc1 as safe default for CODECS
+      const remuxCodecs = multiAudio
+        ? ',CODECS="avc1.640028,mp4a.40.2"'
+        : '';
       lines.push(
-        `#EXT-X-STREAM-INF:BANDWIDTH=${bw},RESOLUTION=${sourceWidth}x${sourceHeight},NAME="remux"`,
+        `#EXT-X-STREAM-INF:BANDWIDTH=${bw},RESOLUTION=${sourceWidth}x${sourceHeight},NAME="remux"${remuxCodecs}${audioAttr}`,
         `/api/stream/${mediaFileId}/remux/index.m3u8${tokenParam}`,
       );
     }
@@ -263,15 +302,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     if (!profiles.length) profiles.push(PROFILES[PROFILES.length - 1]); // at least 480p
 
     for (const p of profiles) {
-      // HLS BANDWIDTH = peak total for the variant (video + audio), not video-only.
       const bw =
         parseBitrateToBps(p.videoBitrate) + parseBitrateToBps(p.audioBitrate);
       const w = Math.min(p.maxWidth, sourceWidth);
-      // Compute height from source aspect ratio, aligned to 16px (matches ffmpeg scale=W:-16 for HW encoders)
       const rawH = (w * sourceHeight) / sourceWidth;
       const h = Math.floor(rawH / 16) * 16 || 16;
       lines.push(
-        `#EXT-X-STREAM-INF:BANDWIDTH=${bw},RESOLUTION=${w}x${h},NAME="${p.name}"`,
+        `#EXT-X-STREAM-INF:BANDWIDTH=${bw},RESOLUTION=${w}x${h},NAME="${p.name}"${transcodeCodecs}${audioAttr}`,
         `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
       );
     }
@@ -369,8 +406,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // Enforce max sessions
-    if (this.sessions.size >= MAX_SESSIONS) {
+    // Enforce max sessions (audio-only sessions don't count)
+    const videoSessionCount = Array.from(this.sessions.values()).filter(
+      (s) => !s.isAudioOnly,
+    ).length;
+    if (videoSessionCount >= MAX_SESSIONS) {
       this.evictOldestSession();
     }
 
@@ -382,7 +422,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const burnIn = ctx?.burnInSubtitle;
     const audioIdx = ctx?.audioStreamIndex;
     const cropInfo = ctx?.crop;
-    const session = await this.startFfmpeg(
+    const isVideoOnly = ctx?.videoOnly ?? false;
+    const session = this.startFfmpeg(
       key,
       mediaFileId,
       quality,
@@ -395,6 +436,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       burnIn,
       audioIdx,
       cropInfo,
+      isVideoOnly,
     );
     this.applyContext(session, ctx);
 
@@ -425,7 +467,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         this.sessions.delete(key);
         await this.killAndClean(session.process, sessionDir);
         await fsp.mkdir(sessionDir, { recursive: true });
-        const cpuSession = await this.startFfmpeg(
+        const cpuSession = this.startFfmpeg(
           key,
           mediaFileId,
           quality,
@@ -438,6 +480,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           burnIn,
           audioIdx,
           cropInfo,
+          isVideoOnly,
         );
         this.applyContext(cpuSession, ctx);
         this.sessions.set(key, cpuSession);
@@ -503,37 +546,24 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return null;
   }
 
-  private async startFfmpeg(
-    sessionId: string,
-    mediaFileId: number,
-    quality: string,
-    absolutePath: string,
-    profile: TranscodeProfile,
-    sessionDir: string,
-    hwAccel: HwAccelType,
-    startSegment = 0,
-    tonemap = false,
-    burnIn?: BurnInSubtitle,
-    audioStreamIndex?: number,
-    crop?: { width: number; height: number; x: number; y: number },
-  ): Promise<TranscodeSession> {
+  /**
+   * Shared helper: spawn an FFmpeg process, wait for first segment, and register the session.
+   */
+  private spawnFfmpegSession(opts: {
+    id: string;
+    mediaFileId: number;
+    quality: string;
+    args: string[];
+    sessionDir: string;
+    startSegment: number;
+    extra?: Partial<TranscodeSession>;
+  }): TranscodeSession {
+    const { id, mediaFileId, quality, args, sessionDir, startSegment, extra } =
+      opts;
     const { resolve: readyResolve, promise: readyPromise } =
       this.createDeferred();
 
-    const args = this.buildFfmpegArgs(
-      absolutePath,
-      profile,
-      sessionDir,
-      hwAccel,
-      startSegment,
-      tonemap,
-      burnIn,
-      audioStreamIndex,
-      crop,
-    );
-    this.log.log(
-      `Transcode start [${sessionId}] (${hwAccel}): ffmpeg ${args.join(' ')}`,
-    );
+    this.log.log(`FFmpeg start [${id}]: ffmpeg ${args.join(' ')}`);
 
     const proc = spawn('ffmpeg', args, {
       stdio: ['ignore', 'ignore', 'pipe'],
@@ -558,7 +588,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       checkReady();
     });
 
-    // Also poll for the segment file (stderr may not fire for all encoders)
     const pollTimer = setInterval(() => {
       checkReady();
       if (resolved) clearInterval(pollTimer);
@@ -571,26 +600,24 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         readyResolve();
       }
       if (code && code !== 0 && code !== 255) {
-        this.log.error(
-          `Transcode [${sessionId}] exited ${code}:\n${stderr.slice(-500)}`,
-        );
+        this.log.error(`FFmpeg [${id}] exited ${code}:\n${stderr.slice(-500)}`);
       }
     });
 
     proc.on('error', (err) => {
-      this.log.error(`Transcode [${sessionId}] spawn error: ${err.message}`);
+      this.log.error(`FFmpeg [${id}] spawn error: ${err.message}`);
       readyResolve();
     });
 
     const session: TranscodeSession = {
-      id: sessionId,
+      id,
       mediaFileId,
       quality,
       process: proc,
       cachePath: sessionDir,
       lastAccess: Date.now(),
       ready: readyPromise,
-      actualHwAccel: hwAccel,
+      ...extra,
     };
 
     // Keep stderr reference on session for debugging
@@ -598,11 +625,50 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       session.stderr = stderr;
     });
 
-    this.sessions.set(sessionId, session);
+    this.sessions.set(id, session);
     return session;
   }
 
-  private async startSeekSession(
+  private startFfmpeg(
+    sessionId: string,
+    mediaFileId: number,
+    quality: string,
+    absolutePath: string,
+    profile: TranscodeProfile,
+    sessionDir: string,
+    hwAccel: HwAccelType,
+    startSegment = 0,
+    tonemap = false,
+    burnIn?: BurnInSubtitle,
+    audioStreamIndex?: number,
+    crop?: { width: number; height: number; x: number; y: number },
+    videoOnly = false,
+  ): TranscodeSession {
+    const args = this.buildFfmpegArgs(
+      absolutePath,
+      profile,
+      sessionDir,
+      hwAccel,
+      startSegment,
+      tonemap,
+      burnIn,
+      audioStreamIndex,
+      crop,
+      videoOnly,
+    );
+
+    return this.spawnFfmpegSession({
+      id: sessionId,
+      mediaFileId,
+      quality,
+      args,
+      sessionDir,
+      startSegment,
+      extra: { actualHwAccel: hwAccel },
+    });
+  }
+
+  private startSeekSession(
     sessionId: string,
     mediaFileId: number,
     quality: string,
@@ -610,9 +676,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     sessionDir: string,
     startSegment: number,
     ctx?: SessionContext,
-  ): Promise<TranscodeSession> {
+  ): TranscodeSession {
     const profile = PROFILES.find((p) => p.name === quality) ?? PROFILES[0];
-    const session = await this.startFfmpeg(
+    const session = this.startFfmpeg(
       sessionId,
       mediaFileId,
       quality,
@@ -625,6 +691,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ctx?.burnInSubtitle,
       ctx?.audioStreamIndex,
       ctx?.crop,
+      ctx?.videoOnly ?? false,
     );
     this.applyContext(session, ctx);
     this.sessions.set(sessionId, session);
@@ -634,9 +701,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   killSession(mediaFileId: number, userId?: number) {
     const key = sessionKey(mediaFileId, userId);
     const session = this.sessions.get(key);
-    if (!session) return;
-    this.sessions.delete(key);
-    this.gracefulKill(session);
+    if (session) {
+      this.sessions.delete(key);
+      this.gracefulKill(session);
+    }
+    // Also kill associated audio sessions
+    const audioPrefix = `${key}-a`;
+    for (const [id, s] of this.sessions) {
+      if (id.startsWith(audioPrefix)) {
+        this.sessions.delete(id);
+        this.gracefulKill(s);
+      }
+    }
   }
 
   /** Kill a session by its map key (used by admin dashboard). */
@@ -672,6 +748,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     burnIn?: BurnInSubtitle,
     audioStreamIndex?: number,
     crop?: { width: number; height: number; x: number; y: number },
+    videoOnly = false,
   ): string[] {
     const args = ['-hide_banner', '-loglevel', 'warning'];
 
@@ -924,13 +1001,61 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         break;
     }
 
-    // Audio — select specific audio stream if requested
-    if (audioStreamIndex != null) {
-      args.push('-map', '0:v:0', '-map', `0:a:${audioStreamIndex}`);
+    // Audio — video-only mode strips audio entirely (used for multi-audio HLS)
+    if (videoOnly) {
+      if (!args.some((a) => a === '-map')) {
+        args.push('-map', '0:v:0');
+      }
+      args.push('-an');
+    } else {
+      if (audioStreamIndex != null) {
+        args.push('-map', '0:v:0', '-map', `0:a:${audioStreamIndex}`);
+      }
+      args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
     }
-    args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
 
     // HLS output
+    args.push(
+      '-f',
+      'hls',
+      '-hls_time',
+      String(SEGMENT_DURATION),
+      '-hls_list_size',
+      '0',
+      '-start_number',
+      String(startSegment),
+      '-hls_segment_filename',
+      path.join(outputDir, 'seg-%04d.ts'),
+      '-hls_flags',
+      'independent_segments',
+      path.join(outputDir, 'index.m3u8'),
+    );
+
+    return args;
+  }
+
+  /**
+   * Build FFmpeg args for audio-only HLS output (used for multi-audio EXT-X-MEDIA renditions).
+   * Lightweight: no video encoding, no HW accel needed.
+   */
+  private buildAudioOnlyFfmpegArgs(
+    inputPath: string,
+    outputDir: string,
+    audioStreamIndex: number,
+    audioBitrate = '192k',
+    startSegment = 0,
+  ): string[] {
+    const args = ['-hide_banner', '-loglevel', 'warning'];
+
+    if (startSegment > 0) {
+      args.push('-ss', String(startSegment * SEGMENT_DURATION));
+    }
+
+    args.push('-i', inputPath);
+    args.push('-map', `0:a:${audioStreamIndex}`);
+    args.push('-vn');
+    args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
+
     args.push(
       '-f',
       'hls',
@@ -960,6 +1085,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     copyAudio: boolean,
     audioBitrate = '192k',
     startSegment = 0,
+    videoOnly = false,
   ): string[] {
     const args = ['-hide_banner', '-loglevel', 'warning'];
 
@@ -969,14 +1095,16 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     args.push('-i', inputPath);
 
-    // Copy video stream as-is (no re-encoding)
-    args.push('-c:v', 'copy');
-
-    // Audio: copy or transcode to AAC
-    if (copyAudio) {
-      args.push('-c:a', 'copy');
+    // Video-only: explicit map + strip audio. Otherwise let FFmpeg auto-select.
+    if (videoOnly) {
+      args.push('-map', '0:v:0', '-c:v', 'copy', '-an');
     } else {
-      args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
+      args.push('-c:v', 'copy');
+      if (copyAudio) {
+        args.push('-c:a', 'copy');
+      } else {
+        args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
+      }
     }
 
     // HLS output with fMP4 segments (better for stream copy)
@@ -1087,74 +1215,125 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const sessionDir = path.join(this.cachePath, key);
     await fsp.mkdir(sessionDir, { recursive: true });
 
-    const { resolve: readyResolve, promise: readyPromise } =
-      this.createDeferred();
+    const isVideoOnly = ctx?.videoOnly ?? false;
     const args = this.buildRemuxArgs(
       absolutePath,
       sessionDir,
       copyAudio,
       '192k',
       requestedSegment,
-    );
-    this.log.log(`Remux start [${key}]: ffmpeg ${args.join(' ')}`);
-
-    const proc = spawn('ffmpeg', args, {
-      stdio: ['ignore', 'ignore', 'pipe'],
-    });
-
-    let stderr = '';
-    let resolved = false;
-    const firstSeg = path.join(
-      sessionDir,
-      `seg-${String(requestedSegment).padStart(4, '0')}.ts`,
+      isVideoOnly,
     );
 
-    const checkReady = () => {
-      if (!resolved && existsSync(firstSeg)) {
-        resolved = true;
-        readyResolve();
-      }
-    };
-
-    proc.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString();
-      checkReady();
-    });
-
-    const pollTimer = setInterval(() => {
-      checkReady();
-      if (resolved) clearInterval(pollTimer);
-    }, 500);
-
-    proc.on('close', (code) => {
-      clearInterval(pollTimer);
-      if (!resolved) {
-        resolved = true;
-        readyResolve();
-      }
-      if (code && code !== 0 && code !== 255) {
-        this.log.error(`Remux [${key}] exited ${code}:\n${stderr.slice(-500)}`);
-      }
-    });
-
-    proc.on('error', (err) => {
-      this.log.error(`Remux [${key}] spawn error: ${err.message}`);
-      readyResolve();
-    });
-
-    const session: TranscodeSession = {
+    const session = this.spawnFfmpegSession({
       id: key,
       mediaFileId,
       quality: 'remux',
-      process: proc,
-      cachePath: sessionDir,
-      lastAccess: Date.now(),
-      ready: readyPromise,
-      remux: true,
-    };
+      args,
+      sessionDir,
+      startSegment: requestedSegment,
+      extra: { remux: true },
+    });
 
     this.applyContext(session, ctx);
-    this.sessions.set(key, session);
+    return session;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Audio-only sessions (multi-audio HLS)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Start or retrieve an audio-only HLS session for a specific audio track.
+   * Audio sessions are keyed separately from video sessions.
+   */
+  async getOrCreateAudioSession(
+    mediaFileId: number,
+    audioIndex: number,
+    absolutePath: string,
+    requestedSegment = 0,
+    ctx?: SessionContext,
+  ): Promise<TranscodeSession> {
+    const key = audioSessionKey(mediaFileId, audioIndex, ctx?.userId);
+    return this.withLock(key, () =>
+      this.doGetOrCreateAudioSession(
+        key,
+        mediaFileId,
+        audioIndex,
+        absolutePath,
+        requestedSegment,
+        ctx,
+      ),
+    );
+  }
+
+  private async doGetOrCreateAudioSession(
+    key: string,
+    mediaFileId: number,
+    audioIndex: number,
+    absolutePath: string,
+    requestedSegment: number,
+    ctx?: SessionContext,
+  ): Promise<TranscodeSession> {
+    const existing = this.sessions.get(key);
+    if (existing) {
+      if (existing.process.exitCode !== null) {
+        this.sessions.delete(key);
+        await fsp.rm(existing.cachePath, { recursive: true, force: true });
+      } else {
+        existing.lastAccess = Date.now();
+
+        // Handle seek
+        if (requestedSegment > 0) {
+          const segFile = path.join(
+            existing.cachePath,
+            `seg-${String(requestedSegment).padStart(4, '0')}.ts`,
+          );
+          const nearbyExists =
+            (await fileExists(segFile)) ||
+            (await fileExists(
+              path.join(
+                existing.cachePath,
+                `seg-${String(Math.max(0, requestedSegment - 1)).padStart(4, '0')}.ts`,
+              ),
+            ));
+          if (!nearbyExists) {
+            this.log.log(
+              `Seek: restarting audio session [${key}] from segment ${requestedSegment}`,
+            );
+            this.sessions.delete(key);
+            await this.killAndClean(existing.process, existing.cachePath);
+          } else {
+            return existing;
+          }
+        } else {
+          return existing;
+        }
+      }
+    }
+
+    const sessionDir = path.join(this.cachePath, key);
+    await fsp.mkdir(sessionDir, { recursive: true });
+
+    const args = this.buildAudioOnlyFfmpegArgs(
+      absolutePath,
+      sessionDir,
+      audioIndex,
+      '192k',
+      requestedSegment,
+    );
+
+    const session = this.spawnFfmpegSession({
+      id: key,
+      mediaFileId,
+      quality: `audio-${audioIndex}`,
+      args,
+      sessionDir,
+      startSegment: requestedSegment,
+      extra: { isAudioOnly: true },
+    });
+
+    this.applyContext(session, ctx);
     return session;
   }
 
@@ -1264,6 +1443,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   private evictOldestSession() {
     let oldest: TranscodeSession | null = null;
     for (const session of this.sessions.values()) {
+      if (session.isAudioOnly) continue; // audio sessions don't count
       if (!oldest || session.lastAccess < oldest.lastAccess) {
         oldest = session;
       }

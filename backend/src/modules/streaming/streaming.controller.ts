@@ -34,6 +34,29 @@ import { DeviceProfileDto } from './dto/device-profile.dto';
 
 const VALID_QUALITIES = new Set([...PROFILES.map((p) => p.name), 'remux']);
 const SEGMENT_RE = /^seg-\d{3,4}\.ts$/;
+const SEG_DURATION = 6;
+
+/** Generate a VOD HLS playlist for a given duration and segment URL pattern. */
+function buildVodPlaylist(
+  duration: number,
+  segmentUrl: (index: string) => string,
+): string {
+  const segCount = Math.ceil(duration / SEG_DURATION);
+  const lines = [
+    '#EXTM3U',
+    '#EXT-X-VERSION:3',
+    `#EXT-X-TARGETDURATION:${SEG_DURATION}`,
+    '#EXT-X-MEDIA-SEQUENCE:0',
+    '#EXT-X-PLAYLIST-TYPE:VOD',
+  ];
+  for (let i = 0; i < segCount; i++) {
+    const segLen = Math.min(SEG_DURATION, duration - i * SEG_DURATION);
+    lines.push(`#EXTINF:${segLen.toFixed(3)},`);
+    lines.push(segmentUrl(String(i).padStart(4, '0')));
+  }
+  lines.push('#EXT-X-ENDLIST');
+  return lines.join('\n');
+}
 
 function firstQueryString(
   query: Request['query'],
@@ -67,6 +90,8 @@ export class StreamingController {
   ): SessionContext {
     const user = req.user;
     const si = resolved.mediaFile.streamInfo;
+    const multiAudio =
+      this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1;
     return {
       userId: user?.id,
       username: user?.username,
@@ -77,10 +102,44 @@ export class StreamingController {
         this.activeStreamTracker.getTranscodeReasons(mediaFileId),
       tonemap: this.activeStreamTracker.getTonemapping(mediaFileId),
       burnInSubtitle: this.activeStreamTracker.getBurnIn(mediaFileId),
-      audioStreamIndex:
-        this.activeStreamTracker.getAudioStreamIndex(mediaFileId),
+      audioStreamIndex: multiAudio
+        ? undefined // audio handled separately via EXT-X-MEDIA
+        : this.activeStreamTracker.getAudioStreamIndex(mediaFileId),
       crop: si?.video?.[0]?.crop ?? undefined,
+      videoOnly: multiAudio,
     };
+  }
+
+  /** Resolve file duration from streamInfo or by probing with ffprobe. */
+  private async resolveDuration(
+    mediaFileId: number,
+    absolutePath: string,
+    streamInfo: { durationSeconds?: number } | null | undefined,
+  ): Promise<number> {
+    let duration = streamInfo?.durationSeconds ?? 0;
+    if (!duration) {
+      try {
+        const { stdout } = await execFileAsync(
+          'ffprobe',
+          [
+            '-v',
+            'error',
+            '-show_entries',
+            'format=duration',
+            '-of',
+            'csv=p=0',
+            absolutePath,
+          ],
+          { timeout: 10_000 },
+        );
+        duration = parseFloat(String(stdout).trim()) || 0;
+      } catch (err) {
+        this.log.warn(
+          `Failed to probe duration for MediaFile #${mediaFileId}: ${err}`,
+        );
+      }
+    }
+    return duration;
   }
 
   /** Current hardware acceleration type detected by the server. */
@@ -217,6 +276,8 @@ export class StreamingController {
 
     const includeRemux = firstQueryString(req.query, 'remux') === '1';
     const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
+    const audioStreams: { language?: string; title?: string }[] =
+      si?.audio ?? [];
     const playlist = this.transcodingService.generateMasterPlaylist(
       mediaFileId,
       w,
@@ -224,6 +285,13 @@ export class StreamingController {
       tokenParam,
       includeRemux,
       sourceBitrate || undefined,
+      audioStreams.length > 1 ? audioStreams : undefined,
+    );
+
+    // Cache audio stream count so subsequent endpoints know to use multi-audio mode
+    this.activeStreamTracker.setAudioStreamCount(
+      mediaFileId,
+      audioStreams.length,
     );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -262,6 +330,94 @@ export class StreamingController {
     res.send(vtt);
   }
 
+  // ---------------------------------------------------------------------------
+  // Audio-only HLS endpoints (multi-audio EXT-X-MEDIA renditions)
+  // Must be registered BEFORE :quality/:segment to avoid route conflicts.
+  // ---------------------------------------------------------------------------
+
+  /** Audio rendition playlist — segment list for a specific audio track. */
+  @Get(':mediaFileId/audio/:audioIndex/index.m3u8')
+  async hlsAudioPlaylist(
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Param('audioIndex', ParseIntPipe) audioIndex: number,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const duration = await this.resolveDuration(
+      mediaFileId,
+      resolved.absolutePath,
+      resolved.mediaFile.streamInfo,
+    );
+    if (!duration) {
+      res.status(404).send('Duration unknown');
+      return;
+    }
+
+    // Start audio-only session in the background
+    const user = req.user;
+    void this.transcodingService.getOrCreateAudioSession(
+      mediaFileId,
+      audioIndex,
+      resolved.absolutePath,
+      0,
+      { userId: user?.id },
+    );
+
+    const token = firstQueryString(req.query, 'token');
+    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+    const playlist = buildVodPlaylist(
+      duration,
+      (seg) =>
+        `/api/stream/${mediaFileId}/audio/${audioIndex}/seg-${seg}.ts${tokenParam}`,
+    );
+
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.send(playlist);
+  }
+
+  /** Audio rendition segment — serves an audio-only .ts segment. */
+  @Get(':mediaFileId/audio/:audioIndex/:segment')
+  async hlsAudioSegment(
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Param('audioIndex', ParseIntPipe) audioIndex: number,
+    @Param('segment') segment: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    if (!SEGMENT_RE.test(segment)) {
+      throw new BadRequestException(`Invalid segment name: ${segment}`);
+    }
+
+    const resolved = await this.streamingService.resolveFile(mediaFileId);
+
+    const segMatch = segment.match(/seg-(\d+)\.ts/);
+    const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
+
+    const user = req.user;
+    const session = await this.transcodingService.getOrCreateAudioSession(
+      mediaFileId,
+      audioIndex,
+      resolved.absolutePath,
+      segIndex,
+      { userId: user?.id },
+    );
+
+    const segPath = await this.transcodingService.getSegmentPath(
+      session,
+      segment,
+    );
+    if (!segPath) {
+      res.status(404).send('Segment not found');
+      return;
+    }
+
+    res.setHeader('Content-Type', 'video/mp2t');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    fs.createReadStream(segPath).pipe(res);
+  }
+
   /** HLS variant playlist — pre-computed segment list based on known duration. */
   @Get(':mediaFileId/:quality/index.m3u8')
   async hlsPlaylist(
@@ -274,33 +430,11 @@ export class StreamingController {
       throw new BadRequestException(`Invalid quality: ${quality}`);
     }
     const resolved = await this.streamingService.resolveFile(mediaFileId);
-    const si = resolved.mediaFile.streamInfo;
-    let duration = si?.durationSeconds ?? 0;
-
-    // If duration unknown, probe it on the fly
-    if (!duration) {
-      try {
-        const { stdout } = await execFileAsync(
-          'ffprobe',
-          [
-            '-v',
-            'error',
-            '-show_entries',
-            'format=duration',
-            '-of',
-            'csv=p=0',
-            resolved.absolutePath,
-          ],
-          { timeout: 10_000 },
-        );
-        duration = parseFloat(String(stdout).trim()) || 0;
-      } catch (err) {
-        this.log.warn(
-          `Failed to probe duration for MediaFile #${mediaFileId}: ${err}`,
-        );
-      }
-    }
-
+    const duration = await this.resolveDuration(
+      mediaFileId,
+      resolved.absolutePath,
+      resolved.mediaFile.streamInfo,
+    );
     if (!duration) {
       res.status(404).send('Duration unknown — rescan the file first');
       return;
@@ -331,31 +465,15 @@ export class StreamingController {
 
     const token = firstQueryString(req.query, 'token');
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
-
-    // Generate a complete playlist upfront so shaka sees a VOD stream with seek support
-    const segDuration = 6;
-    const segCount = Math.ceil(duration / segDuration);
-    const lines = [
-      '#EXTM3U',
-      '#EXT-X-VERSION:3',
-      `#EXT-X-TARGETDURATION:${segDuration}`,
-      '#EXT-X-MEDIA-SEQUENCE:0',
-      '#EXT-X-PLAYLIST-TYPE:VOD',
-    ];
-
-    for (let i = 0; i < segCount; i++) {
-      const remaining = duration - i * segDuration;
-      const segLen = Math.min(segDuration, remaining);
-      lines.push(`#EXTINF:${segLen.toFixed(3)},`);
-      lines.push(
-        `/api/stream/${mediaFileId}/${quality}/seg-${String(i).padStart(4, '0')}.ts${tokenParam}`,
-      );
-    }
-    lines.push('#EXT-X-ENDLIST');
+    const playlist = buildVodPlaylist(
+      duration,
+      (seg) =>
+        `/api/stream/${mediaFileId}/${quality}/seg-${seg}.ts${tokenParam}`,
+    );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(lines.join('\n'));
+    res.send(playlist);
   }
 
   /** HLS segment — serves a transcoded .ts segment. */

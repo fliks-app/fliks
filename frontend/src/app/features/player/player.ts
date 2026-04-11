@@ -1128,7 +1128,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.playerSettings.saveRememberedAudioTrack(this.mediaFileId, trackId);
     }
 
-    // Reload the stream with the new audio track
+    // Shaka native switch (no reload) for EXT-X-MEDIA audio renditions
+    if (trackId.startsWith('shaka-') && this.player) {
+      const audioId = parseInt(trackId.replace('shaka-', ''), 10);
+      const variants = this.player.getVariantTracks();
+      const target = variants.find((v: any) => v.audioId === audioId);
+      if (target) {
+        this.player.selectVariantTrack(target, /* clearBuffer= */ true);
+        return;
+      }
+    }
+
+    // Fallback: legacy reload (direct play, single-audio files)
     await this.reloadStream();
   }
 
@@ -1449,17 +1460,27 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     // Disable ABR and lock to a specific variant
     this.player.configure({ abr: { enabled: false } } as any);
-    const tracks = this.player.getVariantTracks();
-    if (!tracks.length) return;
+    const allTracks = this.player.getVariantTracks();
+    if (!allTracks.length) return;
+
+    // Preserve current audio track: filter variants to those matching the active audioId
+    const activeTrack = allTracks.find((t: any) => t.active);
+    const activeAudioId = activeTrack?.audioId;
+    const tracks =
+      activeAudioId != null
+        ? allTracks.filter((t: any) => t.audioId === activeAudioId)
+        : allTracks;
+    // Fallback to all tracks if filtering left nothing
+    const candidates = tracks.length ? tracks : allTracks;
 
     if (option.id === 'original') {
       // Pick the highest resolution track (original/remux quality)
-      const best = tracks.reduce((a, b) => ((a.height ?? 0) >= (b.height ?? 0) ? a : b));
+      const best = candidates.reduce((a, b) => ((a.height ?? 0) >= (b.height ?? 0) ? a : b));
       this.player.selectVariantTrack(best, true);
     } else {
       // Find the track closest to the requested height
       const target = option.height;
-      const match = tracks.reduce((a, b) =>
+      const match = candidates.reduce((a, b) =>
         Math.abs((a.height ?? 0) - target) <= Math.abs((b.height ?? 0) - target) ? a : b,
       );
       this.player.selectVariantTrack(match, true);
