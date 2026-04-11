@@ -1,5 +1,5 @@
 import { Injectable, signal } from '@angular/core';
-import { parseAudioIndex } from '../utils/player.utils';
+
 
 export interface PlayerSettings {
   // Audio
@@ -104,15 +104,25 @@ export class PlayerSettingsService {
   resolveAudioStreamIndex(
     mediaFileId: number,
     audioStreams: { language?: string }[],
+    mediaId?: number,
   ): number | undefined {
     const s = this.get();
-    if (s.useDefaultAudioStream) return undefined;
 
-    // Priority 1: remembered selection for this file
+    // Priority 1: remembered selection always wins (even with "use default" enabled)
+    // Uses mediaId (series/movie) so the choice carries across episodes.
     if (s.rememberAudioSelections) {
-      const saved = this.getRememberedAudioTrack(mediaFileId);
-      if (saved != null) return parseAudioIndex(saved);
+      const key = mediaId || mediaFileId;
+      const savedLang = this.getRememberedAudioTrack(key);
+      if (savedLang) {
+        const idx = audioStreams.findIndex(
+          (a) => normalizeLang(a.language) === savedLang,
+        );
+        if (idx >= 0) return idx;
+      }
     }
+
+    // "Use default audio stream" skips language/auto-selection but not remembered choices
+    if (s.useDefaultAudioStream) return undefined;
 
     // Priority 2: preferred language
     if (s.preferredAudioLanguage) {

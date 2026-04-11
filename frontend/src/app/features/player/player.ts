@@ -584,7 +584,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
         const audioStreams: { language?: string }[] = (file?.streamInfo as any)?.audio ?? [];
         const preselectedAudioIndex = this.playerSettings.resolveAudioStreamIndex(
-          this.mediaFileId, audioStreams,
+          this.mediaFileId, audioStreams, this.mediaId,
         );
         this.activeAudioStreamIndex = preselectedAudioIndex;
 
@@ -622,15 +622,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           await this.player.load(streamUrl, startTime, 'video/mp4');
         } else {
           // Pre-configure ABR to avoid starting at 360p then switching
-          const savedQuality = this.activeQualityId();
-          const qualityOption = this.availableQualities().find(q => q.id === savedQuality);
-          if (savedQuality === 'auto') {
+          // Pre-configure ABR before load; quality selection is applied after
+          // load via applyQualityPreferenceAfterLoad() / selectQuality().
+          // Don't use restrictions here — height mismatches (e.g. 1080p profile
+          // = 1008px actual due to 16px alignment) would filter out all variants.
+          if (this.activeQualityId() === 'auto') {
             this.configureAutoAbrForHls();
-          } else if (qualityOption && qualityOption.height > 0) {
-            this.player.configure({
-              abr: { enabled: false },
-              restrictions: { minHeight: qualityOption.height, maxHeight: qualityOption.height },
-            } as any);
           }
 
           this.player.configure({
@@ -1096,16 +1093,27 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Auto-select audio track based on user preferences. */
   private autoSelectAudioTrack(tracks: { id: string; language: string }[]) {
     const settings = this.playerSettings.get();
-    if (settings.useDefaultAudioStream) return;
-    // Skip if audio was already pre-selected during init (avoids reloading the stream)
-    if (this.activeAudioStreamIndex != null) return;
+    // "Use default audio stream" only applies when no remembered selection exists
+    // (i.e. first time watching). On refresh, the saved choice takes priority.
+    const hasSavedSelection = settings.rememberAudioSelections &&
+      !!this.playerSettings.getRememberedAudioTrack(this.mediaFileId);
+    if (settings.useDefaultAudioStream && !hasSavedSelection) return;
+    // For non-Shaka tracks (si-*), skip if audio was already pre-selected during
+    // init to avoid reloading the stream. For Shaka tracks (shaka-*), the
+    // pre-select has no effect — we must switch via selectVariantTrack.
+    const hasShakaAudio = tracks.some((t) => t.id.startsWith('shaka-'));
+    if (!hasShakaAudio && this.activeAudioStreamIndex != null) return;
 
-    // Priority 1: remembered selection for this file
+    // Priority 1: remembered selection for this media (saved as language code)
     if (settings.rememberAudioSelections) {
-      const saved = this.playerSettings.getRememberedAudioTrack(this.mediaFileId);
-      if (saved && tracks.some((t) => t.id === saved)) {
-        this.onSelectAudioTrack(saved);
-        return;
+      const key = this.mediaId || this.mediaFileId;
+      const savedLang = this.playerSettings.getRememberedAudioTrack(key);
+      if (savedLang) {
+        const match = tracks.find((t) => t.language === savedLang);
+        if (match) {
+          this.onSelectAudioTrack(match.id);
+          return;
+        }
       }
     }
 
@@ -1126,9 +1134,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.activeAudioTrackId.set(trackId);
     this.activeAudioStreamIndex = parseAudioIndex(trackId);
 
-    // Remember selection if enabled
+    // Remember selection by language at the media level (series/movie),
+    // so the choice carries across episodes.
     if (this.playerSettings.get().rememberAudioSelections) {
-      this.playerSettings.saveRememberedAudioTrack(this.mediaFileId, trackId);
+      const track = this.availableAudioTracks().find((t) => t.id === trackId);
+      const lang = track?.language ?? trackId;
+      const key = this.mediaId || this.mediaFileId;
+      this.playerSettings.saveRememberedAudioTrack(key, lang);
     }
 
     // Shaka native switch (no reload) for EXT-X-MEDIA audio renditions
