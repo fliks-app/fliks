@@ -449,10 +449,11 @@ export class StreamingController {
 
     // Only pre-start if no session exists yet — Shaka loads ALL variant playlists
     // in parallel and each call would kill the previous session (same key per user+file).
-    const hasSession = this.transcodingService
-      .getActiveSessions()
-      .some((s) => s.mediaFileId === mediaFileId && s.userId === req.user?.id);
-    if (!hasSession) {
+    const existing = this.transcodingService.getExistingSession(
+      mediaFileId,
+      req.user?.id,
+    );
+    if (!existing || existing.process.exitCode !== null) {
       const ctx = this.buildSessionContext(req, resolved, mediaFileId);
       if (quality === 'remux') {
         const copyAudio =
