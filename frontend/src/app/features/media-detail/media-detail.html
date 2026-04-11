@@ -9,115 +9,166 @@
       <p class="text-lg">{{ 'media_detail.not_found' | translate }}</p>
     </div>
   } @else if (media(); as m) {
-    <div class="flex flex-col">
-      <app-media-detail-header
-        [media]="m"
-        [resumeInfo]="resumeInfo()"
-        [backRoute]="['/', backSegment()]"
-        [canEditProfiles]="canEditProfiles()"
-        [isAdmin]="isAdmin()"
-        [refreshLoading]="refreshLoading()"
-        [monitoredLoading]="monitoredLoading()"
-        [deleteLoading]="deleteLoading()"
-        [files]="mediaFiles()"
-        [selectedFileId]="activeFileId()"
-        [canGrab]="canGrab()"
-        [releasesLoading]="releasesLoading()"
-        [grabBusy]="grabBusy()"
-        (openProfiles)="openProfilesModal()"
-        (openRootFolder)="openRootFolderModal()"
-        (refreshMetadata)="refreshMetadata()"
-        (toggleMonitored)="toggleMonitored()"
-        (deleteMedia)="deleteMedia()"
-        (selectedFileIdChange)="selectedFileId.set($event)"
-        (loadReleases)="loadReleases()"
-        (grabBest)="grabBest()"
-        (deleteFile)="deleteFile($event.fileId, $event.deleteOnDisk)"
-        (rescanFiles)="rescanFiles()"
-        (openDownload)="openDownloadModal()"
-      />
 
-      @if (m.type === 'movie' && (cast().length || crew().length)) {
-        <ng-container *ngTemplateOutlet="castCrewBlock" />
-      }
-
-      @if (m.type === 'movie') {
-        <app-media-detail-subtitles
-          [subtitles]="selectedFileSubtitles()"
-          [requiredLanguages]="requiredSubtitleLangs()"
-          [subtitlesLoading]="subtitlesLoading()"
-          [canGrab]="canGrab()"
-          [subtitleActionBusy]="subtitleActionBusy()"
-          (openSubtitleSearch)="openSubtitleSearch()"
-          (autoSubtitle)="autoSubtitle()"
-          (syncSubtitle)="syncSubtitle($event)"
-          (deleteSubtitle)="deleteSubtitle($event)"
-          (postProcess)="postProcessSubtitle($event)"
-          (blacklistSubtitle)="blacklistSubtitle($event)"
-        />
-      }
-
-      @if (activeFile(); as af) {
-        <app-media-file-info [file]="af" />
-      }
-
-      @if (m.type === 'series' && m.seasons?.length) {
-        <app-media-detail-seasons
-          [media]="m"
-          [selectedSeason]="activeSeason(m)"
-          [watchedEpisodeIds]="watchedEpisodeIds()"
-          [activeSeasonId]="activeSeasonId()"
-          [episodesHasFileOnly]="episodesHasFileOnly()"
-          [filteredEpisodes]="activeSeason(m) ? filteredSeasonEpisodes(activeSeason(m)!) : []"
-          [seasonReleasesLoading]="seasonReleasesLoading()"
-          [seasonReleasesOpenId]="seasonReleasesOpen()"
-          [seasonGrabBusy]="seasonGrabBusy()"
-          [seasonBusyId]="seasonBusy()"
+    <!-- ===== EPISODE MODE ===== -->
+    @if (episodeMode() && focusedEpisode(); as ep) {
+      @let s = focusedSeason()!;
+      <div class="flex flex-col">
+        <app-media-info-header
+          [title]="m.title"
+          [mediaId]="m.id"
+          [episodeId]="ep.id"
+          [episodeLabel]="episodeLabel()"
+          [rating]="null"
+          [dateLabel]="episodeDateLabel()"
+          [runtime]="ep.runtime ?? null"
+          [overview]="ep.overview ?? null"
+          [directors]="directors()"
+          [monitored]="ep.monitored"
+          [fanartUrl]="ep.stillUrl ?? m.fanartUrl ?? null"
+          [posterUrl]="ep.stillUrl ?? m.fanartUrl ?? null"
+          [posterMode]="'still'"
+          [backRoute]="episodeSeriesRoute()"
+          [backLabel]="m.title"
+          [subtitles]="subtitleSection()?.headerSubtitles() ?? []"
+          [files]="episodeFiles()"
+          [selectedFileId]="episodeActiveFileId()"
           [canGrab]="canGrab()"
           [isAdmin]="isAdmin()"
-          (selectSeason)="selectSeason($event)"
-          (episodesHasFileOnlyChange)="setEpisodesHasFileOnly($event)"
-          (loadSeasonReleases)="loadSeasonReleases(m.id, $event)"
-          (grabSeason)="grabSeasonAuto(m.id, $event)"
-          (toggleSeasonMonitored)="toggleSeasonMonitored($event)"
+          [releasesLoading]="epReleasesLoading()"
+          [grabBusy]="epGrabBusy()"
+          [refreshLoading]="refreshLoading()"
+          (selectedFileIdChange)="selectedFileId.set($event)"
+          (deleteFile)="deleteFile($event.fileId, $event.deleteOnDisk)"
+          (openDownload)="openDownloadModal()"
+          (refreshMetadata)="refreshMetadata()"
+          (toggleMonitored)="toggleMonitored()"
+          (loadReleases)="loadEpisodeReleases(m.id, s.id, ep.id)"
+          (grabBest)="grabEpisodeBest(m.id, ep.id)"
+          (rescanFiles)="rescanFiles()"
         />
-      }
 
-      @if (m.type === 'series' && (cast().length || crew().length)) {
-        <ng-container *ngTemplateOutlet="castCrewBlock" />
-      }
+        @if (cast().length || crew().length) {
+          <div class="divider my-6"></div>
+          <ng-container *ngTemplateOutlet="castCrewBlock" />
+        }
 
-      <app-media-detail-library-info [media]="m" />
+        <app-subtitle-section
+          [mediaId]="m.id"
+          [episodeId]="ep.id"
+          [files]="m.files ?? []"
+          [selectedFileId]="episodeActiveFileId()"
+          [canGrab]="canGrab()"
+          [searchDisabled]="!ep.hasFile"
+          [languageProfileId]="m.languageProfile?.id ?? null"
+        />
 
-      <app-media-detail-movie-download
-        [media]="m"
-        [showUpgradeSection]="m.type === 'movie' && !!m.files?.length && !!m.qualityProfile?.upgradeAllowed"
-        [showDownloadSection]="m.type === 'movie'"
-        [canGrab]="canGrab()"
-        [upgradeReleasesLoading]="upgradeReleasesLoading()"
-        [upgradeGrabBusy]="upgradeGrabBusy()"
-        [releasesLoading]="releasesLoading()"
-        [grabBusy]="grabBusy()"
-        (loadUpgradeReleases)="loadUpgradeReleases()"
-        (grabUpgradeBest)="grabUpgradeBest()"
-        (loadReleases)="loadReleases()"
-        (grabBest)="grabBest()"
-      />
-    </div>
+        @if (episodeActiveFile(); as sf) {
+          <div class="divider my-6"></div>
+          <app-media-file-info [file]="sf" />
+        }
+      </div>
 
-    <!-- Modals (outside gap container to avoid spacing) -->
-     <div>
-        <app-media-detail-subtitle-search-modal
-        [subSearchLang]="subSearchLang()"
-        (subSearchLangChange)="subSearchLang.set($event)"
-        [subSearchLoading]="subSearchLoading()"
-        [subSearchSearched]="subSearchSearched()"
-        [subSearchResults]="subSearchResults()"
-        [subtitleActionBusy]="subtitleActionBusy()"
-        (search)="searchSubtitles()"
-        (download)="downloadSearchResult($event)"
-      />
+    <!-- ===== NORMAL MODE (movie / series) ===== -->
+    } @else {
+      <div class="flex flex-col">
+        <app-media-info-header
+          [title]="m.title"
+          [mediaId]="m.id"
+          [rating]="m.rating ?? null"
+          [dateLabel]="m.year ? '' + m.year : null"
+          [runtime]="m.runtime ?? null"
+          [overview]="m.overview ?? null"
+          [genres]="m.genres ?? []"
+          [directors]="directors()"
+          [status]="m.status ?? null"
+          [monitored]="m.monitored ?? true"
+          [path]="m.path ?? null"
+          [qualityProfileName]="m.qualityProfile?.name ?? null"
+          [languageProfileName]="m.languageProfile?.name ?? null"
+          [tags]="m.tags?.length ? m.tags.map(t => t.label) : []"
+          [fanartUrl]="m.fanartUrl ?? null"
+          [posterUrl]="m.posterUrl ?? null"
+          [backRoute]="['/', backSegment()]"
+          [subtitles]="subtitleSection()?.headerSubtitles() ?? []"
+          [files]="mediaFiles()"
+          [selectedFileId]="activeFileId()"
+          [mediaType]="m.type"
+          [episodeStats]="m.episodeStats ?? null"
+          [canGrab]="canGrab()"
+          [canEditProfiles]="canEditProfiles()"
+          [isAdmin]="isAdmin()"
+          [releasesLoading]="releasesLoading()"
+          [grabBusy]="grabBusy()"
+          [refreshLoading]="refreshLoading()"
+          [monitoredLoading]="monitoredLoading()"
+          [deleteLoading]="deleteLoading()"
+          (selectedFileIdChange)="selectedFileId.set($event)"
+          (deleteFile)="deleteFile($event.fileId, $event.deleteOnDisk)"
+          (openDownload)="openDownloadModal()"
+          (openProfiles)="openProfilesModal()"
+          (openRootFolder)="openRootFolderModal()"
+          (refreshMetadata)="refreshMetadata()"
+          (toggleMonitored)="toggleMonitored()"
+          (deleteMedia)="deleteMedia()"
+          (loadReleases)="loadReleases()"
+          (grabBest)="grabBest()"
+          (rescanFiles)="rescanFiles()"
+        />
 
+        @if (m.type === 'movie' && (cast().length || crew().length)) {
+          <div class="divider my-6"></div>
+          <ng-container *ngTemplateOutlet="castCrewBlock" />
+        }
+
+        @if (m.type === 'movie') {
+          <app-subtitle-section
+            [mediaId]="m.id"
+            [files]="mediaFiles()"
+            [selectedFileId]="activeFileId()"
+            [canGrab]="canGrab()"
+            [languageProfileId]="m.languageProfile?.id ?? null"
+          />
+        }
+
+        @if (activeFile(); as af) {
+          <div class="divider my-6"></div>
+          <app-media-file-info [file]="af" />
+        }
+
+        @if (m.type === 'series' && m.seasons?.length) {
+          <app-media-detail-seasons
+            [media]="m"
+            [selectedSeason]="activeSeason(m)"
+            [watchedEpisodeIds]="watchedEpisodeIds()"
+            [activeSeasonId]="activeSeasonId()"
+            [episodesHasFileOnly]="episodesHasFileOnly()"
+            [filteredEpisodes]="activeSeason(m) ? filteredSeasonEpisodes(activeSeason(m)!) : []"
+            [seasonReleasesLoading]="seasonReleasesLoading()"
+            [seasonReleasesOpenId]="seasonReleasesOpen()"
+            [seasonGrabBusy]="seasonGrabBusy()"
+            [seasonBusyId]="seasonBusy()"
+            [canGrab]="canGrab()"
+            [isAdmin]="isAdmin()"
+            (selectSeason)="selectSeason($event)"
+            (episodesHasFileOnlyChange)="setEpisodesHasFileOnly($event)"
+            (loadSeasonReleases)="loadSeasonReleases(m.id, $event)"
+            (grabSeason)="grabSeasonAuto(m.id, $event)"
+            (toggleSeasonMonitored)="toggleSeasonMonitored($event)"
+          />
+        }
+
+        @if (m.type === 'series' && (cast().length || crew().length)) {
+          <div class="divider my-6"></div>
+          <ng-container *ngTemplateOutlet="castCrewBlock" />
+        }
+
+
+      </div>
+    }
+
+    <!-- Modals (shared between modes) -->
+    <div>
       <app-releases-modal #movieReleasesModal
         [title]="'media_detail.download_section' | translate"
         [releases]="releases()"
@@ -132,19 +183,6 @@
         (customSearchQueryChange)="customSearchQuery.set($event)"
         grabPrefix="r"
         (grab)="grabRelease($event.release, $event.index)"
-      />
-
-      <app-releases-modal #upgradeReleasesModal
-        [title]="'media_detail.upgrade_section' | translate"
-        [releases]="upgradeReleases()"
-        [loading]="upgradeReleasesLoading()"
-        [searched]="upgradeReleasesSearched()"
-        [error]="upgradeReleasesError()"
-        [grabBusy]="upgradeGrabBusy()"
-        [grabState]="upgradeGrabState()"
-        [canGrab]="canGrab()"
-        grabPrefix="u"
-        (grab)="grabUpgradeRelease($event.release, $event.index)"
       />
 
       <app-releases-modal #episodeReleasesModal
@@ -202,7 +240,7 @@
 </div>
 
 <ng-template #castCrewBlock>
-  <div class="mt-8 flex flex-col gap-6">
+  <div class="flex flex-col gap-6">
     @if (cast().length) {
       <app-horizontal-scroller [title]="'media_detail.cast' | translate">
         @for (c of cast(); track c.id) {

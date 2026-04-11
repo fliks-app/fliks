@@ -2,29 +2,82 @@
 @let selSeason = selectedSeason();
 <div class="divider my-6"></div>
 <section class="space-y-4">
-  <label class="flex items-center gap-2 cursor-pointer select-none text-sm shrink-0">
-    <input
-      type="checkbox"
-      class="toggle toggle-sm toggle-primary"
-      [checked]="episodesHasFileOnly()"
-      (change)="episodesHasFileOnlyChange.emit($any($event.target).checked)"
-    />
-    <span>{{ 'media_detail.episodes_available_only' | translate }}</span>
-  </label>
-  <h2 class="text-xl font-semibold">{{ 'media_detail.seasons_section' | translate }}</h2>
-
-  <div class="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-    @for (season of displaySeasons(); track season.id) {
-      <button
-        type="button"
-        class="btn btn-sm shrink-0"
-        [class.btn-primary]="activeSeasonId() === season.id"
-        [class.btn-ghost]="activeSeasonId() !== season.id"
-        (click)="selectSeason.emit(season.id)"
-      >
-        {{ 'media_detail.season' | translate }} {{ season.seasonNumber }}
-        <span class="opacity-60 text-xs ml-1">({{ tabEpisodeCount(season) }})</span>
-      </button>
+  <div class="flex items-center gap-2 overflow-x-auto pb-1">
+    <div class="dropdown shrink-0">
+      <div tabindex="0" role="button" class="btn btn-ghost btn-circle">
+        <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+      </div>
+      <div tabindex="0" class="dropdown-content bg-base-200 rounded-box z-20 w-max p-3 shadow-lg">
+        <label class="flex items-center gap-2 cursor-pointer select-none text-sm whitespace-nowrap">
+          <input
+            type="checkbox"
+            class="toggle toggle-primary shrink-0"
+            [checked]="episodesHasFileOnly()"
+            (change)="episodesHasFileOnlyChange.emit($any($event.target).checked)"
+          />
+          {{ 'media_detail.episodes_available_only' | translate }}
+        </label>
+      </div>
+    </div>
+    <select
+      class="select select-bordered w-fit shrink-0"
+      [ngModel]="activeSeasonId()"
+      (ngModelChange)="selectSeason.emit($event)"
+    >
+      @for (season of displaySeasons(); track season.id) {
+        <option [ngValue]="season.id">
+          {{ 'media_detail.season' | translate }} {{ season.seasonNumber }} ({{ tabEpisodeCount(season) }})
+        </option>
+      }
+    </select>
+    @if (selSeason && isSeasonTabVisible(selSeason) && !episodesHasFileOnly()) {
+      <div class="w-4 shrink-0"></div>
+      @if (!selSeason.monitored) {
+        <span class="badge badge-ghost shrink-0">{{ 'media_detail.unmonitored' | translate }}</span>
+      }
+      @if (canGrab()) {
+        <button
+          type="button"
+          class="btn btn-outline btn-primary shrink-0"
+          [disabled]="seasonReleasesLoading() && seasonReleasesOpenId() === selSeason.id"
+          (click)="loadSeasonReleases.emit(selSeason)"
+        >
+          @if (seasonReleasesLoading() && seasonReleasesOpenId() === selSeason.id) {
+            <span class="loading loading-spinner loading-xs"></span>
+          } @else {
+            {{ 'media_detail.season_releases' | translate }}
+          }
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary shrink-0"
+          [disabled]="seasonGrabBusy() !== null"
+          (click)="grabSeason.emit(selSeason)"
+        >
+          @if (seasonGrabBusy() !== null) {
+            <span class="loading loading-spinner loading-xs"></span>
+          } @else {
+            {{ 'media_detail.grab_season' | translate }}
+          }
+        </button>
+      }
+      @if (isAdmin()) {
+        <button
+          type="button"
+          class="btn btn-ghost shrink-0"
+          [class.opacity-50]="seasonBusyId() === selSeason.id"
+          [disabled]="seasonBusyId() === selSeason.id"
+          (click)="toggleSeasonMonitored.emit(selSeason)"
+        >
+          @if (seasonBusyId() === selSeason.id) {
+            <span class="loading loading-spinner loading-xs"></span>
+          } @else if (selSeason.monitored) {
+            {{ 'media_detail.unmonitor' | translate }}
+          } @else {
+            {{ 'media_detail.monitor' | translate }}
+          }
+        </button>
+      }
     }
   </div>
 
@@ -59,55 +112,5 @@
       </app-horizontal-scroller>
     }
 
-    @if (!episodesHasFileOnly()) {
-      <div class="flex items-center gap-2 overflow-x-auto pb-1 mt-4">
-        @if (!selSeason.monitored) {
-          <span class="badge badge-sm badge-ghost">{{ 'media_detail.unmonitored' | translate }}</span>
-        }
-        @if (canGrab()) {
-          <button
-            type="button"
-            class="btn btn-sm btn-outline btn-primary"
-            [disabled]="seasonReleasesLoading() && seasonReleasesOpenId() === selSeason.id"
-            (click)="loadSeasonReleases.emit(selSeason)"
-          >
-            @if (seasonReleasesLoading() && seasonReleasesOpenId() === selSeason.id) {
-              <span class="loading loading-spinner loading-xs"></span>
-            } @else {
-              {{ 'media_detail.season_releases' | translate }}
-            }
-          </button>
-          <button
-            type="button"
-            class="btn btn-sm btn-primary"
-            [disabled]="seasonGrabBusy() !== null"
-            (click)="grabSeason.emit(selSeason)"
-          >
-            @if (seasonGrabBusy() !== null) {
-              <span class="loading loading-spinner loading-xs"></span>
-            } @else {
-              {{ 'media_detail.grab_season' | translate }}
-            }
-          </button>
-        }
-        @if (isAdmin()) {
-          <button
-            type="button"
-            class="btn btn-sm btn-ghost"
-            [class.opacity-50]="seasonBusyId() === selSeason.id"
-            [disabled]="seasonBusyId() === selSeason.id"
-            (click)="toggleSeasonMonitored.emit(selSeason)"
-          >
-            @if (seasonBusyId() === selSeason.id) {
-              <span class="loading loading-spinner loading-xs"></span>
-            } @else if (selSeason.monitored) {
-              {{ 'media_detail.unmonitor' | translate }}
-            } @else {
-              {{ 'media_detail.monitor' | translate }}
-            }
-          </button>
-        }
-      </div>
-    }
   }
 </section>

@@ -7,8 +7,9 @@ import {
   output,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
-import { LucideCircleCheck, LucideCircleX } from '@lucide/angular';
+import { LucideCircleCheck, LucideCircleX, LucideEllipsisVertical } from '@lucide/angular';
 import { HorizontalScrollerComponent } from '../../../../shared/components/horizontal-scroller';
 import { MediaCardComponent } from '../../../../shared/components/media-card/media-card';
 import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
@@ -27,7 +28,7 @@ import {
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, RouterLink, ResolveUrlPipe, HorizontalScrollerComponent, MediaCardComponent, LucideCircleCheck, LucideCircleX],
+  imports: [TranslateModule, FormsModule, RouterLink, ResolveUrlPipe, HorizontalScrollerComponent, MediaCardComponent, LucideCircleCheck, LucideCircleX, LucideEllipsisVertical],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })

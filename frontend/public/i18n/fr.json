@@ -420,6 +420,16 @@
     "as_crew": "En tant qu'équipe technique",
     "no_local_credits": "Aucun crédit local pour cette personne"
   },
+  "media_info": {
+    "video": "Vidéo",
+    "audio": "Audio",
+    "subtitles": "Sous-titres",
+    "directors": "Réalisateurs",
+    "watched": "Lu",
+    "ends_at": "Se termine à {{time}}",
+    "remaining": "restantes",
+    "genres": "Genres"
+  },
   "media_detail": {
     "cast": "Casting",
     "crew": "Équipe technique",
@@ -428,7 +438,7 @@
     "refresh_metadata": "Rafraîchir les métadonnées",
     "edit_profiles": "Profils",
     "path_label": "Chemin",
-    "root_folder_label": "Dossier racine",
+    "root_folder_label": "Chemin",
     "no_root_folder": "Aucun dossier racine",
     "edit_root_folder": "Dossier racine",
     "availability_label": "Disponibilité minimum",

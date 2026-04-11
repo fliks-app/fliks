@@ -127,9 +127,10 @@ export const routes: Routes = [
       {
         path: 'series/:id/episode/:episodeId',
         loadComponent: () =>
-          import('./features/episode-detail/episode-detail').then(
-            (m) => m.EpisodeDetailComponent,
+          import('./features/media-detail/media-detail').then(
+            (m) => m.MediaDetailComponent,
           ),
+        data: { kind: 'series' },
       },
       {
         path: 'requests',
