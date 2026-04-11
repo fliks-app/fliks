@@ -53,8 +53,20 @@ export class NativeEngine implements PlaybackEngine {
     _mimeType?: string,
     headers?: Record<string, string>,
   ): Promise<void> {
-    await NativePlayer.load({ url, startTime, headers });
+    // Pass preloaded subtitle URLs to the native plugin
+    const subtitles = this._subtitleUrls.length > 0
+      ? this._preloadedSubtitles
+      : undefined;
+    await NativePlayer.load({ url, startTime, headers, subtitles });
     this.startPositionPoll();
+  }
+
+  private _preloadedSubtitles: { url: string; language: string; label: string }[] = [];
+
+  /** Set subtitles to include in the native MediaItem at load time. */
+  setPreloadedSubtitles(subs: { url: string; language: string; label: string }[]): void {
+    this._preloadedSubtitles = subs;
+    this._subtitleUrls = subs.map((s) => s.url);
   }
 
   async unload(): Promise<void> {
@@ -120,27 +132,34 @@ export class NativeEngine implements PlaybackEngine {
   }
 
   // ── Subtitles ──
+  // Subtitles are preloaded at load() time. addTextTrack finds the matching
+  // preloaded track by URL and returns its ExoPlayer text track index.
+
+  private _subtitleUrls: string[] = [];
+
+  /** Store subtitle URLs passed at load() for matching later. */
+  setSubtitleUrls(urls: string[]): void {
+    this._subtitleUrls = urls;
+  }
 
   async addTextTrack(
     url: string,
-    language: string,
-    label: string,
+    _language: string,
+    _label: string,
   ): Promise<string> {
-    const result = await NativePlayer.addExternalSubtitle({
-      url,
-      language,
-      label,
-    });
-    return result.id;
+    // Find the index of this URL in the preloaded subtitles
+    const idx = this._subtitleUrls.indexOf(url);
+    return idx >= 0 ? `text-${idx}` : `text-0`;
   }
 
-  async selectTextTrack(id: string | null): Promise<void> {
-    await NativePlayer.selectSubtitleTrack({ id });
+  selectTextTrack(track: any): void {
+    const id = typeof track === 'string' ? track : null;
+    NativePlayer.selectSubtitleTrack({ id });
   }
 
   setTextVisibility(visible: boolean): void {
-    if (visible) {
-      // Native subtitle visibility is handled by track selection
+    if (!visible) {
+      NativePlayer.selectSubtitleTrack({ id: null });
     }
   }
 

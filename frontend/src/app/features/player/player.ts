@@ -532,6 +532,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (this.isNative && mode !== 'direct') {
           await this.createNativeEngine();
 
+          // Pre-load subtitles so they're included in the ExoPlayer MediaItem
+          // Pre-load subtitles so they're included in ExoPlayer's MediaItem (no rebuild needed)
+          const subs = await this.trackManager.loadSubtitles(
+            this.mediaId, this.mediaFileId, this.streamingApi, this.media,
+          );
+          this.availableSubtitles.set(subs);
+          const nonBurnInSubs = subs
+            .filter((s) => !s.burnIn && s.url)
+            .map((s) => ({ url: s.url, language: s.language, label: s.label }));
+          (this.engine as NativeEngine).setPreloadedSubtitles(nonBurnInSubs);
+
           const token = this.authService.accessToken;
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
           const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId);
@@ -583,15 +594,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
 
-      // Load tracks
+      // Load tracks (skip subtitle loading if already preloaded for native engine)
       if (this.isOfflinePlayback) {
         await this.loadOfflineSubtitles();
         this.loadAudioTracks();
-      } else {
+      } else if (!this.availableSubtitles().length) {
         const subs = await this.trackManager.loadSubtitles(
           this.mediaId, this.mediaFileId, this.streamingApi, this.media,
         );
         this.availableSubtitles.set(subs);
+        this.loadAudioTracks();
+      } else {
         this.loadAudioTracks();
       }
       await this.trackManager.autoSelectSubtitle(

@@ -15,6 +15,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.TrackGroup;
@@ -25,7 +26,11 @@ import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.hls.HlsMediaSource;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import java.util.ArrayList;
+import java.util.List;
 import androidx.media3.ui.AspectRatioFrameLayout;
+import androidx.media3.ui.SubtitleView;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -46,7 +51,13 @@ public class NativePlayerPlugin extends Plugin {
     private ExoPlayer player;
     private FrameLayout wrapper;
     private AspectRatioFrameLayout aspectFrame;
+    /** Pending subtitle track ID — applied when onTracksChanged fires */
+    private String pendingSubtitleTrackId = null;
     private TextureView textureView;
+    private SubtitleView subtitleView;
+    private DefaultHttpDataSource.Factory httpFactory;
+    private String currentHlsUrl;
+    private final List<MediaItem.SubtitleConfiguration> subtitleConfigs = new ArrayList<>();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private Handler positionHandler;
     private Runnable positionRunnable;
@@ -79,10 +90,16 @@ public class NativePlayerPlugin extends Plugin {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     Gravity.CENTER));
 
-            // Insert behind the WebView
+            // Insert wrapper (video) behind the WebView
             android.webkit.WebView webView = getBridge().getWebView();
             ViewGroup webViewParent = (ViewGroup) webView.getParent();
             webViewParent.addView(wrapper, 0, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
+
+            // Subtitle overlay ABOVE the WebView (so text is always visible)
+            subtitleView = new SubtitleView(getContext());
+            webViewParent.addView(subtitleView, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -105,6 +122,11 @@ public class NativePlayerPlugin extends Plugin {
                 player.release();
                 player = null;
             }
+            if (subtitleView != null) {
+                ViewGroup subParent = (ViewGroup) subtitleView.getParent();
+                if (subParent != null) subParent.removeView(subtitleView);
+                subtitleView = null;
+            }
             if (wrapper != null) {
                 ViewGroup parent = (ViewGroup) wrapper.getParent();
                 if (parent != null) parent.removeView(wrapper);
@@ -112,6 +134,7 @@ public class NativePlayerPlugin extends Plugin {
                 aspectFrame = null;
                 textureView = null;
             }
+            subtitleConfigs.clear();
             // Allow screen to sleep again
             getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             call.resolve();
@@ -132,6 +155,7 @@ public class NativePlayerPlugin extends Plugin {
         String url = call.getString("url");
         double startTime = call.getDouble("startTime", 0.0);
         JSObject headers = call.getObject("headers", new JSObject());
+        JSArray subtitles = call.getArray("subtitles", new JSArray());
 
         if (url == null) {
             call.reject("URL is required");
@@ -151,17 +175,33 @@ public class NativePlayerPlugin extends Plugin {
                 }
             }
 
-            DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
+            httpFactory = new DefaultHttpDataSource.Factory()
                     .setDefaultRequestProperties(headerMap)
                     .setConnectTimeoutMs(15_000)
                     .setReadTimeoutMs(30_000)
                     .setAllowCrossProtocolRedirects(true);
 
-            HlsMediaSource hlsSource = new HlsMediaSource.Factory(httpFactory)
-                    .setAllowChunklessPreparation(true)
-                    .createMediaSource(MediaItem.fromUri(Uri.parse(url)));
+            currentHlsUrl = url;
+            subtitleConfigs.clear();
 
+            // Pre-load all subtitle configs from the load call
+            if (subtitles != null) {
+                for (int i = 0; i < subtitles.length(); i++) {
+                    try {
+                        org.json.JSONObject sub = subtitles.getJSONObject(i);
+                        subtitleConfigs.add(
+                                new MediaItem.SubtitleConfiguration.Builder(Uri.parse(sub.getString("url")))
+                                        .setMimeType(MimeTypes.TEXT_VTT)
+                                        .setLanguage(sub.optString("language", "und"))
+                                        .setLabel(sub.optString("label", "Subtitle"))
+                                        .build());
+                    } catch (Exception ignored) {}
+                }
+            }
+
+            DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(httpFactory);
             player = new ExoPlayer.Builder(getContext())
+                    .setMediaSourceFactory(mediaSourceFactory)
                     .setWakeMode(C.WAKE_MODE_NETWORK)
                     .build();
             if (textureView != null) player.setVideoTextureView(textureView);
@@ -187,6 +227,12 @@ public class NativePlayerPlugin extends Plugin {
 
                 @Override public void onTracksChanged(@NonNull Tracks tracks) {
                     emitTracksChanged();
+                    // Apply pending subtitle selection now that tracks are ready
+                    if (pendingSubtitleTrackId != null) {
+                        if (applySubtitleTrack(pendingSubtitleTrackId)) {
+                            pendingSubtitleTrackId = null;
+                        }
+                    }
                 }
 
                 @Override public void onVideoSizeChanged(@NonNull VideoSize videoSize) {
@@ -195,9 +241,26 @@ public class NativePlayerPlugin extends Plugin {
                                 videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height);
                     }
                 }
+
+                @Override public void onCues(@NonNull androidx.media3.common.text.CueGroup cueGroup) {
+                    if (subtitleView != null) {
+                        subtitleView.setCues(cueGroup.cues);
+                    }
+                }
             });
 
-            player.setMediaSource(hlsSource);
+            MediaItem.Builder itemBuilder = new MediaItem.Builder()
+                    .setUri(Uri.parse(currentHlsUrl));
+            if (!subtitleConfigs.isEmpty()) {
+                itemBuilder.setSubtitleConfigurations(subtitleConfigs);
+            }
+            player.setMediaItem(itemBuilder.build());
+
+            // Disable text tracks by default — user selects via UI
+            player.setTrackSelectionParameters(
+                    player.getTrackSelectionParameters().buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                            .build());
             player.prepare();
             if (startTime > 0) player.seekTo((long) (startTime * 1000));
             player.setPlayWhenReady(true);
@@ -305,6 +368,7 @@ public class NativePlayerPlugin extends Plugin {
             if (player == null) { call.reject("Player not initialized"); return; }
 
             if (id == null) {
+                pendingSubtitleTrackId = null;
                 player.setTrackSelectionParameters(
                         player.getTrackSelectionParameters().buildUpon()
                                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build());
@@ -312,33 +376,20 @@ public class NativePlayerPlugin extends Plugin {
                 return;
             }
 
-            int targetIndex;
-            try { targetIndex = Integer.parseInt(id.replace("text-", "")); }
-            catch (NumberFormatException e) { call.reject("Invalid track id"); return; }
-
-            int idx = 0;
-            for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
-                if (group.getType() == C.TRACK_TYPE_TEXT) {
-                    if (idx == targetIndex) {
-                        player.setTrackSelectionParameters(
-                                player.getTrackSelectionParameters().buildUpon()
-                                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                                        .setOverrideForType(new TrackSelectionOverride(group.getMediaTrackGroup(), 0))
-                                        .build());
-                        call.resolve();
-                        return;
-                    }
-                    idx++;
-                }
+            // Try to apply now; if tracks aren't ready, store as pending
+            if (!applySubtitleTrack(id)) {
+                pendingSubtitleTrackId = id;
             }
-            call.reject("Subtitle track not found");
+            call.resolve();
         });
     }
 
     @PluginMethod()
     public void addExternalSubtitle(PluginCall call) {
-        // Stub — external subtitles via MergingMediaSource is a future enhancement
-        call.resolve(new JSObject().put("id", "ext-sub-" + System.currentTimeMillis()));
+        // Subtitles are preloaded at load() time. This just returns an ID
+        // for the frontend to track. The actual selection is done via selectSubtitleTrack.
+        String id = call.getString("url", "ext-sub-" + System.currentTimeMillis());
+        call.resolve(new JSObject().put("id", id));
     }
 
     // ── Quality ──
@@ -385,6 +436,32 @@ public class NativePlayerPlugin extends Plugin {
     }
 
     // ── Private helpers ──
+
+    /** Try to select a subtitle track by ID (e.g. "text-0"). Returns true if found. */
+    private boolean applySubtitleTrack(String id) {
+        if (player == null) return false;
+
+        int targetIndex;
+        try { targetIndex = Integer.parseInt(id.replace("text-", "")); }
+        catch (NumberFormatException e) { return false; }
+
+        int idx = 0;
+        for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
+            if (group.getType() == C.TRACK_TYPE_TEXT) {
+                if (idx == targetIndex) {
+                    player.setTrackSelectionParameters(
+                            player.getTrackSelectionParameters().buildUpon()
+                                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                                    .setOverrideForType(
+                                            new TrackSelectionOverride(group.getMediaTrackGroup(), 0))
+                                    .build());
+                    return true;
+                }
+                idx++;
+            }
+        }
+        return false;
+    }
 
     private JSArray buildAudioTrackList() {
         JSArray list = new JSArray();

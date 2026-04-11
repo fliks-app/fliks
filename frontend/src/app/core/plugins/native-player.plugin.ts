@@ -66,6 +66,7 @@ export interface NativePlayerPlugin {
     url: string;
     startTime?: number;
     headers?: Record<string, string>;
+    subtitles?: { url: string; language: string; label: string }[];
   }): Promise<void>;
 
   play(): Promise<void>;
