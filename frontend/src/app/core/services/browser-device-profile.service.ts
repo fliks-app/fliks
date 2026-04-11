@@ -1,5 +1,6 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { PlayerSettingsService } from './player-settings.service';
 
 interface HdrPlugin {
   isSupported(): Promise<{ supported: boolean }>;
@@ -40,6 +41,7 @@ export interface DeviceProfile {
 
 @Injectable({ providedIn: 'root' })
 export class BrowserDeviceProfileService {
+  private readonly playerSettings = inject(PlayerSettingsService);
   private cachedProfile: DeviceProfile | null = null;
   private nativeHdr: boolean | null = null;
 
@@ -56,9 +58,20 @@ export class BrowserDeviceProfileService {
    * Build the device profile. Cached after first call.
    */
   getProfile(): DeviceProfile {
-    if (this.cachedProfile) return this.cachedProfile;
-    this.cachedProfile = this.buildProfile();
+    if (!this.cachedProfile) {
+      this.cachedProfile = this.buildProfile();
+    }
+    // Override HDR if user forced it off (check every call — setting may change)
+    if (this.playerSettings.get().forceDisableHdr) {
+      return { ...this.cachedProfile, supportsHdr: false };
+    }
     return this.cachedProfile;
+  }
+
+  /** Whether the display hardware supports HDR (ignoring user preference). */
+  get hardwareSupportsHdr(): boolean {
+    if (!this.cachedProfile) this.cachedProfile = this.buildProfile();
+    return this.cachedProfile.supportsHdr;
   }
 
   private buildProfile(): DeviceProfile {

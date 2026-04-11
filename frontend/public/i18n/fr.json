@@ -162,6 +162,8 @@
     "player_use_default_hint": "Ignorer les préférences de langue et toujours utiliser la piste audio par défaut du fichier.",
     "player_remember_audio": "Mémoriser les sélections audio",
     "player_remember_audio_hint": "Le lecteur se souviendra de la piste audio choisie pour chaque fichier.",
+    "player_disable_hdr": "Désactiver le HDR",
+    "player_disable_hdr_hint": "Force le transcodage HDR → SDR. Utile si votre écran affiche des couleurs ternes ou délavées en HDR.",
     "player_clear_saved": "Vider les sélections audio enregistrées",
     "tab_subtitles": "Sous-titres",
     "sub_preferred_lang": "Langue préférée pour les sous-titres",

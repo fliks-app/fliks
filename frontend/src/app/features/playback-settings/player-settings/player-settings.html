@@ -33,6 +33,20 @@
       </label>
     </div>
 
+    @if (showHdrToggle()) {
+      <div class="divider my-0"></div>
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-4">
+          <input type="checkbox" class="toggle toggle-primary" [ngModel]="forceDisableHdr()" (ngModelChange)="forceDisableHdr.set($event)" />
+          <div>
+            <span class="label-text font-medium">{{ 'playback_settings.player_disable_hdr' | translate }}</span>
+            <p class="text-xs text-base-content/50 mt-0.5">{{ 'playback_settings.player_disable_hdr_hint' | translate }}</p>
+          </div>
+        </label>
+      </div>
+    }
+
     <!-- Clear saved audio selections -->
     <button class="btn btn-ghost btn-sm text-error gap-2 self-start" (click)="clearAudioSelections()">
       <svg lucideTrash2 class="h-4 w-4"></svg>

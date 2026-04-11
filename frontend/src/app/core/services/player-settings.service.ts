@@ -6,6 +6,8 @@ export interface PlayerSettings {
   preferredAudioLanguage: string;
   useDefaultAudioStream: boolean;
   rememberAudioSelections: boolean;
+  // Video
+  forceDisableHdr: boolean;
   // Subtitles
   preferredSubtitleLanguage: string;
   subtitleMode: 'off' | 'intelligent' | 'always';
@@ -28,6 +30,7 @@ const DEFAULTS: PlayerSettings = {
   preferredAudioLanguage: '',
   useDefaultAudioStream: false,
   rememberAudioSelections: true,
+  forceDisableHdr: false,
   preferredSubtitleLanguage: '',
   subtitleMode: 'intelligent',
   rememberSubtitleSelections: true,
