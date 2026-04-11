@@ -32,6 +32,7 @@ import {
   SUBTITLE_SIZE_MAP, SUBTITLE_COLOR_MAP, SUBTITLE_SHADOW_MAP, SUBTITLE_BG_MAP,
 } from '../../core/services/player-settings.service';
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { NativeEngine } from '../../core/services/playback-engine/native-engine';
 
 interface ImmersivePlugin {
   enter(options?: { displayBehindNotch?: boolean }): Promise<void>;
@@ -94,6 +95,13 @@ const ABR_MIN_HEIGHT_PREFERENCE = 720;
       z-index: 100;
       overflow: hidden;
     }
+    /* When using native player, make WebView layers transparent so ExoPlayer/AVPlayer shows through */
+    .player-container.native-player {
+      background-color: transparent !important;
+    }
+    .player-container.native-player > .player-video {
+      display: none !important;
+    }
     .player-container.hide-cursor {
       cursor: none;
     }
@@ -125,6 +133,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly videoEl = viewChild<ElementRef<HTMLVideoElement>>('videoElement');
   private readonly containerEl = viewChild<ElementRef<HTMLDivElement>>('playerContainer');
   private player: shaka.Player | null = null;
+  nativeEngine: NativeEngine | null = null;
   private saveInterval: ReturnType<typeof setInterval> | null = null;
   private controlsTimeout: ReturnType<typeof setTimeout> | null = null;
   private statsInterval: ReturnType<typeof setInterval> | null = null;
@@ -616,43 +625,91 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           'reasons:', pi.transcodeReasons.map(r => r.flag).join(', '),
           'startTime:', startTime, 'audioIdx:', preselectedAudioIndex);
 
-        // 5. Configure Shaka ABR BEFORE load so it picks the right variant immediately
-        if (mode === 'direct') {
-          const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
-          await this.player.load(streamUrl, startTime, 'video/mp4');
-        } else {
-          // Pre-configure ABR to avoid starting at 360p then switching
-          // Pre-configure ABR before load; quality selection is applied after
-          // load via applyQualityPreferenceAfterLoad() / selectQuality().
-          // Don't use restrictions here — height mismatches (e.g. 1080p profile
-          // = 1008px actual due to 16px alignment) would filter out all variants.
-          if (this.activeQualityId() === 'auto') {
-            this.configureAutoAbrForHls();
+        // 5. Load the stream
+        if (this.isNative && mode !== 'direct') {
+          // ── Native engine (ExoPlayer / AVPlayer) ──
+          // Hide the HTML video element — native player renders behind WebView
+          video.style.display = 'none';
+
+          this.nativeEngine = new NativeEngine();
+          const container = this.containerEl()?.nativeElement ?? video.parentElement!;
+          await this.nativeEngine.init(container);
+
+          // Force transparent background on ALL ancestors so native player shows through
+          document.documentElement.classList.add('native-player-active');
+          let el: HTMLElement | null = container;
+          while (el && el !== document.documentElement) {
+            el.style.setProperty('background', 'transparent', 'important');
+            el = el.parentElement;
           }
 
-          this.player.configure({
-            streaming: {
-              retryParameters: { timeout: 60_000, maxAttempts: 5, baseDelay: 1000 },
-            },
-            manifest: {
-              retryParameters: { timeout: 30_000, maxAttempts: 5, baseDelay: 1000 },
-            },
-          } as any);
+          // Build auth headers for HLS segment requests
+          const token = this.authService.accessToken;
+          const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
           const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId);
-          await this.player.load(hlsUrl);
-        }
+          await this.nativeEngine.load(hlsUrl, startTime, undefined, headers);
 
-        // Resume position — wait until Shaka has buffered enough to accept a seek
-        if (startTime != null && startTime > 0) {
-          const doSeek = () => {
-            console.log('[Player] Seeking to resume position:', startTime);
-            video.currentTime = startTime!;
-          };
-          if (video.readyState >= 2) {
-            doSeek();
+          // Sync native events → Angular signals
+          this.nativeEngine.on('stateChanged', (e) => {
+            this.paused.set(e.state === 'paused' || e.state === 'idle');
+            this.buffering.set(e.state === 'buffering');
+            if (e.state === 'error') this.error.set('Playback error');
+          });
+          this.nativeEngine.on('timeUpdate', (e) => {
+            this.currentTime.set(e.position);
+            if (e.duration > 0) this.duration.set(e.duration);
+            this.bufferedEnd.set(e.buffered);
+          });
+          this.nativeEngine.on('error', (e) => {
+            this.error.set(e.message);
+          });
+          this.nativeEngine.on('audioTracksChanged', (e) => {
+            const tracks = e.tracks.map((t) => ({
+              id: t.id,
+              label: t.label,
+              language: normalizeLang(t.language),
+            }));
+            this.availableAudioTracks.set(tracks);
+            if (tracks.length > 0) {
+              this.activeAudioTrackId.set(tracks[0].id);
+              this.autoSelectAudioTrack(tracks);
+            }
+          });
+        } else {
+          // ── Shaka engine (web / direct play) ──
+          if (mode === 'direct') {
+            const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
+            await this.player!.load(streamUrl, startTime, 'video/mp4');
           } else {
-            video.addEventListener('canplay', doSeek, { once: true });
+            if (this.activeQualityId() === 'auto') {
+              this.configureAutoAbrForHls();
+            }
+
+            this.player!.configure({
+              streaming: {
+                retryParameters: { timeout: 60_000, maxAttempts: 5, baseDelay: 1000 },
+              },
+              manifest: {
+                retryParameters: { timeout: 30_000, maxAttempts: 5, baseDelay: 1000 },
+              },
+            } as any);
+
+            const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId);
+            await this.player!.load(hlsUrl);
+          }
+
+          // Resume position — wait until Shaka has buffered enough to accept a seek
+          if (startTime != null && startTime > 0) {
+            const doSeek = () => {
+              console.log('[Player] Seeking to resume position:', startTime);
+              video.currentTime = startTime!;
+            };
+            if (video.readyState >= 2) {
+              doSeek();
+            } else {
+              video.addEventListener('canplay', doSeek, { once: true });
+            }
           }
         }
       }
@@ -733,6 +790,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.stopStreamingSessions();
     }
     this.player?.destroy();
+    if (this.nativeEngine) {
+      document.documentElement.classList.remove('native-player-active');
+      this.nativeEngine.destroy().catch(() => {});
+    }
     this.removeSubtitleStyle();
     if (this.saveInterval) clearInterval(this.saveInterval);
     if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
@@ -783,6 +844,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // Player actions (local playback)
   onTogglePlay() {
+    if (this.nativeEngine) {
+      if (this.paused()) this.nativeEngine.play();
+      else this.nativeEngine.pause();
+      return;
+    }
     const video = this.videoEl()?.nativeElement;
     if (!video) return;
     if (video.paused) video.play();
@@ -790,9 +856,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   onSeek(time: number) {
+    const t = Math.max(0, Math.min(time, this.duration() || 0));
+    if (this.nativeEngine) {
+      this.nativeEngine.seek(t);
+      this.currentTime.set(t);
+      return;
+    }
     const video = this.videoEl()?.nativeElement;
     if (!video) return;
-    video.currentTime = Math.max(0, Math.min(time, this.duration() || 0));
+    video.currentTime = t;
   }
 
   onVolumeChange(vol: number) {
@@ -1143,12 +1215,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.playerSettings.saveRememberedAudioTrack(key, lang);
     }
 
+    // Native engine: seamless audio switch via ExoPlayer/AVPlayer
+    if (this.nativeEngine) {
+      await this.nativeEngine.selectAudioTrack(trackId);
+      return;
+    }
+
     // Shaka native switch (no reload) for EXT-X-MEDIA audio renditions
     if (trackId.startsWith('shaka-') && this.player) {
       const audioId = parseInt(trackId.replace('shaka-', ''), 10);
       const variants = this.player.getVariantTracks();
-      // Preserve current video quality: find variant matching both the new audioId
-      // and the active video resolution to avoid triggering a backend quality change.
       const active = variants.find((v: any) => v.active);
       const target =
         variants.find(

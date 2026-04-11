@@ -23,6 +23,23 @@ body.native {
 body.native.immersive {
   padding: 0 !important;
 }
+/* Native player (ExoPlayer/AVPlayer behind WebView) — force ALL layers transparent
+   so the native video surface shows through the WebView. */
+html.native-player-active {
+  background: transparent !important;
+}
+html.native-player-active body {
+  background: transparent !important;
+}
+html.native-player-active .drawer,
+html.native-player-active .drawer-content,
+html.native-player-active app-root,
+html.native-player-active app-layout,
+html.native-player-active main,
+html.native-player-active router-outlet + *,
+html.native-player-active app-player {
+  background: transparent !important;
+}
 /* Pages with hero fanart — content extends behind status bar */
 body.native.hero-page {
   padding-top: 0 !important;

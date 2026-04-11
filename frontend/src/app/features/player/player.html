@@ -3,11 +3,12 @@
   #playerContainer
   class="player-container"
   [class.hide-cursor]="!controlsVisible()"
+  [class.native-player]="!!nativeEngine"
   [class.hidden]="castService.isConnected()"
   (mousemove)="isNative ? null : showControls()"
 >
-  <!-- Fanart backdrop until video renders its first frame -->
-  @if (!videoStarted()) {
+  <!-- Fanart backdrop until video renders its first frame (hidden when native player is active) -->
+  @if (!videoStarted() && !nativeEngine) {
     <div class="absolute inset-0 z-1" [style.background-image]="fanartUrl() ? 'url(' + fanartUrl() + ')' : 'none'" style="background-size: cover; background-position: center; background-color: #000"></div>
   }
 
