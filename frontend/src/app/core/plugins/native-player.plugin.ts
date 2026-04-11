@@ -100,6 +100,11 @@ export interface NativePlayerPlugin {
     bottomMarginPercent: number;
   }): Promise<void>;
 
+  // ── Brightness ──
+
+  /** Set screen brightness. -1 = restore system default, 1.0 = max. */
+  setBrightness(options: { brightness: number }): Promise<void>;
+
   // ── Quality ──
 
   /** Set max video resolution constraint. Pass 0,0 for auto (no restriction). */

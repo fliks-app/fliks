@@ -45,6 +45,18 @@
           </div>
         </label>
       </div>
+
+      @if (!forceDisableHdr()) {
+        <div class="form-control">
+          <label class="label cursor-pointer justify-start gap-4">
+            <input type="checkbox" class="toggle toggle-primary" [ngModel]="hdrAutoBrightness()" (ngModelChange)="hdrAutoBrightness.set($event)" />
+            <div>
+              <span class="label-text font-medium">{{ 'playback_settings.player_hdr_brightness' | translate }}</span>
+              <p class="text-xs text-base-content/50 mt-0.5">{{ 'playback_settings.player_hdr_brightness_hint' | translate }}</p>
+            </div>
+          </label>
+        </div>
+      }
     }
 
     <!-- Clear saved audio selections -->

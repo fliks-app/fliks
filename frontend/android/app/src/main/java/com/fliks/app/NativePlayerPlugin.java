@@ -447,6 +447,25 @@ public class NativePlayerPlugin extends Plugin {
         }
     }
 
+    // ── Brightness ──
+
+    @PluginMethod()
+    public void setBrightness(PluginCall call) {
+        float brightness = call.getFloat("brightness", -1f);
+        mainHandler.post(() -> {
+            WindowManager.LayoutParams lp = getActivity().getWindow().getAttributes();
+            lp.screenBrightness = brightness; // -1 = system default, 0..1 = manual
+            getActivity().getWindow().setAttributes(lp);
+
+            // Dim subtitle view when screen is at max brightness (HDR mode)
+            if (subtitleView != null) {
+                subtitleView.setAlpha(brightness >= 1.0f ? 0.5f : 1.0f);
+            }
+
+            call.resolve();
+        });
+    }
+
     // ── Quality ──
 
     @PluginMethod()

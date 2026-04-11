@@ -34,6 +34,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 
 import { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import { ShakaEngine } from '../../core/services/playback-engine/shaka-engine';
+import { NativePlayer } from '../../core/plugins/native-player.plugin';
 import { NativeEngine } from '../../core/services/playback-engine/native-engine';
 import { CastEngine } from '../../core/services/playback-engine/cast-engine';
 import { PlayerStateService } from '../../core/services/player-state.service';
@@ -86,6 +87,13 @@ import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats
       height: 100%;
       object-fit: contain;
     }
+    /* Dim controls when HDR max brightness is active.
+       Uses opacity on the direct child — safe for layout since controls are already
+       absolutely positioned and won't affect the video surface behind. */
+    .player-container.hdr-bright app-player-controls,
+    .player-container.hdr-bright > .loading-overlay {
+      opacity: 0.5;
+    }
   `],
 })
 export class PlayerComponent implements AfterViewInit, OnDestroy {
@@ -115,11 +123,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Current playback engine (ShakaEngine | NativeEngine | CastEngine). */
   private engine: PlaybackEngine | null = null;
-  private isNativeEngine = false;
+  readonly isNativeEngine = signal(false);
 
   /** Template binding — true when using native (ExoPlayer/AVPlayer) engine. */
   get nativeEngine(): boolean {
-    return this.isNativeEngine;
+    return this.isNativeEngine();
   }
 
   private saveInterval: ReturnType<typeof setInterval> | null = null;
@@ -181,7 +189,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (casting && !this.wasCasting) {
       // Just connected — mute/pause local engine
       try {
-        if (this.engine && !this.isNativeEngine) {
+        if (this.engine && !this.isNativeEngine()) {
           this.engine.pause().catch(() => {});
           this.engine.muted = true;
         }
@@ -232,6 +240,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly pipPlaybackEffect = effect(() => {
     if (!this.isNative) return;
     Pip.updatePlaybackState({ playing: !this.paused() }).catch(() => {});
+  });
+
+  // HDR auto-brightness: max brightness when playing HDR, restore on pause/exit
+  private readonly isHdrContent = signal(false);
+
+  /** True when HDR max brightness is active — used to dim controls/subtitles. */
+  readonly hdrBrightnessActive = computed(() => {
+    if (!this.isNative || !this.isNativeEngine()) return false;
+    const settings = this.playerSettings.get();
+    if (!settings.hdrAutoBrightness || settings.forceDisableHdr) return false;
+    return this.isHdrContent() && !this.paused();
+  });
+
+  private readonly hdrBrightnessEffect = effect(() => {
+    const active = this.hdrBrightnessActive();
+    if (!this.isNative) return;
+    NativePlayer.setBrightness({ brightness: active ? 1.0 : -1 }).catch(() => {});
   });
 
   // Media info
@@ -515,6 +540,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           this.mediaFileId, deviceProfile, undefined, preselectedAudioIndex,
         );
         const pi = this.playbackInfo;
+        this.isHdrContent.set(!!pi.source?.hdrFormat);
 
         // Map backend decision to mode signal
         if (pi.playMethod === 'DirectPlay') {
@@ -628,13 +654,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       );
 
       // If Cast is already connected, send to Cast
-      if (this.castService.isConnected() && !this.isNativeEngine) {
+      if (this.castService.isConnected() && !this.isNativeEngine()) {
         await this.engine!.pause();
         this.engine!.muted = true;
         await this.engine!.unload();
         const startPos = resumeTime ?? this.engine!.currentTime;
         await this.startCastFromPlayer(startPos);
-      } else if (!this.isNativeEngine) {
+      } else if (!this.isNativeEngine()) {
         this.engine!.play().catch(() => {
           // Autoplay may be blocked
         });
@@ -690,8 +716,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.stopStreamingSessions();
     }
     if (this.engine) {
-      if (this.isNativeEngine) {
+      if (this.isNativeEngine()) {
         document.documentElement.classList.remove('native-player-active');
+        // Restore system brightness
+        NativePlayer.setBrightness({ brightness: -1 }).catch(() => {});
       }
       this.engine.destroy().catch(() => {});
     }
@@ -718,7 +746,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const engine = new ShakaEngine();
     await engine.init(video);
     this.engine = engine;
-    this.isNativeEngine = false;
+    this.isNativeEngine.set(false);
     this.state.bindEngine(engine);
 
     // videoStarted tracking (first frame rendered)
@@ -753,7 +781,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
 
     this.engine = engine;
-    this.isNativeEngine = true;
+    this.isNativeEngine.set(true);
     this.state.bindEngine(engine);
 
     // Listen for audio tracks from native engine
