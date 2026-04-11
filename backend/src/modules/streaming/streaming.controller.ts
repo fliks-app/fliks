@@ -33,7 +33,6 @@ import { SubtitleBurnInService } from './subtitle-burn-in.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 
 const VALID_QUALITIES = new Set([...PROFILES.map((p) => p.name), 'remux']);
-const SEGMENT_RE = /^seg-\d{3,4}\.ts$/;
 const SEG_DURATION = 6;
 
 /** Generate a VOD HLS playlist for a given duration and segment URL pattern. */
@@ -109,6 +108,11 @@ export class StreamingController {
       crop: si?.video?.[0]?.crop ?? undefined,
       videoOnly:
         this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1,
+      // Pass audio stream info for var_stream_map (single FFmpeg, multi-output)
+      audioStreams:
+        this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1
+          ? (si?.audio as { language?: string; title?: string }[]) ?? []
+          : undefined,
     };
   }
 
@@ -204,6 +208,10 @@ export class StreamingController {
       this.activeStreamTracker.setBurnIn(mediaFileId, undefined);
     }
     this.activeStreamTracker.setAudioStreamIndex(mediaFileId, audioStreamIndex);
+    this.activeStreamTracker.setMultiAudioMuxed(
+      mediaFileId,
+      deviceProfile.supportsMultiAudioMuxed ?? false,
+    );
     return result;
   }
 
@@ -283,6 +291,12 @@ export class StreamingController {
     const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
     const audioStreams: { language?: string; title?: string }[] =
       si?.audio ?? [];
+    // Use EXT-X-MEDIA only when the client needs it (Shaka on web).
+    // Native players (ExoPlayer/AVPlayer) handle multi-audio from muxed TS.
+    const clientMuxesAudio =
+      this.activeStreamTracker.getMultiAudioMuxed(mediaFileId);
+    const useExtXMedia =
+      audioStreams.length > 1 && !clientMuxesAudio;
     const playlist = this.transcodingService.generateMasterPlaylist(
       mediaFileId,
       w,
@@ -290,7 +304,7 @@ export class StreamingController {
       tokenParam,
       includeRemux,
       sourceBitrate || undefined,
-      audioStreams.length > 1 ? audioStreams : undefined,
+      useExtXMedia ? audioStreams : undefined,
     );
 
     this.activeStreamTracker.setAudioStreamCount(
@@ -358,15 +372,20 @@ export class StreamingController {
       return;
     }
 
-    // Start audio session in the background
-    const user = req.user;
-    void this.transcodingService.getOrCreateAudioSession(
-      mediaFileId,
-      audioIndex,
-      resolved.absolutePath,
-      0,
-      { userId: user?.id },
-    );
+    // With var_stream_map, audio is produced by the video session — no separate
+    // audio session needed. Only start one as fallback for single-audio files.
+    const multiAudio =
+      this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1;
+    if (!multiAudio) {
+      const user = req.user;
+      void this.transcodingService.getOrCreateAudioSession(
+        mediaFileId,
+        audioIndex,
+        resolved.absolutePath,
+        0,
+        { userId: user?.id },
+      );
+    }
 
     const token = firstQueryString(req.query, 'token');
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
@@ -374,7 +393,7 @@ export class StreamingController {
     const playlist = buildVodPlaylist(
       duration,
       (seg) => `${basePath}/seg-${seg}.m4s${tokenParam}`,
-      `${basePath}/init.mp4${tokenParam}`,
+      `${basePath}/init_${audioIndex + 1}.mp4${tokenParam}`,
     );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -391,30 +410,51 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const AUDIO_SEG_RE = /^(init\.mp4|seg-\d{3,4}\.m4s)$/;
+    const AUDIO_SEG_RE = /^(init(_\d+)?\.mp4|seg-\d{3,4}\.m4s)$/;
     if (!AUDIO_SEG_RE.test(segment)) {
       throw new BadRequestException(`Invalid audio segment name: ${segment}`);
     }
 
     const resolved = await this.streamingService.resolveFile(mediaFileId);
 
-    // For init.mp4, no seek needed; for segments, parse index
     const segMatch = segment.match(/seg-(\d+)\.m4s/);
     const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
 
     const user = req.user;
-    const session = await this.transcodingService.getOrCreateAudioSession(
-      mediaFileId,
-      audioIndex,
-      resolved.absolutePath,
-      segIndex,
-      { userId: user?.id },
-    );
 
-    const segPath = await this.transcodingService.getSegmentPath(
-      session,
-      segment,
+    // With var_stream_map, audio is in the SAME session as video (subdir N+1).
+    // Fall back to separate audio session if the video session doesn't have it.
+    const videoSession = this.transcodingService.getExistingSession(
+      mediaFileId,
+      user?.id,
     );
+    const varStreamPath = videoSession
+      ? `${audioIndex + 1}/${segment}`
+      : null;
+
+    let segPath: string | null = null;
+
+    if (videoSession && varStreamPath) {
+      segPath = await this.transcodingService.getSegmentPath(
+        videoSession,
+        varStreamPath,
+      );
+    }
+
+    // Fallback: separate audio session (for non-var_stream_map setups)
+    if (!segPath) {
+      const audioSession = await this.transcodingService.getOrCreateAudioSession(
+        mediaFileId,
+        audioIndex,
+        resolved.absolutePath,
+        segIndex,
+        { userId: user?.id },
+      );
+      segPath = await this.transcodingService.getSegmentPath(
+        audioSession,
+        segment,
+      );
+    }
     if (!segPath) {
       res.status(404).send('Segment not found');
       return;
@@ -482,10 +522,13 @@ export class StreamingController {
     const token = firstQueryString(req.query, 'token');
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
     const basePath = `/api/stream/${mediaFileId}/${quality}`;
+    const multiAudioPlaylist =
+      this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1;
+    const initName = multiAudioPlaylist ? 'init_0.mp4' : 'init.mp4';
     const playlist = buildVodPlaylist(
       duration,
       (seg) => `${basePath}/seg-${seg}.m4s${tokenParam}`,
-      `${basePath}/init.mp4${tokenParam}`,
+      `${basePath}/${initName}${tokenParam}`,
     );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -505,7 +548,7 @@ export class StreamingController {
     if (!VALID_QUALITIES.has(quality)) {
       throw new BadRequestException(`Invalid quality: ${quality}`);
     }
-    const VIDEO_SEG_RE = /^(seg-\d{3,4}\.(ts|m4s)|init\.mp4)$/;
+    const VIDEO_SEG_RE = /^(seg-\d{3,4}\.(ts|m4s)|init(_\d+)?\.mp4)$/;
     if (!VIDEO_SEG_RE.test(segment)) {
       throw new BadRequestException(`Invalid segment name: ${segment}`);
     }
@@ -515,15 +558,17 @@ export class StreamingController {
     // Parse segment index (seg-042.ts → 42, seg-042.m4s → 42, init.mp4 → 0)
     // For init.mp4: serve from existing session without triggering quality changes.
     // Shaka probes init segments from multiple qualities to build segment indexes.
-    if (segment === 'init.mp4') {
+    if (segment.startsWith('init')) {
       const existing = this.transcodingService.getExistingSession(
         mediaFileId,
         req.user?.id,
       );
       if (existing) {
+        const ma = this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1;
+        const initFile = ma ? `0/${segment}` : segment;
         const initPath = await this.transcodingService.getSegmentPath(
           existing,
-          'init.mp4',
+          initFile,
         );
         if (initPath) {
           res.setHeader('Content-Type', 'video/mp4');
@@ -556,16 +601,21 @@ export class StreamingController {
             ctx,
           );
 
+    // With var_stream_map, video segments are in subdirectory "0/"
+    const multiAudio =
+      this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1;
+    const segName = multiAudio ? `0/${segment}` : segment;
+
     const segPath = await this.transcodingService.getSegmentPath(
       session,
-      segment,
+      segName,
     );
     if (!segPath) {
       res.status(404).send('Segment not found');
       return;
     }
 
-    res.setHeader('Content-Type', segment.endsWith('.ts') ? 'video/mp2t' : 'video/mp4');
+    res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Access-Control-Allow-Origin', '*');
     fs.createReadStream(segPath).pipe(res);
   }

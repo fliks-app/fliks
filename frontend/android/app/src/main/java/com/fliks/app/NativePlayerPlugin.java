@@ -240,22 +240,26 @@ public class NativePlayerPlugin extends Plugin {
         mainHandler.post(() -> {
             if (player == null) { call.reject("Player not initialized"); return; }
 
-            int targetIndex;
-            try { targetIndex = Integer.parseInt(id.replace("audio-", "")); }
+            int targetFlatIdx;
+            try { targetFlatIdx = Integer.parseInt(id.replace("audio-", "")); }
             catch (NumberFormatException e) { call.reject("Invalid track id: " + id); return; }
 
-            int audioIndex = 0;
+            // Find the group and format index matching the flat audio index
+            int flatIdx = 0;
             for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
                 if (group.getType() == C.TRACK_TYPE_AUDIO) {
-                    if (audioIndex == targetIndex) {
-                        player.setTrackSelectionParameters(
-                                player.getTrackSelectionParameters().buildUpon()
-                                        .setOverrideForType(new TrackSelectionOverride(group.getMediaTrackGroup(), 0))
-                                        .build());
-                        call.resolve();
-                        return;
+                    for (int i = 0; i < group.length; i++) {
+                        if (flatIdx == targetFlatIdx) {
+                            player.setTrackSelectionParameters(
+                                    player.getTrackSelectionParameters().buildUpon()
+                                            .setOverrideForType(
+                                                    new TrackSelectionOverride(group.getMediaTrackGroup(), i))
+                                            .build());
+                            call.resolve();
+                            return;
+                        }
+                        flatIdx++;
                     }
-                    audioIndex++;
                 }
             }
             call.reject("Audio track not found: " + id);
@@ -331,6 +335,26 @@ public class NativePlayerPlugin extends Plugin {
         call.resolve(new JSObject().put("id", "ext-sub-" + System.currentTimeMillis()));
     }
 
+    // ── Quality ──
+
+    @PluginMethod()
+    public void setMaxResolution(PluginCall call) {
+        int width = call.getInt("width", 0);
+        int height = call.getInt("height", 0);
+        mainHandler.post(() -> {
+            if (player == null) { call.reject("Player not initialized"); return; }
+            var builder = player.getTrackSelectionParameters().buildUpon();
+            if (width <= 0 || height <= 0) {
+                // Auto: remove resolution constraints
+                builder.setMaxVideoSize(Integer.MAX_VALUE, Integer.MAX_VALUE);
+            } else {
+                builder.setMaxVideoSize(width, height);
+            }
+            player.setTrackSelectionParameters(builder.build());
+            call.resolve();
+        });
+    }
+
     // ── State ──
 
     @PluginMethod()
@@ -359,18 +383,19 @@ public class NativePlayerPlugin extends Plugin {
     private JSArray buildAudioTrackList() {
         JSArray list = new JSArray();
         if (player == null) return list;
-        int idx = 0;
+        int flatIdx = 0;
         for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
             if (group.getType() == C.TRACK_TYPE_AUDIO) {
                 for (int i = 0; i < group.length; i++) {
                     var fmt = group.getTrackFormat(i);
                     JSObject t = new JSObject();
-                    t.put("id", "audio-" + idx);
+                    t.put("id", "audio-" + flatIdx);
                     t.put("language", fmt.language != null ? fmt.language : "und");
-                    t.put("label", fmt.label != null ? fmt.label : (fmt.language != null ? fmt.language : "Track " + idx));
+                    t.put("label", fmt.label != null ? fmt.label
+                            : (fmt.language != null ? fmt.language : "Track " + flatIdx));
                     list.put(t);
+                    flatIdx++;
                 }
-                idx++;
             }
         }
         return list;

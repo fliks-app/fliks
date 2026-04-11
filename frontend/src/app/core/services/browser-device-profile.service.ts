@@ -34,6 +34,8 @@ export interface DeviceProfile {
   supportsHlsFmp4: boolean;
   supportsHlsTs: boolean;
   supportsHdr: boolean;
+  /** True when the player handles multi-audio from muxed TS (ExoPlayer). False = use EXT-X-MEDIA. */
+  supportsMultiAudioMuxed: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -171,6 +173,8 @@ export class BrowserDeviceProfileService {
       supportsHlsFmp4,
       supportsHlsTs,
       supportsHdr,
+      // All players use EXT-X-MEDIA for seamless audio switching.
+      supportsMultiAudioMuxed: false,
     };
   }
 

@@ -1,9 +1,10 @@
 /**
  * Unified playback engine interface.
- * Two implementations: ShakaEngine (web) and NativeEngine (Android/iOS).
+ * Implementations: ShakaEngine (web), NativeEngine (Android/iOS), CastEngine (Chromecast).
  *
  * The engine abstracts the video player so the UI (player.ts) doesn't need
- * to know whether Shaka Player or ExoPlayer/AVPlayer is doing the actual work.
+ * to know whether Shaka Player, ExoPlayer/AVPlayer, or the Cast SDK is doing
+ * the actual work.
  */
 
 // ---------------------------------------------------------------------------
@@ -18,36 +19,35 @@ export interface AudioTrack {
 
 export interface SubtitleTrack {
   id: string;
-  language: string;
   label: string;
   url: string;
-  /** True for bitmap subs (PGS/VOBSUB) that need server-side burn-in */
+  language: string;
   burnIn: boolean;
-  /** Database subtitle ID (for burn-in request) */
   subtitleDbId?: number;
   forced?: boolean;
 }
 
-export interface QualityLevel {
-  id: string;
-  label: string;
-  height: number;
-}
+export type PlaybackState = 'idle' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error';
 
-export type PlaybackState =
-  | 'idle'
-  | 'playing'
-  | 'paused'
-  | 'buffering'
-  | 'ended'
-  | 'error';
+export interface EngineStats {
+  droppedFrames: number;
+  streamBandwidth?: number;
+  activeVariant?: {
+    width?: number;
+    height?: number;
+    videoBandwidth?: number;
+    audioBandwidth?: number;
+    videoCodec?: string;
+    audioCodec?: string;
+  };
+}
 
 export type EngineEventMap = {
   stateChanged: { state: PlaybackState };
   timeUpdate: { position: number; duration: number; buffered: number };
   error: { code: number; message: string };
   audioTracksChanged: { tracks: AudioTrack[] };
-  subtitleTracksChanged: { tracks: SubtitleTrack[] };
+  ended: void;
 };
 
 export type EngineEvent = keyof EngineEventMap;
@@ -60,14 +60,7 @@ export interface PlaybackEngine {
   // ── Lifecycle ──
   init(container: HTMLElement): Promise<void>;
   destroy(): Promise<void>;
-
-  // ── Loading ──
-  load(
-    url: string,
-    startTime?: number,
-    mimeType?: string,
-    headers?: Record<string, string>,
-  ): Promise<void>;
+  load(url: string, startTime?: number, mimeType?: string, headers?: Record<string, string>): Promise<void>;
   unload(): Promise<void>;
 
   // ── Playback ──
@@ -81,19 +74,25 @@ export interface PlaybackEngine {
   readonly paused: boolean;
   readonly buffered: number;
   playbackRate: number;
+  volume: number;
+  muted: boolean;
 
   // ── Audio tracks ──
   getAudioTracks(): AudioTrack[];
   selectAudioTrack(id: string): Promise<void>;
 
   // ── Subtitles ──
-  addTextTrack(url: string, language: string, label: string): Promise<string>;
-  selectTextTrack(id: string | null): Promise<void>;
+  addTextTrack(url: string, language: string, label: string): Promise<any>;
+  selectTextTrack(track: any): void;
+  setTextVisibility(visible: boolean): void;
 
-  // ── Quality (video variants) ──
+  // ── Quality (Shaka variant tracks) ──
   getVariantTracks(): any[];
   selectVariantTrack(track: any, clearBuffer?: boolean): void;
   configure(config: any): void;
+
+  // ── Stats ──
+  getStats(): EngineStats;
 
   // ── Events ──
   on<E extends EngineEvent>(event: E, handler: (data: EngineEventMap[E]) => void): void;

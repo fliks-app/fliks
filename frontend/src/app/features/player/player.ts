@@ -14,7 +14,6 @@ import {
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/api/streaming-api.service';
-import { SubtitlesApiService } from '../../core/services/api/subtitles-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
 import { BrowserDeviceProfileService } from '../../core/services/browser-device-profile.service';
 import { SseService } from '../../core/services/sse.service';
@@ -24,7 +23,7 @@ import { OfflineStorageService } from '../../core/services/offline-storage.servi
 import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
 import { NetworkService } from '../../core/services/network.service';
 import { DownloadCacheService } from '../../core/services/download-cache.service';
-import { CastPlayerService } from '../../core/services/cast-player.service';
+import { CastPlayerService, CastAudioOption } from '../../core/services/cast-player.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { parseAudioIndex, SpriteMetadata } from '../../core/utils/player.utils';
 import {
@@ -32,7 +31,14 @@ import {
   SUBTITLE_SIZE_MAP, SUBTITLE_COLOR_MAP, SUBTITLE_SHADOW_MAP, SUBTITLE_BG_MAP,
 } from '../../core/services/player-settings.service';
 import { Capacitor, registerPlugin } from '@capacitor/core';
+
+import { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
+import { ShakaEngine } from '../../core/services/playback-engine/shaka-engine';
 import { NativeEngine } from '../../core/services/playback-engine/native-engine';
+import { CastEngine } from '../../core/services/playback-engine/cast-engine';
+import { PlayerStateService } from '../../core/services/player-state.service';
+import { TrackManagerService, SubtitleOption } from '../../core/services/track-manager.service';
+import { QualityManagerService } from '../../core/services/quality-manager.service';
 
 interface ImmersivePlugin {
   enter(options?: { displayBehindNotch?: boolean }): Promise<void>;
@@ -47,40 +53,10 @@ interface PipPlugin {
   updatePlaybackState(options: { playing: boolean }): Promise<void>;
 }
 const Pip = registerPlugin<PipPlugin>('Pip');
+
 import { LucideCircleAlert } from '@lucide/angular';
-import { CastAudioOption } from '../../core/services/cast-player.service';
 import { PlayerControlsComponent } from './controls/player-controls';
 import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
-import shaka from 'shaka-player';
-
-interface SubtitleOption {
-  id: string;
-  label: string;
-  url: string;
-  language: string;
-  /** True for bitmap subs (PGS/VOBSUB) that need server-side burn-in */
-  burnIn: boolean;
-  /** Database subtitle ID (for burn-in request) */
-  subtitleDbId?: number;
-  /** True if this is a forced subtitle track */
-  forced?: boolean;
-}
-
-interface QualityOption {
-  id: string;      // 'auto' | 'original' | '1080p' | '720p' | '480p'
-  label: string;   // "Auto", "Original (4K)", "1080p", "720p", "480p"
-  height: number;  // 0 for auto, source height for original, profile height
-}
-
-/** Persisted user choice for quality (same key across sessions). */
-const PLAYER_QUALITY_STORAGE_KEY = 'player.qualityId';
-
-/**
- * ABR: prefer starting at 720p+ and staying there when possible; below 720 only
- * when no variant meets the restriction (very slow network / low source res).
- */
-const ABR_DEFAULT_BANDWIDTH_ESTIMATE = 4_500_000;
-const ABR_MIN_HEIGHT_PREFERENCE = 720;
 
 @Component({
   imports: [TranslateModule, LucideCircleAlert, PlayerControlsComponent, PlayerStatsOverlayComponent],
@@ -120,7 +96,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly offlineSync = inject(OfflinePlaybackSyncService);
   private readonly network = inject(NetworkService);
   private readonly dlCache = inject(DownloadCacheService);
-  private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly mediaService = inject(MediaService);
   private readonly deviceProfileService = inject(BrowserDeviceProfileService);
   private readonly sseService = inject(SseService);
@@ -130,45 +105,60 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly serverConfig = inject(ServerConfigService);
   private readonly playerSettings = inject(PlayerSettingsService);
 
+  // New extracted services
+  private readonly state = inject(PlayerStateService);
+  private readonly trackManager = inject(TrackManagerService);
+  private readonly qualityManager = inject(QualityManagerService);
+
   private readonly videoEl = viewChild<ElementRef<HTMLVideoElement>>('videoElement');
   private readonly containerEl = viewChild<ElementRef<HTMLDivElement>>('playerContainer');
-  private player: shaka.Player | null = null;
-  nativeEngine: NativeEngine | null = null;
+
+  /** Current playback engine (ShakaEngine | NativeEngine | CastEngine). */
+  private engine: PlaybackEngine | null = null;
+  private isNativeEngine = false;
+
+  /** Template binding — true when using native (ExoPlayer/AVPlayer) engine. */
+  get nativeEngine(): boolean {
+    return this.isNativeEngine;
+  }
+
   private saveInterval: ReturnType<typeof setInterval> | null = null;
   private controlsTimeout: ReturnType<typeof setTimeout> | null = null;
   private statsInterval: ReturnType<typeof setInterval> | null = null;
-
   private subtitleStyleEl: HTMLStyleElement | null = null;
 
-  // State
-  readonly loading = signal(true);
-  readonly videoStarted = signal(false);
-  readonly error = signal<string | null>(null);
-  readonly paused = signal(true);
-  readonly currentTime = signal(0);
-  readonly duration = signal(0);
-  readonly volume = signal(1);
+  // ── Template-facing signal aliases (delegate to services) ──
+  readonly loading = this.state.loading;
+  readonly videoStarted = this.state.videoStarted;
+  readonly error = this.state.error;
+  readonly paused = this.state.paused;
+  readonly currentTime = this.state.currentTime;
+  readonly duration = this.state.duration;
+  readonly volume = this.state.volume;
+  readonly buffering = this.state.buffering;
+  readonly bufferedEnd = this.state.bufferedEnd;
+  readonly playbackMode = this.state.playbackMode;
+  readonly hwAccel = this.state.hwAccel;
+  readonly activeQualityId = this.qualityManager.activeQualityId;
+  readonly availableQualities = this.qualityManager.availableQualities;
+  readonly activeResolution = this.qualityManager.activeResolution;
+
+  // Component-owned signals (not delegated)
   readonly playbackRate = signal(1);
   readonly controlsVisible = signal(true);
-  readonly buffering = signal(false);
-  readonly bufferedEnd = signal(0);
   readonly inPipMode = signal(false);
   private readonly isLandscape = signal(screen.orientation?.type?.startsWith('landscape') ?? false);
   readonly statsVisible = signal(false);
   readonly fillScreen = signal(false);
-  /** Forces stats recomputation while overlay is open (e.g. Shaka getStats, paused playback). */
   private readonly statsRefreshTick = signal(0);
   readonly subtitlePickerOpen = signal(false);
   readonly qualityPickerOpen = signal(false);
   readonly spriteUrl = signal<string | null>(null);
   readonly spriteMetadata = signal<SpriteMetadata | null>(null);
   readonly activeSubtitleId = signal<string | null>(null);
-  readonly activeQualityId = signal('auto');
-  readonly activeResolution = signal('');
   readonly activeAudioTrackId = signal<string | null>(null);
   readonly availableAudioTracks = signal<{ id: string; label: string; language: string }[]>([]);
   readonly availableSubtitles = signal<SubtitleOption[]>([]);
-  readonly availableQualities = signal<QualityOption[]>([]);
 
   /** Audio tracks from streamInfo for the Cast remote */
   readonly castAudioOptions = computed<CastAudioOption[]>(() => {
@@ -189,14 +179,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly castSyncEffect = effect(() => {
     const casting = this.castService.isConnected();
     if (casting && !this.wasCasting) {
-      // Just connected — mute/pause local video
+      // Just connected — mute/pause local engine
       try {
-        const video = this.videoEl()?.nativeElement;
-        if (video && !video.paused) video.pause();
-        if (video) video.muted = true;
-      } catch { /* video element may not be ready yet */ }
+        if (this.engine && !this.isNativeEngine) {
+          this.engine.pause().catch(() => {});
+          this.engine.muted = true;
+        }
+      } catch { /* engine may not be ready yet */ }
     } else if (!casting && this.wasCasting) {
-      // Just disconnected — reload Shaka and resume local playback at Cast position
+      // Just disconnected — reload local engine and resume at Cast position
       const castPos = this.castService.currentTime();
       this.resumeLocalAfterCast(castPos);
     }
@@ -215,10 +206,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (cmd.action === 'pause') this.castService.pause();
       else if (cmd.action === 'play') this.castService.play();
       else if (cmd.action === 'stop') { this.castService.disconnect(); this.onBack(); }
-    } else {
-      const video = this.videoEl()?.nativeElement;
-      if (cmd.action === 'pause' && video && !video.paused) video.pause();
-      else if (cmd.action === 'play' && video && video.paused) video.play();
+    } else if (this.engine) {
+      if (cmd.action === 'pause') this.engine.pause().catch(() => {});
+      else if (cmd.action === 'play') this.engine.play().catch(() => {});
       else if (cmd.action === 'stop') this.onBack();
     }
   });
@@ -234,7 +224,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } else {
       Immersive.exit().catch(() => {});
       document.body.classList.remove('immersive');
-      // Player bg is black → white status bar icons
       Immersive.setLightStatusBar({ light: false }).catch(() => {});
     }
   });
@@ -252,18 +241,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private episodeId: number | undefined;
   private media: Media | null = null;
   private activeBurnInId: number | null = null;
+  private activeAudioStreamIndex: number | undefined;
 
   readonly mediaTitle = signal('');
   readonly episodeTitle = signal('');
   readonly fanartUrl = signal<string | null>(null);
-  readonly playbackMode = signal<'direct' | 'remux' | 'transcode'>('direct');
-  readonly hwAccel = signal('none');
   private playbackInfo: PlaybackInfoResponse | null = null;
 
   readonly playerStats = computed<PlayerStats | null>(() => {
     if (!this.statsVisible()) return null;
-    const video = this.videoEl()?.nativeElement;
-    if (!video) return null;
 
     // Read signals so Angular tracks them as dependencies
     const _time = this.currentTime();
@@ -272,21 +258,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     const pi = this.playbackInfo;
     const src = pi?.source;
-    const shakaStats = this.player?.getStats();
+    const engineStats = this.engine?.getStats();
     const mode = this.playbackMode();
     const hw = this.hwAccel();
+    const activeVariant = engineStats?.activeVariant;
 
-    // Get the currently playing variant track from Shaka (reflects quality switch)
-    const activeTrack = this.player?.getVariantTracks()?.find(t => t.active);
+    const playingWidth = activeVariant?.width ?? src?.width;
+    const playingHeight = activeVariant?.height ?? src?.height;
 
     // Determine effective copy/transcode state based on selected quality
-    // "auto"/"original" in direct/remux → follows initial playbackInfo
-    // Any specific transcode profile (1080p/720p/480p) → video IS being transcoded
     const isTranscodeQuality = !['auto', 'original'].includes(_quality);
     const effectiveVideoCopy = isTranscodeQuality ? false : (pi?.videoCopyStream ?? true);
     const effectiveAudioCopy = isTranscodeQuality ? false : (pi?.audioCopyStream ?? true);
 
-    /** Same formatting as media-file-info (bps). */
     const formatBitrateBps = (bps: number): string => {
       if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} Mbps`;
       if (bps >= 1_000) return `${(bps / 1_000).toFixed(0)} kbps`;
@@ -312,10 +296,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       ? 'Audio transcoded to a compatible codec'
       : '';
 
-    // --- Video label (playing resolution from Shaka when available) ---
-    const playingWidth = activeTrack?.width ?? src?.width;
-    const playingHeight = activeTrack?.height ?? src?.height;
-    const resLabel = this.resolutionLabel(playingWidth, playingHeight);
+    // --- Video label ---
+    const resLabel = this.qualityManager.resolutionLabel(playingWidth, playingHeight);
     const hdrTag = src?.hdrFormat ? ` ${src.hdrFormat}` : '';
     const codecName = (src?.videoCodec ?? '?').toUpperCase();
     const videoLabel = `${resLabel}${hdrTag} ${codecName}`;
@@ -324,7 +306,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const qId = _quality;
     const sourceA = src?.audioBitRate;
 
-    /** Selected HLS profile entry (same resolution as stream bitrate logic). */
     let selectedRateEntry: {
       videoBitrateBps: number;
       audioBitrateBps: number;
@@ -333,14 +314,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (rateMap && qId !== 'auto' && qId !== 'original' && rateMap[qId]) {
       selectedRateEntry = rateMap[qId];
     } else if (rateMap && (qId === 'auto' || qId === 'original')) {
-      const tier = this.transcodeTierFromVariantHeight(activeTrack?.height ?? 0);
+      const tier = this.qualityManager.transcodeTierFromVariantHeight(activeVariant?.height ?? 0);
       if (tier && rateMap[tier]) selectedRateEntry = rateMap[tier];
     }
 
     const validBps = (n: unknown): n is number =>
       typeof n === 'number' && !Number.isNaN(n) && n > 0;
 
-    // Video stream bitrate: server manifest BANDWIDTH, else Shaka variant / total.
+    // Video stream bitrate
     let videoStreamBitrate = '';
     let serverStreamTotalBps: number | undefined;
     if (selectedRateEntry) {
@@ -358,9 +339,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (serverStreamTotalBps != null && serverStreamTotalBps > 0) {
       videoStreamBitrate = formatBitrateBps(serverStreamTotalBps);
     } else {
-      const trackVbw = activeTrack?.videoBandwidth;
-      const shakaStreamBw = (shakaStats as { streamBandwidth?: number } | undefined)
-        ?.streamBandwidth;
+      const trackVbw = activeVariant?.videoBandwidth;
+      const shakaStreamBw = engineStats?.streamBandwidth;
       if (validBps(trackVbw)) {
         videoStreamBitrate = formatBitrateBps(trackVbw);
       } else if (validBps(shakaStreamBw)) {
@@ -381,12 +361,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } else {
       videoPlaybackMode = hw !== 'none' ? `Transcoding (${hw.toUpperCase()})` : 'Transcoding (CPU)';
     }
-    // Show current resolution if transcoding to a lower quality
-    if (activeTrack && playingHeight && src?.height && playingHeight < src.height) {
-      videoPlaybackMode += ` → ${playingWidth}x${playingHeight}`;
+    if (playingHeight && src?.height && playingHeight < src.height) {
+      videoPlaybackMode += ` \u2192 ${playingWidth}x${playingHeight}`;
     }
     if (pi?.tonemapping) {
-      videoPlaybackMode += ' (HDR → SDR)';
+      videoPlaybackMode += ' (HDR \u2192 SDR)';
     }
 
     // --- Audio ---
@@ -401,7 +380,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } else if (validBps(sourceA) && pi?.playMethod === 'DirectStream') {
       audioStreamBitrate = formatBitrateBps(sourceA);
     } else {
-      const trackAbw = (activeTrack as { audioBandwidth?: number } | undefined)?.audioBandwidth;
+      const trackAbw = activeVariant?.audioBandwidth;
       if (validBps(trackAbw)) {
         audioStreamBitrate = formatBitrateBps(trackAbw);
       }
@@ -427,7 +406,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       videoStreamBitrate,
       videoProfileLine,
       videoPlaybackMode,
-      droppedFrames: shakaStats?.droppedFrames ?? 0,
+      droppedFrames: engineStats?.droppedFrames ?? 0,
       audioLabel,
       audioStreamBitrate,
       audioDetailLine,
@@ -435,18 +414,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     };
   });
 
+  // ── Lifecycle ──
+
   async ngAfterViewInit() {
+    this.state.reset();
+
     // On native: listen to orientation changes (immersive handled by effect)
     if (this.isNative) {
       screen.orientation?.addEventListener('change', this.onOrientationChange);
-    }
-
-    shaka.polyfill.installAll();
-
-    if (!shaka.Player.isBrowserSupported()) {
-      this.error.set('Browser not supported');
-      this.loading.set(false);
-      return;
     }
 
     const qp = this.route.snapshot.queryParams;
@@ -455,53 +430,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.episodeId = qp['episodeId'] ? +qp['episodeId'] : undefined;
     const resumeTime = 't' in qp ? +qp['t'] : undefined;
 
-    const video = this.videoEl()!.nativeElement;
-    this.player = new shaka.Player();
-    await this.player.attach(video);
-
-    this.player.configure({
-      streaming: {
-        bufferingGoal: 60,
-        rebufferingGoal: 5,
-        bufferBehind: 60,
-      },
-    } as any);
-
-    // Video event listeners
-    video.addEventListener('timeupdate', () => {
-      this.currentTime.set(video.currentTime);
-    });
-    video.addEventListener('durationchange', () => {
-      // Only use video.duration if we don't already have a reliable duration from ffprobe
-      // and if the reported duration is finite and reasonable
-      const current = this.duration();
-      if (!current && isFinite(video.duration) && video.duration > 0) {
-        this.duration.set(video.duration);
-      }
-    });
-    video.addEventListener('play', () => this.paused.set(false));
-    video.addEventListener('pause', () => this.paused.set(true));
-    video.addEventListener('waiting', () => this.buffering.set(true));
-    video.addEventListener('playing', () => { this.buffering.set(false); this.error.set(null); });
-    video.addEventListener('canplay', () => this.buffering.set(false));
-    video.addEventListener('volumechange', () => {
-      this.volume.set(video.muted ? 0 : video.volume);
-    });
-    video.addEventListener('progress', () => {
-      const buf = video.buffered;
-      if (buf.length > 0) {
-        this.bufferedEnd.set(buf.end(buf.length - 1));
-      }
-    });
-
-    this.player.addEventListener('error', (e: any) => {
-      const detail = e.detail;
-      console.error('[Player] Shaka error:', detail?.code, detail?.category, detail?.message, detail);
-      this.error.set(detail?.message ?? 'Playback error');
-    });
-
     try {
-      // Only use offline playback if explicitly requested via query param (e.g. from downloads page)
+      // Only use offline playback if explicitly requested via query param
       const offlineCheck = qp['offline'] === '1'
         ? await this.offlineStorage.getLocalUrl(`download-${this.mediaFileId}`).catch(() => null)
         : null;
@@ -514,7 +444,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.mediaTitle.set(media.title);
         if (media.fanartUrl) this.fanartUrl.set(this.serverConfig.resolveUrl(media.fanartUrl));
 
-        // Build episode title (e.g. "S2:E3 - Episode Name")
         const file = media.files?.find((f: any) => f.id === this.mediaFileId);
         if (this.episodeId && media.seasons) {
           for (const season of media.seasons) {
@@ -531,11 +460,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const si = file?.streamInfo as any;
         const knownDuration = si?.durationSeconds;
         if (knownDuration && knownDuration > 0) {
-          this.duration.set(knownDuration);
+          this.state.duration.set(knownDuration);
         }
       }
 
-      // Set MediaSession metadata (Android notification, PiP, recent apps)
+      // Set MediaSession metadata
       if ('mediaSession' in navigator) {
         const artwork: MediaImage[] = [];
         if (this.media?.posterUrl) artwork.push({ src: this.serverConfig.resolveUrl(this.media.posterUrl), sizes: '300x450', type: 'image/jpeg' });
@@ -547,49 +476,24 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         });
       }
 
-      video.addEventListener('error', () => {
-        const e = video.error;
-        console.error('[Player] Video error:', e?.code, e?.message);
-        this.error.set(e?.message ?? `Video error code ${e?.code}`);
-      });
+      // Determine resume position
+      let startTime: number | undefined = resumeTime ?? undefined;
+      if (startTime == null) {
+        try {
+          const playbackState = await this.streamingApi.getPlaybackState(this.mediaFileId);
+          if (playbackState && !playbackState.completed && playbackState.positionSeconds > 10) {
+            startTime = playbackState.positionSeconds;
+          }
+        } catch { /* playback state may not be available */ }
+      }
 
       if (this.isOfflinePlayback) {
-        // Offline: load via Shaka for subtitle track support (addTextTrackAsync)
-        console.log('[Player] Playing offline file via Shaka');
-        this.playbackMode.set('direct');
-
-        // Determine resume position for offline playback
-        let offlineStartTime: number | undefined = resumeTime ?? undefined;
-        if (offlineStartTime == null) {
-          try {
-            const state = await this.streamingApi.getPlaybackState(this.mediaFileId);
-            if (state && !state.completed && state.positionSeconds > 10) {
-              offlineStartTime = state.positionSeconds;
-            }
-          } catch { /* offline — state may not be available */ }
-        }
-
-        await this.player.load(offlineCheck!, offlineStartTime, 'video/mp4');
+        // Offline: always use ShakaEngine
+        await this.createShakaEngine();
+        this.state.playbackMode.set('direct');
+        await this.engine!.load(offlineCheck!, startTime, 'video/mp4');
       } else {
-        // ── Pre-compute all preferences BEFORE starting any backend stream ──
-
-        // 1. Determine resume position
-        let startTime: number | undefined = resumeTime ?? undefined;
-        console.log('[Player] resumeTime from URL:', resumeTime);
-        if (startTime == null) {
-          try {
-            const state = await this.streamingApi.getPlaybackState(this.mediaFileId);
-            console.log('[Player] PlaybackState from API:', state);
-            if (state && !state.completed && state.positionSeconds > 10) {
-              startTime = state.positionSeconds;
-            }
-          } catch (err) {
-            console.warn('[Player] getPlaybackState failed:', err);
-          }
-        }
-        console.log('[Player] Final startTime:', startTime);
-
-        // 2. Determine preferred audio stream index from settings + streamInfo
+        // Pre-compute audio preference
         const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
         const audioStreams: { language?: string }[] = (file?.streamInfo as any)?.audio ?? [];
         const preselectedAudioIndex = this.playerSettings.resolveAudioStreamIndex(
@@ -597,27 +501,26 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         );
         this.activeAudioStreamIndex = preselectedAudioIndex;
 
-        // 3. Ask the backend to decide how to play — pass audio index upfront
+        // Ask the backend to decide how to play
         const deviceProfile = this.deviceProfileService.getProfile();
         this.playbackInfo = await this.streamingApi.getPlaybackInfo(
           this.mediaFileId, deviceProfile, undefined, preselectedAudioIndex,
         );
         const pi = this.playbackInfo;
 
-        // Map backend decision to our mode signal
+        // Map backend decision to mode signal
         if (pi.playMethod === 'DirectPlay') {
-          this.playbackMode.set('direct');
+          this.state.playbackMode.set('direct');
         } else if (pi.playMethod === 'DirectStream') {
-          this.playbackMode.set('remux');
+          this.state.playbackMode.set('remux');
         } else {
-          this.playbackMode.set('transcode');
+          this.state.playbackMode.set('transcode');
         }
+        this.state.hwAccel.set(pi.hwAccel);
 
-        this.hwAccel.set(pi.hwAccel);
-
-        // 4. Build quality options and apply saved preference BEFORE load
-        this.buildQualityOptions(pi);
-        this.applySavedQualityPreferenceFromStorage();
+        // Build quality options and apply saved preference BEFORE load
+        this.qualityManager.buildQualityOptions(pi);
+        this.qualityManager.applySavedPreference();
 
         const mode = this.playbackMode();
         console.log('[Player] mediaFileId:', this.mediaFileId, 'mode:', pi.playMethod,
@@ -625,174 +528,147 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           'reasons:', pi.transcodeReasons.map(r => r.flag).join(', '),
           'startTime:', startTime, 'audioIdx:', preselectedAudioIndex);
 
-        // 5. Load the stream
+        // ── Engine selection ──
         if (this.isNative && mode !== 'direct') {
-          // ── Native engine (ExoPlayer / AVPlayer) ──
-          // Hide the HTML video element — native player renders behind WebView
-          video.style.display = 'none';
+          await this.createNativeEngine();
 
-          this.nativeEngine = new NativeEngine();
-          const container = this.containerEl()?.nativeElement ?? video.parentElement!;
-          await this.nativeEngine.init(container);
-
-          // Force transparent background on ALL ancestors so native player shows through
-          document.documentElement.classList.add('native-player-active');
-          let el: HTMLElement | null = container;
-          while (el && el !== document.documentElement) {
-            el.style.setProperty('background', 'transparent', 'important');
-            el = el.parentElement;
-          }
-
-          // Build auth headers for HLS segment requests
           const token = this.authService.accessToken;
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-
           const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId);
-          await this.nativeEngine.load(hlsUrl, startTime, undefined, headers);
-
-          // Sync native events → Angular signals
-          this.nativeEngine.on('stateChanged', (e) => {
-            this.paused.set(e.state === 'paused' || e.state === 'idle');
-            this.buffering.set(e.state === 'buffering');
-            if (e.state === 'error') this.error.set('Playback error');
-          });
-          this.nativeEngine.on('timeUpdate', (e) => {
-            this.currentTime.set(e.position);
-            if (e.duration > 0) this.duration.set(e.duration);
-            this.bufferedEnd.set(e.buffered);
-          });
-          this.nativeEngine.on('error', (e) => {
-            this.error.set(e.message);
-          });
-          this.nativeEngine.on('audioTracksChanged', (e) => {
-            const tracks = e.tracks.map((t) => ({
-              id: t.id,
-              label: t.label,
-              language: normalizeLang(t.language),
-            }));
-            this.availableAudioTracks.set(tracks);
-            if (tracks.length > 0) {
-              this.activeAudioTrackId.set(tracks[0].id);
-              this.autoSelectAudioTrack(tracks);
-            }
-          });
+          await this.engine!.load(hlsUrl, startTime, undefined, headers);
         } else {
-          // ── Shaka engine (web / direct play) ──
+          await this.createShakaEngine();
+
           if (mode === 'direct') {
             const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
-            await this.player!.load(streamUrl, startTime, 'video/mp4');
+            await this.engine!.load(streamUrl, startTime, 'video/mp4');
           } else {
             if (this.activeQualityId() === 'auto') {
-              this.configureAutoAbrForHls();
+              this.qualityManager.selectQuality(
+                { id: 'auto', label: 'Auto', height: 0 },
+                this.engine, mode, true,
+              );
             }
 
-            this.player!.configure({
+            this.engine!.configure({
               streaming: {
                 retryParameters: { timeout: 60_000, maxAttempts: 5, baseDelay: 1000 },
               },
               manifest: {
                 retryParameters: { timeout: 30_000, maxAttempts: 5, baseDelay: 1000 },
               },
-            } as any);
+            });
 
             const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId);
-            await this.player!.load(hlsUrl);
+            await this.engine!.load(hlsUrl);
           }
 
-          // Resume position — wait until Shaka has buffered enough to accept a seek
+          // Resume position (Shaka needs to buffer before accepting a seek)
           if (startTime != null && startTime > 0) {
-            const doSeek = () => {
-              console.log('[Player] Seeking to resume position:', startTime);
-              video.currentTime = startTime!;
-            };
-            if (video.readyState >= 2) {
-              doSeek();
-            } else {
-              video.addEventListener('canplay', doSeek, { once: true });
+            const video = this.videoEl()?.nativeElement;
+            if (video) {
+              const doSeek = () => {
+                console.log('[Player] Seeking to resume position:', startTime);
+                video.currentTime = startTime!;
+              };
+              if (video.readyState >= 2) {
+                doSeek();
+              } else {
+                video.addEventListener('canplay', doSeek, { once: true });
+              }
             }
           }
         }
       }
 
-      this.applyQualityPreferenceAfterLoad();
+      this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
 
+      // Load tracks
       if (this.isOfflinePlayback) {
         await this.loadOfflineSubtitles();
         this.loadAudioTracks();
       } else {
-        await this.loadSubtitles();
+        const subs = await this.trackManager.loadSubtitles(
+          this.mediaId, this.mediaFileId, this.streamingApi, this.media,
+        );
+        this.availableSubtitles.set(subs);
         this.loadAudioTracks();
       }
-      await this.autoSelectSubtitle();
+      await this.trackManager.autoSelectSubtitle(
+        this.availableSubtitles(),
+        this.availableAudioTracks(),
+        this.activeAudioTrackId(),
+        this.mediaFileId,
+        (sub) => this.selectSubtitle(sub),
+      );
 
-      // If Cast is already connected (user connected from navbar), send to Cast
-      if (this.castService.isConnected()) {
-        video.pause();
-        video.muted = true;
-        // Unload Shaka so it stops requesting HLS segments (would conflict with Cast session)
-        await this.player.unload();
-        const startPos = resumeTime ?? video.currentTime;
+      // If Cast is already connected, send to Cast
+      if (this.castService.isConnected() && !this.isNativeEngine) {
+        await this.engine!.pause();
+        this.engine!.muted = true;
+        await this.engine!.unload();
+        const startPos = resumeTime ?? this.engine!.currentTime;
         await this.startCastFromPlayer(startPos);
-      } else {
-        video.play().catch(() => {
+      } else if (!this.isNativeEngine) {
+        this.engine!.play().catch(() => {
           // Autoplay may be blocked
         });
       }
 
-      // Save position every 10 seconds + immediately on seek
+      // Save position every 10s + immediately on seek
       this.saveInterval = setInterval(() => this.savePosition(), 10_000);
-      video.addEventListener('seeked', () => this.savePosition());
+      const video = this.videoEl()?.nativeElement;
+      if (video) video.addEventListener('seeked', () => this.savePosition());
 
-      // Apply subtitle appearance + load thumbnail sprite metadata (non-blocking)
+      // Apply subtitle appearance + load thumbnail sprite metadata
       this.applySubtitleStyle();
       this.loadSpriteMetadata();
-      video.addEventListener('playing', () => this.videoStarted.set(true), { once: true });
 
       // Update stats every second
       this.statsInterval = setInterval(() => {
-        // Update active resolution from Shaka's current variant track
-        const track = this.player?.getVariantTracks()?.find(t => t.active);
-        if (track?.height) {
-          this.activeResolution.set(this.resolutionLabel(track.width ?? undefined, track.height));
+        const stats = this.engine?.getStats();
+        const variant = stats?.activeVariant;
+        if (variant?.height) {
+          this.qualityManager.activeResolution.set(
+            this.qualityManager.resolutionLabel(variant.width, variant.height),
+          );
         }
         if (this.statsVisible()) {
-          this.currentTime.set(video.currentTime);
+          this.state.currentTime.set(this.engine?.currentTime ?? 0);
           this.statsRefreshTick.update((n) => n + 1);
         }
       }, 1000);
     } catch (e: any) {
       console.error('[Player] Init error:', e?.code, e?.category, e?.data, e);
-      this.error.set(e?.message ?? String(e));
+      this.state.error.set(e?.message ?? String(e));
     } finally {
-      this.loading.set(false);
+      this.state.loading.set(false);
     }
 
     // Keyboard shortcuts
     document.addEventListener('keydown', this.onKeyDown);
 
-    // Best-effort cleanup on page unload (desktop). On mobile, the server-side
-    // 60s timeout and dead-process detection handle cleanup.
+    // Best-effort cleanup on page unload
     window.addEventListener('beforeunload', this.onBeforeUnload);
 
     // PiP mode change listener (native Android)
     if (this.isNative) {
       window.addEventListener('pipModeChanged', this.onPipModeChanged as EventListener);
       window.addEventListener('pipAction', this.onPipAction as EventListener);
-      // Auto-enter PiP when user swipes home
       Pip.setAutoEnter({ enabled: true }).catch(() => {});
     }
   }
 
   ngOnDestroy() {
     this.savePosition();
-    // Don't stop streaming sessions if handing off to Cast
     if (!this.castService.isConnected()) {
       this.stopStreamingSessions();
     }
-    this.player?.destroy();
-    if (this.nativeEngine) {
-      document.documentElement.classList.remove('native-player-active');
-      this.nativeEngine.destroy().catch(() => {});
+    if (this.engine) {
+      if (this.isNativeEngine) {
+        document.documentElement.classList.remove('native-player-active');
+      }
+      this.engine.destroy().catch(() => {});
     }
     this.removeSubtitleStyle();
     if (this.saveInterval) clearInterval(this.saveInterval);
@@ -800,7 +676,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.statsInterval) clearInterval(this.statsInterval);
     document.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('beforeunload', this.onBeforeUnload);
-    // Restore system UI when leaving player
     if (this.isNative) {
       screen.orientation?.removeEventListener('change', this.onOrientationChange);
       Immersive.exit().catch(() => {});
@@ -811,7 +686,72 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  // Controls visibility
+  // ── Engine factories ──
+
+  private async createShakaEngine(): Promise<void> {
+    const video = this.videoEl()!.nativeElement;
+    const engine = new ShakaEngine();
+    await engine.init(video);
+    this.engine = engine;
+    this.isNativeEngine = false;
+    this.state.bindEngine(engine);
+
+    // videoStarted tracking (first frame rendered)
+    video.addEventListener('playing', () => this.state.videoStarted.set(true), { once: true });
+    // Volume sync for template
+    video.addEventListener('volumechange', () => {
+      this.state.volume.set(video.muted ? 0 : video.volume);
+    });
+    // durationchange fallback: only use if we don't already have a reliable duration
+    video.addEventListener('durationchange', () => {
+      const current = this.state.duration();
+      if (!current && isFinite(video.duration) && video.duration > 0) {
+        this.state.duration.set(video.duration);
+      }
+    });
+  }
+
+  private async createNativeEngine(): Promise<void> {
+    const video = this.videoEl()!.nativeElement;
+    video.style.display = 'none';
+
+    const engine = new NativeEngine();
+    const container = this.containerEl()?.nativeElement ?? video.parentElement!;
+    await engine.init(container);
+
+    // Force transparent background so native player shows through
+    document.documentElement.classList.add('native-player-active');
+    let el: HTMLElement | null = container;
+    while (el && el !== document.documentElement) {
+      el.style.setProperty('background', 'transparent', 'important');
+      el = el.parentElement;
+    }
+
+    this.engine = engine;
+    this.isNativeEngine = true;
+    this.state.bindEngine(engine);
+
+    // Listen for audio tracks from native engine
+    engine.on('audioTracksChanged', (e) => {
+      const tracks = e.tracks.map((t) => ({
+        id: t.id,
+        label: t.label,
+        language: normalizeLang(t.language),
+      }));
+      this.availableAudioTracks.set(tracks);
+      if (tracks.length > 0) {
+        this.activeAudioTrackId.set(tracks[0].id);
+        this.trackManager.autoSelectAudioTrack(
+          tracks, this.mediaId, this.mediaFileId,
+          this.activeAudioTrackId(),
+          (trackId) => this.onSelectAudioTrack(trackId),
+        );
+      }
+    });
+  }
+
+  // ── Controls visibility ──
+
   toggleControls() {
     if (this.controlsVisible() && !this.isDropdownOpen()) {
       this.hideControls();
@@ -842,42 +782,31 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return !!active && !!active.closest('.dropdown');
   }
 
-  // Player actions (local playback)
+  // ── Player actions ──
+
   onTogglePlay() {
-    if (this.nativeEngine) {
-      if (this.paused()) this.nativeEngine.play();
-      else this.nativeEngine.pause();
-      return;
-    }
-    const video = this.videoEl()?.nativeElement;
-    if (!video) return;
-    if (video.paused) video.play();
-    else video.pause();
+    if (!this.engine) return;
+    if (this.paused()) this.engine.play().catch(() => {});
+    else this.engine.pause().catch(() => {});
   }
 
   onSeek(time: number) {
     const t = Math.max(0, Math.min(time, this.duration() || 0));
-    if (this.nativeEngine) {
-      this.nativeEngine.seek(t);
-      this.currentTime.set(t);
-      return;
+    if (this.engine) {
+      this.engine.seek(t).catch(() => {});
+      this.state.currentTime.set(t);
     }
-    const video = this.videoEl()?.nativeElement;
-    if (!video) return;
-    video.currentTime = t;
   }
 
   onVolumeChange(vol: number) {
-    const video = this.videoEl()?.nativeElement;
-    if (!video) return;
-    video.volume = vol;
-    video.muted = vol === 0;
+    if (!this.engine) return;
+    this.engine.volume = vol;
+    this.engine.muted = vol === 0;
   }
 
   onToggleMute() {
-    const video = this.videoEl()?.nativeElement;
-    if (!video) return;
-    video.muted = !video.muted;
+    if (!this.engine) return;
+    this.engine.muted = !this.engine.muted;
   }
 
   onToggleFullscreen() {
@@ -909,30 +838,27 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    // Pause video immediately while connecting
-    const video = this.videoEl()?.nativeElement;
-    const wasPlaying = video && !video.paused;
-    const currentPos = video?.currentTime ?? 0;
-    if (video) video.pause();
+    const wasPlaying = this.engine && !this.engine.paused;
+    const currentPos = this.engine?.currentTime ?? 0;
+    if (this.engine) this.engine.pause().catch(() => {});
 
     this.castService.requestSession();
 
     // Wait for connection (poll for up to 30s)
     for (let i = 0; i < 60; i++) {
       if (this.castService.isConnected()) break;
-      if (!this.castService.connecting()) break; // user cancelled
+      if (!this.castService.connecting()) break;
       await new Promise(r => setTimeout(r, 500));
     }
 
     if (!this.castService.isConnected()) {
-      // Connection failed or cancelled — restore playback
-      if (wasPlaying && video) video.play().catch(() => {});
+      if (wasPlaying && this.engine) this.engine.play().catch(() => {});
       return;
     }
 
-    // Connected — hand off to Cast and leave the player page
-    if (video) video.muted = true;
-    if (this.player) await this.player.unload();
+    // Connected — hand off to Cast
+    if (this.engine) this.engine.muted = true;
+    if (this.engine) await this.engine.unload();
     await this.startCastFromPlayer(currentPos);
     this.castPlayerService.expanded.set(true);
     this.onBack();
@@ -975,28 +901,26 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     await this.castPlayerService.reloadCastStream(position);
   }
 
-  /** Reload Shaka and resume local playback after Cast disconnect. */
+  /** Reload local engine and resume after Cast disconnect. */
   private async resumeLocalAfterCast(castPos: number) {
     try {
-      const video = this.videoEl()?.nativeElement;
-      if (video) video.muted = false;
-      if (this.player && this.mediaFileId) {
+      if (this.engine) this.engine.muted = false;
+      if (this.engine && this.mediaFileId) {
         const mode = this.playbackMode();
         const url = mode === 'direct'
           ? this.streamingApi.getStreamUrl(this.mediaFileId)
           : this.streamingApi.getHlsUrl(this.mediaFileId);
         const mimeType = mode === 'direct' ? 'video/mp4' : undefined;
-        await this.player.load(url, castPos > 0 ? castPos : undefined, mimeType);
-        this.applyQualityPreferenceAfterLoad();
-        video?.play().catch(() => {});
+        await this.engine.load(url, castPos > 0 ? castPos : undefined, mimeType);
+        this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
+        this.engine.play().catch(() => {});
       }
     } catch { /* ignore */ }
   }
 
   onSpeedChange(rate: number) {
-    const video = this.videoEl()?.nativeElement;
-    if (!video) return;
-    video.playbackRate = rate;
+    if (!this.engine) return;
+    this.engine.playbackRate = rate;
     this.playbackRate.set(rate);
   }
 
@@ -1015,80 +939,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  // Subtitles
-  async loadSubtitles() {
-    if (!this.mediaId) return;
-    try {
-      const options: SubtitleOption[] = [];
+  // ── Subtitles ──
 
-      const subs = await this.subtitlesApi.getForMedia(this.mediaId);
-      const bitmapCodecs = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle']);
-      const seen = new Set<string>();
-
-      for (const sub of subs) {
-        if (sub.mediaFileId !== this.mediaFileId) continue;
-        const isBitmap = bitmapCodecs.has(sub.codec ?? '');
-
-        if (sub.relativePath) {
-          const key = `ext-${sub.language}-${sub.forced}-${sub.hearingImpaired}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          options.push({
-            id: `ext-${sub.id}`,
-            label: `${sub.language}${sub.hearingImpaired ? ' (HI)' : ''}${sub.forced ? ' (Forced)' : ''}`,
-            url: this.streamingApi.getSubtitleUrl(this.mediaFileId, sub.id),
-            language: sub.language,
-            burnIn: false,
-            subtitleDbId: sub.id,
-            forced: sub.forced ?? false,
-          });
-        } else if (sub.streamIndex != null) {
-          const key = `emb-${sub.streamIndex}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          options.push({
-            id: key,
-            label: `${sub.language}${sub.hearingImpaired ? ' (HI)' : ''}${sub.forced ? ' (Forced)' : ''}${isBitmap ? ' [PGS]' : ' [embedded]'}`,
-            url: isBitmap ? '' : this.streamingApi.getEmbeddedSubtitleUrl(this.mediaFileId, sub.streamIndex!),
-            language: sub.language,
-            burnIn: isBitmap,
-            subtitleDbId: sub.id,
-            forced: sub.forced ?? false,
-          });
-        }
-      }
-
-      // Also check streamInfo for embedded subs not yet in DB
-      const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
-      const si = file?.streamInfo as any;
-      if (si?.subtitles?.length) {
-        for (const emb of si.subtitles) {
-          const key = `emb-${emb.streamIndex}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          const isBitmap = bitmapCodecs.has(emb.codec);
-          if (isBitmap) continue; // Bitmap from streamInfo only (no DB ID for burn-in)
-          options.push({
-            id: key,
-            label: `${emb.language}${emb.hearingImpaired ? ' (HI)' : ''}${emb.forced ? ' (Forced)' : ''} [embedded]`,
-            url: this.streamingApi.getEmbeddedSubtitleUrl(this.mediaFileId, emb.streamIndex),
-            language: emb.language,
-            burnIn: false,
-            forced: emb.forced ?? false,
-          });
-        }
-      }
-
-      this.availableSubtitles.set(options);
-    } catch {
-      // Ignore subtitle loading errors
-    }
-  }
-
-  /** Load VTT subtitle files from offline storage — same method as online (addTextTrackAsync). */
+  /** Load VTT subtitle files from offline storage. */
   private async loadOfflineSubtitles() {
-    if (!this.player) return;
-
     const cached = this.dlCache.load();
     const task = cached.find((t) => t.mediaFileId === this.mediaFileId);
     if (!task?.subtitles?.length) return;
@@ -1112,25 +966,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.availableSubtitles.set(options);
   }
 
-  /** Load audio tracks from Shaka variant tracks (works in both direct play and HLS) */
+  /** Load audio tracks (Shaka variant tracks or streamInfo fallback). */
   private loadAudioTracks() {
-    if (!this.player) return;
+    if (!this.engine) return;
 
-    // Wait a moment for Shaka to parse the manifest/file
+    // Wait a moment for the engine to parse the manifest/file
     setTimeout(() => {
-      if (!this.player) return;
-      const variants = this.player.getVariantTracks();
+      if (!this.engine) return;
 
-      // Deduplicate by audioId (each audio track appears in multiple variants for different video qualities)
-      const seen = new Map<number, any>();
-      for (const v of variants) {
-        if (v.audioId != null && !seen.has(v.audioId)) {
-          seen.set(v.audioId, v);
-        }
-      }
+      const engineTracks = this.engine.getAudioTracks();
 
-      if (seen.size <= 1) {
-        // Fallback: use streamInfo if Shaka only sees one audio track
+      if (engineTracks.length <= 1) {
+        // Fallback: use streamInfo if engine only sees one audio track
         const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
         const si = file?.streamInfo as any;
         if (si?.audio?.length > 1) {
@@ -1141,99 +988,49 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           }));
           this.availableAudioTracks.set(tracks);
           this.activeAudioTrackId.set(tracks[0].id);
-          this.autoSelectAudioTrack(tracks);
+          this.trackManager.autoSelectAudioTrack(
+            tracks, this.mediaId, this.mediaFileId,
+            this.activeAudioTrackId(),
+            (trackId) => this.onSelectAudioTrack(trackId),
+          );
         }
         return;
       }
 
-      const tracks = Array.from(seen.entries()).map(([audioId, v]) => ({
-        id: `shaka-${audioId}`,
-        label: `${v.language ?? 'und'} (${v.audioCodec ?? '?'}${v.channelsCount ? ' ' + v.channelsCount + 'ch' : ''})`,
-        language: normalizeLang(v.language),
+      const tracks = engineTracks.map(t => ({
+        id: t.id,
+        label: t.label,
+        language: normalizeLang(t.language),
       }));
 
       this.availableAudioTracks.set(tracks);
       // Set active to the currently playing one
-      const active = variants.find((v: any) => v.active);
+      const allVariants = this.engine.getVariantTracks();
+      const active = allVariants.find((v: any) => v.active);
       if (active?.audioId != null) {
         this.activeAudioTrackId.set(`shaka-${active.audioId}`);
       }
-      this.autoSelectAudioTrack(tracks);
+      this.trackManager.autoSelectAudioTrack(
+        tracks, this.mediaId, this.mediaFileId,
+        this.activeAudioTrackId(),
+        (trackId) => this.onSelectAudioTrack(trackId),
+      );
     }, 2000);
   }
-
-  /** Auto-select audio track based on user preferences. */
-  private autoSelectAudioTrack(tracks: { id: string; language: string }[]) {
-    const settings = this.playerSettings.get();
-    // "Use default audio stream" only applies when no remembered selection exists
-    // (i.e. first time watching). On refresh, the saved choice takes priority.
-    const hasSavedSelection = settings.rememberAudioSelections &&
-      !!this.playerSettings.getRememberedAudioTrack(this.mediaFileId);
-    if (settings.useDefaultAudioStream && !hasSavedSelection) return;
-    // For non-Shaka tracks (si-*), skip if audio was already pre-selected during
-    // init to avoid reloading the stream. For Shaka tracks (shaka-*), the
-    // pre-select has no effect — we must switch via selectVariantTrack.
-    const hasShakaAudio = tracks.some((t) => t.id.startsWith('shaka-'));
-    if (!hasShakaAudio && this.activeAudioStreamIndex != null) return;
-
-    // Priority 1: remembered selection for this media (saved as language code)
-    if (settings.rememberAudioSelections) {
-      const key = this.mediaId || this.mediaFileId;
-      const savedLang = this.playerSettings.getRememberedAudioTrack(key);
-      if (savedLang) {
-        const match = tracks.find((t) => t.language === savedLang);
-        if (match) {
-          this.onSelectAudioTrack(match.id);
-          return;
-        }
-      }
-    }
-
-    // Priority 2: preferred language
-    if (settings.preferredAudioLanguage) {
-      const match = tracks.find(
-        (t) => t.language === settings.preferredAudioLanguage,
-      );
-      if (match && match.id !== this.activeAudioTrackId()) {
-        this.onSelectAudioTrack(match.id);
-      }
-    }
-  }
-
-  private activeAudioStreamIndex: number | undefined;
 
   async onSelectAudioTrack(trackId: string) {
     this.activeAudioTrackId.set(trackId);
     this.activeAudioStreamIndex = parseAudioIndex(trackId);
 
-    // Remember selection by language at the media level (series/movie),
-    // so the choice carries across episodes.
-    if (this.playerSettings.get().rememberAudioSelections) {
-      const track = this.availableAudioTracks().find((t) => t.id === trackId);
-      const lang = track?.language ?? trackId;
-      const key = this.mediaId || this.mediaFileId;
-      this.playerSettings.saveRememberedAudioTrack(key, lang);
-    }
+    // Save selection
+    this.trackManager.saveAudioSelection(
+      trackId, this.availableAudioTracks(), this.mediaId, this.mediaFileId,
+    );
 
-    // Native engine: seamless audio switch via ExoPlayer/AVPlayer
-    if (this.nativeEngine) {
-      await this.nativeEngine.selectAudioTrack(trackId);
+    // Engine-level audio switch (Shaka native or NativeEngine)
+    if (this.engine && (trackId.startsWith('shaka-') || trackId.startsWith('audio-'))) {
+      await this.engine.selectAudioTrack(trackId);
       return;
-    }
-
-    // Shaka native switch (no reload) for EXT-X-MEDIA audio renditions
-    if (trackId.startsWith('shaka-') && this.player) {
-      const audioId = parseInt(trackId.replace('shaka-', ''), 10);
-      const variants = this.player.getVariantTracks();
-      const active = variants.find((v: any) => v.active);
-      const target =
-        variants.find(
-          (v: any) => v.audioId === audioId && v.videoId === active?.videoId,
-        ) ?? variants.find((v: any) => v.audioId === audioId);
-      if (target) {
-        this.player.selectVariantTrack(target, /* clearBuffer= */ true);
-        return;
-      }
     }
 
     // Fallback: legacy reload (direct play, single-audio files)
@@ -1241,10 +1038,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   async selectSubtitle(sub: SubtitleOption | null) {
-    if (!this.player) return;
+    if (!this.engine) return;
 
     if (!sub) {
-      try { (this.player as any).setTextVisibility(false); } catch {};
+      try { this.engine.setTextVisibility(false); } catch {}
       this.activeSubtitleId.set(null);
       this.subtitlePickerOpen.set(false);
       localStorage.setItem('player.subtitleLang', '');
@@ -1257,7 +1054,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
 
     if (sub.burnIn && sub.subtitleDbId) {
-      // Server-side burn-in: reload stream with subtitle baked in
       this.activeBurnInId = sub.subtitleDbId;
       this.activeSubtitleId.set(sub.id);
       this.subtitlePickerOpen.set(false);
@@ -1272,16 +1068,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.activeBurnInId = null;
         if (!this.isOfflinePlayback) await this.reloadStream();
       }
-      const track = await this.player.addTextTrackAsync(
-        sub.url,
-        sub.language,
-        'subtitles',
-        'text/vtt',
-        undefined,
-        sub.label,
-      );
-      this.player.selectTextTrack(track);
-      try { (this.player as any).setTextVisibility(true); } catch {};
+      const track = await this.engine.addTextTrack(sub.url, sub.language, sub.label);
+      this.engine.selectTextTrack(track);
+      try { this.engine.setTextVisibility(true); } catch {}
     } catch (e) {
       console.error('[Player] Failed to load subtitle:', e);
     }
@@ -1290,77 +1079,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.subtitlePickerOpen.set(false);
     localStorage.setItem('player.subtitleLang', sub.language);
 
-    // Remember selection if enabled
     if (this.playerSettings.get().rememberSubtitleSelections) {
       this.playerSettings.saveRememberedSubtitleTrack(this.mediaFileId, sub.id);
     }
   }
 
-  /** Auto-select subtitle based on user preferences (mode: off/intelligent/always).
-   *  Burn-in subtitles are excluded to avoid triggering a stream reload during init. */
-  private async autoSelectSubtitle() {
-    const settings = this.playerSettings.get();
-    // Exclude burn-in subs (PGS, DVD, etc.) — selecting them calls reloadStream() to bake
-    // the subtitle into the video server-side, which kills the active transcode session.
-    // During init the transcode just started (possibly with a seek), so reloading would
-    // spawn a 3rd ffmpeg process and cause Shaka error 1003. Users can still pick burn-in
-    // subs manually from the subtitle menu.
-    const subs = this.availableSubtitles().filter((s) => !s.burnIn);
-    if (!subs.length && !this.availableSubtitles().length) return;
+  // ── Keyboard handler ──
 
-    // Priority 1: remembered selection (only non-burn-in)
-    if (settings.rememberSubtitleSelections) {
-      const savedId = this.playerSettings.getRememberedSubtitleTrack(this.mediaFileId);
-      if (savedId) {
-        const match = subs.find((s) => s.id === savedId);
-        if (match) { await this.selectSubtitle(match); return; }
-      }
-    }
-
-    if (settings.subtitleMode === 'off') return;
-
-    const prefLang = settings.preferredSubtitleLanguage;
-    if (!prefLang) {
-      // Fallback: try old localStorage key for migration
-      const oldLang = localStorage.getItem('player.subtitleLang');
-      if (oldLang) {
-        const match = subs.find((s) => s.language === oldLang);
-        if (match) await this.selectSubtitle(match);
-      }
-      return;
-    }
-
-    const findMatch = () =>
-      subs.find((s) => s.language === prefLang && !s.forced)
-      ?? subs.find((s) => s.language === prefLang);
-
-    if (settings.subtitleMode === 'always') {
-      const match = findMatch();
-      if (match) await this.selectSubtitle(match);
-      return;
-    }
-
-    // Intelligent mode: show subtitles only when audio language differs from preferred
-    if (settings.subtitleMode === 'intelligent') {
-      const audioTracks = this.availableAudioTracks();
-      const activeAudioId = this.activeAudioTrackId();
-      const activeAudio = audioTracks.find((t) => t.id === activeAudioId);
-      const audioLang = activeAudio?.language ?? 'und';
-
-      if (audioLang !== prefLang && audioLang !== 'und') {
-        const match = findMatch();
-        if (match) await this.selectSubtitle(match);
-      }
-    }
-  }
-
-  // Keyboard handler
   private onKeyDown = (e: KeyboardEvent) => {
-    // Ignore if typing in an input
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
-
-    const video = this.videoEl()?.nativeElement;
-    if (!video) return;
+    if (!this.engine) return;
 
     switch (e.key) {
       case ' ':
@@ -1370,19 +1098,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         break;
       case 'ArrowLeft':
         e.preventDefault();
-        this.onSeek(video.currentTime - 10);
+        this.onSeek(this.engine.currentTime - 10);
         break;
       case 'ArrowRight':
         e.preventDefault();
-        this.onSeek(video.currentTime + 10);
+        this.onSeek(this.engine.currentTime + 10);
         break;
       case 'j':
         e.preventDefault();
-        this.onSeek(video.currentTime - 30);
+        this.onSeek(this.engine.currentTime - 30);
         break;
       case 'l':
         e.preventDefault();
-        this.onSeek(video.currentTime + 30);
+        this.onSeek(this.engine.currentTime + 30);
         break;
       case 'f':
         e.preventDefault();
@@ -1418,11 +1146,88 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.showControls();
   };
 
-  /** Best-effort cleanup on page unload / app background. Not guaranteed on mobile — the
-   *  server-side 60s timeout and dead-process detection are the real safety nets. */
+  // ── Event handlers ──
+
   private onBeforeUnload = () => {
     this.fireAndForgetStopSessions();
   };
+
+  private onPipModeChanged = (e: Event) => {
+    const isInPip = (e as CustomEvent).detail?.isInPipMode ?? false;
+    this.inPipMode.set(isInPip);
+  };
+
+  private onPipAction = (e: Event) => {
+    const action = (e as CustomEvent).detail?.action;
+    if (action === 'togglePlayback') {
+      this.onTogglePlay();
+    }
+  };
+
+  private onOrientationChange = () => {
+    this.isLandscape.set(screen.orientation?.type?.startsWith('landscape') ?? false);
+  };
+
+  onCloseStats() {
+    this.statsVisible.set(false);
+  }
+
+  onSelectQualityById(id: string) {
+    const option = this.availableQualities().find(q => q.id === id);
+    if (option) {
+      this.qualityManager.selectQuality(option, this.engine, this.playbackMode());
+    }
+  }
+
+  onSelectSubtitleById(id: string | null) {
+    if (id === null) {
+      this.selectSubtitle(null);
+    } else {
+      const sub = this.availableSubtitles().find(s => s.id === id) ?? null;
+      this.selectSubtitle(sub);
+    }
+  }
+
+  onToggleQualityPicker() {
+    this.qualityPickerOpen.set(!this.qualityPickerOpen());
+    this.subtitlePickerOpen.set(false);
+  }
+
+  // ── Private helpers ──
+
+  /** Reload the stream (e.g. when toggling burn-in subtitles or switching audio). */
+  private async reloadStream() {
+    if (!this.engine) return;
+    const currentPos = this.engine.currentTime;
+
+    this.stopStreamingSessions();
+
+    const deviceProfile = this.deviceProfileService.getProfile();
+    this.playbackInfo = await this.streamingApi.getPlaybackInfo(
+      this.mediaFileId, deviceProfile, this.activeBurnInId ?? undefined, this.activeAudioStreamIndex,
+    );
+    const pi = this.playbackInfo;
+
+    if (pi.playMethod === 'DirectPlay') {
+      this.state.playbackMode.set('direct');
+    } else if (pi.playMethod === 'DirectStream') {
+      this.state.playbackMode.set('remux');
+    } else {
+      this.state.playbackMode.set('transcode');
+    }
+    this.state.hwAccel.set(pi.hwAccel);
+    this.qualityManager.buildQualityOptions(pi);
+
+    const mode = this.playbackMode();
+    if (mode === 'direct') {
+      await this.engine.load(this.streamingApi.getStreamUrl(this.mediaFileId), currentPos, 'video/mp4');
+    } else {
+      await this.engine.load(this.streamingApi.getHlsUrl(this.mediaFileId), currentPos);
+    }
+
+    this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
+    this.engine.play().catch(() => {});
+  }
 
   private fireAndForgetStopSessions() {
     if (!this.mediaFileId || this.playbackMode() === 'direct') return;
@@ -1442,15 +1247,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     let dur: number;
 
     if (this.castService.isConnected()) {
-      // Playback is on Chromecast — read position from Cast receiver
       pos = this.castService.currentTime();
       dur = this.castService.duration() || this.duration();
+    } else if (this.engine) {
+      pos = this.engine.currentTime;
+      dur = this.engine.duration || this.duration();
     } else {
-      const video = this.videoEl()?.nativeElement;
-      if (!video || !video.currentTime) return;
-      pos = video.currentTime;
-      dur = isFinite(video.duration) ? video.duration : this.duration();
+      return;
     }
+
+    if (!pos) return;
 
     const payload = {
       positionSeconds: pos,
@@ -1463,271 +1269,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       try {
         await this.streamingApi.updatePlaybackState(this.mediaFileId, payload);
       } catch {
-        // API failed — queue for later
         this.offlineSync.queue({ mediaFileId: this.mediaFileId, ...payload });
       }
     } else {
       this.offlineSync.queue({ mediaFileId: this.mediaFileId, ...payload });
     }
-  }
-
-  private onPipModeChanged = (e: Event) => {
-    const isInPip = (e as CustomEvent).detail?.isInPipMode ?? false;
-    this.inPipMode.set(isInPip);
-  };
-
-  private onPipAction = (e: Event) => {
-    const action = (e as CustomEvent).detail?.action;
-    if (action === 'togglePlayback') {
-      const video = this.videoEl()?.nativeElement;
-      if (video) {
-        if (video.paused) video.play();
-        else video.pause();
-      }
-    }
-  };
-
-  private onOrientationChange = () => {
-    this.isLandscape.set(screen.orientation?.type?.startsWith('landscape') ?? false);
-  };
-
-  onCloseStats() {
-    this.statsVisible.set(false);
-  }
-
-  /** Reload the stream (e.g. when toggling burn-in subtitles) */
-  private async reloadStream() {
-    const video = this.videoEl()?.nativeElement;
-    if (!video || !this.player) return;
-    const currentPos = video.currentTime;
-
-    // Stop existing sessions
-    this.stopStreamingSessions();
-
-    // Re-fetch playback info with burn-in + audio stream selection
-    const deviceProfile = this.deviceProfileService.getProfile();
-    this.playbackInfo = await this.streamingApi.getPlaybackInfo(
-      this.mediaFileId, deviceProfile, this.activeBurnInId ?? undefined, this.activeAudioStreamIndex,
-    );
-    const pi = this.playbackInfo;
-
-    if (pi.playMethod === 'DirectPlay') {
-      this.playbackMode.set('direct');
-    } else if (pi.playMethod === 'DirectStream') {
-      this.playbackMode.set('remux');
-    } else {
-      this.playbackMode.set('transcode');
-    }
-    this.hwAccel.set(pi.hwAccel);
-    this.buildQualityOptions(pi);
-
-    const mode = this.playbackMode();
-    if (mode === 'direct') {
-      await this.player.load(this.streamingApi.getStreamUrl(this.mediaFileId), currentPos, 'video/mp4');
-    } else {
-      await this.player.load(this.streamingApi.getHlsUrl(this.mediaFileId), currentPos);
-    }
-
-    this.applyQualityPreferenceAfterLoad();
-
-    video.play().catch(() => {});
-  }
-
-  onToggleQualityPicker() {
-    this.qualityPickerOpen.set(!this.qualityPickerOpen());
-    this.subtitlePickerOpen.set(false);
-  }
-
-  async selectQuality(option: QualityOption, force = false) {
-    this.qualityPickerOpen.set(false);
-    if (!force && option.id === this.activeQualityId()) return;
-    this.activeQualityId.set(option.id);
-    this.persistQualityPreference(option.id);
-
-    if (!this.player) return;
-
-    if (option.id === 'auto') {
-      if (this.playbackMode() !== 'direct') {
-        this.configureAutoAbrForHls();
-      } else {
-        this.player.configure({ abr: { enabled: true } } as any);
-      }
-      return;
-    }
-
-    // Disable ABR and lock to a specific variant
-    this.player.configure({ abr: { enabled: false } } as any);
-    const allTracks = this.player.getVariantTracks();
-    if (!allTracks.length) return;
-
-    // Preserve current audio track: filter variants to those matching the active audioId
-    const activeTrack = allTracks.find((t: any) => t.active);
-    const activeAudioId = activeTrack?.audioId;
-    const tracks =
-      activeAudioId != null
-        ? allTracks.filter((t: any) => t.audioId === activeAudioId)
-        : allTracks;
-    // Fallback to all tracks if filtering left nothing
-    const candidates = tracks.length ? tracks : allTracks;
-
-    if (option.id === 'original') {
-      // Pick the highest resolution track (original/remux quality)
-      const best = candidates.reduce((a, b) => ((a.height ?? 0) >= (b.height ?? 0) ? a : b));
-      this.player.selectVariantTrack(best, true);
-    } else {
-      // Find the track closest to the requested height
-      const target = option.height;
-      const match = candidates.reduce((a, b) =>
-        Math.abs((a.height ?? 0) - target) <= Math.abs((b.height ?? 0) - target) ? a : b,
-      );
-      this.player.selectVariantTrack(match, true);
-    }
-  }
-
-  private readSavedQualityIdFromStorage(): string | null {
-    try {
-      return localStorage.getItem(PLAYER_QUALITY_STORAGE_KEY);
-    } catch {
-      return null;
-    }
-  }
-
-  private persistQualityPreference(id: string) {
-    try {
-      localStorage.setItem(PLAYER_QUALITY_STORAGE_KEY, id);
-    } catch {
-      /* private mode / quota */
-    }
-  }
-
-  /** After buildQualityOptions: restore last choice if still valid for this manifest. */
-  private applySavedQualityPreferenceFromStorage() {
-    const saved = this.readSavedQualityIdFromStorage();
-    const ids = new Set(this.availableQualities().map(q => q.id));
-    if (saved && ids.has(saved)) {
-      this.activeQualityId.set(saved);
-    } else {
-      this.activeQualityId.set('auto');
-    }
-  }
-
-  /**
-   * Apply activeQualityId after load / reload (Shaka resets ABR).
-   * Uses force=true so initial state matches persisted preference.
-   */
-  private applyQualityPreferenceAfterLoad() {
-    const option = this.availableQualities().find(q => q.id === this.activeQualityId())
-      ?? this.availableQualities().find(q => q.id === 'auto');
-    if (!option) return;
-    void this.selectQuality(option, true);
-  }
-
-  /** Optimistic ABR for HLS: bias toward 720p+, still allowed to drop if needed. */
-  private configureAutoAbrForHls() {
-    if (!this.player) return;
-    this.player.configure({
-      abr: {
-        enabled: true,
-        defaultBandwidthEstimate: ABR_DEFAULT_BANDWIDTH_ESTIMATE,
-        useNetworkInformation: true,
-        restrictions: {
-          minWidth: 0,
-          maxWidth: Infinity,
-          minHeight: ABR_MIN_HEIGHT_PREFERENCE,
-          maxHeight: Infinity,
-          minPixels: 0,
-          maxPixels: Infinity,
-          minFrameRate: 0,
-          maxFrameRate: Infinity,
-          minBandwidth: 0,
-          maxBandwidth: Infinity,
-          minChannelsCount: 0,
-          maxChannelsCount: Infinity,
-        },
-      },
-    } as any);
-  }
-
-  onSelectQualityById(id: string) {
-    const option = this.availableQualities().find(q => q.id === id);
-    if (option) this.selectQuality(option);
-  }
-
-  onSelectSubtitleById(id: string | null) {
-    if (id === null) {
-      this.selectSubtitle(null);
-    } else {
-      const sub = this.availableSubtitles().find(s => s.id === id) ?? null;
-      this.selectSubtitle(sub);
-    }
-  }
-
-  private buildQualityOptions(pi: PlaybackInfoResponse) {
-    const options: QualityOption[] = [];
-    const srcH = pi.source.height ?? 0;
-    const srcW = pi.source.width ?? 0;
-
-    // Auto is always first
-    options.push({ id: 'auto', label: 'Auto', height: 0 });
-
-    if (pi.playMethod === 'DirectPlay') {
-      // Only original quality
-      const resLabel = this.resolutionLabel(srcW, srcH);
-      options.push({ id: 'original', label: resLabel, height: srcH });
-    } else {
-      // Original (remux) if video can be copied
-      if (pi.videoCopyStream) {
-        const resLabel = this.resolutionLabel(srcW, srcH);
-        options.push({ id: 'original', label: resLabel, height: srcH });
-      }
-      // Transcode profiles: use width to match (stable across cinema aspect ratios)
-      const profiles = [
-        { id: '2160p', label: '4K', height: 2160, minWidth: 3800 },
-        { id: '1080p', label: '1080p', height: 1080, minWidth: 1900 },
-        { id: '720p', label: '720p', height: 720, minWidth: 1260 },
-        { id: '480p', label: '480p', height: 480, minWidth: 0 },
-        { id: '360p', label: '360p', height: 360, minWidth: 0 },
-        { id: '240p', label: '240p', height: 240, minWidth: 0 },
-        { id: '144p', label: '144p', height: 144, minWidth: 0 },
-      ];
-      const originalLabel = pi.videoCopyStream ? this.resolutionLabel(srcW, srcH) : null;
-      for (const p of profiles) {
-        if (srcW >= p.minWidth && p.label !== originalLabel) {
-          options.push(p);
-        }
-      }
-    }
-
-    this.availableQualities.set(options);
-  }
-
-  /**
-   * Hauteur de la variante Shaka → clé PROFILES / transcodeBitrateByQuality.
-   */
-  private transcodeTierFromVariantHeight(h: number): string | null {
-    if (h <= 0) return null;
-    if (h >= 2160) return '2160p';
-    if (h >= 1080) return '1080p';
-    if (h >= 720) return '720p';
-    if (h >= 480) return '480p';
-    if (h >= 360) return '360p';
-    if (h >= 240) return '240p';
-    return '144p';
-  }
-
-  private resolutionLabel(w?: number, h?: number): string {
-    if (!w || !h) return '?';
-    if (w >= 3840 || h >= 2160) return '4K';
-    if (w >= 2560 || h >= 1440) return '1440p';
-    if (w >= 1920 || h >= 1080) return '1080p';
-    if (w >= 1280 || h >= 720) return '720p';
-    if (w >= 854 || h >= 480) return '480p';
-    return `${w}x${h}`;
-  }
-
-  private getStreamInfo() {
-    const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
-    return file?.streamInfo as any;
   }
 
   /** Inject dynamic video::cue CSS based on subtitle appearance settings. */
@@ -1754,7 +1300,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.subtitleStyleEl.textContent = css;
   }
 
-  /** Remove injected subtitle style on destroy. */
   private removeSubtitleStyle() {
     if (this.subtitleStyleEl) {
       this.subtitleStyleEl.remove();
@@ -1774,5 +1319,4 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Sprite not available, tooltip will show time only
     }
   }
-
 }

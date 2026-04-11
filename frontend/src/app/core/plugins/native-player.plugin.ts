@@ -88,6 +88,11 @@ export interface NativePlayerPlugin {
     label: string;
   }): Promise<{ id: string }>;
 
+  // ── Quality ──
+
+  /** Set max video resolution constraint. Pass 0,0 for auto (no restriction). */
+  setMaxResolution(options: { width: number; height: number }): Promise<void>;
+
   // ── State ──
 
   getPosition(): Promise<NativePlayerPosition>;

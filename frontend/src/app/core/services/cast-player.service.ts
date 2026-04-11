@@ -65,6 +65,7 @@ export class CastPlayerService {
       supportsHlsFmp4: true,
       supportsHlsTs: true,
       supportsHdr: cs.hdr ?? false,
+      supportsMultiAudioMuxed: false, // Cast uses Shaka receiver → needs EXT-X-MEDIA
     };
   }
 

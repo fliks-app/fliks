@@ -79,4 +79,8 @@ export class DeviceProfileDto {
   @IsBoolean()
   @IsOptional()
   supportsHdr?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  supportsMultiAudioMuxed?: boolean;
 }

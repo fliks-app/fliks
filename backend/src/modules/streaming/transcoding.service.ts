@@ -48,6 +48,10 @@ export interface SessionContext {
   crop?: { width: number; height: number; x: number; y: number };
   /** When true, produce video-only segments (audio served separately via EXT-X-MEDIA) */
   videoOnly?: boolean;
+  /** When true, mux ALL audio tracks into the output (for native players like ExoPlayer) */
+  mapAllAudio?: boolean;
+  /** Audio stream info for multi-audio var_stream_map (single FFmpeg process) */
+  audioStreams?: { language?: string; title?: string }[];
 }
 
 export interface TranscodeSession {
@@ -157,17 +161,22 @@ async function fileExists(p: string): Promise<boolean> {
   }
 }
 
-/** Check if a segment (or its predecessor) exists in the cache directory. */
+/** Check if a segment (or its predecessor) exists. Checks both root and subdir 0/ (var_stream_map). */
 async function segmentNearby(
   cachePath: string,
   segment: number,
 ): Promise<boolean> {
-  const pad = (n: number) => `seg-${String(n).padStart(4, '0')}.m4s`;
-  return (
-    (await fileExists(path.join(cachePath, pad(segment)))) ||
-    (segment > 0 &&
-      (await fileExists(path.join(cachePath, pad(segment - 1)))))
-  );
+  const seg = `seg-${String(segment).padStart(4, '0')}.m4s`;
+  const prev =
+    segment > 0
+      ? `seg-${String(segment - 1).padStart(4, '0')}.m4s`
+      : null;
+  // Check root (single-stream) and subdir 0/ (var_stream_map video)
+  for (const dir of [cachePath, path.join(cachePath, '0')]) {
+    if (await fileExists(path.join(dir, seg))) return true;
+    if (prev && (await fileExists(path.join(dir, prev)))) return true;
+  }
+  return false;
 }
 
 const SEGMENT_DURATION = 6;
@@ -370,6 +379,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     requestedSegment: number,
     ctx?: SessionContext,
   ): Promise<TranscodeSession> {
+    const isVideoOnly = ctx?.videoOnly ?? false;
+    const ctxAudioStreams = ctx?.audioStreams;
+    const useVarStreamMap = isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
+
     const existing = this.sessions.get(key);
     if (existing) {
       // If FFmpeg process has exited, clean up and start fresh
@@ -399,6 +412,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           this.sessions.delete(key);
           await this.killAndClean(existing.process, existing.cachePath);
           await fsp.mkdir(existing.cachePath, { recursive: true });
+          // Recreate var_stream_map subdirectories
+          if (useVarStreamMap) {
+            for (let i = 0; i <= ctxAudioStreams!.length; i++) {
+              await fsp.mkdir(path.join(existing.cachePath, String(i)), { recursive: true });
+            }
+          }
           return this.startSeekSession(
             key,
             mediaFileId,
@@ -430,7 +449,14 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const burnIn = ctx?.burnInSubtitle;
     const audioIdx = ctx?.audioStreamIndex;
     const cropInfo = ctx?.crop;
-    const isVideoOnly = ctx?.videoOnly ?? false;
+    const isMapAllAudio = ctx?.mapAllAudio ?? false;
+
+    // var_stream_map needs subdirectories pre-created (FFmpeg won't create them)
+    if (useVarStreamMap) {
+      for (let i = 0; i <= ctxAudioStreams!.length; i++) {
+        await fsp.mkdir(path.join(sessionDir, String(i)), { recursive: true });
+      }
+    }
     const session = this.startFfmpeg(
       key,
       mediaFileId,
@@ -445,6 +471,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       audioIdx,
       cropInfo,
       isVideoOnly,
+      isMapAllAudio,
+      ctxAudioStreams,
     );
     this.applyContext(session, ctx);
 
@@ -489,6 +517,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           audioIdx,
           cropInfo,
           isVideoOnly,
+          isMapAllAudio,
+          ctxAudioStreams,
         );
         this.applyContext(cpuSession, ctx);
         this.sessions.set(key, cpuSession);
@@ -564,8 +594,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     args: string[];
     sessionDir: string;
     startSegment: number;
-    /** Segment file extension (default: '.ts', use '.m4s' for fMP4 audio) */
+    /** Segment file extension (default '.m4s') */
     segExt?: string;
+    /** Subdirectory for first segment check (e.g. '0' for var_stream_map) */
+    segSubDir?: string;
     extra?: Partial<TranscodeSession>;
   }): TranscodeSession {
     const {
@@ -576,6 +608,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       sessionDir,
       startSegment,
       segExt = '.m4s',
+      segSubDir,
       extra,
     } = opts;
     const { resolve: readyResolve, promise: readyPromise } =
@@ -589,8 +622,16 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     let stderr = '';
     let resolved = false;
+    // Debug: log FFmpeg stderr in real-time
+    proc.stderr.on('data', (chunk: Buffer) => {
+      const line = chunk.toString();
+      if (line.includes('Error') || line.includes('error') || line.includes('failed') || line.includes('Invalid')) {
+        this.log.error(`FFmpeg [${id}] stderr: ${line.trim()}`);
+      }
+    });
+    const segDir = segSubDir ? path.join(sessionDir, segSubDir) : sessionDir;
     const firstSeg = path.join(
-      sessionDir,
+      segDir,
       `seg-${String(startSegment).padStart(4, '0')}${segExt}`,
     );
 
@@ -661,6 +702,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     audioStreamIndex?: number,
     crop?: { width: number; height: number; x: number; y: number },
     videoOnly = false,
+    mapAllAudio = false,
+    audioStreams?: { language?: string; title?: string }[],
   ): TranscodeSession {
     const args = this.buildFfmpegArgs(
       absolutePath,
@@ -673,8 +716,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       audioStreamIndex,
       crop,
       videoOnly,
+      mapAllAudio,
+      audioStreams,
     );
 
+    // When using var_stream_map, segments are in subdirectories (0/ for video)
+    const usesVarStreamMap = videoOnly && audioStreams && audioStreams.length > 1;
     return this.spawnFfmpegSession({
       id: sessionId,
       mediaFileId,
@@ -682,6 +729,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args,
       sessionDir,
       startSegment,
+      segSubDir: usesVarStreamMap ? '0' : undefined,
       extra: { actualHwAccel: hwAccel },
     });
   }
@@ -710,6 +758,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ctx?.audioStreamIndex,
       ctx?.crop,
       ctx?.videoOnly ?? false,
+      ctx?.mapAllAudio ?? false,
+      ctx?.audioStreams,
     );
     this.applyContext(session, ctx);
     this.sessions.set(sessionId, session);
@@ -767,8 +817,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     audioStreamIndex?: number,
     crop?: { width: number; height: number; x: number; y: number },
     videoOnly = false,
+    mapAllAudio = false,
+    audioStreams?: { language?: string; title?: string }[],
   ): string[] {
-    const args = ['-hide_banner', '-loglevel', 'warning'];
+    const args = ['-hide_banner', '-loglevel', 'info'];
 
     // Seek to start position if needed
     if (startSegment > 0) {
@@ -1019,39 +1071,58 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         break;
     }
 
-    // Audio — video-only strips audio (multi-audio uses separate renditions)
-    if (videoOnly) {
+    // ── Audio mapping + HLS output ──
+    const useVarStreamMap = videoOnly && audioStreams && audioStreams.length > 1;
+
+    if (useVarStreamMap) {
+      // Single FFmpeg process for video + all audio renditions (perfect sync).
+      // Uses -var_stream_map to output separate streams in subdirectories.
       if (!args.some((a) => a === '-map')) {
         args.push('-map', '0:v:0');
       }
-      args.push('-an');
+      for (let i = 0; i < audioStreams.length; i++) {
+        args.push('-map', `0:a:${i}`);
+      }
+      args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
+
+      // Build var_stream_map: "v:0,agroup:audio a:0,agroup:audio,language:fre ..."
+      const varParts = ['v:0,agroup:audio'];
+      for (let i = 0; i < audioStreams.length; i++) {
+        const lang = audioStreams[i].language || 'und';
+        varParts.push(`a:${i},agroup:audio,language:${lang}`);
+      }
+
+      args.push(
+        '-f', 'hls',
+        '-hls_time', String(SEGMENT_DURATION),
+        '-hls_list_size', '0',
+        '-start_number', String(startSegment),
+        '-hls_segment_type', 'fmp4',
+        '-hls_fmp4_init_filename', 'init_%v.mp4',
+        '-hls_flags', 'independent_segments',
+        '-var_stream_map', varParts.join(' '),
+        '-hls_segment_filename', path.join(outputDir, '%v', 'seg-%04d.m4s'),
+        path.join(outputDir, '%v', 'index.m3u8'),
+      );
     } else {
+      // Standard single-stream output
       if (audioStreamIndex != null) {
         args.push('-map', '0:v:0', '-map', `0:a:${audioStreamIndex}`);
       }
       args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
-    }
 
-    // HLS output — always fMP4 (native browser support, no transmuxer needed)
-    args.push(
-      '-f',
-      'hls',
-      '-hls_time',
-      String(SEGMENT_DURATION),
-      '-hls_list_size',
-      '0',
-      '-start_number',
-      String(startSegment),
-      '-hls_segment_type',
-      'fmp4',
-      '-hls_fmp4_init_filename',
-      'init.mp4',
-      '-hls_segment_filename',
-      path.join(outputDir, 'seg-%04d.m4s'),
-      '-hls_flags',
-      'independent_segments',
-      path.join(outputDir, 'index.m3u8'),
-    );
+      args.push(
+        '-f', 'hls',
+        '-hls_time', String(SEGMENT_DURATION),
+        '-hls_list_size', '0',
+        '-start_number', String(startSegment),
+        '-hls_segment_type', 'fmp4',
+        '-hls_fmp4_init_filename', 'init.mp4',
+        '-hls_segment_filename', path.join(outputDir, 'seg-%04d.m4s'),
+        '-hls_flags', 'independent_segments',
+        path.join(outputDir, 'index.m3u8'),
+      );
+    }
 
     return args;
   }

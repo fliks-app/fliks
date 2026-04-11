@@ -115,6 +115,17 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.audioStreamCountCache.get(mediaFileId) ?? 0;
   }
 
+  /** Whether the client handles multi-audio from muxed TS (ExoPlayer/AVPlayer) */
+  private readonly multiAudioMuxedCache = new Map<number, boolean>();
+
+  setMultiAudioMuxed(mediaFileId: number, value: boolean) {
+    this.multiAudioMuxedCache.set(mediaFileId, value);
+  }
+
+  getMultiAudioMuxed(mediaFileId: number): boolean {
+    return this.multiAudioMuxedCache.get(mediaFileId) ?? false;
+  }
+
   setAudioStreamIndex(mediaFileId: number, index: number | undefined) {
     if (index != null) this.audioStreamIndexCache.set(mediaFileId, index);
     else this.audioStreamIndexCache.delete(mediaFileId);

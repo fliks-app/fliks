@@ -2,6 +2,7 @@ import { NativePlayer } from '../../plugins/native-player.plugin';
 import type {
   PlaybackEngine,
   AudioTrack,
+  EngineStats,
   PlaybackState,
   EngineEvent,
   EngineEventMap,
@@ -19,6 +20,8 @@ export class NativeEngine implements PlaybackEngine {
   private _buffered = 0;
   private _paused = true;
   private _playbackRate = 1;
+  private _volume = 1;
+  private _muted = false;
   private _state: PlaybackState = 'idle';
   private _audioTracks: AudioTrack[] = [];
   private _variantTracks: any[] = [];
@@ -101,6 +104,11 @@ export class NativeEngine implements PlaybackEngine {
     NativePlayer.setPlaybackRate({ rate });
   }
 
+  get volume(): number { return this._volume; }
+  set volume(v: number) { this._volume = v; }
+  get muted(): boolean { return this._muted; }
+  set muted(m: boolean) { this._muted = m; }
+
   // ── Audio tracks ──
 
   getAudioTracks(): AudioTrack[] {
@@ -130,21 +138,41 @@ export class NativeEngine implements PlaybackEngine {
     await NativePlayer.selectSubtitleTrack({ id });
   }
 
-  // ── Quality (variant tracks) ──
-  // Native player handles adaptive quality internally.
-  // These are thin stubs to satisfy the interface.
+  setTextVisibility(visible: boolean): void {
+    if (visible) {
+      // Native subtitle visibility is handled by track selection
+    }
+  }
+
+  // ── Stats ──
+
+  getStats(): EngineStats {
+    return { droppedFrames: 0 };
+  }
+
+  // ── Quality ──
+  // ExoPlayer handles ABR internally. We control it via max resolution constraints.
 
   getVariantTracks(): any[] {
     return this._variantTracks;
   }
 
-  selectVariantTrack(_track: any, _clearBuffer?: boolean): void {
-    // Native ABR handles this — no-op for now.
-    // Could be extended to set max resolution constraints.
+  selectVariantTrack(track: any, _clearBuffer?: boolean): void {
+    // Set max resolution to the selected track's resolution
+    if (track?.height) {
+      NativePlayer.setMaxResolution({
+        width: track.width ?? track.height * 2,
+        height: track.height,
+      });
+    }
   }
 
-  configure(_config: any): void {
-    // No Shaka config for native engine
+  configure(config: any): void {
+    // Handle ABR enable/disable
+    if (config?.abr?.enabled === true) {
+      // Auto mode: remove resolution constraints
+      NativePlayer.setMaxResolution({ width: 0, height: 0 });
+    }
   }
 
   // ── Events ──

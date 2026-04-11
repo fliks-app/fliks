@@ -2,9 +2,10 @@ export type {
   PlaybackEngine,
   AudioTrack,
   SubtitleTrack,
-  QualityLevel,
   PlaybackState,
   EngineEvent,
   EngineEventMap,
+  EngineStats,
 } from './playback-engine';
 export { NativeEngine } from './native-engine';
+export { ShakaEngine } from './shaka-engine';
