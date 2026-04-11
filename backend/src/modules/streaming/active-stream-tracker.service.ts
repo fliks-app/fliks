@@ -126,6 +126,16 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.multiAudioMuxedCache.get(mediaFileId) ?? false;
   }
 
+  private readonly fmp4SupportedCache = new Map<number, boolean>();
+
+  setFmp4Supported(mediaFileId: number, value: boolean) {
+    this.fmp4SupportedCache.set(mediaFileId, value);
+  }
+
+  getFmp4Supported(mediaFileId: number): boolean {
+    return this.fmp4SupportedCache.get(mediaFileId) ?? true;
+  }
+
   setAudioStreamIndex(mediaFileId: number, index: number | undefined) {
     if (index != null) this.audioStreamIndexCache.set(mediaFileId, index);
     else this.audioStreamIndexCache.delete(mediaFileId);

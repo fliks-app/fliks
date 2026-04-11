@@ -62,10 +62,10 @@ export class CastPlayerService {
       codecConditions: [],
       maxStreamingBitrate: 20_000_000,
       maxAudioChannels: cs.audioChannels ?? 2,
-      supportsHlsFmp4: true,
+      supportsHlsFmp4: false,  // Default Cast receiver (MPL) doesn't support fMP4 HLS
       supportsHlsTs: true,
       supportsHdr: cs.hdr ?? false,
-      supportsMultiAudioMuxed: false, // Cast uses Shaka receiver → needs EXT-X-MEDIA
+      supportsMultiAudioMuxed: false,
     };
   }
 

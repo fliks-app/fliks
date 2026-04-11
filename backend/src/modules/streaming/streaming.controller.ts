@@ -113,6 +113,7 @@ export class StreamingController {
         this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1
           ? (si?.audio as { language?: string; title?: string }[]) ?? []
           : undefined,
+      useFmp4: this.activeStreamTracker.getFmp4Supported(mediaFileId),
     };
   }
 
@@ -164,9 +165,6 @@ export class StreamingController {
     @Body() deviceProfile: DeviceProfileDto,
     @Req() req: Request,
   ) {
-    // Kill any stale session from a previous playback of this file
-    this.transcodingService.killSession(mediaFileId, req.user?.id);
-
     const resolved = await this.streamingService.resolveFile(mediaFileId);
     const token = firstQueryString(req.query, 'token');
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
@@ -211,6 +209,10 @@ export class StreamingController {
     this.activeStreamTracker.setMultiAudioMuxed(
       mediaFileId,
       deviceProfile.supportsMultiAudioMuxed ?? false,
+    );
+    this.activeStreamTracker.setFmp4Supported(
+      mediaFileId,
+      deviceProfile.supportsHlsFmp4 ?? true,
     );
     return result;
   }
@@ -522,14 +524,25 @@ export class StreamingController {
     const token = firstQueryString(req.query, 'token');
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
     const basePath = `/api/stream/${mediaFileId}/${quality}`;
-    const multiAudioPlaylist =
+    const useFmp4 = this.activeStreamTracker.getFmp4Supported(mediaFileId);
+    const multiAudio =
       this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1;
-    const initName = multiAudioPlaylist ? 'init_0.mp4' : 'init.mp4';
-    const playlist = buildVodPlaylist(
-      duration,
-      (seg) => `${basePath}/seg-${seg}.m4s${tokenParam}`,
-      `${basePath}/${initName}${tokenParam}`,
-    );
+
+    let playlist: string;
+    if (useFmp4) {
+      const initName = multiAudio ? 'init_0.mp4' : 'init.mp4';
+      playlist = buildVodPlaylist(
+        duration,
+        (seg) => `${basePath}/seg-${seg}.m4s${tokenParam}`,
+        `${basePath}/${initName}${tokenParam}`,
+      );
+    } else {
+      // MPEG-TS for Cast (no init segment needed)
+      playlist = buildVodPlaylist(
+        duration,
+        (seg) => `${basePath}/seg-${seg}.ts${tokenParam}`,
+      );
+    }
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
