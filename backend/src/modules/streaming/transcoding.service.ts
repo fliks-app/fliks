@@ -52,6 +52,8 @@ export interface SessionContext {
   mapAllAudio?: boolean;
   /** Audio stream info for multi-audio var_stream_map (single FFmpeg process) */
   audioStreams?: { language?: string; title?: string }[];
+  /** Whether to use fMP4 segments (true) or MPEG-TS (false, for Cast) */
+  useFmp4?: boolean;
 }
 
 export interface TranscodeSession {
@@ -161,20 +163,20 @@ async function fileExists(p: string): Promise<boolean> {
   }
 }
 
-/** Check if a segment (or its predecessor) exists. Checks both root and subdir 0/ (var_stream_map). */
+/** Check if a segment (or its predecessor) exists. Checks .m4s, .ts, root, and subdir 0/. */
 async function segmentNearby(
   cachePath: string,
   segment: number,
 ): Promise<boolean> {
-  const seg = `seg-${String(segment).padStart(4, '0')}.m4s`;
-  const prev =
-    segment > 0
-      ? `seg-${String(segment - 1).padStart(4, '0')}.m4s`
-      : null;
-  // Check root (single-stream) and subdir 0/ (var_stream_map video)
-  for (const dir of [cachePath, path.join(cachePath, '0')]) {
-    if (await fileExists(path.join(dir, seg))) return true;
-    if (prev && (await fileExists(path.join(dir, prev)))) return true;
+  const num = String(segment).padStart(4, '0');
+  const prevNum = segment > 0 ? String(segment - 1).padStart(4, '0') : null;
+  const exts = ['.m4s', '.ts'];
+  const dirs = [cachePath, path.join(cachePath, '0')];
+  for (const dir of dirs) {
+    for (const ext of exts) {
+      if (await fileExists(path.join(dir, `seg-${num}${ext}`))) return true;
+      if (prevNum && (await fileExists(path.join(dir, `seg-${prevNum}${ext}`)))) return true;
+    }
   }
   return false;
 }
@@ -473,6 +475,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       isVideoOnly,
       isMapAllAudio,
       ctxAudioStreams,
+      ctx?.useFmp4 ?? true,
     );
     this.applyContext(session, ctx);
 
@@ -519,6 +522,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           isVideoOnly,
           isMapAllAudio,
           ctxAudioStreams,
+          ctx?.useFmp4 ?? true,
         );
         this.applyContext(cpuSession, ctx);
         this.sessions.set(key, cpuSession);
@@ -697,6 +701,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     videoOnly = false,
     mapAllAudio = false,
     audioStreams?: { language?: string; title?: string }[],
+    useFmp4 = true,
   ): TranscodeSession {
     const args = this.buildFfmpegArgs(
       absolutePath,
@@ -711,10 +716,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       videoOnly,
       mapAllAudio,
       audioStreams,
+      useFmp4,
     );
 
-    // When using var_stream_map, segments are in subdirectories (0/ for video)
     const usesVarStreamMap = videoOnly && audioStreams && audioStreams.length > 1;
+    const segExt = useFmp4 ? '.m4s' : '.ts';
     return this.spawnFfmpegSession({
       id: sessionId,
       mediaFileId,
@@ -722,6 +728,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args,
       sessionDir,
       startSegment,
+      segExt,
       segSubDir: usesVarStreamMap ? '0' : undefined,
       extra: { actualHwAccel: hwAccel },
     });
@@ -753,27 +760,30 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ctx?.videoOnly ?? false,
       ctx?.mapAllAudio ?? false,
       ctx?.audioStreams,
+      ctx?.useFmp4 ?? true,
     );
     this.applyContext(session, ctx);
     this.sessions.set(sessionId, session);
     return session;
   }
 
-  killSession(mediaFileId: number, userId?: number) {
+  async killSession(mediaFileId: number, userId?: number) {
     const key = sessionKey(mediaFileId, userId);
+    const promises: Promise<void>[] = [];
     const session = this.sessions.get(key);
     if (session) {
       this.sessions.delete(key);
-      this.gracefulKill(session);
+      promises.push(this.killAndClean(session.process, session.cachePath));
     }
     // Also kill associated audio sessions
     const audioPrefix = `${key}-a`;
     for (const [id, s] of this.sessions) {
       if (id.startsWith(audioPrefix)) {
         this.sessions.delete(id);
-        this.gracefulKill(s);
+        promises.push(this.killAndClean(s.process, s.cachePath));
       }
     }
+    await Promise.all(promises);
   }
 
   /** Kill a session by its map key (used by admin dashboard). */
@@ -812,6 +822,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     videoOnly = false,
     mapAllAudio = false,
     audioStreams?: { language?: string; title?: string }[],
+    useFmp4 = true,
   ): string[] {
     const args = ['-hide_banner', '-loglevel', 'warning'];
 
@@ -1065,7 +1076,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     }
 
     // ── Audio mapping + HLS output ──
-    const useVarStreamMap = videoOnly && audioStreams && audioStreams.length > 1;
+    // var_stream_map requires fMP4. For TS clients (Cast), fall back to single-audio.
+    const useVarStreamMap = useFmp4 && videoOnly && audioStreams && audioStreams.length > 1;
 
     if (useVarStreamMap) {
       // Single FFmpeg process for video + all audio renditions (perfect sync).
@@ -1109,9 +1121,19 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         '-hls_time', String(SEGMENT_DURATION),
         '-hls_list_size', '0',
         '-start_number', String(startSegment),
-        '-hls_segment_type', 'fmp4',
-        '-hls_fmp4_init_filename', 'init.mp4',
-        '-hls_segment_filename', path.join(outputDir, 'seg-%04d.m4s'),
+      );
+      if (useFmp4) {
+        args.push(
+          '-hls_segment_type', 'fmp4',
+          '-hls_fmp4_init_filename', 'init.mp4',
+          '-hls_segment_filename', path.join(outputDir, 'seg-%04d.m4s'),
+        );
+      } else {
+        args.push(
+          '-hls_segment_filename', path.join(outputDir, 'seg-%04d.ts'),
+        );
+      }
+      args.push(
         '-hls_flags', 'independent_segments',
         path.join(outputDir, 'index.m3u8'),
       );

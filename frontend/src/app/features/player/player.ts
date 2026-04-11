@@ -534,6 +534,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         );
         this.activeAudioStreamIndex = preselectedAudioIndex;
 
+        // Kill any stale session (e.g. Cast used TS, now player needs fMP4, or vice versa)
+        await this.streamingApi.stopSessions(this.mediaFileId).catch(() => {});
+
         // Ask the backend to decide how to play
         const deviceProfile = this.deviceProfileService.getProfile();
         this.playbackInfo = await this.streamingApi.getPlaybackInfo(
@@ -651,6 +654,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.activeAudioTrackId(),
         this.mediaFileId,
         (sub) => this.selectSubtitle(sub),
+        this.mediaId,
       );
 
       // If Cast is already connected, send to Cast
@@ -1112,6 +1116,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.activeSubtitleId.set(null);
       this.subtitlePickerOpen.set(false);
       localStorage.setItem('player.subtitleLang', '');
+      this.trackManager.saveSubtitleSelection(this.mediaId, null);
       localStorage.removeItem('player.subtitleForced');
       if (!this.isOfflinePlayback && this.activeBurnInId) {
         this.activeBurnInId = null;
@@ -1146,9 +1151,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.subtitlePickerOpen.set(false);
     localStorage.setItem('player.subtitleLang', sub.language);
 
-    if (this.playerSettings.get().rememberSubtitleSelections) {
-      this.playerSettings.saveRememberedSubtitleTrack(this.mediaFileId, sub.id);
-    }
+    this.trackManager.saveSubtitleSelection(this.mediaId, sub.language, sub.forced);
   }
 
   // ── Keyboard handler ──

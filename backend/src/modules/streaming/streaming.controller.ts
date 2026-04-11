@@ -106,13 +106,17 @@ export class StreamingController {
       audioStreamIndex:
         this.activeStreamTracker.getAudioStreamIndex(mediaFileId),
       crop: si?.video?.[0]?.crop ?? undefined,
+      // videoOnly only makes sense with fMP4 (var_stream_map produces separate audio).
+      // For TS (Cast), audio must stay muxed in the video stream.
       videoOnly:
-        this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1,
+        this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
+        this.activeStreamTracker.getFmp4Supported(mediaFileId),
       // Pass audio stream info for var_stream_map (single FFmpeg, multi-output)
       audioStreams:
         this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1
           ? (si?.audio as { language?: string; title?: string }[]) ?? []
           : undefined,
+      useFmp4: this.activeStreamTracker.getFmp4Supported(mediaFileId),
     };
   }
 
@@ -164,9 +168,6 @@ export class StreamingController {
     @Body() deviceProfile: DeviceProfileDto,
     @Req() req: Request,
   ) {
-    // Kill any stale session from a previous playback of this file
-    this.transcodingService.killSession(mediaFileId, req.user?.id);
-
     const resolved = await this.streamingService.resolveFile(mediaFileId);
     const token = firstQueryString(req.query, 'token');
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
@@ -211,6 +212,10 @@ export class StreamingController {
     this.activeStreamTracker.setMultiAudioMuxed(
       mediaFileId,
       deviceProfile.supportsMultiAudioMuxed ?? false,
+    );
+    this.activeStreamTracker.setFmp4Supported(
+      mediaFileId,
+      deviceProfile.supportsHlsFmp4 ?? true,
     );
     return result;
   }
@@ -291,12 +296,15 @@ export class StreamingController {
     const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
     const audioStreams: { language?: string; title?: string }[] =
       si?.audio ?? [];
-    // Use EXT-X-MEDIA only when the client needs it (Shaka on web).
+    // Use EXT-X-MEDIA only when the client needs it (Shaka on web) AND supports fMP4.
     // Native players (ExoPlayer/AVPlayer) handle multi-audio from muxed TS.
+    // Cast (TS) can't handle separate fMP4 audio renditions.
     const clientMuxesAudio =
       this.activeStreamTracker.getMultiAudioMuxed(mediaFileId);
+    const fmp4Supported =
+      this.activeStreamTracker.getFmp4Supported(mediaFileId);
     const useExtXMedia =
-      audioStreams.length > 1 && !clientMuxesAudio;
+      audioStreams.length > 1 && !clientMuxesAudio && fmp4Supported;
     const playlist = this.transcodingService.generateMasterPlaylist(
       mediaFileId,
       w,
@@ -490,13 +498,18 @@ export class StreamingController {
       return;
     }
 
-    // Only pre-start if no session exists yet — Shaka loads ALL variant playlists
-    // in parallel and each call would kill the previous session (same key per user+file).
+    // Pre-start transcoding so the first segment is ready when the player requests it.
+    // Only if no session already exists (Shaka loads multiple playlists in parallel).
     const existing = this.transcodingService.getExistingSession(
       mediaFileId,
       req.user?.id,
     );
     if (!existing || existing.process.exitCode !== null) {
+      // startAt query param: Cast passes the resume position so we pre-start at the right segment
+      const startAtRaw = firstQueryString(req.query, 'startAt');
+      const startAtSec = startAtRaw ? parseInt(startAtRaw, 10) : 0;
+      const startSegment = startAtSec > 0 ? Math.floor(startAtSec / 6) : 0;
+
       const ctx = this.buildSessionContext(req, resolved, mediaFileId);
       if (quality === 'remux') {
         const copyAudio =
@@ -505,7 +518,7 @@ export class StreamingController {
           mediaFileId,
           resolved.absolutePath,
           copyAudio,
-          0,
+          startSegment,
           ctx,
         );
       } else {
@@ -513,7 +526,7 @@ export class StreamingController {
           mediaFileId,
           quality,
           resolved.absolutePath,
-          0,
+          startSegment,
           ctx,
         );
       }
@@ -522,14 +535,26 @@ export class StreamingController {
     const token = firstQueryString(req.query, 'token');
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
     const basePath = `/api/stream/${mediaFileId}/${quality}`;
-    const multiAudioPlaylist =
-      this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1;
-    const initName = multiAudioPlaylist ? 'init_0.mp4' : 'init.mp4';
-    const playlist = buildVodPlaylist(
-      duration,
-      (seg) => `${basePath}/seg-${seg}.m4s${tokenParam}`,
-      `${basePath}/${initName}${tokenParam}`,
-    );
+    const useFmp4 = this.activeStreamTracker.getFmp4Supported(mediaFileId);
+    // var_stream_map (subdirectories) only active with fMP4 + multi-audio
+    const multiAudio =
+      this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 && useFmp4;
+
+    let playlist: string;
+    if (useFmp4) {
+      const initName = multiAudio ? 'init_0.mp4' : 'init.mp4';
+      playlist = buildVodPlaylist(
+        duration,
+        (seg) => `${basePath}/seg-${seg}.m4s${tokenParam}`,
+        `${basePath}/${initName}${tokenParam}`,
+      );
+    } else {
+      // MPEG-TS for Cast (no init segment needed)
+      playlist = buildVodPlaylist(
+        duration,
+        (seg) => `${basePath}/seg-${seg}.ts${tokenParam}`,
+      );
+    }
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -564,7 +589,8 @@ export class StreamingController {
         req.user?.id,
       );
       if (existing) {
-        const ma = this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1;
+        const fmp4 = this.activeStreamTracker.getFmp4Supported(mediaFileId);
+        const ma = this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 && fmp4;
         const initFile = ma ? `0/${segment}` : segment;
         const initPath = await this.transcodingService.getSegmentPath(
           existing,
@@ -601,10 +627,11 @@ export class StreamingController {
             ctx,
           );
 
-    // With var_stream_map, video segments are in subdirectory "0/"
-    const multiAudio =
-      this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1;
-    const segName = multiAudio ? `0/${segment}` : segment;
+    // With var_stream_map (fMP4 + multi-audio), video segments are in subdirectory "0/"
+    const varStreamMap =
+      this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
+      this.activeStreamTracker.getFmp4Supported(mediaFileId);
+    const segName = varStreamMap ? `0/${segment}` : segment;
 
     const segPath = await this.transcodingService.getSegmentPath(
       session,
@@ -626,12 +653,12 @@ export class StreamingController {
 
   /** Stop the transcoding session for this user + media file (called on player close / page unload). */
   @Delete(':mediaFileId/sessions')
-  stopSessions(
+  async stopSessions(
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
     @Req() req: Request,
   ) {
     const user = req.user;
-    this.transcodingService.killSession(mediaFileId, user?.id);
+    await this.transcodingService.killSession(mediaFileId, user?.id);
     if (user) {
       this.activeStreamTracker.unregister(user.id, mediaFileId);
     }

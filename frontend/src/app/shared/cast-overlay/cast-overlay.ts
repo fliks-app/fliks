@@ -58,9 +58,11 @@ export class CastOverlayComponent {
       this.cp.activeSubtitleId.set(null);
       this.cast.setActiveSubtitle(0);
       this.cp.changeBurnIn(null);
+      this.cp.saveSubtitleSelection(null);
       return;
     }
     this.cp.activeSubtitleId.set(sub.id);
+    this.cp.saveSubtitleSelection(sub.language, sub.forced);
     if (sub.burnIn) {
       this.cp.changeBurnIn(sub.castTrackId ?? 0);
     } else if (sub.castTrackId) {
@@ -80,7 +82,7 @@ export class CastOverlayComponent {
   }
 
   disconnect() {
-    this.cast.disconnect();
+    this.cast.stop();
     this.cp.clear();
     this.cp.expanded.set(false);
   }
