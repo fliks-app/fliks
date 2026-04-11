@@ -392,24 +392,22 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         existing.lastAccess = Date.now();
 
         // If the requested segment is far ahead, restart FFmpeg with seek
-        if (requestedSegment > 0) {
-          if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
-            this.log.log(
-              `Seek: restarting transcode [${key}] from segment ${requestedSegment}`,
-            );
-            this.sessions.delete(key);
-            await this.killAndClean(existing.process, existing.cachePath);
-            await fsp.mkdir(existing.cachePath, { recursive: true });
-            return this.startSeekSession(
-              key,
-              mediaFileId,
-              quality,
-              absolutePath,
-              existing.cachePath,
-              requestedSegment,
-              ctx,
-            );
-          }
+        if (requestedSegment > 0 && !(await segmentNearby(existing.cachePath, requestedSegment))) {
+          this.log.log(
+            `Seek: restarting transcode [${key}] from segment ${requestedSegment}`,
+          );
+          this.sessions.delete(key);
+          await this.killAndClean(existing.process, existing.cachePath);
+          await fsp.mkdir(existing.cachePath, { recursive: true });
+          return this.startSeekSession(
+            key,
+            mediaFileId,
+            quality,
+            absolutePath,
+            existing.cachePath,
+            requestedSegment,
+            ctx,
+          );
         }
 
         return existing;
@@ -1213,14 +1211,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       } else {
         existing.lastAccess = Date.now();
 
-        if (requestedSegment > 0) {
-          if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
-            this.log.log(
-              `Seek: restarting remux [${key}] from segment ${requestedSegment}`,
-            );
-            this.sessions.delete(key);
-            await this.killAndClean(existing.process, existing.cachePath);
-          }
+        if (requestedSegment > 0 && !(await segmentNearby(existing.cachePath, requestedSegment))) {
+          this.log.log(
+            `Seek: restarting remux [${key}] from segment ${requestedSegment}`,
+          );
+          this.sessions.delete(key);
+          await this.killAndClean(existing.process, existing.cachePath);
         } else {
           return existing;
         }
@@ -1303,16 +1299,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         existing.lastAccess = Date.now();
 
         // Handle seek
-        if (requestedSegment > 0) {
-          if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
-            this.log.log(
-              `Seek: restarting audio session [${key}] from segment ${requestedSegment}`,
-            );
-            this.sessions.delete(key);
-            await this.killAndClean(existing.process, existing.cachePath);
-          } else {
-            return existing;
-          }
+        if (requestedSegment > 0 && !(await segmentNearby(existing.cachePath, requestedSegment))) {
+          this.log.log(
+            `Seek: restarting audio session [${key}] from segment ${requestedSegment}`,
+          );
+          this.sessions.delete(key);
+          await this.killAndClean(existing.process, existing.cachePath);
         } else {
           return existing;
         }

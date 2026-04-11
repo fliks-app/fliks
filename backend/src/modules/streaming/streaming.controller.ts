@@ -160,6 +160,9 @@ export class StreamingController {
     @Body() deviceProfile: DeviceProfileDto,
     @Req() req: Request,
   ) {
+    // Kill any stale session from a previous playback of this file
+    this.transcodingService.killSession(mediaFileId, req.user?.id);
+
     const resolved = await this.streamingService.resolveFile(mediaFileId);
     const token = firstQueryString(req.query, 'token');
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
