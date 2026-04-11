@@ -209,6 +209,15 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 30_000);
   }
 
+  /** Get an existing session without creating or modifying it. */
+  getExistingSession(
+    mediaFileId: number,
+    userId?: number,
+  ): TranscodeSession | undefined {
+    const key = sessionKey(mediaFileId, userId);
+    return this.sessions.get(key);
+  }
+
   async onModuleDestroy() {
     if (this.cleanupTimer) clearInterval(this.cleanupTimer);
     for (const session of this.sessions.values()) {

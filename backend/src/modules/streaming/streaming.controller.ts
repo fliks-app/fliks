@@ -447,9 +447,33 @@ export class StreamingController {
       return;
     }
 
-    // Session is created on-demand by the segment endpoint — no pre-start here.
-    // Shaka loads multiple variant playlists in parallel and they would fight
-    // for the same session slot (keyed per user+file, not per quality).
+    // Only pre-start if no session exists yet — Shaka loads ALL variant playlists
+    // in parallel and each call would kill the previous session (same key per user+file).
+    const hasSession = this.transcodingService
+      .getActiveSessions()
+      .some((s) => s.mediaFileId === mediaFileId && s.userId === req.user?.id);
+    if (!hasSession) {
+      const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+      if (quality === 'remux') {
+        const copyAudio =
+          firstQueryString(req.query, 'copyAudio') !== 'false';
+        void this.transcodingService.getOrCreateRemuxSession(
+          mediaFileId,
+          resolved.absolutePath,
+          copyAudio,
+          0,
+          ctx,
+        );
+      } else {
+        void this.transcodingService.getOrCreateSession(
+          mediaFileId,
+          quality,
+          resolved.absolutePath,
+          0,
+          ctx,
+        );
+      }
+    }
 
     const token = firstQueryString(req.query, 'token');
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
@@ -485,6 +509,28 @@ export class StreamingController {
     const resolved = await this.streamingService.resolveFile(mediaFileId);
 
     // Parse segment index (seg-042.ts → 42, seg-042.m4s → 42, init.mp4 → 0)
+    // For init.mp4: serve from existing session without triggering quality changes.
+    // Shaka probes init segments from multiple qualities to build segment indexes.
+    if (segment === 'init.mp4') {
+      const existing = this.transcodingService.getExistingSession(
+        mediaFileId,
+        req.user?.id,
+      );
+      if (existing) {
+        const initPath = await this.transcodingService.getSegmentPath(
+          existing,
+          'init.mp4',
+        );
+        if (initPath) {
+          res.setHeader('Content-Type', 'video/mp4');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          fs.createReadStream(initPath).pipe(res);
+          return;
+        }
+      }
+      // No session yet — fall through to create one
+    }
+
     const segMatch = segment.match(/seg-(\d+)\.(ts|m4s)/);
     const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
 
@@ -515,10 +561,7 @@ export class StreamingController {
       return;
     }
 
-    const contentType = segment.endsWith('.ts')
-      ? 'video/mp2t'
-      : 'video/mp4';
-    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Type', segment.endsWith('.ts') ? 'video/mp2t' : 'video/mp4');
     res.setHeader('Access-Control-Allow-Origin', '*');
     fs.createReadStream(segPath).pipe(res);
   }

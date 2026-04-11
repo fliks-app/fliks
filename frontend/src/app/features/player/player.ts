@@ -1135,7 +1135,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (trackId.startsWith('shaka-') && this.player) {
       const audioId = parseInt(trackId.replace('shaka-', ''), 10);
       const variants = this.player.getVariantTracks();
-      const target = variants.find((v: any) => v.audioId === audioId);
+      // Preserve current video quality: find variant matching both the new audioId
+      // and the active video resolution to avoid triggering a backend quality change.
+      const active = variants.find((v: any) => v.active);
+      const target =
+        variants.find(
+          (v: any) => v.audioId === audioId && v.videoId === active?.videoId,
+        ) ?? variants.find((v: any) => v.audioId === audioId);
       if (target) {
         this.player.selectVariantTrack(target, /* clearBuffer= */ true);
         return;
