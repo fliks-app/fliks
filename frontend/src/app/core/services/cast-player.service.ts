@@ -6,13 +6,16 @@ import { SubtitlesApiService } from './api/subtitles-api.service';
 import { AuthService } from './auth.service';
 import { BrowserDeviceProfileService, DeviceProfile } from './browser-device-profile.service';
 import { ServerConfigService } from './server-config.service';
+import { parseAudioIndex } from '../utils/player.utils';
 import { PlayerSettingsService } from './player-settings.service';
+import { TrackManagerService } from './track-manager.service';
 
 export interface CastSubtitleOption {
   id: string;
   label: string;
   language: string;
   burnIn: boolean;
+  forced?: boolean;
   castTrackId?: number;
   subtitleDbId?: number;
 }
@@ -35,6 +38,7 @@ interface SubtitleInfo {
   burnIn: boolean;
   subtitleDbId?: number;
   url: string;
+  forced?: boolean;
 }
 
 /**
@@ -51,6 +55,7 @@ export class CastPlayerService {
   private readonly deviceProfile = inject(BrowserDeviceProfileService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly playerSettings = inject(PlayerSettingsService);
+  private readonly trackManager = inject(TrackManagerService);
 
   /** Chromecast device profile — only H264 + AAC, forces transcode for incompatible codecs. */
   /** Chromecast profile — force full transcode to guarantee H264+AAC HLS output. */
@@ -144,6 +149,7 @@ export class CastPlayerService {
       label: s.label,
       language: s.language,
       burnIn: s.burnIn,
+      forced: s.forced,
       subtitleDbId: s.subtitleDbId,
       castTrackId: s.burnIn ? s.subtitleDbId : trackId++,
     })));
@@ -167,8 +173,12 @@ export class CastPlayerService {
 
     const castProfile = this.getCastDeviceProfile();
 
+    // Resolve audio index from active track ID if not explicitly set
+    const audioIdx = this.activeAudioStreamIndex
+      ?? parseAudioIndex(this.activeAudioTrackId() ?? 'audio-0');
+
     const pi = await this.streamingApi.getPlaybackInfo(
-      mfId, castProfile, this.activeBurnInId ?? undefined, this.activeAudioStreamIndex,
+      mfId, castProfile, this.activeBurnInId ?? undefined, audioIdx,
     );
 
     // Update playback mode from backend decision (may differ from local player)
@@ -260,6 +270,17 @@ export class CastPlayerService {
 
   async changeAudio(audioIndex: number) {
     this.activeAudioStreamIndex = audioIndex;
+
+    // Save selection via shared TrackManager
+    const trackId = `audio-${audioIndex}`;
+    this.trackManager.saveAudioSelection(
+      trackId, this.availableAudioTracks(), this.mediaId(), 0,
+    );
+
+    // Kill existing session — audio is muxed in the TS segments,
+    // so a new session with the new audio track is needed.
+    const mfId = this.mediaFileId();
+    if (mfId) this.streamingApi.stopSessions(mfId).catch(() => {});
     await this.reloadCastStream();
   }
 
@@ -303,22 +324,33 @@ export class CastPlayerService {
     return filtered.find(q => q.id === maxQ)?.id ?? filtered[0]?.id ?? '1080p';
   }
 
-  /** Find the subtitle matching the user's remembered language for this media. */
+  /** Find the subtitle matching the user's remembered language+type for this media. */
   private resolveRememberedSubtitleId(
     mediaId: number,
     subtitles: SubtitleInfo[],
   ): string | null {
     const settings = this.playerSettings.get();
     if (!settings.rememberSubtitleSelections || !mediaId) return null;
-    const savedLang = this.playerSettings.getRememberedSubtitleTrack(mediaId);
-    if (!savedLang) return null;
-    const match = subtitles.find((s) => !s.burnIn && s.language === savedLang);
+    const saved = this.playerSettings.getRememberedSubtitleTrack(mediaId);
+    if (!saved || saved === 'off') return null;
+    const [savedLang, savedType] = saved.split(':');
+    const wantForced = savedType === 'forced';
+    const match =
+      subtitles.find((s) => !s.burnIn && s.language === savedLang && !!s.forced === wantForced)
+      ?? subtitles.find((s) => !s.burnIn && s.language === savedLang && !s.forced);
     return match?.id ?? null;
+  }
+
+  saveSubtitleSelection(language: string | null, forced = false) {
+    const mId = this.mediaId();
+    if (mId) this.trackManager.saveSubtitleSelection(mId, language, forced);
   }
 
   async changeBurnIn(subtitleDbId: number | null) {
     if (this.activeBurnInId === subtitleDbId) return;
     this.activeBurnInId = subtitleDbId;
+    const mfId = this.mediaFileId();
+    if (mfId) this.streamingApi.stopSessions(mfId).catch(() => {});
     await this.reloadCastStream();
   }
 
@@ -341,7 +373,7 @@ export class CastPlayerService {
     // Resolve preferred audio stream index from user settings
     const audioStreams: { language?: string }[] = opts.streamInfo?.audio ?? [];
     const audioIndex = this.playerSettings.resolveAudioStreamIndex(
-      opts.mediaFileId, audioStreams,
+      opts.mediaFileId, audioStreams, opts.mediaId,
     );
 
     // Fetch playback info
@@ -380,6 +412,7 @@ export class CastPlayerService {
             id: `ext-${sub.id}`, label: `${sub.language}${sub.forced ? ' (Forced)' : ''}`,
             language: sub.language, burnIn: false, subtitleDbId: sub.id,
             url: this.streamingApi.getSubtitleUrl(opts.mediaFileId, sub.id),
+            forced: sub.forced ?? false,
           });
         } else if (sub.streamIndex != null) {
           subtitleInfos.push({
@@ -387,6 +420,7 @@ export class CastPlayerService {
             label: `${sub.language}${sub.forced ? ' (Forced)' : ''}${isBitmap ? ' [PGS]' : ' [embedded]'}`,
             language: sub.language, burnIn: isBitmap, subtitleDbId: sub.id,
             url: isBitmap ? '' : this.streamingApi.getEmbeddedSubtitleUrl(opts.mediaFileId, sub.streamIndex!),
+            forced: sub.forced ?? false,
           });
         }
       }

@@ -77,15 +77,23 @@ export class TrackManagerService {
    */
   saveAudioSelection(
     trackId: string,
-    tracks: { id: string; language: string }[],
+    tracks: { id: string; language?: string }[],
     mediaId: number,
-    mediaFileId: number,
+    mediaFileId?: number,
   ): void {
     if (!this.playerSettings.get().rememberAudioSelections) return;
     const track = tracks.find((t) => t.id === trackId);
     const lang = track?.language ?? trackId;
     const key = mediaId;
     this.playerSettings.saveRememberedAudioTrack(key, lang);
+  }
+
+  /** Save subtitle selection for this media. Pass null = user explicitly disabled.
+   *  Stores "language:forced", or "off" when disabled. */
+  saveSubtitleSelection(mediaId: number, language: string | null, forced = false): void {
+    if (!this.playerSettings.get().rememberSubtitleSelections || !mediaId) return;
+    const value = language ? `${language}${forced ? ':forced' : ''}` : 'off';
+    this.playerSettings.saveRememberedSubtitleTrack(mediaId, value);
   }
 
   // ── Subtitle methods ──
@@ -202,12 +210,16 @@ export class TrackManagerService {
     const subs = subtitles.filter((s) => !s.burnIn);
     if (!subs.length && !subtitles.length) return;
 
-    // Priority 1: remembered selection by language (saved per mediaId for series)
+    // Priority 1: remembered selection by "language:forced" or "off" (saved per mediaId)
     if (settings.rememberSubtitleSelections) {
-      const key = mediaId;
-      const savedLang = this.playerSettings.getRememberedSubtitleTrack(key);
-      if (savedLang) {
-        const match = subs.find((s) => s.language === savedLang);
+      const saved = this.playerSettings.getRememberedSubtitleTrack(mediaId);
+      if (saved === 'off') return; // User explicitly disabled subtitles
+      if (saved) {
+        const [savedLang, savedType] = saved.split(':');
+        const wantForced = savedType === 'forced';
+        // Exact match first (forced flag matches), then fallback to same language
+        const match = subs.find((s) => s.language === savedLang && !!s.forced === wantForced)
+          ?? subs.find((s) => s.language === savedLang && !s.forced);
         if (match) { await onSelect(match); return; }
       }
     }

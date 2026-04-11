@@ -1113,10 +1113,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.activeSubtitleId.set(null);
       this.subtitlePickerOpen.set(false);
       localStorage.setItem('player.subtitleLang', '');
-      if (this.playerSettings.get().rememberSubtitleSelections) {
-        const key = this.mediaId;
-        this.playerSettings.saveRememberedSubtitleTrack(key, null);
-      }
+      this.trackManager.saveSubtitleSelection(this.mediaId, null);
       localStorage.removeItem('player.subtitleForced');
       if (!this.isOfflinePlayback && this.activeBurnInId) {
         this.activeBurnInId = null;
@@ -1151,10 +1148,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.subtitlePickerOpen.set(false);
     localStorage.setItem('player.subtitleLang', sub.language);
 
-    if (this.playerSettings.get().rememberSubtitleSelections) {
-      const key = this.mediaId;
-      this.playerSettings.saveRememberedSubtitleTrack(key, sub.language);
-    }
+    this.trackManager.saveSubtitleSelection(this.mediaId, sub.language, sub.forced);
   }
 
   // ── Keyboard handler ──
