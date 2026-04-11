@@ -89,6 +89,11 @@ export class MediaInfoHeaderComponent {
   readonly overview = input<string | null>(null);
   readonly directors = input<string[]>([]);
   readonly genres = input<string[]>([]);
+  /** For series: label of the episode to resume (e.g. "S01:E03 - Title") */
+  readonly resumeEpisodeLabel = input<string | null>(null);
+  /** For series: resume context (episodeId + mediaFileId) so play() knows what to launch */
+  readonly resumeEpisodeId = input<number | undefined>(undefined);
+  readonly resumeMediaFileId = input<number | undefined>(undefined);
   readonly status = input<string | null>(null);
   readonly monitored = input(true);
   readonly path = input<string | null>(null);
@@ -222,15 +227,18 @@ export class MediaInfoHeaderComponent {
   // ── Actions: play, watched, audio, subtitle ──
 
   async play(fromStart: boolean) {
-    const fileId = this.selectedFileId();
+    // Series resume: use resume episode context if available
+    const resumeFileId = this.resumeMediaFileId();
+    const resumeEpId = this.resumeEpisodeId();
+    const fileId = resumeFileId ?? this.selectedFileId();
     if (!fileId) return;
     const file = this.files().find(f => f.id === fileId);
     await this.playable.play({
       fileId,
       mediaId: this.mediaId(),
-      episodeId: this.episodeId(),
+      episodeId: resumeEpId ?? this.episodeId(),
       title: this.title(),
-      episodeTitle: this.episodeLabel() ?? undefined,
+      episodeTitle: this.resumeEpisodeLabel() ?? this.episodeLabel() ?? undefined,
       fanartUrl: this.posterUrl() ?? this.fanartUrl() ?? null,
       streamInfo: file?.streamInfo,
     }, fromStart);

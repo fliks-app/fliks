@@ -180,6 +180,22 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return m ? ['/series', String(m.id)] : ['/series'];
   });
 
+  /** Resume episode label for series header (e.g. "S01:E03 - Title") */
+  readonly resumeEpisodeLabel = computed(() => {
+    const info = this.resumeInfo();
+    const m = this.media();
+    if (!info?.episodeId || !m?.seasons) return null;
+    for (const s of m.seasons) {
+      const ep = s.episodes?.find(e => e.id === info.episodeId);
+      if (ep) {
+        const sn = String(s.seasonNumber).padStart(2, '0');
+        const en = String(ep.episodeNumber).padStart(2, '0');
+        return `S${sn}:E${en} - ${ep.title ?? ''}`;
+      }
+    }
+    return null;
+  });
+
   /** Directors for shared header */
   readonly directors = computed(() =>
     this.crew()

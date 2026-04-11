@@ -4,7 +4,13 @@
 
   <div class="px-4 -mt-16 relative z-10">
     <!-- Title -->
-    <h1 class="text-3xl font-semibold tracking-tight leading-tight">{{ title() }}</h1>
+    <h1 class="text-3xl font-semibold tracking-tight leading-tight">
+      @if (episodeLabel()) {
+        <a [routerLink]="backRoute()" class="hover:underline">{{ title() }}</a>
+      } @else {
+        {{ title() }}
+      }
+    </h1>
 
     @if (episodeLabel()) {
       <p class="text-base-content/70 mt-0.5">{{ episodeLabel() }}</p>
@@ -22,8 +28,8 @@
       @if (runtime()) { <span>{{ runtime() }}min</span> }
     </div>
 
-    <!-- Stream info: video (or file select) / audio / subtitles -->
-    @if (selectedFileId()) {
+    <!-- Stream info: video (or file select) / audio / subtitles (hidden on series overview) -->
+    @if (selectedFileId() && (mediaType() !== 'series' || episodeId())) {
       <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
         <span class="text-base-content/50">{{ 'media_info.video' | translate }}</span>
         @if (multipleFiles()) {
@@ -101,9 +107,13 @@
       </div>
     }
 
+    @if (resumeEpisodeLabel() && resumeLabel()) {
+      <p class="mt-4 mb-4 font-semibold">{{ resumeEpisodeLabel() }}</p>
+    }
+
     <!-- Play button (full width on mobile) -->
     @if (selectedFileId()) {
-      <button class="btn btn-primary w-full gap-2 mt-4" (click)="play(false)">
+      <button class="btn btn-primary w-full gap-2" [class.mt-4]="!resumeEpisodeLabel() || !resumeLabel()" [class.mt-2]="resumeEpisodeLabel() && resumeLabel()" (click)="play(false)">
         <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
         @if (resumeLabel()) {
           {{ 'player.resume_at' | translate:{ time: resumeLabel() } }}
@@ -249,7 +259,13 @@
       </div>
 
       <!-- Title -->
-      <h1 class="text-4xl font-bold tracking-tight">{{ title() }}</h1>
+      <h1 class="text-4xl font-bold tracking-tight">
+        @if (episodeLabel()) {
+          <a [routerLink]="backRoute()" class="hover:underline">{{ title() }}</a>
+        } @else {
+          {{ title() }}
+        }
+      </h1>
       @if (episodeLabel()) {
         <p class="text-base-content/70 mt-1 text-lg">{{ episodeLabel() }}</p>
       }
@@ -269,8 +285,8 @@
         }
       </div>
 
-      <!-- Stream info: Video (or file select) / Audio / Subtitles -->
-      @if (selectedFileId()) {
+      <!-- Stream info: Video (or file select) / Audio / Subtitles (hidden on series overview) -->
+      @if (selectedFileId() && (mediaType() !== 'series' || episodeId())) {
         <div class="flex flex-wrap items-center gap-x-5 gap-y-1.5 mt-3">
           <div class="flex items-center gap-2">
             <span class="text-base-content/50 font-medium">{{ 'media_info.video' | translate }}</span>
@@ -352,8 +368,12 @@
         </div>
       }
 
+      @if (resumeEpisodeLabel() && resumeLabel()) {
+        <p class="mt-4 mb-4 font-semibold">{{ resumeEpisodeLabel() }}</p>
+      }
+
       <!-- Action buttons -->
-      <div class="flex flex-wrap items-center gap-2 mt-4">
+      <div class="flex flex-wrap items-center gap-2" [class.mt-4]="!resumeEpisodeLabel() || !resumeLabel()" [class.mt-2]="resumeEpisodeLabel() && resumeLabel()">
         @if (selectedFileId()) {
           <button class="btn btn-primary btn gap-1" (click)="play(false)">
             <svg lucidePlay class="h-4 w-4" fill="currentColor"></svg>
