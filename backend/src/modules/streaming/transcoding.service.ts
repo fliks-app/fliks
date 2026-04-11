@@ -622,13 +622,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     let stderr = '';
     let resolved = false;
-    // Debug: log FFmpeg stderr in real-time
-    proc.stderr.on('data', (chunk: Buffer) => {
-      const line = chunk.toString();
-      if (line.includes('Error') || line.includes('error') || line.includes('failed') || line.includes('Invalid')) {
-        this.log.error(`FFmpeg [${id}] stderr: ${line.trim()}`);
-      }
-    });
     const segDir = segSubDir ? path.join(sessionDir, segSubDir) : sessionDir;
     const firstSeg = path.join(
       segDir,
@@ -820,7 +813,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     mapAllAudio = false,
     audioStreams?: { language?: string; title?: string }[],
   ): string[] {
-    const args = ['-hide_banner', '-loglevel', 'info'];
+    const args = ['-hide_banner', '-loglevel', 'warning'];
 
     // Seek to start position if needed
     if (startSegment > 0) {

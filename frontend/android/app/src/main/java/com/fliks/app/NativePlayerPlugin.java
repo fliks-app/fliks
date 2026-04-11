@@ -23,6 +23,7 @@ import androidx.media3.common.TrackSelectionOverride;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.VideoSize;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.hls.HlsMediaSource;
@@ -200,7 +201,9 @@ public class NativePlayerPlugin extends Plugin {
                 }
             }
 
-            DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(httpFactory);
+            // DefaultDataSource wraps httpFactory for HTTP + FileDataSource for file:// URLs
+            DefaultDataSource.Factory dataSourceFactory = new DefaultDataSource.Factory(getContext(), httpFactory);
+            DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory);
             player = new ExoPlayer.Builder(getContext())
                     .setMediaSourceFactory(mediaSourceFactory)
                     .setWakeMode(C.WAKE_MODE_NETWORK)

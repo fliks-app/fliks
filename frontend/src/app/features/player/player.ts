@@ -488,10 +488,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
 
       if (this.isOfflinePlayback) {
-        // Offline: always use ShakaEngine
-        await this.createShakaEngine();
         this.state.playbackMode.set('direct');
-        await this.engine!.load(offlineCheck!, startTime, 'video/mp4');
+        if (this.isNative) {
+          // Offline on native: use ExoPlayer with the native file path
+          await this.createNativeEngine();
+          const nativePath = await this.offlineStorage.getNativeDestPath(`download-${this.mediaFileId}`);
+          const fileUrl = nativePath ? `file://${nativePath}` : offlineCheck!;
+          await this.engine!.load(fileUrl, startTime, 'video/mp4');
+        } else {
+          // Offline on web: use Shaka
+          await this.createShakaEngine();
+          await this.engine!.load(offlineCheck!, startTime, 'video/mp4');
+        }
       } else {
         // Pre-compute audio preference
         const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
@@ -523,10 +531,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.qualityManager.applySavedPreference();
 
         const mode = this.playbackMode();
-        console.log('[Player] mediaFileId:', this.mediaFileId, 'mode:', pi.playMethod,
-          'videoCopy:', pi.videoCopyStream, 'audioCopy:', pi.audioCopyStream,
-          'reasons:', pi.transcodeReasons.map(r => r.flag).join(', '),
-          'startTime:', startTime, 'audioIdx:', preselectedAudioIndex);
 
         // ── Engine selection ──
         if (this.isNative && mode !== 'direct') {
@@ -588,7 +592,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             const video = this.videoEl()?.nativeElement;
             if (video) {
               const doSeek = () => {
-                console.log('[Player] Seeking to resume position:', startTime);
                 video.currentTime = startTime!;
               };
               if (video.readyState >= 2) {
