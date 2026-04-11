@@ -44,7 +44,7 @@ export class TrackManagerService {
 
     // "Use default audio stream" only applies when no remembered selection exists
     // (i.e. first time watching). On refresh, the saved choice takes priority.
-    const key = mediaId || mediaFileId;
+    const key = mediaId;
     const hasSavedSelection = settings.rememberAudioSelections &&
       !!this.playerSettings.getRememberedAudioTrack(key);
     if (settings.useDefaultAudioStream && !hasSavedSelection) return;
@@ -84,7 +84,7 @@ export class TrackManagerService {
     if (!this.playerSettings.get().rememberAudioSelections) return;
     const track = tracks.find((t) => t.id === trackId);
     const lang = track?.language ?? trackId;
-    const key = mediaId || mediaFileId;
+    const key = mediaId;
     this.playerSettings.saveRememberedAudioTrack(key, lang);
   }
 
@@ -190,6 +190,7 @@ export class TrackManagerService {
     activeAudioTrackId: string | null,
     mediaFileId: number,
     onSelect: (sub: SubtitleOption | null) => Promise<void>,
+    mediaId = 0,
   ): Promise<void> {
     const settings = this.playerSettings.get();
 
@@ -201,11 +202,12 @@ export class TrackManagerService {
     const subs = subtitles.filter((s) => !s.burnIn);
     if (!subs.length && !subtitles.length) return;
 
-    // Priority 1: remembered selection (only non-burn-in)
+    // Priority 1: remembered selection by language (saved per mediaId for series)
     if (settings.rememberSubtitleSelections) {
-      const savedId = this.playerSettings.getRememberedSubtitleTrack(mediaFileId);
-      if (savedId) {
-        const match = subs.find((s) => s.id === savedId);
+      const key = mediaId;
+      const savedLang = this.playerSettings.getRememberedSubtitleTrack(key);
+      if (savedLang) {
+        const match = subs.find((s) => s.language === savedLang);
         if (match) { await onSelect(match); return; }
       }
     }

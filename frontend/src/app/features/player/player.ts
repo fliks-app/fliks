@@ -651,6 +651,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.activeAudioTrackId(),
         this.mediaFileId,
         (sub) => this.selectSubtitle(sub),
+        this.mediaId,
       );
 
       // If Cast is already connected, send to Cast
@@ -1112,6 +1113,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.activeSubtitleId.set(null);
       this.subtitlePickerOpen.set(false);
       localStorage.setItem('player.subtitleLang', '');
+      if (this.playerSettings.get().rememberSubtitleSelections) {
+        const key = this.mediaId;
+        this.playerSettings.saveRememberedSubtitleTrack(key, null);
+      }
       localStorage.removeItem('player.subtitleForced');
       if (!this.isOfflinePlayback && this.activeBurnInId) {
         this.activeBurnInId = null;
@@ -1147,7 +1152,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     localStorage.setItem('player.subtitleLang', sub.language);
 
     if (this.playerSettings.get().rememberSubtitleSelections) {
-      this.playerSettings.saveRememberedSubtitleTrack(this.mediaFileId, sub.id);
+      const key = this.mediaId;
+      this.playerSettings.saveRememberedSubtitleTrack(key, sub.language);
     }
   }
 

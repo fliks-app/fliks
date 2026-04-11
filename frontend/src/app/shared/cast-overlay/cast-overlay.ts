@@ -80,7 +80,7 @@ export class CastOverlayComponent {
   }
 
   disconnect() {
-    this.cast.disconnect();
+    this.cast.stop();
     this.cp.clear();
     this.cp.expanded.set(false);
   }

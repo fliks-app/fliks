@@ -92,6 +92,7 @@ export class CastPlayerService {
   private activeBurnInId: number | null = null;
   private activeAudioStreamIndex: number | undefined;
   private subtitleInfos: SubtitleInfo[] = [];
+  private saveInterval: ReturnType<typeof setInterval> | null = null;
 
   /** Whether a Cast session is actively playing media (not just connected). */
   readonly hasMedia = signal(false);
@@ -124,7 +125,10 @@ export class CastPlayerService {
     this.episodeId.set(opts.episodeId);
     this.mediaTitle.set(opts.mediaTitle);
     this.episodeTitle.set(opts.episodeTitle);
-    this.fanartUrl.set(opts.fanartUrl);
+    // Resolve relative URLs to absolute (needed on mobile where origin is localhost)
+    this.fanartUrl.set(
+      opts.fanartUrl ? this.serverConfig.resolveUrl(opts.fanartUrl) : null,
+    );
     this.playbackMode.set(opts.playbackMode);
     this.subtitleInfos = opts.subtitles;
     this.activeQualityId.set(opts.activeQualityId);
@@ -146,10 +150,12 @@ export class CastPlayerService {
     this.availableQualities.set(opts.qualities);
     this.availableAudioTracks.set(opts.audioTracks);
     this.hasMedia.set(true);
+    this.startPositionSaving();
   }
 
   /** Clear Cast media state (on disconnect). */
   clear() {
+    this.stopPositionSaving();
     this.hasMedia.set(false);
     this.expanded.set(false);
     this.mediaFileId.set(0);
@@ -257,7 +263,61 @@ export class CastPlayerService {
     await this.reloadCastStream();
   }
 
+  private startPositionSaving() {
+    this.stopPositionSaving();
+    this.saveInterval = setInterval(() => this.saveCastPosition(), 10_000);
+  }
+
+  private stopPositionSaving() {
+    if (this.saveInterval) {
+      clearInterval(this.saveInterval);
+      this.saveInterval = null;
+    }
+  }
+
+  private async saveCastPosition() {
+    const mfId = this.mediaFileId();
+    const mId = this.mediaId();
+    if (!mfId || !mId) return;
+    const pos = this.cast.currentTime();
+    const dur = this.cast.duration();
+    if (!pos || pos < 1) return;
+    try {
+      await this.streamingApi.updatePlaybackState(mfId, {
+        positionSeconds: pos,
+        durationSeconds: dur || 0,
+        mediaId: mId,
+        episodeId: this.episodeId(),
+      });
+    } catch { /* ignore */ }
+  }
+
+  /** Resolve the initial Cast quality from Cast settings (maxQuality). */
+  private resolveInitialCastQuality(qualities: CastQualityOption[]): string {
+    const cs = this.castSettings.get();
+    const maxQ = cs.maxQuality;
+    const filtered = qualities.filter(q => q.id !== 'auto' && q.id !== 'original');
+    if (maxQ === 'original') {
+      return filtered[0]?.id ?? '1080p';
+    }
+    return filtered.find(q => q.id === maxQ)?.id ?? filtered[0]?.id ?? '1080p';
+  }
+
+  /** Find the subtitle matching the user's remembered language for this media. */
+  private resolveRememberedSubtitleId(
+    mediaId: number,
+    subtitles: SubtitleInfo[],
+  ): string | null {
+    const settings = this.playerSettings.get();
+    if (!settings.rememberSubtitleSelections || !mediaId) return null;
+    const savedLang = this.playerSettings.getRememberedSubtitleTrack(mediaId);
+    if (!savedLang) return null;
+    const match = subtitles.find((s) => !s.burnIn && s.language === savedLang);
+    return match?.id ?? null;
+  }
+
   async changeBurnIn(subtitleDbId: number | null) {
+    if (this.activeBurnInId === subtitleDbId) return;
     this.activeBurnInId = subtitleDbId;
     await this.reloadCastStream();
   }
@@ -358,13 +418,23 @@ export class CastPlayerService {
       subtitles: subtitleInfos,
       qualities,
       audioTracks,
-      activeQualityId: 'auto',
-      activeSubtitleId: null,
+      activeQualityId: this.resolveInitialCastQuality(qualities),
+      activeSubtitleId: this.resolveRememberedSubtitleId(opts.mediaId, subtitleInfos),
       activeAudioTrackId: audioIndex != null ? `audio-${audioIndex}` : (audioTracks[0]?.id ?? null),
       activeBurnInId: null,
       activeAudioStreamIndex: audioIndex,
     });
 
-    await this.reloadCastStream(opts.startTime ?? 0);
+    // Resolve start position: explicit > saved playback state > 0
+    let startTime = opts.startTime;
+    if (startTime == null) {
+      try {
+        const state = await this.streamingApi.getPlaybackState(opts.mediaFileId);
+        if (state && !state.completed && state.positionSeconds > 10) {
+          startTime = state.positionSeconds;
+        }
+      } catch { /* ignore */ }
+    }
+    await this.reloadCastStream(startTime ?? 0);
   }
 }
