@@ -433,6 +433,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
 
     shaka.polyfill.installAll();
+
     if (!shaka.Player.isBrowserSupported()) {
       this.error.set('Browser not supported');
       this.loading.set(false);
@@ -485,7 +486,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     });
 
     this.player.addEventListener('error', (e: any) => {
-      this.error.set(e.detail?.message ?? 'Playback error');
+      const detail = e.detail;
+      console.error('[Player] Shaka error:', detail?.code, detail?.category, detail?.message, detail);
+      this.error.set(detail?.message ?? 'Playback error');
     });
 
     try {
@@ -703,9 +706,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           this.statsRefreshTick.update((n) => n + 1);
         }
       }, 1000);
-    } catch (e) {
-      console.error('[Player] Init error:', e);
-      this.error.set((e as Error).message);
+    } catch (e: any) {
+      console.error('[Player] Init error:', e?.code, e?.category, e?.data, e);
+      this.error.set(e?.message ?? String(e));
     } finally {
       this.loading.set(false);
     }

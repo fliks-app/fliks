@@ -157,6 +157,19 @@ async function fileExists(p: string): Promise<boolean> {
   }
 }
 
+/** Check if a segment (or its predecessor) exists in the cache directory. */
+async function segmentNearby(
+  cachePath: string,
+  segment: number,
+): Promise<boolean> {
+  const pad = (n: number) => `seg-${String(n).padStart(4, '0')}.m4s`;
+  return (
+    (await fileExists(path.join(cachePath, pad(segment)))) ||
+    (segment > 0 &&
+      (await fileExists(path.join(cachePath, pad(segment - 1)))))
+  );
+}
+
 const SEGMENT_DURATION = 6;
 
 /** Parse FFmpeg-style rates like '8M', '500k', '192k' to bits per second. */
@@ -371,19 +384,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
         // If the requested segment is far ahead, restart FFmpeg with seek
         if (requestedSegment > 0) {
-          const segFile = path.join(
-            existing.cachePath,
-            `seg-${String(requestedSegment).padStart(4, '0')}.ts`,
-          );
-          const nearbyExists =
-            (await fileExists(segFile)) ||
-            (await fileExists(
-              path.join(
-                existing.cachePath,
-                `seg-${String(Math.max(0, requestedSegment - 1)).padStart(4, '0')}.ts`,
-              ),
-            ));
-          if (!nearbyExists) {
+          if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
             this.log.log(
               `Seek: restarting transcode [${key}] from segment ${requestedSegment}`,
             );
@@ -503,7 +504,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     for (let i = 0; i < 120; i++) {
       if (await fileExists(playlistPath)) {
         const content = await fsp.readFile(playlistPath, 'utf-8');
-        if (content.includes('.ts')) return content; // Wait until at least one segment is listed
+        if (content.includes('.ts') || content.includes('.m4s')) return content; // Wait until at least one segment is listed
       }
       await new Promise((r) => setTimeout(r, 500));
     }
@@ -556,10 +557,20 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     args: string[];
     sessionDir: string;
     startSegment: number;
+    /** Segment file extension (default: '.ts', use '.m4s' for fMP4 audio) */
+    segExt?: string;
     extra?: Partial<TranscodeSession>;
   }): TranscodeSession {
-    const { id, mediaFileId, quality, args, sessionDir, startSegment, extra } =
-      opts;
+    const {
+      id,
+      mediaFileId,
+      quality,
+      args,
+      sessionDir,
+      startSegment,
+      segExt = '.m4s',
+      extra,
+    } = opts;
     const { resolve: readyResolve, promise: readyPromise } =
       this.createDeferred();
 
@@ -573,7 +584,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     let resolved = false;
     const firstSeg = path.join(
       sessionDir,
-      `seg-${String(startSegment).padStart(4, '0')}.ts`,
+      `seg-${String(startSegment).padStart(4, '0')}${segExt}`,
     );
 
     const checkReady = () => {
@@ -1001,7 +1012,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         break;
     }
 
-    // Audio — video-only mode strips audio entirely (used for multi-audio HLS)
+    // Audio — video-only strips audio (multi-audio uses separate renditions)
     if (videoOnly) {
       if (!args.some((a) => a === '-map')) {
         args.push('-map', '0:v:0');
@@ -1014,7 +1025,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
     }
 
-    // HLS output
+    // HLS output — always fMP4 (native browser support, no transmuxer needed)
     args.push(
       '-f',
       'hls',
@@ -1024,8 +1035,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       '0',
       '-start_number',
       String(startSegment),
+      '-hls_segment_type',
+      'fmp4',
+      '-hls_fmp4_init_filename',
+      'init.mp4',
       '-hls_segment_filename',
-      path.join(outputDir, 'seg-%04d.ts'),
+      path.join(outputDir, 'seg-%04d.m4s'),
       '-hls_flags',
       'independent_segments',
       path.join(outputDir, 'index.m3u8'),
@@ -1056,6 +1071,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     args.push('-vn');
     args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
 
+    // Use fMP4 segments for audio — browsers can't transmux audio-only MPEG-TS
     args.push(
       '-f',
       'hls',
@@ -1065,8 +1081,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       '0',
       '-start_number',
       String(startSegment),
+      '-hls_segment_type',
+      'fmp4',
+      '-hls_fmp4_init_filename',
+      'init.mp4',
       '-hls_segment_filename',
-      path.join(outputDir, 'seg-%04d.ts'),
+      path.join(outputDir, 'seg-%04d.m4s'),
       '-hls_flags',
       'independent_segments',
       path.join(outputDir, 'index.m3u8'),
@@ -1107,7 +1127,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // HLS output with fMP4 segments (better for stream copy)
+    // HLS output — always fMP4
     args.push(
       '-f',
       'hls',
@@ -1118,9 +1138,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       '-start_number',
       String(startSegment),
       '-hls_segment_type',
-      'mpegts',
+      'fmp4',
+      '-hls_fmp4_init_filename',
+      'init.mp4',
       '-hls_segment_filename',
-      path.join(outputDir, 'seg-%04d.ts'),
+      path.join(outputDir, 'seg-%04d.m4s'),
       '-hls_flags',
       'independent_segments',
       path.join(outputDir, 'index.m3u8'),
@@ -1183,19 +1205,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         existing.lastAccess = Date.now();
 
         if (requestedSegment > 0) {
-          const segFile = path.join(
-            existing.cachePath,
-            `seg-${String(requestedSegment).padStart(4, '0')}.ts`,
-          );
-          const nearbyExists =
-            (await fileExists(segFile)) ||
-            (await fileExists(
-              path.join(
-                existing.cachePath,
-                `seg-${String(Math.max(0, requestedSegment - 1)).padStart(4, '0')}.ts`,
-              ),
-            ));
-          if (!nearbyExists) {
+          if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
             this.log.log(
               `Seek: restarting remux [${key}] from segment ${requestedSegment}`,
             );
@@ -1285,19 +1295,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
         // Handle seek
         if (requestedSegment > 0) {
-          const segFile = path.join(
-            existing.cachePath,
-            `seg-${String(requestedSegment).padStart(4, '0')}.ts`,
-          );
-          const nearbyExists =
-            (await fileExists(segFile)) ||
-            (await fileExists(
-              path.join(
-                existing.cachePath,
-                `seg-${String(Math.max(0, requestedSegment - 1)).padStart(4, '0')}.ts`,
-              ),
-            ));
-          if (!nearbyExists) {
+          if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
             this.log.log(
               `Seek: restarting audio session [${key}] from segment ${requestedSegment}`,
             );
