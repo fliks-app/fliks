@@ -44,13 +44,13 @@ export class TrackManagerService {
 
     // "Use default audio stream" only applies when no remembered selection exists
     // (i.e. first time watching). On refresh, the saved choice takes priority.
+    const key = mediaId || mediaFileId;
     const hasSavedSelection = settings.rememberAudioSelections &&
-      !!this.playerSettings.getRememberedAudioTrack(mediaFileId);
+      !!this.playerSettings.getRememberedAudioTrack(key);
     if (settings.useDefaultAudioStream && !hasSavedSelection) return;
 
     // Priority 1: remembered selection for this media (saved as language code)
     if (settings.rememberAudioSelections) {
-      const key = mediaId || mediaFileId;
       const savedLang = this.playerSettings.getRememberedAudioTrack(key);
       if (savedLang) {
         const match = tracks.find((t) => t.language === savedLang);
