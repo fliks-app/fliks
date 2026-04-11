@@ -1,5 +1,7 @@
 package com.fliks.app;
 
+import android.content.Context;
+import android.net.wifi.WifiManager;
 import android.util.Log;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -63,6 +65,7 @@ public class CastPlugin extends Plugin {
     private CastContext castContext;
     private SessionManager sessionManager;
     private CastSession castSession;
+    private WifiManager.WifiLock wifiLock;
     /** True between the user picking a device and the session starting/failing. */
     private volatile boolean sessionPending = false;
 
@@ -76,6 +79,7 @@ public class CastPlugin extends Plugin {
             runOnMainThread(() -> {
                 sessionPending = false;
                 castSession = session;
+                acquireWifiLock();
                 notifyJS("connected", true);
             });
         }
@@ -84,6 +88,7 @@ public class CastPlugin extends Plugin {
             runOnMainThread(() -> {
                 sessionPending = false;
                 castSession = null;
+                releaseWifiLock();
                 notifyJS("connected", false);
             });
         }
@@ -92,11 +97,14 @@ public class CastPlugin extends Plugin {
             runOnMainThread(() -> {
                 sessionPending = false;
                 castSession = session;
+                acquireWifiLock();
                 notifyJS("connected", true);
             });
         }
         @Override
-        public void onSessionSuspended(CastSession session, int reason) {}
+        public void onSessionSuspended(CastSession session, int reason) {
+            releaseWifiLock();
+        }
         @Override
         public void onSessionStarting(CastSession session) {
             // Must set immediately on the callback thread (volatile). If we only post to the main
@@ -127,6 +135,19 @@ public class CastPlugin extends Plugin {
             });
         }
     };
+
+    private void acquireWifiLock() {
+        if (wifiLock == null) {
+            WifiManager wm = (WifiManager) getContext().getApplicationContext()
+                    .getSystemService(Context.WIFI_SERVICE);
+            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "fliks:cast");
+        }
+        if (!wifiLock.isHeld()) wifiLock.acquire();
+    }
+
+    private void releaseWifiLock() {
+        if (wifiLock != null && wifiLock.isHeld()) wifiLock.release();
+    }
 
     private void notifyJS(String key, boolean value) {
         String js = "window.dispatchEvent(new CustomEvent('castStateChanged', { detail: { " + key + ": " + value + " } }));";
