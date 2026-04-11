@@ -53,12 +53,58 @@ export class NativeEngine implements PlaybackEngine {
     _mimeType?: string,
     headers?: Record<string, string>,
   ): Promise<void> {
-    // Pass preloaded subtitle URLs to the native plugin
-    const subtitles = this._subtitleUrls.length > 0
+    const subtitles = this._preloadedSubtitles.length > 0
       ? this._preloadedSubtitles
       : undefined;
     await NativePlayer.load({ url, startTime, headers, subtitles });
+
+    // Apply subtitle style settings
+    if (this._subtitleStyle) {
+      await NativePlayer.setSubtitleStyle(this._subtitleStyle);
+    }
+
     this.startPositionPoll();
+  }
+
+  private _subtitleStyle: {
+    fontScale: number;
+    foregroundColor: string;
+    backgroundColor: string;
+    edgeType: string;
+    bottomMarginPercent: number;
+  } | null = null;
+
+  /** Set subtitle appearance. Call before load() or anytime after. */
+  setSubtitleStyle(settings: {
+    size: string;
+    color: string;
+    shadow: string;
+    background: string;
+    bottomMargin: number;
+  }): void {
+    const sizeMap: Record<string, number> = {
+      small: 0.7, normal: 1.0, large: 1.3, xlarge: 1.6,
+    };
+    const colorMap: Record<string, string> = {
+      white: '#FFFFFF', yellow: '#FFFF00', green: '#00FF00', cyan: '#00FFFF',
+    };
+    const bgMap: Record<string, string> = {
+      transparent: 'transparent', semi: '#80000000', black: '#E6000000',
+    };
+    const edgeMap: Record<string, string> = {
+      none: 'none', drop: 'drop_shadow', outline: 'outline', raised: 'raised',
+    };
+
+    this._subtitleStyle = {
+      fontScale: sizeMap[settings.size] ?? 1.0,
+      foregroundColor: colorMap[settings.color] ?? '#FFFFFF',
+      backgroundColor: bgMap[settings.background] ?? 'transparent',
+      edgeType: edgeMap[settings.shadow] ?? 'drop_shadow',
+      bottomMarginPercent: settings.bottomMargin,
+    };
+
+    // Apply immediately if player is active
+    NativePlayer.setSubtitleStyle(this._subtitleStyle).catch(() => {});
   }
 
   private _preloadedSubtitles: { url: string; language: string; label: string }[] = [];

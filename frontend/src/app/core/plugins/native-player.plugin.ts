@@ -89,6 +89,17 @@ export interface NativePlayerPlugin {
     label: string;
   }): Promise<{ id: string }>;
 
+  // ── Subtitle style ──
+
+  /** Apply subtitle appearance settings to the native SubtitleView. */
+  setSubtitleStyle(options: {
+    fontScale: number;       // 0.7, 0.9, 1.2, 1.5
+    foregroundColor: string; // hex #RRGGBB
+    backgroundColor: string; // hex #AARRGGBB or 'transparent'
+    edgeType: string;        // 'none' | 'drop_shadow' | 'outline' | 'raised'
+    bottomMarginPercent: number;
+  }): Promise<void>;
+
   // ── Quality ──
 
   /** Set max video resolution constraint. Pass 0,0 for auto (no restriction). */

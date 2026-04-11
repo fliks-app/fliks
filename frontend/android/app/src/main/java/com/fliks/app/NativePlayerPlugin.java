@@ -30,6 +30,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import java.util.ArrayList;
 import java.util.List;
 import androidx.media3.ui.AspectRatioFrameLayout;
+import androidx.media3.ui.CaptionStyleCompat;
 import androidx.media3.ui.SubtitleView;
 
 import com.getcapacitor.JSArray;
@@ -90,16 +91,16 @@ public class NativePlayerPlugin extends Plugin {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     Gravity.CENTER));
 
-            // Insert wrapper (video) behind the WebView
+            // Z-order: 0=wrapper (video) → 1=subtitleView → 2+=WebView (controls)
             android.webkit.WebView webView = getBridge().getWebView();
             ViewGroup webViewParent = (ViewGroup) webView.getParent();
+
             webViewParent.addView(wrapper, 0, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
 
-            // Subtitle overlay ABOVE the WebView (so text is always visible)
             subtitleView = new SubtitleView(getContext());
-            webViewParent.addView(subtitleView, new FrameLayout.LayoutParams(
+            webViewParent.addView(subtitleView, 1, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -390,6 +391,57 @@ public class NativePlayerPlugin extends Plugin {
         // for the frontend to track. The actual selection is done via selectSubtitleTrack.
         String id = call.getString("url", "ext-sub-" + System.currentTimeMillis());
         call.resolve(new JSObject().put("id", id));
+    }
+
+    // ── Subtitle Style ──
+
+    @PluginMethod()
+    public void setSubtitleStyle(PluginCall call) {
+        float fontScale = call.getFloat("fontScale", 1.0f);
+        String fgColor = call.getString("foregroundColor", "#FFFFFF");
+        String bgColor = call.getString("backgroundColor", "transparent");
+        String edgeType = call.getString("edgeType", "drop_shadow");
+        int bottomMargin = call.getInt("bottomMarginPercent", 10);
+
+        mainHandler.post(() -> {
+            if (subtitleView == null) { call.resolve(); return; }
+
+            int fg = parseColor(fgColor, Color.WHITE);
+            int bg = bgColor.equals("transparent") ? Color.TRANSPARENT : parseColor(bgColor, Color.TRANSPARENT);
+            int edge;
+            switch (edgeType) {
+                case "outline": edge = CaptionStyleCompat.EDGE_TYPE_OUTLINE; break;
+                case "raised": edge = CaptionStyleCompat.EDGE_TYPE_RAISED; break;
+                case "none": edge = CaptionStyleCompat.EDGE_TYPE_NONE; break;
+                default: edge = CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW; break;
+            }
+
+            CaptionStyleCompat style = new CaptionStyleCompat(
+                    fg,                              // foreground
+                    bg,                              // background
+                    Color.TRANSPARENT,               // window (around the cue box)
+                    edge,                            // edge type
+                    Color.BLACK,                     // edge color
+                    null);                           // typeface (null = default)
+
+            subtitleView.setStyle(style);
+            subtitleView.setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 18f * fontScale);
+
+            // Bottom margin via padding
+            int screenH = getActivity().getWindow().getDecorView().getHeight();
+            int paddingBottom = (int) (screenH * bottomMargin / 100f);
+            subtitleView.setPadding(0, 0, 0, paddingBottom);
+
+            call.resolve();
+        });
+    }
+
+    private int parseColor(String hex, int fallback) {
+        try {
+            return Color.parseColor(hex);
+        } catch (Exception e) {
+            return fallback;
+        }
     }
 
     // ── Quality ──

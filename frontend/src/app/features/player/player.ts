@@ -532,7 +532,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (this.isNative && mode !== 'direct') {
           await this.createNativeEngine();
 
-          // Pre-load subtitles so they're included in the ExoPlayer MediaItem
+          // Apply subtitle style to native player
+          const subSettings = this.playerSettings.get();
+          (this.engine as NativeEngine).setSubtitleStyle({
+            size: subSettings.subtitleSize,
+            color: subSettings.subtitleColor,
+            shadow: subSettings.subtitleShadow,
+            background: subSettings.subtitleBackground,
+            bottomMargin: subSettings.subtitleBottomMargin,
+          });
+
           // Pre-load subtitles so they're included in ExoPlayer's MediaItem (no rebuild needed)
           const subs = await this.trackManager.loadSubtitles(
             this.mediaId, this.mediaFileId, this.streamingApi, this.media,
