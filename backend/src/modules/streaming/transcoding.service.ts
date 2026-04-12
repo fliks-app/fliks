@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ChildProcess, spawn, execFile } from 'child_process';
 import { promisify } from 'util';
+import * as fs from 'fs';
 import { existsSync } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
@@ -555,6 +556,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Get a segment file path, waiting if it's being generated.
+   * Uses fs.watch for instant detection instead of polling.
    */
   async getSegmentPath(
     session: TranscodeSession,
@@ -562,26 +564,89 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ): Promise<string | null> {
     const segPath = path.join(session.cachePath, segmentName);
 
-    // Wait up to 60s for the segment to appear (GPU can be slow when multiple transcodes run)
+    // Fast path: already exists
+    if (await fileExists(segPath)) {
+      return this.waitStableSegment(segPath);
+    }
+
+    // If FFmpeg already exited, no point waiting
+    if (session.process.exitCode !== null) {
+      this.log.warn(
+        `Segment ${segmentName} unavailable: FFmpeg exited with code ${session.process.exitCode}`,
+      );
+      return null;
+    }
+
+    // Watch the directory for segment creation (instant detection vs 500ms polling)
+    const watchDir = path.dirname(segPath);
+    const targetFile = path.basename(segPath);
+
+    return new Promise<string | null>((resolve) => {
+      let resolved = false;
+      const cleanup = () => {
+        try { watcher?.close(); } catch { /* ignore */ }
+        clearTimeout(timeout);
+        session.process.removeListener('exit', onExit);
+      };
+      const done = (result: string | null) => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
+        resolve(result);
+      };
+
+      const timeout = setTimeout(() => done(null), 60_000);
+      const onExit = () => done(null);
+
+      let watcher: ReturnType<typeof fs.watch> | undefined;
+      try {
+        watcher = fs.watch(watchDir, async (_, filename) => {
+          if (filename === targetFile) {
+            done(await this.waitStableSegment(segPath));
+          }
+        });
+        watcher.on('error', () => done(null));
+      } catch {
+        clearTimeout(timeout);
+        resolve(this.pollForSegment(session, segPath));
+        return;
+      }
+
+      session.process.on('exit', onExit);
+
+      // Re-check after setting up watcher (file may have appeared in the gap)
+      fileExists(segPath).then((exists) => {
+        if (exists) this.waitStableSegment(segPath).then(done);
+      });
+    });
+  }
+
+  /** Wait for a segment file to stop growing (write complete). */
+  private async waitStableSegment(segPath: string): Promise<string | null> {
+    try {
+      const size1 = (await fsp.stat(segPath)).size;
+      await new Promise((r) => setTimeout(r, 150));
+      const size2 = (await fsp.stat(segPath)).size;
+      if (size1 === size2 && size1 > 0) return segPath;
+      // Still writing — wait a bit more
+      await new Promise((r) => setTimeout(r, 200));
+      return segPath;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Fallback polling for when fs.watch isn't available. */
+  private async pollForSegment(
+    session: TranscodeSession,
+    segPath: string,
+  ): Promise<string | null> {
     for (let i = 0; i < 120; i++) {
-      // If FFmpeg has exited, stop waiting immediately
       if (session.process.exitCode !== null && !(await fileExists(segPath))) {
-        this.log.warn(
-          `Segment ${segmentName} unavailable: FFmpeg exited with code ${session.process.exitCode}`,
-        );
         return null;
       }
       if (await fileExists(segPath)) {
-        try {
-          // Wait a bit more to ensure writing is complete
-          const size1 = (await fsp.stat(segPath)).size;
-          await new Promise((r) => setTimeout(r, 200));
-          const size2 = (await fsp.stat(segPath)).size;
-          if (size1 === size2 && size1 > 0) return segPath;
-        } catch {
-          // File was removed between exists check and stat (session killed)
-          return null;
-        }
+        return this.waitStableSegment(segPath);
       }
       await new Promise((r) => setTimeout(r, 500));
     }
@@ -772,6 +837,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const promises: Promise<void>[] = [];
     const session = this.sessions.get(key);
     if (session) {
+      this.log.log(`Kill session [${key}] (quality: ${session.quality})`);
       this.sessions.delete(key);
       promises.push(this.killAndClean(session.process, session.cachePath));
     }

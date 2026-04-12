@@ -15,7 +15,6 @@ const PLAYER_QUALITY_STORAGE_KEY = 'player.qualityId';
  * when no variant meets the restriction (very slow network / low source res).
  */
 const ABR_DEFAULT_BANDWIDTH_ESTIMATE = 4_500_000;
-const ABR_MIN_HEIGHT_PREFERENCE = 720;
 
 @Injectable({ providedIn: 'root' })
 export class QualityManagerService {
@@ -105,26 +104,12 @@ export class QualityManagerService {
 
     if (option.id === 'auto') {
       if (playbackMode !== 'direct') {
-        // Optimistic ABR for HLS: bias toward 720p+, still allowed to drop if needed
+        // ABR for HLS: bias toward higher quality with optimistic bandwidth estimate
         engine.configure({
           abr: {
             enabled: true,
             defaultBandwidthEstimate: ABR_DEFAULT_BANDWIDTH_ESTIMATE,
             useNetworkInformation: true,
-            restrictions: {
-              minWidth: 0,
-              maxWidth: Infinity,
-              minHeight: ABR_MIN_HEIGHT_PREFERENCE,
-              maxHeight: Infinity,
-              minPixels: 0,
-              maxPixels: Infinity,
-              minFrameRate: 0,
-              maxFrameRate: Infinity,
-              minBandwidth: 0,
-              maxBandwidth: Infinity,
-              minChannelsCount: 0,
-              maxChannelsCount: Infinity,
-            },
           },
         });
       } else {

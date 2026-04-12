@@ -217,7 +217,10 @@ export class StreamingController {
       mediaFileId,
       deviceProfile.supportsHlsFmp4 ?? true,
     );
-    return result;
+
+    // Include duration so the player can skip ffprobe in hlsPlaylist
+    const duration = resolved.mediaFile.streamInfo?.durationSeconds ?? 0;
+    return { ...result, durationSeconds: duration };
   }
 
   // ---------------------------------------------------------------------------
@@ -488,47 +491,53 @@ export class StreamingController {
       throw new BadRequestException(`Invalid quality: ${quality}`);
     }
     const resolved = await this.streamingService.resolveFile(mediaFileId);
-    const duration = await this.resolveDuration(
-      mediaFileId,
-      resolved.absolutePath,
-      resolved.mediaFile.streamInfo,
-    );
+    // Use client-provided duration (from playbackInfo) to skip ffprobe
+    const durationHint = firstQueryString(req.query, 'duration');
+    const duration = (durationHint ? parseFloat(durationHint) : 0)
+      || await this.resolveDuration(
+        mediaFileId,
+        resolved.absolutePath,
+        resolved.mediaFile.streamInfo,
+      );
     if (!duration) {
       res.status(404).send('Duration unknown — rescan the file first');
       return;
     }
 
-    // Pre-start transcoding so the first segment is ready when the player requests it.
-    // Only if no session already exists (Shaka loads multiple playlists in parallel).
-    const existing = this.transcodingService.getExistingSession(
-      mediaFileId,
-      req.user?.id,
-    );
-    if (!existing || existing.process.exitCode !== null) {
-      // startAt query param: Cast passes the resume position so we pre-start at the right segment
-      const startAtRaw = firstQueryString(req.query, 'startAt');
-      const startAtSec = startAtRaw ? parseInt(startAtRaw, 10) : 0;
-      const startSegment = startAtSec > 0 ? Math.floor(startAtSec / 6) : 0;
-
-      const ctx = this.buildSessionContext(req, resolved, mediaFileId);
-      if (quality === 'remux') {
-        const copyAudio =
-          firstQueryString(req.query, 'copyAudio') !== 'false';
-        void this.transcodingService.getOrCreateRemuxSession(
-          mediaFileId,
-          resolved.absolutePath,
-          copyAudio,
-          startSegment,
-          ctx,
-        );
-      } else {
-        void this.transcodingService.getOrCreateSession(
-          mediaFileId,
-          quality,
-          resolved.absolutePath,
-          startSegment,
-          ctx,
-        );
+    // No pre-start here: Shaka loads ALL variant playlists in parallel,
+    // and pre-starting would create a session at whichever quality arrives first (often 360p).
+    // The session is created on first actual segment request (with the correct quality
+    // selected by the frontend's ABR lock).
+    // Exception: Cast passes startAt for resume position — pre-start for Cast/remux only.
+    const startAtRaw = firstQueryString(req.query, 'startAt');
+    if (startAtRaw) {
+      const existing = this.transcodingService.getExistingSession(
+        mediaFileId,
+        req.user?.id,
+      );
+      if (!existing || existing.process.exitCode !== null) {
+        const startAtSec = parseInt(startAtRaw, 10);
+        const startSegment = startAtSec > 0 ? Math.floor(startAtSec / 6) : 0;
+        const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+        if (quality === 'remux') {
+          const copyAudio =
+            firstQueryString(req.query, 'copyAudio') !== 'false';
+          void this.transcodingService.getOrCreateRemuxSession(
+            mediaFileId,
+            resolved.absolutePath,
+            copyAudio,
+            startSegment,
+            ctx,
+          );
+        } else {
+          void this.transcodingService.getOrCreateSession(
+            mediaFileId,
+            quality,
+            resolved.absolutePath,
+            startSegment,
+            ctx,
+          );
+        }
       }
     }
 
@@ -580,9 +589,7 @@ export class StreamingController {
 
     const resolved = await this.streamingService.resolveFile(mediaFileId);
 
-    // Parse segment index (seg-042.ts → 42, seg-042.m4s → 42, init.mp4 → 0)
     // For init.mp4: serve from existing session without triggering quality changes.
-    // Shaka probes init segments from multiple qualities to build segment indexes.
     if (segment.startsWith('init')) {
       const existing = this.transcodingService.getExistingSession(
         mediaFileId,

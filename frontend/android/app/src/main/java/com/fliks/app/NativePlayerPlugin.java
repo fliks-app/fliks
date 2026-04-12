@@ -28,6 +28,8 @@ import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.hls.HlsMediaSource;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection;
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import java.util.ArrayList;
 import java.util.List;
 import androidx.media3.ui.AspectRatioFrameLayout;
@@ -204,7 +206,18 @@ public class NativePlayerPlugin extends Plugin {
             // DefaultDataSource wraps httpFactory for HTTP + FileDataSource for file:// URLs
             DefaultDataSource.Factory dataSourceFactory = new DefaultDataSource.Factory(getContext(), httpFactory);
             DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory);
+            // Stabilised ABR: reduce quality oscillations
+            AdaptiveTrackSelection.Factory trackSelectionFactory =
+                    new AdaptiveTrackSelection.Factory(
+                            /* minDurationForQualityIncreaseMs= */ 10_000,
+                            /* maxDurationForQualityDecreaseMs= */ 25_000,
+                            /* minDurationToRetainAfterDiscardMs= */ 25_000,
+                            /* bandwidthFraction= */ 0.7f
+                    );
+            DefaultTrackSelector trackSelector = new DefaultTrackSelector(getContext(), trackSelectionFactory);
+
             player = new ExoPlayer.Builder(getContext())
+                    .setTrackSelector(trackSelector)
                     .setMediaSourceFactory(mediaSourceFactory)
                     .setWakeMode(C.WAKE_MODE_NETWORK)
                     .build();

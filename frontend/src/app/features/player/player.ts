@@ -455,6 +455,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.episodeId = qp['episodeId'] ? +qp['episodeId'] : undefined;
     const resumeTime = 't' in qp ? +qp['t'] : undefined;
 
+    // Subtitle loading promise — started early for Shaka path, resolved later
+    let subsPromise: Promise<any[]> | null = null;
+
     try {
       // Only use offline playback if explicitly requested via query param
       const offlineCheck = qp['offline'] === '1'
@@ -462,9 +465,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         : null;
       if (offlineCheck) this.isOfflinePlayback = true;
 
-      // Load media info (skip if offline)
+      // Load media info + playback state + kill stale sessions in parallel
+      let startTime: number | undefined = resumeTime ?? undefined;
       if (this.mediaId && !this.isOfflinePlayback) {
-        const media = await this.mediaService.getOne(this.mediaId);
+        const [media, playbackState] = await Promise.all([
+          this.mediaService.getOne(this.mediaId),
+          startTime == null
+            ? this.streamingApi.getPlaybackState(this.mediaId, this.episodeId).catch(() => null)
+            : Promise.resolve(null),
+          this.streamingApi.stopSessions(this.mediaFileId).catch(() => {}),
+        ]);
+
         this.media = media;
         this.mediaTitle.set(media.title);
         if (media.fanartUrl) this.fanartUrl.set(this.serverConfig.resolveUrl(media.fanartUrl));
@@ -487,6 +498,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (knownDuration && knownDuration > 0) {
           this.state.duration.set(knownDuration);
         }
+
+        // Resume position from playback state
+        if (startTime == null && playbackState && !playbackState.completed && playbackState.positionSeconds > 10) {
+          startTime = playbackState.positionSeconds;
+        }
       }
 
       // Set MediaSession metadata
@@ -499,17 +515,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           artist: this.episodeTitle() ? this.mediaTitle() : undefined,
           artwork,
         });
-      }
-
-      // Determine resume position
-      let startTime: number | undefined = resumeTime ?? undefined;
-      if (startTime == null) {
-        try {
-          const playbackState = await this.streamingApi.getPlaybackState(this.mediaId, this.episodeId);
-          if (playbackState && !playbackState.completed && playbackState.positionSeconds > 10) {
-            startTime = playbackState.positionSeconds;
-          }
-        } catch { /* playback state may not be available */ }
       }
 
       if (this.isOfflinePlayback) {
@@ -534,10 +539,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         );
         this.activeAudioStreamIndex = preselectedAudioIndex;
 
-        // Kill any stale session (e.g. Cast used TS, now player needs fMP4, or vice versa)
-        await this.streamingApi.stopSessions(this.mediaFileId).catch(() => {});
-
-        // Ask the backend to decide how to play
+        // Ask the backend to decide how to play (stopSessions already called in parallel above)
         const deviceProfile = this.deviceProfileService.getProfile();
         this.playbackInfo = await this.streamingApi.getPlaybackInfo(
           this.mediaFileId, deviceProfile, undefined, preselectedAudioIndex,
@@ -592,19 +594,27 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         } else {
           await this.createShakaEngine();
 
+          // Start subtitle loading in parallel with engine.load (Shaka doesn't need them upfront)
+          subsPromise = this.trackManager.loadSubtitles(
+            this.mediaId, this.mediaFileId, this.streamingApi, this.media,
+          );
+
           if (mode === 'direct') {
             const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
             await this.engine!.load(streamUrl, startTime, 'video/mp4');
           } else {
-            if (this.activeQualityId() === 'auto') {
-              this.qualityManager.selectQuality(
-                { id: 'auto', label: 'Auto', height: 0 },
-                this.engine, mode, true,
-              );
-            }
+            // Full master playlist. ABR disabled, Shaka lazy-loads only the picked variant.
+            // Problem: Shaka picks a default variant DURING load() before we can selectVariantTrack.
+            // Solution: use a request filter to block requests for wrong quality init.mp4/segments
+            // during startup. The filter is removed after the first segment succeeds.
+            const savedQualityId = this.activeQualityId();
+            const targetQuality = savedQualityId !== 'auto' ? savedQualityId : '720p';
 
             this.engine!.configure({
+              abr: { enabled: false },
               streaming: {
+                bufferingGoal: 30,
+                rebufferingGoal: 5,
                 retryParameters: { timeout: 60_000, maxAttempts: 5, baseDelay: 1000 },
               },
               manifest: {
@@ -614,6 +624,34 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
             const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId);
             await this.engine!.load(hlsUrl);
+
+            // After load: select the correct variant (Shaka may have picked wrong one)
+            const targetHeight = this.qualityManager.availableQualities()
+              .find(q => q.id === targetQuality)?.height ?? 720;
+            const match = this.findVariantByQualityId(targetQuality, targetHeight);
+            if (match) {
+              const active = this.getActiveVariant();
+              if (!active || active.id !== match.id) {
+                this.engine!.selectVariantTrack(match, true);
+              }
+            }
+
+            // Auto mode: enable ABR after playback starts (prevents thrashing during buffering)
+            if (savedQualityId === 'auto') {
+              const video = this.videoEl()?.nativeElement;
+              if (video) {
+                video.addEventListener('playing', () => {
+                  this.engine?.configure({
+                    abr: {
+                      enabled: true,
+                      switchInterval: 10,
+                      bandwidthUpgradeTarget: 0.85,
+                      bandwidthDowngradeTarget: 0.95,
+                    },
+                  });
+                }, { once: true });
+              }
+            }
           }
 
           // Resume position (Shaka needs to buffer before accepting a seek)
@@ -630,6 +668,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
               }
             }
           }
+
         }
       }
 
@@ -640,9 +679,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         await this.loadOfflineSubtitles();
         this.loadAudioTracks();
       } else if (!this.availableSubtitles().length) {
-        const subs = await this.trackManager.loadSubtitles(
-          this.mediaId, this.mediaFileId, this.streamingApi, this.media,
-        );
+        // subsPromise was started in parallel with engine.load (Shaka path)
+        // For native path, subtitles are already preloaded above
+        const subs = subsPromise
+          ? await subsPromise
+          : await this.trackManager.loadSubtitles(this.mediaId, this.mediaFileId, this.streamingApi, this.media);
         this.availableSubtitles.set(subs);
         this.loadAudioTracks();
       } else {
@@ -1074,8 +1115,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       this.availableAudioTracks.set(tracks);
       // Set active to the currently playing one
-      const allVariants = this.engine.getVariantTracks();
-      const active = allVariants.find((v: any) => v.active);
+      const active = this.getActiveVariant();
       if (active?.audioId != null) {
         this.activeAudioTrackId.set(`shaka-${active.audioId}`);
       }
@@ -1242,10 +1282,41 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.statsVisible.set(false);
   }
 
-  onSelectQualityById(id: string) {
+  async onSelectQualityById(id: string) {
     const option = this.availableQualities().find(q => q.id === id);
-    if (option) {
-      this.qualityManager.selectQuality(option, this.engine, this.playbackMode());
+    if (!option) return;
+    const mode = this.playbackMode();
+
+    if (mode !== 'direct' && this.engine) {
+      this.qualityManager.activeQualityId.set(id);
+      this.qualityManager.persistPreference(id);
+
+      if (id === 'auto') {
+        // Enable ABR — Shaka handles variant switching via lazy-load
+        this.engine.configure({
+          abr: {
+            enabled: true,
+            switchInterval: 10,
+            bandwidthUpgradeTarget: 0.85,
+            bandwidthDowngradeTarget: 0.95,
+          },
+        });
+      } else {
+        // Fixed quality: disable ABR, kill session if quality changes, select variant.
+        // Shaka lazy-loads the new variant playlist + fetches new init.mp4.
+        // Backend creates new FFmpeg at the requested quality.
+        this.engine.configure({ abr: { enabled: false } });
+        const match = this.findVariantByQualityId(id, option.height);
+        if (match) {
+          const active = this.getActiveVariant();
+          if (!active || active.id !== match.id) {
+            await this.streamingApi.stopSessions(this.mediaFileId).catch(() => {});
+          }
+          this.engine.selectVariantTrack(match, true);
+        }
+      }
+    } else {
+      this.qualityManager.selectQuality(option, this.engine, mode);
     }
     this.resetHideTimer();
   }
@@ -1304,6 +1375,24 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!this.mediaFileId || this.playbackMode() === 'direct') return;
     const url = this.streamingApi.getStopSessionsUrl(this.mediaFileId);
     fetch(url, { method: 'DELETE', keepalive: true }).catch(() => {});
+  }
+
+  /** Find a variant track matching a quality id (e.g. '480p', 'original') by URL or height fallback. */
+  private findVariantByQualityId(qualityId: string, targetHeight: number): any | null {
+    if (!this.engine) return null;
+    const tracks = this.engine.getVariantTracks();
+    if (!tracks.length) return null;
+    const qualityPath = `/${qualityId}/`;
+    return tracks.find((t: any) =>
+      t.originalVideoId?.includes(qualityPath) || t.label === qualityId,
+    ) ?? tracks.reduce((a: any, b: any) =>
+      Math.abs((a.height ?? 0) - targetHeight) <= Math.abs((b.height ?? 0) - targetHeight) ? a : b,
+    );
+  }
+
+  /** Get the currently active variant track. */
+  private getActiveVariant(): any | null {
+    return this.engine?.getVariantTracks()?.find((t: any) => t.active) ?? null;
   }
 
   private stopStreamingSessions() {
