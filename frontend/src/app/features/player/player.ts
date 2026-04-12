@@ -39,7 +39,7 @@ import { NativeEngine } from '../../core/services/playback-engine/native-engine'
 import { CastEngine } from '../../core/services/playback-engine/cast-engine';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { TrackManagerService, SubtitleOption } from '../../core/services/track-manager.service';
-import { QualityManagerService } from '../../core/services/quality-manager.service';
+import { QualityManagerService, findVariantByProfileName, findBestVariantForHeight } from '../../core/services/quality-manager.service';
 
 interface ImmersivePlugin {
   enter(options?: { displayBehindNotch?: boolean }): Promise<void>;
@@ -322,7 +322,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       : '';
 
     // --- Video label ---
-    const resLabel = this.qualityManager.resolutionLabel(playingWidth, playingHeight);
+    // Use profile name from active variant URL (e.g. "360p") instead of raw resolution
+    const active = this.getActiveVariant();
+    const urlMatch = active?.originalVideoId?.match(/\/(\d+p)\//);
+    const resLabel = urlMatch?.[1]
+      ?? this.qualityManager.resolutionLabel(playingWidth, playingHeight);
     const hdrTag = src?.hdrFormat ? ` ${src.hdrFormat}` : '';
     const codecName = (src?.videoCodec ?? '?').toUpperCase();
     const videoLabel = `${resLabel}${hdrTag} ${codecName}`;
@@ -339,7 +343,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (rateMap && qId !== 'auto' && qId !== 'original' && rateMap[qId]) {
       selectedRateEntry = rateMap[qId];
     } else if (rateMap && (qId === 'auto' || qId === 'original')) {
-      const tier = this.qualityManager.transcodeTierFromVariantHeight(activeVariant?.height ?? 0);
+      const tier = urlMatch?.[1] ?? this.qualityManager.transcodeTierFromVariantHeight(activeVariant?.height ?? 0);
       if (tier && rateMap[tier]) selectedRateEntry = rateMap[tier];
     }
 
@@ -603,18 +607,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
             await this.engine!.load(streamUrl, startTime, 'video/mp4');
           } else {
-            // Full master playlist. ABR disabled, Shaka lazy-loads only the picked variant.
-            // Problem: Shaka picks a default variant DURING load() before we can selectVariantTrack.
-            // Solution: use a request filter to block requests for wrong quality init.mp4/segments
-            // during startup. The filter is removed after the first segment succeeds.
-            const savedQualityId = this.activeQualityId();
-            const targetQuality = savedQualityId !== 'auto' ? savedQualityId : '720p';
+            if (this.activeQualityId() === 'auto') {
+              this.qualityManager.selectQuality(
+                { id: 'auto', label: 'Auto', height: 0 },
+                this.engine, mode, true,
+              );
+            }
 
             this.engine!.configure({
-              abr: { enabled: false },
               streaming: {
-                bufferingGoal: 30,
-                rebufferingGoal: 5,
                 retryParameters: { timeout: 60_000, maxAttempts: 5, baseDelay: 1000 },
               },
               manifest: {
@@ -624,34 +625,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
             const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId);
             await this.engine!.load(hlsUrl);
-
-            // After load: select the correct variant (Shaka may have picked wrong one)
-            const targetHeight = this.qualityManager.availableQualities()
-              .find(q => q.id === targetQuality)?.height ?? 720;
-            const match = this.findVariantByQualityId(targetQuality, targetHeight);
-            if (match) {
-              const active = this.getActiveVariant();
-              if (!active || active.id !== match.id) {
-                this.engine!.selectVariantTrack(match, true);
-              }
-            }
-
-            // Auto mode: enable ABR after playback starts (prevents thrashing during buffering)
-            if (savedQualityId === 'auto') {
-              const video = this.videoEl()?.nativeElement;
-              if (video) {
-                video.addEventListener('playing', () => {
-                  this.engine?.configure({
-                    abr: {
-                      enabled: true,
-                      switchInterval: 10,
-                      bandwidthUpgradeTarget: 0.85,
-                      bandwidthDowngradeTarget: 0.95,
-                    },
-                  });
-                }, { once: true });
-              }
-            }
           }
 
           // Resume position (Shaka needs to buffer before accepting a seek)
@@ -728,9 +701,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const stats = this.engine?.getStats();
         const variant = stats?.activeVariant;
         if (variant?.height) {
-          this.qualityManager.activeResolution.set(
-            this.qualityManager.resolutionLabel(variant.width, variant.height),
-          );
+          // Extract profile name from active variant URL (e.g. "/720p/" → "720p")
+          const active = this.getActiveVariant();
+          const urlMatch = active?.originalVideoId?.match(/\/(\d+p)\//);
+          const label = urlMatch?.[1]
+            ?? this.qualityManager.resolutionLabel(variant.width, variant.height);
+          this.qualityManager.activeResolution.set(label);
         }
         if (this.statsVisible()) {
           this.state.currentTime.set(this.engine?.currentTime ?? 0);
@@ -1282,41 +1258,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.statsVisible.set(false);
   }
 
-  async onSelectQualityById(id: string) {
+  onSelectQualityById(id: string) {
     const option = this.availableQualities().find(q => q.id === id);
-    if (!option) return;
-    const mode = this.playbackMode();
-
-    if (mode !== 'direct' && this.engine) {
-      this.qualityManager.activeQualityId.set(id);
-      this.qualityManager.persistPreference(id);
-
-      if (id === 'auto') {
-        // Enable ABR — Shaka handles variant switching via lazy-load
-        this.engine.configure({
-          abr: {
-            enabled: true,
-            switchInterval: 10,
-            bandwidthUpgradeTarget: 0.85,
-            bandwidthDowngradeTarget: 0.95,
-          },
-        });
-      } else {
-        // Fixed quality: disable ABR, kill session if quality changes, select variant.
-        // Shaka lazy-loads the new variant playlist + fetches new init.mp4.
-        // Backend creates new FFmpeg at the requested quality.
-        this.engine.configure({ abr: { enabled: false } });
-        const match = this.findVariantByQualityId(id, option.height);
-        if (match) {
-          const active = this.getActiveVariant();
-          if (!active || active.id !== match.id) {
-            await this.streamingApi.stopSessions(this.mediaFileId).catch(() => {});
-          }
-          this.engine.selectVariantTrack(match, true);
-        }
-      }
-    } else {
-      this.qualityManager.selectQuality(option, this.engine, mode);
+    if (option) {
+      this.qualityManager.selectQuality(option, this.engine, this.playbackMode());
     }
     this.resetHideTimer();
   }
@@ -1382,12 +1327,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!this.engine) return null;
     const tracks = this.engine.getVariantTracks();
     if (!tracks.length) return null;
-    const qualityPath = `/${qualityId}/`;
-    return tracks.find((t: any) =>
-      t.originalVideoId?.includes(qualityPath) || t.label === qualityId,
-    ) ?? tracks.reduce((a: any, b: any) =>
-      Math.abs((a.height ?? 0) - targetHeight) <= Math.abs((b.height ?? 0) - targetHeight) ? a : b,
-    );
+    return findVariantByProfileName(tracks, qualityId)
+      ?? findBestVariantForHeight(tracks, targetHeight);
   }
 
   /** Get the currently active variant track. */

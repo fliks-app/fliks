@@ -16,6 +16,28 @@ const PLAYER_QUALITY_STORAGE_KEY = 'player.qualityId';
  */
 const ABR_DEFAULT_BANDWIDTH_ESTIMATE = 4_500_000;
 
+/**
+ * Find a variant track by profile name in the variant URL (e.g. '480p' matches '/480p/').
+ * Returns null if no match found.
+ */
+export function findVariantByProfileName(tracks: any[], profileName: string): any | null {
+  const path = `/${profileName}/`;
+  return tracks.find((t: any) => t.originalVideoId?.includes(path)) ?? null;
+}
+
+/**
+ * Find the best variant track for a target height:
+ * pick the largest height that is ≤ targetHeight.
+ * If none fits (all tracks are above target), pick the smallest.
+ */
+export function findBestVariantForHeight(tracks: any[], targetHeight: number): any {
+  const below = tracks.filter((t: any) => (t.height ?? 0) <= targetHeight);
+  if (below.length) {
+    return below.reduce((a: any, b: any) => ((a.height ?? 0) >= (b.height ?? 0) ? a : b));
+  }
+  return tracks.reduce((a: any, b: any) => ((a.height ?? 0) <= (b.height ?? 0) ? a : b));
+}
+
 @Injectable({ providedIn: 'root' })
 export class QualityManagerService {
   readonly activeQualityId = signal('auto');
@@ -142,10 +164,9 @@ export class QualityManagerService {
       const best = candidates.reduce((a: any, b: any) => ((a.height ?? 0) >= (b.height ?? 0) ? a : b));
       engine.selectVariantTrack(best, true);
     } else {
-      const target = option.height;
-      const match = candidates.reduce((a: any, b: any) =>
-        Math.abs((a.height ?? 0) - target) <= Math.abs((b.height ?? 0) - target) ? a : b,
-      );
+      // Match by variant URL (e.g. "/480p/" in originalVideoId) to avoid crop/alignment issues
+      const match = findVariantByProfileName(candidates, option.id)
+        ?? findBestVariantForHeight(candidates, option.height);
       engine.selectVariantTrack(match, true);
     }
   }
