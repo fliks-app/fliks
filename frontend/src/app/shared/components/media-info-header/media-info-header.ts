@@ -366,15 +366,12 @@ export class MediaInfoHeaderComponent {
   async onDeleteFileClick() {
     const fileId = this.selectedFileId();
     if (!fileId) return;
-    const result = await this.confirmation.choose({
+    const confirmed = await this.confirmation.confirm({
       title: this.translate.instant('common.confirm'),
       message: this.translate.instant('media_detail.confirm_delete_file_disk'),
-      confirmLabel: this.translate.instant('media_detail.delete_file_disk'),
-      cancelLabel: this.translate.instant('media_detail.untrack_file'),
-      dismissLabel: this.translate.instant('common.cancel'),
       variant: 'danger',
     });
-    if (result === null) return;
-    this.deleteFile.emit({ fileId, deleteOnDisk: result });
+    if (!confirmed) return;
+    this.deleteFile.emit({ fileId, deleteOnDisk: true });
   }
 }

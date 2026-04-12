@@ -74,24 +74,6 @@
     <!-- Library info + genres -->
     @if (path() || qualityProfileName() || languageProfileName() || tags().length || genres().length) {
       <div class="flex flex-wrap gap-x-6 gap-y-2 mt-4">
-        @if (path()) {
-          <div class="flex flex-col">
-            <span class="text-base-content/40 text-sm">{{ 'media_detail.root_folder_label' | translate }}</span>
-            <span class="font-mono">{{ path() }}</span>
-          </div>
-        }
-        @if (qualityProfileName()) {
-          <div class="flex flex-col">
-            <span class="text-base-content/40 text-sm">{{ 'media_detail.quality_profile_label' | translate }}</span>
-            <span>{{ qualityProfileName() }}</span>
-          </div>
-        }
-        @if (languageProfileName()) {
-          <div class="flex flex-col">
-            <span class="text-base-content/40 text-sm">{{ 'media_detail.language_profile_label' | translate }}</span>
-            <span>{{ languageProfileName() }}</span>
-          </div>
-        }
         @if (tags().length) {
           <div class="flex flex-col">
             <span class="text-base-content/40 text-sm">{{ 'media_detail.tags_label' | translate }}</span>
@@ -125,7 +107,7 @@
 
     <!-- Progress bar -->
     @if (resumeLabel() && progressPercent() > 0) {
-      <div class="mt-2">
+      <div class="mt-4">
         <div class="w-full bg-base-300 rounded-full h-1.5">
           <div class="bg-primary rounded-full h-1.5 transition-all" [style.width.%]="progressPercent()"></div>
         </div>
@@ -136,61 +118,62 @@
     }
 
     <!-- Action icons row -->
-    @if (selectedFileId()) {
-      <div class="flex items-center justify-center gap-6 mt-4">
-        <button class="flex flex-col items-center gap-1" [class.text-success]="watched()" (click)="onToggleWatched()">
-          <svg lucideCheck class="h-6 w-6"></svg>
+    <div class="flex items-center justify-center gap-6 mt-4">
+      @if (!selectedFileId()) { <div class="flex-1"></div> }
+      @if (selectedFileId()) {
+        <button class="flex flex-col items-center gap-1 text-sm" [class.text-success]="watched()" (click)="onToggleWatched()">
+          <svg lucideCheck class="h-5 w-5"></svg>
           {{ 'media_info.watched' | translate }}
         </button>
-        <button class="flex flex-col items-center gap-1" (click)="openDownload.emit()">
-          <svg lucideDownload class="h-6 w-6"></svg>
+        <button class="flex flex-col items-center gap-1 text-sm" (click)="openDownload.emit()">
+          <svg lucideDownload class="h-5 w-5"></svg>
           {{ 'downloads.download' | translate }}
         </button>
-        <button class="flex flex-col items-center gap-1 text-error" (click)="onDeleteFileClick()">
-          <svg lucideTrash2 class="h-6 w-6"></svg>
+        <button class="flex flex-col items-center gap-1 text-sm text-error" (click)="onDeleteFileClick()">
+          <svg lucideTrash2 class="h-5 w-5"></svg>
           {{ 'media_detail.delete' | translate }}
         </button>
-        <div class="dropdown dropdown-end">
-          <div tabindex="0" role="button" class="flex flex-col items-center gap-1 cursor-pointer">
-            <svg lucideEllipsisVertical class="h-6 w-6"></svg>
-            {{ 'common.more' | translate }}
-          </div>
-          <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-56 p-2 shadow-lg">
-            @if (resumeLabel()) {
-              <li><a class="flex items-center gap-3" (click)="play(true)">
-                <svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>
-                {{ 'player.play_from_start' | translate }}
-              </a></li>
-            }
-            @if (canGrab()) {
-              <li><a class="flex items-center gap-3" (click)="grabBest.emit()" [class.pointer-events-none]="grabBusy() !== null">
-                @if (grabBusy() === 'best') { <span class="loading loading-spinner loading-xs"></span> }
-                @else { <svg lucideDownload class="h-4 w-4 shrink-0 opacity-70"></svg> }
-                {{ 'media_detail.grab_best' | translate }}
-              </a></li>
-              <li><a class="flex items-center gap-3" (click)="loadReleases.emit()" [class.pointer-events-none]="releasesLoading()">
-                @if (releasesLoading()) { <span class="loading loading-spinner loading-xs"></span> }
-                @else { <svg lucideSearch class="h-4 w-4 shrink-0 opacity-70"></svg> }
-                {{ 'media_detail.search_releases' | translate }}
-              </a></li>
-            }
-            @if (canEditProfiles()) {
-              <li><a class="flex items-center gap-3" (click)="openProfiles.emit()"><svg lucideSettings class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_profiles' | translate }}</a></li>
-              <li><a class="flex items-center gap-3" (click)="openRootFolder.emit()"><svg lucideFolder class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_root_folder' | translate }}</a></li>
-            }
-            @if (isAdmin()) {
-              <li><a class="flex items-center gap-3" (click)="refreshMetadata.emit()"><svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.refresh_metadata' | translate }}</a></li>
-              <li><a class="flex items-center gap-3" (click)="rescanFiles.emit()"><svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.rescan_files' | translate }}</a></li>
-              <li><a class="flex items-center gap-3" (click)="toggleMonitored.emit()">
-                @if (monitored()) { <svg lucideEyeOff class="h-4 w-4 shrink-0 opacity-70"></svg> {{ 'media_detail.unmonitor' | translate }} }
-                @else { <svg lucideEye class="h-4 w-4 shrink-0 opacity-70"></svg> {{ 'media_detail.monitor' | translate }} }
-              </a></li>
-              <li><a class="flex items-center gap-3 text-error" (click)="deleteMedia.emit()"><svg lucideTrash2 class="h-4 w-4 shrink-0"></svg>{{ 'media_detail.delete' | translate }}</a></li>
-            }
-          </ul>
+      }
+      <div class="dropdown dropdown-end">
+        <div tabindex="0" role="button" class="flex flex-col items-center gap-1 text-sm cursor-pointer">
+          <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+          {{ 'common.more' | translate }}
         </div>
+        <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-56 p-2 shadow-lg">
+          @if (resumeLabel()) {
+            <li><a class="flex items-center gap-3" (click)="play(true)">
+              <svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>
+              {{ 'player.play_from_start' | translate }}
+            </a></li>
+          }
+          @if (canGrab()) {
+            <li><a class="flex items-center gap-3" (click)="grabBest.emit()" [class.pointer-events-none]="grabBusy() !== null">
+              @if (grabBusy() === 'best') { <span class="loading loading-spinner loading-xs"></span> }
+              @else { <svg lucideDownload class="h-4 w-4 shrink-0 opacity-70"></svg> }
+              {{ 'media_detail.grab_best' | translate }}
+            </a></li>
+            <li><a class="flex items-center gap-3" (click)="loadReleases.emit()" [class.pointer-events-none]="releasesLoading()">
+              @if (releasesLoading()) { <span class="loading loading-spinner loading-xs"></span> }
+              @else { <svg lucideSearch class="h-4 w-4 shrink-0 opacity-70"></svg> }
+              {{ 'media_detail.search_releases' | translate }}
+            </a></li>
+          }
+          @if (canEditProfiles()) {
+            <li><a class="flex items-center gap-3" (click)="openProfiles.emit()"><svg lucideSettings class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_profiles' | translate }}</a></li>
+            <li><a class="flex items-center gap-3" (click)="openRootFolder.emit()"><svg lucideFolder class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_root_folder' | translate }}</a></li>
+          }
+          @if (isAdmin()) {
+            <li><a class="flex items-center gap-3" (click)="refreshMetadata.emit()"><svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.refresh_metadata' | translate }}</a></li>
+            <li><a class="flex items-center gap-3" (click)="rescanFiles.emit()"><svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.rescan_files' | translate }}</a></li>
+            <li><a class="flex items-center gap-3" (click)="toggleMonitored.emit()">
+              @if (monitored()) { <svg lucideEyeOff class="h-4 w-4 shrink-0 opacity-70"></svg> {{ 'media_detail.unmonitor' | translate }} }
+              @else { <svg lucideEye class="h-4 w-4 shrink-0 opacity-70"></svg> {{ 'media_detail.monitor' | translate }} }
+            </a></li>
+            <li><a class="flex items-center gap-3 text-error" (click)="deleteMedia.emit()"><svg lucideTrash2 class="h-4 w-4 shrink-0"></svg>{{ 'media_detail.delete_from_library' | translate }}</a></li>
+          }
+        </ul>
       </div>
-    }
+    </div>
 
     <!-- Series episode progress -->
     @if (mediaType() === 'series' && episodeStats()) {
@@ -209,7 +192,7 @@
     }
     @if (directors().length) {
       <p class="mt-2 text-base-content/50">
-        {{ 'media_info.directors' | translate }}: {{ directors().join(', ') }}
+        {{ 'media_info.directors' | translate }} {{ directors().join(', ') }}
       </p>
     }
 
@@ -434,7 +417,7 @@
               <li><a class="flex items-center gap-3 text-error" (click)="deleteMedia.emit()" [class.pointer-events-none]="deleteLoading()">
                 @if (deleteLoading()) { <span class="loading loading-spinner loading-xs"></span> }
                 @else { <svg lucideTrash2 class="h-4 w-4 shrink-0"></svg> }
-                {{ 'media_detail.delete' | translate }}
+                {{ 'media_detail.delete_from_library' | translate }}
               </a></li>
             }
           </ul>
@@ -470,7 +453,7 @@
       }
       @if (directors().length) {
         <p class="mt-2 text-base-content/50">
-          {{ 'media_info.directors' | translate }}: {{ directors().join(', ') }}
+          {{ 'media_info.directors' | translate }} {{ directors().join(', ') }}
         </p>
       }
 
