@@ -186,7 +186,8 @@ export class BrowserDeviceProfileService {
       supportsHlsFmp4,
       supportsHlsTs,
       supportsHdr,
-      // All players use EXT-X-MEDIA for seamless audio switching.
+      // Multi-audio in muxed TS doesn't work reliably (ExoPlayer can't switch PIDs).
+      // Audio switching always goes through server-side reload.
       supportsMultiAudioMuxed: false,
     };
   }

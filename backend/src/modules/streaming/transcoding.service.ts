@@ -1120,7 +1120,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       );
     } else {
       // Standard single-stream output
-      if (audioStreamIndex != null) {
+      if (mapAllAudio && audioStreams && audioStreams.length > 1) {
+        // TS + multi-audio: mux ALL audio tracks so native players (ExoPlayer/AVPlayer) can switch
+        args.push('-map', '0:v:0');
+        for (let i = 0; i < audioStreams.length; i++) {
+          args.push('-map', `0:a:${i}`);
+          // Preserve language metadata so ExoPlayer/AVPlayer show correct track names
+          const lang = audioStreams[i].language;
+          if (lang) {
+            args.push(`-metadata:s:a:${i}`, `language=${lang}`);
+          }
+        }
+      } else if (audioStreamIndex != null) {
         args.push('-map', '0:v:0', '-map', `0:a:${audioStreamIndex}`);
       }
       args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');

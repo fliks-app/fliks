@@ -125,10 +125,13 @@ export class StreamingController {
         this.activeStreamTracker.getAudioStreamIndex(mediaFileId),
       crop: si?.video?.[0]?.crop ?? undefined,
       // videoOnly only makes sense with fMP4 (var_stream_map produces separate audio).
-      // For TS (Cast), audio must stay muxed in the video stream.
+      // For TS, audio must stay muxed in the video stream.
       videoOnly:
         this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
         this.activeStreamTracker.getFmp4Supported(mediaFileId),
+      // Multi-audio in muxed TS doesn't work (ExoPlayer can't switch PIDs).
+      // Audio switching always goes through server-side reload.
+      mapAllAudio: false,
       // Pass audio stream info for var_stream_map (single FFmpeg, multi-output)
       audioStreams:
         this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1

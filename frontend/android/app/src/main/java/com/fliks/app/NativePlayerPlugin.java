@@ -42,6 +42,7 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -59,6 +60,7 @@ public class NativePlayerPlugin extends Plugin {
     private SubtitleView subtitleView;
     private DefaultHttpDataSource.Factory httpFactory;
     private String currentHlsUrl;
+    private int lastAudioTrackCount = -1;
     private final List<MediaItem.SubtitleConfiguration> subtitleConfigs = new ArrayList<>();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private Handler positionHandler;
@@ -266,6 +268,7 @@ public class NativePlayerPlugin extends Plugin {
                 itemBuilder.setSubtitleConfigurations(subtitleConfigs);
             }
             player.setMediaItem(itemBuilder.build());
+            lastAudioTrackCount = -1; // Reset so emitTracksChanged fires for new media
 
             // Disable text tracks by default — user selects via UI
             player.setTrackSelectionParameters(
@@ -554,15 +557,40 @@ public class NativePlayerPlugin extends Plugin {
                     var fmt = group.getTrackFormat(i);
                     JSObject t = new JSObject();
                     t.put("id", "audio-" + flatIdx);
-                    t.put("language", fmt.language != null ? fmt.language : "und");
-                    t.put("label", fmt.label != null ? fmt.label
-                            : (fmt.language != null ? fmt.language : "Track " + flatIdx));
+                    String lang = fmt.language != null ? fmt.language : "und";
+                    t.put("language", lang);
+                    // Build a human-readable label: "Français (AAC 6ch)"
+                    String displayLang = langToDisplayName(lang);
+                    String codec = fmt.sampleMimeType != null
+                            ? fmt.sampleMimeType.replace("audio/", "").toUpperCase()
+                            : "";
+                    String channels = fmt.channelCount > 0 ? fmt.channelCount + "ch" : "";
+                    String detail = (codec + " " + channels).trim();
+                    t.put("label", displayLang + (detail.isEmpty() ? "" : " (" + detail + ")"));
+                    t.put("selected", group.isTrackSelected(i));
                     list.put(t);
                     flatIdx++;
                 }
             }
         }
         return list;
+    }
+
+    /** Convert ISO 639-2/B or 639-1 language code to display name. */
+    private String langToDisplayName(String code) {
+        if (code == null || code.equals("und")) return "Unknown";
+        Locale loc = Locale.forLanguageTag(code);
+        String name = loc.getDisplayLanguage(Locale.getDefault());
+        if (!name.isEmpty() && !name.equals(code)) {
+            return name.substring(0, 1).toUpperCase() + name.substring(1);
+        }
+        // Fallback for 3-letter codes (fre→fr, eng→en)
+        loc = new Locale(code);
+        name = loc.getDisplayLanguage(Locale.getDefault());
+        if (!name.isEmpty() && !name.equals(code)) {
+            return name.substring(0, 1).toUpperCase() + name.substring(1);
+        }
+        return code;
     }
 
     private void emitStateChanged(String state) {
@@ -578,6 +606,10 @@ public class NativePlayerPlugin extends Plugin {
 
     private void emitTracksChanged() {
         JSArray audio = buildAudioTrackList();
+        // Only emit when audio track count actually changes — ExoPlayer fires
+        // onTracksChanged on every HLS segment transition which would clear the UI.
+        if (audio.length() == lastAudioTrackCount) return;
+        lastAudioTrackCount = audio.length();
         getBridge().getWebView().evaluateJavascript(
                 "window.dispatchEvent(new CustomEvent('nativePlayerTracksChanged',{detail:{audioTracks:" + audio + ",subtitleTracks:[]}}));", null);
     }

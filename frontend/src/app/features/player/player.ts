@@ -813,22 +813,26 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.isNativeEngine.set(true);
     this.state.bindEngine(engine);
 
-    // Listen for audio tracks from native engine
+    // Listen for audio tracks from native engine.
+    // ExoPlayer may emit this multiple times (e.g. rendition switch) —
+    // never overwrite a good list with a smaller one.
     engine.on('audioTracksChanged', (e) => {
-      const tracks = e.tracks.map((t) => ({
+      const tracks = e.tracks.map((t: any) => ({
         id: t.id,
         label: t.label,
         language: normalizeLang(t.language),
+        selected: !!t.selected,
       }));
+      if (tracks.length <= this.availableAudioTracks().length) return;
       this.availableAudioTracks.set(tracks);
-      if (tracks.length > 0) {
-        this.activeAudioTrackId.set(tracks[0].id);
-        this.trackManager.autoSelectAudioTrack(
-          tracks, this.mediaId, this.mediaFileId,
-          this.activeAudioTrackId(),
-          (trackId) => this.onSelectAudioTrack(trackId),
-        );
-      }
+      // Use the track ExoPlayer reports as selected, fallback to first
+      const selected = tracks.find((t: any) => t.selected) ?? tracks[0];
+      this.activeAudioTrackId.set(selected.id);
+      this.trackManager.autoSelectAudioTrack(
+        tracks, this.mediaId, this.mediaFileId,
+        this.activeAudioTrackId(),
+        (trackId) => this.onSelectAudioTrack(trackId),
+      );
     });
   }
 
@@ -1076,6 +1080,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Wait a moment for the engine to parse the manifest/file
     setTimeout(() => {
       if (!this.engine) return;
+
+      // Native engines populate audio tracks via audioTracksChanged event.
+      // If already populated, don't overwrite.
+      if (this.isNativeEngine() && this.availableAudioTracks().length > 1) return;
 
       const engineTracks = this.engine.getAudioTracks();
 
