@@ -90,7 +90,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
                 self.pollForDialogDismiss()
             } else {
                 // Dialog closed — if no session started, notify JS
-                if self.currentSession?.connectionState != .connected && !self.sessionStarting {
+                if self.currentSession?. connectionState != .connected && !self.sessionStarting {
                     self.emitPickerDismissed()
                 }
             }
