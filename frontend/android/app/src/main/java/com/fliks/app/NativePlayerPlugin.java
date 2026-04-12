@@ -529,10 +529,20 @@ public class NativePlayerPlugin extends Plugin {
         try { targetIndex = Integer.parseInt(id.replace("text-", "")); }
         catch (NumberFormatException e) { return false; }
 
+        // ExoPlayer may auto-detect extra text tracks (CEA-608 from HLS) before our sidecar subs.
+        // Offset by the number of non-sidecar text tracks so text-0 maps to our first SubtitleConfiguration.
+        int totalTextGroups = 0;
+        for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
+            if (group.getType() == C.TRACK_TYPE_TEXT) totalTextGroups++;
+        }
+        int sidecarOffset = totalTextGroups - subtitleConfigs.size();
+        if (sidecarOffset < 0) sidecarOffset = 0;
+        int exoIndex = targetIndex + sidecarOffset;
+
         int idx = 0;
         for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
             if (group.getType() == C.TRACK_TYPE_TEXT) {
-                if (idx == targetIndex) {
+                if (idx == exoIndex) {
                     player.setTrackSelectionParameters(
                             player.getTrackSelectionParameters().buildUpon()
                                     .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
