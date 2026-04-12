@@ -126,13 +126,15 @@ export class QualityManagerService {
 
     if (option.id === 'auto') {
       if (playbackMode !== 'direct') {
-        // ABR for HLS: bias toward higher quality with optimistic bandwidth estimate
+        // ABR for HLS: enable + trim buffer to 5s so ABR can switch quality quickly.
+        // The server restarts FFmpeg at the new quality from the current segment.
         engine.configure({
           abr: {
             enabled: true,
             defaultBandwidthEstimate: ABR_DEFAULT_BANDWIDTH_ESTIMATE,
             useNetworkInformation: true,
           },
+          streaming: { bufferBehind: 5 },
         });
       } else {
         engine.configure({ abr: { enabled: true } });
