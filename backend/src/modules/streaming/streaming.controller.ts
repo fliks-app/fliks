@@ -213,10 +213,12 @@ export class StreamingController {
       mediaFileId,
       deviceProfile.supportsMultiAudioMuxed ?? false,
     );
-    this.activeStreamTracker.setFmp4Supported(
-      mediaFileId,
-      deviceProfile.supportsHlsFmp4 ?? true,
-    );
+    // Use TS for single-audio files (faster startup: no init.mp4 needed).
+    // Keep fMP4 for multi-audio (required for var_stream_map / EXT-X-MEDIA).
+    const audioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 1;
+    const clientSupportsFmp4 = deviceProfile.supportsHlsFmp4 ?? true;
+    const useFmp4 = audioCount > 1 && clientSupportsFmp4;
+    this.activeStreamTracker.setFmp4Supported(mediaFileId, useFmp4);
 
     // Include duration so the player can skip ffprobe in hlsPlaylist
     const duration = resolved.mediaFile.streamInfo?.durationSeconds ?? 0;
@@ -476,7 +478,9 @@ export class StreamingController {
       : 'video/iso.segment';
     res.setHeader('Content-Type', contentType);
     res.setHeader('Access-Control-Allow-Origin', '*');
-    fs.createReadStream(segPath).pipe(res);
+    const stream = fs.createReadStream(segPath);
+    stream.on('error', () => { if (!res.headersSent) res.status(404).end(); });
+    stream.pipe(res);
   }
 
   /** HLS variant playlist — pre-computed segment list based on known duration. */
@@ -606,7 +610,9 @@ export class StreamingController {
         if (initPath) {
           res.setHeader('Content-Type', 'video/mp4');
           res.setHeader('Access-Control-Allow-Origin', '*');
-          fs.createReadStream(initPath).pipe(res);
+          const initStream = fs.createReadStream(initPath);
+          initStream.on('error', () => { if (!res.headersSent) res.status(404).end(); });
+          initStream.pipe(res);
           return;
         }
       }
@@ -651,7 +657,9 @@ export class StreamingController {
 
     res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    fs.createReadStream(segPath).pipe(res);
+    const stream = fs.createReadStream(segPath);
+    stream.on('error', () => { if (!res.headersSent) res.status(404).end(); });
+    stream.pipe(res);
   }
 
   // ---------------------------------------------------------------------------

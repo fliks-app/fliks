@@ -630,6 +630,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             }
 
             this.engine!.configure({
+              abr: { defaultBandwidthEstimate: 100_000_000 },
               streaming: {
                 retryParameters: { timeout: 60_000, maxAttempts: 5, baseDelay: 1000 },
               },
@@ -639,23 +640,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             });
 
             const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId);
-            await this.engine!.load(hlsUrl);
+            await this.engine!.load(hlsUrl, startTime);
           }
 
-          // Resume position (Shaka needs to buffer before accepting a seek)
-          if (startTime != null && startTime > 0) {
-            const video = this.videoEl()?.nativeElement;
-            if (video) {
-              const doSeek = () => {
-                video.currentTime = startTime!;
-              };
-              if (video.readyState >= 2) {
-                doSeek();
-              } else {
-                video.addEventListener('canplay', doSeek, { once: true });
-              }
-            }
-          }
 
         }
       }
