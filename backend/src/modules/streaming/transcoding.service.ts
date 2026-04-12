@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { ChildProcess, spawn, execFile } from 'child_process';
 import { promisify } from 'util';
-import * as fs from 'fs';
 import { existsSync } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
@@ -499,7 +498,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         `seg-${String(requestedSegment).padStart(4, '0')}.ts`,
       );
       const crashed =
-        session.process.exitCode !== null && !(await fileExists(expectedSeg));
+        session.process.exitCode !== null
+        && !(await fileExists(expectedSeg))
+        && this.sessions.has(key); // Still registered = real crash. Deleted = intentionally killed.
       if (crashed) {
         this.log.warn(
           `Transcode [${key}]: HW accel (${this.detectedHwAccel}) crashed (exit=${session.process.exitCode}), falling back to CPU\n${(session.stderr ?? '').slice(-1000)}`,
@@ -556,7 +557,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Get a segment file path, waiting if it's being generated.
-   * Uses fs.watch for instant detection instead of polling.
    */
   async getSegmentPath(
     session: TranscodeSession,
@@ -564,89 +564,20 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ): Promise<string | null> {
     const segPath = path.join(session.cachePath, segmentName);
 
-    // Fast path: already exists
-    if (await fileExists(segPath)) {
-      return this.waitStableSegment(segPath);
-    }
-
-    // If FFmpeg already exited, no point waiting
-    if (session.process.exitCode !== null) {
-      this.log.warn(
-        `Segment ${segmentName} unavailable: FFmpeg exited with code ${session.process.exitCode}`,
-      );
-      return null;
-    }
-
-    // Watch the directory for segment creation (instant detection vs 500ms polling)
-    const watchDir = path.dirname(segPath);
-    const targetFile = path.basename(segPath);
-
-    return new Promise<string | null>((resolve) => {
-      let resolved = false;
-      const cleanup = () => {
-        try { watcher?.close(); } catch { /* ignore */ }
-        clearTimeout(timeout);
-        session.process.removeListener('exit', onExit);
-      };
-      const done = (result: string | null) => {
-        if (resolved) return;
-        resolved = true;
-        cleanup();
-        resolve(result);
-      };
-
-      const timeout = setTimeout(() => done(null), 60_000);
-      const onExit = () => done(null);
-
-      let watcher: ReturnType<typeof fs.watch> | undefined;
-      try {
-        watcher = fs.watch(watchDir, async (_, filename) => {
-          if (filename === targetFile) {
-            done(await this.waitStableSegment(segPath));
-          }
-        });
-        watcher.on('error', () => done(null));
-      } catch {
-        clearTimeout(timeout);
-        resolve(this.pollForSegment(session, segPath));
-        return;
-      }
-
-      session.process.on('exit', onExit);
-
-      // Re-check after setting up watcher (file may have appeared in the gap)
-      fileExists(segPath).then((exists) => {
-        if (exists) this.waitStableSegment(segPath).then(done);
-      });
-    });
-  }
-
-  /** Wait for a segment file to stop growing (write complete). */
-  private async waitStableSegment(segPath: string): Promise<string | null> {
-    try {
-      const size1 = (await fsp.stat(segPath)).size;
-      await new Promise((r) => setTimeout(r, 150));
-      const size2 = (await fsp.stat(segPath)).size;
-      if (size1 === size2 && size1 > 0) return segPath;
-      // Still writing — wait a bit more
-      await new Promise((r) => setTimeout(r, 200));
-      return segPath;
-    } catch {
-      return null;
-    }
-  }
-
-  /** Fallback polling for when fs.watch isn't available. */
-  private async pollForSegment(
-    session: TranscodeSession,
-    segPath: string,
-  ): Promise<string | null> {
+    // Wait up to 60s for the segment to appear
     for (let i = 0; i < 120; i++) {
       if (session.process.exitCode !== null && !(await fileExists(segPath))) {
         return null;
       }
       if (await fileExists(segPath)) {
-        return this.waitStableSegment(segPath);
+        try {
+          const size1 = (await fsp.stat(segPath)).size;
+          await new Promise((r) => setTimeout(r, 200));
+          const size2 = (await fsp.stat(segPath)).size;
+          if (size1 === size2 && size1 > 0) return segPath;
+        } catch {
+          return null;
+        }
       }
       await new Promise((r) => setTimeout(r, 500));
     }
@@ -896,6 +827,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     if (startSegment > 0) {
       const seekSeconds = startSegment * SEGMENT_DURATION;
       args.push('-ss', String(seekSeconds));
+      // -copyts preserves original timestamps so HLS segment timestamps match
+      // the source file timeline (required for subtitle sync)
+      args.push('-copyts', '-avoid_negative_ts', 'make_zero');
     }
 
     const bitrateNum = parseInt(profile.videoBitrate) * 1_000_000; // e.g. "8M" -> 8000000
@@ -1223,6 +1157,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     if (startSegment > 0) {
       args.push('-ss', String(startSegment * SEGMENT_DURATION));
+      args.push('-copyts', '-avoid_negative_ts', 'make_zero');
     }
 
     args.push('-i', inputPath);
@@ -1270,6 +1205,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     if (startSegment > 0) {
       args.push('-ss', String(startSegment * SEGMENT_DURATION));
+      args.push('-copyts', '-avoid_negative_ts', 'make_zero');
     }
 
     args.push('-i', inputPath);

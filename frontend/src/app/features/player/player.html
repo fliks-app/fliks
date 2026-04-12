@@ -32,7 +32,7 @@
     </div>
   }
 
-  @if (loading() || buffering()) {
+  @if (loading() || buffering() || (!videoStarted() && !error())) {
     <div class="loading-overlay absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
       <span class="loading loading-spinner loading-lg text-white"></span>
     </div>

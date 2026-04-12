@@ -591,6 +591,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             .map((s) => ({ url: s.url, language: s.language, label: s.label }));
           (this.engine as NativeEngine).setPreloadedSubtitles(nonBurnInSubs);
 
+          // Set initial quality constraint BEFORE load to prevent ExoPlayer from
+          // picking 4K on a phone (slow transcode → A/V desync).
+          const savedQualityId = this.activeQualityId();
+          if (savedQualityId !== 'auto') {
+            const PROFILE_WIDTHS: Record<string, number> = {
+              '2160p': 3840, '1080p': 1920, '720p': 1280, '480p': 854,
+              '360p': 640, '240p': 426, '144p': 256,
+            };
+            const w = PROFILE_WIDTHS[savedQualityId] ?? 1920;
+            const h = this.qualityManager.availableQualities()
+              .find(q => q.id === savedQualityId)?.height ?? 1080;
+            (this.engine as NativeEngine).selectVariantTrack({ width: w, height: h });
+          }
+          // Auto: no constraint — ExoPlayer picks based on network/device
+
           const token = this.authService.accessToken;
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
           const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId);
@@ -1115,7 +1130,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     // Engine-level audio switch (Shaka native or NativeEngine)
     if (this.engine && (trackId.startsWith('shaka-') || trackId.startsWith('audio-'))) {
+      // Show spinner during audio switch (native player reloads the stream)
+      if (this.isNativeEngine()) {
+        this.state.buffering.set(true);
+      }
       await this.engine.selectAudioTrack(trackId);
+      if (this.isNativeEngine()) {
+        this.state.buffering.set(false);
+      }
       return;
     }
 
@@ -1258,11 +1280,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.statsVisible.set(false);
   }
 
-  onSelectQualityById(id: string) {
+  async onSelectQualityById(id: string) {
     const option = this.availableQualities().find(q => q.id === id);
-    if (option) {
-      this.qualityManager.selectQuality(option, this.engine, this.playbackMode());
+    if (!option) return;
+    const mode = this.playbackMode();
+    // Kill FFmpeg session before quality change so the backend starts fresh
+    // at the new quality (prevents init.mp4 mismatch / 404)
+    if (mode !== 'direct' && id !== 'auto') {
+      await this.streamingApi.stopSessions(this.mediaFileId).catch(() => {});
     }
+    this.qualityManager.selectQuality(option, this.engine, mode);
     this.resetHideTimer();
   }
 

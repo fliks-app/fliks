@@ -150,9 +150,15 @@ export class QualityManagerService {
     const allTracks = engine.getVariantTracks();
 
     if (!allTracks.length) {
-      // No variant tracks (native player) — use synthetic track with target height
-      const h = option.id === 'original' ? 9999 : option.height;
-      engine.selectVariantTrack({ height: h, width: Math.round(h * 16 / 9) }, true);
+      // No variant tracks (native player) — use profile maxWidth to set resolution constraint.
+      // Must match backend PROFILES exactly to avoid off-by-one with ExoPlayer track selection.
+      const PROFILE_WIDTHS: Record<string, number> = {
+        '2160p': 3840, '1080p': 1920, '720p': 1280, '480p': 854,
+        '360p': 640, '240p': 426, '144p': 256, 'original': 99999,
+      };
+      const w = PROFILE_WIDTHS[option.id] ?? Math.round(option.height * 16 / 9);
+      const h = option.id === 'original' ? 99999 : option.height;
+      engine.selectVariantTrack({ height: h, width: w }, true);
       return;
     }
 
@@ -165,15 +171,19 @@ export class QualityManagerService {
         : allTracks;
     const candidates = tracks.length ? tracks : allTracks;
 
+    const wasPaused = engine.paused;
+
     if (option.id === 'original') {
       const best = candidates.reduce((a: any, b: any) => ((a.height ?? 0) >= (b.height ?? 0) ? a : b));
       engine.selectVariantTrack(best, true);
     } else {
-      // Match by variant URL (e.g. "/480p/" in originalVideoId) to avoid crop/alignment issues
       const match = findVariantByProfileName(candidates, option.id)
         ?? findBestVariantForHeight(candidates, option.height);
       engine.selectVariantTrack(match, true);
     }
+
+    // Restore pause state — clearBuffer can trigger autoplay
+    if (wasPaused) engine.pause();
   }
 
   /**
