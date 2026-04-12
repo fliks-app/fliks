@@ -1098,7 +1098,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             language: normalizeLang(a.language),
           }));
           this.availableAudioTracks.set(tracks);
-          this.activeAudioTrackId.set(tracks[0].id);
+          // Set active to the track the backend is already using (preselected at startup)
+          const activeIdx = this.activeAudioStreamIndex ?? 0;
+          this.activeAudioTrackId.set(tracks[activeIdx]?.id ?? tracks[0].id);
           this.trackManager.autoSelectAudioTrack(
             tracks, this.mediaId, this.mediaFileId,
             this.activeAudioTrackId(),
