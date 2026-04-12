@@ -181,7 +181,7 @@ async function segmentNearby(
   return false;
 }
 
-const SEGMENT_DURATION = 6;
+const SEGMENT_DURATION = 3;
 
 /** Parse FFmpeg-style rates like '8M', '500k', '192k' to bits per second. */
 export function parseBitrateToBps(s: string): number {
@@ -396,13 +396,14 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         await fsp.rm(existing.cachePath, { recursive: true, force: true });
         // Fall through to create a new session below
       } else if (existing.quality !== quality || existing.remux) {
-        // Quality changed (or switching from remux to transcode) — kill old, start new
+        // Quality changed — kill process but keep cache dir (faster restart).
+        // Old segments will be overwritten by the new FFmpeg.
         this.log.log(
           `Quality change [${key}]: ${existing.quality} → ${quality}, killing old session`,
         );
         this.sessions.delete(key);
-        await this.killAndClean(existing.process, existing.cachePath);
-        // Fall through to create a new session below
+        await this.killProcess(existing.process);
+        // Fall through to create a new session (reuses existing cache dir)
       } else {
         existing.lastAccess = Date.now();
 
@@ -1100,6 +1101,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args.push(
         '-f', 'hls',
         '-hls_time', String(SEGMENT_DURATION),
+        '-hls_init_time', '1',
         '-hls_list_size', '0',
         '-start_number', String(startSegment),
         '-hls_segment_type', 'fmp4',
@@ -1119,6 +1121,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args.push(
         '-f', 'hls',
         '-hls_time', String(SEGMENT_DURATION),
+        '-hls_init_time', '1',
         '-hls_list_size', '0',
         '-start_number', String(startSegment),
       );
@@ -1547,30 +1550,22 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     this.killAndClean(session.process, session.cachePath).catch(() => {});
   }
 
-  /** Send SIGTERM, wait for the process to exit, then rm the directory. */
-  private killAndClean(proc: ChildProcess, dirPath: string): Promise<void> {
-    // Already exited — just clean up
-    if (proc.exitCode !== null) {
-      return fsp.rm(dirPath, { recursive: true, force: true });
-    }
-
+  /** Send SIGTERM and wait for the process to exit. Does NOT delete cache. */
+  private killProcess(proc: ChildProcess): Promise<void> {
+    if (proc.exitCode !== null) return Promise.resolve();
     return new Promise<void>((resolve) => {
-      const done = () => {
-        fsp
-          .rm(dirPath, { recursive: true, force: true })
-          .then(resolve, resolve);
-      };
-
-      proc.once('close', done);
+      proc.once('close', () => resolve());
       proc.kill('SIGTERM');
-
-      // Safety net: force-kill if still alive after 5s
       setTimeout(() => {
-        if (proc.exitCode === null) {
-          proc.kill('SIGKILL');
-        }
+        if (proc.exitCode === null) proc.kill('SIGKILL');
       }, 5000);
     });
+  }
+
+  /** Send SIGTERM, wait for the process to exit, then rm the directory. */
+  private async killAndClean(proc: ChildProcess, dirPath: string): Promise<void> {
+    await this.killProcess(proc);
+    await fsp.rm(dirPath, { recursive: true, force: true });
   }
 
   private applyContext(session: TranscodeSession, ctx?: SessionContext) {

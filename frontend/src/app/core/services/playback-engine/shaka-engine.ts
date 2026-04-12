@@ -48,7 +48,7 @@ export class ShakaEngine implements PlaybackEngine {
     this.player.configure({
       streaming: {
         bufferingGoal: 60,
-        rebufferingGoal: 5,
+        rebufferingGoal: 2,
         bufferBehind: 60,
       },
     } as any);

@@ -469,7 +469,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         : null;
       if (offlineCheck) this.isOfflinePlayback = true;
 
-      // Load media info + playback state + kill stale sessions in parallel
+      // Load media info + playback state in parallel
+      // No stopSessions here — getOrCreateSession handles stale sessions naturally
       let startTime: number | undefined = resumeTime ?? undefined;
       if (this.mediaId && !this.isOfflinePlayback) {
         const [media, playbackState] = await Promise.all([
@@ -477,7 +478,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           startTime == null
             ? this.streamingApi.getPlaybackState(this.mediaId, this.episodeId).catch(() => null)
             : Promise.resolve(null),
-          this.streamingApi.stopSessions(this.mediaFileId).catch(() => {}),
         ]);
 
         this.media = media;
@@ -1280,15 +1280,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.statsVisible.set(false);
   }
 
-  async onSelectQualityById(id: string) {
+  onSelectQualityById(id: string) {
     const option = this.availableQualities().find(q => q.id === id);
     if (!option) return;
     const mode = this.playbackMode();
-    // Kill FFmpeg session before quality change so the backend starts fresh
-    // at the new quality (prevents init.mp4 mismatch / 404)
-    if (mode !== 'direct' && id !== 'auto') {
-      await this.streamingApi.stopSessions(this.mediaFileId).catch(() => {});
-    }
     this.qualityManager.selectQuality(option, this.engine, mode);
     this.resetHideTimer();
   }
