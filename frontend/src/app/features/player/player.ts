@@ -1282,7 +1282,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.statsVisible.set(false);
   }
 
-  onSelectQualityById(id: string) {
+  async onSelectQualityById(id: string) {
     const option = this.availableQualities().find(q => q.id === id);
     if (!option) return;
     const mode = this.playbackMode();
