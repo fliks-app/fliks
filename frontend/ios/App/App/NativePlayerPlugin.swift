@@ -191,6 +191,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             ])
 
             let playerItem = AVPlayerItem(asset: asset)
+            // Start with high bitrate preference so AVPlayer picks the best rendition immediately
+            playerItem.preferredPeakBitRate = 100_000_000  // 100 Mbps — effectively no limit
             let player = AVPlayer(playerItem: playerItem)
             self.player = player
 
@@ -454,6 +456,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
             if width == 0 && height == 0 {
                 item.preferredMaximumResolution = .zero
+                item.preferredPeakBitRate = 100_000_000  // No limit — pick highest
             } else {
                 item.preferredMaximumResolution = CGSize(width: width, height: height)
             }
@@ -580,6 +583,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         subtitleView = nil
         subtitleLabel = nil
         subtitleBottomConstraint = nil
+
 
         // Restore brightness
         if let saved = savedBrightness {

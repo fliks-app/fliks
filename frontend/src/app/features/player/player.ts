@@ -803,11 +803,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     // Force transparent background so native player shows through
     document.documentElement.classList.add('native-player-active');
-    let el: HTMLElement | null = container;
-    while (el && el !== document.documentElement) {
-      el.style.setProperty('background', 'transparent', 'important');
-      el = el.parentElement;
-    }
 
     this.engine = engine;
     this.isNativeEngine.set(true);
