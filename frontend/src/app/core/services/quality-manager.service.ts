@@ -133,6 +133,9 @@ export class QualityManagerService {
             enabled: true,
             defaultBandwidthEstimate: ABR_DEFAULT_BANDWIDTH_ESTIMATE,
             useNetworkInformation: true,
+            switchInterval: 5,              // Re-evaluate every 5s (default: 8)
+            bandwidthUpgradeTarget: 0.7,    // Upgrade at 70% headroom (default: 0.85 = more conservative)
+            bandwidthDowngradeTarget: 0.95, // Downgrade only when nearly saturated
           },
           streaming: { bufferBehind: 5 },
         });
