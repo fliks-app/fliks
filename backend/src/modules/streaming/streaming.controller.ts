@@ -33,7 +33,7 @@ import { SubtitleBurnInService } from './subtitle-burn-in.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 
 const VALID_QUALITIES = new Set([...PROFILES.map((p) => p.name), 'remux']);
-const SEG_DURATION = 3;
+const SEG_DURATION = 2;
 
 /** Generate a VOD HLS playlist for a given duration and segment URL pattern. */
 function buildVodPlaylist(

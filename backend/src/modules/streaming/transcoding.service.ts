@@ -181,7 +181,7 @@ async function segmentNearby(
   return false;
 }
 
-const SEGMENT_DURATION = 3;
+const SEGMENT_DURATION = 2;
 
 /** Parse FFmpeg-style rates like '8M', '500k', '192k' to bits per second. */
 export function parseBitrateToBps(s: string): number {
@@ -1101,7 +1101,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args.push(
         '-f', 'hls',
         '-hls_time', String(SEGMENT_DURATION),
-        '-hls_init_time', '1',
+        '-hls_init_time', '0.5',
         '-hls_list_size', '0',
         '-start_number', String(startSegment),
         '-hls_segment_type', 'fmp4',
@@ -1121,7 +1121,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args.push(
         '-f', 'hls',
         '-hls_time', String(SEGMENT_DURATION),
-        '-hls_init_time', '1',
+        '-hls_init_time', '0.5',
         '-hls_list_size', '0',
         '-start_number', String(startSegment),
       );
