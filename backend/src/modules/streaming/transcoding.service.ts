@@ -498,7 +498,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         `seg-${String(requestedSegment).padStart(4, '0')}.ts`,
       );
       const crashed =
-        session.process.exitCode !== null && !(await fileExists(expectedSeg));
+        session.process.exitCode !== null
+        && !(await fileExists(expectedSeg))
+        && this.sessions.has(key); // Still registered = real crash. Deleted = intentionally killed.
       if (crashed) {
         this.log.warn(
           `Transcode [${key}]: HW accel (${this.detectedHwAccel}) crashed (exit=${session.process.exitCode}), falling back to CPU\n${(session.stderr ?? '').slice(-1000)}`,
@@ -562,24 +564,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ): Promise<string | null> {
     const segPath = path.join(session.cachePath, segmentName);
 
-    // Wait up to 60s for the segment to appear (GPU can be slow when multiple transcodes run)
+    // Wait up to 60s for the segment to appear
     for (let i = 0; i < 120; i++) {
-      // If FFmpeg has exited, stop waiting immediately
       if (session.process.exitCode !== null && !(await fileExists(segPath))) {
-        this.log.warn(
-          `Segment ${segmentName} unavailable: FFmpeg exited with code ${session.process.exitCode}`,
-        );
         return null;
       }
       if (await fileExists(segPath)) {
         try {
-          // Wait a bit more to ensure writing is complete
           const size1 = (await fsp.stat(segPath)).size;
           await new Promise((r) => setTimeout(r, 200));
           const size2 = (await fsp.stat(segPath)).size;
           if (size1 === size2 && size1 > 0) return segPath;
         } catch {
-          // File was removed between exists check and stat (session killed)
           return null;
         }
       }
@@ -772,6 +768,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const promises: Promise<void>[] = [];
     const session = this.sessions.get(key);
     if (session) {
+      this.log.log(`Kill session [${key}] (quality: ${session.quality})`);
       this.sessions.delete(key);
       promises.push(this.killAndClean(session.process, session.cachePath));
     }
@@ -830,6 +827,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     if (startSegment > 0) {
       const seekSeconds = startSegment * SEGMENT_DURATION;
       args.push('-ss', String(seekSeconds));
+      // -copyts preserves original timestamps so HLS segment timestamps match
+      // the source file timeline (required for subtitle sync)
+      args.push('-copyts', '-avoid_negative_ts', 'make_zero');
     }
 
     const bitrateNum = parseInt(profile.videoBitrate) * 1_000_000; // e.g. "8M" -> 8000000
@@ -1157,6 +1157,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     if (startSegment > 0) {
       args.push('-ss', String(startSegment * SEGMENT_DURATION));
+      args.push('-copyts', '-avoid_negative_ts', 'make_zero');
     }
 
     args.push('-i', inputPath);
@@ -1204,6 +1205,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     if (startSegment > 0) {
       args.push('-ss', String(startSegment * SEGMENT_DURATION));
+      args.push('-copyts', '-avoid_negative_ts', 'make_zero');
     }
 
     args.push('-i', inputPath);

@@ -15,7 +15,28 @@ const PLAYER_QUALITY_STORAGE_KEY = 'player.qualityId';
  * when no variant meets the restriction (very slow network / low source res).
  */
 const ABR_DEFAULT_BANDWIDTH_ESTIMATE = 4_500_000;
-const ABR_MIN_HEIGHT_PREFERENCE = 720;
+
+/**
+ * Find a variant track by profile name in the variant URL (e.g. '480p' matches '/480p/').
+ * Returns null if no match found.
+ */
+export function findVariantByProfileName(tracks: any[], profileName: string): any | null {
+  const path = `/${profileName}/`;
+  return tracks.find((t: any) => t.originalVideoId?.includes(path)) ?? null;
+}
+
+/**
+ * Find the best variant track for a target height:
+ * pick the largest height that is ≤ targetHeight.
+ * If none fits (all tracks are above target), pick the smallest.
+ */
+export function findBestVariantForHeight(tracks: any[], targetHeight: number): any {
+  const below = tracks.filter((t: any) => (t.height ?? 0) <= targetHeight);
+  if (below.length) {
+    return below.reduce((a: any, b: any) => ((a.height ?? 0) >= (b.height ?? 0) ? a : b));
+  }
+  return tracks.reduce((a: any, b: any) => ((a.height ?? 0) <= (b.height ?? 0) ? a : b));
+}
 
 @Injectable({ providedIn: 'root' })
 export class QualityManagerService {
@@ -105,27 +126,18 @@ export class QualityManagerService {
 
     if (option.id === 'auto') {
       if (playbackMode !== 'direct') {
-        // Optimistic ABR for HLS: bias toward 720p+, still allowed to drop if needed
+        // ABR for HLS: enable + trim buffer to 5s so ABR can switch quality quickly.
+        // The server restarts FFmpeg at the new quality from the current segment.
         engine.configure({
           abr: {
             enabled: true,
             defaultBandwidthEstimate: ABR_DEFAULT_BANDWIDTH_ESTIMATE,
             useNetworkInformation: true,
-            restrictions: {
-              minWidth: 0,
-              maxWidth: Infinity,
-              minHeight: ABR_MIN_HEIGHT_PREFERENCE,
-              maxHeight: Infinity,
-              minPixels: 0,
-              maxPixels: Infinity,
-              minFrameRate: 0,
-              maxFrameRate: Infinity,
-              minBandwidth: 0,
-              maxBandwidth: Infinity,
-              minChannelsCount: 0,
-              maxChannelsCount: Infinity,
-            },
+            switchInterval: 5,              // Re-evaluate every 5s (default: 8)
+            bandwidthUpgradeTarget: 0.7,    // Upgrade at 70% headroom (default: 0.85 = more conservative)
+            bandwidthDowngradeTarget: 0.95, // Downgrade only when nearly saturated
           },
+          streaming: { bufferBehind: 5 },
         });
       } else {
         engine.configure({ abr: { enabled: true } });
@@ -138,9 +150,15 @@ export class QualityManagerService {
     const allTracks = engine.getVariantTracks();
 
     if (!allTracks.length) {
-      // No variant tracks (native player) — use synthetic track with target height
-      const h = option.id === 'original' ? 9999 : option.height;
-      engine.selectVariantTrack({ height: h, width: Math.round(h * 16 / 9) }, true);
+      // No variant tracks (native player) — use profile maxWidth to set resolution constraint.
+      // Must match backend PROFILES exactly to avoid off-by-one with ExoPlayer track selection.
+      const PROFILE_WIDTHS: Record<string, number> = {
+        '2160p': 3840, '1080p': 1920, '720p': 1280, '480p': 854,
+        '360p': 640, '240p': 426, '144p': 256, 'original': 99999,
+      };
+      const w = PROFILE_WIDTHS[option.id] ?? Math.round(option.height * 16 / 9);
+      const h = option.id === 'original' ? 99999 : option.height;
+      engine.selectVariantTrack({ height: h, width: w }, true);
       return;
     }
 
@@ -153,16 +171,19 @@ export class QualityManagerService {
         : allTracks;
     const candidates = tracks.length ? tracks : allTracks;
 
+    const wasPaused = engine.paused;
+
     if (option.id === 'original') {
       const best = candidates.reduce((a: any, b: any) => ((a.height ?? 0) >= (b.height ?? 0) ? a : b));
       engine.selectVariantTrack(best, true);
     } else {
-      const target = option.height;
-      const match = candidates.reduce((a: any, b: any) =>
-        Math.abs((a.height ?? 0) - target) <= Math.abs((b.height ?? 0) - target) ? a : b,
-      );
+      const match = findVariantByProfileName(candidates, option.id)
+        ?? findBestVariantForHeight(candidates, option.height);
       engine.selectVariantTrack(match, true);
     }
+
+    // Restore pause state — clearBuffer can trigger autoplay
+    if (wasPaused) engine.pause();
   }
 
   /**

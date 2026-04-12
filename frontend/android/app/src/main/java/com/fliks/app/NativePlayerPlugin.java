@@ -222,8 +222,15 @@ public class NativePlayerPlugin extends Plugin {
                 }
 
                 @Override public void onIsPlayingChanged(boolean isPlaying) {
-                    emitStateChanged(isPlaying ? "playing" : "paused");
+                    if (isPlaying) {
+                        emitStateChanged("playing");
+                    } else if (player.getPlaybackState() == Player.STATE_BUFFERING) {
+                        emitStateChanged("buffering");
+                    } else if (player.getPlaybackState() == Player.STATE_READY) {
+                        emitStateChanged("paused");
+                    }
                 }
+
 
                 @Override public void onPlayerError(@NonNull PlaybackException error) {
                     emitError(error.errorCode, error.getMessage());

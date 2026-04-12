@@ -323,6 +323,16 @@ export class ShakaEngine implements PlaybackEngine {
       this.emit('stateChanged', { state: 'buffering' });
     });
 
+    this.addVideoListener('stalled', () => {
+      // Network stall — show buffering if not paused and buffer is nearly empty
+      if (!video.paused && video.buffered.length > 0) {
+        const bufferedAhead = video.buffered.end(video.buffered.length - 1) - video.currentTime;
+        if (bufferedAhead < 1) {
+          this.emit('stateChanged', { state: 'buffering' });
+        }
+      }
+    });
+
     this.addVideoListener('playing', () => {
       this.emit('stateChanged', { state: 'playing' });
     });
