@@ -1199,7 +1199,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.subtitlePickerOpen.set(false);
     localStorage.setItem('player.subtitleLang', sub.language);
 
-    this.trackManager.saveSubtitleSelection(this.mediaId, sub.language, sub.forced);
+    this.trackManager.saveSubtitleSelection(this.mediaId, sub.language, sub.forced, sub.id.startsWith('emb-'));
   }
 
   // ── Keyboard handler ──
@@ -1327,7 +1327,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!this.engine) return;
     const currentPos = this.engine.currentTime;
 
-    this.stopStreamingSessions();
+    // Remember active subtitle so we can restore it after reload
+    const activeSub = this.activeSubtitleId()
+      ? this.availableSubtitles().find(s => s.id === this.activeSubtitleId())
+      : null;
+
+    // Native: stop the player before reload to avoid freeze
+    if (this.isNativeEngine()) {
+      await NativePlayer.stop().catch(() => {});
+    }
+
+    // Await stop so the backend finishes cleaning the cache dir before we start a new session
+    await this.streamingApi.stopSessions(this.mediaFileId).catch(() => {});
 
     const deviceProfile = this.deviceProfileService.getProfile();
     this.playbackInfo = await this.streamingApi.getPlaybackInfo(
@@ -1354,6 +1365,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
     this.engine.play().catch(() => {});
+
+    // Restore active subtitle (non burn-in) after Shaka reload
+    if (activeSub && !activeSub.burnIn && activeSub.url) {
+      try {
+        const track = await this.engine.addTextTrack(activeSub.url, activeSub.language, activeSub.label);
+        this.engine.selectTextTrack(track);
+        this.engine.setTextVisibility(true);
+      } catch {}
+    }
   }
 
   private fireAndForgetStopSessions() {

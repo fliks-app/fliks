@@ -54,7 +54,7 @@ export class TrackManagerService {
       const savedLang = this.playerSettings.getRememberedAudioTrack(key);
       if (savedLang) {
         const match = tracks.find((t) => t.language === savedLang);
-        if (match) {
+        if (match && match.id !== activeAudioTrackId) {
           onSelect(match.id);
           return;
         }
@@ -89,10 +89,11 @@ export class TrackManagerService {
   }
 
   /** Save subtitle selection for this media. Pass null = user explicitly disabled.
-   *  Stores "language:forced", or "off" when disabled. */
-  saveSubtitleSelection(mediaId: number, language: string | null, forced = false): void {
+   *  Stores "language:forced:embedded", or "off" when disabled. */
+  saveSubtitleSelection(mediaId: number, language: string | null, forced = false, embedded = false): void {
     if (!this.playerSettings.get().rememberSubtitleSelections || !mediaId) return;
-    const value = language ? `${language}${forced ? ':forced' : ''}` : 'off';
+    const flags = [forced ? 'forced' : '', embedded ? 'embedded' : ''].filter(Boolean).join(':');
+    const value = language ? `${language}${flags ? ':' + flags : ''}` : 'off';
     this.playerSettings.saveRememberedSubtitleTrack(mediaId, value);
   }
 
@@ -210,15 +211,20 @@ export class TrackManagerService {
     const subs = subtitles.filter((s) => !s.burnIn);
     if (!subs.length && !subtitles.length) return;
 
-    // Priority 1: remembered selection by "language:forced" or "off" (saved per mediaId)
+    // Priority 1: remembered selection by "language[:forced][:embedded]" or "off"
     if (settings.rememberSubtitleSelections) {
       const saved = this.playerSettings.getRememberedSubtitleTrack(mediaId);
       if (saved === 'off') return; // User explicitly disabled subtitles
       if (saved) {
-        const [savedLang, savedType] = saved.split(':');
-        const wantForced = savedType === 'forced';
-        // Exact match first (forced flag matches), then fallback to same language
-        const match = subs.find((s) => s.language === savedLang && !!s.forced === wantForced)
+        const parts = saved.split(':');
+        const savedLang = parts[0];
+        const wantForced = parts.includes('forced');
+        const wantEmbedded = parts.includes('embedded');
+        const isEmbedded = (s: SubtitleOption) => s.id.startsWith('emb-');
+        // Best match: same language + same type (embedded/external) + same forced flag
+        const match =
+          subs.find((s) => s.language === savedLang && !!s.forced === wantForced && isEmbedded(s) === wantEmbedded)
+          ?? subs.find((s) => s.language === savedLang && !!s.forced === wantForced)
           ?? subs.find((s) => s.language === savedLang && !s.forced);
         if (match) { await onSelect(match); return; }
       }
