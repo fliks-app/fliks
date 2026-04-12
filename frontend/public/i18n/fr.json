@@ -466,7 +466,7 @@
     "quality_profile_label": "Profil de qualité",
     "no_quality_profile": "Aucun profil de qualité : configurez-en un (ou réimportez) pour activer la recherche de releases.",
     "search_releases": "Chercher des releases",
-    "grab_best": "Télécharger la meilleure release autorisée",
+    "grab_best": "Télécharger la meilleure version",
     "grab_one": "Télécharger",
     "allowed": "Autorisé",
     "not_allowed": "Hors profil",

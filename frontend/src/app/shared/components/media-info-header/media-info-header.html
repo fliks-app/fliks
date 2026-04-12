@@ -2,7 +2,7 @@
 <div class="lg:hidden">
   <app-mobile-fanart-hero [fanartUrl]="fanartUrl()" />
 
-  <div class="px-4 -mt-16 relative z-10">
+  <div class="-mt-16 relative z-10">
     <!-- Title -->
     <h1 class="text-3xl font-semibold tracking-tight leading-tight">
       @if (episodeLabel()) {
@@ -93,16 +93,24 @@
       <p class="mt-4 mb-4 font-semibold">{{ resumeEpisodeLabel() }}</p>
     }
 
-    <!-- Play button (full width on mobile) -->
+    <!-- Play buttons (mobile) -->
     @if (selectedFileId()) {
-      <button class="btn btn-primary w-full gap-2" [class.mt-4]="!resumeEpisodeLabel() || !resumeLabel()" [class.mt-2]="resumeEpisodeLabel() && resumeLabel()" (click)="play(false)">
-        <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
+      <div class="flex gap-2" [class.mt-4]="!resumeEpisodeLabel() || !resumeLabel()" [class.mt-2]="resumeEpisodeLabel() && resumeLabel()">
+        <button class="btn btn-primary flex-1 gap-2" (click)="play(false)">
+          <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
+          @if (resumeLabel()) {
+            {{ 'player.resume_at' | translate:{ time: resumeLabel() } }}
+          } @else {
+            {{ 'player.play' | translate }}
+          }
+        </button>
         @if (resumeLabel()) {
-          {{ 'player.resume_at' | translate:{ time: resumeLabel() } }}
-        } @else {
-          {{ 'player.play' | translate }}
+          <button class="btn btn-ghost gap-2" (click)="play(true)">
+            <svg lucideRotateCcw class="h-4 w-4"></svg>
+            {{ 'player.play_from_start' | translate }}
+          </button>
         }
-      </button>
+      </div>
     }
 
     <!-- Progress bar -->
@@ -139,13 +147,7 @@
           <svg lucideEllipsisVertical class="h-5 w-5"></svg>
           {{ 'common.more' | translate }}
         </div>
-        <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-56 p-2 shadow-lg">
-          @if (resumeLabel()) {
-            <li><a class="flex items-center gap-3" (click)="play(true)">
-              <svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>
-              {{ 'player.play_from_start' | translate }}
-            </a></li>
-          }
+        <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-max min-w-56 p-2 shadow-lg">
           @if (canGrab()) {
             <li><a class="flex items-center gap-3" (click)="grabBest.emit()" [class.pointer-events-none]="grabBusy() !== null">
               @if (grabBusy() === 'best') { <span class="loading loading-spinner loading-xs"></span> }
@@ -386,7 +388,7 @@
           <div tabindex="0" role="button" class="btn btn-ghost btn btn-circle">
             <svg lucideEllipsisVertical class="h-5 w-5"></svg>
           </div>
-          <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-56 p-2 shadow-lg">
+          <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-max min-w-56 p-2 shadow-lg">
             @if (canGrab()) {
               <li><a class="flex items-center gap-3" (click)="grabBest.emit()" [class.pointer-events-none]="grabBusy() !== null">
                 @if (grabBusy() === 'best') { <span class="loading loading-spinner loading-xs"></span> }
