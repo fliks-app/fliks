@@ -71,6 +71,8 @@ import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats
       background-color: #000;
       z-index: 100;
       overflow: hidden;
+      -webkit-user-select: none;
+      user-select: none;
     }
     /* When using native player, make WebView layers transparent so ExoPlayer/AVPlayer shows through */
     .player-container.native-player {
@@ -132,6 +134,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private saveInterval: ReturnType<typeof setInterval> | null = null;
   private controlsTimeout: ReturnType<typeof setTimeout> | null = null;
+  private seekDragging = false;
   private statsInterval: ReturnType<typeof setInterval> | null = null;
   private subtitleStyleEl: HTMLStyleElement | null = null;
 
@@ -851,8 +854,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private resetHideTimer() {
     if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
+    if (this.seekDragging) return; // don't start hide timer during drag
     this.controlsTimeout = setTimeout(() => {
-      if (!this.paused() && !this.isDropdownOpen()) this.controlsVisible.set(false);
+      if (!this.paused() && !this.isDropdownOpen() && !this.seekDragging) this.controlsVisible.set(false);
     }, 3000);
   }
 
@@ -878,12 +882,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  onSeekDragChange(dragging: boolean) {
+    this.seekDragging = dragging;
+    if (dragging) {
+      // Cancel any pending hide
+      if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
+    } else {
+      this.resetHideTimer();
+    }
+  }
+
   onSeek(time: number) {
     const t = Math.max(0, Math.min(time, this.duration() || 0));
     if (this.engine) {
       this.engine.seek(t).catch(() => {});
       this.state.currentTime.set(t);
     }
+    this.resetHideTimer();
   }
 
   onVolumeChange(vol: number) {
@@ -1272,6 +1287,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!option) return;
     const mode = this.playbackMode();
     this.qualityManager.selectQuality(option, this.engine, mode);
+
+    // Native engine + transcode: setMaxResolution is only a hint for ABR.
+    // The backend serves single-rendition HLS, so we must reload the stream
+    // to get the new quality from FFmpeg.
+    if (this.isNative && mode !== 'direct') {
+      await this.reloadStream();
+    }
+
     this.resetHideTimer();
   }
 

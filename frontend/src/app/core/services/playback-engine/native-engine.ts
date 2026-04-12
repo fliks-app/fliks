@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import { NativePlayer } from '../../plugins/native-player.plugin';
 import type {
   PlaybackEngine,
@@ -7,6 +8,12 @@ import type {
   EngineEvent,
   EngineEventMap,
 } from './playback-engine';
+
+interface VttCue {
+  start: number;
+  end: number;
+  text: string;
+}
 
 /**
  * PlaybackEngine implementation backed by the NativePlayer Capacitor plugin
@@ -30,6 +37,13 @@ export class NativeEngine implements PlaybackEngine {
   private listeners: Array<{ event: string; fn: EventListener }> = [];
   private positionPoll: ReturnType<typeof setInterval> | null = null;
 
+  // ── Native subtitle overlay (iOS) ──
+  private readonly _isIos = Capacitor.getPlatform() === 'ios';
+  private _parsedTracks = new Map<string, VttCue[]>();
+  private _activeTrackId: string | null = null;
+  private _subtitleVisible = false;
+  private _lastCueText = '';
+
   // ── Lifecycle ──
 
   async init(_container: HTMLElement): Promise<void> {
@@ -42,6 +56,7 @@ export class NativeEngine implements PlaybackEngine {
   async destroy(): Promise<void> {
     this.stopPositionPoll();
     this.unbindWindowEvents();
+    this.destroySubtitleOverlay();
     await NativePlayer.destroy();
   }
 
@@ -195,16 +210,41 @@ export class NativeEngine implements PlaybackEngine {
   ): Promise<string> {
     // Find the index of this URL in the preloaded subtitles
     const idx = this._subtitleUrls.indexOf(url);
-    return idx >= 0 ? `text-${idx}` : `text-0`;
+    const trackId = idx >= 0 ? `text-${idx}` : `text-0`;
+
+    // On iOS: fetch and parse WebVTT for HTML overlay rendering
+    if (this._isIos && !this._parsedTracks.has(trackId)) {
+      try {
+        const resp = await fetch(url);
+        const vtt = await resp.text();
+        this._parsedTracks.set(trackId, this.parseVtt(vtt));
+      } catch {
+        this._parsedTracks.set(trackId, []);
+      }
+    }
+
+    return trackId;
   }
 
   selectTextTrack(track: any): void {
     const id = typeof track === 'string' ? track : null;
-    NativePlayer.selectSubtitleTrack({ id });
+    if (this._isIos) {
+      this._activeTrackId = id;
+      this._subtitleVisible = !!id;
+      this.updateSubtitleOverlay();
+    } else {
+      NativePlayer.selectSubtitleTrack({ id });
+    }
   }
 
   setTextVisibility(visible: boolean): void {
-    if (!visible) {
+    if (this._isIos) {
+      this._subtitleVisible = visible;
+      if (!visible) {
+        this._activeTrackId = null;
+        this.updateSubtitleOverlay();
+      }
+    } else if (!visible) {
       NativePlayer.selectSubtitleTrack({ id: null });
     }
   }
@@ -285,6 +325,7 @@ export class NativeEngine implements PlaybackEngine {
       this._duration = d.duration;
       this._buffered = d.buffered;
       this.emit('timeUpdate', d);
+      this.updateSubtitleOverlay();
     });
 
     bind('nativePlayerError', (e: Event) => {
@@ -318,6 +359,7 @@ export class NativeEngine implements PlaybackEngine {
         this._duration = pos.duration;
         this._buffered = pos.buffered;
         this.emit('timeUpdate', pos);
+        this.updateSubtitleOverlay();
       } catch {
         /* player might be destroyed */
       }
@@ -329,5 +371,72 @@ export class NativeEngine implements PlaybackEngine {
       clearInterval(this.positionPoll);
       this.positionPoll = null;
     }
+  }
+
+  // ── Native Subtitle Overlay (iOS) ──
+
+  private updateSubtitleOverlay(): void {
+    if (!this._isIos) return;
+    if (!this._subtitleVisible || !this._activeTrackId) {
+      if (this._lastCueText) {
+        this._lastCueText = '';
+        NativePlayer.setSubtitleText({ text: '' }).catch(() => {});
+      }
+      return;
+    }
+    const cues = this._parsedTracks.get(this._activeTrackId);
+    if (!cues) return;
+    const t = this._currentTime;
+    const active = cues.find(c => t >= c.start && t <= c.end);
+    const text = active?.text?.replace(/<br>/g, '\n').replace(/<[^>]*>/g, '') ?? '';
+    if (text !== this._lastCueText) {
+      this._lastCueText = text;
+      NativePlayer.setSubtitleText({ text }).catch(() => {});
+    }
+  }
+
+  private destroySubtitleOverlay(): void {
+    if (this._isIos) {
+      NativePlayer.setSubtitleText({ text: '' }).catch(() => {});
+    }
+    this._parsedTracks.clear();
+    this._activeTrackId = null;
+    this._subtitleVisible = false;
+    this._lastCueText = '';
+  }
+
+  private parseVtt(raw: string): VttCue[] {
+    const cues: VttCue[] = [];
+    const blocks = raw.replace(/\r\n/g, '\n').split('\n\n');
+    for (const block of blocks) {
+      const lines = block.trim().split('\n');
+      const timeLine = lines.find(l => l.includes('-->'));
+      if (!timeLine) continue;
+      const [startStr, endStr] = timeLine.split('-->').map(s => s.trim());
+      const start = this.vttTimeToSec(startStr);
+      const end = this.vttTimeToSec(endStr);
+      if (isNaN(start) || isNaN(end)) continue;
+      const textLines = lines.slice(lines.indexOf(timeLine) + 1);
+      const text = textLines.join('<br>').replace(/<\/?[^>]*>/g, (tag) => {
+        // Allow <b>, <i>, <u>, <br> — strip everything else
+        if (/^<\/?(b|i|u|br)\s*\/?>$/i.test(tag)) return tag;
+        return '';
+      });
+      if (text) cues.push({ start, end, text });
+    }
+    return cues;
+  }
+
+  private vttTimeToSec(ts: string): number {
+    // Remove positioning metadata (e.g. "00:01:23.456 align:start")
+    const clean = ts.split(' ')[0];
+    const parts = clean.split(':');
+    if (parts.length === 3) {
+      return +parts[0] * 3600 + +parts[1] * 60 + parseFloat(parts[2]);
+    }
+    if (parts.length === 2) {
+      return +parts[0] * 60 + parseFloat(parts[1]);
+    }
+    return NaN;
   }
 }

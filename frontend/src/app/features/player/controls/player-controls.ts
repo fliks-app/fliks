@@ -114,6 +114,7 @@ export class PlayerControlsComponent {
   readonly toggleCast = output<void>();
   readonly toggleFillScreen = output<void>();
   readonly openMedia = output<void>();
+  readonly seekDragChange = output<boolean>();
 
   readonly speedOptions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
@@ -251,10 +252,14 @@ export class PlayerControlsComponent {
 
   onProgressDown(event: PointerEvent) {
     const bar = event.currentTarget as HTMLElement;
-    bar.setPointerCapture(event.pointerId);
     event.preventDefault();
 
+    // Safari may silently fail setPointerCapture — use try/catch
+    try { bar.setPointerCapture(event.pointerId); } catch {}
+
     this.dragging.set(true);
+    this.seekDragChange.emit(true);
+    this._dragBar = bar;
     this.updateDragFromPointer(event, bar);
 
     const onMove = (e: PointerEvent) => {
@@ -265,16 +270,41 @@ export class PlayerControlsComponent {
       bar.removeEventListener('pointermove', onMove);
       bar.removeEventListener('pointerup', onUp);
       bar.removeEventListener('pointercancel', onUp);
-      this.dragging.set(false);
-      // Keep showing dragTime until currentTime catches up
-      this.seekTarget = this.dragTime();
-      this.seekPending.set(true);
-      this.seek.emit(this.seekTarget);
+      document.removeEventListener('pointermove', onMoveDoc);
+      document.removeEventListener('pointerup', onUpDoc);
+      this.finishDrag();
+    };
+
+    // Fallback: also listen on document in case pointer capture fails (Safari)
+    const onMoveDoc = (e: PointerEvent) => {
+      this.updateDragFromPointer(e, bar);
+    };
+    const onUpDoc = () => {
+      bar.removeEventListener('pointermove', onMove);
+      bar.removeEventListener('pointerup', onUp);
+      bar.removeEventListener('pointercancel', onUp);
+      document.removeEventListener('pointermove', onMoveDoc);
+      document.removeEventListener('pointerup', onUpDoc);
+      this.finishDrag();
     };
 
     bar.addEventListener('pointermove', onMove);
     bar.addEventListener('pointerup', onUp);
     bar.addEventListener('pointercancel', onUp);
+    document.addEventListener('pointermove', onMoveDoc);
+    document.addEventListener('pointerup', onUpDoc);
+  }
+
+  private _dragBar: HTMLElement | null = null;
+
+  private finishDrag() {
+    if (!this.dragging()) return;
+    this.dragging.set(false);
+    this.seekDragChange.emit(false);
+    this._dragBar = null;
+    this.seekTarget = this.dragTime();
+    this.seekPending.set(true);
+    this.seek.emit(this.seekTarget);
   }
 
   private updateDragFromPointer(e: PointerEvent, bar: HTMLElement) {

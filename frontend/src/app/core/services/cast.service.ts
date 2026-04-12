@@ -92,6 +92,11 @@ export class CastService implements OnDestroy {
         this.duration.set(e.detail?.duration ?? 0);
         this.isPaused.set(e.detail?.isPaused ?? true);
       }) as EventListener);
+
+      // Device discovery updates
+      window.addEventListener('castAvailabilityChanged', ((e: CustomEvent) => {
+        this.isAvailable.set(e.detail?.available ?? false);
+      }) as EventListener);
     } catch (e) {
       console.warn('NativeCast.initialize failed', e);
       this.isAvailable.set(false);

@@ -114,6 +114,9 @@ export interface NativePlayerPlugin {
 
   getPosition(): Promise<NativePlayerPosition>;
   setPlaybackRate(options: { rate: number }): Promise<void>;
+
+  /** Update the native subtitle label text (iOS: rendered between player and WebView). */
+  setSubtitleText(options: { text: string }): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------

@@ -11,6 +11,10 @@ const config: CapacitorConfig = {
   android: {
     allowMixedContent: true,
   },
+  ios: {
+    allowMixedContent: true,
+    webContentsDebuggingEnabled: true,
+  },
 };
 
 export default config;

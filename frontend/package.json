@@ -9,8 +9,11 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "cap:sync": "npx cap sync android",
+    "cap:sync:ios": "npx cap sync ios",
     "cap:open": "npx cap open android",
-    "cap:build": "npm run build && npx cap sync android"
+    "cap:open:ios": "npx cap open ios",
+    "cap:build": "npm run build && npx cap sync android",
+    "cap:build:ios": "npm run build && npx cap sync ios"
   },
   "private": true,
   "packageManager": "npm@10.8.2",
@@ -27,6 +30,7 @@
     "@capacitor/app": "^8.1.0",
     "@capacitor/cli": "^7.6.1",
     "@capacitor/core": "^8.3.0",
+    "@capacitor/ios": "^8.3.0",
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/keyboard": "^8.0.2",
     "@capacitor/preferences": "^8.0.1",
