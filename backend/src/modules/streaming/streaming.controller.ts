@@ -372,9 +372,16 @@ export class StreamingController {
       mediaFileId,
       streamIndex,
     );
+    // Buffer the FFmpeg output so we can send Content-Length
+    // (ExoPlayer needs it for subtitle loading)
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    const vtt = Buffer.concat(chunks);
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    stream.pipe(res);
+    res.send(vtt);
   }
 
   /** Serve an external subtitle as WebVTT. */
