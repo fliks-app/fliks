@@ -16,6 +16,7 @@ import type { Request, Response } from 'express';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
+import { SettingsService } from '../settings/settings.service';
 
 const execFileAsync = promisify(execFile);
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
@@ -33,9 +34,11 @@ import { SubtitleBurnInService } from './subtitle-burn-in.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 
 const VALID_QUALITIES = new Set([...PROFILES.map((p) => p.name), 'remux']);
-const SEG_DURATION = 2;
 
 /** Generate a VOD HLS playlist for a given duration and segment URL pattern. */
+/** Default segment duration — overridden by admin streaming settings via tracker. */
+let SEG_DURATION = 3;
+
 function buildVodPlaylist(
   duration: number,
   segmentUrl: (index: string) => string,
@@ -84,7 +87,22 @@ export class StreamingController {
     private readonly activeStreamTracker: ActiveStreamTracker,
     private readonly subtitleBurnIn: SubtitleBurnInService,
     private readonly thumbnailService: ThumbnailService,
+    private readonly settingsService: SettingsService,
   ) {}
+
+  /** Read streaming settings from DB with defaults. */
+  private async getStreamingSettings() {
+    const [format, duration, initTime] = await Promise.all([
+      this.settingsService.get('streaming_segment_format'),
+      this.settingsService.get('streaming_segment_duration'),
+      this.settingsService.get('streaming_init_time'),
+    ]);
+    return {
+      segmentFormat: (format ?? 'auto') as 'auto' | 'ts' | 'fmp4',
+      segmentDuration: parseFloat(duration ?? '3') || 3,
+      initTime: parseFloat(initTime ?? '1') || 1,
+    };
+  }
 
   private buildSessionContext(
     req: Request,
@@ -213,12 +231,19 @@ export class StreamingController {
       mediaFileId,
       deviceProfile.supportsMultiAudioMuxed ?? false,
     );
-    // Use TS for single-audio files (faster startup: no init.mp4 needed).
-    // Keep fMP4 for multi-audio (required for var_stream_map / EXT-X-MEDIA).
+    // Decide segment format from admin streaming settings
+    const ss = await this.getStreamingSettings();
     const audioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 1;
-    const clientSupportsFmp4 = deviceProfile.supportsHlsFmp4 ?? true;
-    const useFmp4 = audioCount > 1 && clientSupportsFmp4;
+    const clientFmp4 = deviceProfile.supportsHlsFmp4 ?? true;
+    let useFmp4: boolean;
+    if (ss.segmentFormat === 'ts') useFmp4 = false;
+    else if (ss.segmentFormat === 'fmp4') useFmp4 = clientFmp4;
+    else useFmp4 = audioCount > 1 && clientFmp4; // auto: fMP4 for multi-audio only
     this.activeStreamTracker.setFmp4Supported(mediaFileId, useFmp4);
+    this.activeStreamTracker.setStreamingDurations(ss.segmentDuration, ss.initTime);
+    // Update module-level constants used by buildVodPlaylist and transcoding
+    SEG_DURATION = ss.segmentDuration;
+    this.transcodingService.setSegmentDurations(ss.segmentDuration, ss.initTime);
 
     // Include duration so the player can skip ffprobe in hlsPlaylist
     const duration = resolved.mediaFile.streamInfo?.durationSeconds ?? 0;

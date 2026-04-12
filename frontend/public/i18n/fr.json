@@ -813,7 +813,20 @@
       "subtitle_providers": "Fournisseurs de sous-titres",
       "subtitles": "Sous-titres",
       "schedulers": "Tâches planifiées",
-      "network": "Réseau & Sécurité"
+      "network": "Réseau & Sécurité",
+      "streaming": "Streaming"
+    },
+    "streaming": {
+      "title": "Streaming",
+      "description": "Configuration du format et de la taille des segments HLS. Affecte la vitesse de démarrage et le changement de qualité.",
+      "segment_format": "Format de segment",
+      "format_auto": "Auto (TS single-audio, fMP4 multi-audio)",
+      "segment_format_help": "TS est plus rapide au démarrage (pas d'init.mp4). fMP4 est nécessaire pour le multi-audio séparé (EXT-X-MEDIA).",
+      "segment_duration": "Durée des segments",
+      "segment_duration_help": "Segments plus courts = démarrage plus rapide mais plus de requêtes HTTP. 3s est un bon compromis.",
+      "init_time": "Durée du premier segment",
+      "init_time_help": "Le premier segment peut être plus court pour accélérer le démarrage. Les suivants utilisent la durée normale.",
+      "saved": "Paramètres de streaming enregistrés"
     },
     "network": {
       "title": "Réseau & Sécurité",

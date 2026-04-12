@@ -1,0 +1,47 @@
+@if (loading()) {
+  <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>
+} @else {
+  <div class="space-y-6 max-w-xl">
+    <h2 class="text-xl font-semibold">{{ 'settings.streaming.title' | translate }}</h2>
+    <p class="text-base-content/60">{{ 'settings.streaming.description' | translate }}</p>
+
+    <!-- Segment format -->
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.segment_format' | translate }}</span></label>
+      <select class="select select-bordered w-full" [ngModel]="segmentFormat()" (ngModelChange)="segmentFormat.set($event)">
+        <option value="auto">{{ 'settings.streaming.format_auto' | translate }}</option>
+        <option value="ts">MPEG-TS</option>
+        <option value="fmp4">fMP4</option>
+      </select>
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.segment_format_help' | translate }}</span></label>
+    </div>
+
+    <!-- Segment duration -->
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.segment_duration' | translate }}</span></label>
+      <select class="select select-bordered w-full" [ngModel]="segmentDuration()" (ngModelChange)="segmentDuration.set($event)">
+        <option value="2">2s</option>
+        <option value="3">3s</option>
+        <option value="4">4s</option>
+        <option value="6">6s</option>
+      </select>
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.segment_duration_help' | translate }}</span></label>
+    </div>
+
+    <!-- Init time -->
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.init_time' | translate }}</span></label>
+      <select class="select select-bordered w-full" [ngModel]="initTime()" (ngModelChange)="initTime.set($event)">
+        <option value="0.5">0.5s</option>
+        <option value="1">1s</option>
+        <option value="2">2s</option>
+      </select>
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.init_time_help' | translate }}</span></label>
+    </div>
+
+    <button class="btn btn-primary" [disabled]="saving()" (click)="save()">
+      @if (saving()) { <span class="loading loading-spinner loading-xs"></span> }
+      {{ 'common.save' | translate }}
+    </button>
+  </div>
+}

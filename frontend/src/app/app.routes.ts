@@ -286,6 +286,7 @@ export const routes: Routes = [
           { path: 'schedulers', loadComponent: () => import('./features/settings/schedulers/schedulers').then((m) => m.SchedulersComponent) },
           { path: 'auto-approval', loadComponent: () => import('./features/settings/auto-approval/auto-approval').then((m) => m.AutoApprovalSettingsComponent) },
           { path: 'network', loadComponent: () => import('./features/settings/network/network').then((m) => m.NetworkSettingsComponent) },
+          { path: 'streaming', loadComponent: () => import('./features/settings/streaming/streaming').then((m) => m.StreamingSettingsComponent) },
         ],
       },
     ],

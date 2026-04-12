@@ -181,7 +181,8 @@ async function segmentNearby(
   return false;
 }
 
-const SEGMENT_DURATION = 2;
+let SEGMENT_DURATION = 3;
+let INIT_TIME = 1;
 
 /** Parse FFmpeg-style rates like '8M', '500k', '192k' to bits per second. */
 export function parseBitrateToBps(s: string): number {
@@ -239,6 +240,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
   getDetectedHwAccel(): HwAccelType {
     return this.detectedHwAccel;
+  }
+
+  /** Update segment durations from admin streaming settings. */
+  setSegmentDurations(segDuration: number, initTime: number) {
+    SEGMENT_DURATION = segDuration;
+    INIT_TIME = initTime;
   }
 
   getActiveSessions(): TranscodeSession[] {
@@ -1101,7 +1108,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args.push(
         '-f', 'hls',
         '-hls_time', String(SEGMENT_DURATION),
-        '-hls_init_time', '0.5',
+        '-hls_init_time', String(INIT_TIME),
         '-hls_list_size', '0',
         '-start_number', String(startSegment),
         '-hls_segment_type', 'fmp4',
@@ -1121,7 +1128,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args.push(
         '-f', 'hls',
         '-hls_time', String(SEGMENT_DURATION),
-        '-hls_init_time', '0.5',
+        '-hls_init_time', String(INIT_TIME),
         '-hls_list_size', '0',
         '-start_number', String(startSegment),
       );

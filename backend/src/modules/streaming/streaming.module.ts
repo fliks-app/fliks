@@ -18,6 +18,7 @@ import { SubtitleBurnInService } from './subtitle-burn-in.service';
 import { ThumbnailService } from './thumbnail.service';
 import { Command } from '../scheduler/entities/command.entity';
 import { AuthModule } from '../auth/auth.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { AuthModule } from '../auth/auth.module';
       Command,
     ]),
     AuthModule,
+    SettingsModule,
   ],
   controllers: [StreamingController, PlaybackController],
   providers: [

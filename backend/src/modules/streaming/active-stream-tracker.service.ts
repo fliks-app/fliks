@@ -136,6 +136,17 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.fmp4SupportedCache.get(mediaFileId) ?? true;
   }
 
+  private segmentDurationCache = 3;
+  private initTimeCache = 1;
+
+  setStreamingDurations(segDuration: number, initTime: number) {
+    this.segmentDurationCache = segDuration;
+    this.initTimeCache = initTime;
+  }
+
+  getSegmentDuration(): number { return this.segmentDurationCache; }
+  getInitTime(): number { return this.initTimeCache; }
+
   setAudioStreamIndex(mediaFileId: number, index: number | undefined) {
     if (index != null) this.audioStreamIndexCache.set(mediaFileId, index);
     else this.audioStreamIndexCache.delete(mediaFileId);
