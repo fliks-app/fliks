@@ -831,6 +831,16 @@
       "segment_duration_help": "Segments plus courts = démarrage plus rapide mais plus de requêtes HTTP. 3s est un bon compromis.",
       "init_time": "Durée du premier segment",
       "init_time_help": "Le premier segment peut être plus court pour accélérer le démarrage. Les suivants utilisent la durée normale.",
+      "qsv_preset": "Preset d'encodage (QSV / libx264)",
+      "qsv_preset_help": "De 'veryfast' (le plus rapide, qualité moindre) à 'veryslow' (le plus lent, meilleure qualité). 'faster' est le bon compromis pour du transcodage à la volée. Ne s'applique pas au VAAPI ni au NVENC.",
+      "qsv_advanced": "Options avancées Intel QSV",
+      "qsv_lookahead": "Lookahead encodeur",
+      "qsv_lookahead_help": "Active -look_ahead avec une profondeur de 40 frames. Meilleure allocation du bitrate sur les scènes complexes, coût GPU faible.",
+      "qsv_low_power": "Mode basse consommation",
+      "qsv_low_power_help": "Active -low_power 1 (VDENC, Intel Gen9+). Encodage plus rapide mais qualité légèrement inférieure. À tester selon la génération du CPU.",
+      "qsv_adaptive": "Frames adaptatives (I/B)",
+      "qsv_adaptive_help": "Active -adaptive_i et -adaptive_b. L'encodeur choisit le placement optimal des I-frames et B-frames selon le contenu. Recommandé.",
+      "default": "défaut",
       "saved": "Paramètres de streaming enregistrés"
     },
     "network": {

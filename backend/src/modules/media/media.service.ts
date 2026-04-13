@@ -46,7 +46,9 @@ import {
 
 import { ImageService } from '../images/image.service';
 import { ThumbnailService } from '../streaming/thumbnail.service';
+import { SubtitleStreamService } from '../streaming/subtitle-stream.service';
 import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
+import { clearMediaCache } from '../../common/utils/media-cache.util';
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
 import { SubtitlesService } from '../subtitles/subtitles.service';
@@ -96,6 +98,7 @@ export class MediaService {
     private readonly subtitles: SubtitlesService,
     private readonly imageService: ImageService,
     private readonly thumbnailService: ThumbnailService,
+    private readonly subtitleStream: SubtitleStreamService,
   ) {}
 
   async importFromTmdb(dto: ImportTmdbDto): Promise<Media> {
@@ -1861,6 +1864,22 @@ export class MediaService {
       `enrichMediaFileFromDisk: enriched media file #${mediaFileId} "${normPath}"`,
     );
 
+    // Pre-extract embedded text subtitles to cache so the first playback
+    // doesn't pay the extraction cost (ExoPlayer on Android pre-fetches all
+    // SubtitleConfiguration URLs at player prepare, blocking playback).
+    // Clear this file's cache subdir first in case the stream layout changed.
+    void this.subtitleStream
+      .clearMediaFileSubtitleCache(dbFile.media?.path, mediaFileId)
+      .then(() =>
+        this.subtitleStream.warmupCache(
+          absPath,
+          dbFile.media?.path,
+          mediaFileId,
+          streamInfo.subtitles,
+          dbFile.media?.title,
+        ),
+      );
+
     void this.mediaServers.dispatch('library.rescan', {
       title: dbFile.media.title,
       path: dbFile.media.path,
@@ -1897,6 +1916,17 @@ export class MediaService {
     if (!media.path) {
       throw new BadRequestException(
         `Media #${mediaId} has no root path configured`,
+      );
+    }
+
+    // Wipe the whole per-media `.cache/` tree (subtitles + any other cached
+    // artefact) — streamInfo is about to be re-read so anything derived
+    // from the old layout is stale.
+    try {
+      await clearMediaCache(media.path);
+    } catch (err) {
+      this.log.warn(
+        `Rescan[media #${mediaId}]: clearMediaCache failed for "${media.path}": ${err instanceof Error ? err.message : err}`,
       );
     }
 
@@ -2111,6 +2141,13 @@ export class MediaService {
         this.log.log(
           `Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${qualityName})`,
         );
+        void this.subtitleStream.warmupCache(
+          absPath,
+          media.path,
+          dbFile.id,
+          streamInfo?.subtitles,
+          media.title,
+        );
       } catch (err) {
         this.log.error(
           `Rescan[media #${mediaId}]: failed to save refreshed metadata for "${normPath}"`,
@@ -2246,6 +2283,13 @@ export class MediaService {
         if (episodeId != null) {
           await this.episodeRepo.update(episodeId, { hasFile: true });
         }
+        void this.subtitleStream.warmupCache(
+          absPath,
+          media.path,
+          savedFile.id,
+          streamInfo.subtitles,
+          media.title,
+        );
       } catch (err) {
         this.log.error(
           `Rescan[media #${mediaId}]: failed to save new file row "${relativePath}" abs="${absPath}"`,

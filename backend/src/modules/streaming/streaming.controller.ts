@@ -93,15 +93,40 @@ export class StreamingController {
 
   /** Read streaming settings from DB with defaults. */
   private async getStreamingSettings() {
-    const [format, duration, initTime] = await Promise.all([
+    const [
+      format,
+      duration,
+      initTime,
+      qsvPreset,
+      qsvLookahead,
+      qsvLowPower,
+      qsvAdaptive,
+    ] = await Promise.all([
       this.settingsService.get('streaming_segment_format'),
       this.settingsService.get('streaming_segment_duration'),
       this.settingsService.get('streaming_init_time'),
+      this.settingsService.get('streaming_qsv_preset'),
+      this.settingsService.get('streaming_qsv_lookahead'),
+      this.settingsService.get('streaming_qsv_low_power'),
+      this.settingsService.get('streaming_qsv_adaptive'),
     ]);
     return {
       segmentFormat: (format ?? 'auto') as 'auto' | 'ts' | 'fmp4',
       segmentDuration: parseFloat(duration ?? '3') || 3,
       initTime: parseFloat(initTime ?? '1') || 1,
+      qsvPreset: (qsvPreset ?? 'faster') as
+        | 'veryfast'
+        | 'faster'
+        | 'fast'
+        | 'medium'
+        | 'slow'
+        | 'slower'
+        | 'veryslow',
+      // Booleans stored as 'true' / 'false' strings (SettingsService is text-only).
+      qsvLookahead: qsvLookahead === 'true',
+      qsvLowPower: qsvLowPower === 'true',
+      // Default true when absent.
+      qsvAdaptive: qsvAdaptive == null ? true : qsvAdaptive === 'true',
     };
   }
 
@@ -127,18 +152,33 @@ export class StreamingController {
       crop: si?.video?.[0]?.crop ?? undefined,
       // videoOnly only makes sense with fMP4 (var_stream_map produces separate audio).
       // For TS, audio must stay muxed in the video stream.
+      // Multi-audio handling depends on segment format:
+      //   - fMP4: videoOnly + var_stream_map (separate audio renditions in
+      //     subdirs) → Shaka can switch via EXT-X-MEDIA.
+      //   - TS:   mapAllAudio muxes every audio track as distinct PIDs in a
+      //     single TS stream → ExoPlayer/AVPlayer switch by PID natively.
       videoOnly:
         this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
         this.activeStreamTracker.getFmp4Supported(mediaFileId),
-      // Multi-audio in muxed TS doesn't work (ExoPlayer can't switch PIDs).
-      // Audio switching always goes through server-side reload.
-      mapAllAudio: false,
-      // Pass audio stream info for var_stream_map (single FFmpeg, multi-output)
+      mapAllAudio:
+        this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
+        !this.activeStreamTracker.getFmp4Supported(mediaFileId),
+      // Pass audio stream info for both var_stream_map (fMP4) and
+      // mapAllAudio (TS) — both paths need language metadata.
       audioStreams:
         this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1
           ? (si?.audio as { language?: string; title?: string }[]) ?? []
           : undefined,
       useFmp4: this.activeStreamTracker.getFmp4Supported(mediaFileId),
+      encoderPreset: this.activeStreamTracker.getEncoderPreset(mediaFileId),
+      qsvOptions: this.activeStreamTracker.getQsvOptions(),
+      // Source framerate (e.g. "24", "23.976", "29.97") — used to compute an
+      // accurate GOP so IDR frames fall on the same boundary regardless of
+      // source fps. Falls back to 24 when unknown.
+      sourceFps: parseFloat(si?.video?.[0]?.frameRate ?? '') || undefined,
+      // ffprobe ran at import/rescan and the result is cached in streamInfo —
+      // tell FFmpeg to skip its own redundant avformat_find_stream_info scan.
+      trustedStreamInfo: !!si?.video?.[0]?.codec,
     };
   }
 
@@ -249,6 +289,26 @@ export class StreamingController {
     SEG_DURATION = ss.segmentDuration;
     this.transcodingService.setSegmentDurations(ss.segmentDuration, ss.initTime);
 
+    // Persist encoder preset + QSV advanced options for downstream sessions.
+    this.activeStreamTracker.setEncoderPreset(mediaFileId, ss.qsvPreset);
+    this.activeStreamTracker.setQsvOptions({
+      lookahead: ss.qsvLookahead,
+      lowPower: ss.qsvLowPower,
+      adaptive: ss.qsvAdaptive,
+    });
+
+    // Persist source→client codec compatibility so hlsMaster can pick a
+    // smart-remux variant when the user's quality lock matches the source
+    // resolution (and video codec is copy-compatible).
+    this.activeStreamTracker.setCanCopyVideo(mediaFileId, result.videoCopyStream);
+    this.activeStreamTracker.setCanCopyAudio(mediaFileId, result.audioCopyStream);
+    const sv = resolved.mediaFile.streamInfo?.video?.[0];
+    this.activeStreamTracker.setSourceDimensions(
+      mediaFileId,
+      sv?.width ?? 0,
+      sv?.height ?? 0,
+    );
+
     // Include duration so the player can skip ffprobe in hlsPlaylist
     const duration = resolved.mediaFile.streamInfo?.durationSeconds ?? 0;
     return { ...result, durationSeconds: duration };
@@ -264,17 +324,13 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
-    const duration = resolved.mediaFile.streamInfo?.durationSeconds;
-    if (!duration) return res.status(404).json({ error: 'no duration' });
-
-    const meta = await this.thumbnailService.getOrGenerate(
-      mediaFileId,
-      resolved.absolutePath,
-      duration,
-      resolved.media.title,
-    );
-    if (!meta) return res.status(404).json({ error: 'generation failed' });
+    // ACL check only — do NOT trigger sprite generation from this endpoint.
+    // Sprites are built at import/rescan (scheduler) or via the admin
+    // regenerate button. Kicking off a CPU-heavy sprite extraction while the
+    // user is starting playback slowed stream startup by 20+ seconds.
+    await this.streamingService.resolveFile(mediaFileId, req.user as User);
+    const meta = await this.thumbnailService.readExistingMeta(mediaFileId);
+    if (!meta) return res.status(404).json({ error: 'sprite not generated' });
 
     res.set('Cache-Control', 'public, max-age=86400');
     res.json(meta);
@@ -286,18 +342,8 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
-    const duration = resolved.mediaFile.streamInfo?.durationSeconds;
-    if (!duration) return res.status(404).end();
-
-    const meta = await this.thumbnailService.getOrGenerate(
-      mediaFileId,
-      resolved.absolutePath,
-      duration,
-      resolved.media.title,
-    );
-    if (!meta) return res.status(404).end();
-
+    // Same rationale as thumbnailMeta — no on-demand generation here.
+    await this.streamingService.resolveFile(mediaFileId, req.user as User);
     const spritePath = this.thumbnailService.getSpritePath(mediaFileId);
     if (!fs.existsSync(spritePath)) return res.status(404).end();
 
@@ -335,20 +381,64 @@ export class StreamingController {
     // Use EXT-X-MEDIA only when the client needs it (Shaka on web) AND supports fMP4.
     // Native players (ExoPlayer/AVPlayer) handle multi-audio from muxed TS.
     // Cast (TS) can't handle separate fMP4 audio renditions.
+    // When the user explicitly picked an audio track (audioStreamIndex set in
+    // the tracker), the variant only contains that one audio — no rendition
+    // group makes sense, drop EXT-X-MEDIA so the player plays the muxed audio.
     const clientMuxesAudio =
       this.activeStreamTracker.getMultiAudioMuxed(mediaFileId);
     const fmp4Supported =
       this.activeStreamTracker.getFmp4Supported(mediaFileId);
+    const userPickedAudio =
+      this.activeStreamTracker.getAudioStreamIndex(mediaFileId) != null;
     const useExtXMedia =
-      audioStreams.length > 1 && !clientMuxesAudio && fmp4Supported;
+      audioStreams.length > 1 &&
+      !clientMuxesAudio &&
+      fmp4Supported &&
+      !userPickedAudio;
+    const onlyQuality = firstQueryString(req.query, 'startQuality');
+
+    // Smart remux: if the user's locked quality maps to a target height that
+    // already matches the source height (±16 px), and the source video codec
+    // is copy-compatible with the client (captured at playback-info time in
+    // `canCopyVideo`), emit the remux variant instead of a transcode variant.
+    // Saves a full video re-encode — zero GPU, instant startup.
+    let smartRemux = false;
+    if (
+      onlyQuality &&
+      onlyQuality !== 'auto' &&
+      onlyQuality !== 'original' &&
+      onlyQuality !== 'remux'
+    ) {
+      const profile = PROFILES.find((p) => p.name === onlyQuality);
+      const canCopyVideo = this.activeStreamTracker.getCanCopyVideo(mediaFileId);
+      const sourceH = this.activeStreamTracker.getSourceHeight(mediaFileId);
+      const sourceW = this.activeStreamTracker.getSourceWidth(mediaFileId);
+      if (profile && canCopyVideo && sourceW > 0 && sourceH > 0) {
+        const targetW = Math.min(profile.maxWidth, sourceW);
+        const rawH = (targetW * sourceH) / sourceW;
+        const targetH = Math.floor(rawH / 16) * 16 || 16;
+        if (Math.abs(sourceH - targetH) <= 16) {
+          smartRemux = true;
+          this.log.log(
+            `Smart remux for file ${mediaFileId}: source ${sourceW}x${sourceH} ` +
+            `matches requested ${onlyQuality}, skipping transcode`,
+          );
+        }
+      }
+    }
+
+    const effectiveIncludeRemux = includeRemux || smartRemux;
+    const effectiveOnlyQuality = smartRemux ? 'remux' : onlyQuality;
+
     const playlist = this.transcodingService.generateMasterPlaylist(
       mediaFileId,
       w,
       h,
       tokenParam,
-      includeRemux,
+      effectiveIncludeRemux,
       sourceBitrate || undefined,
       useExtXMedia ? audioStreams : undefined,
+      effectiveOnlyQuality,
     );
 
     this.activeStreamTracker.setAudioStreamCount(
@@ -661,12 +751,15 @@ export class StreamingController {
     const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
 
     const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+    // For remux sessions, copy audio only when the source codec is compatible
+    // (captured at playback-info); otherwise transcode audio to AAC.
+    const copyAudio = this.activeStreamTracker.getCanCopyAudio(mediaFileId);
     const session =
       quality === 'remux'
         ? await this.transcodingService.getOrCreateRemuxSession(
             mediaFileId,
             resolved.absolutePath,
-            true,
+            copyAudio,
             segIndex,
             ctx,
           )

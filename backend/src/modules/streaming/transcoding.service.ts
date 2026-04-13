@@ -54,6 +54,31 @@ export interface SessionContext {
   audioStreams?: { language?: string; title?: string }[];
   /** Whether to use fMP4 segments (true) or MPEG-TS (false, for Cast) */
   useFmp4?: boolean;
+  /**
+   * FFmpeg encoder preset ('veryfast' | 'faster' | 'fast' | 'medium' | 'slow').
+   * Applied to h264_qsv and libx264; VAAPI/NVENC ignore it (different naming).
+   * Default 'faster' if unset — good speed/quality trade-off.
+   */
+  encoderPreset?: string;
+  /** h264_qsv advanced options (all admin-configurable). */
+  qsvOptions?: {
+    /** -look_ahead 1 -look_ahead_depth 40 (better rate control, slight GPU cost) */
+    lookahead: boolean;
+    /** -low_power 1 (VDENC on Gen9+ — faster, slight quality loss) */
+    lowPower: boolean;
+    /** -adaptive_i 1 -adaptive_b 1 (encoder chooses I/B placement) */
+    adaptive: boolean;
+  };
+  /** Source framerate (fps). Used to compute GOP = SEGMENT_DURATION * fps. */
+  sourceFps?: number;
+  /**
+   * True when the backend already has a trusted `streamInfo` for this file
+   * (populated by ffprobe at import / rescan). If set, FFmpeg can use an
+   * aggressive `-analyzeduration 0 -probesize 200K` to skip the redundant
+   * stream-info scan — we already know codecs / dimensions / audio layout.
+   * Safe default is false (fall back to a balanced 1s/1MB probe).
+   */
+  trustedStreamInfo?: boolean;
 }
 
 export interface TranscodeSession {
@@ -300,6 +325,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     includeRemux = false,
     sourceBitrate?: number,
     audioStreams?: { language?: string; title?: string }[],
+    onlyQuality?: string,
   ): string {
     const multiAudio = audioStreams && audioStreams.length > 1;
     const lines = ['#EXTM3U'];
@@ -317,29 +343,41 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // When multi-audio, Shaka requires CODECS on EXT-X-STREAM-INF to validate browser support.
-    // Transcoded = H.264 High + AAC-LC. Remux = source video codec + AAC-LC.
+    // Always declare CODECS on EXT-X-STREAM-INF. For HLS-TS, this lets Shaka
+    // skip fetching seg 0 purely to probe codecs (TS has no init segment) —
+    // otherwise a user resuming mid-file wastes a transcode pass at seg 0
+    // before the real seek-aware session starts at their resume position.
+    // We always produce H.264 High @ L4.0 + AAC-LC, so the string is fixed.
     const audioAttr = multiAudio ? ',AUDIO="audio"' : '';
-    const transcodeCodecs = multiAudio
-      ? ',CODECS="avc1.640028,mp4a.40.2"'
-      : '';
+    const transcodeCodecs = ',CODECS="avc1.640028,mp4a.40.2"';
 
-    // Add remux variant (original quality, no video re-encoding) as highest quality
-    if (includeRemux) {
+    // When the client asks for a specific startup quality, emit ONLY that
+    // variant. It's the only reliable way to stop Shaka from probing lower
+    // variants during startup — no master = no probe. The downside is that
+    // in-playback quality changes require a stream reload with a new
+    // `onlyQuality` (same cost the native path already pays), which the
+    // player handles via `reloadStream()`.
+    const wantRemuxOnly = onlyQuality === 'remux' || onlyQuality === 'original';
+
+    if (includeRemux && (!onlyQuality || wantRemuxOnly)) {
       const bw = sourceBitrate ?? 20_000_000; // fallback to 20 Mbps if unknown
-      // Remux keeps source video codec; use avc1 as safe default for CODECS
-      const remuxCodecs = multiAudio
-        ? ',CODECS="avc1.640028,mp4a.40.2"'
-        : '';
+      // Remux keeps source video codec; declare avc1 + aac as safe default
+      // (we always transcode audio to AAC-LC; source video is typically H.264).
+      const remuxCodecs = ',CODECS="avc1.640028,mp4a.40.2"';
       lines.push(
         `#EXT-X-STREAM-INF:BANDWIDTH=${bw},RESOLUTION=${sourceWidth}x${sourceHeight},NAME="remux"${remuxCodecs}${audioAttr}`,
         `/api/stream/${mediaFileId}/remux/index.m3u8${tokenParam}`,
       );
+      if (wantRemuxOnly) return lines.join('\n');
     }
 
-    // Add transcode profiles
-    const profiles = this.getAvailableProfiles(sourceWidth, sourceHeight);
+    let profiles = this.getAvailableProfiles(sourceWidth, sourceHeight);
     if (!profiles.length) profiles.push(PROFILES[PROFILES.length - 1]); // at least 480p
+
+    if (onlyQuality && !wantRemuxOnly) {
+      const picked = profiles.find((p) => p.name === onlyQuality);
+      if (picked) profiles = [picked];
+    }
 
     for (const p of profiles) {
       const bw =
@@ -414,8 +452,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       } else {
         existing.lastAccess = Date.now();
 
-        // If the requested segment is far ahead, restart FFmpeg with seek
-        if (requestedSegment > 0 && !(await segmentNearby(existing.cachePath, requestedSegment))) {
+        // If the requested segment isn't in the current cache, restart FFmpeg
+        // with a seek. Covers both forward seeks AND backward seeks (e.g. seek
+        // to t=0 while the current session was started mid-file via resume) —
+        // previously the `> 0` guard skipped the restart for segment 0, so the
+        // cache was missing it and the client got 404.
+        if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
           this.log.log(
             `Seek: restarting transcode [${key}] from segment ${requestedSegment}`,
           );
@@ -484,6 +526,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       isMapAllAudio,
       ctxAudioStreams,
       ctx?.useFmp4 ?? true,
+      ctx?.encoderPreset,
+      ctx?.qsvOptions,
+      ctx?.sourceFps,
+      ctx?.trustedStreamInfo,
     );
     this.applyContext(session, ctx);
 
@@ -533,6 +579,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           isMapAllAudio,
           ctxAudioStreams,
           ctx?.useFmp4 ?? true,
+          ctx?.encoderPreset,
+          ctx?.qsvOptions,
+          ctx?.sourceFps,
         );
         this.applyContext(cpuSession, ctx);
         this.sessions.set(key, cpuSession);
@@ -706,6 +755,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     mapAllAudio = false,
     audioStreams?: { language?: string; title?: string }[],
     useFmp4 = true,
+    encoderPreset?: string,
+    qsvOptions?: { lookahead: boolean; lowPower: boolean; adaptive: boolean },
+    sourceFps?: number,
+    trustedStreamInfo = false,
   ): TranscodeSession {
     const args = this.buildFfmpegArgs(
       absolutePath,
@@ -721,6 +774,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       mapAllAudio,
       audioStreams,
       useFmp4,
+      encoderPreset,
+      qsvOptions,
+      sourceFps,
+      trustedStreamInfo,
     );
 
     const usesVarStreamMap = videoOnly && audioStreams && audioStreams.length > 1;
@@ -765,6 +822,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ctx?.mapAllAudio ?? false,
       ctx?.audioStreams,
       ctx?.useFmp4 ?? true,
+      ctx?.encoderPreset,
+      ctx?.qsvOptions,
+      ctx?.sourceFps,
+      ctx?.trustedStreamInfo,
     );
     this.applyContext(session, ctx);
     this.sessions.set(sessionId, session);
@@ -828,8 +889,44 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     mapAllAudio = false,
     audioStreams?: { language?: string; title?: string }[],
     useFmp4 = true,
+    encoderPreset: string = 'faster',
+    qsvOptions: { lookahead: boolean; lowPower: boolean; adaptive: boolean } = {
+      lookahead: false,
+      lowPower: false,
+      adaptive: true,
+    },
+    sourceFps?: number,
+    trustedStreamInfo = false,
   ): string[] {
+    // GOP = segment_duration × fps so each segment starts exactly on an IDR.
+    // Fallback to 24 fps when source fps is unknown (safe for most content).
+    const fps = sourceFps && sourceFps > 0 ? sourceFps : 24;
+    const gopSize = Math.max(1, Math.round(SEGMENT_DURATION * fps));
+    // Build reusable QSV extra options flag list.
+    const qsvExtra: string[] = [];
+    if (qsvOptions.lookahead) {
+      qsvExtra.push('-look_ahead', '1', '-look_ahead_depth', '40');
+    }
+    if (qsvOptions.lowPower) {
+      qsvExtra.push('-low_power', '1');
+    }
+    if (qsvOptions.adaptive) {
+      qsvExtra.push('-adaptive_i', '1', '-adaptive_b', '1');
+    }
     const args = ['-hide_banner', '-loglevel', 'warning'];
+
+    // Reduce FFmpeg's avformat_find_stream_info scan. When we already have a
+    // trusted streamInfo in the DB (populated by ffprobe at import/rescan),
+    // collapse the probe to effectively nothing — FFmpeg just reads container
+    // headers and stops. Otherwise fall back to a balanced 1s/1MB budget.
+    // Default FFmpeg is 5s/5MB which burns 3-5s on cold start of large 4K MKVs.
+    if (trustedStreamInfo) {
+      this.log.log('Probe: using cached streamInfo (0s / 200KB scan)');
+      args.push('-analyzeduration', '0', '-probesize', '200000');
+    } else {
+      this.log.log('Probe: no cached streamInfo — running full FFmpeg scan (1s / 1MB)');
+      args.push('-analyzeduration', '1000000', '-probesize', '1000000');
+    }
 
     // Seek to start position if needed
     if (startSegment > 0) {
@@ -840,7 +937,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args.push('-copyts', '-avoid_negative_ts', 'make_zero');
     }
 
-    const bitrateNum = parseInt(profile.videoBitrate) * 1_000_000; // e.g. "8M" -> 8000000
+    // parseBitrateToBps handles both "8M" and "200k" correctly. Using parseInt()*1e6
+    // would give 200 Mbps for "200k" (it drops the suffix and multiplies as if M).
+    const bitrateNum = parseBitrateToBps(profile.videoBitrate);
 
     // Force pipeline adjustments when HW accel can't handle required filters:
     // - Subtitle burn-in is always CPU-only
@@ -945,6 +1044,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           args.push(
             '-c:v',
             'h264_qsv',
+            '-preset',
+            encoderPreset,
+            ...qsvExtra,
             '-mbbrc',
             '1',
             '-b:v',
@@ -958,14 +1060,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-vf',
             `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
             '-g',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
             '-keyint_min',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
           );
         } else {
           args.push(
             '-c:v',
             'h264_qsv',
+            '-preset',
+            encoderPreset,
+            ...qsvExtra,
             '-mbbrc',
             '1',
             '-b:v',
@@ -979,9 +1084,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-vf',
             `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
             '-g',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
             '-keyint_min',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
           );
         }
         break;
@@ -997,9 +1102,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-vf',
             `${hwCropPrefix}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
             '-g',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
             '-keyint_min',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
           );
         } else {
           args.push(
@@ -1012,9 +1117,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-vf',
             `${hwCropPrefix}scale_vaapi=w=${w}:h=-16:format=nv12`,
             '-g',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
             '-keyint_min',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
           );
         }
         break;
@@ -1033,9 +1138,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-vf',
             `hwdownload,format=p010le,${cpuCropPrefix}${tonemapCpu}scale=${w}:-2`,
             '-g',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
             '-keyint_min',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
           );
         } else {
           // Use scale_cuda to stay on GPU; force nv12 to avoid green bar with 10-bit HDR sources
@@ -1054,9 +1159,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-vf',
             `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=nv12`,
             '-g',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
             '-keyint_min',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
           );
         }
         break;
@@ -1065,7 +1170,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           '-c:v',
           'libx264',
           '-preset',
-          'veryfast',
+          encoderPreset,
           '-b:v',
           profile.videoBitrate,
           '-maxrate',
@@ -1085,7 +1190,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     // ── Audio mapping + HLS output ──
     // var_stream_map requires fMP4. For TS clients (Cast), fall back to single-audio.
-    const useVarStreamMap = useFmp4 && videoOnly && audioStreams && audioStreams.length > 1;
+    // An explicit `audioStreamIndex` (user picked a specific track from the UI)
+    // forces single-audio output even when multi-audio would otherwise apply —
+    // otherwise the backend keeps muxing every track and the client can't
+    // actually switch (Shaka in TS-only can't demux multi-PID, ExoPlayer
+    // fallback path goes through `si-*` reload).
+    const userPickedAudio = audioStreamIndex != null;
+    const useVarStreamMap =
+      useFmp4 &&
+      videoOnly &&
+      audioStreams &&
+      audioStreams.length > 1 &&
+      !userPickedAudio;
 
     if (useVarStreamMap) {
       // Single FFmpeg process for video + all audio renditions (perfect sync).
@@ -1119,8 +1235,14 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         path.join(outputDir, '%v', 'index.m3u8'),
       );
     } else {
-      // Standard single-stream output
-      if (mapAllAudio && audioStreams && audioStreams.length > 1) {
+      // Standard single-stream output.
+      // `userPickedAudio` (audioStreamIndex set) wins over `mapAllAudio`:
+      // when the user explicitly chose a track from the UI, honour it with a
+      // single -map so the next reload actually plays that audio. Otherwise
+      // mapAllAudio mux every PID for native client-side switching.
+      if (userPickedAudio) {
+        args.push('-map', '0:v:0', '-map', `0:a:${audioStreamIndex}`);
+      } else if (mapAllAudio && audioStreams && audioStreams.length > 1) {
         // TS + multi-audio: mux ALL audio tracks so native players (ExoPlayer/AVPlayer) can switch
         args.push('-map', '0:v:0');
         for (let i = 0; i < audioStreams.length; i++) {
@@ -1131,8 +1253,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             args.push(`-metadata:s:a:${i}`, `language=${lang}`);
           }
         }
-      } else if (audioStreamIndex != null) {
-        args.push('-map', '0:v:0', '-map', `0:a:${audioStreamIndex}`);
       }
       args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
 
@@ -1173,8 +1293,16 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     audioStreamIndex: number,
     audioBitrate = '192k',
     startSegment = 0,
+    trustedStreamInfo = false,
   ): string[] {
     const args = ['-hide_banner', '-loglevel', 'warning'];
+    if (trustedStreamInfo) {
+      this.log.log('Probe [audio-only]: using cached streamInfo (0s / 200KB scan)');
+      args.push('-analyzeduration', '0', '-probesize', '200000');
+    } else {
+      this.log.log('Probe [audio-only]: no cached streamInfo — running full FFmpeg scan (1s / 1MB)');
+      args.push('-analyzeduration', '1000000', '-probesize', '1000000');
+    }
 
     if (startSegment > 0) {
       args.push('-ss', String(startSegment * SEGMENT_DURATION));
@@ -1221,8 +1349,22 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     audioBitrate = '192k',
     startSegment = 0,
     videoOnly = false,
+    mapAllAudio = false,
+    audioStreams?: { language?: string; title?: string }[],
+    useFmp4 = true,
+    trustedStreamInfo = false,
+    audioStreamIndex?: number,
   ): string[] {
     const args = ['-hide_banner', '-loglevel', 'warning'];
+    // See buildFfmpegArgs for rationale — trust cached streamInfo when we have
+    // it, otherwise use a balanced 1s/1MB probe.
+    if (trustedStreamInfo) {
+      this.log.log('Probe [remux]: using cached streamInfo (0s / 200KB scan)');
+      args.push('-analyzeduration', '0', '-probesize', '200000');
+    } else {
+      this.log.log('Probe [remux]: no cached streamInfo — running full FFmpeg scan (1s / 1MB)');
+      args.push('-analyzeduration', '1000000', '-probesize', '1000000');
+    }
 
     if (startSegment > 0) {
       args.push('-ss', String(startSegment * SEGMENT_DURATION));
@@ -1231,9 +1373,41 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     args.push('-i', inputPath);
 
-    // Video-only: explicit map + strip audio. Otherwise let FFmpeg auto-select.
-    if (videoOnly) {
+    const userPickedAudio = audioStreamIndex != null;
+    if (videoOnly && !userPickedAudio) {
+      // Video-only remux for fMP4 var_stream_map (audio served separately).
       args.push('-map', '0:v:0', '-c:v', 'copy', '-an');
+    } else if (userPickedAudio) {
+      // User picked a specific audio track from the UI — single-map wins
+      // over both videoOnly (var_stream_map) and mapAllAudio so the chosen
+      // track actually plays after a reload.
+      args.push(
+        '-map',
+        '0:v:0',
+        '-map',
+        `0:a:${audioStreamIndex}`,
+        '-c:v',
+        'copy',
+      );
+      if (copyAudio) {
+        args.push('-c:a', 'copy');
+      } else {
+        args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
+      }
+    } else if (mapAllAudio && audioStreams && audioStreams.length > 1) {
+      // TS + multi-audio: copy video, map all audio tracks as distinct PIDs
+      // so ExoPlayer/AVPlayer can switch between them natively.
+      args.push('-map', '0:v:0', '-c:v', 'copy');
+      for (let i = 0; i < audioStreams.length; i++) {
+        args.push('-map', `0:a:${i}`);
+        const lang = audioStreams[i].language;
+        if (lang) args.push(`-metadata:s:a:${i}`, `language=${lang}`);
+      }
+      if (copyAudio) {
+        args.push('-c:a', 'copy');
+      } else {
+        args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
+      }
     } else {
       args.push('-c:v', 'copy');
       if (copyAudio) {
@@ -1243,7 +1417,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // HLS output — always fMP4
+    // HLS output — fMP4 or TS based on useFmp4
     args.push(
       '-f',
       'hls',
@@ -1253,14 +1427,20 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       '0',
       '-start_number',
       String(startSegment),
-      '-hls_segment_type',
-      'fmp4',
-      '-hls_fmp4_init_filename',
-      'init.mp4',
-      '-hls_segment_filename',
-      path.join(outputDir, 'seg-%04d.m4s'),
-      '-hls_flags',
-      'independent_segments',
+    );
+    if (useFmp4) {
+      args.push(
+        '-hls_segment_type', 'fmp4',
+        '-hls_fmp4_init_filename', 'init.mp4',
+        '-hls_segment_filename', path.join(outputDir, 'seg-%04d.m4s'),
+      );
+    } else {
+      args.push(
+        '-hls_segment_filename', path.join(outputDir, 'seg-%04d.ts'),
+      );
+    }
+    args.push(
+      '-hls_flags', 'independent_segments',
       path.join(outputDir, 'index.m3u8'),
     );
 
@@ -1320,7 +1500,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       } else {
         existing.lastAccess = Date.now();
 
-        if (requestedSegment > 0 && !(await segmentNearby(existing.cachePath, requestedSegment))) {
+        if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
           this.log.log(
             `Seek: restarting remux [${key}] from segment ${requestedSegment}`,
           );
@@ -1347,6 +1527,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       '192k',
       requestedSegment,
       isVideoOnly,
+      ctx?.mapAllAudio ?? false,
+      ctx?.audioStreams,
+      ctx?.useFmp4 ?? true,
+      ctx?.trustedStreamInfo,
+      ctx?.audioStreamIndex,
     );
 
     const session = this.spawnFfmpegSession({
@@ -1407,8 +1592,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       } else {
         existing.lastAccess = Date.now();
 
-        // Handle seek
-        if (requestedSegment > 0 && !(await segmentNearby(existing.cachePath, requestedSegment))) {
+        // Handle seek (including seek to 0 when the current session started
+        // later via resume).
+        if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
           this.log.log(
             `Seek: restarting audio session [${key}] from segment ${requestedSegment}`,
           );
@@ -1429,6 +1615,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       audioIndex,
       '192k',
       requestedSegment,
+      ctx?.trustedStreamInfo,
     );
 
     const session = this.spawnFfmpegSession({
