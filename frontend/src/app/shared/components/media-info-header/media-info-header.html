@@ -127,12 +127,14 @@
 
     <!-- Action icons row -->
     <div class="flex items-center justify-center gap-6 mt-4">
-      @if (!selectedFileId()) { <div class="flex-1"></div> }
-      @if (selectedFileId()) {
+      @if (!selectedFileId() && !canToggleWatched()) { <div class="flex-1"></div> }
+      @if (canToggleWatched()) {
         <button class="flex flex-col items-center gap-1 text-sm" [class.text-success]="watched()" (click)="onToggleWatched()">
           <svg lucideCheck class="h-5 w-5"></svg>
           {{ 'media_info.watched' | translate }}
         </button>
+      }
+      @if (selectedFileId()) {
         <button class="flex flex-col items-center gap-1 text-sm" (click)="openDownload.emit()">
           <svg lucideDownload class="h-5 w-5"></svg>
           {{ 'downloads.download' | translate }}
@@ -382,6 +384,11 @@
           </button>
           <button type="button" class="btn btn-ghost btn btn-circle" (click)="openDownload.emit()">
             <svg lucideDownload class="h-4 w-4"></svg>
+          </button>
+        }
+        @if (!selectedFileId() && canToggleWatched()) {
+          <button type="button" class="btn btn-outline btn btn-circle" [class.btn-success]="watched()" [class.btn-ghost]="!watched()" (click)="onToggleWatched()">
+            <svg lucideCheck class="h-4 w-4"></svg>
           </button>
         }
         <div class="dropdown dropdown-end">

@@ -124,6 +124,28 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const list = m.files ?? [];
     return m.type === 'series' ? list.filter((f) => !f.episodeId) : list;
   });
+
+  /**
+   * For a series, true iff every downloaded episode in a non-special season
+   * (seasonNumber > 0, hasFile=true) is marked as watched. Drives the series
+   * root "watched" toggle and stays in sync with per-episode toggles through
+   * `watchedEpisodeIds`.
+   */
+  readonly seriesFullyWatched = computed(() => {
+    const m = this.media();
+    if (m?.type !== 'series' || !m.seasons?.length) return false;
+    const watched = this.watchedEpisodeIds();
+    let total = 0;
+    for (const s of m.seasons) {
+      if (!s.seasonNumber || s.seasonNumber <= 0) continue;
+      for (const ep of s.episodes ?? []) {
+        if (!ep.hasFile) continue;
+        total++;
+        if (!watched.has(ep.id)) return false;
+      }
+    }
+    return total > 0;
+  });
   readonly selectedFileId = signal<number | null>(null);
   readonly activeFileId = computed(() => this.selectedFileId() ?? this.mediaFiles()[0]?.id ?? null);
   readonly activeFile = computed(() => {
@@ -956,6 +978,29 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   }
 
+
+  /**
+   * Handler for the series root watched toggle. The header has already
+   * POSTed to the bulk endpoint (which mirrors the rule "every downloaded
+   * episode in a non-special season is watched"); we mirror that same rule
+   * locally — no extra round-trip.
+   */
+  onSeriesWatchedToggled(payload: { watched: boolean }) {
+    const m = this.media();
+    if (!m?.seasons?.length) return;
+    if (!payload.watched) {
+      this.watchedEpisodeIds.set(new Set());
+      return;
+    }
+    const ids = new Set<number>();
+    for (const s of m.seasons) {
+      if (!s.seasonNumber || s.seasonNumber <= 0) continue;
+      for (const ep of s.episodes ?? []) {
+        if (ep.hasFile) ids.add(ep.id);
+      }
+    }
+    this.watchedEpisodeIds.set(ids);
+  }
 
   async grabRelease(r: MovieRelease, index: number) {
     const m = this.media();

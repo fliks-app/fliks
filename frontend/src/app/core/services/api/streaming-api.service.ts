@@ -314,6 +314,19 @@ export class StreamingApiService {
     );
   }
 
+  /**
+   * Mark every episode of a series as watched/unwatched in a single request.
+   * The caller should refresh the episode watched list after this.
+   */
+  toggleSeriesWatched(mediaId: number, watched: boolean) {
+    return firstValueFrom(
+      this.http.post<{ watched: boolean }>(
+        `/api/playback/media/${mediaId}/toggle-series-watched`,
+        { watched },
+      ),
+    );
+  }
+
   hideFromContinueWatching(mediaId: number) {
     return firstValueFrom(
       this.http.delete<void>(`/api/playback/hide/${mediaId}`),
