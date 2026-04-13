@@ -41,12 +41,6 @@ export class GeneralSettingsComponent implements OnInit {
   readonly companionFileExtensions = signal('');
   readonly savingAutomation = signal(false);
 
-  // Stalled
-  readonly stalledDeleteEnabled = signal('false');
-  readonly stalledDeleteAfterMinutes = signal('60');
-  readonly stalledSearchAfterDelete = signal('true');
-  readonly savingStalled = signal(false);
-
   // Post-import
   readonly postImportScript = signal('');
   readonly savingPostImport = signal(false);
@@ -66,9 +60,6 @@ export class GeneralSettingsComponent implements OnInit {
         map['companion_file_extensions'] ??
         '.nfo,.srt,.ass,.ssa,.sub,.idx,.vtt,.sup,.txt,.jpg,.jpeg,.png,.tbn,.nfo-orig',
       );
-      this.stalledDeleteEnabled.set(map['stalled_delete_enabled'] ?? 'false');
-      this.stalledDeleteAfterMinutes.set(map['stalled_delete_after_minutes'] ?? '60');
-      this.stalledSearchAfterDelete.set(map['stalled_search_after_delete'] ?? 'true');
     } catch {
       this.error.set(this.translate.instant('settings.general.load_error'));
     } finally {
@@ -109,18 +100,6 @@ export class GeneralSettingsComponent implements OnInit {
       });
       this.toast.success(this.translate.instant('settings.general.saved'));
     } catch { /* interceptor */ } finally { this.savingAutomation.set(false); }
-  }
-
-  async saveStalled() {
-    this.savingStalled.set(true);
-    try {
-      await this.api.setBulk({
-        stalled_delete_enabled: this.stalledDeleteEnabled(),
-        stalled_delete_after_minutes: this.stalledDeleteAfterMinutes(),
-        stalled_search_after_delete: this.stalledSearchAfterDelete(),
-      });
-      this.toast.success(this.translate.instant('settings.general.saved'));
-    } catch { /* interceptor */ } finally { this.savingStalled.set(false); }
   }
 
   async savePostImport() {
