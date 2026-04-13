@@ -54,6 +54,12 @@ export interface SessionContext {
   audioStreams?: { language?: string; title?: string }[];
   /** Whether to use fMP4 segments (true) or MPEG-TS (false, for Cast) */
   useFmp4?: boolean;
+  /**
+   * FFmpeg encoder preset ('veryfast' | 'faster' | 'fast' | 'medium' | 'slow').
+   * Applied to h264_qsv and libx264; VAAPI/NVENC ignore it (different naming).
+   * Default 'faster' if unset — good speed/quality trade-off.
+   */
+  encoderPreset?: string;
 }
 
 export interface TranscodeSession {
@@ -501,6 +507,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       isMapAllAudio,
       ctxAudioStreams,
       ctx?.useFmp4 ?? true,
+      ctx?.encoderPreset,
     );
     this.applyContext(session, ctx);
 
@@ -550,6 +557,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           isMapAllAudio,
           ctxAudioStreams,
           ctx?.useFmp4 ?? true,
+          ctx?.encoderPreset,
         );
         this.applyContext(cpuSession, ctx);
         this.sessions.set(key, cpuSession);
@@ -723,6 +731,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     mapAllAudio = false,
     audioStreams?: { language?: string; title?: string }[],
     useFmp4 = true,
+    encoderPreset?: string,
   ): TranscodeSession {
     const args = this.buildFfmpegArgs(
       absolutePath,
@@ -738,6 +747,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       mapAllAudio,
       audioStreams,
       useFmp4,
+      encoderPreset,
     );
 
     const usesVarStreamMap = videoOnly && audioStreams && audioStreams.length > 1;
@@ -782,6 +792,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ctx?.mapAllAudio ?? false,
       ctx?.audioStreams,
       ctx?.useFmp4 ?? true,
+      ctx?.encoderPreset,
     );
     this.applyContext(session, ctx);
     this.sessions.set(sessionId, session);
@@ -845,6 +856,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     mapAllAudio = false,
     audioStreams?: { language?: string; title?: string }[],
     useFmp4 = true,
+    encoderPreset: string = 'faster',
   ): string[] {
     const args = ['-hide_banner', '-loglevel', 'warning'];
 
@@ -964,6 +976,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           args.push(
             '-c:v',
             'h264_qsv',
+            '-preset',
+            encoderPreset,
             '-mbbrc',
             '1',
             '-b:v',
@@ -985,6 +999,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           args.push(
             '-c:v',
             'h264_qsv',
+            '-preset',
+            encoderPreset,
             '-mbbrc',
             '1',
             '-b:v',
@@ -1084,7 +1100,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           '-c:v',
           'libx264',
           '-preset',
-          'veryfast',
+          encoderPreset,
           '-b:v',
           profile.videoBitrate,
           '-maxrate',
@@ -1240,6 +1256,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     audioBitrate = '192k',
     startSegment = 0,
     videoOnly = false,
+    mapAllAudio = false,
+    audioStreams?: { language?: string; title?: string }[],
+    useFmp4 = true,
   ): string[] {
     const args = ['-hide_banner', '-loglevel', 'warning'];
 
@@ -1250,9 +1269,23 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     args.push('-i', inputPath);
 
-    // Video-only: explicit map + strip audio. Otherwise let FFmpeg auto-select.
     if (videoOnly) {
+      // Video-only remux for fMP4 var_stream_map (audio served separately).
       args.push('-map', '0:v:0', '-c:v', 'copy', '-an');
+    } else if (mapAllAudio && audioStreams && audioStreams.length > 1) {
+      // TS + multi-audio: copy video, map all audio tracks as distinct PIDs
+      // so ExoPlayer/AVPlayer can switch between them natively.
+      args.push('-map', '0:v:0', '-c:v', 'copy');
+      for (let i = 0; i < audioStreams.length; i++) {
+        args.push('-map', `0:a:${i}`);
+        const lang = audioStreams[i].language;
+        if (lang) args.push(`-metadata:s:a:${i}`, `language=${lang}`);
+      }
+      if (copyAudio) {
+        args.push('-c:a', 'copy');
+      } else {
+        args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
+      }
     } else {
       args.push('-c:v', 'copy');
       if (copyAudio) {
@@ -1262,7 +1295,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // HLS output — always fMP4
+    // HLS output — fMP4 or TS based on useFmp4
     args.push(
       '-f',
       'hls',
@@ -1272,14 +1305,20 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       '0',
       '-start_number',
       String(startSegment),
-      '-hls_segment_type',
-      'fmp4',
-      '-hls_fmp4_init_filename',
-      'init.mp4',
-      '-hls_segment_filename',
-      path.join(outputDir, 'seg-%04d.m4s'),
-      '-hls_flags',
-      'independent_segments',
+    );
+    if (useFmp4) {
+      args.push(
+        '-hls_segment_type', 'fmp4',
+        '-hls_fmp4_init_filename', 'init.mp4',
+        '-hls_segment_filename', path.join(outputDir, 'seg-%04d.m4s'),
+      );
+    } else {
+      args.push(
+        '-hls_segment_filename', path.join(outputDir, 'seg-%04d.ts'),
+      );
+    }
+    args.push(
+      '-hls_flags', 'independent_segments',
       path.join(outputDir, 'index.m3u8'),
     );
 
@@ -1366,6 +1405,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       '192k',
       requestedSegment,
       isVideoOnly,
+      ctx?.mapAllAudio ?? false,
+      ctx?.audioStreams,
+      ctx?.useFmp4 ?? true,
     );
 
     const session = this.spawnFfmpegSession({

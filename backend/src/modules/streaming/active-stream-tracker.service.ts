@@ -156,6 +156,49 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.audioStreamIndexCache.get(mediaFileId);
   }
 
+  // ── Admin streaming settings forwarded to transcode sessions ──
+  private readonly encoderPresetCache = new Map<number, string>();
+
+  setEncoderPreset(mediaFileId: number, preset: string) {
+    this.encoderPresetCache.set(mediaFileId, preset);
+  }
+
+  getEncoderPreset(mediaFileId: number): string {
+    return this.encoderPresetCache.get(mediaFileId) ?? 'faster';
+  }
+
+  // ── Source-vs-client compat captured at playback-info time, read at
+  //    master.m3u8 time to decide whether to emit a smart-remux variant ──
+  private readonly canCopyVideoCache = new Map<number, boolean>();
+  private readonly canCopyAudioCache = new Map<number, boolean>();
+  private readonly sourceWidthCache = new Map<number, number>();
+  private readonly sourceHeightCache = new Map<number, number>();
+
+  setCanCopyVideo(mediaFileId: number, value: boolean) {
+    this.canCopyVideoCache.set(mediaFileId, value);
+  }
+  getCanCopyVideo(mediaFileId: number): boolean {
+    return this.canCopyVideoCache.get(mediaFileId) ?? false;
+  }
+
+  setCanCopyAudio(mediaFileId: number, value: boolean) {
+    this.canCopyAudioCache.set(mediaFileId, value);
+  }
+  getCanCopyAudio(mediaFileId: number): boolean {
+    return this.canCopyAudioCache.get(mediaFileId) ?? false;
+  }
+
+  setSourceDimensions(mediaFileId: number, width: number, height: number) {
+    this.sourceWidthCache.set(mediaFileId, width);
+    this.sourceHeightCache.set(mediaFileId, height);
+  }
+  getSourceWidth(mediaFileId: number): number {
+    return this.sourceWidthCache.get(mediaFileId) ?? 0;
+  }
+  getSourceHeight(mediaFileId: number): number {
+    return this.sourceHeightCache.get(mediaFileId) ?? 0;
+  }
+
   getActive(): DirectPlaySession[] {
     const cutoff = Date.now() - STALE_TIMEOUT_MS;
     return Array.from(this.sessions.values()).filter(

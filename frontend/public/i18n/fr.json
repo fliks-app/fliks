@@ -831,6 +831,9 @@
       "segment_duration_help": "Segments plus courts = démarrage plus rapide mais plus de requêtes HTTP. 3s est un bon compromis.",
       "init_time": "Durée du premier segment",
       "init_time_help": "Le premier segment peut être plus court pour accélérer le démarrage. Les suivants utilisent la durée normale.",
+      "qsv_preset": "Preset d'encodage (QSV / libx264)",
+      "qsv_preset_help": "Preset FFmpeg pour les encodeurs QSV et libx264. 'faster' offre un bon compromis vitesse/qualité. Ne s'applique pas au VAAPI ni au NVENC.",
+      "default": "défaut",
       "saved": "Paramètres de streaming enregistrés"
     },
     "network": {

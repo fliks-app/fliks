@@ -93,15 +93,22 @@ export class StreamingController {
 
   /** Read streaming settings from DB with defaults. */
   private async getStreamingSettings() {
-    const [format, duration, initTime] = await Promise.all([
+    const [format, duration, initTime, qsvPreset] = await Promise.all([
       this.settingsService.get('streaming_segment_format'),
       this.settingsService.get('streaming_segment_duration'),
       this.settingsService.get('streaming_init_time'),
+      this.settingsService.get('streaming_qsv_preset'),
     ]);
     return {
       segmentFormat: (format ?? 'auto') as 'auto' | 'ts' | 'fmp4',
       segmentDuration: parseFloat(duration ?? '3') || 3,
       initTime: parseFloat(initTime ?? '1') || 1,
+      qsvPreset: (qsvPreset ?? 'faster') as
+        | 'veryfast'
+        | 'faster'
+        | 'fast'
+        | 'medium'
+        | 'slow',
     };
   }
 
@@ -145,6 +152,7 @@ export class StreamingController {
           ? (si?.audio as { language?: string; title?: string }[]) ?? []
           : undefined,
       useFmp4: this.activeStreamTracker.getFmp4Supported(mediaFileId),
+      encoderPreset: this.activeStreamTracker.getEncoderPreset(mediaFileId),
     };
   }
 
@@ -255,6 +263,21 @@ export class StreamingController {
     SEG_DURATION = ss.segmentDuration;
     this.transcodingService.setSegmentDurations(ss.segmentDuration, ss.initTime);
 
+    // Persist encoder preset for downstream FFmpeg sessions.
+    this.activeStreamTracker.setEncoderPreset(mediaFileId, ss.qsvPreset);
+
+    // Persist source→client codec compatibility so hlsMaster can pick a
+    // smart-remux variant when the user's quality lock matches the source
+    // resolution (and video codec is copy-compatible).
+    this.activeStreamTracker.setCanCopyVideo(mediaFileId, result.videoCopyStream);
+    this.activeStreamTracker.setCanCopyAudio(mediaFileId, result.audioCopyStream);
+    const sv = resolved.mediaFile.streamInfo?.video?.[0];
+    this.activeStreamTracker.setSourceDimensions(
+      mediaFileId,
+      sv?.width ?? 0,
+      sv?.height ?? 0,
+    );
+
     // Include duration so the player can skip ffprobe in hlsPlaylist
     const duration = resolved.mediaFile.streamInfo?.durationSeconds ?? 0;
     return { ...result, durationSeconds: duration };
@@ -348,15 +371,49 @@ export class StreamingController {
     const useExtXMedia =
       audioStreams.length > 1 && !clientMuxesAudio && fmp4Supported;
     const onlyQuality = firstQueryString(req.query, 'startQuality');
+
+    // Smart remux: if the user's locked quality maps to a target height that
+    // already matches the source height (±16 px), and the source video codec
+    // is copy-compatible with the client (captured at playback-info time in
+    // `canCopyVideo`), emit the remux variant instead of a transcode variant.
+    // Saves a full video re-encode — zero GPU, instant startup.
+    let smartRemux = false;
+    if (
+      onlyQuality &&
+      onlyQuality !== 'auto' &&
+      onlyQuality !== 'original' &&
+      onlyQuality !== 'remux'
+    ) {
+      const profile = PROFILES.find((p) => p.name === onlyQuality);
+      const canCopyVideo = this.activeStreamTracker.getCanCopyVideo(mediaFileId);
+      const sourceH = this.activeStreamTracker.getSourceHeight(mediaFileId);
+      const sourceW = this.activeStreamTracker.getSourceWidth(mediaFileId);
+      if (profile && canCopyVideo && sourceW > 0 && sourceH > 0) {
+        const targetW = Math.min(profile.maxWidth, sourceW);
+        const rawH = (targetW * sourceH) / sourceW;
+        const targetH = Math.floor(rawH / 16) * 16 || 16;
+        if (Math.abs(sourceH - targetH) <= 16) {
+          smartRemux = true;
+          this.log.log(
+            `Smart remux for file ${mediaFileId}: source ${sourceW}x${sourceH} ` +
+            `matches requested ${onlyQuality}, skipping transcode`,
+          );
+        }
+      }
+    }
+
+    const effectiveIncludeRemux = includeRemux || smartRemux;
+    const effectiveOnlyQuality = smartRemux ? 'remux' : onlyQuality;
+
     const playlist = this.transcodingService.generateMasterPlaylist(
       mediaFileId,
       w,
       h,
       tokenParam,
-      includeRemux,
+      effectiveIncludeRemux,
       sourceBitrate || undefined,
       useExtXMedia ? audioStreams : undefined,
-      onlyQuality,
+      effectiveOnlyQuality,
     );
 
     this.activeStreamTracker.setAudioStreamCount(
@@ -669,12 +726,15 @@ export class StreamingController {
     const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
 
     const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+    // For remux sessions, copy audio only when the source codec is compatible
+    // (captured at playback-info); otherwise transcode audio to AAC.
+    const copyAudio = this.activeStreamTracker.getCanCopyAudio(mediaFileId);
     const session =
       quality === 'remux'
         ? await this.transcodingService.getOrCreateRemuxSession(
             mediaFileId,
             resolved.absolutePath,
-            true,
+            copyAudio,
             segIndex,
             ctx,
           )

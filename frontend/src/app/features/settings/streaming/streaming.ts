@@ -21,6 +21,7 @@ export class StreamingSettingsComponent implements OnInit {
   readonly segmentFormat = signal('auto');
   readonly segmentDuration = signal('3');
   readonly initTime = signal('1');
+  readonly qsvPreset = signal('faster');
 
   async ngOnInit() {
     try {
@@ -28,6 +29,7 @@ export class StreamingSettingsComponent implements OnInit {
       this.segmentFormat.set(all['streaming_segment_format'] ?? 'auto');
       this.segmentDuration.set(all['streaming_segment_duration'] ?? '3');
       this.initTime.set(all['streaming_init_time'] ?? '1');
+      this.qsvPreset.set(all['streaming_qsv_preset'] ?? 'faster');
     } catch { /* interceptor */ }
     this.loading.set(false);
   }
@@ -39,6 +41,7 @@ export class StreamingSettingsComponent implements OnInit {
         streaming_segment_format: this.segmentFormat(),
         streaming_segment_duration: this.segmentDuration(),
         streaming_init_time: this.initTime(),
+        streaming_qsv_preset: this.qsvPreset(),
       });
       this.toast.success(this.translate.instant('settings.streaming.saved'));
     } catch { /* interceptor */ }
