@@ -275,8 +275,13 @@ public class NativePlayerPlugin extends Plugin {
                     player.getTrackSelectionParameters().buildUpon()
                             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                             .build());
-            player.prepare();
+            // seekTo BEFORE prepare: ExoPlayer queues the seek and applies it
+            // once sources are ready. Calling seekTo AFTER prepare can race with
+            // ProgressiveMediaPeriod (used by SubtitleConfiguration wrappers)
+            // mid-preparation and trip its `isPendingReset` assertion — surfaces
+            // as an intermittent IllegalStateException at startup (~1 in 6 plays).
             if (startTime > 0) player.seekTo((long) (startTime * 1000));
+            player.prepare();
             player.setPlayWhenReady(true);
             startPositionUpdates();
             call.resolve();
