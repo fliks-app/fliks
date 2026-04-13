@@ -111,6 +111,24 @@ export class PlaybackController {
     );
   }
 
+  /**
+   * Mark every episode of a series as watched (or unwatched) in a single call.
+   * Returns the resulting set of watched episode IDs.
+   */
+  @Post('media/:mediaId/toggle-series-watched')
+  toggleSeriesWatched(
+    @Req() req: Request,
+    @Param('mediaId', ParseIntPipe) mediaId: number,
+    @Body() body: { watched: boolean },
+  ) {
+    const user = req.user as User;
+    return this.playbackService.toggleSeriesWatched(
+      user.id,
+      mediaId,
+      !!body.watched,
+    );
+  }
+
   /** Delete playback state for a media or episode. */
   @Delete('media/:mediaId/state')
   deleteState(

@@ -129,6 +129,12 @@ export class MediaInfoHeaderComponent {
   // ── Inputs: series-specific ──
   readonly mediaType = input<string>('movie');
   readonly episodeStats = input<{ downloadedEpisodes: number; totalEpisodes: number } | null>(null);
+  /**
+   * Derived watched status for a series (true iff every downloaded episode in a
+   * non-special season is marked as watched). Used instead of a series-level
+   * PlaybackState row, which does not exist for series.
+   */
+  readonly seriesFullyWatched = input<boolean>(false);
 
   // ── Outputs (delegated to parent) ──
   readonly selectedFileIdChange = output<number>();
@@ -142,6 +148,8 @@ export class MediaInfoHeaderComponent {
   readonly loadReleases = output<void>();
   readonly grabBest = output<void>();
   readonly rescanFiles = output<void>();
+  /** Emitted after a series-level bulk watched toggle. Parent should refresh its episode watched list. */
+  readonly seriesWatchedToggled = output<{ watched: boolean }>();
 
   // ── Internal state ──
 
@@ -158,8 +166,14 @@ export class MediaInfoHeaderComponent {
     const episodeId = this.episodeId();
     if (!mediaId) return;
 
-    // Load watched
-    this.playable.loadWatchedState(mediaId, episodeId).then(v => this.watched.set(v));
+    // Watched state: for a series without an episode context, derive from the
+    // aggregate `seriesFullyWatched` input (see parent). Otherwise, read the
+    // playback_state row as before.
+    if (this.mediaType() === 'series' && !episodeId) {
+      this.watched.set(this.seriesFullyWatched());
+    } else {
+      this.playable.loadWatchedState(mediaId, episodeId).then(v => this.watched.set(v));
+    }
 
     // Load resume position
     this.streamingApi.getPlaybackState(mediaId, episodeId).then(ps => {
@@ -245,11 +259,24 @@ export class MediaInfoHeaderComponent {
   }
 
   async onToggleWatched() {
+    const mediaId = this.mediaId();
+    // Series root toggle: bulk mark every episode as (un)watched.
+    if (this.mediaType() === 'series' && !this.episodeId()) {
+      const target = !this.watched();
+      try {
+        const result = await this.streamingApi.toggleSeriesWatched(mediaId, target);
+        this.watched.set(result.watched);
+        this.seriesWatchedToggled.emit(result);
+      } catch { /* ignore */ }
+      return;
+    }
+
+    // Single movie / episode toggle — existing per-file behavior.
     const fileId = this.selectedFileId();
     if (!fileId) return;
     try {
       this.watched.set(
-        await this.playable.toggleWatched(this.mediaId(), fileId, this.episodeId()),
+        await this.playable.toggleWatched(mediaId, fileId, this.episodeId()),
       );
     } catch { /* ignore */ }
   }
@@ -350,6 +377,15 @@ export class MediaInfoHeaderComponent {
   readonly selectedFile = computed(() => {
     const id = this.selectedFileId();
     return this.files().find(f => f.id === id) ?? this.files()[0] ?? null;
+  });
+
+  /**
+   * Whether to render the watched-toggle button. Visible as soon as there is a
+   * file to mark, or for the series root (bulk toggle across all episodes).
+   */
+  readonly canToggleWatched = computed(() => {
+    if (this.selectedFileId() != null) return true;
+    return this.mediaType() === 'series' && !this.episodeId();
   });
 
   fileLabel(f: MediaInfoHeaderFile): string {

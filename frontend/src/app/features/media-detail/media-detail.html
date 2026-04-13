@@ -98,6 +98,7 @@
           [selectedFileId]="activeFileId()"
           [mediaType]="m.type"
           [episodeStats]="m.episodeStats ?? null"
+          [seriesFullyWatched]="seriesFullyWatched()"
           [canGrab]="canGrab()"
           [canEditProfiles]="canEditProfiles()"
           [isAdmin]="isAdmin()"
@@ -117,6 +118,7 @@
           (loadReleases)="loadReleases()"
           (grabBest)="grabBest()"
           (rescanFiles)="rescanFiles()"
+          (seriesWatchedToggled)="onSeriesWatchedToggled($event)"
         />
 
         @if (m.type === 'movie' && (cast().length || crew().length)) {

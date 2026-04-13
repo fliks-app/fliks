@@ -413,11 +413,76 @@ export class PlaybackService implements OnModuleInit {
         ON ps."userId" = $1 AND ps."episodeId" = e.id AND ps.completed = true
       WHERE s."seasonNumber" > 0 AND e."hasFile" = true
       GROUP BY s."mediaId"
-      HAVING COUNT(*) = COUNT(ps.id)
+      HAVING COUNT(*) > 0 AND COUNT(*) = COUNT(ps.id)
       `,
       [userId],
     );
     return rows.map((r) => r.id);
+  }
+
+  /**
+   * Bulk-mark every episode with a file in non-special seasons as watched or
+   * unwatched. Caller is expected to refresh its episode watched list (via
+   * {@link getWatchedEpisodeIds}) — we don't return the full list here to
+   * keep the payload small.
+   */
+  async toggleSeriesWatched(
+    userId: number,
+    mediaId: number,
+    watched: boolean,
+  ): Promise<{ watched: boolean }> {
+    if (watched) {
+      // Upsert a completed playback_state for every episode with a file in
+      // non-special seasons. We use the partial unique index
+      // idx_playback_user_episode (userId, episodeId) WHERE episodeId IS NOT NULL.
+      await this.repo.query(
+        `
+        INSERT INTO playback_states
+          ("userId", "mediaId", "mediaFileId", "episodeId",
+           "positionSeconds", "durationSeconds", completed, "lastPlayedAt")
+        SELECT $1, $2,
+               (SELECT mf.id FROM media_files mf
+                 WHERE mf."episodeId" = e.id
+                 ORDER BY mf.id DESC LIMIT 1),
+               e.id,
+               0,
+               COALESCE(
+                 (SELECT (mf2."streamInfo"->>'durationSeconds')::float FROM media_files mf2
+                   WHERE mf2."episodeId" = e.id
+                   ORDER BY mf2.id DESC LIMIT 1),
+                 0
+               ),
+               true,
+               NOW()
+        FROM episodes e
+        JOIN seasons s ON s.id = e."seasonId"
+        WHERE s."mediaId" = $2
+          AND s."seasonNumber" > 0
+          AND e."hasFile" = true
+        ON CONFLICT ("userId", "episodeId") WHERE "episodeId" IS NOT NULL
+        DO UPDATE SET
+          completed = true,
+          "positionSeconds" = 0,
+          "lastPlayedAt" = NOW()
+        `,
+        [userId, mediaId],
+      );
+    } else {
+      await this.repo.query(
+        `
+        UPDATE playback_states
+           SET completed = false,
+               "positionSeconds" = 0,
+               "lastPlayedAt" = NOW()
+         WHERE "userId" = $1
+           AND "mediaId" = $2
+           AND "episodeId" IS NOT NULL
+        `,
+        [userId, mediaId],
+      );
+    }
+
+    return { watched };
   }
 
   async toggleWatched(
