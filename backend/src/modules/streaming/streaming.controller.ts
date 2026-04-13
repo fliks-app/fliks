@@ -93,11 +93,22 @@ export class StreamingController {
 
   /** Read streaming settings from DB with defaults. */
   private async getStreamingSettings() {
-    const [format, duration, initTime, qsvPreset] = await Promise.all([
+    const [
+      format,
+      duration,
+      initTime,
+      qsvPreset,
+      qsvLookahead,
+      qsvLowPower,
+      qsvAdaptive,
+    ] = await Promise.all([
       this.settingsService.get('streaming_segment_format'),
       this.settingsService.get('streaming_segment_duration'),
       this.settingsService.get('streaming_init_time'),
       this.settingsService.get('streaming_qsv_preset'),
+      this.settingsService.get('streaming_qsv_lookahead'),
+      this.settingsService.get('streaming_qsv_low_power'),
+      this.settingsService.get('streaming_qsv_adaptive'),
     ]);
     return {
       segmentFormat: (format ?? 'auto') as 'auto' | 'ts' | 'fmp4',
@@ -108,7 +119,14 @@ export class StreamingController {
         | 'faster'
         | 'fast'
         | 'medium'
-        | 'slow',
+        | 'slow'
+        | 'slower'
+        | 'veryslow',
+      // Booleans stored as 'true' / 'false' strings (SettingsService is text-only).
+      qsvLookahead: qsvLookahead === 'true',
+      qsvLowPower: qsvLowPower === 'true',
+      // Default true when absent.
+      qsvAdaptive: qsvAdaptive == null ? true : qsvAdaptive === 'true',
     };
   }
 
@@ -153,6 +171,11 @@ export class StreamingController {
           : undefined,
       useFmp4: this.activeStreamTracker.getFmp4Supported(mediaFileId),
       encoderPreset: this.activeStreamTracker.getEncoderPreset(mediaFileId),
+      qsvOptions: this.activeStreamTracker.getQsvOptions(),
+      // Source framerate (e.g. "24", "23.976", "29.97") — used to compute an
+      // accurate GOP so IDR frames fall on the same boundary regardless of
+      // source fps. Falls back to 24 when unknown.
+      sourceFps: parseFloat(si?.video?.[0]?.frameRate ?? '') || undefined,
     };
   }
 
@@ -263,8 +286,13 @@ export class StreamingController {
     SEG_DURATION = ss.segmentDuration;
     this.transcodingService.setSegmentDurations(ss.segmentDuration, ss.initTime);
 
-    // Persist encoder preset for downstream FFmpeg sessions.
+    // Persist encoder preset + QSV advanced options for downstream sessions.
     this.activeStreamTracker.setEncoderPreset(mediaFileId, ss.qsvPreset);
+    this.activeStreamTracker.setQsvOptions({
+      lookahead: ss.qsvLookahead,
+      lowPower: ss.qsvLowPower,
+      adaptive: ss.qsvAdaptive,
+    });
 
     // Persist source→client codec compatibility so hlsMaster can pick a
     // smart-remux variant when the user's quality lock matches the source

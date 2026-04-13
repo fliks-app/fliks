@@ -60,6 +60,17 @@ export interface SessionContext {
    * Default 'faster' if unset — good speed/quality trade-off.
    */
   encoderPreset?: string;
+  /** h264_qsv advanced options (all admin-configurable). */
+  qsvOptions?: {
+    /** -look_ahead 1 -look_ahead_depth 40 (better rate control, slight GPU cost) */
+    lookahead: boolean;
+    /** -low_power 1 (VDENC on Gen9+ — faster, slight quality loss) */
+    lowPower: boolean;
+    /** -adaptive_i 1 -adaptive_b 1 (encoder chooses I/B placement) */
+    adaptive: boolean;
+  };
+  /** Source framerate (fps). Used to compute GOP = SEGMENT_DURATION * fps. */
+  sourceFps?: number;
 }
 
 export interface TranscodeSession {
@@ -508,6 +519,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ctxAudioStreams,
       ctx?.useFmp4 ?? true,
       ctx?.encoderPreset,
+      ctx?.qsvOptions,
+      ctx?.sourceFps,
     );
     this.applyContext(session, ctx);
 
@@ -558,6 +571,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           ctxAudioStreams,
           ctx?.useFmp4 ?? true,
           ctx?.encoderPreset,
+          ctx?.qsvOptions,
+          ctx?.sourceFps,
         );
         this.applyContext(cpuSession, ctx);
         this.sessions.set(key, cpuSession);
@@ -732,6 +747,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     audioStreams?: { language?: string; title?: string }[],
     useFmp4 = true,
     encoderPreset?: string,
+    qsvOptions?: { lookahead: boolean; lowPower: boolean; adaptive: boolean },
+    sourceFps?: number,
   ): TranscodeSession {
     const args = this.buildFfmpegArgs(
       absolutePath,
@@ -748,6 +765,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       audioStreams,
       useFmp4,
       encoderPreset,
+      qsvOptions,
+      sourceFps,
     );
 
     const usesVarStreamMap = videoOnly && audioStreams && audioStreams.length > 1;
@@ -793,6 +812,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ctx?.audioStreams,
       ctx?.useFmp4 ?? true,
       ctx?.encoderPreset,
+      ctx?.qsvOptions,
+      ctx?.sourceFps,
     );
     this.applyContext(session, ctx);
     this.sessions.set(sessionId, session);
@@ -857,8 +878,35 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     audioStreams?: { language?: string; title?: string }[],
     useFmp4 = true,
     encoderPreset: string = 'faster',
+    qsvOptions: { lookahead: boolean; lowPower: boolean; adaptive: boolean } = {
+      lookahead: false,
+      lowPower: false,
+      adaptive: true,
+    },
+    sourceFps?: number,
   ): string[] {
+    // GOP = segment_duration × fps so each segment starts exactly on an IDR.
+    // Fallback to 24 fps when source fps is unknown (safe for most content).
+    const fps = sourceFps && sourceFps > 0 ? sourceFps : 24;
+    const gopSize = Math.max(1, Math.round(SEGMENT_DURATION * fps));
+    // Build reusable QSV extra options flag list.
+    const qsvExtra: string[] = [];
+    if (qsvOptions.lookahead) {
+      qsvExtra.push('-look_ahead', '1', '-look_ahead_depth', '40');
+    }
+    if (qsvOptions.lowPower) {
+      qsvExtra.push('-low_power', '1');
+    }
+    if (qsvOptions.adaptive) {
+      qsvExtra.push('-adaptive_i', '1', '-adaptive_b', '1');
+    }
     const args = ['-hide_banner', '-loglevel', 'warning'];
+
+    // Reduce FFmpeg's avformat_find_stream_info scan (default 5s/5MB → 1s/1MB).
+    // On large 4K HDR MKVs with many audio / subtitle tracks, the default
+    // probe can burn 3-5s at session startup before the first segment is
+    // even encoded. 1s/1MB is enough to detect h264/hevc/aac reliably.
+    args.push('-analyzeduration', '1000000', '-probesize', '1000000');
 
     // Seek to start position if needed
     if (startSegment > 0) {
@@ -978,6 +1026,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             'h264_qsv',
             '-preset',
             encoderPreset,
+            ...qsvExtra,
             '-mbbrc',
             '1',
             '-b:v',
@@ -991,9 +1040,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-vf',
             `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
             '-g',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
             '-keyint_min',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
           );
         } else {
           args.push(
@@ -1001,6 +1050,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             'h264_qsv',
             '-preset',
             encoderPreset,
+            ...qsvExtra,
             '-mbbrc',
             '1',
             '-b:v',
@@ -1014,9 +1064,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-vf',
             `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
             '-g',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
             '-keyint_min',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
           );
         }
         break;
@@ -1032,9 +1082,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-vf',
             `${hwCropPrefix}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
             '-g',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
             '-keyint_min',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
           );
         } else {
           args.push(
@@ -1047,9 +1097,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-vf',
             `${hwCropPrefix}scale_vaapi=w=${w}:h=-16:format=nv12`,
             '-g',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
             '-keyint_min',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
           );
         }
         break;
@@ -1068,9 +1118,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-vf',
             `hwdownload,format=p010le,${cpuCropPrefix}${tonemapCpu}scale=${w}:-2`,
             '-g',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
             '-keyint_min',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
           );
         } else {
           // Use scale_cuda to stay on GPU; force nv12 to avoid green bar with 10-bit HDR sources
@@ -1089,9 +1139,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-vf',
             `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=nv12`,
             '-g',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
             '-keyint_min',
-            String(SEGMENT_DURATION * 24),
+            String(gopSize),
           );
         }
         break;
@@ -1210,6 +1260,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     startSegment = 0,
   ): string[] {
     const args = ['-hide_banner', '-loglevel', 'warning'];
+    args.push('-analyzeduration', '1000000', '-probesize', '1000000');
 
     if (startSegment > 0) {
       args.push('-ss', String(startSegment * SEGMENT_DURATION));
@@ -1261,6 +1312,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     useFmp4 = true,
   ): string[] {
     const args = ['-hide_banner', '-loglevel', 'warning'];
+    // Same reduced probe as buildFfmpegArgs — saves 3-5s on cold start for
+    // large 4K MKVs when the OS page cache is empty.
+    args.push('-analyzeduration', '1000000', '-probesize', '1000000');
 
     if (startSegment > 0) {
       args.push('-ss', String(startSegment * SEGMENT_DURATION));

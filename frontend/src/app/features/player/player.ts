@@ -831,7 +831,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     // Listen for audio tracks from native engine.
     // ExoPlayer may emit this multiple times (e.g. rendition switch) —
-    // never overwrite a good list with a smaller one.
+    // never overwrite a good list with a smaller one. BUT: always let
+    // engine-sourced tracks (audio-* / shaka-*) replace the streamInfo
+    // fallback (si-*), even at equal length — their IDs enable client-side
+    // PID switching instead of a full backend reload.
     engine.on('audioTracksChanged', (e) => {
       const tracks = e.tracks.map((t: any) => ({
         id: t.id,
@@ -839,7 +842,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         language: normalizeLang(t.language),
         selected: !!t.selected,
       }));
-      if (tracks.length <= this.availableAudioTracks().length) return;
+      const existing = this.availableAudioTracks();
+      const newIsEngineSourced =
+        tracks.length > 0 &&
+        (tracks[0].id.startsWith('audio-') || tracks[0].id.startsWith('shaka-'));
+      const existingIsFallback =
+        existing.length > 0 && existing[0].id.startsWith('si-');
+      // Upgrade ONLY when incoming has at least as many tracks as existing —
+      // otherwise a transient partial emission (e.g. 1 audio track during
+      // ExoPlayer's initial parse) would wipe the full 3-track si-* list.
+      const upgradeFromFallback =
+        newIsEngineSourced && existingIsFallback && tracks.length >= existing.length;
+      if (tracks.length <= existing.length && !upgradeFromFallback) return;
       this.availableAudioTracks.set(tracks);
       // Use the track ExoPlayer reports as selected, fallback to first
       const selected = tracks.find((t: any) => t.selected) ?? tracks[0];
@@ -1160,13 +1174,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       trackId, this.availableAudioTracks(), this.mediaId, this.mediaFileId,
     );
 
+    const isEngineTrack =
+      this.engine && (trackId.startsWith('shaka-') || trackId.startsWith('audio-'));
+
     // Engine-level audio switch (Shaka native or NativeEngine)
-    if (this.engine && (trackId.startsWith('shaka-') || trackId.startsWith('audio-'))) {
+    if (isEngineTrack) {
       // Show spinner during audio switch (native player reloads the stream)
       if (this.isNativeEngine()) {
         this.state.buffering.set(true);
       }
-      await this.engine.selectAudioTrack(trackId);
+      await this.engine!.selectAudioTrack(trackId);
       if (this.isNativeEngine()) {
         this.state.buffering.set(false);
       }

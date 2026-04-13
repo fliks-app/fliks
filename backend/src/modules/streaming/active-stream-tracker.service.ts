@@ -158,6 +158,9 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
 
   // ── Admin streaming settings forwarded to transcode sessions ──
   private readonly encoderPresetCache = new Map<number, string>();
+  private qsvLookaheadCache = false;
+  private qsvLowPowerCache = false;
+  private qsvAdaptiveCache = true;
 
   setEncoderPreset(mediaFileId: number, preset: string) {
     this.encoderPresetCache.set(mediaFileId, preset);
@@ -165,6 +168,20 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
 
   getEncoderPreset(mediaFileId: number): string {
     return this.encoderPresetCache.get(mediaFileId) ?? 'faster';
+  }
+
+  /** QSV advanced options are global (driven by admin streaming settings). */
+  setQsvOptions(opts: { lookahead: boolean; lowPower: boolean; adaptive: boolean }) {
+    this.qsvLookaheadCache = opts.lookahead;
+    this.qsvLowPowerCache = opts.lowPower;
+    this.qsvAdaptiveCache = opts.adaptive;
+  }
+  getQsvOptions(): { lookahead: boolean; lowPower: boolean; adaptive: boolean } {
+    return {
+      lookahead: this.qsvLookaheadCache,
+      lowPower: this.qsvLowPowerCache,
+      adaptive: this.qsvAdaptiveCache,
+    };
   }
 
   // ── Source-vs-client compat captured at playback-info time, read at
