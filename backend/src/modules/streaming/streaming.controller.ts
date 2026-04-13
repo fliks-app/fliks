@@ -176,6 +176,9 @@ export class StreamingController {
       // accurate GOP so IDR frames fall on the same boundary regardless of
       // source fps. Falls back to 24 when unknown.
       sourceFps: parseFloat(si?.video?.[0]?.frameRate ?? '') || undefined,
+      // ffprobe ran at import/rescan and the result is cached in streamInfo —
+      // tell FFmpeg to skip its own redundant avformat_find_stream_info scan.
+      trustedStreamInfo: !!si?.video?.[0]?.codec,
     };
   }
 
@@ -321,17 +324,13 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
-    const duration = resolved.mediaFile.streamInfo?.durationSeconds;
-    if (!duration) return res.status(404).json({ error: 'no duration' });
-
-    const meta = await this.thumbnailService.getOrGenerate(
-      mediaFileId,
-      resolved.absolutePath,
-      duration,
-      resolved.media.title,
-    );
-    if (!meta) return res.status(404).json({ error: 'generation failed' });
+    // ACL check only — do NOT trigger sprite generation from this endpoint.
+    // Sprites are built at import/rescan (scheduler) or via the admin
+    // regenerate button. Kicking off a CPU-heavy sprite extraction while the
+    // user is starting playback slowed stream startup by 20+ seconds.
+    await this.streamingService.resolveFile(mediaFileId, req.user as User);
+    const meta = await this.thumbnailService.readExistingMeta(mediaFileId);
+    if (!meta) return res.status(404).json({ error: 'sprite not generated' });
 
     res.set('Cache-Control', 'public, max-age=86400');
     res.json(meta);
@@ -343,18 +342,8 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
-    const duration = resolved.mediaFile.streamInfo?.durationSeconds;
-    if (!duration) return res.status(404).end();
-
-    const meta = await this.thumbnailService.getOrGenerate(
-      mediaFileId,
-      resolved.absolutePath,
-      duration,
-      resolved.media.title,
-    );
-    if (!meta) return res.status(404).end();
-
+    // Same rationale as thumbnailMeta — no on-demand generation here.
+    await this.streamingService.resolveFile(mediaFileId, req.user as User);
     const spritePath = this.thumbnailService.getSpritePath(mediaFileId);
     if (!fs.existsSync(spritePath)) return res.status(404).end();
 

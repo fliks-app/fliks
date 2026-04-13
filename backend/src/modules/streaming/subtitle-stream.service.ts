@@ -8,12 +8,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { Readable } from 'stream';
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
+import * as fsSync from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { StreamingService } from './streaming.service';
 import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
+import { TRANSCODE_DIR } from '../../common/constants/paths';
 
 const execFileAsync = promisify(execFile);
 
@@ -86,24 +88,49 @@ export class SubtitleStreamService {
       throw new BadRequestException(`Invalid stream index: ${streamIndex}`);
     }
 
+    // Cache extracted VTTs on disk. First extraction spawns FFmpeg (slow on
+    // 4K MKV — decodes the file header-to-end to read the subtitle stream),
+    // subsequent requests stream the cached file instantly. Especially
+    // important on Android where ExoPlayer pre-fetches every sub URL
+    // declared in the MediaItem during load — without caching, a file with
+    // 3-5 embedded subs adds 15-20s to player startup, serialising 5 full
+    // FFmpeg invocations.
+    const cacheDir = path.join(TRANSCODE_DIR, 'subs', String(mediaFileId));
+    const cachePath = path.join(cacheDir, `emb-${streamIndex}.vtt`);
+    if (fsSync.existsSync(cachePath)) {
+      return fsSync.createReadStream(cachePath);
+    }
+
     const resolved = await this.streamingService.resolveFile(mediaFileId);
-    const { spawn } = require('child_process');
+    await fs.mkdir(cacheDir, { recursive: true });
 
-    const proc = spawn(
-      'ffmpeg',
-      [
-        '-i',
-        resolved.absolutePath,
-        '-map',
-        `0:${streamIndex}`,
-        '-f',
-        'webvtt',
-        '-',
-      ],
-      { stdio: ['ignore', 'pipe', 'ignore'] },
-    );
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(
+        'ffmpeg',
+        [
+          // Trusted streamInfo populated at import — skip the probe scan.
+          '-analyzeduration', '0', '-probesize', '200000',
+          // Skip video + audio streams: we only need the subtitle track.
+          '-vn', '-an',
+          '-i', resolved.absolutePath,
+          '-map', `0:${streamIndex}`,
+          '-f', 'webvtt',
+          '-y', cachePath,
+        ],
+        { stdio: ['ignore', 'ignore', 'pipe'] },
+      );
+      let stderrTail = '';
+      proc.stderr?.on('data', (chunk: Buffer) => {
+        stderrTail = (stderrTail + chunk.toString()).slice(-1000);
+      });
+      proc.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`ffmpeg subtitle extract failed (${code}): ${stderrTail}`));
+      });
+      proc.on('error', reject);
+    });
 
-    return proc.stdout as Readable;
+    return fsSync.createReadStream(cachePath);
   }
 
   private srtToVtt(srt: string): string {

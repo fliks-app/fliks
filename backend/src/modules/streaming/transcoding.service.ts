@@ -71,6 +71,14 @@ export interface SessionContext {
   };
   /** Source framerate (fps). Used to compute GOP = SEGMENT_DURATION * fps. */
   sourceFps?: number;
+  /**
+   * True when the backend already has a trusted `streamInfo` for this file
+   * (populated by ffprobe at import / rescan). If set, FFmpeg can use an
+   * aggressive `-analyzeduration 0 -probesize 200K` to skip the redundant
+   * stream-info scan — we already know codecs / dimensions / audio layout.
+   * Safe default is false (fall back to a balanced 1s/1MB probe).
+   */
+  trustedStreamInfo?: boolean;
 }
 
 export interface TranscodeSession {
@@ -521,6 +529,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ctx?.encoderPreset,
       ctx?.qsvOptions,
       ctx?.sourceFps,
+      ctx?.trustedStreamInfo,
     );
     this.applyContext(session, ctx);
 
@@ -749,6 +758,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     encoderPreset?: string,
     qsvOptions?: { lookahead: boolean; lowPower: boolean; adaptive: boolean },
     sourceFps?: number,
+    trustedStreamInfo = false,
   ): TranscodeSession {
     const args = this.buildFfmpegArgs(
       absolutePath,
@@ -767,6 +777,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       encoderPreset,
       qsvOptions,
       sourceFps,
+      trustedStreamInfo,
     );
 
     const usesVarStreamMap = videoOnly && audioStreams && audioStreams.length > 1;
@@ -814,6 +825,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ctx?.encoderPreset,
       ctx?.qsvOptions,
       ctx?.sourceFps,
+      ctx?.trustedStreamInfo,
     );
     this.applyContext(session, ctx);
     this.sessions.set(sessionId, session);
@@ -884,6 +896,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       adaptive: true,
     },
     sourceFps?: number,
+    trustedStreamInfo = false,
   ): string[] {
     // GOP = segment_duration × fps so each segment starts exactly on an IDR.
     // Fallback to 24 fps when source fps is unknown (safe for most content).
@@ -902,11 +915,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     }
     const args = ['-hide_banner', '-loglevel', 'warning'];
 
-    // Reduce FFmpeg's avformat_find_stream_info scan (default 5s/5MB → 1s/1MB).
-    // On large 4K HDR MKVs with many audio / subtitle tracks, the default
-    // probe can burn 3-5s at session startup before the first segment is
-    // even encoded. 1s/1MB is enough to detect h264/hevc/aac reliably.
-    args.push('-analyzeduration', '1000000', '-probesize', '1000000');
+    // Reduce FFmpeg's avformat_find_stream_info scan. When we already have a
+    // trusted streamInfo in the DB (populated by ffprobe at import/rescan),
+    // collapse the probe to effectively nothing — FFmpeg just reads container
+    // headers and stops. Otherwise fall back to a balanced 1s/1MB budget.
+    // Default FFmpeg is 5s/5MB which burns 3-5s on cold start of large 4K MKVs.
+    if (trustedStreamInfo) {
+      this.log.log('Probe: using cached streamInfo (0s / 200KB scan)');
+      args.push('-analyzeduration', '0', '-probesize', '200000');
+    } else {
+      this.log.log('Probe: no cached streamInfo — running full FFmpeg scan (1s / 1MB)');
+      args.push('-analyzeduration', '1000000', '-probesize', '1000000');
+    }
 
     // Seek to start position if needed
     if (startSegment > 0) {
@@ -1258,9 +1278,16 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     audioStreamIndex: number,
     audioBitrate = '192k',
     startSegment = 0,
+    trustedStreamInfo = false,
   ): string[] {
     const args = ['-hide_banner', '-loglevel', 'warning'];
-    args.push('-analyzeduration', '1000000', '-probesize', '1000000');
+    if (trustedStreamInfo) {
+      this.log.log('Probe [audio-only]: using cached streamInfo (0s / 200KB scan)');
+      args.push('-analyzeduration', '0', '-probesize', '200000');
+    } else {
+      this.log.log('Probe [audio-only]: no cached streamInfo — running full FFmpeg scan (1s / 1MB)');
+      args.push('-analyzeduration', '1000000', '-probesize', '1000000');
+    }
 
     if (startSegment > 0) {
       args.push('-ss', String(startSegment * SEGMENT_DURATION));
@@ -1310,11 +1337,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     mapAllAudio = false,
     audioStreams?: { language?: string; title?: string }[],
     useFmp4 = true,
+    trustedStreamInfo = false,
   ): string[] {
     const args = ['-hide_banner', '-loglevel', 'warning'];
-    // Same reduced probe as buildFfmpegArgs — saves 3-5s on cold start for
-    // large 4K MKVs when the OS page cache is empty.
-    args.push('-analyzeduration', '1000000', '-probesize', '1000000');
+    // See buildFfmpegArgs for rationale — trust cached streamInfo when we have
+    // it, otherwise use a balanced 1s/1MB probe.
+    if (trustedStreamInfo) {
+      this.log.log('Probe [remux]: using cached streamInfo (0s / 200KB scan)');
+      args.push('-analyzeduration', '0', '-probesize', '200000');
+    } else {
+      this.log.log('Probe [remux]: no cached streamInfo — running full FFmpeg scan (1s / 1MB)');
+      args.push('-analyzeduration', '1000000', '-probesize', '1000000');
+    }
 
     if (startSegment > 0) {
       args.push('-ss', String(startSegment * SEGMENT_DURATION));
@@ -1462,6 +1496,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ctx?.mapAllAudio ?? false,
       ctx?.audioStreams,
       ctx?.useFmp4 ?? true,
+      ctx?.trustedStreamInfo,
     );
 
     const session = this.spawnFfmpegSession({
@@ -1545,6 +1580,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       audioIndex,
       '192k',
       requestedSegment,
+      ctx?.trustedStreamInfo,
     );
 
     const session = this.spawnFfmpegSession({

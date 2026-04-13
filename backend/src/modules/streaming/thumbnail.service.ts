@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { execFile, spawn } from 'child_process';
@@ -8,6 +8,7 @@ import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { EventsService } from '../scheduler/events.service';
 import { Command } from '../scheduler/entities/command.entity';
+import { TranscodingService } from './transcoding.service';
 import { TRANSCODE_DIR } from '../../common/constants/paths';
 
 const execFileAsync = promisify(execFile);
@@ -47,6 +48,8 @@ export class ThumbnailService {
     private readonly eventsService: EventsService,
     @InjectRepository(Command)
     private readonly commandRepo: Repository<Command>,
+    @Inject(forwardRef(() => TranscodingService))
+    private readonly transcodingService: TranscodingService,
   ) {}
 
   async getOrGenerate(
@@ -88,6 +91,22 @@ export class ThumbnailService {
 
   getMetadataPath(mediaFileId: number): string {
     return path.join(BASE_DIR, String(mediaFileId), 'sprite.json');
+  }
+
+  /**
+   * Read an existing sprite metadata without triggering generation.
+   * Used by the streaming endpoints so opening the player doesn't kick off
+   * a heavy thumbnail transcode in parallel. Sprite generation is done at
+   * import/rescan (scheduler) or via the manual regenerate button.
+   */
+  async readExistingMeta(mediaFileId: number): Promise<SpriteMetadata | null> {
+    const metaPath = path.join(BASE_DIR, String(mediaFileId), 'sprite.json');
+    if (!existsSync(metaPath)) return null;
+    try {
+      return JSON.parse(await fsp.readFile(metaPath, 'utf-8'));
+    } catch {
+      return null;
+    }
   }
 
   private processQueue(): void {
@@ -229,7 +248,26 @@ export class ThumbnailService {
     progressKey: string,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
+      // Use the system's detected HW decoder so we don't saturate the CPU
+      // decoding 4K/HDR while the user might also be streaming.
+      const hw = this.transcodingService.getDetectedHwAccel();
+      const hwArgs: string[] = [];
+      if (hw === 'vaapi' || hw === 'qsv') {
+        // QSV on Intel piggybacks on VAAPI for decode — same flags work.
+        hwArgs.push(
+          '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
+          '-hwaccel', 'vaapi',
+          '-hwaccel_device', 'va',
+          // Download frames to CPU immediately so fps + scale filters work.
+          '-hwaccel_output_format', 'nv12',
+        );
+      } else if (hw === 'nvenc') {
+        hwArgs.push('-hwaccel', 'cuda', '-hwaccel_output_format', 'nv12');
+      }
       const proc = spawn('ffmpeg', [
+        // Trusted streamInfo was validated at import; skip the redundant probe.
+        '-analyzeduration', '0', '-probesize', '200000',
+        ...hwArgs,
         '-i', inputPath,
         '-vf', `fps=1/${interval},scale=${THUMB_WIDTH}:-1`,
         '-q:v', '3',
