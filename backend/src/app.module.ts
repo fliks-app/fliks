@@ -14,6 +14,7 @@ import { RequestsModule } from './modules/requests/requests.module';
 import { FliksSchedulerModule } from './modules/scheduler/scheduler.module';
 import { EventsModule } from './modules/scheduler/events.module';
 import { RootFoldersModule } from './modules/root-folders/root-folders.module';
+import { CleanupProfilesModule } from './modules/cleanup-profiles/cleanup-profiles.module';
 import { BlocklistModule } from './modules/blocklist/blocklist.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SettingsModule } from './modules/settings/settings.module';
@@ -74,6 +75,7 @@ import { join } from 'path';
     RequestsModule,
     FliksSchedulerModule,
     RootFoldersModule,
+    CleanupProfilesModule,
     BlocklistModule,
     NotificationsModule,
     SettingsModule,

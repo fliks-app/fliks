@@ -34,4 +34,12 @@ export class DownloadHistory extends BaseEntity {
 
   @Column({ type: 'text', nullable: true })
   statusMessage: string;
+
+  /**
+   * Whether this grab was initiated automatically by the system (missing search,
+   * quality upgrade, scheduler) or picked manually by a user via the download modal.
+   * Used by the stalled-cleanup job to decide whether re-grab after removal.
+   */
+  @Column({ type: 'varchar', length: 8, default: 'auto' })
+  grabSource: 'auto' | 'manual';
 }

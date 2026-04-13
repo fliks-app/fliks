@@ -14,6 +14,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   RootFoldersApiService,
   RootFolder,
+  StalledCleanupProfileKey,
 } from '../../../core/services/api/root-folders-api.service';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
@@ -56,6 +57,13 @@ export class RootFoldersSettingsComponent implements OnInit {
     { value: null, labelKey: 'settings.root_folders.provider_auto' },
     { value: 'tmdb', label: 'TMDB' },
     { value: 'tvdb', label: 'TVDB' },
+  ];
+  readonly formCleanupProfile = signal<StalledCleanupProfileKey | null>(null);
+  readonly cleanupProfileOptions: { value: StalledCleanupProfileKey | null; labelKey: string }[] = [
+    { value: null, labelKey: 'settings.cleanup_profiles.none' },
+    { value: 'fast', labelKey: 'settings.cleanup_profiles.profile_fast' },
+    { value: 'medium', labelKey: 'settings.cleanup_profiles.profile_medium' },
+    { value: 'slow', labelKey: 'settings.cleanup_profiles.profile_slow' },
   ];
   readonly saving = signal(false);
   readonly saveError = signal('');
@@ -104,6 +112,7 @@ export class RootFoldersSettingsComponent implements OnInit {
     this.formMovies.set(true);
     this.formSeries.set(true);
     this.formProvider.set(null);
+    this.formCleanupProfile.set(null);
     this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -115,6 +124,7 @@ export class RootFoldersSettingsComponent implements OnInit {
     this.formMovies.set(folder.mediaTypes.includes('movie'));
     this.formSeries.set(folder.mediaTypes.includes('series'));
     this.formProvider.set(folder.preferredProvider ?? null);
+    this.formCleanupProfile.set(folder.stalledCleanupProfile ?? null);
     this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -142,10 +152,11 @@ export class RootFoldersSettingsComponent implements OnInit {
     try {
       const id = this.editingId();
       const preferredProvider = this.formProvider() || null;
+      const stalledCleanupProfile = this.formCleanupProfile();
       if (id !== null) {
-        await this.api.update(id, { path, label: this.formLabel().trim() || undefined, mediaTypes, preferredProvider });
+        await this.api.update(id, { path, label: this.formLabel().trim() || undefined, mediaTypes, preferredProvider, stalledCleanupProfile });
       } else {
-        await this.api.create({ path, label: this.formLabel().trim() || undefined, mediaTypes, preferredProvider });
+        await this.api.create({ path, label: this.formLabel().trim() || undefined, mediaTypes, preferredProvider, stalledCleanupProfile });
       }
       this.closeForm();
       await this.reload();

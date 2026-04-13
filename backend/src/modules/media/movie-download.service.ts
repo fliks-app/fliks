@@ -266,6 +266,7 @@ export class MovieDownloadService {
 
     let downloadUrl = dto.downloadUrl?.trim();
     let sourceTitle = dto.sourceTitle?.trim();
+    const grabSource: 'auto' | 'manual' = downloadUrl ? 'manual' : 'auto';
 
     this.log.log(
       `grabMovie #${mediaId} "${media.title}" — manual URL: ${downloadUrl || '(auto)'}`,
@@ -331,6 +332,7 @@ export class MovieDownloadService {
       torrentHash: torrentHash || undefined,
       quality: parsed.quality.name,
       status: 'grabbed',
+      grabSource,
     });
     const saved = await this.historyRepo.save(row);
 
@@ -462,6 +464,7 @@ export class MovieDownloadService {
 
     let downloadUrl = dto.downloadUrl?.trim();
     let sourceTitle = dto.sourceTitle?.trim();
+    const grabSource: 'auto' | 'manual' = downloadUrl ? 'manual' : 'auto';
 
     this.log.log(
       `grabUpgrade #${mediaId} "${media.title}" — manual URL: ${downloadUrl || '(auto)'}`,
@@ -541,6 +544,7 @@ export class MovieDownloadService {
       torrentHash: torrentHash || undefined,
       quality: parsed.quality.name,
       status: 'grabbed',
+      grabSource,
     });
     const saved = await this.historyRepo.save(row);
 

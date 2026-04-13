@@ -44,6 +44,11 @@
                     @if (folder.preferredProvider) {
                       <span class="badge badge-primary badge-sm">{{ folder.preferredProvider | uppercase }}</span>
                     }
+                    @if (folder.stalledCleanupProfile) {
+                      <span class="badge badge-warning badge-sm">
+                        {{ 'settings.cleanup_profiles.profile_' + folder.stalledCleanupProfile | translate }}
+                      </span>
+                    }
                   </div>
                   @if (folder.accessible) {
                     <p class="text-sm text-base-content/60 mt-1">
@@ -197,6 +202,19 @@
         </select>
         <div class="label">
           <span class="label-text-alt text-base-content/50">{{ 'settings.root_folders.provider_hint' | translate }}</span>
+        </div>
+      </label>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.cleanup_profiles.field_profile' | translate }}</span>
+        <select class="select select-bordered select-sm w-full"
+          [ngModel]="formCleanupProfile()" (ngModelChange)="formCleanupProfile.set($event)">
+          @for (opt of cleanupProfileOptions; track opt.value) {
+            <option [ngValue]="opt.value">{{ opt.labelKey | translate }}</option>
+          }
+        </select>
+        <div class="label">
+          <span class="label-text-alt text-base-content/50">{{ 'settings.cleanup_profiles.field_profile_hint' | translate }}</span>
         </div>
       </label>
 

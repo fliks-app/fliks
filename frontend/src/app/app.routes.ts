@@ -283,6 +283,7 @@ export const routes: Routes = [
             ],
           },
           { path: 'delay-profiles', loadComponent: () => import('./features/settings/delay-profiles/delay-profiles').then((m) => m.DelayProfilesComponent) },
+          { path: 'cleanup-profiles', loadComponent: () => import('./features/settings/cleanup-profiles/cleanup-profiles').then((m) => m.CleanupProfilesComponent) },
           { path: 'schedulers', loadComponent: () => import('./features/settings/schedulers/schedulers').then((m) => m.SchedulersComponent) },
           { path: 'auto-approval', loadComponent: () => import('./features/settings/auto-approval/auto-approval').then((m) => m.AutoApprovalSettingsComponent) },
           { path: 'network', loadComponent: () => import('./features/settings/network/network').then((m) => m.NetworkSettingsComponent) },

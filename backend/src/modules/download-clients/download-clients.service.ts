@@ -160,6 +160,7 @@ export class DownloadClientsService {
         torrentHash: hash,
         quality: this.parseQuality(sourceTitle),
         status: 'grabbed',
+        grabSource: 'manual',
       }),
     );
   }
