@@ -341,6 +341,7 @@ export class StreamingController {
       this.activeStreamTracker.getFmp4Supported(mediaFileId);
     const useExtXMedia =
       audioStreams.length > 1 && !clientMuxesAudio && fmp4Supported;
+    const onlyQuality = firstQueryString(req.query, 'startQuality');
     const playlist = this.transcodingService.generateMasterPlaylist(
       mediaFileId,
       w,
@@ -349,6 +350,7 @@ export class StreamingController {
       includeRemux,
       sourceBitrate || undefined,
       useExtXMedia ? audioStreams : undefined,
+      onlyQuality,
     );
 
     this.activeStreamTracker.setAudioStreamCount(

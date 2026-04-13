@@ -119,13 +119,21 @@ export class StreamingApiService {
   private readonly serverConfig = inject(ServerConfigService);
   private readonly castService = inject(CastService);
 
-  /** Build authenticated HLS master playlist URL */
-  getHlsUrl(mediaFileId: number): string {
+  /**
+   * Build authenticated HLS master playlist URL.
+   * `startQuality` tells the backend which quality to pre-start FFmpeg at
+   * (e.g. "1080p") — avoids the "first segment fetch spawns FFmpeg at a
+   * wrong variant Shaka probed during load" waste.
+   */
+  getHlsUrl(mediaFileId: number, startQuality?: string): string {
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/master.m3u8`)
       : `/api/stream/${mediaFileId}/master.m3u8`;
+    const params: string[] = [];
     const token = this.auth.accessToken;
-    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+    if (token) params.push(`token=${encodeURIComponent(token)}`);
+    if (startQuality) params.push(`startQuality=${encodeURIComponent(startQuality)}`);
+    return params.length ? `${base}?${params.join('&')}` : base;
   }
 
   /** Build authenticated stream URL for direct play */

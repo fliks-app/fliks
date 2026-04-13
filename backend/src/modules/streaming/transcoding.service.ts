@@ -300,6 +300,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     includeRemux = false,
     sourceBitrate?: number,
     audioStreams?: { language?: string; title?: string }[],
+    onlyQuality?: string,
   ): string {
     const multiAudio = audioStreams && audioStreams.length > 1;
     const lines = ['#EXTM3U'];
@@ -317,29 +318,41 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // When multi-audio, Shaka requires CODECS on EXT-X-STREAM-INF to validate browser support.
-    // Transcoded = H.264 High + AAC-LC. Remux = source video codec + AAC-LC.
+    // Always declare CODECS on EXT-X-STREAM-INF. For HLS-TS, this lets Shaka
+    // skip fetching seg 0 purely to probe codecs (TS has no init segment) —
+    // otherwise a user resuming mid-file wastes a transcode pass at seg 0
+    // before the real seek-aware session starts at their resume position.
+    // We always produce H.264 High @ L4.0 + AAC-LC, so the string is fixed.
     const audioAttr = multiAudio ? ',AUDIO="audio"' : '';
-    const transcodeCodecs = multiAudio
-      ? ',CODECS="avc1.640028,mp4a.40.2"'
-      : '';
+    const transcodeCodecs = ',CODECS="avc1.640028,mp4a.40.2"';
 
-    // Add remux variant (original quality, no video re-encoding) as highest quality
-    if (includeRemux) {
+    // When the client asks for a specific startup quality, emit ONLY that
+    // variant. It's the only reliable way to stop Shaka from probing lower
+    // variants during startup — no master = no probe. The downside is that
+    // in-playback quality changes require a stream reload with a new
+    // `onlyQuality` (same cost the native path already pays), which the
+    // player handles via `reloadStream()`.
+    const wantRemuxOnly = onlyQuality === 'remux' || onlyQuality === 'original';
+
+    if (includeRemux && (!onlyQuality || wantRemuxOnly)) {
       const bw = sourceBitrate ?? 20_000_000; // fallback to 20 Mbps if unknown
-      // Remux keeps source video codec; use avc1 as safe default for CODECS
-      const remuxCodecs = multiAudio
-        ? ',CODECS="avc1.640028,mp4a.40.2"'
-        : '';
+      // Remux keeps source video codec; declare avc1 + aac as safe default
+      // (we always transcode audio to AAC-LC; source video is typically H.264).
+      const remuxCodecs = ',CODECS="avc1.640028,mp4a.40.2"';
       lines.push(
         `#EXT-X-STREAM-INF:BANDWIDTH=${bw},RESOLUTION=${sourceWidth}x${sourceHeight},NAME="remux"${remuxCodecs}${audioAttr}`,
         `/api/stream/${mediaFileId}/remux/index.m3u8${tokenParam}`,
       );
+      if (wantRemuxOnly) return lines.join('\n');
     }
 
-    // Add transcode profiles
-    const profiles = this.getAvailableProfiles(sourceWidth, sourceHeight);
+    let profiles = this.getAvailableProfiles(sourceWidth, sourceHeight);
     if (!profiles.length) profiles.push(PROFILES[PROFILES.length - 1]); // at least 480p
+
+    if (onlyQuality && !wantRemuxOnly) {
+      const picked = profiles.find((p) => p.name === onlyQuality);
+      if (picked) profiles = [picked];
+    }
 
     for (const p of profiles) {
       const bw =
@@ -414,8 +427,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       } else {
         existing.lastAccess = Date.now();
 
-        // If the requested segment is far ahead, restart FFmpeg with seek
-        if (requestedSegment > 0 && !(await segmentNearby(existing.cachePath, requestedSegment))) {
+        // If the requested segment isn't in the current cache, restart FFmpeg
+        // with a seek. Covers both forward seeks AND backward seeks (e.g. seek
+        // to t=0 while the current session was started mid-file via resume) —
+        // previously the `> 0` guard skipped the restart for segment 0, so the
+        // cache was missing it and the client got 404.
+        if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
           this.log.log(
             `Seek: restarting transcode [${key}] from segment ${requestedSegment}`,
           );
@@ -840,7 +857,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args.push('-copyts', '-avoid_negative_ts', 'make_zero');
     }
 
-    const bitrateNum = parseInt(profile.videoBitrate) * 1_000_000; // e.g. "8M" -> 8000000
+    // parseBitrateToBps handles both "8M" and "200k" correctly. Using parseInt()*1e6
+    // would give 200 Mbps for "200k" (it drops the suffix and multiplies as if M).
+    const bitrateNum = parseBitrateToBps(profile.videoBitrate);
 
     // Force pipeline adjustments when HW accel can't handle required filters:
     // - Subtitle burn-in is always CPU-only
@@ -1320,7 +1339,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       } else {
         existing.lastAccess = Date.now();
 
-        if (requestedSegment > 0 && !(await segmentNearby(existing.cachePath, requestedSegment))) {
+        if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
           this.log.log(
             `Seek: restarting remux [${key}] from segment ${requestedSegment}`,
           );
@@ -1407,8 +1426,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       } else {
         existing.lastAccess = Date.now();
 
-        // Handle seek
-        if (requestedSegment > 0 && !(await segmentNearby(existing.cachePath, requestedSegment))) {
+        // Handle seek (including seek to 0 when the current session started
+        // later via resume).
+        if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
           this.log.log(
             `Seek: restarting audio session [${key}] from segment ${requestedSegment}`,
           );

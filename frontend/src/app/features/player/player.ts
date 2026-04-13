@@ -611,7 +611,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
           const token = this.authService.accessToken;
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-          const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId);
+          const nativeStartQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
+          const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId, nativeStartQuality);
           await this.engine!.load(hlsUrl, startTime, undefined, headers);
         } else {
           await this.createShakaEngine();
@@ -625,24 +626,44 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
             await this.engine!.load(streamUrl, startTime, 'video/mp4');
           } else {
-            if (this.activeQualityId() === 'auto') {
+            const savedQualityId = this.activeQualityId();
+            if (savedQualityId === 'auto') {
               this.qualityManager.selectQuality(
                 { id: 'auto', label: 'Auto', height: 0 },
                 this.engine, mode, true,
               );
             }
 
+            // Disable ABR when a specific quality is saved — avoids background
+            // variant-switch chatter mid-playback. The backend serves a
+            // single-variant master playlist in that case so there's only one
+            // track anyway.
             this.engine!.configure({
-              abr: { defaultBandwidthEstimate: 100_000_000 },
+              abr: {
+                enabled: savedQualityId === 'auto',
+                defaultBandwidthEstimate: 100_000_000,
+              },
               streaming: {
                 retryParameters: { timeout: 60_000, maxAttempts: 5, baseDelay: 1000 },
               },
               manifest: {
                 retryParameters: { timeout: 30_000, maxAttempts: 5, baseDelay: 1000 },
+                // Tell Shaka the HLS-TS codec mime type upfront so it doesn't
+                // fetch seg 0 purely to probe. Matches our transcode output
+                // (H.264 High @ L4.0 + AAC-LC) + the master playlist CODECS
+                // attribute.
+                hls: {
+                  mediaPlaylistFullMimeType:
+                    'video/mp2t; codecs="avc1.640028,mp4a.40.2"',
+                },
               },
             });
 
-            const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId);
+            // Tell the backend the target quality so it pre-starts FFmpeg at
+            // the right profile + applies the quality-change grace period to
+            // protect the session from Shaka's startup bandwidth probe.
+            const startQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
+            const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId, startQuality);
             await this.engine!.load(hlsUrl, startTime);
           }
 
@@ -1009,9 +1030,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (this.engine) this.engine.muted = false;
       if (this.engine && this.mediaFileId) {
         const mode = this.playbackMode();
+        const savedQualityId = this.activeQualityId();
+        const startQuality = mode !== 'direct' && savedQualityId !== 'auto'
+          ? savedQualityId
+          : undefined;
         const url = mode === 'direct'
           ? this.streamingApi.getStreamUrl(this.mediaFileId)
-          : this.streamingApi.getHlsUrl(this.mediaFileId);
+          : this.streamingApi.getHlsUrl(this.mediaFileId, startQuality);
         const mimeType = mode === 'direct' ? 'video/mp4' : undefined;
         await this.engine.load(url, castPos > 0 ? castPos : undefined, mimeType);
         this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
@@ -1293,10 +1318,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const mode = this.playbackMode();
     this.qualityManager.selectQuality(option, this.engine, mode);
 
-    // Native engine + transcode: setMaxResolution is only a hint for ABR.
-    // The backend serves single-rendition HLS, so we must reload the stream
-    // to get the new quality from FFmpeg.
-    if (this.isNative && mode !== 'direct') {
+    // Transcode mode: the backend emits a single-variant master playlist
+    // (the one matching savedQualityId), so switching quality requires a
+    // full stream reload — same trade-off the native path already makes.
+    // The reload is done so that Shaka can't probe lower variants during
+    // startup (which would spin up FFmpeg at the wrong quality).
+    if (mode !== 'direct') {
       await this.reloadStream();
     }
 
@@ -1357,7 +1384,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (mode === 'direct') {
       await this.engine.load(this.streamingApi.getStreamUrl(this.mediaFileId), currentPos, 'video/mp4');
     } else {
-      await this.engine.load(this.streamingApi.getHlsUrl(this.mediaFileId), currentPos);
+      const savedQualityId = this.activeQualityId();
+      const startQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
+      await this.engine.load(this.streamingApi.getHlsUrl(this.mediaFileId, startQuality), currentPos);
     }
 
     this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
