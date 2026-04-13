@@ -127,13 +127,19 @@ export class StreamingController {
       crop: si?.video?.[0]?.crop ?? undefined,
       // videoOnly only makes sense with fMP4 (var_stream_map produces separate audio).
       // For TS, audio must stay muxed in the video stream.
+      // Multi-audio handling depends on segment format:
+      //   - fMP4: videoOnly + var_stream_map (separate audio renditions in
+      //     subdirs) → Shaka can switch via EXT-X-MEDIA.
+      //   - TS:   mapAllAudio muxes every audio track as distinct PIDs in a
+      //     single TS stream → ExoPlayer/AVPlayer switch by PID natively.
       videoOnly:
         this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
         this.activeStreamTracker.getFmp4Supported(mediaFileId),
-      // Multi-audio in muxed TS doesn't work (ExoPlayer can't switch PIDs).
-      // Audio switching always goes through server-side reload.
-      mapAllAudio: false,
-      // Pass audio stream info for var_stream_map (single FFmpeg, multi-output)
+      mapAllAudio:
+        this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
+        !this.activeStreamTracker.getFmp4Supported(mediaFileId),
+      // Pass audio stream info for both var_stream_map (fMP4) and
+      // mapAllAudio (TS) — both paths need language metadata.
       audioStreams:
         this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1
           ? (si?.audio as { language?: string; title?: string }[]) ?? []
