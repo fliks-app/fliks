@@ -35,7 +35,7 @@ import { MediaFileInfoComponent } from '../../shared/components/media-file-info'
 import { MediaDetailSeasonsComponent } from './components/media-detail-seasons/media-detail-seasons.component';
 import { ReleasesModalComponent } from './components/releases-modal/releases-modal.component';
 import { MediaDetailProfilesModalComponent } from './components/media-detail-profiles-modal/media-detail-profiles-modal.component';
-import { MediaDetailRootFolderModalComponent } from './components/media-detail-root-folder-modal/media-detail-root-folder-modal.component';
+import { MediaDetailLibraryModalComponent } from './components/media-detail-library-modal/media-detail-library-modal.component';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
@@ -72,7 +72,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     MediaDetailSeasonsComponent,
     ReleasesModalComponent,
     MediaDetailProfilesModalComponent,
-    MediaDetailRootFolderModalComponent,
+    MediaDetailLibraryModalComponent,
     HorizontalScrollerComponent,
     DownloadQualityModalComponent,
     RouterLink,
@@ -251,8 +251,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   readonly libraries = signal<Library[]>([]);
   readonly selectedLibraryId = signal<number | null>(null);
-  readonly pathSaving = signal(false);
-  readonly pathOk = signal(false);
+  readonly libraryPatchSaving = signal(false);
+  readonly libraryPatchSaved = signal(false);
 
   readonly canGrab = computed(() => this.auth.hasPermission('media.grab'));
   readonly canEditProfiles = computed(() => this.auth.hasPermission('media.edit'));
@@ -296,7 +296,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly episodeReleasesModal = viewChild<ReleasesModalComponent>('episodeReleasesModal');
   readonly seasonReleasesModal = viewChild<ReleasesModalComponent>('seasonReleasesModal');
   readonly profilesModal = viewChild(MediaDetailProfilesModalComponent);
-  readonly rootFolderModal = viewChild(MediaDetailRootFolderModalComponent);
+  readonly libraryModal = viewChild(MediaDetailLibraryModalComponent);
   readonly subtitleSection = viewChild(SubtitleSectionComponent);
 
   readonly episodeDialogFiles = computed(() => {
@@ -456,26 +456,26 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return this.expectedKind() === 'movie' ? 'movies' : 'series';
   }
 
-  openRootFolderModal() {
-    this.pathOk.set(false);
-    this.rootFolderModal()?.showModal();
+  openLibraryModal() {
+    this.libraryPatchSaved.set(false);
+    this.libraryModal()?.showModal();
   }
 
-  async saveRootFolder() {
+  async saveLibrary() {
     const m = this.media();
     if (!m) return;
     const libId = this.selectedLibraryId();
     if (libId == null) return;
-    this.pathSaving.set(true);
-    this.pathOk.set(false);
+    this.libraryPatchSaving.set(true);
+    this.libraryPatchSaved.set(false);
     try {
       const updated = await this.mediaService.patchLibrary(m.id, libId);
       this.media.set(updated);
       if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
-      this.pathOk.set(true);
-      setTimeout(() => this.pathOk.set(false), 3000);
+      this.libraryPatchSaved.set(true);
+      setTimeout(() => this.libraryPatchSaved.set(false), 3000);
     } finally {
-      this.pathSaving.set(false);
+      this.libraryPatchSaving.set(false);
     }
   }
 

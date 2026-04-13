@@ -25,8 +25,11 @@ export class DownloadsController {
   constructor(private readonly downloads: DownloadsService) {}
 
   @Get('qualities/:mediaFileId')
-  getQualities(@Param('mediaFileId', ParseIntPipe) mediaFileId: number) {
-    return this.downloads.getAvailableQualities(mediaFileId);
+  getQualities(
+    @Req() req: Request,
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+  ) {
+    return this.downloads.getAvailableQualities(mediaFileId, req.user as User);
   }
 
   @Post()
@@ -46,7 +49,7 @@ export class DownloadsController {
   ) {
     const user = req.user as User;
     return this.downloads.create(
-      user.id,
+      user,
       body.mediaFileId,
       body.quality,
       body.deviceProfile,

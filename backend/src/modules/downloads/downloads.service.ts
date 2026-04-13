@@ -186,8 +186,8 @@ export class DownloadsService implements OnModuleInit {
     }
   }
 
-  async getAvailableQualities(mediaFileId: number): Promise<DownloadQuality[]> {
-    const resolved = await this.streaming.resolveFile(mediaFileId);
+  async getAvailableQualities(mediaFileId: number, user?: User): Promise<DownloadQuality[]> {
+    const resolved = await this.streaming.resolveFile(mediaFileId, user);
     const info = resolved.mediaFile.streamInfo;
     const fileSize = resolved.size;
     const video = info?.video?.[0];
@@ -225,7 +225,7 @@ export class DownloadsService implements OnModuleInit {
   }
 
   async create(
-    userId: number,
+    user: User,
     mediaFileId: number,
     quality: string,
     deviceProfile?: {
@@ -235,12 +235,12 @@ export class DownloadsService implements OnModuleInit {
     },
     deviceId?: string,
   ): Promise<DownloadTask> {
-    const resolved = await this.streaming.resolveFile(mediaFileId);
+    const resolved = await this.streaming.resolveFile(mediaFileId, user);
     const file = resolved.mediaFile;
 
     // Check for existing task (scoped by device when provided)
     const where: Record<string, any> = {
-      user: { id: userId },
+      user: { id: user.id },
       mediaFile: { id: mediaFileId },
       quality,
     };
@@ -270,7 +270,7 @@ export class DownloadsService implements OnModuleInit {
     }
 
     const task = this.taskRepo.create({
-      user: { id: userId } as User,
+      user: { id: user.id } as User,
       deviceId,
       media: { id: file.mediaId } as Media,
       episode:

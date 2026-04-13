@@ -30,7 +30,6 @@ import { UpdateMediaProfilesDto } from './dto/update-media-profiles.dto';
 import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { PatchMonitoredDto } from './dto/patch-monitored.dto';
-import { UpdateRootFolderDto } from './dto/update-path.dto';
 import { APP_QUALITIES } from '../../common/constants/app-qualities';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
@@ -61,6 +60,15 @@ export class MediaController {
     private readonly eventsService: EventsService,
     private readonly libraries: LibrariesService,
   ) {}
+
+  /**
+   * Throws NotFound when the user can't access the media's library.
+   * Use at the start of every per-media endpoint to seal off cross-library leaks.
+   */
+  private async assertMediaAccessible(id: number, user: User): Promise<void> {
+    const accessible = await this.libraries.getAccessibleLibraryIds(user);
+    await this.mediaService.assertAccessible(id, accessible);
+  }
 
   @Post('import/tmdb')
   @CheckPolicies((ability) => ability.can(Action.Create, Media))
@@ -131,70 +139,91 @@ export class MediaController {
 
   @Post(':id/rename')
   @CheckPolicies((ability) => ability.can(Action.Update, Media))
-  renameFiles(@Param('id', ParseIntPipe) id: number) {
+  async renameFiles(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
+    await this.assertMediaAccessible(id, user);
     return this.mediaService.renameFiles(id);
   }
 
   @Get(':id/releases')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  movieReleases(
+  async movieReleases(
     @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
     @Query('q') customQuery?: string,
   ) {
+    await this.assertMediaAccessible(id, user);
     return this.movieDownload.searchMovieReleases(id, customQuery);
   }
 
   @Post(':id/grab')
   @CheckPolicies((ability) => ability.can(Action.Grab, Media))
-  grabMovie(@Param('id', ParseIntPipe) id: number, @Body() dto: GrabMovieDto) {
+  async grabMovie(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+    @Body() dto: GrabMovieDto,
+  ) {
+    await this.assertMediaAccessible(id, user);
     return this.movieDownload.grabMovie(id, dto ?? {});
   }
 
   @Get(':id/upgrade-releases')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  upgradeReleases(
+  async upgradeReleases(
     @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
     @Query('q') customQuery?: string,
   ) {
+    await this.assertMediaAccessible(id, user);
     return this.movieDownload.searchUpgradeReleases(id, customQuery);
   }
 
   @Post(':id/upgrade')
   @CheckPolicies((ability) => ability.can(Action.Grab, Media))
-  grabUpgrade(
+  async grabUpgrade(
     @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
     @Body() dto: GrabMovieDto,
   ) {
+    await this.assertMediaAccessible(id, user);
     return this.movieDownload.grabUpgrade(id, dto ?? {});
   }
 
   @Get(':id/seasons/:seasonId/releases')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  seasonReleases(
+  async seasonReleases(
     @Param('id', ParseIntPipe) id: number,
     @Param('seasonId', ParseIntPipe) seasonId: number,
+    @CurrentUser() user: User,
     @Query('q') customQuery?: string,
   ) {
+    await this.assertMediaAccessible(id, user);
     return this.episodeDownload.searchSeasonReleases(id, seasonId, customQuery);
   }
 
   @Post(':id/seasons/:seasonId/grab')
   @CheckPolicies((ability) => ability.can(Action.Grab, Media))
-  grabSeason(
+  async grabSeason(
     @Param('id', ParseIntPipe) id: number,
     @Param('seasonId', ParseIntPipe) seasonId: number,
+    @CurrentUser() user: User,
     @Body() dto: GrabMovieDto,
   ) {
+    await this.assertMediaAccessible(id, user);
     return this.episodeDownload.grabSeason(id, seasonId, dto ?? {});
   }
 
   @Get(':id/episodes/:episodeId/releases')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  episodeReleases(
+  async episodeReleases(
     @Param('id', ParseIntPipe) id: number,
     @Param('episodeId', ParseIntPipe) episodeId: number,
+    @CurrentUser() user: User,
     @Query('q') customQuery?: string,
   ) {
+    await this.assertMediaAccessible(id, user);
     return this.episodeDownload.searchEpisodeReleases(
       id,
       episodeId,
@@ -204,21 +233,25 @@ export class MediaController {
 
   @Post(':id/episodes/:episodeId/grab')
   @CheckPolicies((ability) => ability.can(Action.Grab, Media))
-  grabEpisode(
+  async grabEpisode(
     @Param('id', ParseIntPipe) id: number,
     @Param('episodeId', ParseIntPipe) episodeId: number,
+    @CurrentUser() user: User,
     @Body() dto: GrabMovieDto,
   ) {
+    await this.assertMediaAccessible(id, user);
     return this.episodeDownload.grabEpisode(id, episodeId, dto ?? {});
   }
 
   @Delete(':id/files/:fileId')
   @CheckPolicies((ability) => ability.can(Action.Delete, Media))
-  deleteFile(
+  async deleteFile(
     @Param('id', ParseIntPipe) id: number,
     @Param('fileId', ParseIntPipe) fileId: number,
+    @CurrentUser() user: User,
     @Query('deleteOnDisk') deleteOnDisk?: string,
   ) {
+    await this.assertMediaAccessible(id, user);
     return this.mediaService.deleteMediaFile(
       id,
       fileId,
@@ -226,21 +259,14 @@ export class MediaController {
     );
   }
 
-  @Patch(':id/root-folder')
-  @CheckPolicies((ability) => ability.can(Action.Update, Media))
-  updateRootFolder(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateRootFolderDto,
-  ) {
-    return this.mediaService.updateRootFolder(id, dto.rootFolderId);
-  }
-
   @Patch(':id/library')
   @CheckPolicies((ability) => ability.can(Action.Update, Media))
-  updateLibrary(
+  async updateLibrary(
     @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
     @Body() dto: { libraryId: number },
   ) {
+    await this.assertMediaAccessible(id, user);
     return this.mediaService.updateLibrary(id, dto.libraryId);
   }
 
@@ -249,31 +275,43 @@ export class MediaController {
     (ability) =>
       ability.can(Action.Grab, Media) || ability.can(Action.Update, Media),
   )
-  updateProfiles(
+  async updateProfiles(
     @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
     @Body() dto: UpdateMediaProfilesDto,
   ) {
+    await this.assertMediaAccessible(id, user);
     return this.mediaService.updateProfiles(id, dto);
   }
 
   @Post(':id/refresh')
   @CheckPolicies((ability) => ability.can(Action.Update, Media))
-  refreshMetadata(@Param('id', ParseIntPipe) id: number) {
+  async refreshMetadata(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
+    await this.assertMediaAccessible(id, user);
     return this.mediaService.refreshMetadata(id);
   }
 
   @Post(':id/episodes/:episodeId/refresh')
   @CheckPolicies((ability) => ability.can(Action.Update, Media))
-  refreshEpisodeMetadata(
+  async refreshEpisodeMetadata(
     @Param('id', ParseIntPipe) id: number,
     @Param('episodeId', ParseIntPipe) episodeId: number,
+    @CurrentUser() user: User,
   ) {
+    await this.assertMediaAccessible(id, user);
     return this.mediaService.refreshEpisodeMetadata(id, episodeId);
   }
 
   @Post(':id/rescan')
   @CheckPolicies((ability) => ability.can(Action.Update, Media))
-  async rescanFiles(@Param('id', ParseIntPipe) id: number) {
+  async rescanFiles(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
+    await this.assertMediaAccessible(id, user);
     const media = await this.mediaService.findOne(id);
     if (!media) throw new NotFoundException(`Media #${id} not found`);
     const title = media.title;
@@ -315,7 +353,11 @@ export class MediaController {
 
   @Get(':id/subtitles')
   @CheckPolicies((ability) => ability.can(Action.Read, SubtitleFile))
-  getSubtitles(@Param('id', ParseIntPipe) id: number) {
+  async getSubtitles(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
+    await this.assertMediaAccessible(id, user);
     return this.subtitlesService.getSubtitlesForMedia(id);
   }
 
@@ -323,9 +365,11 @@ export class MediaController {
   @CheckPolicies((ability) => ability.can(Action.Read, SubtitleFile))
   async searchSubtitles(
     @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
     @Query('language') language?: string,
     @Query('episodeId') episodeId?: string,
   ) {
+    await this.assertMediaAccessible(id, user);
     const media = await this.mediaService.findOne(id);
 
     // `episodeId` = id DB de l'épisode ; les APIs (OpenSubtitles, Subdl…) attendent
@@ -361,9 +405,11 @@ export class MediaController {
   @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
   async autoSubtitle(
     @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
     @Body()
     body: { mediaFileId: number; episodeId?: number; language?: string },
   ) {
+    await this.assertMediaAccessible(id, user);
     const media = await this.mediaService.findOne(id);
 
     let season: number | undefined;
@@ -399,9 +445,11 @@ export class MediaController {
   @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
   async downloadSubtitle(
     @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
     @Body()
     body: { searchResult: any; mediaFileId: number; episodeId?: number },
   ) {
+    await this.assertMediaAccessible(id, user);
     return this.subtitlesService.downloadSubtitle(
       id,
       body.mediaFileId,
@@ -412,18 +460,21 @@ export class MediaController {
 
   @Delete(':id/subtitles/:subtitleId')
   @CheckPolicies((ability) => ability.can(Action.Delete, SubtitleFile))
-  deleteSubtitle(
-    @Param('id', ParseIntPipe) _id: number,
+  async deleteSubtitle(
+    @Param('id', ParseIntPipe) id: number,
     @Param('subtitleId', ParseIntPipe) subtitleId: number,
+    @CurrentUser() user: User,
   ) {
+    await this.assertMediaAccessible(id, user);
     return this.subtitlesService.deleteSubtitle(subtitleId);
   }
 
   @Post(':id/subtitles/:subtitleId/sync')
   @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
   async syncSubtitle(
-    @Param('id', ParseIntPipe) _id: number,
+    @Param('id', ParseIntPipe) id: number,
     @Param('subtitleId', ParseIntPipe) subtitleId: number,
+    @CurrentUser() user: User,
     @Body()
     body?: {
       reference?: string;
@@ -432,6 +483,7 @@ export class MediaController {
       goldenSectionSearch?: boolean;
     },
   ) {
+    await this.assertMediaAccessible(id, user);
     return this.subtitleSync.enqueueSyncSubtitle(subtitleId, body ?? {});
   }
 
@@ -440,7 +492,9 @@ export class MediaController {
   async getStreams(
     @Param('id', ParseIntPipe) id: number,
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @CurrentUser() user: User,
   ) {
+    await this.assertMediaAccessible(id, user);
     const media = await this.mediaService.findOne(id);
     const file = media.files?.find((f) => f.id === mediaFileId);
     if (!file)
@@ -459,10 +513,12 @@ export class MediaController {
   @Post(':id/subtitles/:subtitleId/post-process')
   @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
   async postProcessSubtitle(
-    @Param('id', ParseIntPipe) _id: number,
+    @Param('id', ParseIntPipe) id: number,
     @Param('subtitleId', ParseIntPipe) subtitleId: number,
+    @CurrentUser() user: User,
     @Body() body: { action: string; params?: Record<string, unknown> },
   ) {
+    await this.assertMediaAccessible(id, user);
     return this.subtitlesService.applyPostProcessing(
       subtitleId,
       body.action,
@@ -473,10 +529,12 @@ export class MediaController {
   @Post(':id/subtitles/:subtitleId/upgrade')
   @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
   async upgradeSubtitle(
-    @Param('id', ParseIntPipe) _id: number,
+    @Param('id', ParseIntPipe) id: number,
     @Param('subtitleId', ParseIntPipe) subtitleId: number,
+    @CurrentUser() user: User,
     @Body() body: { searchResult: any },
   ) {
+    await this.assertMediaAccessible(id, user);
     return this.subtitlesService.upgradeSubtitle(subtitleId, body.searchResult);
   }
 
@@ -493,43 +551,66 @@ export class MediaController {
 
   @Get(':id/cast')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  getCast(@Param('id', ParseIntPipe) id: number) {
+  async getCast(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
+    await this.assertMediaAccessible(id, user);
     return this.mediaService.getCast(id);
   }
 
   @Get(':id/crew')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  getCrew(@Param('id', ParseIntPipe) id: number) {
+  async getCrew(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
+    await this.assertMediaAccessible(id, user);
     return this.mediaService.getCrew(id);
   }
 
   @Put(':id')
   @CheckPolicies((ability) => ability.can(Action.Update, Media))
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateMediaDto) {
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+    @Body() dto: UpdateMediaDto,
+  ) {
+    await this.assertMediaAccessible(id, user);
     return this.mediaService.update(id, dto);
   }
 
   @Delete(':id')
   @CheckPolicies((ability) => ability.can(Action.Delete, Media))
-  remove(@Param('id', ParseIntPipe) id: number) {
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
+    await this.assertMediaAccessible(id, user);
     return this.mediaService.remove(id);
   }
 
   @Patch('seasons/:seasonId')
   @CheckPolicies((ability) => ability.can(Action.Update, Media))
-  patchSeason(
+  async patchSeason(
     @Param('seasonId', ParseIntPipe) seasonId: number,
+    @CurrentUser() user: User,
     @Body() dto: PatchMonitoredDto,
   ) {
+    const mediaId = await this.mediaService.getMediaIdForSeason(seasonId);
+    await this.assertMediaAccessible(mediaId, user);
     return this.mediaService.updateSeasonMonitored(seasonId, dto.monitored);
   }
 
   @Patch('episodes/:episodeId')
   @CheckPolicies((ability) => ability.can(Action.Update, Media))
-  patchEpisode(
+  async patchEpisode(
     @Param('episodeId', ParseIntPipe) episodeId: number,
+    @CurrentUser() user: User,
     @Body() dto: PatchMonitoredDto,
   ) {
+    const mediaId = await this.mediaService.getMediaIdForEpisode(episodeId);
+    await this.assertMediaAccessible(mediaId, user);
     return this.mediaService.updateEpisodeMonitored(episodeId, dto.monitored);
   }
 }

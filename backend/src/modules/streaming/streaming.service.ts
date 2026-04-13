@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
+import { User } from '../users/entities/user.entity';
+import { LibrariesService } from '../libraries/libraries.service';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
@@ -39,9 +41,17 @@ export class StreamingService {
     private readonly mediaRepo: Repository<Media>,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
+    private readonly libraries: LibrariesService,
   ) {}
 
-  async resolveFile(mediaFileId: number): Promise<ResolvedFile> {
+  /**
+   * Resolve a media file for streaming/download. When `user` is passed,
+   * enforces library ACL — non-admin users get NotFoundException for media
+   * outside their accessible libraries (same shape as "missing" so we don't
+   * leak existence). Internal callers (subtitle workers, etc.) call without
+   * `user` to bypass.
+   */
+  async resolveFile(mediaFileId: number, user?: User): Promise<ResolvedFile> {
     const file = await this.mediaFileRepo.findOne({
       where: { id: mediaFileId },
       relations: ['media', 'media.rootFolder'],
@@ -50,6 +60,18 @@ export class StreamingService {
       throw new NotFoundException(`MediaFile #${mediaFileId} not found`);
 
     const media = file.media;
+
+    if (user) {
+      const accessible = await this.libraries.getAccessibleLibraryIds(user);
+      if (accessible !== null) {
+        if (media.libraryId == null || !accessible.includes(media.libraryId)) {
+          // Mirror the "not found" shape so users can't probe for media in
+          // libraries they don't have access to.
+          throw new NotFoundException(`MediaFile #${mediaFileId} not found`);
+        }
+      }
+    }
+
     if (!media?.path) {
       throw new NotFoundException(
         `Media "${media?.title ?? file.mediaId}" has no root folder assigned. Go to the media detail page and set a root folder.`,

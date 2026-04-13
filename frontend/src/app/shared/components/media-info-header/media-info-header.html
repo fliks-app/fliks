@@ -164,7 +164,7 @@
           }
           @if (canEditProfiles()) {
             <li><a class="flex items-center gap-3" (click)="openProfiles.emit()"><svg lucideSettings class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_profiles' | translate }}</a></li>
-            <li><a class="flex items-center gap-3" (click)="openRootFolder.emit()"><svg lucideFolder class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_root_folder' | translate }}</a></li>
+            <li><a class="flex items-center gap-3" (click)="openLibrary.emit()"><svg lucideFolder class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_library' | translate }}</a></li>
           }
           @if (isAdmin()) {
             <li><a class="flex items-center gap-3" (click)="refreshMetadata.emit()"><svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.refresh_metadata' | translate }}</a></li>
@@ -320,11 +320,17 @@
       }
 
       <!-- Library info + genres -->
-      @if (path() || qualityProfileName() || languageProfileName() || tags().length || genres().length) {
+      @if (libraryName() || path() || qualityProfileName() || languageProfileName() || tags().length || genres().length) {
         <div class="flex flex-wrap gap-x-8 gap-y-2 mt-4">
+          @if (libraryName()) {
+            <div class="flex flex-col">
+              <span class="text-base-content/40 text-sm">{{ 'media_detail.library_label' | translate }}</span>
+              <span class="badge badge-primary badge-outline">{{ libraryName() }}</span>
+            </div>
+          }
           @if (path()) {
             <div class="flex flex-col">
-              <span class="text-base-content/40 text-sm">{{ 'media_detail.root_folder_label' | translate }}</span>
+              <span class="text-base-content/40 text-sm">{{ 'media_detail.path_label' | translate }}</span>
               <span class="font-mono">{{ path() }}</span>
             </div>
           }
@@ -410,7 +416,7 @@
             }
             @if (canEditProfiles()) {
               <li><a class="flex items-center gap-3" (click)="openProfiles.emit()"><svg lucideSettings class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_profiles' | translate }}</a></li>
-              <li><a class="flex items-center gap-3" (click)="openRootFolder.emit()"><svg lucideFolder class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_root_folder' | translate }}</a></li>
+              <li><a class="flex items-center gap-3" (click)="openLibrary.emit()"><svg lucideFolder class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_library' | translate }}</a></li>
             }
             @if (isAdmin()) {
               <li><a class="flex items-center gap-3" (click)="refreshMetadata.emit()" [class.pointer-events-none]="refreshLoading()">

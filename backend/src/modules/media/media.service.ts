@@ -503,6 +503,26 @@ export class MediaService {
     }
   }
 
+  /** Returns the parent media id for a season — used by ACL on season-scoped endpoints. */
+  async getMediaIdForSeason(seasonId: number): Promise<number> {
+    const s = await this.seasonRepo.findOne({
+      where: { id: seasonId },
+      select: ['id', 'mediaId'],
+    });
+    if (!s) throw new NotFoundException(`Season #${seasonId} not found`);
+    return s.mediaId;
+  }
+
+  /** Returns the parent media id for an episode — used by ACL on episode-scoped endpoints. */
+  async getMediaIdForEpisode(episodeId: number): Promise<number> {
+    const e = await this.episodeRepo.findOne({
+      where: { id: episodeId },
+      relations: ['season'],
+    });
+    if (!e) throw new NotFoundException(`Episode #${episodeId} not found`);
+    return e.season.mediaId;
+  }
+
   /** Adds `WHERE media.libraryId IN (...)` when ACL is in effect. */
   private applyLibraryAcl(
     qb: SelectQueryBuilder<Media>,
@@ -543,6 +563,7 @@ export class MediaService {
         'files',
         'qualityProfile',
         'languageProfile',
+        'library',
       ],
     });
     if (!media) {
@@ -584,14 +605,6 @@ export class MediaService {
     const saved = await this.mediaRepo.save(media);
     await this.updateSearchVector(saved.id);
     return this.findOne(saved.id);
-  }
-
-  async updateRootFolder(id: number, rootFolderId: number): Promise<Media> {
-    await this.findOne(id);
-    await this.mediaRepo.update(id, {
-      rootFolder: { id: rootFolderId } as RootFolder,
-    });
-    return this.findOne(id);
   }
 
   /**

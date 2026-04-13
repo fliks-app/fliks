@@ -19,16 +19,16 @@
           }
         </select>
       </label>
-      @if (pathOk()) {
+      @if (saved()) {
         <div role="alert" class="alert alert-success text-sm py-2">{{ 'media_detail.library_saved' | translate }}</div>
       }
       <div class="modal-action">
         <button
           type="submit"
           class="btn btn-primary btn-sm"
-          [disabled]="pathSaving() || selectedLibraryId() === null"
+          [disabled]="saving() || selectedLibraryId() === null"
         >
-          @if (pathSaving()) {
+          @if (saving()) {
             <span class="loading loading-spinner loading-xs"></span>
           }
           {{ 'common.save' | translate }}

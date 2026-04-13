@@ -13,7 +13,6 @@ import { DownloadClientsModule } from './modules/download-clients/download-clien
 import { RequestsModule } from './modules/requests/requests.module';
 import { FliksSchedulerModule } from './modules/scheduler/scheduler.module';
 import { EventsModule } from './modules/scheduler/events.module';
-import { RootFoldersModule } from './modules/root-folders/root-folders.module';
 import { CleanupProfilesModule } from './modules/cleanup-profiles/cleanup-profiles.module';
 import { LibrariesModule } from './modules/libraries/libraries.module';
 import { BlocklistModule } from './modules/blocklist/blocklist.module';
@@ -75,7 +74,6 @@ import { join } from 'path';
     DownloadClientsModule,
     RequestsModule,
     FliksSchedulerModule,
-    RootFoldersModule,
     CleanupProfilesModule,
     LibrariesModule,
     BlocklistModule,

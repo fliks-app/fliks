@@ -75,8 +75,8 @@ export interface Media {
   status: string;
   monitored: boolean;
   path?: string | null;
-  rootFolderId?: number | null;
   libraryId?: number | null;
+  library?: { id: number; name: string } | null;
   posterUrl: string | null;
   fanartUrl: string | null;
   rating: number;
@@ -265,10 +265,6 @@ export class MediaService {
         params: { deleteOnDisk: String(deleteOnDisk) },
       }),
     );
-  }
-
-  patchRootFolder(id: number, rootFolderId: number) {
-    return firstValueFrom(this.http.patch<Media>(`/api/media/${id}/root-folder`, { rootFolderId }));
   }
 
   /** Move media to a different library (backend resolves an appropriate path inside it). */

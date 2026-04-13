@@ -10,21 +10,17 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { Library } from '../../../../core/services/api/libraries-api.service';
 
-/**
- * Retained filename for historical reasons — now a library picker.
- * Backend resolves the actual filesystem path inside the chosen library.
- */
 @Component({
-  selector: 'app-media-detail-root-folder-modal',
+  selector: 'app-media-detail-library-modal',
   imports: [TranslateModule, FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  templateUrl: './media-detail-root-folder-modal.component.html',
+  templateUrl: './media-detail-library-modal.component.html',
 })
-export class MediaDetailRootFolderModalComponent {
+export class MediaDetailLibraryModalComponent {
   readonly libraries = input<Library[]>([]);
   readonly selectedLibraryId = input<number | null>(null);
-  readonly pathSaving = input(false);
-  readonly pathOk = input(false);
+  readonly saving = input(false);
+  readonly saved = input(false);
 
   readonly selectedLibraryIdChange = output<number | null>();
   readonly save = output<void>();

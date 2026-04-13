@@ -33,10 +33,10 @@
                 </div>
                 <div class="flex gap-1.5 mt-1">
                   @if (lib.mediaTypes.includes('movie')) {
-                    <span class="badge badge-outline badge-sm">{{ 'settings.root_folders.media_type_movie' | translate }}</span>
+                    <span class="badge badge-outline badge-sm">{{ 'settings.libraries.media_type_movie' | translate }}</span>
                   }
                   @if (lib.mediaTypes.includes('series')) {
-                    <span class="badge badge-outline badge-sm">{{ 'settings.root_folders.media_type_series' | translate }}</span>
+                    <span class="badge badge-outline badge-sm">{{ 'settings.libraries.media_type_series' | translate }}</span>
                   }
                   @if (lib.preferredProvider) {
                     <span class="badge badge-primary badge-sm">{{ lib.preferredProvider | uppercase }}</span>
@@ -55,7 +55,7 @@
                   <p class="font-mono text-xs text-base-content/60 mt-1 truncate">
                     {{ rf.path }}
                     @if (!rf.accessible) {
-                      <span class="badge badge-error badge-xs ml-2">{{ 'settings.root_folders.inaccessible' | translate }}</span>
+                      <span class="badge badge-error badge-xs ml-2">{{ 'settings.libraries.inaccessible' | translate }}</span>
                     }
                   </p>
                 }
@@ -99,12 +99,12 @@
           <label class="label cursor-pointer gap-2">
             <input type="checkbox" class="checkbox checkbox-sm"
               [ngModel]="formMovies()" (ngModelChange)="formMovies.set($event)" />
-            <span class="label-text">{{ 'settings.root_folders.media_type_movie' | translate }}</span>
+            <span class="label-text">{{ 'settings.libraries.media_type_movie' | translate }}</span>
           </label>
           <label class="label cursor-pointer gap-2">
             <input type="checkbox" class="checkbox checkbox-sm"
               [ngModel]="formSeries()" (ngModelChange)="formSeries.set($event)" />
-            <span class="label-text">{{ 'settings.root_folders.media_type_series' | translate }}</span>
+            <span class="label-text">{{ 'settings.libraries.media_type_series' | translate }}</span>
           </label>
         </div>
       </div>

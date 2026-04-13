@@ -88,13 +88,13 @@ export class LibrariesService implements OnModuleInit {
     await this.dataSource.transaction(async (m) => {
       const libraries: Library[] = [];
 
-      // 1. Create one Library per RootFolder, copying legacy fields.
+      // 1. Create one Library per RootFolder. Defaults only — legacy
+      //    per-rootfolder columns (mediaTypes/preferredProvider/cleanup)
+      //    have been removed; admin reconfigures via library editor.
       for (const rf of orphanRoots) {
         const lib = m.create(Library, {
           name: rf.label?.trim() || rf.path,
-          mediaTypes: rf.mediaTypes ?? [MediaType.MOVIE, MediaType.SERIES],
-          preferredProvider: rf.preferredProvider,
-          stalledCleanupProfile: rf.stalledCleanupProfile,
+          mediaTypes: [MediaType.MOVIE, MediaType.SERIES],
         });
         const saved = await m.save(lib);
         libraries.push(saved);
@@ -383,10 +383,6 @@ export class LibrariesService implements OnModuleInit {
       path: dto.path,
       label: dto.label,
       library: lib,
-      // Mirror the library's media types so any legacy reader still works.
-      mediaTypes: lib.mediaTypes,
-      preferredProvider: lib.preferredProvider,
-      stalledCleanupProfile: lib.stalledCleanupProfile,
     });
     return m.save(rf);
   }
@@ -450,9 +446,7 @@ export class LibrariesService implements OnModuleInit {
   }
 
   // Used by other modules wanting to filter on "is it the default lib for X type"
-  async getDefaultForType(
-    type: MediaType,
-  ): Promise<Library | null> {
+  async getDefaultForType(type: MediaType): Promise<Library | null> {
     const where =
       type === MediaType.MOVIE
         ? { isDefaultForMovies: true }

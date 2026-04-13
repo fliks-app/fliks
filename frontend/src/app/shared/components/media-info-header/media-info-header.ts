@@ -97,6 +97,7 @@ export class MediaInfoHeaderComponent {
   readonly status = input<string | null>(null);
   readonly monitored = input(true);
   readonly path = input<string | null>(null);
+  readonly libraryName = input<string | null>(null);
   readonly qualityProfileName = input<string | null>(null);
   readonly languageProfileName = input<string | null>(null);
   readonly tags = input<string[]>([]);
@@ -141,7 +142,7 @@ export class MediaInfoHeaderComponent {
   readonly deleteFile = output<{ fileId: number; deleteOnDisk: boolean }>();
   readonly openDownload = output<void>();
   readonly openProfiles = output<void>();
-  readonly openRootFolder = output<void>();
+  readonly openLibrary = output<void>();
   readonly refreshMetadata = output<void>();
   readonly toggleMonitored = output<void>();
   readonly deleteMedia = output<void>();

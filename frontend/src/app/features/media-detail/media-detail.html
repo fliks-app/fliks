@@ -87,6 +87,7 @@
           [status]="m.status ?? null"
           [monitored]="m.monitored ?? true"
           [path]="m.path ?? null"
+          [libraryName]="m.library?.name ?? null"
           [qualityProfileName]="m.qualityProfile?.name ?? null"
           [languageProfileName]="m.languageProfile?.name ?? null"
           [tags]="m.tags?.length ? m.tags.map(t => t.label) : []"
@@ -111,7 +112,7 @@
           (deleteFile)="deleteFile($event.fileId, $event.deleteOnDisk)"
           (openDownload)="openDownloadModal()"
           (openProfiles)="openProfilesModal()"
-          (openRootFolder)="openRootFolderModal()"
+          (openLibrary)="openLibraryModal()"
           (refreshMetadata)="refreshMetadata()"
           (toggleMonitored)="toggleMonitored()"
           (deleteMedia)="deleteMedia()"
@@ -230,13 +231,13 @@
         (save)="saveProfiles()"
       />
 
-      <app-media-detail-root-folder-modal
+      <app-media-detail-library-modal
         [libraries]="libraries()"
         [selectedLibraryId]="selectedLibraryId()"
-        [pathSaving]="pathSaving()"
-        [pathOk]="pathOk()"
+        [saving]="libraryPatchSaving()"
+        [saved]="libraryPatchSaved()"
         (selectedLibraryIdChange)="selectedLibraryId.set($event)"
-        (save)="saveRootFolder()"
+        (save)="saveLibrary()"
       />
       <app-download-quality-modal #downloadModal (download)="onDownload($event)" />
     </div>

@@ -45,7 +45,6 @@ export interface FliksRequestRow {
   declinedReason: string | null;
   qualityProfileId: number | null;
   languageProfileId: number | null;
-  rootFolderId: number | null;
   libraryId: number | null;
   mediaId: number | null;
   seasons: number[] | null;

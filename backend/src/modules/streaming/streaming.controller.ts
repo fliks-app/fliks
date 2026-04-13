@@ -20,6 +20,7 @@ import { SettingsService } from '../settings/settings.service';
 
 const execFileAsync = promisify(execFile);
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
+import { User } from '../users/entities/user.entity';
 import { StreamingService, ResolvedFile } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
 import {
@@ -189,7 +190,7 @@ export class StreamingController {
     @Body() deviceProfile: DeviceProfileDto,
     @Req() req: Request,
   ) {
-    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
     const token = firstQueryString(req.query, 'token');
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
     const burnInSubtitleRaw = firstQueryString(req.query, 'burnInSubtitleId');
@@ -260,9 +261,10 @@ export class StreamingController {
   @Get(':mediaFileId/thumbnails/sprite.json')
   async thumbnailMeta(
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
-    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
     const duration = resolved.mediaFile.streamInfo?.durationSeconds;
     if (!duration) return res.status(404).json({ error: 'no duration' });
 
@@ -281,9 +283,10 @@ export class StreamingController {
   @Get(':mediaFileId/thumbnails/sprite.jpg')
   async thumbnailSprite(
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
-    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
     const duration = resolved.mediaFile.streamInfo?.durationSeconds;
     if (!duration) return res.status(404).end();
 
@@ -314,7 +317,7 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
     const crop = v?.crop;
@@ -409,7 +412,7 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
     const duration = await this.resolveDuration(
       mediaFileId,
       resolved.absolutePath,
@@ -463,7 +466,7 @@ export class StreamingController {
       throw new BadRequestException(`Invalid audio segment name: ${segment}`);
     }
 
-    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
 
     const segMatch = segment.match(/seg-(\d+)\.m4s/);
     const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
@@ -529,7 +532,7 @@ export class StreamingController {
     if (!VALID_QUALITIES.has(quality)) {
       throw new BadRequestException(`Invalid quality: ${quality}`);
     }
-    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
     // Use client-provided duration (from playbackInfo) to skip ffprobe
     const durationHint = firstQueryString(req.query, 'duration');
     const duration = (durationHint ? parseFloat(durationHint) : 0)
@@ -626,7 +629,7 @@ export class StreamingController {
       throw new BadRequestException(`Invalid segment name: ${segment}`);
     }
 
-    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
 
     // For init.mp4: serve from existing session without triggering quality changes.
     if (segment.startsWith('init')) {
@@ -726,7 +729,7 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
 
     // Track direct play session
     const user = req.user;
