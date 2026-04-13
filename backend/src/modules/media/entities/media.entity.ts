@@ -7,6 +7,7 @@ import {
   ManyToMany,
   JoinTable,
   JoinColumn,
+  RelationId,
   Index,
 } from 'typeorm';
 import * as nodePath from 'path';
@@ -19,6 +20,7 @@ import {
 import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
 import { RootFolder } from '../../root-folders/entities/root-folder.entity';
+import { Library } from '../../libraries/entities/library.entity';
 import { Tag } from '../../tags/entities/tag.entity';
 import { Season } from './season.entity';
 import { MediaFile } from './media-file.entity';
@@ -60,12 +62,31 @@ export class Media extends BaseEntity {
   @Column({ default: true })
   monitored: boolean;
 
-  @ManyToOne(() => RootFolder, { nullable: true, eager: true })
+  @ManyToOne(() => RootFolder, {
+    nullable: true,
+    eager: true,
+    onDelete: 'SET NULL',
+  })
   @JoinColumn({ name: 'rootFolderId' })
-  rootFolder: RootFolder;
+  rootFolder: RootFolder | null;
 
-  @Column({ nullable: true })
-  rootFolderId: number;
+  @RelationId((m: Media) => m.rootFolder)
+  rootFolderId: number | null;
+
+  /**
+   * Library this media belongs to. Coexists with `rootFolderId`: the FK here
+   * drives ACL filtering and stalled-cleanup lookups, the rootFolder FK drives
+   * disk I/O. Invariant: `media.rootFolder.libraryId === media.libraryId`.
+   *
+   * `onDelete: RESTRICT` matches the service-level guard that forbids deleting
+   * a library while it still owns media — the DB is the second line of defence.
+   */
+  @ManyToOne(() => Library, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'libraryId' })
+  library: Library | null;
+
+  @RelationId((m: Media) => m.library)
+  libraryId: number | null;
 
   @Column({ nullable: true })
   folderName: string;
@@ -118,19 +139,27 @@ export class Media extends BaseEntity {
   })
   searchVector: string;
 
-  @ManyToOne(() => QualityProfile, { nullable: true, eager: true })
+  @ManyToOne(() => QualityProfile, {
+    nullable: true,
+    eager: true,
+    onDelete: 'SET NULL',
+  })
   @JoinColumn({ name: 'qualityProfileId' })
-  qualityProfile: QualityProfile;
+  qualityProfile: QualityProfile | null;
 
-  @Column({ nullable: true })
-  qualityProfileId: number;
+  @RelationId((m: Media) => m.qualityProfile)
+  qualityProfileId: number | null;
 
-  @ManyToOne(() => LanguageProfile, { nullable: true, eager: true })
+  @ManyToOne(() => LanguageProfile, {
+    nullable: true,
+    eager: true,
+    onDelete: 'SET NULL',
+  })
   @JoinColumn({ name: 'languageProfileId' })
-  languageProfile: LanguageProfile;
+  languageProfile: LanguageProfile | null;
 
-  @Column({ nullable: true })
-  languageProfileId: number;
+  @RelationId((m: Media) => m.languageProfile)
+  languageProfileId: number | null;
 
   @ManyToMany(() => Tag, { eager: true })
   @JoinTable({ name: 'media_tags' })

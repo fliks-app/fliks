@@ -92,17 +92,17 @@
               </select>
             </label>
           }
-          @if (compatibleFolders().length > 1) {
+          @if (compatibleLibraries().length > 1) {
             <label class="form-control w-full">
-              <span class="label-text text-base-content/60">{{ 'discover.root_folder' | translate }}</span>
+              <span class="label-text text-base-content/60">{{ 'settings.libraries.title' | translate }}</span>
               <select
                 class="select select-bordered select-sm w-full"
-                [ngModel]="rootFolderId()"
-                (ngModelChange)="rootFolderId.set($event ? +$event : null)"
+                [ngModel]="libraryId()"
+                (ngModelChange)="libraryId.set($event ? +$event : null)"
               >
-                <option [ngValue]="null">{{ 'discover.root_folder_default' | translate }}</option>
-                @for (f of compatibleFolders(); track f.id) {
-                  <option [ngValue]="f.id">{{ f.label || f.path }}</option>
+                <option [ngValue]="null">—</option>
+                @for (l of compatibleLibraries(); track l.id) {
+                  <option [ngValue]="l.id">{{ l.name }}</option>
                 }
               </select>
             </label>

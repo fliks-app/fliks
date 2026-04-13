@@ -6,12 +6,13 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Role } from './entities/role.entity';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { DEFAULT_ROLES, PERMISSIONS } from '../../common/constants/permissions';
 import { User } from '../users/entities/user.entity';
+import { Library } from '../libraries/entities/library.entity';
 
 @Injectable()
 export class RolesService implements OnModuleInit {
@@ -22,7 +23,14 @@ export class RolesService implements OnModuleInit {
     private readonly roleRepo: Repository<Role>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(Library)
+    private readonly libraryRepo: Repository<Library>,
   ) {}
+
+  private async loadLibraries(ids?: number[]): Promise<Library[]> {
+    if (!ids?.length) return [];
+    return this.libraryRepo.find({ where: { id: In(ids) } });
+  }
 
   /** Seed default roles & migrate legacy users on startup. */
   async onModuleInit() {
@@ -42,11 +50,17 @@ export class RolesService implements OnModuleInit {
   }
 
   findAll(): Promise<Role[]> {
-    return this.roleRepo.find({ order: { name: 'ASC' } });
+    return this.roleRepo.find({
+      order: { name: 'ASC' },
+      relations: ['defaultLibraries'],
+    });
   }
 
   async findOne(id: number): Promise<Role> {
-    const role = await this.roleRepo.findOne({ where: { id } });
+    const role = await this.roleRepo.findOne({
+      where: { id },
+      relations: ['defaultLibraries'],
+    });
     if (!role) throw new NotFoundException(`Role #${id} not found`);
     return role;
   }
@@ -64,11 +78,13 @@ export class RolesService implements OnModuleInit {
         .execute();
     }
 
+    const defaultLibraries = await this.loadLibraries(dto.defaultLibraryIds);
     return this.roleRepo.save(
       this.roleRepo.create({
         name: dto.name,
         permissions: dto.permissions,
         isDefault: dto.isDefault ?? false,
+        defaultLibraries,
       }),
     );
   }
@@ -92,6 +108,9 @@ export class RolesService implements OnModuleInit {
           .execute();
       }
       role.isDefault = dto.isDefault;
+    }
+    if (dto.defaultLibraryIds !== undefined) {
+      role.defaultLibraries = await this.loadLibraries(dto.defaultLibraryIds);
     }
 
     return this.roleRepo.save(role);

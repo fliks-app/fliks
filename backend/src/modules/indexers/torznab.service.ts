@@ -190,7 +190,7 @@ export class TorznabService {
       const results = parseTorznabItems(body, indexer);
       void this.statRepo.save(
         this.statRepo.create({
-          indexerId: indexer.id,
+          indexer,
           queryType: 'rss',
           responseTimeMs: Date.now() - start,
           resultCount: results.length,
@@ -201,7 +201,7 @@ export class TorznabService {
     } catch (e) {
       void this.statRepo.save(
         this.statRepo.create({
-          indexerId: indexer.id,
+          indexer,
           queryType: 'rss',
           responseTimeMs: Date.now() - start,
           resultCount: 0,
@@ -243,7 +243,7 @@ export class TorznabService {
       const results = parseTorznabItems(body, indexer);
       void this.statRepo.save(
         this.statRepo.create({
-          indexerId: indexer.id,
+          indexer,
           queryType: 'season',
           responseTimeMs: Date.now() - start,
           resultCount: results.length,
@@ -254,7 +254,7 @@ export class TorznabService {
     } catch (e) {
       void this.statRepo.save(
         this.statRepo.create({
-          indexerId: indexer.id,
+          indexer,
           queryType: 'season',
           responseTimeMs: Date.now() - start,
           resultCount: 0,
@@ -296,7 +296,7 @@ export class TorznabService {
       const results = parseTorznabItems(body, indexer);
       void this.statRepo.save(
         this.statRepo.create({
-          indexerId: indexer.id,
+          indexer,
           queryType: 'tvsearch',
           responseTimeMs: Date.now() - start,
           resultCount: results.length,
@@ -307,7 +307,7 @@ export class TorznabService {
     } catch (e) {
       void this.statRepo.save(
         this.statRepo.create({
-          indexerId: indexer.id,
+          indexer,
           queryType: 'tvsearch',
           responseTimeMs: Date.now() - start,
           resultCount: 0,
@@ -350,7 +350,7 @@ export class TorznabService {
       const results = parseTorznabItems(body, indexer);
       void this.statRepo.save(
         this.statRepo.create({
-          indexerId: indexer.id,
+          indexer,
           queryType: 'search',
           responseTimeMs: Date.now() - start,
           resultCount: results.length,
@@ -361,7 +361,7 @@ export class TorznabService {
     } catch (e) {
       void this.statRepo.save(
         this.statRepo.create({
-          indexerId: indexer.id,
+          indexer,
           queryType: 'search',
           responseTimeMs: Date.now() - start,
           resultCount: 0,

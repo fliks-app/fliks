@@ -1,12 +1,19 @@
-import { Entity, Column } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, RelationId } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
+import { Indexer } from '../../indexers/entities/indexer.entity';
+import { Media } from '../../media/entities/media.entity';
+import { User } from '../../users/entities/user.entity';
 
 @Entity('blocklist')
 export class BlocklistEntry extends BaseEntity {
   @Column()
   sourceTitle: string;
 
-  @Column({ nullable: true })
+  @ManyToOne(() => Indexer, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'indexerId' })
+  indexer: Indexer | null;
+
+  @RelationId((b: BlocklistEntry) => b.indexer)
   indexerId: number;
 
   @Column({ nullable: true })
@@ -18,12 +25,20 @@ export class BlocklistEntry extends BaseEntity {
   @Column({ nullable: true })
   quality: string;
 
-  @Column({ nullable: true })
+  @ManyToOne(() => Media, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'mediaId' })
+  media: Media | null;
+
+  @RelationId((b: BlocklistEntry) => b.media)
   mediaId: number;
 
   @Column({ nullable: true })
   note: string;
 
-  @Column({ type: 'int', nullable: true })
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'userId' })
+  user: User | null;
+
+  @RelationId((b: BlocklistEntry) => b.user)
   userId: number | null;
 }

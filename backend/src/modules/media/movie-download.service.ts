@@ -326,8 +326,8 @@ export class MovieDownloadService {
     this.log.log(`Grab successful for "${sourceTitle}" (hash=${torrentHash})`);
 
     const row = this.historyRepo.create({
-      mediaId: media.id,
-      downloadClientId: qbit.id,
+      media,
+      downloadClient: qbit,
       sourceTitle,
       torrentHash: torrentHash || undefined,
       quality: parsed.quality.name,
@@ -538,8 +538,8 @@ export class MovieDownloadService {
     );
 
     const row = this.historyRepo.create({
-      mediaId: media.id,
-      downloadClientId: qbit.id,
+      media,
+      downloadClient: qbit,
       sourceTitle,
       torrentHash: torrentHash || undefined,
       quality: parsed.quality.name,

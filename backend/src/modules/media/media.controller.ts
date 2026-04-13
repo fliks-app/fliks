@@ -42,6 +42,8 @@ import { SubtitleSyncService } from '../subtitles/subtitle-sync.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { EventsService } from '../scheduler/events.service';
+import { LibrariesService } from '../libraries/libraries.service';
+import type { User } from '../users/entities/user.entity';
 
 @Controller('media')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
@@ -57,6 +59,7 @@ export class MediaController {
     private readonly subtitleSync: SubtitleSyncService,
     private readonly ffprobe: FfprobeService,
     private readonly eventsService: EventsService,
+    private readonly libraries: LibrariesService,
   ) {}
 
   @Post('import/tmdb')
@@ -91,17 +94,20 @@ export class MediaController {
 
   @Get()
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  findAll(@Query() query: SearchMediaDto, @CurrentUser() user: any) {
+  async findAll(@Query() query: SearchMediaDto, @CurrentUser() user: User) {
+    const accessibleLibraryIds = await this.libraries.getAccessibleLibraryIds(user);
     return this.mediaService.findAll(
       query,
       query.excludeWatched ? user?.id : undefined,
+      accessibleLibraryIds,
     );
   }
 
   @Get('counts')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  counts() {
-    return this.mediaService.getCounts();
+  async counts(@CurrentUser() user: User) {
+    const accessibleLibraryIds = await this.libraries.getAccessibleLibraryIds(user);
+    return this.mediaService.getCounts(accessibleLibraryIds);
   }
 
   @Get('qualities')
@@ -112,8 +118,9 @@ export class MediaController {
 
   @Get('calendar')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  calendar(@Query() query: CalendarQueryDto) {
-    return this.mediaService.getCalendar(query);
+  async calendar(@Query() query: CalendarQueryDto, @CurrentUser() user: User) {
+    const accessibleLibraryIds = await this.libraries.getAccessibleLibraryIds(user);
+    return this.mediaService.getCalendar(query, accessibleLibraryIds);
   }
 
   @Patch('bulk')
@@ -226,6 +233,15 @@ export class MediaController {
     @Body() dto: UpdateRootFolderDto,
   ) {
     return this.mediaService.updateRootFolder(id, dto.rootFolderId);
+  }
+
+  @Patch(':id/library')
+  @CheckPolicies((ability) => ability.can(Action.Update, Media))
+  updateLibrary(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: { libraryId: number },
+  ) {
+    return this.mediaService.updateLibrary(id, dto.libraryId);
   }
 
   @Patch(':id/profiles')
@@ -466,7 +482,12 @@ export class MediaController {
 
   @Get(':id')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  findOne(@Param('id', ParseIntPipe) id: number) {
+  async findOne(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
+    const accessibleLibraryIds = await this.libraries.getAccessibleLibraryIds(user);
+    await this.mediaService.assertAccessible(id, accessibleLibraryIds);
     return this.mediaService.findOne(id);
   }
 

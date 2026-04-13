@@ -1,4 +1,13 @@
-import { IsString, IsUrl, IsOptional, IsIn, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsUrl,
+  IsOptional,
+  IsIn,
+  IsBoolean,
+  IsInt,
+  Min,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class ImportApiDto {
   @IsUrl({ require_tld: false, require_protocol: true })
@@ -16,4 +25,16 @@ export class ImportApiDto {
   @IsOptional()
   @IsBoolean()
   importSubtitles?: boolean;
+
+  /** Drop imported media into this existing library. Mutually exclusive with newLibraryName. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  targetLibraryId?: number;
+
+  /** Create a new library with this name and use it as the import target. */
+  @IsOptional()
+  @IsString()
+  newLibraryName?: string;
 }

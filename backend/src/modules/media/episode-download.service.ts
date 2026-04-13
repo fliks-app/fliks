@@ -280,8 +280,8 @@ export class EpisodeDownloadService {
     this.log.log(`Grab successful for "${sourceTitle}" (hash=${torrentHash})`);
 
     const row = this.historyRepo.create({
-      mediaId: media.id,
-      downloadClientId: qbit.id,
+      media,
+      downloadClient: qbit,
       sourceTitle: sourceTitle,
       torrentHash: torrentHash || undefined,
       quality: parsed.quality.name,
@@ -511,8 +511,8 @@ export class EpisodeDownloadService {
       );
       await this.historyRepo.save(
         this.historyRepo.create({
-          mediaId,
-          downloadClientId: qbit.id,
+          media: { id: mediaId } as Media,
+          downloadClient: qbit,
           sourceTitle,
           torrentHash: torrentHash || undefined,
           quality: parsed.quality.name,
@@ -593,8 +593,8 @@ export class EpisodeDownloadService {
       );
       await this.historyRepo.save(
         this.historyRepo.create({
-          mediaId,
-          downloadClientId: qbit.id,
+          media: { id: mediaId } as Media,
+          downloadClient: qbit,
           sourceTitle: bestPack.title,
           torrentHash: packHash || undefined,
           quality: bestPack.qualityName,
@@ -667,8 +667,8 @@ export class EpisodeDownloadService {
         );
         await this.historyRepo.save(
           this.historyRepo.create({
-            mediaId,
-            downloadClientId: qbit.id,
+            media: { id: mediaId } as Media,
+            downloadClient: qbit,
             sourceTitle: pick.title,
             torrentHash: epHash || undefined,
             quality: pick.qualityName,

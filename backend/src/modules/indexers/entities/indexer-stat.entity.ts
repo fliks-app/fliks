@@ -3,14 +3,22 @@ import {
   Column,
   CreateDateColumn,
   PrimaryGeneratedColumn,
+  ManyToOne,
+  JoinColumn,
+  RelationId,
 } from 'typeorm';
+import { Indexer } from './indexer.entity';
 
 @Entity('indexer_stats')
 export class IndexerStat {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @ManyToOne(() => Indexer, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'indexerId' })
+  indexer: Indexer;
+
+  @RelationId((s: IndexerStat) => s.indexer)
   indexerId: number;
 
   @CreateDateColumn()

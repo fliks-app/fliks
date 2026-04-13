@@ -231,11 +231,11 @@
       />
 
       <app-media-detail-root-folder-modal
-        [rootFolders]="rootFolders()"
-        [selectedRootFolderId]="selectedRootFolderId()"
+        [libraries]="libraries()"
+        [selectedLibraryId]="selectedLibraryId()"
         [pathSaving]="pathSaving()"
         [pathOk]="pathOk()"
-        (selectedRootFolderIdChange)="selectedRootFolderId.set($event)"
+        (selectedLibraryIdChange)="selectedLibraryId.set($event)"
         (save)="saveRootFolder()"
       />
       <app-download-quality-modal #downloadModal (download)="onDownload($event)" />

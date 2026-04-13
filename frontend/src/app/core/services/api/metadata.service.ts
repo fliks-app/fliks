@@ -107,15 +107,15 @@ export class MetadataService {
     tmdbId: number,
     qualityProfileId?: number,
     languageProfileId?: number,
-    rootFolderId?: number,
+    libraryId?: number,
   ) {
-    const body: { type: string; tmdbId: number; qualityProfileId?: number; languageProfileId?: number; rootFolderId?: number } = {
+    const body: { type: string; tmdbId: number; qualityProfileId?: number; languageProfileId?: number; libraryId?: number } = {
       type,
       tmdbId,
     };
     if (qualityProfileId != null) body.qualityProfileId = qualityProfileId;
     if (languageProfileId != null) body.languageProfileId = languageProfileId;
-    if (rootFolderId != null) body.rootFolderId = rootFolderId;
+    if (libraryId != null) body.libraryId = libraryId;
     return firstValueFrom(this.http.post<Media>('/api/media/import/tmdb', body));
   }
 
@@ -126,7 +126,7 @@ export class MetadataService {
     provider: string;
     qualityProfileId?: number;
     languageProfileId?: number;
-    rootFolderId?: number;
+    libraryId?: number;
   }) {
     return firstValueFrom(this.http.post<Media>('/api/media/import', opts));
   }

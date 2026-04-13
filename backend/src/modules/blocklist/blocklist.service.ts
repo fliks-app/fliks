@@ -3,6 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { BlocklistEntry } from './entities/blocklist-entry.entity';
 import { CreateBlocklistEntryDto } from './dto/create-blocklist-entry.dto';
+import { Indexer } from '../indexers/entities/indexer.entity';
+import { Media } from '../media/entities/media.entity';
+import { User } from '../users/entities/user.entity';
 
 @Injectable()
 export class BlocklistService {
@@ -12,7 +15,13 @@ export class BlocklistService {
   ) {}
 
   create(dto: CreateBlocklistEntryDto): Promise<BlocklistEntry> {
-    const row = this.repo.create(dto);
+    const { indexerId, mediaId, userId, ...rest } = dto;
+    const row = this.repo.create({
+      ...rest,
+      indexer: indexerId ? ({ id: indexerId } as Indexer) : null,
+      media: mediaId ? ({ id: mediaId } as Media) : null,
+      user: userId ? ({ id: userId } as User) : null,
+    });
     return this.repo.save(row);
   }
 

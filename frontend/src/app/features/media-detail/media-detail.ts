@@ -24,9 +24,9 @@ import {
 import { AuthService } from '../../core/services/auth.service';
 import { ProfilesService, LanguageProfile } from '../../core/services/api/profiles.service';
 import {
-  RootFoldersApiService,
-  RootFolder,
-} from '../../core/services/api/root-folders-api.service';
+  LibrariesApiService,
+  Library,
+} from '../../core/services/api/libraries-api.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { StreamingApiService, MediaResumeInfo } from '../../core/services/api/streaming-api.service';
 import { MediaInfoHeaderComponent } from '../../shared/components/media-info-header/media-info-header';
@@ -89,7 +89,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly profilesApi = inject(ProfilesService);
   private readonly auth = inject(AuthService);
   private readonly translate = inject(TranslateService);
-  private readonly rootFoldersApi = inject(RootFoldersApiService);
+  private readonly librariesApi = inject(LibrariesApiService);
   private readonly navbarService = inject(NavbarService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
@@ -249,8 +249,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly profilesOk = signal('');
   readonly profilesErr = signal('');
 
-  readonly rootFolders = signal<RootFolder[]>([]);
-  readonly selectedRootFolderId = signal<number | null>(null);
+  readonly libraries = signal<Library[]>([]);
+  readonly selectedLibraryId = signal<number | null>(null);
   readonly pathSaving = signal(false);
   readonly pathOk = signal(false);
 
@@ -327,15 +327,15 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       if (!this.auth.hasPermission('media.edit')) return;
       this.profilesOptionsLoading.set(true);
       try {
-        const [q, l, rf] = await Promise.all([
+        const [q, l, libs] = await Promise.all([
           this.profilesApi.getQualityProfiles(),
           this.profilesApi.getLanguageProfiles(),
-          this.rootFoldersApi.list(),
+          this.librariesApi.list(),
         ]);
         this.qualityProfileOptions.set(q.map((p) => ({ id: p.id, name: p.name })));
         this.languageProfiles.set(l);
         this.languageProfileOptions.set(l.map((p) => ({ id: p.id, name: p.name })));
-        this.rootFolders.set(rf);
+        this.libraries.set(libs);
       } catch {
         // Profiles will just be empty — the page still works
       } finally {
@@ -444,7 +444,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       }
       this.draftQualityProfileId.set(m.qualityProfile?.id ?? null);
       this.draftLanguageProfileId.set(m.languageProfile?.id ?? null);
-      this.selectedRootFolderId.set(m.rootFolderId ?? null);
+      this.selectedLibraryId.set(m.libraryId ?? null);
     } catch {
       this.notFound.set(true);
     } finally {
@@ -464,13 +464,12 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   async saveRootFolder() {
     const m = this.media();
     if (!m) return;
-    const rfId = this.selectedRootFolderId();
-    const rf = this.rootFolders().find((r) => r.id === rfId);
-    if (!rf) return;
+    const libId = this.selectedLibraryId();
+    if (libId == null) return;
     this.pathSaving.set(true);
     this.pathOk.set(false);
     try {
-      const updated = await this.mediaService.patchRootFolder(m.id, rf.id);
+      const updated = await this.mediaService.patchLibrary(m.id, libId);
       this.media.set(updated);
       if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
       this.pathOk.set(true);

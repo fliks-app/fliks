@@ -13,7 +13,7 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { MetadataService, SeasonStub } from '../../../../core/services/api/metadata.service';
 import { RequestsService } from '../../../../core/services/api/requests.service';
-import { RootFolder } from '../../../../core/services/api/root-folders-api.service';
+import { Library } from '../../../../core/services/api/libraries-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { MediaType } from '../../../../core/enums/media-type.enum';
 
@@ -31,11 +31,11 @@ export class RequestModalComponent {
 
   readonly qualityProfiles = input<{ id: number; name: string }[]>([]);
   readonly languageProfiles = input<{ id: number; name: string }[]>([]);
-  readonly rootFolders = input<RootFolder[]>([]);
+  readonly libraries = input<Library[]>([]);
   readonly requested = output<void>();
 
-  readonly compatibleFolders = computed(() =>
-    this.rootFolders().filter((f) => f.mediaTypes.includes(this.mediaType())),
+  readonly compatibleLibraries = computed(() =>
+    this.libraries().filter((l) => l.mediaTypes.includes(this.mediaType())),
   );
 
   private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
@@ -45,7 +45,7 @@ export class RequestModalComponent {
   readonly tmdbId = signal(0);
   readonly qualityProfileId = signal<number | null>(null);
   readonly languageProfileId = signal<number | null>(null);
-  readonly rootFolderId = signal<number | null>(null);
+  readonly libraryId = signal<number | null>(null);
   readonly requesting = signal(false);
 
   readonly seasons = signal<SeasonStub[]>([]);
@@ -58,9 +58,13 @@ export class RequestModalComponent {
     this.tmdbId.set(params.tmdbId);
     this.qualityProfileId.set(this.qualityProfiles()[0]?.id ?? null);
     this.languageProfileId.set(this.languageProfiles()[0]?.id ?? null);
-    const compatible = this.rootFolders().filter((f) => f.mediaTypes.includes(params.mediaType));
+    const compatible = this.libraries().filter((l) => l.mediaTypes.includes(params.mediaType));
+    const defaultLib =
+      compatible.find((l) =>
+        params.mediaType === 'series' ? l.isDefaultForSeries : l.isDefaultForMovies,
+      ) ?? compatible[0];
     // Only pre-select if multiple choices (select will be shown)
-    this.rootFolderId.set(compatible.length > 1 ? (compatible[0]?.id ?? null) : null);
+    this.libraryId.set(compatible.length > 1 ? (defaultLib?.id ?? null) : null);
     this.seasons.set([]);
     this.selectedSeasons.set(new Set());
     this.dialogEl()?.nativeElement.showModal();
@@ -109,7 +113,7 @@ export class RequestModalComponent {
         title: this.title(),
         qualityProfileId: this.qualityProfileId() ?? undefined,
         languageProfileId: this.languageProfileId() ?? undefined,
-        rootFolderId: this.rootFolderId() ?? undefined,
+        libraryId: this.libraryId() ?? undefined,
         ...(isSeries && this.selectedSeasons().size > 0
           ? { seasons: [...this.selectedSeasons()].sort((a, b) => a - b) }
           : {}),

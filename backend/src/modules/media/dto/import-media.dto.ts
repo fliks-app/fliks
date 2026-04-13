@@ -30,4 +30,10 @@ export class ImportMediaDto {
   @IsInt()
   @Min(1)
   rootFolderId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  libraryId?: number;
 }

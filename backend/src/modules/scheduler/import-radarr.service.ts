@@ -27,7 +27,14 @@ import {
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleProviderType } from '../../common/enums';
+import { LibrariesService } from '../libraries/libraries.service';
+import { Library } from '../libraries/entities/library.entity';
 import * as path from 'path';
+
+export interface ImportTargetSpec {
+  targetLibraryId?: number;
+  newLibraryName?: string;
+}
 
 interface RadarrMovie {
   id?: number;
@@ -97,19 +104,34 @@ export class ImportRadarrService {
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly config: ConfigService,
+    private readonly libraries: LibrariesService,
   ) {}
+
+  private autoLibraryName(): string {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `Radarr Import ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  }
 
   async importFromApi(
     url: string,
     apiKey: string,
     mode: 'skip' | 'update' = 'skip',
     importSubtitles = false,
+    target: ImportTargetSpec = {},
   ): Promise<ApiImportResult> {
     const baseUrl = url.replace(/\/+$/, '');
     let imported = 0;
     const errors: string[] = [];
     const rootFoldersCreated: string[] = [];
     const qualityProfilesCreated: string[] = [];
+
+    const targetLibrary = await this.libraries.resolveTargetLibrary({
+      targetLibraryId: target.targetLibraryId,
+      newLibraryName: target.newLibraryName,
+      mediaType: MediaType.MOVIE,
+      autoLabel: this.autoLibraryName(),
+    });
 
     let movies: RadarrMovie[];
     try {
@@ -138,7 +160,13 @@ export class ImportRadarrService {
       };
     }
 
-    await this.reconcileRootFolders(baseUrl, apiKey, rootFoldersCreated);
+    await this.reconcileRootFolders(
+      baseUrl,
+      apiKey,
+      rootFoldersCreated,
+      targetLibrary.id,
+      errors,
+    );
     const profileMap = await this.importQualityProfiles(
       baseUrl,
       apiKey,
@@ -185,6 +213,7 @@ export class ImportRadarrService {
             imdbId: movie.imdbId || exists.imdbId,
             overview: movie.overview || exists.overview,
             qualityProfileId: localProfileId ?? exists.qualityProfileId,
+            library: { id: exists.libraryId ?? targetLibrary.id } as Library,
           });
         } else {
           await this.mediaRepo.save(
@@ -195,7 +224,10 @@ export class ImportRadarrService {
               type: MediaType.MOVIE,
               status: MediaStatus.RELEASED,
               monitored: movie.monitored ?? true,
-              rootFolderId: resolved?.rootFolderId,
+              rootFolder: resolved?.rootFolderId
+                ? ({ id: resolved.rootFolderId } as RootFolder)
+                : null,
+              library: targetLibrary,
               folderName: folderName || undefined,
               imdbId: movie.imdbId || undefined,
               overview: movie.overview || undefined,
@@ -251,7 +283,7 @@ export class ImportRadarrService {
       if (!media) continue;
 
       const mediaFile = await this.mediaFileRepo.findOne({
-        where: { mediaId: media.id },
+        where: { media: { id: media.id } },
         order: { id: 'DESC' },
       });
       if (!mediaFile) continue;
@@ -442,6 +474,8 @@ export class ImportRadarrService {
     baseUrl: string,
     apiKey: string,
     rootFoldersCreated: string[],
+    libraryId: number,
+    warnings: string[],
   ): Promise<void> {
     try {
       const rfRes = await fetch(`${baseUrl}/api/v3/rootfolder`, {
@@ -454,6 +488,8 @@ export class ImportRadarrService {
           this.rootFolderRepo,
           remoteFolders.map((r) => r.path),
           rootFoldersCreated,
+          libraryId,
+          warnings,
         );
         for (let i = before; i < rootFoldersCreated.length; i++) {
           this.log.log(
@@ -470,6 +506,7 @@ export class ImportRadarrService {
 
   async importFromDump(
     buffer: Buffer,
+    target: ImportTargetSpec = {},
   ): Promise<{ imported: number; skipped: number; errors: string[] }> {
     if (!buffer?.length) {
       throw new BadRequestException('Empty file');
@@ -477,6 +514,13 @@ export class ImportRadarrService {
 
     let imported = 0;
     const errors: string[] = [];
+
+    const targetLibrary = await this.libraries.resolveTargetLibrary({
+      targetLibraryId: target.targetLibraryId,
+      newLibraryName: target.newLibraryName,
+      mediaType: MediaType.MOVIE,
+      autoLabel: this.autoLibraryName(),
+    });
 
     try {
       await withTemporaryRestoredDatabase(
@@ -489,6 +533,8 @@ export class ImportRadarrService {
             this.rootFolderRepo,
             dumpPaths,
             createdRf,
+            targetLibrary.id,
+            errors,
           );
           for (const p of createdRf) {
             this.log.log(`Created root folder from Radarr dump: ${p}`);
@@ -530,7 +576,10 @@ export class ImportRadarrService {
                   title,
                   year: row.year ?? undefined,
                   monitored: rowMonitored(row.monitored),
-                  rootFolderId: resolved?.rootFolderId,
+                  rootFolder: resolved?.rootFolderId
+                    ? ({ id: resolved.rootFolderId } as RootFolder)
+                    : null,
+                  library: { id: exists.libraryId ?? targetLibrary.id } as Library,
                   folderName: folderName || undefined,
                 });
               } else {
@@ -542,7 +591,10 @@ export class ImportRadarrService {
                     type: MediaType.MOVIE,
                     status: MediaStatus.RELEASED,
                     monitored: rowMonitored(row.monitored),
-                    rootFolderId: resolved?.rootFolderId,
+                    rootFolder: resolved?.rootFolderId
+                      ? ({ id: resolved.rootFolderId } as RootFolder)
+                      : null,
+                    library: targetLibrary,
                     folderName: folderName || undefined,
                   }),
                 );

@@ -14,7 +14,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Router } from '@angular/router';
 import { MetadataService } from '../../../../core/services/api/metadata.service';
 import { ProfilesService } from '../../../../core/services/api/profiles.service';
-import { RootFoldersApiService, RootFolder } from '../../../../core/services/api/root-folders-api.service';
+import { LibrariesApiService, Library } from '../../../../core/services/api/libraries-api.service';
 import { SettingsApiService } from '../../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { MediaType } from '../../../../core/enums/media-type.enum';
@@ -28,7 +28,7 @@ import { MediaType } from '../../../../core/enums/media-type.enum';
 export class ImportModalComponent {
   private readonly metadata = inject(MetadataService);
   private readonly profilesApi = inject(ProfilesService);
-  private readonly rootFoldersApi = inject(RootFoldersApiService);
+  private readonly librariesApi = inject(LibrariesApiService);
   private readonly settingsApi = inject(SettingsApiService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
@@ -49,13 +49,13 @@ export class ImportModalComponent {
 
   readonly qualityProfiles = signal<{ id: number; name: string }[]>([]);
   readonly languageProfiles = signal<{ id: number; name: string }[]>([]);
-  readonly rootFolders = signal<RootFolder[]>([]);
+  readonly libraries = signal<Library[]>([]);
   readonly selectedQualityProfileId = signal<number | null>(null);
   readonly selectedLanguageProfileId = signal<number | null>(null);
-  readonly selectedRootFolderId = signal<number | null>(null);
+  readonly selectedLibraryId = signal<number | null>(null);
 
-  readonly compatibleFolders = computed(() =>
-    this.rootFolders().filter((f) => f.mediaTypes.includes(this.mediaType())),
+  readonly compatibleLibraries = computed(() =>
+    this.libraries().filter((l) => l.mediaTypes.includes(this.mediaType())),
   );
 
   async open(params: { title: string; mediaType: MediaType; tmdbId: number; provider?: string; externalId?: string }) {
@@ -70,27 +70,26 @@ export class ImportModalComponent {
 
     this.loading.set(true);
     try {
-      const [qp, lp, folders, settings] = await Promise.all([
+      const [qp, lp, libs] = await Promise.all([
         this.profilesApi.getQualityProfiles(),
         this.profilesApi.getLanguageProfiles(),
-        this.rootFoldersApi.list(),
-        this.settingsApi.getAll(),
+        this.librariesApi.list(),
       ]);
       this.qualityProfiles.set(qp.map((p) => ({ id: p.id, name: p.name })));
       this.languageProfiles.set(lp.map((p) => ({ id: p.id, name: p.name })));
-      this.rootFolders.set(folders);
+      this.libraries.set(libs);
 
       if (qp.length) this.selectedQualityProfileId.set(qp[0].id);
       if (lp.length) this.selectedLanguageProfileId.set(lp[0].id);
 
-      const compatible = folders.filter((f) => f.mediaTypes.includes(params.mediaType));
-      const defaultKey = params.mediaType === 'series' ? 'default_root_folder_series' : 'default_root_folder_movie';
-      const defaultId = Number(settings[defaultKey]);
-      if (defaultId && compatible.some((f) => f.id === defaultId)) {
-        this.selectedRootFolderId.set(defaultId);
-      } else if (compatible.length) {
-        this.selectedRootFolderId.set(compatible[0].id);
-      }
+      // Pick the library flagged as default for this media type, falling back
+      // to the first compatible one.
+      const compatible = libs.filter((l) => l.mediaTypes.includes(params.mediaType));
+      const defaultLib =
+        compatible.find((l) =>
+          params.mediaType === 'series' ? l.isDefaultForSeries : l.isDefaultForMovies,
+        ) ?? compatible[0];
+      if (defaultLib) this.selectedLibraryId.set(defaultLib.id);
     } catch {
       /* ignore — selects will just be empty */
     } finally {
@@ -112,7 +111,7 @@ export class ImportModalComponent {
         provider: this.provider(),
         qualityProfileId: this.selectedQualityProfileId() ?? undefined,
         languageProfileId: this.selectedLanguageProfileId() ?? undefined,
-        rootFolderId: this.selectedRootFolderId() ?? undefined,
+        libraryId: this.selectedLibraryId() ?? undefined,
       });
       this.toast.success(this.translate.instant('discover.import_success'));
       this.close();

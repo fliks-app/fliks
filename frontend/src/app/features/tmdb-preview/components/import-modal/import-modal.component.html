@@ -41,16 +41,16 @@
             </select>
           </label>
         }
-        @if (compatibleFolders().length > 1) {
+        @if (compatibleLibraries().length > 1) {
           <label class="form-control w-full">
-            <span class="label-text text-base-content/60">{{ 'discover.root_folder' | translate }}</span>
+            <span class="label-text text-base-content/60">{{ 'settings.libraries.title' | translate }}</span>
             <select
               class="select select-bordered select-sm w-full"
-              [ngModel]="selectedRootFolderId()"
-              (ngModelChange)="selectedRootFolderId.set($event ? +$event : null)"
+              [ngModel]="selectedLibraryId()"
+              (ngModelChange)="selectedLibraryId.set($event ? +$event : null)"
             >
-              @for (f of compatibleFolders(); track f.id) {
-                <option [ngValue]="f.id">{{ f.label || f.path }}</option>
+              @for (l of compatibleLibraries(); track l.id) {
+                <option [ngValue]="l.id">{{ l.name }}</option>
               }
             </select>
           </label>

@@ -1,0 +1,234 @@
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'settings.libraries.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.libraries.subtitle' | translate }}</p>
+    </div>
+    <button type="button" class="btn btn-primary self-start sm:self-auto" (click)="openCreate()">
+      {{ 'settings.libraries.add' | translate }}
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>
+  } @else if (listError()) {
+    <div role="alert" class="alert alert-error">{{ listError() }}</div>
+  } @else if (libraries().length === 0) {
+    <p class="text-center py-12 text-base-content/50">{{ 'settings.libraries.empty' | translate }}</p>
+  } @else {
+    <div class="flex flex-col gap-3">
+      @for (lib of libraries(); track lib.id) {
+        <div class="card bg-base-100 border border-base-200">
+          <div class="card-body py-4 px-5 gap-3">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="font-medium">{{ lib.name }}</span>
+                  @if (lib.isDefaultForMovies) {
+                    <span class="badge badge-info badge-sm">{{ 'settings.libraries.default_for_movies' | translate }}</span>
+                  }
+                  @if (lib.isDefaultForSeries) {
+                    <span class="badge badge-info badge-sm">{{ 'settings.libraries.default_for_series' | translate }}</span>
+                  }
+                </div>
+                <div class="flex gap-1.5 mt-1">
+                  @if (lib.mediaTypes.includes('movie')) {
+                    <span class="badge badge-outline badge-sm">{{ 'settings.root_folders.media_type_movie' | translate }}</span>
+                  }
+                  @if (lib.mediaTypes.includes('series')) {
+                    <span class="badge badge-outline badge-sm">{{ 'settings.root_folders.media_type_series' | translate }}</span>
+                  }
+                  @if (lib.preferredProvider) {
+                    <span class="badge badge-primary badge-sm">{{ lib.preferredProvider | uppercase }}</span>
+                  }
+                  @if (lib.stalledCleanupProfile) {
+                    <span class="badge badge-warning badge-sm">
+                      {{ 'settings.cleanup_profiles.profile_' + lib.stalledCleanupProfile | translate }}
+                    </span>
+                  }
+                </div>
+                <p class="text-xs text-base-content/60 mt-2">
+                  {{ lib.rootFolders.length }} {{ 'settings.libraries.paths' | translate }} —
+                  {{ formatBytes(totalFreeSpace(lib)) }} / {{ formatBytes(totalCapacity(lib)) }}
+                </p>
+                @for (rf of lib.rootFolders; track rf.id) {
+                  <p class="font-mono text-xs text-base-content/60 mt-1 truncate">
+                    {{ rf.path }}
+                    @if (!rf.accessible) {
+                      <span class="badge badge-error badge-xs ml-2">{{ 'settings.root_folders.inaccessible' | translate }}</span>
+                    }
+                  </p>
+                }
+              </div>
+              <div class="flex gap-1 shrink-0">
+                <button type="button" class="btn btn-ghost btn-sm" (click)="openEdit(lib)">
+                  {{ 'settings.libraries.edit' | translate }}
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm text-error" (click)="remove(lib)">
+                  {{ 'common.delete' | translate }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>
+
+<dialog #editorDialog class="modal">
+  <div class="modal-box max-w-2xl">
+    <h2 class="text-lg font-bold mb-4">
+      @if (editingId() !== null) {
+        {{ 'settings.libraries.editor_edit_title' | translate }}
+      } @else {
+        {{ 'settings.libraries.editor_title' | translate }}
+      }
+    </h2>
+
+    <div class="flex flex-col gap-4">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.libraries.name' | translate }}</span>
+        <input type="text" class="input input-bordered input-sm w-full"
+          [ngModel]="formName()" (ngModelChange)="formName.set($event)" />
+      </label>
+
+      <div>
+        <span class="label-text">{{ 'settings.libraries.media_types' | translate }}</span>
+        <div class="flex gap-4 mt-2">
+          <label class="label cursor-pointer gap-2">
+            <input type="checkbox" class="checkbox checkbox-sm"
+              [ngModel]="formMovies()" (ngModelChange)="formMovies.set($event)" />
+            <span class="label-text">{{ 'settings.root_folders.media_type_movie' | translate }}</span>
+          </label>
+          <label class="label cursor-pointer gap-2">
+            <input type="checkbox" class="checkbox checkbox-sm"
+              [ngModel]="formSeries()" (ngModelChange)="formSeries.set($event)" />
+            <span class="label-text">{{ 'settings.root_folders.media_type_series' | translate }}</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Paths section -->
+      <div>
+        <div class="flex items-center justify-between">
+          <span class="label-text">{{ 'settings.libraries.paths' | translate }}</span>
+          <button type="button" class="btn btn-ghost btn-xs" (click)="addDraftPath()">
+            + {{ 'settings.libraries.add_path' | translate }}
+          </button>
+        </div>
+        <div class="flex flex-col gap-2 mt-2">
+          @for (p of formPaths(); track $index) {
+            <div class="flex gap-2 items-start">
+              <input type="text" class="input input-bordered input-sm flex-1 font-mono"
+                [ngModel]="p.path" (ngModelChange)="updateDraftPath($index, { path: $event })"
+                placeholder="/media/movies" />
+              <input type="text" class="input input-bordered input-sm w-40"
+                [ngModel]="p.label" (ngModelChange)="updateDraftPath($index, { label: $event })"
+                [placeholder]="'settings.libraries.path_label_placeholder' | translate" />
+              <button type="button" class="btn btn-ghost btn-sm text-error"
+                (click)="removeDraftPath($index)">×</button>
+            </div>
+          }
+          @if (formPaths().length === 0) {
+            <p class="text-xs text-base-content/50 italic">{{ 'settings.libraries.no_paths' | translate }}</p>
+          }
+        </div>
+      </div>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.libraries.preferred_provider' | translate }}</span>
+        <select class="select select-bordered select-sm w-full"
+          [ngModel]="formProvider()" (ngModelChange)="formProvider.set($event || null)">
+          @for (opt of providerOptions; track opt.value) {
+            <option [ngValue]="opt.value">{{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.libraries.stalled_cleanup' | translate }}</span>
+        <select class="select select-bordered select-sm w-full"
+          [ngModel]="formCleanup()" (ngModelChange)="formCleanup.set($event)">
+          @for (opt of cleanupOptions; track opt.value) {
+            <option [ngValue]="opt.value">{{ opt.labelKey | translate }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.libraries.default_quality_profile' | translate }}</span>
+        <select class="select select-bordered select-sm w-full"
+          [ngModel]="formQualityProfileId()" (ngModelChange)="formQualityProfileId.set($event)">
+          <option [ngValue]="null">—</option>
+          @for (qp of qualityProfiles(); track qp.id) {
+            <option [ngValue]="qp.id">{{ qp.name }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.libraries.default_language_profile' | translate }}</span>
+        <select class="select select-bordered select-sm w-full"
+          [ngModel]="formLanguageProfileId()" (ngModelChange)="formLanguageProfileId.set($event)">
+          <option [ngValue]="null">—</option>
+          @for (lp of languageProfiles(); track lp.id) {
+            <option [ngValue]="lp.id">{{ lp.name }}</option>
+          }
+        </select>
+      </label>
+
+      <div class="flex gap-4">
+        <label class="label cursor-pointer gap-2">
+          <input type="checkbox" class="checkbox checkbox-sm"
+            [ngModel]="formDefaultMovies()" (ngModelChange)="formDefaultMovies.set($event)" />
+          <span class="label-text">{{ 'settings.libraries.default_for_movies' | translate }}</span>
+        </label>
+        <label class="label cursor-pointer gap-2">
+          <input type="checkbox" class="checkbox checkbox-sm"
+            [ngModel]="formDefaultSeries()" (ngModelChange)="formDefaultSeries.set($event)" />
+          <span class="label-text">{{ 'settings.libraries.default_for_series' | translate }}</span>
+        </label>
+      </div>
+
+      <!-- User access -->
+      <div>
+        <span class="label-text">{{ 'settings.libraries.user_access' | translate }}</span>
+        <div class="flex flex-col gap-1 mt-2 max-h-40 overflow-auto border border-base-200 rounded p-2">
+          @for (u of users(); track u.id) {
+            <label class="label cursor-pointer gap-2 justify-start py-1">
+              <input type="checkbox" class="checkbox checkbox-sm"
+                [checked]="formUserIds().has(u.id)"
+                (change)="toggleUser(u.id)" />
+              <span class="label-text">{{ u.username }}</span>
+              @if (u.isAdmin) {
+                <span class="badge badge-ghost badge-xs">admin</span>
+              }
+            </label>
+          }
+          @if (users().length === 0) {
+            <p class="text-xs text-base-content/50 italic">—</p>
+          }
+        </div>
+        <p class="text-xs text-base-content/50 mt-1">{{ 'settings.libraries.user_access_hint' | translate }}</p>
+      </div>
+
+      @if (saveError()) {
+        <div role="alert" class="alert alert-error text-sm">{{ saveError() }}</div>
+      }
+    </div>
+
+    <div class="modal-action mt-6">
+      <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+        @if (saving()) { <span class="loading loading-spinner loading-sm"></span> }
+        {{ 'common.save' | translate }}
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">close</button>
+  </form>
+</dialog>

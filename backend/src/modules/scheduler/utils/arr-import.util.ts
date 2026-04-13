@@ -3,33 +3,56 @@ import { Repository } from 'typeorm';
 import { readdir } from 'fs/promises';
 import { RootFolder } from '../../root-folders/entities/root-folder.entity';
 import { SubtitleFile } from '../../subtitles/entities/subtitle-file.entity';
+import { Episode } from '../../media/entities/episode.entity';
+import { Library } from '../../libraries/entities/library.entity';
+import { Media } from '../../media/entities/media.entity';
+import { MediaFile } from '../../media/entities/media-file.entity';
 import { SubtitleProviderType, SubtitleStatus } from '../../../common/enums';
 
 // ---------------------------------------------------------------------------
 // Root folders (Radarr / Sonarr API reconcile)
 // ---------------------------------------------------------------------------
 
-/** Insert missing root folders by path (same behavior as Radarr/Sonarr API reconcile). */
+/**
+ * Insert missing root folders by path and link them to the given library.
+ * If a path already exists but belongs to a different library, the path is
+ * skipped and a warning string is pushed to `warningsOut` — it is never
+ * silently re-homed.
+ */
 export async function ensureRootFolderPathsExist(
   repo: Repository<RootFolder>,
   paths: string[],
   createdOut: string[],
+  libraryId: number,
+  warningsOut: string[] = [],
 ): Promise<void> {
   const existing = await repo.find();
-  const existingPaths = new Set(
-    existing.map((f) => f.path.replace(/\/+$/, '')),
+  const byNormalizedPath = new Map(
+    existing.map((f) => [f.path.replace(/\/+$/, ''), f]),
   );
   for (const raw of paths) {
     if (!raw?.trim()) continue;
     const normalized = raw.replace(/\/+$/, '');
-    if (!existingPaths.has(normalized)) {
-      try {
-        await repo.save(repo.create({ path: raw.trim() }));
-        createdOut.push(raw.trim());
-        existingPaths.add(normalized);
-      } catch {
-        /* duplicate or DB error */
+    const present = byNormalizedPath.get(normalized);
+    if (present) {
+      if (present.libraryId != null && present.libraryId !== libraryId) {
+        warningsOut.push(
+          `Path "${raw}" already belongs to library #${present.libraryId}; skipped (would silently re-home it).`,
+        );
       }
+      continue;
+    }
+    try {
+      const saved = await repo.save(
+        repo.create({
+          path: raw.trim(),
+          library: { id: libraryId } as Library,
+        }),
+      );
+      createdOut.push(raw.trim());
+      byNormalizedPath.set(normalized, saved);
+    } catch {
+      /* duplicate or DB error */
     }
   }
 }
@@ -284,9 +307,10 @@ export async function upsertImportedSubtitleFile(
 
   await subtitleRepo.save(
     subtitleRepo.create({
-      mediaId,
-      mediaFileId,
-      episodeId: params.episodeId ?? undefined,
+      media: { id: mediaId } as Media,
+      mediaFile: { id: mediaFileId } as MediaFile,
+      episode:
+        params.episodeId != null ? ({ id: params.episodeId } as Episode) : null,
       language,
       forced,
       hearingImpaired,

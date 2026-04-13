@@ -45,6 +45,22 @@
             <input type="checkbox" class="toggle toggle-sm" [ngModel]="radarrImportSubs()" (ngModelChange)="radarrImportSubs.set($event)" />
             <span class="label-text">{{ 'import.import_subtitles' | translate }}</span>
           </label>
+          <div class="form-control">
+            <label class="label"><span class="label-text">{{ 'settings.libraries.import_target' | translate }}</span></label>
+            <select class="select select-bordered select-sm" [ngModel]="radarrLibrary()" (ngModelChange)="radarrLibrary.set($event)">
+              <option [ngValue]="null">—</option>
+              @for (l of movieLibraries(); track l.id) {
+                <option [ngValue]="l.id">{{ l.name }}</option>
+              }
+              <option [ngValue]="'new'">{{ 'settings.libraries.import_target_new' | translate }}</option>
+            </select>
+            @if (radarrLibrary() === 'new') {
+              <input type="text" class="input input-bordered input-sm mt-2"
+                [placeholder]="'settings.libraries.import_new_name_placeholder' | translate"
+                [ngModel]="radarrNewLibraryName()"
+                (ngModelChange)="radarrNewLibraryName.set($event)" />
+            }
+          </div>
         </div>
 
         <button
@@ -125,6 +141,22 @@
             <input type="checkbox" class="toggle toggle-sm" [ngModel]="sonarrImportSubs()" (ngModelChange)="sonarrImportSubs.set($event)" />
             <span class="label-text">{{ 'import.import_subtitles' | translate }}</span>
           </label>
+          <div class="form-control">
+            <label class="label"><span class="label-text">{{ 'settings.libraries.import_target' | translate }}</span></label>
+            <select class="select select-bordered select-sm" [ngModel]="sonarrLibrary()" (ngModelChange)="sonarrLibrary.set($event)">
+              <option [ngValue]="null">—</option>
+              @for (l of seriesLibraries(); track l.id) {
+                <option [ngValue]="l.id">{{ l.name }}</option>
+              }
+              <option [ngValue]="'new'">{{ 'settings.libraries.import_target_new' | translate }}</option>
+            </select>
+            @if (sonarrLibrary() === 'new') {
+              <input type="text" class="input input-bordered input-sm mt-2"
+                [placeholder]="'settings.libraries.import_new_name_placeholder' | translate"
+                [ngModel]="sonarrNewLibraryName()"
+                (ngModelChange)="sonarrNewLibraryName.set($event)" />
+            }
+          </div>
         </div>
 
         <button
