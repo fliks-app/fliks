@@ -53,6 +53,7 @@ import { LibrariesModule } from '../libraries/libraries.module';
     StreamingService,
     ActiveStreamTracker,
     ThumbnailService,
+    SubtitleStreamService,
   ],
 })
 export class StreamingModule {}
