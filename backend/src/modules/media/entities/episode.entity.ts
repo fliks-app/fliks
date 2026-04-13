@@ -1,4 +1,4 @@
-import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, RelationId, Index } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Season } from './season.entity';
 
@@ -10,7 +10,7 @@ export class Episode extends BaseEntity {
   @JoinColumn({ name: 'seasonId' })
   season: Season;
 
-  @Column()
+  @RelationId((e: Episode) => e.season)
   seasonId: number;
 
   @Column()

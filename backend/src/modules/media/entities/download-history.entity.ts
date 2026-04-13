@@ -1,6 +1,8 @@
-import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, RelationId } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Media } from './media.entity';
+import { Indexer } from '../../indexers/entities/indexer.entity';
+import { DownloadClient } from '../../download-clients/entities/download-client.entity';
 
 @Entity('download_history')
 export class DownloadHistory extends BaseEntity {
@@ -8,13 +10,21 @@ export class DownloadHistory extends BaseEntity {
   @JoinColumn({ name: 'mediaId' })
   media: Media;
 
-  @Column()
+  @RelationId((dh: DownloadHistory) => dh.media)
   mediaId: number;
 
-  @Column({ nullable: true })
+  @ManyToOne(() => Indexer, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'indexerId' })
+  indexer: Indexer | null;
+
+  @RelationId((dh: DownloadHistory) => dh.indexer)
   indexerId: number;
 
-  @Column({ nullable: true })
+  @ManyToOne(() => DownloadClient, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'downloadClientId' })
+  downloadClient: DownloadClient | null;
+
+  @RelationId((dh: DownloadHistory) => dh.downloadClient)
   downloadClientId: number;
 
   @Column()

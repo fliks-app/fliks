@@ -18,7 +18,7 @@ import {
   MetadataDetails,
 } from '../../core/services/api/metadata.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
-import { RootFoldersApiService, RootFolder } from '../../core/services/api/root-folders-api.service';
+import { LibrariesApiService, Library } from '../../core/services/api/libraries-api.service';
 import { SettingsApiService } from '../../core/services/api/settings-api.service';
 import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -40,7 +40,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly metadata = inject(MetadataService);
   private readonly profilesApi = inject(ProfilesService);
-  private readonly rootFoldersApi = inject(RootFoldersApiService);
+  private readonly librariesApi = inject(LibrariesApiService);
   private readonly settingsApi = inject(SettingsApiService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
@@ -54,8 +54,8 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
 
   readonly qualityProfiles = signal<{ id: number; name: string }[]>([]);
   readonly selectedQualityProfileId = signal<number | null>(null);
-  readonly rootFolders = signal<RootFolder[]>([]);
-  readonly selectedRootFolderId = signal<number | null>(null);
+  readonly libraries = signal<Library[]>([]);
+  readonly selectedLibraryId = signal<number | null>(null);
 
   readonly type = computed(() => {
     const url = this.router.url;
@@ -74,8 +74,8 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
       ?? '';
   });
 
-  readonly compatibleRootFolders = computed(() =>
-    this.rootFolders().filter((f) => f.mediaTypes.includes(this.type())),
+  readonly compatibleLibraries = computed(() =>
+    this.libraries().filter((l) => l.mediaTypes.includes(this.type())),
   );
 
   readonly canImport = computed(() => this.auth.hasPermission('media.create'));
@@ -96,33 +96,28 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
 
     const r = this.auth.user()?.role;
     if (r === 'admin' || r === 'user') {
-      const [profiles, folders, settings] = await Promise.all([
+      const [profiles, libs] = await Promise.all([
         this.profilesApi.getQualityProfiles(),
-        this.rootFoldersApi.list(),
-        this.settingsApi.getAll(),
+        this.librariesApi.list(),
       ]);
       this.qualityProfiles.set(profiles.map((p) => ({ id: p.id, name: p.name })));
       if (profiles.length) this.selectedQualityProfileId.set(profiles[0].id);
-      this.rootFolders.set(folders);
+      this.libraries.set(libs);
 
-      // Use default root folder for this media type, or fallback to first compatible folder
-      const compatible = folders.filter((f) => f.mediaTypes.includes(type));
-      const defaultKey = type === 'series' ? 'default_root_folder_series' : 'default_root_folder_movie';
-      const defaultId = Number(settings[defaultKey]);
-      if (defaultId && compatible.some((f) => f.id === defaultId)) {
-        this.selectedRootFolderId.set(defaultId);
-      } else if (compatible.length) {
-        this.selectedRootFolderId.set(compatible[0].id);
-      }
+      const compatible = libs.filter((l) => l.mediaTypes.includes(type));
+      const defaultLib =
+        compatible.find((l) => (type === 'series' ? l.isDefaultForSeries : l.isDefaultForMovies)) ??
+        compatible[0];
+      if (defaultLib) this.selectedLibraryId.set(defaultLib.id);
     } else if (this.canRequest()) {
-      const [qp, lp, folders] = await Promise.all([
+      const [qp, lp, libs] = await Promise.all([
         this.profilesApi.getQualityProfiles(),
         this.profilesApi.getLanguageProfiles(),
-        this.rootFoldersApi.list(),
+        this.librariesApi.list(),
       ]);
       this.qualityProfiles.set(qp.map((p) => ({ id: p.id, name: p.name })));
       this.languageProfiles.set(lp.map((p) => ({ id: p.id, name: p.name })));
-      this.rootFolders.set(folders);
+      this.libraries.set(libs);
     }
 
     try {
@@ -149,7 +144,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
         externalId,
         provider,
         qualityProfileId: this.selectedQualityProfileId() ?? undefined,
-        rootFolderId: this.selectedRootFolderId() ?? undefined,
+        libraryId: this.selectedLibraryId() ?? undefined,
       });
       this.toast.success(this.translate.instant('discover.import_success'));
       const prefix = saved.type === 'movie' ? '/movies' : '/series';

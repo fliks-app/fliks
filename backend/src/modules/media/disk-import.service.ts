@@ -15,6 +15,7 @@ import { MediaFile } from './entities/media-file.entity';
 import { Season } from './entities/season.entity';
 import { Episode } from './entities/episode.entity';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
+import { Library } from '../libraries/entities/library.entity';
 import { parseReleaseQuality } from './release-quality.parser';
 import { ImportFileEntry } from './dto/confirm-disk-import.dto';
 import { MediaService } from './media.service';
@@ -129,12 +130,15 @@ export class DiskImportService {
               .replace(/^\/+/, '')
               .split('/')[0];
             const folderName = remainder || path.basename(dir);
+            // Mirror the rootFolder's library so the new media is ACL-visible
+            // through the standard libraryId filter.
             await this.mediaRepo.update(media.id, {
-              rootFolderId: rf.id,
+              rootFolder: rf,
+              library: rf.libraryId ? ({ id: rf.libraryId } as Library) : null,
               folderName,
             });
-            media.rootFolderId = rf.id;
             media.rootFolder = rf;
+            media.library = rf.library;
             media.folderName = folderName;
           }
         } else if (!media.folderName) {
@@ -168,14 +172,17 @@ export class DiskImportService {
 
         // Avoid duplicate path
         const existing = await this.fileRepo.findOne({
-          where: { mediaId: media.id, relativePath },
+          where: { media: { id: media.id }, relativePath },
         });
         if (existing) continue;
 
         const saved = await this.fileRepo.save(
           this.fileRepo.create({
-            mediaId: media.id,
-            episodeId: entry.episodeId ?? undefined,
+            media,
+            episode:
+              entry.episodeId != null
+                ? ({ id: entry.episodeId } as Episode)
+                : null,
             relativePath,
             size: fileSize,
             quality: entry.quality,
@@ -256,24 +263,24 @@ export class DiskImportService {
 
     if (matched?.type === 'series' && epNums) {
       let season = await this.seasonRepo.findOne({
-        where: { mediaId: matched.id, seasonNumber: epNums.season },
+        where: { media: { id: matched.id }, seasonNumber: epNums.season },
       });
       if (!season) {
         season = await this.seasonRepo.save(
           this.seasonRepo.create({
-            mediaId: matched.id,
+            media: { id: matched.id } as Media,
             seasonNumber: epNums.season,
             monitored: true,
           }),
         );
       }
       let ep = await this.episodeRepo.findOne({
-        where: { seasonId: season.id, episodeNumber: epNums.episode },
+        where: { season: { id: season.id }, episodeNumber: epNums.episode },
       });
       if (!ep) {
         ep = await this.episodeRepo.save(
           this.episodeRepo.create({
-            seasonId: season.id,
+            season,
             episodeNumber: epNums.episode,
             monitored: true,
           }),

@@ -3,14 +3,22 @@ import {
   Column,
   CreateDateColumn,
   PrimaryGeneratedColumn,
+  ManyToOne,
+  JoinColumn,
+  RelationId,
 } from 'typeorm';
+import { SubtitleProvider } from './subtitle-provider.entity';
 
 @Entity('subtitle_provider_stats')
 export class SubtitleProviderStat {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @ManyToOne(() => SubtitleProvider, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'providerId' })
+  provider: SubtitleProvider;
+
+  @RelationId((s: SubtitleProviderStat) => s.provider)
   providerId: number;
 
   @CreateDateColumn()

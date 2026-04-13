@@ -38,6 +38,8 @@ import { DownloadsModule } from '../downloads/downloads.module';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { StalledCheck } from './entities/stalled-check.entity';
 import { CleanupProfilesModule } from '../cleanup-profiles/cleanup-profiles.module';
+import { LibrariesModule } from '../libraries/libraries.module';
+import { Library } from '../libraries/entities/library.entity';
 
 @Module({
   imports: [
@@ -56,6 +58,7 @@ import { CleanupProfilesModule } from '../cleanup-profiles/cleanup-profiles.modu
       QualityProfile,
       SubtitleFile,
       StalledCheck,
+      Library,
     ]),
     IndexersModule,
     DownloadClientsModule,
@@ -70,6 +73,7 @@ import { CleanupProfilesModule } from '../cleanup-profiles/cleanup-profiles.modu
     StreamingModule,
     DownloadsModule,
     CleanupProfilesModule,
+    LibrariesModule,
   ],
   controllers: [CommandsController, SystemController],
   providers: [

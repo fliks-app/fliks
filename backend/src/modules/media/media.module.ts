@@ -26,6 +26,8 @@ import { EpisodeDownloadService } from './episode-download.service';
 import { DiskImportService } from './disk-import.service';
 import { NamingService } from '../scheduler/naming.service';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
+import { Library } from '../libraries/entities/library.entity';
+import { LibrariesModule } from '../libraries/libraries.module';
 import { FliksSchedulerModule } from '../scheduler/scheduler.module';
 import { ImageModule } from '../images/image.module';
 import { StreamingModule } from '../streaming/streaming.module';
@@ -44,6 +46,7 @@ import { StreamingModule } from '../streaming/streaming.module';
       MediaCrew,
       Tag,
       RootFolder,
+      Library,
     ]),
     AuthModule,
     MetadataProvidersModule,
@@ -57,6 +60,7 @@ import { StreamingModule } from '../streaming/streaming.module';
     forwardRef(() => FliksSchedulerModule),
     ImageModule,
     StreamingModule,
+    LibrariesModule,
   ],
   controllers: [MediaController],
   providers: [

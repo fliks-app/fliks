@@ -1,8 +1,9 @@
-import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, RelationId } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { SubtitleProviderType, SubtitleStatus } from '../../../common/enums';
 import { Media } from '../../media/entities/media.entity';
 import { MediaFile } from '../../media/entities/media-file.entity';
+import { Episode } from '../../media/entities/episode.entity';
 
 @Entity('subtitle_files')
 export class SubtitleFile extends BaseEntity {
@@ -10,17 +11,21 @@ export class SubtitleFile extends BaseEntity {
   @JoinColumn({ name: 'mediaId' })
   media: Media;
 
-  @Column()
+  @RelationId((sf: SubtitleFile) => sf.media)
   mediaId: number;
 
-  @Column({ nullable: true })
+  @ManyToOne(() => Episode, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'episodeId' })
+  episode: Episode | null;
+
+  @RelationId((sf: SubtitleFile) => sf.episode)
   episodeId: number;
 
   @ManyToOne(() => MediaFile, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'mediaFileId' })
   mediaFile: MediaFile;
 
-  @Column()
+  @RelationId((sf: SubtitleFile) => sf.mediaFile)
   mediaFileId: number;
 
   @Column()

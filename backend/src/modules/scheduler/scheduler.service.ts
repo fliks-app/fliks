@@ -382,7 +382,7 @@ export class SchedulerService implements OnModuleInit {
 
       // Skip if already grabbed and pending
       const pending = await this.historyRepo.findOne({
-        where: { mediaId: media.id, status: 'grabbed' },
+        where: { media: { id: media.id }, status: 'grabbed' },
       });
       if (pending) continue;
 
@@ -407,9 +407,9 @@ export class SchedulerService implements OnModuleInit {
         );
         await this.historyRepo.save(
           this.historyRepo.create({
-            mediaId: media.id,
-            downloadClientId: qbitClient.id,
-            indexerId: pick.indexerId,
+            media,
+            downloadClient: qbitClient,
+            indexer: { id: pick.indexerId } as Indexer,
             sourceTitle: pick.title,
             quality: this.naming.parseQuality(pick.title),
             status: 'grabbed',
@@ -511,9 +511,9 @@ export class SchedulerService implements OnModuleInit {
         );
         await this.historyRepo.save(
           this.historyRepo.create({
-            mediaId: media.id,
-            downloadClientId: qbitClient.id,
-            indexerId: pick.indexerId,
+            media,
+            downloadClient: qbitClient,
+            indexer: { id: pick.indexerId } as Indexer,
             sourceTitle: pick.title,
             quality: this.naming.parseQuality(pick.title),
             status: 'grabbed',
@@ -695,7 +695,7 @@ export class SchedulerService implements OnModuleInit {
 
           // Check if already in history
           const alreadyGrabbed = await this.historyRepo.findOne({
-            where: { mediaId: match.id, sourceTitle: release.title },
+            where: { media: { id: match.id }, sourceTitle: release.title },
           });
           if (alreadyGrabbed) continue;
 
@@ -710,9 +710,9 @@ export class SchedulerService implements OnModuleInit {
             );
             await this.historyRepo.save(
               this.historyRepo.create({
-                mediaId: match.id,
-                downloadClientId: qbitClient.id,
-                indexerId: release.indexerId,
+                media: match,
+                downloadClient: qbitClient,
+                indexer: { id: release.indexerId } as Indexer,
                 sourceTitle: release.title,
                 quality: this.naming.parseQuality(release.title),
                 status: 'grabbed',

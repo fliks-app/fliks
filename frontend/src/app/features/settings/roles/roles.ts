@@ -14,6 +14,7 @@ import {
   RolesApiService,
   RoleRow,
 } from '../../../core/services/api/roles-api.service';
+import { LibrariesApiService, Library } from '../../../core/services/api/libraries-api.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
 
@@ -25,6 +26,7 @@ import { ToastService } from '../../../core/services/toast.service';
 })
 export class RolesSettingsComponent implements OnInit {
   private readonly api = inject(RolesApiService);
+  private readonly librariesApi = inject(LibrariesApiService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
@@ -40,9 +42,12 @@ export class RolesSettingsComponent implements OnInit {
 
   readonly editingRole = signal<RoleRow | null>(null);
 
+  readonly libraries = signal<Library[]>([]);
+
   readonly formName = signal('');
   readonly formPermissions = signal<Set<string>>(new Set());
   readonly formIsDefault = signal(false);
+  readonly formDefaultLibraryIds = signal<Set<number>>(new Set());
 
   ngOnInit() {
     this.reloadAll();
@@ -51,12 +56,14 @@ export class RolesSettingsComponent implements OnInit {
   async reloadAll() {
     this.loading.set(true);
     try {
-      const [list, perms] = await Promise.all([
+      const [list, perms, libs] = await Promise.all([
         this.api.list(),
         this.api.getPermissions(),
+        this.librariesApi.list().catch(() => [] as Library[]),
       ]);
       this.rows.set(list);
       this.availablePermissions.set(perms);
+      this.libraries.set(libs);
     } catch {
       this.listError.set(this.translate.instant('settings.roles.load_error'));
     } finally {
@@ -70,6 +77,7 @@ export class RolesSettingsComponent implements OnInit {
     this.formName.set('');
     this.formPermissions.set(new Set());
     this.formIsDefault.set(false);
+    this.formDefaultLibraryIds.set(new Set());
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -79,6 +87,7 @@ export class RolesSettingsComponent implements OnInit {
     this.formName.set(role.name);
     this.formPermissions.set(new Set(role.permissions));
     this.formIsDefault.set(role.isDefault);
+    this.formDefaultLibraryIds.set(new Set(role.defaultLibraryIds ?? []));
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -95,15 +104,26 @@ export class RolesSettingsComponent implements OnInit {
     });
   }
 
+  toggleDefaultLibrary(id: number) {
+    this.formDefaultLibraryIds.update((set) => {
+      const next = new Set(set);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   async save() {
     this.saving.set(true);
     const permissions = [...this.formPermissions()];
+    const defaultLibraryIds = [...this.formDefaultLibraryIds()];
     try {
       if (this.isCreating()) {
         await this.api.create({
           name: this.formName().trim(),
           permissions,
           isDefault: this.formIsDefault(),
+          defaultLibraryIds,
         });
       } else {
         const role = this.editingRole();
@@ -112,6 +132,7 @@ export class RolesSettingsComponent implements OnInit {
           name: this.formName().trim(),
           permissions,
           isDefault: this.formIsDefault(),
+          defaultLibraryIds,
         });
       }
       this.closeEditor();

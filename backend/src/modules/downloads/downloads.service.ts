@@ -13,6 +13,8 @@ import { DownloadTask } from './entities/download-task.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { Episode } from '../media/entities/episode.entity';
+import { Media } from '../media/entities/media.entity';
+import { User } from '../users/entities/user.entity';
 import { Season } from '../media/entities/season.entity';
 import { StreamingService, ResolvedFile } from '../streaming/streaming.service';
 import { TranscodingService, PROFILES } from '../streaming/transcoding.service';
@@ -237,7 +239,11 @@ export class DownloadsService implements OnModuleInit {
     const file = resolved.mediaFile;
 
     // Check for existing task (scoped by device when provided)
-    const where: Record<string, any> = { userId, mediaFileId, quality };
+    const where: Record<string, any> = {
+      user: { id: userId },
+      mediaFile: { id: mediaFileId },
+      quality,
+    };
     if (deviceId) where.deviceId = deviceId;
     const existing = await this.taskRepo.findOne({ where });
     if (existing && existing.status !== 'failed') {
@@ -264,11 +270,12 @@ export class DownloadsService implements OnModuleInit {
     }
 
     const task = this.taskRepo.create({
-      userId,
+      user: { id: userId } as User,
       deviceId,
-      mediaId: file.mediaId,
-      episodeId: file.episodeId ?? undefined,
-      mediaFileId,
+      media: { id: file.mediaId } as Media,
+      episode:
+        file.episodeId != null ? ({ id: file.episodeId } as Episode) : null,
+      mediaFile: { id: mediaFileId } as MediaFile,
       quality,
       status: 'pending',
       episodeLabel,
@@ -286,7 +293,7 @@ export class DownloadsService implements OnModuleInit {
   }
 
   async list(userId: number, deviceId?: string): Promise<DownloadTask[]> {
-    const where: Record<string, any> = { userId };
+    const where: Record<string, any> = { user: { id: userId } };
     if (deviceId) where.deviceId = deviceId;
     return this.taskRepo.find({
       where,
@@ -480,7 +487,7 @@ export class DownloadsService implements OnModuleInit {
 
       // Collect external subtitles
       const subtitles = await this.subtitleRepo.find({
-        where: { mediaFileId: resolved.mediaFile.id },
+        where: { mediaFile: { id: resolved.mediaFile.id } },
       });
       const extSubs = subtitles.filter((s) => s.relativePath);
 
@@ -632,7 +639,7 @@ export class DownloadsService implements OnModuleInit {
 
       // Collect external subtitles
       const subtitles = await this.subtitleRepo.find({
-        where: { mediaFileId: resolved.mediaFile.id },
+        where: { mediaFile: { id: resolved.mediaFile.id } },
       });
 
       const crop = (video as any)?.crop as

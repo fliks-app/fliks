@@ -261,7 +261,7 @@ export const routes: Routes = [
           { path: 'blocklist', loadComponent: () => import('./features/settings/blocklist/blocklist').then((m) => m.BlocklistSettingsComponent) },
           { path: 'notifications', loadComponent: () => import('./features/settings/notifications/notifications').then((m) => m.NotificationsSettingsComponent) },
           { path: 'media-servers', loadComponent: () => import('./features/settings/media-servers/media-servers').then((m) => m.MediaServersSettingsComponent) },
-          { path: 'root-folders', loadComponent: () => import('./features/settings/root-folders/root-folders').then((m) => m.RootFoldersSettingsComponent) },
+          { path: 'libraries', loadComponent: () => import('./features/settings/libraries/libraries').then((m) => m.LibrariesSettingsComponent) },
           { path: 'tags', loadComponent: () => import('./features/settings/tags/tags').then((m) => m.TagsSettingsComponent) },
           { path: 'users', loadComponent: () => import('./features/settings/users/users').then((m) => m.UsersSettingsComponent) },
           {

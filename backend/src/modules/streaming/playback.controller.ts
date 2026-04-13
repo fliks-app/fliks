@@ -15,35 +15,43 @@ import type { Request } from 'express';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PlaybackService } from './playback.service';
 import { User } from '../users/entities/user.entity';
+import { LibrariesService } from '../libraries/libraries.service';
 
 @Controller('playback')
 @UseGuards(JwtOrApiKeyGuard)
 export class PlaybackController {
-  constructor(private readonly playbackService: PlaybackService) {}
+  constructor(
+    private readonly playbackService: PlaybackService,
+    private readonly libraries: LibrariesService,
+  ) {}
 
   @Get('watched-ids')
-  watchedIds(@Req() req: Request) {
+  async watchedIds(@Req() req: Request) {
     const user = req.user as User;
-    return this.playbackService.getWatchedMediaIds(user.id);
+    const libraryIds = await this.libraries.getAccessibleLibraryIds(user);
+    return this.playbackService.getWatchedMediaIds(user.id, libraryIds);
   }
 
   @Get('continue-watching')
-  continueWatching(@Req() req: Request) {
+  async continueWatching(@Req() req: Request) {
     const user = req.user as User;
-    return this.playbackService.getContinueWatching(user.id);
+    const libraryIds = await this.libraries.getAccessibleLibraryIds(user);
+    return this.playbackService.getContinueWatching(user.id, libraryIds);
   }
 
   @Get('history')
-  history(
+  async history(
     @Req() req: Request,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     const user = req.user as User;
+    const libraryIds = await this.libraries.getAccessibleLibraryIds(user);
     return this.playbackService.getHistory(
       user.id,
       Math.max(1, Number(page) || 1),
       Math.min(100, Math.max(1, Number(limit) || 25)),
+      libraryIds,
     );
   }
 

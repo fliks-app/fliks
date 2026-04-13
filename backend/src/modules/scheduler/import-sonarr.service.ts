@@ -28,6 +28,9 @@ import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { MediaService } from '../media/media.service';
 import { SubtitleProviderType } from '../../common/enums';
+import { LibrariesService } from '../libraries/libraries.service';
+import { Library } from '../libraries/entities/library.entity';
+import type { ImportTargetSpec } from './import-radarr.service';
 import * as path from 'path';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 
@@ -86,19 +89,34 @@ export class ImportSonarrService {
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly config: ConfigService,
     private readonly mediaService: MediaService,
+    private readonly libraries: LibrariesService,
   ) {}
+
+  private autoLibraryName(): string {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `Sonarr Import ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  }
 
   async importFromApi(
     url: string,
     apiKey: string,
     mode: 'skip' | 'update' = 'skip',
     importSubtitles = false,
+    target: ImportTargetSpec = {},
   ): Promise<ApiImportResult> {
     const baseUrl = url.replace(/\/+$/, '');
     let imported = 0;
     const errors: string[] = [];
     const rootFoldersCreated: string[] = [];
     const qualityProfilesCreated: string[] = [];
+
+    const targetLibrary = await this.libraries.resolveTargetLibrary({
+      targetLibraryId: target.targetLibraryId,
+      newLibraryName: target.newLibraryName,
+      mediaType: MediaType.SERIES,
+      autoLabel: this.autoLibraryName(),
+    });
 
     let series: SonarrSeries[];
     try {
@@ -127,7 +145,13 @@ export class ImportSonarrService {
       };
     }
 
-    await this.reconcileRootFolders(baseUrl, apiKey, rootFoldersCreated);
+    await this.reconcileRootFolders(
+      baseUrl,
+      apiKey,
+      rootFoldersCreated,
+      targetLibrary.id,
+      errors,
+    );
     const profileMap = await this.importQualityProfiles(
       baseUrl,
       apiKey,
@@ -173,6 +197,7 @@ export class ImportSonarrService {
             imdbId: s.imdbId || exists.imdbId,
             overview: s.overview || exists.overview,
             qualityProfileId: localProfileId ?? exists.qualityProfileId,
+            library: { id: exists.libraryId ?? targetLibrary.id } as Library,
           });
         } else {
           const saved = await this.mediaRepo.save(
@@ -183,7 +208,10 @@ export class ImportSonarrService {
               type: MediaType.SERIES,
               status: MediaStatus.CONTINUING,
               monitored: s.monitored ?? true,
-              rootFolderId: resolved?.rootFolderId,
+              rootFolder: resolved?.rootFolderId
+                ? ({ id: resolved.rootFolderId } as RootFolder)
+                : null,
+              library: targetLibrary,
               folderName: folderName || undefined,
               imdbId: s.imdbId || undefined,
               overview: s.overview || undefined,
@@ -252,7 +280,7 @@ export class ImportSonarrService {
 
       try {
         const mediaFiles = await this.mediaFileRepo.find({
-          where: { mediaId: media.id },
+          where: { media: { id: media.id } },
           order: { id: 'ASC' },
         });
 
@@ -437,6 +465,8 @@ export class ImportSonarrService {
     baseUrl: string,
     apiKey: string,
     rootFoldersCreated: string[],
+    libraryId: number,
+    warnings: string[],
   ): Promise<void> {
     try {
       const rfRes = await fetch(`${baseUrl}/api/v3/rootfolder`, {
@@ -449,6 +479,8 @@ export class ImportSonarrService {
           this.rootFolderRepo,
           remoteFolders.map((r) => r.path),
           rootFoldersCreated,
+          libraryId,
+          warnings,
         );
         for (let i = before; i < rootFoldersCreated.length; i++) {
           this.log.log(
@@ -465,6 +497,7 @@ export class ImportSonarrService {
 
   async importFromDump(
     buffer: Buffer,
+    target: ImportTargetSpec = {},
   ): Promise<{ imported: number; skipped: number; errors: string[] }> {
     if (!buffer?.length) {
       throw new BadRequestException('Empty file');
@@ -472,6 +505,13 @@ export class ImportSonarrService {
 
     let imported = 0;
     const errors: string[] = [];
+
+    const targetLibrary = await this.libraries.resolveTargetLibrary({
+      targetLibraryId: target.targetLibraryId,
+      newLibraryName: target.newLibraryName,
+      mediaType: MediaType.SERIES,
+      autoLabel: this.autoLibraryName(),
+    });
 
     try {
       await withTemporaryRestoredDatabase(
@@ -484,6 +524,8 @@ export class ImportSonarrService {
             this.rootFolderRepo,
             dumpPaths,
             createdRf,
+            targetLibrary.id,
+            errors,
           );
           for (const p of createdRf) {
             this.log.log(`Created root folder from Sonarr dump: ${p}`);
@@ -526,7 +568,10 @@ export class ImportSonarrService {
                   title,
                   year: row.year ?? undefined,
                   monitored: rowMonitored(row.monitored),
-                  rootFolderId: resolved?.rootFolderId,
+                  rootFolder: resolved?.rootFolderId
+                    ? ({ id: resolved.rootFolderId } as RootFolder)
+                    : null,
+                  library: { id: exists.libraryId ?? targetLibrary.id } as Library,
                   folderName: folderName || undefined,
                 });
               } else {
@@ -538,7 +583,10 @@ export class ImportSonarrService {
                     type: MediaType.SERIES,
                     status: MediaStatus.CONTINUING,
                     monitored: rowMonitored(row.monitored),
-                    rootFolderId: resolved?.rootFolderId,
+                    rootFolder: resolved?.rootFolderId
+                      ? ({ id: resolved.rootFolderId } as RootFolder)
+                      : null,
+                    library: targetLibrary,
                     folderName: folderName || undefined,
                   }),
                 );

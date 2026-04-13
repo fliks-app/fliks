@@ -15,6 +15,8 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { Role } from '../roles/entities/role.entity';
 import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
 import { Action } from '../auth/casl/actions.enum';
+import { LibraryUserAccess } from '../libraries/entities/library-user-access.entity';
+import { Library } from '../libraries/entities/library.entity';
 
 /** API shape: user without password hash, with role name instead of relation. */
 export type PublicUser = Omit<User, 'passwordHash' | 'userRole'> & {
@@ -31,6 +33,8 @@ export class UsersService implements OnModuleInit {
     private readonly userRepo: Repository<User>,
     @InjectRepository(Role)
     private readonly roleRepo: Repository<Role>,
+    @InjectRepository(LibraryUserAccess)
+    private readonly libraryAccessRepo: Repository<LibraryUserAccess>,
     private readonly caslAbilityFactory: CaslAbilityFactory,
   ) {}
 
@@ -88,11 +92,13 @@ export class UsersService implements OnModuleInit {
     if (existing) throw new ConflictException('Username already taken');
 
     let roleId = dto.roleId;
-    if (!roleId) {
-      const defaultRole = await this.roleRepo.findOne({
-        where: { isDefault: true },
-      });
-      roleId = defaultRole?.id;
+    let role: Role | null = null;
+    if (roleId) {
+      role = await this.roleRepo.findOne({ where: { id: roleId } });
+    }
+    if (!role) {
+      role = await this.roleRepo.findOne({ where: { isDefault: true } });
+      roleId = role?.id;
     }
 
     const user = this.userRepo.create({
@@ -104,6 +110,20 @@ export class UsersService implements OnModuleInit {
       enabled: dto.enabled ?? true,
     });
     const saved = await this.userRepo.save(user);
+
+    // Seed library access from the role's defaultLibraryIds template.
+    const defaults = role?.defaultLibraryIds ?? [];
+    if (defaults.length) {
+      await this.libraryAccessRepo.save(
+        defaults.map((libraryId) =>
+          this.libraryAccessRepo.create({
+            user: saved,
+            library: { id: libraryId } as Library,
+          }),
+        ),
+      );
+    }
+
     return this.findOne(saved.id);
   }
 

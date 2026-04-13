@@ -36,6 +36,8 @@ import {
 import { MediaType, MediaStatus } from '../../common/enums';
 import { ProfilesService } from '../profiles/profiles.service';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
+import { Library } from '../libraries/entities/library.entity';
+import { LibrariesService } from '../libraries/libraries.service';
 import { NamingService } from '../scheduler/naming.service';
 import {
   getAppQualityById,
@@ -71,6 +73,9 @@ export class MediaService {
     private readonly historyRepo: Repository<DownloadHistory>,
     @InjectRepository(RootFolder)
     private readonly rootFolderRepo: Repository<RootFolder>,
+    @InjectRepository(Library)
+    private readonly libraryRepo: Repository<Library>,
+    private readonly libraries: LibrariesService,
     @InjectRepository(MediaMetadata)
     private readonly metadataRepo: Repository<MediaMetadata>,
     @InjectRepository(Person)
@@ -116,42 +121,10 @@ export class MediaService {
         dto.languageProfileId,
       );
 
-    let resolvedRootFolderId: number | undefined;
-    if (dto.rootFolderId) {
-      const rf = await this.rootFolderRepo.findOne({
-        where: { id: dto.rootFolderId },
-      });
-      if (rf && rf.mediaTypes?.includes(dto.type)) {
-        resolvedRootFolderId = rf.id;
-      }
-    }
-
-    // Fallback to default root folder setting only
-    if (!resolvedRootFolderId) {
-      const defaultKey =
-        dto.type === MediaType.MOVIE
-          ? 'default_root_folder_movie'
-          : 'default_root_folder_series';
-      const [row] = (await this.dataSource.query(
-        `SELECT value FROM app_settings WHERE key = $1 LIMIT 1`,
-        [defaultKey],
-      )) as { value: string | null }[];
-      if (row?.value) {
-        const rfId = Number(row.value);
-        if (rfId) {
-          const rf = await this.rootFolderRepo.findOne({ where: { id: rfId } });
-          if (rf && rf.mediaTypes?.includes(dto.type)) {
-            resolvedRootFolderId = rf.id;
-          }
-        }
-      }
-    }
-
-    if (!resolvedRootFolderId) {
-      throw new BadRequestException(
-        'No compatible root folder found. Set a default root folder for this media type in settings.',
-      );
-    }
+    const { libraryId, rootFolderId } = await this.resolveImportTarget(
+      dto.type,
+      { libraryId: dto.libraryId, rootFolderId: dto.rootFolderId },
+    );
 
     // Load folder format settings
     const fmtKeys = [
@@ -180,8 +153,9 @@ export class MediaService {
         details,
         qualityProfileId,
         languageProfileId,
-        resolvedRootFolderId,
+        rootFolderId,
         folderName,
+        libraryId,
       );
     }
 
@@ -199,8 +173,9 @@ export class MediaService {
       seasons,
       qualityProfileId,
       languageProfileId,
-      resolvedRootFolderId,
+      rootFolderId,
       folderName,
+      libraryId,
     );
   }
 
@@ -229,29 +204,10 @@ export class MediaService {
     const qualityProfileId = await this.profiles.resolveQualityProfileIdForImport(dto.qualityProfileId);
     const languageProfileId = await this.profiles.resolveLanguageProfileIdForImport(dto.languageProfileId);
 
-    // Resolve root folder
-    let resolvedRootFolderId: number | undefined;
-    if (dto.rootFolderId) {
-      const rf = await this.rootFolderRepo.findOne({ where: { id: dto.rootFolderId } });
-      if (rf && rf.mediaTypes?.includes(dto.type)) resolvedRootFolderId = rf.id;
-    }
-    if (!resolvedRootFolderId) {
-      const defaultKey = dto.type === MediaType.MOVIE ? 'default_root_folder_movie' : 'default_root_folder_series';
-      const [row] = (await this.dataSource.query(
-        `SELECT value FROM app_settings WHERE key = $1 LIMIT 1`,
-        [defaultKey],
-      )) as { value: string | null }[];
-      if (row?.value) {
-        const rfId = Number(row.value);
-        if (rfId) {
-          const rf = await this.rootFolderRepo.findOne({ where: { id: rfId } });
-          if (rf && rf.mediaTypes?.includes(dto.type)) resolvedRootFolderId = rf.id;
-        }
-      }
-    }
-    if (!resolvedRootFolderId) {
-      throw new BadRequestException('No compatible root folder found.');
-    }
+    const { libraryId, rootFolderId } = await this.resolveImportTarget(
+      dto.type,
+      { libraryId: dto.libraryId, rootFolderId: dto.rootFolderId },
+    );
 
     // Load folder format settings
     const fmtKeys = ['naming_movie_folder_format', 'naming_series_folder_format'];
@@ -276,7 +232,7 @@ export class MediaService {
         year: details.year,
         tmdbId: details.tmdbId,
       });
-      return this.persistImportedMovie(details, qualityProfileId, languageProfileId, resolvedRootFolderId, folderName);
+      return this.persistImportedMovie(details, qualityProfileId, languageProfileId, rootFolderId, folderName, libraryId);
     }
 
     const details = await provider.getTvShowDetails(dto.externalId);
@@ -292,7 +248,73 @@ export class MediaService {
       year: details.year,
       tmdbId: details.tmdbId,
     });
-    return this.persistImportedSeries(details, seasons, qualityProfileId, languageProfileId, resolvedRootFolderId, folderName);
+    return this.persistImportedSeries(details, seasons, qualityProfileId, languageProfileId, rootFolderId, folderName, libraryId);
+  }
+
+  /**
+   * Resolves the destination library + root folder for an import.
+   *
+   * Priority:
+   *  1. Explicit `libraryId` from DTO (validated against media type).
+   *  2. Legacy `rootFolderId` from DTO — derive `libraryId` from it.
+   *  3. Default library for the media type (`isDefaultForMovies` /
+   *     `isDefaultForSeries` flag).
+   *
+   * Then picks one root folder inside that library (most-free-space).
+   */
+  private async resolveImportTarget(
+    type: MediaType,
+    dto: { libraryId?: number; rootFolderId?: number },
+  ): Promise<{ libraryId: number; rootFolderId: number }> {
+    let library: Library | null = null;
+
+    if (dto.libraryId) {
+      library = await this.libraryRepo.findOne({ where: { id: dto.libraryId } });
+      if (!library) {
+        throw new BadRequestException(`Library #${dto.libraryId} not found`);
+      }
+    } else if (dto.rootFolderId) {
+      const rf = await this.rootFolderRepo.findOne({
+        where: { id: dto.rootFolderId },
+      });
+      if (rf?.libraryId) {
+        library = await this.libraryRepo.findOne({ where: { id: rf.libraryId } });
+      }
+    }
+
+    if (!library) {
+      library = await this.libraries.getDefaultForType(type);
+    }
+
+    if (!library) {
+      throw new BadRequestException(
+        'No compatible library found. Set a default library for this media type in settings.',
+      );
+    }
+    if (!library.mediaTypes?.includes(type)) {
+      throw new BadRequestException(
+        `Library "${library.name}" does not accept ${type}`,
+      );
+    }
+
+    // If the caller passed a rootFolderId that belongs to this library, honor
+    // it (lets advanced clients pin a specific path). Otherwise pick the path
+    // with the most free space.
+    let rootFolderId: number;
+    if (dto.rootFolderId) {
+      const rf = await this.rootFolderRepo.findOne({
+        where: { id: dto.rootFolderId },
+      });
+      if (rf?.libraryId === library.id) {
+        rootFolderId = rf.id;
+      } else {
+        rootFolderId = (await this.libraries.pickRootFolderForLibrary(library.id)).id;
+      }
+    } else {
+      rootFolderId = (await this.libraries.pickRootFolderForLibrary(library.id)).id;
+    }
+
+    return { libraryId: library.id, rootFolderId };
   }
 
   async create(dto: CreateMediaDto): Promise<Media> {
@@ -308,10 +330,19 @@ export class MediaService {
     return this.findOne(saved.id);
   }
 
-  async getCounts(): Promise<{ movies: number; series: number }> {
+  async getCounts(
+    accessibleLibraryIds?: number[] | null,
+  ): Promise<{ movies: number; series: number }> {
+    const buildQb = (type: MediaType) => {
+      const qb = this.mediaRepo
+        .createQueryBuilder('media')
+        .where('media.type = :type', { type });
+      this.applyLibraryAcl(qb, accessibleLibraryIds);
+      return qb;
+    };
     const [movies, series] = await Promise.all([
-      this.mediaRepo.count({ where: { type: 'movie' as MediaType } }),
-      this.mediaRepo.count({ where: { type: 'series' as MediaType } }),
+      buildQb(MediaType.MOVIE).getCount(),
+      buildQb(MediaType.SERIES).getCount(),
     ]);
     return { movies, series };
   }
@@ -319,6 +350,7 @@ export class MediaService {
   async findAll(
     query: SearchMediaDto,
     userId?: number,
+    accessibleLibraryIds?: number[] | null,
   ): Promise<{ data: Media[]; total: number }> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 25;
@@ -332,6 +364,7 @@ export class MediaService {
       .leftJoinAndSelect('media.tags', 'tags')
       .leftJoinAndSelect('media.files', 'files');
 
+    this.applyLibraryAcl(qb, accessibleLibraryIds);
     this.applyFilters(qb, query);
 
     if (query.excludeWatched && userId) {
@@ -435,8 +468,54 @@ export class MediaService {
     return { data: enriched, total };
   }
 
-  async findByTmdbId(tmdbId: number, type: MediaType): Promise<Media | null> {
-    return this.mediaRepo.findOne({ where: { tmdbId, type } });
+  async findByTmdbId(
+    tmdbId: number,
+    type: MediaType,
+    accessibleLibraryIds?: number[] | null,
+  ): Promise<Media | null> {
+    const m = await this.mediaRepo.findOne({ where: { tmdbId, type } });
+    if (!m) return null;
+    if (accessibleLibraryIds !== undefined && accessibleLibraryIds !== null) {
+      if (m.libraryId == null || !accessibleLibraryIds.includes(m.libraryId)) {
+        return null;
+      }
+    }
+    return m;
+  }
+
+  /**
+   * Throws NotFoundException when the media exists but is outside the user's
+   * accessible libraries — same shape as "not found" so we don't leak existence.
+   * Pass `null` to skip the check (admins / internal callers).
+   */
+  async assertAccessible(
+    mediaId: number,
+    accessibleLibraryIds: number[] | null,
+  ): Promise<void> {
+    if (accessibleLibraryIds === null) return;
+    const row = await this.mediaRepo.findOne({
+      where: { id: mediaId },
+      select: ['id', 'libraryId'],
+    });
+    if (!row) throw new NotFoundException(`Media #${mediaId} not found`);
+    if (row.libraryId == null || !accessibleLibraryIds.includes(row.libraryId)) {
+      throw new NotFoundException(`Media #${mediaId} not found`);
+    }
+  }
+
+  /** Adds `WHERE media.libraryId IN (...)` when ACL is in effect. */
+  private applyLibraryAcl(
+    qb: SelectQueryBuilder<Media>,
+    accessibleLibraryIds: number[] | null | undefined,
+  ): void {
+    if (accessibleLibraryIds === undefined || accessibleLibraryIds === null) return;
+    if (accessibleLibraryIds.length === 0) {
+      qb.andWhere('1 = 0');
+      return;
+    }
+    qb.andWhere('media.libraryId IN (:...accessibleLibraryIds)', {
+      accessibleLibraryIds,
+    });
   }
 
   async getCast(mediaId: number): Promise<MediaCast[]> {
@@ -509,7 +588,27 @@ export class MediaService {
 
   async updateRootFolder(id: number, rootFolderId: number): Promise<Media> {
     await this.findOne(id);
-    await this.mediaRepo.update(id, { rootFolderId });
+    await this.mediaRepo.update(id, {
+      rootFolder: { id: rootFolderId } as RootFolder,
+    });
+    return this.findOne(id);
+  }
+
+  /**
+   * Reassign media to a different library. Picks a root folder inside the
+   * target library (most free space) and updates both FKs atomically.
+   */
+  async updateLibrary(id: number, libraryId: number): Promise<Media> {
+    await this.findOne(id);
+    const library = await this.libraryRepo.findOne({ where: { id: libraryId } });
+    if (!library) {
+      throw new NotFoundException(`Library #${libraryId} not found`);
+    }
+    const rootFolder = await this.libraries.pickRootFolderForLibrary(libraryId);
+    await this.mediaRepo.update(id, {
+      library,
+      rootFolder,
+    });
     return this.findOne(id);
   }
 
@@ -559,6 +658,9 @@ export class MediaService {
       patch.monitored = dto.monitored;
     }
     if (dto.rootFolder !== undefined) {
+      // QueryBuilder.set() accepts the column name directly (bypasses entity
+      // metadata for relation properties), so the @RelationId-virtual
+      // `rootFolderId` is fine to write here.
       patch.rootFolderId = dto.rootFolder;
     }
 
@@ -591,7 +693,10 @@ export class MediaService {
   // Calendar
   // ---------------------------------------------------------------------------
 
-  async getCalendar(dto: CalendarQueryDto) {
+  async getCalendar(
+    dto: CalendarQueryDto,
+    accessibleLibraryIds?: number[] | null,
+  ) {
     // TypeORM may return PostgreSQL `date` columns as Date objects.
     // Normalise to YYYY-MM-DD string to avoid timezone shifts.
     function toDateStr(v: unknown): string | null {
@@ -641,7 +746,7 @@ export class MediaService {
 
     // 1. Movies — one entry per event type with a date in range
     if (!dto.type || dto.type === MediaType.MOVIE) {
-      const movies = await this.mediaRepo
+      const moviesQb = this.mediaRepo
         .createQueryBuilder('m')
         .where('m.type = :type', { type: MediaType.MOVIE })
         .andWhere(
@@ -657,8 +762,17 @@ export class MediaService {
               })
               .orWhere('m.releaseDate BETWEEN :start AND :end', { start, end });
           }),
-        )
-        .getMany();
+        );
+      if (accessibleLibraryIds !== undefined && accessibleLibraryIds !== null) {
+        if (accessibleLibraryIds.length === 0) {
+          moviesQb.andWhere('1 = 0');
+        } else {
+          moviesQb.andWhere('m.libraryId IN (:...accessibleLibraryIds)', {
+            accessibleLibraryIds,
+          });
+        }
+      }
+      const movies = await moviesQb.getMany();
 
       const eventFields: { field: keyof Media; event: string }[] = [
         { field: 'inCinemas', event: 'cinema' },
@@ -705,13 +819,22 @@ export class MediaService {
 
     // 2. Episodes with airDate in range
     if (!dto.type || dto.type === MediaType.SERIES) {
-      const episodes = await this.episodeRepo
+      const epQb = this.episodeRepo
         .createQueryBuilder('ep')
         .innerJoinAndSelect('ep.season', 'season')
         .innerJoinAndSelect('season.media', 'media')
         .where('ep.airDate BETWEEN :start AND :end', { start, end })
-        .orderBy('ep.airDate', 'ASC')
-        .getMany();
+        .orderBy('ep.airDate', 'ASC');
+      if (accessibleLibraryIds !== undefined && accessibleLibraryIds !== null) {
+        if (accessibleLibraryIds.length === 0) {
+          epQb.andWhere('1 = 0');
+        } else {
+          epQb.andWhere('media.libraryId IN (:...accessibleLibraryIds)', {
+            accessibleLibraryIds,
+          });
+        }
+      }
+      const episodes = await epQb.getMany();
 
       for (const ep of episodes) {
         results.push({
@@ -772,7 +895,7 @@ export class MediaService {
     if (!media) throw new NotFoundException(`Media #${mediaId} not found`);
 
     const file = await this.mediaFileRepo.findOne({
-      where: { id: fileId, mediaId },
+      where: { id: fileId, media: { id: mediaId } },
     });
     if (!file) throw new NotFoundException(`File #${fileId} not found`);
 
@@ -794,7 +917,7 @@ export class MediaService {
     await this.mediaFileRepo.remove(file);
     if (episodeId != null) {
       const remaining = await this.mediaFileRepo.count({
-        where: { episodeId },
+        where: { episode: { id: episodeId } },
       });
       if (remaining === 0) {
         await this.episodeRepo.update(episodeId, { hasFile: false });
@@ -841,7 +964,7 @@ export class MediaService {
 
     // Refresh embedded subtitles for all files
     const files = await this.mediaFileRepo.find({
-      where: { mediaId: media.id },
+      where: { media: { id: media.id } },
     });
     for (const file of files) {
       await this.embeddedSubtitle.detectAndStore(
@@ -856,7 +979,7 @@ export class MediaService {
     const episodeLabelMap = new Map<number, string>();
     if (media.type === MediaType.SERIES) {
       const seasons = await this.seasonRepo.find({
-        where: { mediaId: media.id },
+        where: { media: { id: media.id } },
         relations: ['episodes'],
       });
       for (const s of seasons) {
@@ -927,7 +1050,7 @@ export class MediaService {
 
     // Refresh embedded subtitles & thumbnails for episode files only
     const files = await this.mediaFileRepo.find({
-      where: { mediaId, episodeId },
+      where: { media: { id: mediaId }, episode: { id: episodeId } },
     });
     const sn = String(episode.season.seasonNumber).padStart(2, '0');
     const en = String(episode.episodeNumber).padStart(2, '0');
@@ -952,7 +1075,7 @@ export class MediaService {
     const { provider, externalId } = await this.resolveProviderForMedia(media);
     const tmdbSeasons = await provider.getTvShowSeasons(externalId);
     const dbSeasons = await this.seasonRepo.find({
-      where: { mediaId: media.id },
+      where: { media: { id: media.id } },
       relations: ['episodes'],
     });
     const dbSeasonMap = new Map(dbSeasons.map((s) => [s.seasonNumber, s]));
@@ -962,7 +1085,7 @@ export class MediaService {
       if (!dbSeason) {
         dbSeason = await this.seasonRepo.save(
           this.seasonRepo.create({
-            mediaId: media.id,
+            media,
             seasonNumber: sd.seasonNumber,
             monitored: true,
           }),
@@ -994,7 +1117,7 @@ export class MediaService {
         } else {
           const inserted = await this.episodeRepo.save(
             this.episodeRepo.create({
-              seasonId: dbSeason.id,
+              season: dbSeason,
               episodeNumber: ep.episodeNumber,
               title: ep.title || undefined,
               overview: ep.overview || undefined,
@@ -1131,12 +1254,12 @@ export class MediaService {
   ): Promise<{ provider: IMetadataProvider; externalId: string }> {
     const label = `"${media.title}" (#${media.id})`;
 
-    // 1. Root folder preferred provider
-    if (media.rootFolderId) {
-      const rf = await this.rootFolderRepo.findOne({ where: { id: media.rootFolderId } });
-      const pref = rf?.preferredProvider;
+    // 1. Library preferred provider
+    if (media.libraryId) {
+      const lib = await this.libraryRepo.findOne({ where: { id: media.libraryId } });
+      const pref = lib?.preferredProvider;
       if (pref) {
-        this.log.log(`resolveProvider: ${label} — root folder prefers ${pref}`);
+        this.log.log(`resolveProvider: ${label} — library prefers ${pref}`);
         if (await this.providerRegistry.isAvailable(pref)) {
           const p = this.providerRegistry.get(pref)!;
           const resolved = await this.resolveExternalIdForProvider(media, p, pref);
@@ -1507,6 +1630,7 @@ export class MediaService {
     languageProfileId: number | null,
     rootFolderId?: number,
     folderName?: string,
+    libraryId?: number,
   ): Promise<Media> {
     const row = this.mediaRepo.create({
       ...this.buildMediaFieldsFromTmdb(details, MediaType.MOVIE),
@@ -1514,7 +1638,10 @@ export class MediaService {
       metadataRefreshedAt: new Date(),
       ...(qualityProfileId != null ? { qualityProfileId } : {}),
       ...(languageProfileId != null ? { languageProfileId } : {}),
-      ...(rootFolderId ? { rootFolderId } : {}),
+      ...(rootFolderId
+        ? { rootFolder: { id: rootFolderId } as RootFolder }
+        : {}),
+      ...(libraryId ? { library: { id: libraryId } as Library } : {}),
       ...(folderName ? { folderName } : {}),
     });
     const saved = await this.mediaRepo.save(row);
@@ -1531,6 +1658,7 @@ export class MediaService {
     languageProfileId: number | null,
     rootFolderId?: number,
     folderName?: string,
+    libraryId?: number,
   ): Promise<Media> {
     const row = this.mediaRepo.create({
       ...this.buildMediaFieldsFromTmdb(details, MediaType.SERIES),
@@ -1538,7 +1666,10 @@ export class MediaService {
       metadataRefreshedAt: new Date(),
       ...(qualityProfileId != null ? { qualityProfileId } : {}),
       ...(languageProfileId != null ? { languageProfileId } : {}),
-      ...(rootFolderId ? { rootFolderId } : {}),
+      ...(rootFolderId
+        ? { rootFolder: { id: rootFolderId } as RootFolder }
+        : {}),
+      ...(libraryId ? { library: { id: libraryId } as Library } : {}),
       ...(folderName ? { folderName } : {}),
     });
     const saved = await this.mediaRepo.save(row);
@@ -1546,7 +1677,7 @@ export class MediaService {
 
     for (const sd of seasons) {
       const season = this.seasonRepo.create({
-        mediaId: saved.id,
+        media: saved,
         seasonNumber: sd.seasonNumber,
         monitored: true,
       });
@@ -1554,7 +1685,7 @@ export class MediaService {
       if (sd.episodes.length > 0) {
         await this.episodeRepo.insert(
           sd.episodes.map((ep) => ({
-            seasonId: sSaved.id,
+            season: sSaved,
             episodeNumber: ep.episodeNumber,
             title: ep.title || undefined,
             overview: ep.overview || undefined,
@@ -1826,7 +1957,7 @@ export class MediaService {
           );
           if (episodeId != null) {
             const remaining = await this.mediaFileRepo.count({
-              where: { episodeId },
+              where: { episode: { id: episodeId } },
             });
             if (remaining === 0) {
               await this.episodeRepo.update(episodeId, { hasFile: false });
@@ -1873,12 +2004,12 @@ export class MediaService {
         if (epNums) {
           try {
             let season = await this.seasonRepo.findOne({
-              where: { mediaId: media.id, seasonNumber: epNums.season },
+              where: { media: { id: media.id }, seasonNumber: epNums.season },
             });
             if (!season) {
               season = await this.seasonRepo.save(
                 this.seasonRepo.create({
-                  mediaId: media.id,
+                  media,
                   seasonNumber: epNums.season,
                   monitored: true,
                 }),
@@ -1888,12 +2019,12 @@ export class MediaService {
               );
             }
             let ep = await this.episodeRepo.findOne({
-              where: { seasonId: season.id, episodeNumber: epNums.episode },
+              where: { season: { id: season.id }, episodeNumber: epNums.episode },
             });
             if (!ep) {
               ep = await this.episodeRepo.save(
                 this.episodeRepo.create({
-                  seasonId: season.id,
+                  season,
                   episodeNumber: epNums.episode,
                   monitored: true,
                 }),
@@ -1902,7 +2033,7 @@ export class MediaService {
                 `Rescan: created episode S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')} for media #${mediaId}`,
               );
             }
-            dbFile.episodeId = ep.id;
+            dbFile.episode = ep;
             try {
               await this.mediaFileRepo.save(dbFile);
               await this.episodeRepo.update(ep.id, { hasFile: true });
@@ -2007,12 +2138,12 @@ export class MediaService {
         if (epNums) {
           try {
             let season = await this.seasonRepo.findOne({
-              where: { mediaId: media.id, seasonNumber: epNums.season },
+              where: { media: { id: media.id }, seasonNumber: epNums.season },
             });
             if (!season) {
               season = await this.seasonRepo.save(
                 this.seasonRepo.create({
-                  mediaId: media.id,
+                  media,
                   seasonNumber: epNums.season,
                   monitored: true,
                 }),
@@ -2022,12 +2153,12 @@ export class MediaService {
               );
             }
             let ep = await this.episodeRepo.findOne({
-              where: { seasonId: season.id, episodeNumber: epNums.episode },
+              where: { season: { id: season.id }, episodeNumber: epNums.episode },
             });
             if (!ep) {
               ep = await this.episodeRepo.save(
                 this.episodeRepo.create({
-                  seasonId: season.id,
+                  season,
                   episodeNumber: epNums.episode,
                   monitored: true,
                 }),
@@ -2087,8 +2218,8 @@ export class MediaService {
       try {
         const savedFile = await this.mediaFileRepo.save(
           this.mediaFileRepo.create({
-            mediaId: media.id,
-            episodeId,
+            media,
+            episode: episodeId != null ? ({ id: episodeId } as Episode) : null,
             relativePath,
             size,
             quality: qualityName,

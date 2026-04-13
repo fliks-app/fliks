@@ -15,6 +15,7 @@ import { LanguageProfile } from '../../profiles/entities/language-profile.entity
 import { Tag } from '../../tags/entities/tag.entity';
 import { SubtitleProvider } from '../../subtitles/entities/subtitle-provider.entity';
 import { SubtitleFile } from '../../subtitles/entities/subtitle-file.entity';
+import { Library } from '../../libraries/entities/library.entity';
 import { Action } from './actions.enum';
 
 type Subjects =
@@ -29,6 +30,7 @@ type Subjects =
       | typeof Tag
       | typeof SubtitleProvider
       | typeof SubtitleFile
+      | typeof Library
     >
   | 'Settings'
   | 'all';
@@ -60,6 +62,7 @@ export class CaslAbilityFactory {
       can(Action.Read, LanguageProfile);
       can(Action.Read, SubtitleFile);
       can(Action.Read, SubtitleProvider);
+      can(Action.Read, Library);
     }
     if (perms.has('media.create')) can(Action.Create, Media);
     if (perms.has('media.edit')) can(Action.Update, Media);
@@ -105,6 +108,7 @@ export class CaslAbilityFactory {
       can(Action.Manage, LanguageProfile);
       can(Action.Manage, Tag);
       can(Action.Manage, SubtitleProvider);
+      can(Action.Manage, Library);
     }
 
     // --- users ---

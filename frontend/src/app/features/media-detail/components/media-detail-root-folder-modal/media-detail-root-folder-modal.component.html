@@ -3,30 +3,30 @@
     <form method="dialog">
       <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
     </form>
-    <h3 class="text-lg font-bold mb-4">{{ 'media_detail.root_folder_section' | translate }}</h3>
+    <h3 class="text-lg font-bold mb-4">{{ 'media_detail.library_section' | translate }}</h3>
     <form class="flex flex-col gap-4" (ngSubmit)="save.emit()">
       <label class="form-control w-full">
-        <span class="label-text">{{ 'media_detail.root_folder_label' | translate }}</span>
+        <span class="label-text">{{ 'media_detail.library_label' | translate }}</span>
         <select
-          class="select select-bordered select-sm w-full font-mono"
-          name="rootFolder"
-          [ngModel]="selectedRootFolderId()"
-          (ngModelChange)="selectedRootFolderIdChange.emit($event)"
+          class="select select-bordered select-sm w-full"
+          name="library"
+          [ngModel]="selectedLibraryId()"
+          (ngModelChange)="selectedLibraryIdChange.emit($event)"
         >
-          <option [ngValue]="null">{{ 'media_detail.no_root_folder' | translate }}</option>
-          @for (rf of rootFolders(); track rf.id) {
-            <option [ngValue]="rf.id">{{ rf.label ? rf.label + ' — ' + rf.path : rf.path }}</option>
+          <option [ngValue]="null">{{ 'media_detail.no_library' | translate }}</option>
+          @for (l of libraries(); track l.id) {
+            <option [ngValue]="l.id">{{ l.name }}</option>
           }
         </select>
       </label>
       @if (pathOk()) {
-        <div role="alert" class="alert alert-success text-sm py-2">{{ 'media_detail.root_folder_saved' | translate }}</div>
+        <div role="alert" class="alert alert-success text-sm py-2">{{ 'media_detail.library_saved' | translate }}</div>
       }
       <div class="modal-action">
         <button
           type="submit"
           class="btn btn-primary btn-sm"
-          [disabled]="pathSaving() || selectedRootFolderId() === null"
+          [disabled]="pathSaving() || selectedLibraryId() === null"
         >
           @if (pathSaving()) {
             <span class="loading loading-spinner loading-xs"></span>

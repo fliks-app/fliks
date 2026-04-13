@@ -4,6 +4,7 @@ import { In, Repository } from 'typeorm';
 import { DownloadClient } from './entities/download-client.entity';
 import { Tag } from '../tags/entities/tag.entity';
 import { DownloadHistory } from '../media/entities/download-history.entity';
+import { Media } from '../media/entities/media.entity';
 import { QbittorrentService, QbittorrentTorrent } from './qbittorrent.service';
 import { CreateDownloadClientDto } from './dto/create-download-client.dto';
 import { UpdateDownloadClientDto } from './dto/update-download-client.dto';
@@ -154,9 +155,9 @@ export class DownloadClientsService {
 
     return this.historyRepo.save(
       this.historyRepo.create({
-        mediaId,
+        media: { id: mediaId } as Media,
         sourceTitle,
-        downloadClientId: clientId,
+        downloadClient: clientId ? ({ id: clientId } as DownloadClient) : null,
         torrentHash: hash,
         quality: this.parseQuality(sourceTitle),
         status: 'grabbed',

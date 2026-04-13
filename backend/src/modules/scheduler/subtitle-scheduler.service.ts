@@ -88,7 +88,7 @@ export class SubtitleSchedulerService {
         );
 
         const existingSubs = await this.subtitleFileRepo.find({
-          where: { mediaFileId: file.id },
+          where: { mediaFile: { id: file.id } },
         });
 
         for (const langItem of subtitleLangs) {

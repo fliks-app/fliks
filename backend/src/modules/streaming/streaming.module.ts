@@ -19,6 +19,7 @@ import { ThumbnailService } from './thumbnail.service';
 import { Command } from '../scheduler/entities/command.entity';
 import { AuthModule } from '../auth/auth.module';
 import { SettingsModule } from '../settings/settings.module';
+import { LibrariesModule } from '../libraries/libraries.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { SettingsModule } from '../settings/settings.module';
     ]),
     AuthModule,
     SettingsModule,
+    LibrariesModule,
   ],
   controllers: [StreamingController, PlaybackController],
   providers: [

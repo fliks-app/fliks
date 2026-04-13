@@ -1,4 +1,4 @@
-import { IsString, IsBoolean, IsArray, IsOptional } from 'class-validator';
+import { IsString, IsBoolean, IsArray, IsInt, IsOptional } from 'class-validator';
 
 export class CreateRoleDto {
   @IsString()
@@ -11,4 +11,10 @@ export class CreateRoleDto {
   @IsBoolean()
   @IsOptional()
   isDefault?: boolean;
+
+  /** Library IDs new users with this role inherit on creation. */
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  defaultLibraryIds?: number[];
 }

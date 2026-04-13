@@ -259,21 +259,37 @@ export class SystemController {
   @Post('import-radarr')
   @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
   @UseInterceptors(FileInterceptor('file'))
-  importRadarr(@UploadedFile() file: Express.Multer.File) {
+  importRadarr(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { targetLibraryId?: string; newLibraryName?: string },
+  ) {
     if (!file?.buffer?.length) {
       throw new BadRequestException('No file uploaded');
     }
-    return this.importRadarrService.importFromDump(file.buffer);
+    return this.importRadarrService.importFromDump(file.buffer, {
+      targetLibraryId: body.targetLibraryId
+        ? Number(body.targetLibraryId)
+        : undefined,
+      newLibraryName: body.newLibraryName?.trim() || undefined,
+    });
   }
 
   @Post('import-sonarr')
   @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
   @UseInterceptors(FileInterceptor('file'))
-  importSonarr(@UploadedFile() file: Express.Multer.File) {
+  importSonarr(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { targetLibraryId?: string; newLibraryName?: string },
+  ) {
     if (!file?.buffer?.length) {
       throw new BadRequestException('No file uploaded');
     }
-    return this.importSonarrService.importFromDump(file.buffer);
+    return this.importSonarrService.importFromDump(file.buffer, {
+      targetLibraryId: body.targetLibraryId
+        ? Number(body.targetLibraryId)
+        : undefined,
+      newLibraryName: body.newLibraryName?.trim() || undefined,
+    });
   }
 
   @Post('import-radarr-api')
@@ -284,6 +300,10 @@ export class SystemController {
       dto.apiKey,
       dto.mode ?? 'skip',
       dto.importSubtitles ?? false,
+      {
+        targetLibraryId: dto.targetLibraryId,
+        newLibraryName: dto.newLibraryName,
+      },
     );
   }
 
@@ -295,6 +315,10 @@ export class SystemController {
       dto.apiKey,
       dto.mode ?? 'skip',
       dto.importSubtitles ?? false,
+      {
+        targetLibraryId: dto.targetLibraryId,
+        newLibraryName: dto.newLibraryName,
+      },
     );
   }
 

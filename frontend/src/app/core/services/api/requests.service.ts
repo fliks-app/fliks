@@ -22,14 +22,14 @@ export interface CreateRequestBody {
   title: string;
   qualityProfileId?: number;
   languageProfileId?: number;
-  rootFolderId?: number;
+  libraryId?: number;
   seasons?: number[];
 }
 
 export interface UpdateRequestBody {
   qualityProfileId?: number;
   languageProfileId?: number;
-  rootFolderId?: number;
+  libraryId?: number;
 }
 
 export interface FliksRequestRow {
@@ -46,6 +46,7 @@ export interface FliksRequestRow {
   qualityProfileId: number | null;
   languageProfileId: number | null;
   rootFolderId: number | null;
+  libraryId: number | null;
   mediaId: number | null;
   seasons: number[] | null;
   createdAt: string;

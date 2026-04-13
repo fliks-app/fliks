@@ -1,17 +1,18 @@
-import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, RelationId, Index } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { User } from '../../users/entities/user.entity';
 import { Media } from '../../media/entities/media.entity';
 import { MediaFile } from '../../media/entities/media-file.entity';
+import { Episode } from '../../media/entities/episode.entity';
 
 @Entity('download_tasks')
-@Index(['userId', 'deviceId', 'status'])
+@Index(['user', 'deviceId', 'status'])
 export class DownloadTask extends BaseEntity {
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;
 
-  @Column()
+  @RelationId((dt: DownloadTask) => dt.user)
   userId: number;
 
   /** UUID identifying the device that created this download */
@@ -22,17 +23,21 @@ export class DownloadTask extends BaseEntity {
   @JoinColumn({ name: 'mediaId' })
   media: Media;
 
-  @Column()
+  @RelationId((dt: DownloadTask) => dt.media)
   mediaId: number;
 
-  @Column({ nullable: true })
+  @ManyToOne(() => Episode, { nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'episodeId' })
+  episode: Episode | null;
+
+  @RelationId((dt: DownloadTask) => dt.episode)
   episodeId: number;
 
   @ManyToOne(() => MediaFile, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'mediaFileId' })
   mediaFile: MediaFile;
 
-  @Column()
+  @RelationId((dt: DownloadTask) => dt.mediaFile)
   mediaFileId: number;
 
   /** 'original' | '1080p' | '720p' | '480p' */

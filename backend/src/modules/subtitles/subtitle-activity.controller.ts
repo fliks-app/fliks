@@ -201,7 +201,7 @@ export class SubtitleActivityController {
 
       for (const file of media.files) {
         const existingSubs = await this.subtitleFileRepo.find({
-          where: { mediaFileId: file.id },
+          where: { mediaFile: { id: file.id } },
         });
 
         for (const lang of subtitleLangs) {

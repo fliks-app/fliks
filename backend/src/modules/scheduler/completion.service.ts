@@ -29,6 +29,7 @@ import { MediaType } from '../../common/enums';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 import { StalledCheck } from './entities/stalled-check.entity';
 import { CleanupProfile } from '../cleanup-profiles/entities/cleanup-profile.entity';
+import { Library } from '../libraries/entities/library.entity';
 
 @Injectable()
 export class CompletionService {
@@ -56,6 +57,8 @@ export class CompletionService {
     private readonly stalledCheckRepo: Repository<StalledCheck>,
     @InjectRepository(CleanupProfile)
     private readonly cleanupProfileRepo: Repository<CleanupProfile>,
+    @InjectRepository(Library)
+    private readonly libraryRepo: Repository<Library>,
     private readonly qbittorrent: QbittorrentService,
     private readonly notifications: NotificationsService,
     private readonly naming: NamingService,
@@ -338,7 +341,7 @@ export class CompletionService {
 
     // Store rootFolderId if not set
     if (!media.rootFolderId && resolvedRf) {
-      await this.mediaRepo.update(media.id, { rootFolderId: resolvedRf.id });
+      await this.mediaRepo.update(media.id, { rootFolder: resolvedRf });
       this.log.log(
         `Import[${history.sourceTitle}]: saved rootFolderId=${resolvedRf.id} on media`,
       );
@@ -399,11 +402,11 @@ export class CompletionService {
 
         if (epNums) {
           const season = await this.seasonRepo.findOne({
-            where: { mediaId: media.id, seasonNumber: epNums.season },
+            where: { media: { id: media.id }, seasonNumber: epNums.season },
           });
           if (season) {
             const episode = await this.episodeRepo.findOne({
-              where: { seasonId: season.id, episodeNumber: epNums.episode },
+              where: { season: { id: season.id }, episodeNumber: epNums.episode },
             });
             if (episode) {
               epTitle = episode.title ?? undefined;
@@ -461,12 +464,12 @@ export class CompletionService {
 
       // Avoid duplicate: update existing record if same path already tracked
       const existingFile = await this.mediaFileRepo.findOne({
-        where: { mediaId: media.id, relativePath },
+        where: { media: { id: media.id }, relativePath },
       });
       const savedFile = existingFile
         ? await this.mediaFileRepo.save(
             Object.assign(existingFile, {
-              episodeId,
+              episode: episodeId != null ? ({ id: episodeId } as Episode) : null,
               size: videoFile.size,
               quality: history.quality,
               streamInfo,
@@ -474,8 +477,8 @@ export class CompletionService {
           )
         : await this.mediaFileRepo.save(
             this.mediaFileRepo.create({
-              mediaId: media.id,
-              episodeId,
+              media,
+              episode: episodeId != null ? ({ id: episodeId } as Episode) : null,
               relativePath,
               size: videoFile.size,
               quality: history.quality,
@@ -631,9 +634,9 @@ export class CompletionService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Per-root-folder stalled-download cleanup.
+   * Per-library stalled-download cleanup.
    *
-   * For every active downloading torrent that can be traced back to a root folder
+   * For every active downloading torrent that can be traced back to a library
    * with a cleanup profile (fast/medium/slow), we snapshot the `downloaded` byte
    * counter at the profile's interval. When the last N snapshots are all equal,
    * the download is considered stalled and is removed + blocklisted.
@@ -651,13 +654,13 @@ export class CompletionService {
     const profiles = await this.cleanupProfileRepo.find();
     const profileByKey = new Map(profiles.map((p) => [p.key, p]));
 
-    // Skip early if no root folder has a profile assigned.
-    const activeRoots = await this.rootFolderRepo.find();
-    const rootsWithProfile = activeRoots.filter(
-      (rf) => rf.stalledCleanupProfile != null,
+    // Skip early if no library has a cleanup profile assigned.
+    const allLibraries = await this.libraryRepo.find();
+    const librariesWithProfile = allLibraries.filter(
+      (l) => l.stalledCleanupProfile != null,
     );
-    if (!rootsWithProfile.length) return;
-    const rootById = new Map(rootsWithProfile.map((rf) => [rf.id, rf]));
+    if (!librariesWithProfile.length) return;
+    const libraryById = new Map(librariesWithProfile.map((l) => [l.id, l]));
 
     const clients = await this.clientRepo.find({ where: { enabled: true } });
     const qbitClients = clients.filter((c) => this.qbittorrent.supports(c));
@@ -698,7 +701,7 @@ export class CompletionService {
         histories.map((h) => [h.torrentHash.toLowerCase(), h]),
       );
 
-      // Pre-load the media rows we need (to resolve rootFolderId).
+      // Pre-load the media rows we need (to resolve libraryId).
       const mediaIds = Array.from(
         new Set(histories.map((h) => h.mediaId).filter((id): id is number => id != null)),
       );
@@ -711,11 +714,11 @@ export class CompletionService {
         const history = historyByHash.get(t.hash.toLowerCase());
         if (!history) continue; // Untracked torrent — not our business.
         const media = history.mediaId ? mediaById.get(history.mediaId) : undefined;
-        if (!media?.rootFolderId) continue;
-        const rootFolder = rootById.get(media.rootFolderId);
-        if (!rootFolder?.stalledCleanupProfile) continue;
+        if (!media?.libraryId) continue;
+        const library = libraryById.get(media.libraryId);
+        if (!library?.stalledCleanupProfile) continue;
 
-        const profile = profileByKey.get(rootFolder.stalledCleanupProfile);
+        const profile = profileByKey.get(library.stalledCleanupProfile);
         if (!profile) continue;
 
         const stalled = await this.evaluateStalled(t, profile, now);

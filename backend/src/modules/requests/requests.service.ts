@@ -13,6 +13,9 @@ import {
   AutoApprovalCondition,
 } from './entities/auto-approval-rule.entity';
 import { User } from '../users/entities/user.entity';
+import { QualityProfile } from '../profiles/entities/quality-profile.entity';
+import { LanguageProfile } from '../profiles/entities/language-profile.entity';
+import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { ListRequestsDto } from './dto/list-requests.dto';
 import { UpdateRequestDto } from './dto/update-request.dto';
@@ -150,7 +153,7 @@ export class RequestsService {
 
     const dup = await this.requestRepo.findOne({
       where: {
-        userId: user.id,
+        user: { id: user.id },
         tmdbId: dto.tmdbId,
         mediaType: dto.mediaType,
         status: RequestStatus.PENDING,
@@ -180,16 +183,22 @@ export class RequestsService {
     const autoApprove = await this.shouldAutoApprove(user, dto);
 
     const partial: DeepPartial<FliksRequest> = {
-      userId: user.id,
+      user,
       mediaType: dto.mediaType,
       tmdbId: dto.tmdbId,
       title: dto.title,
       seasons: dto.seasons ?? null,
-      qualityProfileId: dto.qualityProfileId ?? null,
-      languageProfileId: dto.languageProfileId ?? null,
-      rootFolderId: dto.rootFolderId ?? null,
+      qualityProfile: dto.qualityProfileId
+        ? ({ id: dto.qualityProfileId } as QualityProfile)
+        : null,
+      languageProfile: dto.languageProfileId
+        ? ({ id: dto.languageProfileId } as LanguageProfile)
+        : null,
+      rootFolder: dto.rootFolderId
+        ? ({ id: dto.rootFolderId } as RootFolder)
+        : null,
       status: autoApprove ? RequestStatus.APPROVED : RequestStatus.PENDING,
-      approvedById: autoApprove ? user.id : null,
+      approvedBy: autoApprove ? user : null,
     };
     const row = this.requestRepo.create(partial);
     const saved = await this.requestRepo.save(row);
@@ -256,11 +265,21 @@ export class RequestsService {
     if (!this.canManageRequests(user) && row.userId !== user.id) {
       throw new ForbiddenException();
     }
-    if (dto.qualityProfileId !== undefined)
-      row.qualityProfileId = dto.qualityProfileId;
-    if (dto.languageProfileId !== undefined)
-      row.languageProfileId = dto.languageProfileId;
-    if (dto.rootFolderId !== undefined) row.rootFolderId = dto.rootFolderId;
+    if (dto.qualityProfileId !== undefined) {
+      row.qualityProfile = dto.qualityProfileId
+        ? ({ id: dto.qualityProfileId } as QualityProfile)
+        : null;
+    }
+    if (dto.languageProfileId !== undefined) {
+      row.languageProfile = dto.languageProfileId
+        ? ({ id: dto.languageProfileId } as LanguageProfile)
+        : null;
+    }
+    if (dto.rootFolderId !== undefined) {
+      row.rootFolder = dto.rootFolderId
+        ? ({ id: dto.rootFolderId } as RootFolder)
+        : null;
+    }
     return this.requestRepo.save(row);
   }
 
@@ -289,7 +308,7 @@ export class RequestsService {
     }
 
     row.status = RequestStatus.APPROVED;
-    row.approvedById = admin.id;
+    row.approvedBy = admin;
     row.declinedReason = null;
 
     // Import the media into the library
@@ -301,7 +320,7 @@ export class RequestsService {
         languageProfileId: row.languageProfileId ?? undefined,
         rootFolderId: row.rootFolderId ?? undefined,
       });
-      row.mediaId = media.id;
+      row.media = media;
     } catch (err) {
       // If already in library, resolve the existing media ID
       if (err?.status === 409) {
@@ -309,7 +328,7 @@ export class RequestsService {
           row.tmdbId,
           row.mediaType,
         );
-        if (existing) row.mediaId = existing.id;
+        if (existing) row.media = existing;
       } else {
         throw err;
       }
@@ -334,7 +353,7 @@ export class RequestsService {
       throw new ConflictException('Request is not pending');
     }
     row.status = RequestStatus.DECLINED;
-    row.approvedById = admin.id;
+    row.approvedBy = admin;
     row.declinedReason = reason ?? null;
     const saved = await this.requestRepo.save(row);
     void this.notifications.dispatch('request.declined', {
@@ -362,8 +381,8 @@ export class RequestsService {
       throw new ForbiddenException();
     }
     const comment = this.commentRepo.create({
-      requestId,
-      userId: user.id,
+      request,
+      user,
       message: dto.message,
     });
     return this.commentRepo.save(comment);
@@ -379,7 +398,7 @@ export class RequestsService {
       throw new ForbiddenException();
     }
     return this.commentRepo.find({
-      where: { requestId },
+      where: { request: { id: requestId } },
       relations: ['user'],
       order: { createdAt: 'ASC' },
     });

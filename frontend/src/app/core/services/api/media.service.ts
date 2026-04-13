@@ -76,6 +76,7 @@ export interface Media {
   monitored: boolean;
   path?: string | null;
   rootFolderId?: number | null;
+  libraryId?: number | null;
   posterUrl: string | null;
   fanartUrl: string | null;
   rating: number;
@@ -268,6 +269,11 @@ export class MediaService {
 
   patchRootFolder(id: number, rootFolderId: number) {
     return firstValueFrom(this.http.patch<Media>(`/api/media/${id}/root-folder`, { rootFolderId }));
+  }
+
+  /** Move media to a different library (backend resolves an appropriate path inside it). */
+  patchLibrary(id: number, libraryId: number) {
+    return firstValueFrom(this.http.patch<Media>(`/api/media/${id}/library`, { libraryId }));
   }
 
   patchProfiles(

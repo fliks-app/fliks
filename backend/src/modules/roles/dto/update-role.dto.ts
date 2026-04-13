@@ -1,4 +1,4 @@
-import { IsString, IsBoolean, IsArray, IsOptional } from 'class-validator';
+import { IsString, IsBoolean, IsArray, IsInt, IsOptional } from 'class-validator';
 
 export class UpdateRoleDto {
   @IsString()
@@ -13,4 +13,9 @@ export class UpdateRoleDto {
   @IsBoolean()
   @IsOptional()
   isDefault?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  defaultLibraryIds?: number[];
 }

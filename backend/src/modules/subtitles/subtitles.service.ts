@@ -73,7 +73,7 @@ export class SubtitlesService {
         const results = await impl.search(params);
         void this.statRepo.save(
           this.statRepo.create({
-            providerId: provider.id,
+            provider,
             queryType: 'search',
             responseTimeMs: Date.now() - start,
             resultCount: results.length,
@@ -84,7 +84,7 @@ export class SubtitlesService {
       } catch (err) {
         void this.statRepo.save(
           this.statRepo.create({
-            providerId: provider.id,
+            provider,
             queryType: 'search',
             responseTimeMs: Date.now() - start,
             resultCount: 0,
@@ -157,7 +157,7 @@ export class SubtitlesService {
       buffer = await impl.download(searchResult);
       void this.statRepo.save(
         this.statRepo.create({
-          providerId: provider.id,
+          provider,
           queryType: 'download',
           responseTimeMs: Date.now() - dlStart,
           resultCount: 1,
@@ -167,7 +167,7 @@ export class SubtitlesService {
     } catch (err) {
       void this.statRepo.save(
         this.statRepo.create({
-          providerId: provider.id,
+          provider,
           queryType: 'download',
           responseTimeMs: Date.now() - dlStart,
           resultCount: 0,
@@ -299,14 +299,14 @@ export class SubtitlesService {
 
   async getSubtitlesForMedia(mediaId: number): Promise<SubtitleFile[]> {
     return this.repo.find({
-      where: { mediaId },
+      where: { media: { id: mediaId } },
       order: { language: 'ASC', score: 'DESC' },
     });
   }
 
   async getSubtitlesForMediaFile(mediaFileId: number): Promise<SubtitleFile[]> {
     return this.repo.find({
-      where: { mediaFileId },
+      where: { mediaFile: { id: mediaFileId } },
       order: { language: 'ASC', score: 'DESC' },
     });
   }
@@ -332,7 +332,7 @@ export class SubtitlesService {
     };
 
     // 1) Stale rows: external subs whose file is gone or path is invalid
-    let subs = await this.repo.find({ where: { mediaId } });
+    let subs = await this.repo.find({ where: { media: { id: mediaId } } });
     for (const sub of subs) {
       if (!isExternalFile(sub)) continue;
       if (!sub.relativePath?.trim()) {
@@ -347,7 +347,7 @@ export class SubtitlesService {
       }
     }
 
-    subs = await this.repo.find({ where: { mediaId } });
+    subs = await this.repo.find({ where: { media: { id: mediaId } } });
     const external = subs.filter(isExternalFile);
 
     // 2) Duplicate relativePath (same file referenced more than once)
@@ -370,7 +370,7 @@ export class SubtitlesService {
     }
 
     // 3) Logical duplicates: same media file + language + forced + HI, different paths — keep one file
-    subs = await this.repo.find({ where: { mediaId } });
+    subs = await this.repo.find({ where: { media: { id: mediaId } } });
     const external2 = subs.filter(isExternalFile);
     const byKey = new Map<string, SubtitleFile[]>();
     for (const s of external2) {

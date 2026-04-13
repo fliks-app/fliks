@@ -7,18 +7,21 @@ export interface RoleRow {
   name: string;
   permissions: string[];
   isDefault: boolean;
+  defaultLibraryIds: number[];
 }
 
 export interface CreateRoleBody {
   name: string;
   permissions: string[];
   isDefault?: boolean;
+  defaultLibraryIds?: number[];
 }
 
 export interface UpdateRoleBody {
   name?: string;
   permissions?: string[];
   isDefault?: boolean;
+  defaultLibraryIds?: number[];
 }
 
 @Injectable({ providedIn: 'root' })

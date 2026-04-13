@@ -1,16 +1,53 @@
 <p class="text-sm text-base-content/60 mb-4">{{ 'system.import_subtitle' | translate }}</p>
 
-<div class="flex flex-wrap gap-4">
-  <label class="btn btn-outline btn-sm">
-    @if (radarrLoading()) { <span class="loading loading-spinner loading-xs"></span> }
-    {{ 'system.import_radarr' | translate }}
-    <input type="file" class="hidden" accept=".sql,.dump" (change)="importRadarr($event)" [disabled]="radarrLoading()" />
-  </label>
-  <label class="btn btn-outline btn-sm">
-    @if (sonarrLoading()) { <span class="loading loading-spinner loading-xs"></span> }
-    {{ 'system.import_sonarr' | translate }}
-    <input type="file" class="hidden" accept=".sql,.dump" (change)="importSonarr($event)" [disabled]="sonarrLoading()" />
-  </label>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+  <div class="flex flex-col gap-3">
+    <div class="form-control">
+      <label class="label"><span class="label-text">{{ 'settings.libraries.import_target' | translate }}</span></label>
+      <select class="select select-bordered select-sm" [ngModel]="radarrLibrary()" (ngModelChange)="radarrLibrary.set($event)">
+        <option [ngValue]="null">—</option>
+        @for (l of movieLibraries(); track l.id) {
+          <option [ngValue]="l.id">{{ l.name }}</option>
+        }
+        <option [ngValue]="'new'">{{ 'settings.libraries.import_target_new' | translate }}</option>
+      </select>
+      @if (radarrLibrary() === 'new') {
+        <input type="text" class="input input-bordered input-sm mt-2"
+          [placeholder]="'settings.libraries.import_new_name_placeholder' | translate"
+          [ngModel]="radarrNewLibraryName()"
+          (ngModelChange)="radarrNewLibraryName.set($event)" />
+      }
+    </div>
+    <label class="btn btn-outline btn-sm">
+      @if (radarrLoading()) { <span class="loading loading-spinner loading-xs"></span> }
+      {{ 'system.import_radarr' | translate }}
+      <input type="file" class="hidden" accept=".sql,.dump" (change)="importRadarr($event)" [disabled]="radarrLoading()" />
+    </label>
+  </div>
+
+  <div class="flex flex-col gap-3">
+    <div class="form-control">
+      <label class="label"><span class="label-text">{{ 'settings.libraries.import_target' | translate }}</span></label>
+      <select class="select select-bordered select-sm" [ngModel]="sonarrLibrary()" (ngModelChange)="sonarrLibrary.set($event)">
+        <option [ngValue]="null">—</option>
+        @for (l of seriesLibraries(); track l.id) {
+          <option [ngValue]="l.id">{{ l.name }}</option>
+        }
+        <option [ngValue]="'new'">{{ 'settings.libraries.import_target_new' | translate }}</option>
+      </select>
+      @if (sonarrLibrary() === 'new') {
+        <input type="text" class="input input-bordered input-sm mt-2"
+          [placeholder]="'settings.libraries.import_new_name_placeholder' | translate"
+          [ngModel]="sonarrNewLibraryName()"
+          (ngModelChange)="sonarrNewLibraryName.set($event)" />
+      }
+    </div>
+    <label class="btn btn-outline btn-sm">
+      @if (sonarrLoading()) { <span class="loading loading-spinner loading-xs"></span> }
+      {{ 'system.import_sonarr' | translate }}
+      <input type="file" class="hidden" accept=".sql,.dump" (change)="importSonarr($event)" [disabled]="sonarrLoading()" />
+    </label>
+  </div>
 </div>
 
 @if (result(); as ir) {

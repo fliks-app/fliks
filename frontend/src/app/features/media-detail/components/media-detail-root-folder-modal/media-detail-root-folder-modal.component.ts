@@ -8,8 +8,12 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
-import { RootFolder } from '../../../../core/services/api/root-folders-api.service';
+import { Library } from '../../../../core/services/api/libraries-api.service';
 
+/**
+ * Retained filename for historical reasons — now a library picker.
+ * Backend resolves the actual filesystem path inside the chosen library.
+ */
 @Component({
   selector: 'app-media-detail-root-folder-modal',
   imports: [TranslateModule, FormsModule],
@@ -17,12 +21,12 @@ import { RootFolder } from '../../../../core/services/api/root-folders-api.servi
   templateUrl: './media-detail-root-folder-modal.component.html',
 })
 export class MediaDetailRootFolderModalComponent {
-  readonly rootFolders = input<RootFolder[]>([]);
-  readonly selectedRootFolderId = input<number | null>(null);
+  readonly libraries = input<Library[]>([]);
+  readonly selectedLibraryId = input<number | null>(null);
   readonly pathSaving = input(false);
   readonly pathOk = input(false);
 
-  readonly selectedRootFolderIdChange = output<number | null>();
+  readonly selectedLibraryIdChange = output<number | null>();
   readonly save = output<void>();
 
   private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
