@@ -1190,7 +1190,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     // ── Audio mapping + HLS output ──
     // var_stream_map requires fMP4. For TS clients (Cast), fall back to single-audio.
-    const useVarStreamMap = useFmp4 && videoOnly && audioStreams && audioStreams.length > 1;
+    // An explicit `audioStreamIndex` (user picked a specific track from the UI)
+    // forces single-audio output even when multi-audio would otherwise apply —
+    // otherwise the backend keeps muxing every track and the client can't
+    // actually switch (Shaka in TS-only can't demux multi-PID, ExoPlayer
+    // fallback path goes through `si-*` reload).
+    const userPickedAudio = audioStreamIndex != null;
+    const useVarStreamMap =
+      useFmp4 &&
+      videoOnly &&
+      audioStreams &&
+      audioStreams.length > 1 &&
+      !userPickedAudio;
 
     if (useVarStreamMap) {
       // Single FFmpeg process for video + all audio renditions (perfect sync).
@@ -1224,8 +1235,14 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         path.join(outputDir, '%v', 'index.m3u8'),
       );
     } else {
-      // Standard single-stream output
-      if (mapAllAudio && audioStreams && audioStreams.length > 1) {
+      // Standard single-stream output.
+      // `userPickedAudio` (audioStreamIndex set) wins over `mapAllAudio`:
+      // when the user explicitly chose a track from the UI, honour it with a
+      // single -map so the next reload actually plays that audio. Otherwise
+      // mapAllAudio mux every PID for native client-side switching.
+      if (userPickedAudio) {
+        args.push('-map', '0:v:0', '-map', `0:a:${audioStreamIndex}`);
+      } else if (mapAllAudio && audioStreams && audioStreams.length > 1) {
         // TS + multi-audio: mux ALL audio tracks so native players (ExoPlayer/AVPlayer) can switch
         args.push('-map', '0:v:0');
         for (let i = 0; i < audioStreams.length; i++) {
@@ -1236,8 +1253,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             args.push(`-metadata:s:a:${i}`, `language=${lang}`);
           }
         }
-      } else if (audioStreamIndex != null) {
-        args.push('-map', '0:v:0', '-map', `0:a:${audioStreamIndex}`);
       }
       args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
 
@@ -1338,6 +1353,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     audioStreams?: { language?: string; title?: string }[],
     useFmp4 = true,
     trustedStreamInfo = false,
+    audioStreamIndex?: number,
   ): string[] {
     const args = ['-hide_banner', '-loglevel', 'warning'];
     // See buildFfmpegArgs for rationale — trust cached streamInfo when we have
@@ -1357,9 +1373,27 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     args.push('-i', inputPath);
 
-    if (videoOnly) {
+    const userPickedAudio = audioStreamIndex != null;
+    if (videoOnly && !userPickedAudio) {
       // Video-only remux for fMP4 var_stream_map (audio served separately).
       args.push('-map', '0:v:0', '-c:v', 'copy', '-an');
+    } else if (userPickedAudio) {
+      // User picked a specific audio track from the UI — single-map wins
+      // over both videoOnly (var_stream_map) and mapAllAudio so the chosen
+      // track actually plays after a reload.
+      args.push(
+        '-map',
+        '0:v:0',
+        '-map',
+        `0:a:${audioStreamIndex}`,
+        '-c:v',
+        'copy',
+      );
+      if (copyAudio) {
+        args.push('-c:a', 'copy');
+      } else {
+        args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
+      }
     } else if (mapAllAudio && audioStreams && audioStreams.length > 1) {
       // TS + multi-audio: copy video, map all audio tracks as distinct PIDs
       // so ExoPlayer/AVPlayer can switch between them natively.
@@ -1497,6 +1531,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ctx?.audioStreams,
       ctx?.useFmp4 ?? true,
       ctx?.trustedStreamInfo,
+      ctx?.audioStreamIndex,
     );
 
     const session = this.spawnFfmpegSession({

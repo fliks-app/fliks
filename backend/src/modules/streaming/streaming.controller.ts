@@ -381,12 +381,20 @@ export class StreamingController {
     // Use EXT-X-MEDIA only when the client needs it (Shaka on web) AND supports fMP4.
     // Native players (ExoPlayer/AVPlayer) handle multi-audio from muxed TS.
     // Cast (TS) can't handle separate fMP4 audio renditions.
+    // When the user explicitly picked an audio track (audioStreamIndex set in
+    // the tracker), the variant only contains that one audio — no rendition
+    // group makes sense, drop EXT-X-MEDIA so the player plays the muxed audio.
     const clientMuxesAudio =
       this.activeStreamTracker.getMultiAudioMuxed(mediaFileId);
     const fmp4Supported =
       this.activeStreamTracker.getFmp4Supported(mediaFileId);
+    const userPickedAudio =
+      this.activeStreamTracker.getAudioStreamIndex(mediaFileId) != null;
     const useExtXMedia =
-      audioStreams.length > 1 && !clientMuxesAudio && fmp4Supported;
+      audioStreams.length > 1 &&
+      !clientMuxesAudio &&
+      fmp4Supported &&
+      !userPickedAudio;
     const onlyQuality = firstQueryString(req.query, 'startQuality');
 
     // Smart remux: if the user's locked quality maps to a target height that
