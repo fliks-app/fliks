@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, LessThan, Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
@@ -27,6 +27,8 @@ import { MediaServersService } from '../media-servers/media-servers.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
 import { MediaType } from '../../common/enums';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
+import { StalledCheck } from './entities/stalled-check.entity';
+import { CleanupProfile } from '../cleanup-profiles/entities/cleanup-profile.entity';
 
 @Injectable()
 export class CompletionService {
@@ -50,6 +52,10 @@ export class CompletionService {
     private readonly rootFolderRepo: Repository<RootFolder>,
     @InjectRepository(Indexer)
     private readonly indexerRepo: Repository<Indexer>,
+    @InjectRepository(StalledCheck)
+    private readonly stalledCheckRepo: Repository<StalledCheck>,
+    @InjectRepository(CleanupProfile)
+    private readonly cleanupProfileRepo: Repository<CleanupProfile>,
     private readonly qbittorrent: QbittorrentService,
     private readonly notifications: NotificationsService,
     private readonly naming: NamingService,
@@ -624,44 +630,104 @@ export class CompletionService {
   // Stalled torrent cleanup
   // ---------------------------------------------------------------------------
 
+  /**
+   * Per-root-folder stalled-download cleanup.
+   *
+   * For every active downloading torrent that can be traced back to a root folder
+   * with a cleanup profile (fast/medium/slow), we snapshot the `downloaded` byte
+   * counter at the profile's interval. When the last N snapshots are all equal,
+   * the download is considered stalled and is removed + blocklisted.
+   *
+   * Whether a new search is triggered depends on:
+   *   - the profile's `autoRestart` flag,
+   *   - the grab source (`auto`|`manual`), and
+   *   - the global `cleanup_restart_manual_grabs` setting.
+   */
   @Cron(CronExpression.EVERY_5_MINUTES)
   async cleanStalledTorrents(): Promise<void> {
-    const enabled = await this.settings.get('stalled_delete_enabled');
-    if (enabled !== 'true') return;
+    // Housekeeping first — discard ancient snapshots regardless of anything else.
+    await this.pruneOldStalledChecks();
 
-    const thresholdMinutes = Number(
-      (await this.settings.get('stalled_delete_after_minutes')) ?? '60',
+    const profiles = await this.cleanupProfileRepo.find();
+    const profileByKey = new Map(profiles.map((p) => [p.key, p]));
+
+    // Skip early if no root folder has a profile assigned.
+    const activeRoots = await this.rootFolderRepo.find();
+    const rootsWithProfile = activeRoots.filter(
+      (rf) => rf.stalledCleanupProfile != null,
     );
-    const searchAfter =
-      (await this.settings.get('stalled_search_after_delete')) !== 'false';
+    if (!rootsWithProfile.length) return;
+    const rootById = new Map(rootsWithProfile.map((rf) => [rf.id, rf]));
 
     const clients = await this.clientRepo.find({ where: { enabled: true } });
     const qbitClients = clients.filter((c) => this.qbittorrent.supports(c));
     if (!qbitClients.length) return;
 
-    const nowSec = Math.floor(Date.now() / 1000);
-    let needsSearch = false;
+    const allowManualRestart =
+      (await this.settings.get('cleanup_restart_manual_grabs')) === 'true';
+
+    const mediaToResearch = new Set<number>();
+    const now = Date.now();
 
     for (const client of qbitClients) {
-      let torrents: Awaited<ReturnType<typeof this.qbittorrent.getTorrents>>;
+      let torrents: QbittorrentTorrent[];
       try {
         torrents = await this.qbittorrent.getTorrents(client);
       } catch {
         continue;
       }
 
-      const stalled = torrents.filter(
+      // Only examine torrents that are still downloading AND not paused by the user.
+      // Paused/stopped torrents make no progress by design and should never be flagged.
+      const downloading = torrents.filter(
         (t) =>
-          t.state === 'stalledDL' &&
-          t.added_on > 0 &&
-          nowSec - t.added_on > thresholdMinutes * 60,
+          t.progress < 1 &&
+          t.hash &&
+          t.hash.length > 0 &&
+          t.state !== 'pausedDL' &&
+          t.state !== 'stoppedDL',
+      );
+      if (!downloading.length) continue;
+
+      // Bulk-load all histories matching these hashes in one query.
+      const hashes = downloading.map((t) => t.hash.toLowerCase());
+      const histories = await this.historyRepo.find({
+        where: { torrentHash: In(hashes) },
+      });
+      const historyByHash = new Map(
+        histories.map((h) => [h.torrentHash.toLowerCase(), h]),
       );
 
-      for (const t of stalled) {
+      // Pre-load the media rows we need (to resolve rootFolderId).
+      const mediaIds = Array.from(
+        new Set(histories.map((h) => h.mediaId).filter((id): id is number => id != null)),
+      );
+      const medias = mediaIds.length
+        ? await this.mediaRepo.find({ where: { id: In(mediaIds) } })
+        : [];
+      const mediaById = new Map(medias.map((m) => [m.id, m]));
+
+      for (const t of downloading) {
+        const history = historyByHash.get(t.hash.toLowerCase());
+        if (!history) continue; // Untracked torrent — not our business.
+        const media = history.mediaId ? mediaById.get(history.mediaId) : undefined;
+        if (!media?.rootFolderId) continue;
+        const rootFolder = rootById.get(media.rootFolderId);
+        if (!rootFolder?.stalledCleanupProfile) continue;
+
+        const profile = profileByKey.get(rootFolder.stalledCleanupProfile);
+        if (!profile) continue;
+
+        const stalled = await this.evaluateStalled(t, profile, now);
+        if (!stalled) continue;
+
         this.log.warn(
-          `StalledCleanup: removing "${t.name}" (stalled ${Math.round((nowSec - t.added_on) / 60)} min, threshold ${thresholdMinutes} min)`,
+          `StalledCleanup: "${t.name}" stalled (profile=${profile.key}, samples=${profile.samples}, interval=${profile.intervalMinutes}m)`,
         );
 
+        // Remove torrent from qBittorrent (files too). If deletion fails we
+        // intentionally skip everything else so we don't double-blocklist or
+        // mark a history entry failed for a torrent still running in the client.
         try {
           await this.qbittorrent.deleteTorrent(client, t.hash, true);
         } catch (e) {
@@ -671,45 +737,90 @@ export class CompletionService {
           continue;
         }
 
-        // Find matching download history
-        const history = await this.historyRepo.findOne({
-          where: { torrentHash: t.hash },
-        });
+        await this.stalledCheckRepo.delete({ torrentHash: t.hash });
 
         this.events.emit({
           type: 'stalled.removed',
-          title: history?.sourceTitle ?? t.name,
+          title: history.sourceTitle ?? t.name,
         });
         this.events.emit({ type: 'queue.updated' });
 
-        // Blocklist the release
         await this.blocklist.create({
-          sourceTitle: history?.sourceTitle ?? t.name,
-          quality: history?.quality ?? undefined,
-          mediaId: history?.mediaId ?? undefined,
-          note: `Auto-blocklist: stalled torrent removed after ${thresholdMinutes} min`,
+          sourceTitle: history.sourceTitle ?? t.name,
+          quality: history.quality ?? undefined,
+          mediaId: history.mediaId ?? undefined,
+          note: `Auto-blocklist: stalled torrent (profile=${profile.key})`,
         });
 
-        // Mark history as failed
-        if (history) {
-          history.status = 'failed';
-          history.statusMessage = `Stalled torrent removed after ${thresholdMinutes} min`;
-          await this.historyRepo.save(history);
-          if (history.mediaId) needsSearch = true;
+        history.status = 'failed';
+        history.statusMessage = `Stalled — removed by ${profile.key} cleanup profile`;
+        await this.historyRepo.save(history);
+
+        const shouldRestart =
+          profile.autoRestart &&
+          (history.grabSource === 'auto' || allowManualRestart);
+        if (shouldRestart && history.mediaId) {
+          mediaToResearch.add(history.mediaId);
         }
       }
     }
 
-    // Re-trigger search for missing media if configured
-    if (searchAfter && needsSearch) {
+    if (mediaToResearch.size > 0) {
       this.log.log(
-        'StalledCleanup: triggering SearchMissing after stalled removal',
+        `StalledCleanup: queueing SearchMissing for ${mediaToResearch.size} media(s)`,
       );
-      // Use dataSource to create a command directly (avoid circular dep with SchedulerService)
+      // Insert command directly to avoid circular dep with SchedulerService.
       await this.dataSource.query(
         `INSERT INTO commands (name, status, trigger, body) VALUES ('SearchMissing', 'queued', 'scheduled', '{}')`,
       );
     }
+  }
+
+  /**
+   * Records a snapshot if the interval has elapsed, then checks whether the
+   * last `profile.samples` snapshots all have the same `downloadedBytes`.
+   */
+  private async evaluateStalled(
+    torrent: QbittorrentTorrent,
+    profile: CleanupProfile,
+    now: number,
+  ): Promise<boolean> {
+    const hash = torrent.hash;
+    const currentBytes = BigInt(torrent.downloaded ?? 0).toString();
+
+    const latest = await this.stalledCheckRepo.findOne({
+      where: { torrentHash: hash },
+      order: { checkedAt: 'DESC' },
+    });
+
+    const intervalMs = profile.intervalMinutes * 60_000;
+    const shouldSnapshot =
+      !latest || now - latest.checkedAt.getTime() >= intervalMs;
+
+    if (shouldSnapshot) {
+      await this.stalledCheckRepo.save(
+        this.stalledCheckRepo.create({
+          torrentHash: hash,
+          downloadedBytes: currentBytes,
+        }),
+      );
+    }
+
+    const recent = await this.stalledCheckRepo.find({
+      where: { torrentHash: hash },
+      order: { checkedAt: 'DESC' },
+      take: profile.samples,
+    });
+
+    if (recent.length < profile.samples) return false;
+    const first = recent[0].downloadedBytes;
+    return recent.every((s) => s.downloadedBytes === first);
+  }
+
+  /** Deletes stalled-check rows older than 24 h to keep the table small. */
+  private async pruneOldStalledChecks(): Promise<void> {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60_000);
+    await this.stalledCheckRepo.delete({ checkedAt: LessThan(cutoff) });
   }
 
   // ---------------------------------------------------------------------------

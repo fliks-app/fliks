@@ -224,6 +224,7 @@ export class EpisodeDownloadService {
 
     let downloadUrl = dto?.downloadUrl?.trim();
     let sourceTitle = dto?.sourceTitle?.trim();
+    const grabSource: 'auto' | 'manual' = downloadUrl ? 'manual' : 'auto';
 
     const epLabel = `S${String(season.seasonNumber).padStart(2, '0')}E${String(episode.episodeNumber).padStart(2, '0')}`;
     this.log.log(
@@ -285,6 +286,7 @@ export class EpisodeDownloadService {
       torrentHash: torrentHash || undefined,
       quality: parsed.quality.name,
       status: 'grabbed',
+      grabSource,
     });
     const saved = await this.historyRepo.save(row);
 
@@ -515,6 +517,7 @@ export class EpisodeDownloadService {
           torrentHash: torrentHash || undefined,
           quality: parsed.quality.name,
           status: 'grabbed',
+          grabSource: 'manual',
         }),
       );
       void this.notifications.dispatch('grab.started', {
@@ -596,6 +599,7 @@ export class EpisodeDownloadService {
           torrentHash: packHash || undefined,
           quality: bestPack.qualityName,
           status: 'grabbed',
+          grabSource: 'auto',
         }),
       );
       void this.notifications.dispatch('grab.started', {
@@ -669,6 +673,7 @@ export class EpisodeDownloadService {
             torrentHash: epHash || undefined,
             quality: pick.qualityName,
             status: 'grabbed',
+            grabSource: 'auto',
           }),
         );
         grabbed++;

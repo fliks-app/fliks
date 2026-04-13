@@ -36,6 +36,8 @@ import { MediaServersModule } from '../media-servers/media-servers.module';
 import { StreamingModule } from '../streaming/streaming.module';
 import { DownloadsModule } from '../downloads/downloads.module';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
+import { StalledCheck } from './entities/stalled-check.entity';
+import { CleanupProfilesModule } from '../cleanup-profiles/cleanup-profiles.module';
 
 @Module({
   imports: [
@@ -53,6 +55,7 @@ import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
       DelayProfile,
       QualityProfile,
       SubtitleFile,
+      StalledCheck,
     ]),
     IndexersModule,
     DownloadClientsModule,
@@ -66,6 +69,7 @@ import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
     MediaServersModule,
     StreamingModule,
     DownloadsModule,
+    CleanupProfilesModule,
   ],
   controllers: [CommandsController, SystemController],
   providers: [
