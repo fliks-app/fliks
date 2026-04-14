@@ -1,8 +1,8 @@
 import { Component, ChangeDetectionStrategy, inject, signal, OnInit } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
-import { MediaService, Media } from '../../core/services/api/media.service';
-import { StreamingApiService, ContinueWatchingItem } from '../../core/services/api/streaming-api.service';
+import { MediaService, Media, CalendarEntry } from '../../core/services/api/media.service';
+import { StreamingApiService, ContinueWatchingItem, RecommendationItem } from '../../core/services/api/streaming-api.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { CastService } from '../../core/services/cast.service';
@@ -11,6 +11,38 @@ import { MediaCardComponent } from '../../shared/components/media-card/media-car
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { LucideIconComponent } from '../../shared/components/lucide-icon';
 
+/**
+ * # Home page
+ *
+ * Displays several horizontal scroller sections:
+ *
+ * ## Libraries
+ * One card per accessible library with custom icon + color gradient.
+ * Data: `GET /api/libraries/mine`.
+ *
+ * ## Continuer à regarder
+ * Media the user started but didn't finish (< 90% or < dur-30s).
+ * Data: `GET /api/playback/continue-watching`.
+ *
+ * ## Bientôt disponible
+ * Movies (digitalRelease) and episodes (airDate) releasing within
+ * -3 days to +30 days that are monitored and don't have a file yet.
+ * Keeps entries visible up to 3 days after release date so newly
+ * released content stays until actually downloaded.
+ * Data: `GET /api/media/calendar?start=<J-3>&end=<J+30>&monitoredOnly=true`.
+ * Client-side filter: `!hasFile && (event === 'digital' || 'airing' || 'release')`.
+ * Deduplicated by mediaId (earliest date kept).
+ *
+ * ## Récemment ajoutés
+ * Last 20 media added to the library (movies + series mixed),
+ * excluding already-watched and missing-file entries.
+ * Data: `GET /api/media?sortBy=createdAt&sortOrder=DESC&limit=20&excludeWatched=true&missing=false`.
+ *
+ * ## Recommandations
+ * Genre-based suggestions derived from the user's watch history.
+ * See `RecommendationService` for the algorithm.
+ * Data: `GET /api/playback/recommendations`.
+ */
 @Component({
   selector: 'app-home',
   imports: [
@@ -35,6 +67,8 @@ export class HomeComponent implements OnInit {
   readonly libraries = signal<LibrarySummary[]>([]);
   readonly continueWatching = signal<ContinueWatchingItem[]>([]);
   readonly recentMedia = signal<Media[]>([]);
+  readonly comingSoon = signal<CalendarEntry[]>([]);
+  readonly recommendations = signal<RecommendationItem[]>([]);
 
   libraryUrl(lib: LibrarySummary): string {
     return `/libraries/${encodeURIComponent(lib.name)}`;
@@ -50,14 +84,40 @@ export class HomeComponent implements OnInit {
 
   async ngOnInit() {
     try {
-      const [libs, cw, recent] = await Promise.all([
+      const today = new Date();
+      const threeDaysAgo = new Date(today);
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      const in30d = new Date(today);
+      in30d.setDate(in30d.getDate() + 30);
+      const startStr = threeDaysAgo.toISOString().slice(0, 10);
+      const in30dStr = in30d.toISOString().slice(0, 10);
+
+      const [libs, cw, recent, calendar, recs] = await Promise.all([
         this.librariesApi.listMine().catch(() => []),
         this.streamingApi.getContinueWatching().catch(() => []),
         this.mediaService.getAll({ sortBy: 'createdAt', sortOrder: 'DESC', limit: 20, excludeWatched: true, missing: false }),
+        this.mediaService.getCalendar(startStr, in30dStr, true).catch(() => []),
+        this.streamingApi.getRecommendations().catch(() => []),
       ]);
       this.libraries.set(libs);
       this.continueWatching.set(cw);
       this.recentMedia.set(recent.data);
+      this.recommendations.set(recs);
+      // Keep only upcoming entries without a file (not yet downloaded).
+      // Backend event names: 'digital' (movies), 'airing' (episodes),
+      // 'release' (movies fallback).
+      const upcoming = calendar
+        .filter((e) => !e.hasFile && (e.event === 'digital' || e.event === 'airing' || e.event === 'release'))
+        .sort((a, b) => a.date.localeCompare(b.date));
+      // Deduplicate by mediaId (keep earliest upcoming date)
+      const seen = new Set<number>();
+      this.comingSoon.set(
+        upcoming.filter((e) => {
+          if (seen.has(e.mediaId)) return false;
+          seen.add(e.mediaId);
+          return true;
+        }),
+      );
     } catch { /* ignore */ }
     this.loading.set(false);
   }

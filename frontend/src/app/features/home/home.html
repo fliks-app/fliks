@@ -38,6 +38,21 @@
       </app-horizontal-scroller>
     }
 
+    <!-- Coming Soon -->
+    @if (comingSoon().length) {
+      <app-horizontal-scroller [title]="'home.coming_soon' | translate">
+        @for (entry of comingSoon(); track entry.id) {
+          <app-media-card
+            class="shrink-0 w-28 sm:w-36"
+            [imageUrl]="entry.posterUrl"
+            [title]="entry.title"
+            [subtitle]="entry.date"
+            [link]="['/' + (entry.type === 'series' ? 'series' : 'movies'), '' + entry.mediaId]"
+          />
+        }
+      </app-horizontal-scroller>
+    }
+
     <!-- Recently Added -->
     @if (recentMedia().length) {
       <app-horizontal-scroller [title]="'home.recent_media' | translate">
@@ -46,6 +61,21 @@
             class="shrink-0 w-28 sm:w-36"
             [media]="m"
             [subtitle]="'' + (m.year ?? '')"
+          />
+        }
+      </app-horizontal-scroller>
+    }
+
+    <!-- Because you watched -->
+    @if (recommendations().length) {
+      <app-horizontal-scroller [title]="'home.recommendations' | translate">
+        @for (rec of recommendations(); track rec.media.id) {
+          <app-media-card
+            class="shrink-0 w-28 sm:w-36"
+            [imageUrl]="rec.media.posterUrl"
+            [title]="rec.media.title"
+            [subtitle]="'' + (rec.media.year ?? '')"
+            [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
           />
         }
       </app-horizontal-scroller>

@@ -286,11 +286,11 @@ export class MediaService {
     return firstValueFrom(this.http.put<Media>(`/api/media/${id}`, { monitored }));
   }
 
-  getCalendar(start: string, end: string) {
+  getCalendar(start: string, end: string, monitoredOnly = false) {
+    const params: Record<string, string> = { start, end };
+    if (monitoredOnly) params['monitoredOnly'] = 'true';
     return firstValueFrom(
-      this.http.get<CalendarEntry[]>('/api/media/calendar', {
-        params: { start, end },
-      }),
+      this.http.get<CalendarEntry[]>('/api/media/calendar', { params }),
     );
   }
 

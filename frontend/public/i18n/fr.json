@@ -143,7 +143,9 @@
   "home": {
     "libraries": "Bibliothèques",
     "continue_watching": "Reprendre la lecture",
-    "recent_media": "Récemment ajoutés"
+    "coming_soon": "Bientôt disponible",
+    "recent_media": "Récemment ajoutés",
+    "recommendations": "Recommandations"
   },
   "playback_settings": {
     "title": "Paramètres de lecture",

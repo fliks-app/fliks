@@ -96,6 +96,19 @@ export interface WatchHistoryItem {
   episodeLabel: string | null;
 }
 
+export interface RecommendationItem {
+  media: {
+    id: number;
+    title: string;
+    type: string;
+    year: number;
+    posterUrl: string | null;
+    genres: string[];
+  };
+  becauseTitle: string;
+  score: number;
+}
+
 export interface ContinueWatchingItem {
   id: number;
   mediaId: number;
@@ -295,6 +308,12 @@ export class StreamingApiService {
   getContinueWatching() {
     return firstValueFrom(
       this.http.get<ContinueWatchingItem[]>('/api/playback/continue-watching'),
+    );
+  }
+
+  getRecommendations() {
+    return firstValueFrom(
+      this.http.get<RecommendationItem[]>('/api/playback/recommendations'),
     );
   }
 

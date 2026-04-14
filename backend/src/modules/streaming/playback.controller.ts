@@ -14,6 +14,7 @@ import {
 import type { Request } from 'express';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PlaybackService } from './playback.service';
+import { RecommendationService } from './recommendation.service';
 import { User } from '../users/entities/user.entity';
 import { LibrariesService } from '../libraries/libraries.service';
 
@@ -22,8 +23,16 @@ import { LibrariesService } from '../libraries/libraries.service';
 export class PlaybackController {
   constructor(
     private readonly playbackService: PlaybackService,
+    private readonly recommendationService: RecommendationService,
     private readonly libraries: LibrariesService,
   ) {}
+
+  @Get('recommendations')
+  async recommendations(@Req() req: Request) {
+    const user = req.user as User;
+    const libraryIds = await this.libraries.getAccessibleLibraryIds(user);
+    return this.recommendationService.getRecommendations(user.id, libraryIds);
+  }
 
   @Get('watched-ids')
   async watchedIds(@Req() req: Request) {

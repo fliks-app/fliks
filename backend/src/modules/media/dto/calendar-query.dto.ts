@@ -1,4 +1,5 @@
-import { IsDateString, IsOptional, IsEnum } from 'class-validator';
+import { IsDateString, IsOptional, IsEnum, IsBoolean } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { MediaType } from '../../../common/enums';
 
 export class CalendarQueryDto {
@@ -13,4 +14,10 @@ export class CalendarQueryDto {
   @IsEnum(MediaType)
   @IsOptional()
   type?: MediaType;
+
+  /** When true, only return monitored media/episodes. */
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  monitoredOnly?: boolean;
 }

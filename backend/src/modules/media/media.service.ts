@@ -799,6 +799,9 @@ export class MediaService {
               .orWhere('m.releaseDate BETWEEN :start AND :end', { start, end });
           }),
         );
+      if (dto.monitoredOnly) {
+        moviesQb.andWhere('m.monitored = true');
+      }
       if (accessibleLibraryIds !== undefined && accessibleLibraryIds !== null) {
         if (accessibleLibraryIds.length === 0) {
           moviesQb.andWhere('1 = 0');
@@ -861,6 +864,9 @@ export class MediaService {
         .innerJoinAndSelect('season.media', 'media')
         .where('ep.airDate BETWEEN :start AND :end', { start, end })
         .orderBy('ep.airDate', 'ASC');
+      if (dto.monitoredOnly) {
+        epQb.andWhere('media.monitored = true').andWhere('ep.monitored = true');
+      }
       if (accessibleLibraryIds !== undefined && accessibleLibraryIds !== null) {
         if (accessibleLibraryIds.length === 0) {
           epQb.andWhere('1 = 0');

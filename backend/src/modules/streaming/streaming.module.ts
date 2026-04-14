@@ -16,6 +16,7 @@ import { PlaybackService } from './playback.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { SubtitleBurnInService } from './subtitle-burn-in.service';
 import { ThumbnailService } from './thumbnail.service';
+import { RecommendationService } from './recommendation.service';
 import { Command } from '../scheduler/entities/command.entity';
 import { AuthModule } from '../auth/auth.module';
 import { SettingsModule } from '../settings/settings.module';
@@ -46,6 +47,7 @@ import { LibrariesModule } from '../libraries/libraries.module';
     ActiveStreamTracker,
     SubtitleBurnInService,
     ThumbnailService,
+    RecommendationService,
   ],
   exports: [
     PlaybackService,
