@@ -60,6 +60,20 @@
       <span class="text-sm text-base-content/70">{{ 'home.only_my_requests' | translate }}</span>
     </label>
 
+    <!-- Recently Added -->
+    @if (recentMedia().length) {
+      <app-horizontal-scroller [title]="'home.recent_media' | translate">
+        @for (m of recentMedia(); track m.id) {
+          <app-media-card
+            class="shrink-0 w-28 sm:w-36"
+            [media]="m"
+            [subtitle]="'' + (m.year ?? '')"
+            [hideStatusBar]="true"
+          />
+        }
+      </app-horizontal-scroller>
+    }
+
     <!-- Coming Soon -->
     @if (comingSoon().length) {
       <app-horizontal-scroller [title]="'home.coming_soon' | translate">
@@ -70,20 +84,6 @@
             [title]="entry.title"
             [subtitle]="entry.date"
             [link]="['/' + (entry.type === 'series' ? 'series' : 'movies'), '' + entry.mediaId]"
-          />
-        }
-      </app-horizontal-scroller>
-    }
-
-    <!-- Recently Added -->
-    @if (recentMedia().length) {
-      <app-horizontal-scroller [title]="'home.recent_media' | translate">
-        @for (m of recentMedia(); track m.id) {
-          <app-media-card
-            class="shrink-0 w-28 sm:w-36"
-            [media]="m"
-            [subtitle]="'' + (m.year ?? '')"
-            [hideStatusBar]="true"
           />
         }
       </app-horizontal-scroller>
