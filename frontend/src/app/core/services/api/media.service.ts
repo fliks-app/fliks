@@ -148,6 +148,7 @@ export interface SearchParams {
   letter?: string;
   excludeWatched?: boolean;
   libraryId?: number;
+  requestedByMe?: boolean;
 }
 
 export interface VideoStreamInfo {
@@ -286,9 +287,10 @@ export class MediaService {
     return firstValueFrom(this.http.put<Media>(`/api/media/${id}`, { monitored }));
   }
 
-  getCalendar(start: string, end: string, monitoredOnly = false) {
+  getCalendar(start: string, end: string, monitoredOnly = false, requestedByMe = false) {
     const params: Record<string, string> = { start, end };
     if (monitoredOnly) params['monitoredOnly'] = 'true';
+    if (requestedByMe) params['requestedByMe'] = 'true';
     return firstValueFrom(
       this.http.get<CalendarEntry[]>('/api/media/calendar', { params }),
     );

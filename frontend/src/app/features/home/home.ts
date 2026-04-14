@@ -1,5 +1,6 @@
 import { Component, ChangeDetectionStrategy, inject, signal, OnInit } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { MediaService, Media, CalendarEntry } from '../../core/services/api/media.service';
 import { StreamingApiService, ContinueWatchingItem, RecommendationItem } from '../../core/services/api/streaming-api.service';
@@ -46,7 +47,7 @@ import { LucideIconComponent } from '../../shared/components/lucide-icon';
 @Component({
   selector: 'app-home',
   imports: [
-    RouterLink, TranslateModule,
+    RouterLink, TranslateModule, FormsModule,
     MediaCardComponent,
     HorizontalScrollerComponent,
     LucideIconComponent,
@@ -69,6 +70,9 @@ export class HomeComponent implements OnInit {
   readonly recentMedia = signal<Media[]>([]);
   readonly comingSoon = signal<CalendarEntry[]>([]);
   readonly recommendations = signal<RecommendationItem[]>([]);
+  readonly onlyMyRequests = signal(
+    localStorage.getItem('fliks.home.onlyMyRequests') === 'true',
+  );
 
   libraryUrl(lib: LibrarySummary): string {
     return `/libraries/${encodeURIComponent(lib.name)}`;
@@ -83,33 +87,54 @@ export class HomeComponent implements OnInit {
   }
 
   async ngOnInit() {
+    // Load non-filterable sections once
     try {
-      const today = new Date();
-      const threeDaysAgo = new Date(today);
-      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-      const in30d = new Date(today);
-      in30d.setDate(in30d.getDate() + 30);
-      const startStr = threeDaysAgo.toISOString().slice(0, 10);
-      const in30dStr = in30d.toISOString().slice(0, 10);
-
-      const [libs, cw, recent, calendar, recs] = await Promise.all([
+      const [libs, cw, recs] = await Promise.all([
         this.librariesApi.listMine().catch(() => []),
         this.streamingApi.getContinueWatching().catch(() => []),
-        this.mediaService.getAll({ sortBy: 'createdAt', sortOrder: 'DESC', limit: 20, excludeWatched: true, missing: false }),
-        this.mediaService.getCalendar(startStr, in30dStr, true).catch(() => []),
         this.streamingApi.getRecommendations().catch(() => []),
       ]);
       this.libraries.set(libs);
       this.continueWatching.set(cw);
-      this.recentMedia.set(recent.data);
       this.recommendations.set(recs);
-      // Keep only upcoming entries without a file (not yet downloaded).
-      // Backend event names: 'digital' (movies), 'airing' (episodes),
-      // 'release' (movies fallback).
+    } catch { /* ignore */ }
+    // Load filterable sections (recent + coming soon)
+    await this.loadFilteredSections();
+    this.loading.set(false);
+  }
+
+  async toggleOnlyMyRequests() {
+    this.onlyMyRequests.update((v) => !v);
+    localStorage.setItem('fliks.home.onlyMyRequests', String(this.onlyMyRequests()));
+    await this.loadFilteredSections();
+  }
+
+  private async loadFilteredSections() {
+    const mine = this.onlyMyRequests();
+    const today = new Date();
+    const threeDaysAgo = new Date(today);
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+    const in30d = new Date(today);
+    in30d.setDate(in30d.getDate() + 30);
+    const startStr = threeDaysAgo.toISOString().slice(0, 10);
+    const in30dStr = in30d.toISOString().slice(0, 10);
+
+    try {
+      const [recent, calendar] = await Promise.all([
+        this.mediaService.getAll({
+          sortBy: 'createdAt',
+          sortOrder: 'DESC',
+          limit: 20,
+          excludeWatched: true,
+          missing: false,
+          requestedByMe: mine || undefined,
+        }),
+        this.mediaService.getCalendar(startStr, in30dStr, true, mine).catch(() => []),
+      ]);
+      this.recentMedia.set(recent.data);
       const upcoming = calendar
         .filter((e) => !e.hasFile && (e.event === 'digital' || e.event === 'airing' || e.event === 'release'))
         .sort((a, b) => a.date.localeCompare(b.date));
-      // Deduplicate by mediaId (keep earliest upcoming date)
       const seen = new Set<number>();
       this.comingSoon.set(
         upcoming.filter((e) => {
@@ -119,7 +144,6 @@ export class HomeComponent implements OnInit {
         }),
       );
     } catch { /* ignore */ }
-    this.loading.set(false);
   }
 
   async playContinueWatching(item: ContinueWatchingItem) {

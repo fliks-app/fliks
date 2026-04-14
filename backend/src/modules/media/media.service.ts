@@ -415,6 +415,16 @@ export class MediaService {
       );
     }
 
+    if (query.requestedByMe && userId) {
+      qb.andWhere(
+        `media.id IN (
+          SELECT r."mediaId" FROM requests r
+          WHERE r."userId" = :reqUserId AND r."mediaId" IS NOT NULL
+        )`,
+        { reqUserId: userId },
+      );
+    }
+
     if (query.q) {
       this.applyFullTextSearch(qb, query.q);
     }
@@ -732,6 +742,7 @@ export class MediaService {
   async getCalendar(
     dto: CalendarQueryDto,
     accessibleLibraryIds?: number[] | null,
+    userId?: number,
   ) {
     // TypeORM may return PostgreSQL `date` columns as Date objects.
     // Normalise to YYYY-MM-DD string to avoid timezone shifts.
@@ -802,6 +813,12 @@ export class MediaService {
       if (dto.monitoredOnly) {
         moviesQb.andWhere('m.monitored = true');
       }
+      if (dto.requestedByMe && userId) {
+        moviesQb.andWhere(
+          `m.id IN (SELECT r."mediaId" FROM requests r WHERE r."userId" = :calUserId AND r."mediaId" IS NOT NULL)`,
+          { calUserId: userId },
+        );
+      }
       if (accessibleLibraryIds !== undefined && accessibleLibraryIds !== null) {
         if (accessibleLibraryIds.length === 0) {
           moviesQb.andWhere('1 = 0');
@@ -866,6 +883,12 @@ export class MediaService {
         .orderBy('ep.airDate', 'ASC');
       if (dto.monitoredOnly) {
         epQb.andWhere('media.monitored = true').andWhere('ep.monitored = true');
+      }
+      if (dto.requestedByMe && userId) {
+        epQb.andWhere(
+          `media.id IN (SELECT r."mediaId" FROM requests r WHERE r."userId" = :calUserId AND r."mediaId" IS NOT NULL)`,
+          { calUserId: userId },
+        );
       }
       if (accessibleLibraryIds !== undefined && accessibleLibraryIds !== null) {
         if (accessibleLibraryIds.length === 0) {

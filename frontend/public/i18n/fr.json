@@ -145,7 +145,8 @@
     "continue_watching": "Reprendre la lecture",
     "coming_soon": "Bientôt disponible",
     "recent_media": "Récemment ajoutés",
-    "recommendations": "Recommandations"
+    "recommendations": "Recommandations",
+    "only_my_requests": "Afficher uniquement les médias que j'ai demandé"
   },
   "playback_settings": {
     "title": "Paramètres de lecture",

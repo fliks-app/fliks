@@ -106,7 +106,7 @@ export class MediaController {
     const accessibleLibraryIds = await this.libraries.getAccessibleLibraryIds(user);
     return this.mediaService.findAll(
       query,
-      query.excludeWatched ? user?.id : undefined,
+      (query.excludeWatched || query.requestedByMe) ? user?.id : undefined,
       accessibleLibraryIds,
     );
   }
@@ -136,7 +136,7 @@ export class MediaController {
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
   async calendar(@Query() query: CalendarQueryDto, @CurrentUser() user: User) {
     const accessibleLibraryIds = await this.libraries.getAccessibleLibraryIds(user);
-    return this.mediaService.getCalendar(query, accessibleLibraryIds);
+    return this.mediaService.getCalendar(query, accessibleLibraryIds, user?.id);
   }
 
   @Patch('bulk')

@@ -20,4 +20,10 @@ export class CalendarQueryDto {
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
   monitoredOnly?: boolean;
+
+  /** Only return media the current user requested. */
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  requestedByMe?: boolean;
 }

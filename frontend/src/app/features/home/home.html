@@ -53,6 +53,13 @@
       </app-horizontal-scroller>
     }
 
+    <!-- Filter toggle -->
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" class="toggle toggle-sm toggle-primary"
+        [ngModel]="onlyMyRequests()" (ngModelChange)="toggleOnlyMyRequests()" />
+      <span class="text-sm text-base-content/70">{{ 'home.only_my_requests' | translate }}</span>
+    </label>
+
     <!-- Coming Soon -->
     @if (comingSoon().length) {
       <app-horizontal-scroller [title]="'home.coming_soon' | translate">

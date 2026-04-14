@@ -91,4 +91,10 @@ export class SearchMediaDto {
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
   excludeWatched?: boolean;
+
+  /** Only return media that the current user requested (via the requests system). */
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  requestedByMe?: boolean;
 }
