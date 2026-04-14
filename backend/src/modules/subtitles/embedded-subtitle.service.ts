@@ -104,16 +104,16 @@ export class EmbeddedSubtitleService {
 
     // Remove all existing embedded subs for this file, then recreate
     await this.subtitleFileRepo.delete({
-      mediaFileId,
+      mediaFile: { id: mediaFileId },
       providerType: SubtitleProviderType.EMBEDDED,
     });
 
     const created: SubtitleFile[] = [];
     for (const stream of streams) {
       const sub = this.subtitleFileRepo.create({
-        mediaId,
-        mediaFileId,
-        episodeId,
+        media: { id: mediaId } as any,
+        mediaFile: { id: mediaFileId } as any,
+        episode: episodeId ? ({ id: episodeId } as any) : undefined,
         language: normalizeLanguage(stream.language),
         forced: stream.forced,
         hearingImpaired: stream.hearingImpaired,
