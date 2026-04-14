@@ -557,8 +557,14 @@ export class MediaService {
   }
 
   async findOne(id: number): Promise<Media> {
+    // relationLoadStrategy 'query' issues one SELECT per relation instead of
+    // a single LEFT JOIN — without it, a series with 200 episodes × 200 files
+    // × N tags hydrates the cartesian-product (40k+ rows) and the endpoint
+    // takes ~4 s. With separate queries each relation is bounded and the
+    // total drops to a few hundred ms.
     const media = await this.mediaRepo.findOne({
       where: { id },
+      relationLoadStrategy: 'query',
       relations: [
         'tags',
         'seasons',

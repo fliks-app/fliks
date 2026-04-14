@@ -449,6 +449,44 @@ export class StreamingController {
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(playlist);
+
+    // Pre-spawn ffmpeg as soon as we know the target quality. The player
+    // typically requests seg-0000 ~50-200ms after the master, so kicking
+    // ffmpeg here amortises the spawn + analyse latency. Skipped when no
+    // quality is pinned (auto mode — we can't guess which variant the
+    // player picks).
+    if (effectiveOnlyQuality && effectiveOnlyQuality !== 'auto') {
+      const existing = this.transcodingService.getExistingSession(
+        mediaFileId,
+        req.user?.id,
+      );
+      if (!existing || existing.process.exitCode !== null) {
+        const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+        if (effectiveOnlyQuality === 'remux' || effectiveOnlyQuality === 'original') {
+          const copyAudio =
+            this.activeStreamTracker.getCanCopyAudio(mediaFileId);
+          void this.transcodingService
+            .getOrCreateRemuxSession(
+              mediaFileId,
+              resolved.absolutePath,
+              copyAudio,
+              0,
+              ctx,
+            )
+            .catch(() => {});
+        } else {
+          void this.transcodingService
+            .getOrCreateSession(
+              mediaFileId,
+              effectiveOnlyQuality,
+              resolved.absolutePath,
+              0,
+              ctx,
+            )
+            .catch(() => {});
+        }
+      }
+    }
   }
 
   // Subtitle VTT routes MUST be registered before :mediaFileId/:quality/* — otherwise

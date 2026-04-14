@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ChildProcess, spawn, execFile } from 'child_process';
 import { promisify } from 'util';
-import { existsSync } from 'fs';
+import { existsSync, watch, FSWatcher } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { TRANSCODE_DIR } from '../../common/constants/paths';
@@ -614,31 +614,66 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Get a segment file path, waiting if it's being generated.
+   *
+   * Combined with the `+temp_file` HLS flag, ffmpeg writes segments to
+   * `<name>.tmp` and atomically renames on completion — so a file at the
+   * final path is always complete and we can serve immediately. fs.watch
+   * (inotify) wakes us on the rename within milliseconds instead of the
+   * old 500ms polling loop.
    */
   async getSegmentPath(
     session: TranscodeSession,
     segmentName: string,
   ): Promise<string | null> {
     const segPath = path.join(session.cachePath, segmentName);
+    if (existsSync(segPath)) return segPath;
 
-    // Wait up to 60s for the segment to appear
-    for (let i = 0; i < 120; i++) {
-      if (session.process.exitCode !== null && !(await fileExists(segPath))) {
-        return null;
+    const dir = path.dirname(segPath);
+    const name = path.basename(segPath);
+
+    return new Promise((resolve) => {
+      let watcher: FSWatcher | null = null;
+      let exitTimer: NodeJS.Timeout | null = null;
+      let timeout: NodeJS.Timeout | null = null;
+      let settled = false;
+
+      const finish = (val: string | null) => {
+        if (settled) return;
+        settled = true;
+        watcher?.close();
+        if (exitTimer) clearInterval(exitTimer);
+        if (timeout) clearTimeout(timeout);
+        resolve(val);
+      };
+
+      try {
+        watcher = watch(dir, { persistent: false }, (_event, filename) => {
+          if (filename === name && existsSync(segPath)) {
+            finish(segPath);
+          }
+        });
+      } catch {
+        // Directory doesn't exist yet — exitTimer's existsSync check covers it.
       }
-      if (await fileExists(segPath)) {
-        try {
-          const size1 = (await fsp.stat(segPath)).size;
-          await new Promise((r) => setTimeout(r, 200));
-          const size2 = (await fsp.stat(segPath)).size;
-          if (size1 === size2 && size1 > 0) return segPath;
-        } catch {
-          return null;
+
+      // Cover the race where the file appeared between the existsSync above
+      // and watch() registering its handlers.
+      if (existsSync(segPath)) {
+        finish(segPath);
+        return;
+      }
+
+      exitTimer = setInterval(() => {
+        if (session.process.exitCode !== null && !existsSync(segPath)) {
+          finish(null);
+        } else if (existsSync(segPath)) {
+          // Belt-and-braces: catch the file even if the watcher missed an event.
+          finish(segPath);
         }
-      }
-      await new Promise((r) => setTimeout(r, 500));
-    }
-    return null;
+      }, 500);
+
+      timeout = setTimeout(() => finish(null), 60_000);
+    });
   }
 
   /**
@@ -684,13 +719,28 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       segDir,
       `seg-${String(startSegment).padStart(4, '0')}${segExt}`,
     );
+    const firstSegName = path.basename(firstSeg);
 
+    let readyWatcher: FSWatcher | null = null;
     const checkReady = () => {
       if (!resolved && existsSync(firstSeg)) {
         resolved = true;
+        readyWatcher?.close();
+        clearInterval(pollTimer);
         readyResolve();
       }
     };
+
+    // fs.watch (inotify) wakes us within ms of ffmpeg's atomic rename
+    // (combined with +temp_file). pollTimer below is a safety net for the
+    // rare case where segDir didn't exist at watcher registration time.
+    try {
+      readyWatcher = watch(segDir, { persistent: false }, (_event, filename) => {
+        if (filename === firstSegName) checkReady();
+      });
+    } catch {
+      // Directory will be created by ffmpeg shortly — pollTimer covers this.
+    }
 
     proc.stderr.on('data', (chunk: Buffer) => {
       stderr += chunk.toString();
@@ -699,11 +749,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     const pollTimer = setInterval(() => {
       checkReady();
-      if (resolved) clearInterval(pollTimer);
     }, 500);
 
     proc.on('close', (code) => {
       clearInterval(pollTimer);
+      readyWatcher?.close();
       if (!resolved) {
         resolved = true;
         readyResolve();
@@ -1229,7 +1279,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         '-start_number', String(startSegment),
         '-hls_segment_type', 'fmp4',
         '-hls_fmp4_init_filename', 'init_%v.mp4',
-        '-hls_flags', 'independent_segments',
+        '-hls_flags', 'independent_segments+temp_file',
         '-var_stream_map', varParts.join(' '),
         '-hls_segment_filename', path.join(outputDir, '%v', 'seg-%04d.m4s'),
         path.join(outputDir, '%v', 'index.m3u8'),
@@ -1275,7 +1325,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         );
       }
       args.push(
-        '-hls_flags', 'independent_segments',
+        '-hls_flags', 'independent_segments+temp_file',
         path.join(outputDir, 'index.m3u8'),
       );
     }
@@ -1320,6 +1370,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       'hls',
       '-hls_time',
       String(SEGMENT_DURATION),
+      // Short first segment cuts post-seek time-to-first-byte: ffmpeg writes
+      // the initial segment after INIT_TIME of input instead of waiting for
+      // a full SEGMENT_DURATION.
+      '-hls_init_time',
+      String(INIT_TIME),
       '-hls_list_size',
       '0',
       '-start_number',
@@ -1331,7 +1386,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       '-hls_segment_filename',
       path.join(outputDir, 'seg-%04d.m4s'),
       '-hls_flags',
-      'independent_segments',
+      'independent_segments+temp_file',
       path.join(outputDir, 'index.m3u8'),
     );
 
@@ -1423,6 +1478,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       'hls',
       '-hls_time',
       String(SEGMENT_DURATION),
+      // Match the transcode paths so post-seek remux writes a short first
+      // segment (~INIT_TIME) instead of waiting for a full SEGMENT_DURATION.
+      '-hls_init_time',
+      String(INIT_TIME),
       '-hls_list_size',
       '0',
       '-start_number',
@@ -1440,7 +1499,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       );
     }
     args.push(
-      '-hls_flags', 'independent_segments',
+      '-hls_flags', 'independent_segments+temp_file',
       path.join(outputDir, 'index.m3u8'),
     );
 
