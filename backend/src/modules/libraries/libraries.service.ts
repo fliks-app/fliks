@@ -114,33 +114,7 @@ export class LibrariesService implements OnModuleInit {
           .execute();
       }
 
-      // 4. Translate legacy default-folder settings to library flags.
-      const defaultMovieIdRaw = await this.settings.get(
-        'default_root_folder_movie',
-      );
-      const defaultSeriesIdRaw = await this.settings.get(
-        'default_root_folder_series',
-      );
-
-      const promoteDefault = async (
-        rfIdRaw: string | null,
-        flag: 'isDefaultForMovies' | 'isDefaultForSeries',
-      ) => {
-        const rfId = rfIdRaw ? parseInt(rfIdRaw, 10) : NaN;
-        if (!Number.isFinite(rfId)) return;
-        const rf = orphanRoots.find((r) => r.id === rfId);
-        if (!rf) return;
-        const lib = libraries.find((l) => l.name === (rf.label?.trim() || rf.path));
-        if (!lib) return;
-        await m.update(Library, lib.id, { [flag]: true });
-      };
-
-      await promoteDefault(defaultMovieIdRaw, 'isDefaultForMovies');
-      await promoteDefault(defaultSeriesIdRaw, 'isDefaultForSeries');
-      await this.settings.delete('default_root_folder_movie');
-      await this.settings.delete('default_root_folder_series');
-
-      // 5. Grant every existing user access to every new library.
+      // 4. Grant every existing user access to every new library.
       const users = await m.find(User);
       const accessRows: LibraryUserAccess[] = [];
       for (const u of users) {
