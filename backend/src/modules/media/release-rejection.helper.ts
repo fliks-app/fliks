@@ -8,6 +8,29 @@ export interface ReleaseRejection {
   params?: Record<string, number | string>;
 }
 
+/**
+ * Detect the video codec from a release title and return a size scaling
+ * factor relative to x264 (= 1.0). Quality definition size limits are
+ * typically calibrated for x264; more efficient codecs produce smaller
+ * files at the same visual quality.
+ *
+ * Factors based on industry consensus:
+ *   x264 (AVC)   → 1.0  (baseline)
+ *   x265 (HEVC)  → 0.55 (~45% smaller than x264)
+ *   AV1          → 0.45 (~55% smaller than x264)
+ *   VP9          → 0.60 (~40% smaller than x264)
+ *   Unknown      → 1.0  (conservative — assume x264)
+ */
+function detectCodecSizeFactor(title?: string): number {
+  if (!title) return 1;
+  const t = title.toLowerCase();
+  if (/\bav1\b/.test(t)) return 0.45;
+  if (/\b(x265|h\.?265|hevc)\b/.test(t)) return 0.55;
+  if (/\bvp9\b/.test(t)) return 0.6;
+  // x264/h264 or unknown → baseline
+  return 1;
+}
+
 export interface SizeLimits {
   min: number;
   preferred: number;
@@ -73,6 +96,8 @@ export function computeRejections(opts: {
   seeders: number;
   indexerId: number;
   indexerMinSeeders: Map<number, number>;
+  /** Release title — used to detect video codec for size-limit scaling. */
+  releaseTitle?: string;
 }): ReleaseRejection[] {
   const out: ReleaseRejection[] = [];
 
@@ -88,23 +113,35 @@ export function computeRejections(opts: {
     out.push({ code: 'BLOCKLISTED' });
   }
 
-  // Quality definition limits are in MB/h — convert file size to the same unit
+  // Quality definition limits are in MB/h — convert file size to the same unit.
+  // Limits are typically calibrated for x264. Modern codecs (x265/HEVC, AV1)
+  // produce significantly smaller files at equivalent quality, so we scale
+  // the limits down by a codec efficiency factor to avoid false "too small"
+  // rejections.
+  const codecFactor = detectCodecSizeFactor(opts.releaseTitle);
   const runtimeHours = opts.runtimeMinutes > 0 ? opts.runtimeMinutes / 60 : 0;
   const sizeMb = opts.sizeBytes > 0 ? opts.sizeBytes / (1024 * 1024) : 0;
   const sizeMbPerHour = runtimeHours > 0 ? sizeMb / runtimeHours : 0;
-  const limits = opts.sizeByQuality.get(opts.qualityId);
+  const rawLimits = opts.sizeByQuality.get(opts.qualityId);
+  const limits = rawLimits
+    ? {
+        min: rawLimits.min * codecFactor,
+        preferred: rawLimits.preferred * codecFactor,
+        max: rawLimits.max * codecFactor,
+      }
+    : undefined;
 
   if (limits && sizeMbPerHour > 0) {
     if (limits.min > 0 && sizeMbPerHour < limits.min) {
       out.push({
         code: 'SIZE_TOO_LOW',
-        params: { actual: Math.round(sizeMbPerHour), min: limits.min },
+        params: { actual: Math.round(sizeMbPerHour), min: Math.round(limits.min) },
       });
     }
     if (limits.max > 0 && sizeMbPerHour > limits.max) {
       out.push({
         code: 'SIZE_TOO_HIGH',
-        params: { actual: Math.round(sizeMbPerHour), max: limits.max },
+        params: { actual: Math.round(sizeMbPerHour), max: Math.round(limits.max) },
       });
     }
     if (
@@ -118,7 +155,7 @@ export function computeRejections(opts: {
           code: 'SIZE_NOT_PREFERRED',
           params: {
             actual: Math.round(sizeMbPerHour),
-            preferred: limits.preferred,
+            preferred: Math.round(limits.preferred),
           },
         });
       }

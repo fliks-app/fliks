@@ -152,6 +152,7 @@ export class MovieDownloadService {
           seeders: r.seeders,
           indexerId: r.indexerId,
           indexerMinSeeders,
+          releaseTitle: r.title,
         });
         return {
           title: r.title,

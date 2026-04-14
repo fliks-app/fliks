@@ -336,6 +336,7 @@ export class EpisodeDownloadService {
       seeders: r.seeders,
       indexerId: r.indexerId,
       indexerMinSeeders,
+      releaseTitle: r.title,
     });
     return {
       title: r.title,
