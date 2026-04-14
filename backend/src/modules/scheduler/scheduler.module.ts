@@ -39,6 +39,7 @@ import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { StalledCheck } from './entities/stalled-check.entity';
 import { CleanupProfilesModule } from '../cleanup-profiles/cleanup-profiles.module';
 import { LibrariesModule } from '../libraries/libraries.module';
+import { ProfilesModule } from '../profiles/profiles.module';
 import { Library } from '../libraries/entities/library.entity';
 
 @Module({
@@ -74,6 +75,7 @@ import { Library } from '../libraries/entities/library.entity';
     DownloadsModule,
     CleanupProfilesModule,
     LibrariesModule,
+    ProfilesModule,
   ],
   controllers: [CommandsController, SystemController],
   providers: [

@@ -26,6 +26,15 @@ import { EventsService } from './events.service';
 import { DownloadsService } from '../downloads/downloads.service';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { ThumbnailService } from '../streaming/thumbnail.service';
+import { CustomFormatsService } from '../profiles/custom-formats.service';
+import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
+import { BlocklistService } from '../blocklist/blocklist.service';
+import {
+  buildAllowedQualityIds,
+  buildIndexerMinSeeders,
+  allowedAudioLanguageIds,
+  scoreAndSortReleases,
+} from '../media/release-rejection.helper';
 
 @Injectable()
 export class SchedulerService implements OnModuleInit {
@@ -59,6 +68,9 @@ export class SchedulerService implements OnModuleInit {
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly thumbnailService: ThumbnailService,
+    private readonly customFormats: CustomFormatsService,
+    private readonly qualityDefs: QualityDefinitionsService,
+    private readonly blocklist: BlocklistService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -358,6 +370,8 @@ export class SchedulerService implements OnModuleInit {
     const missing = await this.mediaRepo
       .createQueryBuilder('m')
       .leftJoin('m.files', 'f')
+      .leftJoinAndSelect('m.qualityProfile', 'qp')
+      .leftJoinAndSelect('m.languageProfile', 'lp')
       .where('m.monitored = true')
       .andWhere('m.type = :type', { type: MediaType.MOVIE })
       .andWhere('f.id IS NULL')
@@ -366,6 +380,14 @@ export class SchedulerService implements OnModuleInit {
     if (!missing.length) return;
 
     const today = new Date().toISOString().slice(0, 10);
+    const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
+    const indexerMinSeeders = buildIndexerMinSeeders(indexers);
+    const indexerUnknownLang = new Map(
+      indexers.map((ix) => [
+        ix.id,
+        ix.settings?.unknownLanguageIsoCode as string | undefined,
+      ]),
+    );
 
     for (let i = 0; i < missing.length; i++) {
       const media = missing[i];
@@ -377,10 +399,8 @@ export class SchedulerService implements OnModuleInit {
         message: media.title,
       });
 
-      // Skip if availability criteria not met
       if (!this.isAvailable(media, today)) continue;
 
-      // Skip if already grabbed and pending
       const pending = await this.historyRepo.findOne({
         where: { media: { id: media.id }, status: 'grabbed' },
       });
@@ -395,7 +415,26 @@ export class SchedulerService implements OnModuleInit {
       );
       if (!results.length) continue;
 
-      const pick = results[0];
+      const sorted = await scoreAndSortReleases(
+        results,
+        {
+          allowed: buildAllowedQualityIds(media.qualityProfile?.items),
+          allowedLangs: allowedAudioLanguageIds(media.languageProfile?.audioLanguages),
+          sizeByQuality,
+          indexerMinSeeders,
+          indexerUnknownLang,
+          runtimeMinutes: media.runtime ?? 0,
+        },
+        this.scorerDeps(),
+      );
+      const pick = sorted.find((r) => r.rejections.length === 0);
+      if (!pick) {
+        this.log.debug?.(
+          `SearchMissing[movie]: no release without rejections for "${media.title}" (${sorted.length} checked)`,
+        );
+        continue;
+      }
+
       try {
         this.log.log(
           `SearchMissing: sending movie "${pick.title}" to qBittorrent — ${pick.downloadUrl}`,
@@ -438,13 +477,24 @@ export class SchedulerService implements OnModuleInit {
     indexers: Indexer[],
     qbitClient: DownloadClient,
   ): Promise<void> {
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const today = new Date().toISOString().slice(0, 10);
+    const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
+    const indexerMinSeeders = buildIndexerMinSeeders(indexers);
+    const indexerUnknownLang = new Map(
+      indexers.map((ix) => [
+        ix.id,
+        ix.settings?.unknownLanguageIsoCode as string | undefined,
+      ]),
+    );
 
-    // Find monitored series with monitored, un-downloaded, aired episodes
+    // Find monitored series with monitored, un-downloaded, aired episodes.
+    // Include quality + language profiles for scoring.
     const episodes = await this.episodeRepo
       .createQueryBuilder('ep')
       .innerJoin('ep.season', 'season')
       .innerJoin('season.media', 'media')
+      .leftJoinAndSelect('media.qualityProfile', 'qp')
+      .leftJoinAndSelect('media.languageProfile', 'lp')
       .where('media.monitored = true')
       .andWhere('media.type = :type', { type: MediaType.SERIES })
       .andWhere('season.monitored = true')
@@ -454,7 +504,12 @@ export class SchedulerService implements OnModuleInit {
       .andWhere('ep.airDate <= :today', { today })
       .select(['ep.id', 'ep.episodeNumber', 'ep.title', 'ep.airDate'])
       .addSelect(['season.id', 'season.seasonNumber', 'season.mediaId'])
-      .addSelect(['media.id', 'media.title', 'media.year'])
+      .addSelect([
+        'media.id',
+        'media.title',
+        'media.year',
+        'media.runtime',
+      ])
       .getMany();
 
     if (!episodes.length) return;
@@ -473,7 +528,6 @@ export class SchedulerService implements OnModuleInit {
         message: `${media.title} ${epLabel}`,
       });
 
-      // Skip if already grabbed
       const pending = await this.historyRepo
         .createQueryBuilder('h')
         .where('h.mediaId = :mediaId', { mediaId: media.id })
@@ -499,7 +553,27 @@ export class SchedulerService implements OnModuleInit {
       );
       if (!results.length) continue;
 
-      const pick = results[0];
+      const sorted = await scoreAndSortReleases(
+        results,
+        {
+          allowed: buildAllowedQualityIds(media.qualityProfile?.items),
+          allowedLangs: allowedAudioLanguageIds(media.languageProfile?.audioLanguages),
+          sizeByQuality,
+          indexerMinSeeders,
+          indexerUnknownLang,
+          // Episodes are typically 20-60 min; use 30 min as fallback for size check.
+          runtimeMinutes: media.runtime ?? 30,
+        },
+        this.scorerDeps(),
+      );
+      const pick = sorted.find((r) => r.rejections.length === 0);
+      if (!pick) {
+        this.log.debug?.(
+          `SearchMissing[series]: no release without rejections for "${media.title}" ${epLabel} (${sorted.length} checked)`,
+        );
+        continue;
+      }
+
       try {
         this.log.log(
           `SearchMissing: sending episode "${pick.title}" to qBittorrent — ${pick.downloadUrl}`,
@@ -944,6 +1018,17 @@ export class SchedulerService implements OnModuleInit {
     if (!profile || profile.torrentDelay <= 0) return false;
     const ageHours = (Date.now() - new Date(publishDate).getTime()) / 3_600_000;
     return ageHours < profile.torrentDelay;
+  }
+
+  /** Build the async scorer deps for scoreAndSortReleases. */
+  private scorerDeps() {
+    return {
+      scoreCustomFormats: (
+        title: string,
+        meta: { freeleech?: boolean; downloadVolumeFactor?: number },
+      ) => this.customFormats.scoreRelease(title, meta),
+      isBlocked: (title: string) => this.blocklist.isBlocked(title),
+    };
   }
 
   private isAvailable(media: Media, today: string): boolean {

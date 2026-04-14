@@ -12,11 +12,6 @@ import { Indexer } from '../indexers/entities/indexer.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
 import { TorznabService, TorznabRelease } from '../indexers/torznab.service';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
-import { parseReleaseQuality } from './release-quality.parser';
-import {
-  parseReleaseLanguage,
-  resolveUnknownLanguage,
-} from './release-language.parser';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
 import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
@@ -24,14 +19,14 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { MediaType } from '../../common/enums';
 import { GrabMovieDto } from './dto/grab-movie.dto';
 import { QualityProfileItem } from '../profiles/entities/quality-profile.entity';
-import { AudioLanguageItem } from '../profiles/entities/language-profile.entity';
-import { APP_LANGUAGES } from '../../common/constants/app-languages';
 import { getAppQualityById } from '../../common/constants/app-qualities';
+import { parseReleaseQuality } from './release-quality.parser';
 import {
   ReleaseRejection,
   buildIndexerMinSeeders,
   buildAllowedQualityIds,
-  computeRejections,
+  allowedAudioLanguageIds,
+  scoreAndSortReleases,
   sortReleasesByRelevance,
 } from './release-rejection.helper';
 
@@ -47,18 +42,6 @@ function inferTitleFromTorrentUrl(url: string): string {
     }
   }
   return url.slice(0, 240);
-}
-
-function allowedAudioLanguageIds(
-  audioLangs: AudioLanguageItem[] | undefined,
-): Set<number> {
-  const set = new Set<number>();
-  if (!audioLangs?.length) return set;
-  for (const item of audioLangs) {
-    const lang = APP_LANGUAGES.find((l) => l.isoCode === item.isoCode);
-    if (lang) set.add(lang.id);
-  }
-  return set;
 }
 
 export interface MovieReleaseRow {
@@ -117,66 +100,31 @@ export class MovieDownloadService {
     allowed: Set<number>,
     allowedLangs: Set<number>,
   ): Promise<MovieReleaseRow[]> {
-    const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
-    const indexerMinSeeders = buildIndexerMinSeeders(indexers);
-    const indexerUnknownLang = new Map(
-      indexers.map((ix) => [
-        ix.id,
-        ix.settings?.unknownLanguageIsoCode as string | undefined,
-      ]),
+    const scored = await scoreAndSortReleases(
+      releases,
+      {
+        allowed,
+        allowedLangs,
+        sizeByQuality: await this.qualityDefs.getSizeLimitsMap(),
+        indexerMinSeeders: buildIndexerMinSeeders(indexers),
+        indexerUnknownLang: new Map(
+          indexers.map((ix) => [
+            ix.id,
+            ix.settings?.unknownLanguageIsoCode as string | undefined,
+          ]),
+        ),
+        runtimeMinutes: media.runtime ?? 0,
+      },
+      {
+        scoreCustomFormats: (title, meta) =>
+          this.customFormats.scoreRelease(title, meta),
+        isBlocked: (title) => this.blocklist.isBlocked(title),
+      },
     );
-
-    return Promise.all(
-      releases.map(async (r) => {
-        const parsed = parseReleaseQuality(r.title);
-        const lang = resolveUnknownLanguage(
-          parseReleaseLanguage(r.title),
-          indexerUnknownLang.get(r.indexerId),
-        );
-        const [cfScore, isBlocklisted] = await Promise.all([
-          this.customFormats.scoreRelease(r.title, {
-            freeleech: r.freeleech,
-            downloadVolumeFactor: r.downloadVolumeFactor,
-          }),
-          this.blocklist.isBlocked(r.title),
-        ]);
-        const rejections = computeRejections({
-          qualityId: parsed.quality.id,
-          allowed,
-          languageId: lang.id,
-          allowedLangs,
-          isBlocklisted,
-          sizeBytes: r.size,
-          runtimeMinutes: media.runtime ?? 0,
-          sizeByQuality,
-          seeders: r.seeders,
-          indexerId: r.indexerId,
-          indexerMinSeeders,
-          releaseTitle: r.title,
-        });
-        return {
-          title: r.title,
-          downloadUrl: r.downloadUrl,
-          qualityId: parsed.quality.id,
-          qualityName: parsed.quality.name,
-          rank: parsed.quality.rank,
-          allowed: allowed.has(parsed.quality.id),
-          customFormatScore: cfScore,
-          blocklisted: isBlocklisted,
-          indexerId: r.indexerId,
-          indexerName: r.indexerName,
-          languageId: lang.id,
-          languageName: lang.name,
-          languageAllowed: allowedLangs.size === 0 || allowedLangs.has(lang.id),
-          size: r.size,
-          seeders: r.seeders,
-          leechers: r.leechers,
-          rejections,
-          freeleech: r.freeleech,
-          downloadVolumeFactor: r.downloadVolumeFactor,
-        };
-      }),
-    );
+    // scoreAndSortReleases returns ScoredRelease; MovieReleaseRow is a
+    // superset with leechers + downloadVolumeFactor which are already on
+    // the spread TorznabRelease fields.
+    return scored as MovieReleaseRow[];
   }
 
   private searchIndexer(

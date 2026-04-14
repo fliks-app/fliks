@@ -1,5 +1,29 @@
 import { QualityProfileItem } from '../profiles/entities/quality-profile.entity';
+import { AudioLanguageItem } from '../profiles/entities/language-profile.entity';
 import { Indexer } from '../indexers/entities/indexer.entity';
+import { TorznabRelease } from '../indexers/torznab.service';
+import { APP_LANGUAGES } from '../../common/constants/app-languages';
+import { parseReleaseQuality } from './release-quality.parser';
+import {
+  parseReleaseLanguage,
+  resolveUnknownLanguage,
+} from './release-language.parser';
+
+/**
+ * Convert a language profile's audio language items into a set of app-language IDs
+ * for rejection checking. Empty set = no language restriction.
+ */
+export function allowedAudioLanguageIds(
+  audioLangs: AudioLanguageItem[] | undefined,
+): Set<number> {
+  const set = new Set<number>();
+  if (!audioLangs?.length) return set;
+  for (const item of audioLangs) {
+    const lang = APP_LANGUAGES.find((l) => l.isoCode === item.isoCode);
+    if (lang) set.add(lang.id);
+  }
+  return set;
+}
 
 export interface ReleaseRejection {
   /** Machine-readable code — the frontend maps this to an i18n key. */
@@ -228,4 +252,98 @@ export function sortReleasesByRelevance<
 
     return 0;
   });
+}
+
+// ---------------------------------------------------------------------------
+// Shared scoring pipeline
+// ---------------------------------------------------------------------------
+
+/** A scored + ranked release row — superset of TorznabRelease. */
+export interface ScoredRelease extends TorznabRelease {
+  qualityId: number;
+  qualityName: string;
+  rank: number;
+  allowed: boolean;
+  customFormatScore: number;
+  blocklisted: boolean;
+  languageId: number;
+  languageName: string;
+  languageAllowed: boolean;
+  rejections: ReleaseRejection[];
+}
+
+/** Async callbacks injected by the caller (avoids coupling to NestJS services). */
+export interface ReleaseScorerDeps {
+  scoreCustomFormats(
+    title: string,
+    meta: { freeleech?: boolean; downloadVolumeFactor?: number },
+  ): Promise<number>;
+  isBlocked(title: string): Promise<boolean>;
+}
+
+/**
+ * Score, reject, and sort a batch of torznab releases using the same
+ * pipeline as the manual download modal. Shared by SearchMissing,
+ * MovieDownloadService, and EpisodeDownloadService.
+ *
+ * Returns the array sorted by relevance (best first). Caller decides
+ * whether to pick the first zero-rejection release or expose all rows.
+ */
+export async function scoreAndSortReleases(
+  releases: TorznabRelease[],
+  opts: {
+    allowed: Set<number>;
+    allowedLangs: Set<number>;
+    sizeByQuality: Map<number, SizeLimits>;
+    indexerMinSeeders: Map<number, number>;
+    indexerUnknownLang: Map<number, string | undefined>;
+    runtimeMinutes: number;
+  },
+  deps: ReleaseScorerDeps,
+): Promise<ScoredRelease[]> {
+  const rows = await Promise.all(
+    releases.map(async (r) => {
+      const parsed = parseReleaseQuality(r.title);
+      const lang = resolveUnknownLanguage(
+        parseReleaseLanguage(r.title),
+        opts.indexerUnknownLang.get(r.indexerId),
+      );
+      const [cfScore, isBlocklisted] = await Promise.all([
+        deps.scoreCustomFormats(r.title, {
+          freeleech: r.freeleech,
+          downloadVolumeFactor: r.downloadVolumeFactor,
+        }),
+        deps.isBlocked(r.title),
+      ]);
+      const rejections = computeRejections({
+        qualityId: parsed.quality.id,
+        allowed: opts.allowed,
+        languageId: lang.id,
+        allowedLangs: opts.allowedLangs,
+        isBlocklisted,
+        sizeBytes: r.size,
+        runtimeMinutes: opts.runtimeMinutes,
+        sizeByQuality: opts.sizeByQuality,
+        seeders: r.seeders,
+        indexerId: r.indexerId,
+        indexerMinSeeders: opts.indexerMinSeeders,
+        releaseTitle: r.title,
+      });
+      return {
+        ...r,
+        qualityId: parsed.quality.id,
+        qualityName: parsed.quality.name,
+        rank: parsed.quality.rank,
+        allowed: opts.allowed.has(parsed.quality.id),
+        customFormatScore: cfScore,
+        blocklisted: isBlocklisted,
+        languageId: lang.id,
+        languageName: lang.name,
+        languageAllowed:
+          opts.allowedLangs.size === 0 || opts.allowedLangs.has(lang.id),
+        rejections,
+      };
+    }),
+  );
+  return sortReleasesByRelevance(rows);
 }

@@ -25,23 +25,11 @@ import { BlocklistService } from '../blocklist/blocklist.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MediaType } from '../../common/enums';
 import { QualityProfileItem } from '../profiles/entities/quality-profile.entity';
-import { AudioLanguageItem } from '../profiles/entities/language-profile.entity';
-import { APP_LANGUAGES } from '../../common/constants/app-languages';
 
-function allowedAudioLanguageIds(
-  audioLangs: AudioLanguageItem[] | undefined,
-): Set<number> {
-  const set = new Set<number>();
-  if (!audioLangs?.length) return set;
-  for (const item of audioLangs) {
-    const lang = APP_LANGUAGES.find((l) => l.isoCode === item.isoCode);
-    if (lang) set.add(lang.id);
-  }
-  return set;
-}
 import { GrabMovieDto } from './dto/grab-movie.dto';
 import {
   ReleaseRejection,
+  allowedAudioLanguageIds,
   buildIndexerMinSeeders,
   buildAllowedQualityIds,
   computeRejections,
