@@ -1,255 +1,140 @@
 @if (cast.isConnected() && cp.hasMedia() && cp.expanded()) {
-    <!-- Expanded: fullscreen on mobile, floating card on desktop -->
-    <!-- Mobile backdrop: blocks scroll on the page behind -->
+    <!-- Backdrop (mobile only) -->
     <div class="fixed inset-0 z-50 bg-black/50 lg:hidden" (click)="toggle()"></div>
+
+    <!-- Container: fullscreen on mobile, floating card on desktop -->
     <div class="fixed inset-0 lg:inset-auto lg:top-14 lg:right-4 z-50 lg:w-96 max-h-dvh max-w-dvw overflow-hidden lg:overflow-visible touch-none lg:touch-auto">
       <div class="bg-base-100 h-full lg:h-auto lg:rounded-xl lg:shadow-2xl lg:border lg:border-base-300 flex flex-col max-h-dvh lg:overflow-visible">
 
-        <!-- ===== MOBILE layout (fullscreen remote) ===== -->
-        <div class="flex flex-col h-full lg:hidden" style="padding-top: calc(env(safe-area-inset-top) / 2 + 12px); padding-bottom: env(safe-area-inset-bottom)">
-          <!-- Top bar -->
-          <div class="flex items-center justify-between px-4 pt-2 shrink-0">
-            <div class="min-w-0 flex-1">
-              <p class="font-bold truncate">{{ cp.mediaTitle() }}</p>
-              @if (cp.episodeTitle()) {
-                <p class="text-xs text-base-content/50 truncate">{{ cp.episodeTitle() }}</p>
-              }
-            </div>
-            <button class="btn btn-ghost btn-sm btn-circle shrink-0 ml-2" (click)="toggle()">
-              <svg lucideX class="h-4 w-4"></svg>
-            </button>
-          </div>
-
-          <!-- Center: poster -->
-          <div class="flex-1 flex items-center justify-center px-12 py-4 min-h-0">
-            @if (cp.fanartUrl()) {
-              <img [src]="cp.fanartUrl()" alt="" class="max-h-[60%] w-auto object-contain rounded-xl shadow-xl" />
-            } @else {
-              <svg lucideCast class="h-20 w-20 text-info"></svg>
+        <!-- Header -->
+        <div class="flex items-center lg:items-start gap-3 px-4 pt-4 lg:py-3 shrink-0 lg:border-b lg:border-base-200"
+             style="padding-top: calc(env(safe-area-inset-top) / 2 + 12px)"
+        >
+          <!-- Poster thumbnail (desktop only) -->
+          @if (cp.fanartUrl()) {
+            <img [src]="cp.fanartUrl()" alt="" class="hidden lg:block w-12 h-16 object-cover rounded shrink-0" />
+          }
+          <div class="min-w-0 flex-1 lg:py-1">
+            <p class="font-bold truncate">{{ cp.mediaTitle() }}</p>
+            @if (cp.episodeTitle()) {
+              <p class="text-xs text-base-content/50 truncate">{{ cp.episodeTitle() }}</p>
             }
           </div>
-
-          <!-- Bottom: controls -->
-          <div class="shrink-0 px-4 pt-4 space-y-5" style="padding-bottom: max(2rem, env(safe-area-inset-bottom))">
-            <!-- Progress -->
-            <div>
-              <app-seekbar #mobileSeekbar
-                [currentTime]="cast.currentTime()"
-                [duration]="cast.duration()"
-                [spriteUrl]="cp.spriteUrl()"
-                [spriteMetadata]="cp.spriteMetadata()"
-                variant="cast"
-                [showThumb]="false"
-                [showBuffered]="false"
-                (seek)="cast.seek($event)"
-              />
-              <div class="flex justify-between text-xs text-base-content/50 mt-1">
-                <span>{{ formatTime(mobileSeekbar.displayTime()) }}</span>
-                <span>{{ formatTime(cast.duration()) }}</span>
-              </div>
-            </div>
-
-            <!-- Playback buttons -->
-            <div class="flex items-center justify-center gap-6">
-              <button class="btn btn-ghost btn-circle" (click)="cast.seek(cast.currentTime() - 10)">
-                <svg lucideRotateCcw class="h-7 w-7"></svg>
-              </button>
-              <button class="btn btn-primary btn-circle btn-lg" (click)="cast.togglePlayPause()">
-                @if (cast.isPaused()) {
-                  <svg lucidePlay class="h-8 w-8"></svg>
-                } @else {
-                  <svg lucidePause class="h-8 w-8"></svg>
-                }
-              </button>
-              <button class="btn btn-ghost btn-circle" (click)="cast.seek(cast.currentTime() + 10)">
-                <svg lucideRotateCw class="h-7 w-7"></svg>
-              </button>
-            </div>
-
-            <!-- Pickers row (below playback buttons, dropdowns open upward) -->
-            <div class="flex items-center justify-center gap-3">
-              @if (cp.availableSubtitles().length) {
-                <div class="dropdown dropdown-top dropdown-start">
-                  <div tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
-                    <svg lucideCaptions class="h-4 w-4"></svg>
-                    <span class="text-xs">Sous-titres</span>
-                  </div>
-                  <div tabindex="0" class="dropdown-content z-50 bg-base-200 rounded-lg shadow-xl p-2 w-56 max-w-[calc(100vw-2rem)] max-h-40 overflow-y-auto mb-2">
-                    <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-white/10" (click)="selectSubtitle(null)">
-                      <span class="flex-1 text-left">Désactivé</span>
-                      @if (!cp.activeSubtitleId()) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
-                    </button>
-                    @for (sub of cp.availableSubtitles(); track sub.id) {
-                      <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-white/10" (click)="selectSubtitle(sub)">
-                        <span class="flex-1 text-left">{{ sub.label }}</span>
-                        @if (cp.activeSubtitleId() === sub.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
-                      </button>
-                    }
-                  </div>
-                </div>
-              }
-              @if (cp.availableAudioTracks().length > 1) {
-                <div class="dropdown dropdown-top dropdown-end">
-                  <div tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
-                    <svg lucideHeadphones class="h-4 w-4"></svg>
-                    <span class="text-xs">Audio</span>
-                  </div>
-                  <div tabindex="0" class="dropdown-content z-50 bg-base-200 rounded-lg shadow-xl p-2 w-56 max-w-[calc(100vw-2rem)] max-h-40 overflow-y-auto mb-2">
-                    @for (track of cp.availableAudioTracks(); track track.id) {
-                      <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-white/10" (click)="selectAudio(track)">
-                        <span class="flex-1 text-left">{{ track.label }}</span>
-                        @if (cp.activeAudioTrackId() === track.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
-                      </button>
-                    }
-                  </div>
-                </div>
-              }
-              @if (cp.availableQualities().length > 1) {
-                <div class="dropdown dropdown-top dropdown-end">
-                  <div tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
-                    <svg lucideSettings class="h-4 w-4"></svg>
-                    <span class="text-xs">Qualité</span>
-                  </div>
-                  <div tabindex="0" class="dropdown-content z-50 bg-base-200 rounded-lg shadow-xl p-2 w-48 max-h-40 overflow-y-auto mb-2">
-                    @for (q of cp.availableQualities(); track q.id) {
-                      <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-white/10" (click)="selectQuality(q)">
-                        <span class="flex-1 text-left">{{ q.label }}</span>
-                        @if (cp.activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
-                      </button>
-                    }
-                  </div>
-                </div>
-              }
-            </div>
-
-            <!-- Stop -->
-            <div class="flex justify-center">
-              <button class="btn btn-ghost btn-sm text-base-content/50 gap-2" (click)="disconnect()">
-                <svg lucideSquare class="h-4 w-4"></svg>
-                Arrêter la diffusion
-              </button>
-            </div>
-          </div>
+          <button class="btn btn-ghost btn-sm btn-circle shrink-0 ml-2" (click)="toggle()">
+            <svg lucideX class="h-4 w-4"></svg>
+          </button>
         </div>
 
-        <!-- ===== DESKTOP layout (compact card) ===== -->
-        <div class="hidden lg:flex flex-col">
-          <!-- Header with poster -->
-          <div class="flex items-start gap-3 px-4 py-3 border-b border-base-200">
-            @if (cp.fanartUrl()) {
-              <img [src]="cp.fanartUrl()" alt="" class="w-12 h-16 object-cover rounded shrink-0" />
-            }
-            <div class="min-w-0 flex-1 py-1">
-              <p class="font-bold truncate">{{ cp.mediaTitle() }}</p>
-              @if (cp.episodeTitle()) {
-                <p class="text-xs text-base-content/50 truncate">{{ cp.episodeTitle() }}</p>
-              }
+        <!-- Large poster (mobile only) -->
+        <div class="flex-1 flex items-center justify-center px-12 py-4 min-h-0 lg:hidden">
+          @if (cp.fanartUrl()) {
+            <img [src]="cp.fanartUrl()" alt="" class="max-h-[60%] w-auto object-contain rounded-xl shadow-xl" />
+          } @else {
+            <svg lucideCast class="h-20 w-20 text-info"></svg>
+          }
+        </div>
+
+        <!-- Controls -->
+        <div class="shrink-0 lg:shrink px-4 pt-4 lg:py-4 space-y-5 lg:space-y-4"
+             style="padding-bottom: max(2rem, env(safe-area-inset-bottom))"
+        >
+          <!-- Progress bar -->
+          <div>
+            <app-seekbar #seekbar
+              [currentTime]="cast.currentTime()"
+              [duration]="cast.duration()"
+              [spriteUrl]="cp.spriteUrl()"
+              [spriteMetadata]="cp.spriteMetadata()"
+              variant="cast"
+              [showThumb]="false"
+              [showBuffered]="false"
+              (seek)="cast.seek($event)"
+            />
+            <div class="flex justify-between text-xs text-base-content/50 mt-1">
+              <span>{{ formatTime(seekbar.displayTime()) }}</span>
+              <span>{{ formatTime(cast.duration()) }}</span>
             </div>
-            <button class="btn btn-ghost btn-sm btn-circle shrink-0" (click)="toggle()">
-              <svg lucideX class="h-4 w-4"></svg>
+          </div>
+
+          <!-- Playback buttons -->
+          <div class="flex items-center justify-center gap-6 lg:gap-4">
+            <button class="btn btn-ghost btn-circle lg:btn-sm" (click)="cast.seek(cast.currentTime() - 10)">
+              <svg lucideRotateCcw class="h-7 w-7 lg:h-5 lg:w-5"></svg>
+            </button>
+            <button class="btn btn-primary btn-circle btn-lg lg:btn-md" (click)="cast.togglePlayPause()">
+              @if (cast.isPaused()) {
+                <svg lucidePlay class="h-8 w-8 lg:h-6 lg:w-6"></svg>
+              } @else {
+                <svg lucidePause class="h-8 w-8 lg:h-6 lg:w-6"></svg>
+              }
+            </button>
+            <button class="btn btn-ghost btn-circle lg:btn-sm" (click)="cast.seek(cast.currentTime() + 10)">
+              <svg lucideRotateCw class="h-7 w-7 lg:h-5 lg:w-5"></svg>
             </button>
           </div>
 
-          <!-- Controls -->
-          <div class="px-4 py-4 space-y-4">
-            <!-- Progress -->
-            <div>
-              <app-seekbar #desktopSeekbar
-                [currentTime]="cast.currentTime()"
-                [duration]="cast.duration()"
-                [spriteUrl]="cp.spriteUrl()"
-                [spriteMetadata]="cp.spriteMetadata()"
-                variant="cast"
-                [showThumb]="false"
-                [showBuffered]="false"
-                (seek)="cast.seek($event)"
-              />
-              <div class="flex justify-between text-xs text-base-content/50 mt-1">
-                <span>{{ formatTime(desktopSeekbar.displayTime()) }}</span>
-                <span>{{ formatTime(cast.duration()) }}</span>
-              </div>
-            </div>
-
-            <!-- Playback buttons -->
-            <div class="flex items-center justify-center gap-4">
-              <button class="btn btn-ghost btn-sm btn-circle" (click)="cast.seek(cast.currentTime() - 10)">
-                <svg lucideRotateCcw class="h-5 w-5"></svg>
-              </button>
-              <button class="btn btn-primary btn-circle" (click)="cast.togglePlayPause()">
-                @if (cast.isPaused()) {
-                  <svg lucidePlay class="h-6 w-6"></svg>
-                } @else {
-                  <svg lucidePause class="h-6 w-6"></svg>
-                }
-              </button>
-              <button class="btn btn-ghost btn-sm btn-circle" (click)="cast.seek(cast.currentTime() + 10)">
-                <svg lucideRotateCw class="h-5 w-5"></svg>
-              </button>
-            </div>
-
-            <!-- Pickers (below playback buttons, dropdowns open upward) -->
-            <div class="flex items-center justify-center gap-2 flex-wrap">
-              @if (cp.availableSubtitles().length) {
-                <div class="dropdown dropdown-top dropdown-start">
-                  <div tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
-                    <svg lucideCaptions class="h-4 w-4"></svg>
-                    <span class="text-xs">Sous-titres</span>
-                  </div>
-                  <div tabindex="0" class="dropdown-content z-50 bg-base-200 rounded-lg shadow-xl p-2 w-56 max-w-[calc(100vw-2rem)] max-h-40 overflow-y-auto mb-2">
-                    <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-white/10" (click)="selectSubtitle(null)">
-                      <span class="flex-1 text-left">Désactivé</span>
-                      @if (!cp.activeSubtitleId()) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
+          <!-- Pickers -->
+          <div class="flex items-center justify-center gap-3 lg:gap-2 flex-wrap">
+            @if (cp.availableSubtitles().length) {
+              <div class="dropdown dropdown-top dropdown-start">
+                <div tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
+                  <svg lucideCaptions class="h-4 w-4"></svg>
+                  <span class="text-xs">Sous-titres</span>
+                </div>
+                <div tabindex="0" class="dropdown-content z-50 bg-base-200 rounded-lg shadow-xl p-2 w-56 max-w-[calc(100vw-2rem)] max-h-40 overflow-y-auto mb-2">
+                  <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-white/10" (click)="selectSubtitle(null)">
+                    <span class="flex-1 text-left">Désactivé</span>
+                    @if (!cp.activeSubtitleId()) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
+                  </button>
+                  @for (sub of cp.availableSubtitles(); track sub.id) {
+                    <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-white/10" (click)="selectSubtitle(sub)">
+                      <span class="flex-1 text-left">{{ sub.label }}</span>
+                      @if (cp.activeSubtitleId() === sub.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
                     </button>
-                    @for (sub of cp.availableSubtitles(); track sub.id) {
-                      <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-white/10" (click)="selectSubtitle(sub)">
-                        <span class="flex-1 text-left">{{ sub.label }}</span>
-                        @if (cp.activeSubtitleId() === sub.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
-                      </button>
-                    }
-                  </div>
+                  }
                 </div>
-              }
-              @if (cp.availableAudioTracks().length > 1) {
-                <div class="dropdown dropdown-top dropdown-end">
-                  <div tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
-                    <svg lucideHeadphones class="h-4 w-4"></svg>
-                    <span class="text-xs">Audio</span>
-                  </div>
-                  <div tabindex="0" class="dropdown-content z-50 bg-base-200 rounded-lg shadow-xl p-2 w-56 max-w-[calc(100vw-2rem)] max-h-40 overflow-y-auto mb-2">
-                    @for (track of cp.availableAudioTracks(); track track.id) {
-                      <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-white/10" (click)="selectAudio(track)">
-                        <span class="flex-1 text-left">{{ track.label }}</span>
-                        @if (cp.activeAudioTrackId() === track.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
-                      </button>
-                    }
-                  </div>
+              </div>
+            }
+            @if (cp.availableAudioTracks().length > 1) {
+              <div class="dropdown dropdown-top dropdown-end">
+                <div tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
+                  <svg lucideHeadphones class="h-4 w-4"></svg>
+                  <span class="text-xs">Audio</span>
                 </div>
-              }
-              @if (cp.availableQualities().length > 1) {
-                <div class="dropdown dropdown-top dropdown-end">
-                  <div tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
-                    <svg lucideSettings class="h-4 w-4"></svg>
-                    <span class="text-xs">Qualité</span>
-                  </div>
-                  <div tabindex="0" class="dropdown-content z-50 bg-base-200 rounded-lg shadow-xl p-2 w-48 max-h-40 overflow-y-auto mb-2">
-                    @for (q of cp.availableQualities(); track q.id) {
-                      <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-white/10" (click)="selectQuality(q)">
-                        <span class="flex-1 text-left">{{ q.label }}</span>
-                        @if (cp.activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
-                      </button>
-                    }
-                  </div>
+                <div tabindex="0" class="dropdown-content z-50 bg-base-200 rounded-lg shadow-xl p-2 w-56 max-w-[calc(100vw-2rem)] max-h-40 overflow-y-auto mb-2">
+                  @for (track of cp.availableAudioTracks(); track track.id) {
+                    <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-white/10" (click)="selectAudio(track)">
+                      <span class="flex-1 text-left">{{ track.label }}</span>
+                      @if (cp.activeAudioTrackId() === track.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
+                    </button>
+                  }
                 </div>
-              }
-            </div>
+              </div>
+            }
+            @if (cp.availableQualities().length > 1) {
+              <div class="dropdown dropdown-top dropdown-end">
+                <div tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
+                  <svg lucideSettings class="h-4 w-4"></svg>
+                  <span class="text-xs">Qualité</span>
+                </div>
+                <div tabindex="0" class="dropdown-content z-50 bg-base-200 rounded-lg shadow-xl p-2 w-48 max-h-40 overflow-y-auto mb-2">
+                  @for (q of cp.availableQualities(); track q.id) {
+                    <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-white/10" (click)="selectQuality(q)">
+                      <span class="flex-1 text-left">{{ q.label }}</span>
+                      @if (cp.activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
+                    </button>
+                  }
+                </div>
+              </div>
+            }
+          </div>
 
-            <!-- Stop -->
-            <div class="flex justify-center">
-              <button class="btn btn-ghost btn-sm text-base-content/50 gap-2" (click)="disconnect()">
-                <svg lucideSquare class="h-4 w-4"></svg>
-                Arrêter la diffusion
-              </button>
-            </div>
+          <!-- Stop -->
+          <div class="flex justify-center">
+            <button class="btn btn-ghost btn-sm text-base-content/50 gap-2" (click)="disconnect()">
+              <svg lucideSquare class="h-4 w-4"></svg>
+              Arrêter la diffusion
+            </button>
           </div>
         </div>
 

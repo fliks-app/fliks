@@ -7,7 +7,6 @@ import {
   LucideCaptions,
   LucideCast,
   LucideCheck,
-  LucideChevronDown,
   LucideHeadphones,
   LucidePause,
   LucidePlay,
@@ -21,7 +20,7 @@ import {
 @Component({
   selector: 'app-cast-overlay',
   imports: [
-    LucideCaptions, LucideCast, LucideCheck, LucideChevronDown,
+    LucideCaptions, LucideCast, LucideCheck,
     LucideHeadphones, LucidePause, LucidePlay, LucideRotateCcw, LucideRotateCw,
     LucideSettings, LucideSquare, LucideX,
     SeekbarComponent,
