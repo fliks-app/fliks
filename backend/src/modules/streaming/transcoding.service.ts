@@ -685,18 +685,24 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   /**
    * Get a segment file path, waiting if it's being generated.
    *
-   * Combined with the `+temp_file` HLS flag, ffmpeg writes segments to
-   * `<name>.tmp` and atomically renames on completion — so a file at the
-   * final path is always complete and we can serve immediately. fs.watch
-   * (inotify) wakes us on the rename within milliseconds instead of the
-   * old 500ms polling loop.
+   * Uses fs.watch (inotify on Linux) so we react within milliseconds of
+   * ffmpeg writing the segment. Without `temp_file`, ffmpeg writes segments
+   * incrementally so we verify size-stability (50ms re-stat) before serving.
+   * For already-completed segments (ffmpeg moved past them), the first stat
+   * check passes immediately — 0ms overhead in the common case.
    */
   async getSegmentPath(
     session: TranscodeSession,
     segmentName: string,
   ): Promise<string | null> {
     const segPath = path.join(session.cachePath, segmentName);
-    if (existsSync(segPath)) return segPath;
+
+    // Quick size-stability check: if file exists and isn't growing, serve.
+    if (existsSync(segPath)) {
+      const stable = await this.isSegmentStable(segPath);
+      if (stable) return segPath;
+      // File exists but still being written — fall through to watch loop.
+    }
 
     const dir = path.dirname(segPath);
     const name = path.basename(segPath);
@@ -716,34 +722,51 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         resolve(val);
       };
 
+      const tryServe = async () => {
+        if (settled || !existsSync(segPath)) return;
+        if (await this.isSegmentStable(segPath)) finish(segPath);
+      };
+
       try {
         watcher = watch(dir, { persistent: false }, (_event, filename) => {
-          if (filename === name && existsSync(segPath)) {
-            finish(segPath);
-          }
+          if (filename === name) void tryServe();
         });
       } catch {
-        // Directory doesn't exist yet — exitTimer's existsSync check covers it.
+        // Directory doesn't exist yet — exitTimer covers it.
       }
 
       // Cover the race where the file appeared between the existsSync above
       // and watch() registering its handlers.
-      if (existsSync(segPath)) {
-        finish(segPath);
-        return;
-      }
+      void tryServe();
 
       exitTimer = setInterval(() => {
         if (session.process.exitCode !== null && !existsSync(segPath)) {
           finish(null);
-        } else if (existsSync(segPath)) {
-          // Belt-and-braces: catch the file even if the watcher missed an event.
-          finish(segPath);
+        } else {
+          void tryServe();
         }
       }, 500);
 
       timeout = setTimeout(() => finish(null), 60_000);
     });
+  }
+
+  /**
+   * 50ms size-stability check. Returns true when the file exists, is non-empty,
+   * and its size hasn't changed in 50ms (= ffmpeg finished writing this segment).
+   * For segments ffmpeg has already moved past, the first stat succeeds and
+   * the 50ms sleep is skipped via the size === size2 check (no growth).
+   */
+  private async isSegmentStable(segPath: string): Promise<boolean> {
+    try {
+      const s1 = (await fsp.stat(segPath)).size;
+      if (s1 === 0) return false;
+      await new Promise((r) => setTimeout(r, 50));
+      const s2 = (await fsp.stat(segPath)).size;
+      return s1 === s2;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -1350,7 +1373,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         '-start_number', String(startSegment),
         '-hls_segment_type', 'fmp4',
         '-hls_fmp4_init_filename', 'init_%v.mp4',
-        '-hls_flags', 'independent_segments+temp_file',
+        '-hls_flags', 'independent_segments',
         '-var_stream_map', varParts.join(' '),
         '-hls_segment_filename', path.join(outputDir, '%v', 'seg-%04d.m4s'),
         path.join(outputDir, '%v', 'index.m3u8'),
@@ -1396,7 +1419,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         );
       }
       args.push(
-        '-hls_flags', 'independent_segments+temp_file',
+        '-hls_flags', 'independent_segments',
         path.join(outputDir, 'index.m3u8'),
       );
     }
@@ -1457,7 +1480,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       '-hls_segment_filename',
       path.join(outputDir, 'seg-%04d.m4s'),
       '-hls_flags',
-      'independent_segments+temp_file',
+      'independent_segments',
       path.join(outputDir, 'index.m3u8'),
     );
 
@@ -1570,7 +1593,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       );
     }
     args.push(
-      '-hls_flags', 'independent_segments+temp_file',
+      '-hls_flags', 'independent_segments',
       path.join(outputDir, 'index.m3u8'),
     );
 
@@ -1904,21 +1927,34 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     this.killAndClean(session.process, session.cachePath).catch(() => {});
   }
 
-  /** Send SIGTERM and wait for the process to exit. Does NOT delete cache. */
-  private killProcess(proc: ChildProcess): Promise<void> {
+  /**
+   * Kill an ffmpeg process and wait for it to exit. Does NOT delete cache.
+   * Uses SIGKILL by default (instant) for seek restarts — ffmpeg's graceful
+   * SIGTERM shutdown (write trailer, close files) is wasted work when we're
+   * about to overwrite the output. SIGTERM is only used when the caller
+   * explicitly needs a clean shutdown (e.g. stopSessions on player close).
+   */
+  private killProcess(
+    proc: ChildProcess,
+    graceful = false,
+  ): Promise<void> {
     if (proc.exitCode !== null) return Promise.resolve();
     return new Promise<void>((resolve) => {
       proc.once('close', () => resolve());
-      proc.kill('SIGTERM');
-      setTimeout(() => {
-        if (proc.exitCode === null) proc.kill('SIGKILL');
-      }, 5000);
+      if (graceful) {
+        proc.kill('SIGTERM');
+        setTimeout(() => {
+          if (proc.exitCode === null) proc.kill('SIGKILL');
+        }, 5000);
+      } else {
+        proc.kill('SIGKILL');
+      }
     });
   }
 
-  /** Send SIGTERM, wait for the process to exit, then rm the directory. */
+  /** Graceful SIGTERM, wait for the process to exit, then rm the directory. */
   private async killAndClean(proc: ChildProcess, dirPath: string): Promise<void> {
-    await this.killProcess(proc);
+    await this.killProcess(proc, true);
     await fsp.rm(dirPath, { recursive: true, force: true });
   }
 

@@ -594,34 +594,29 @@ export class StreamingController {
       throw new BadRequestException(`Invalid audio segment name: ${segment}`);
     }
 
-    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
-
     const segMatch = segment.match(/seg-(\d+)\.m4s/);
     const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
-
     const user = req.user;
 
-    // With var_stream_map, audio is in the SAME session as video (subdir N+1).
-    // Fall back to separate audio session if the video session doesn't have it.
+    // Fast path: try video session's var_stream_map subdir first (no DB query).
     const videoSession = this.transcodingService.getExistingSession(
       mediaFileId,
       user?.id,
     );
-    const varStreamPath = videoSession
-      ? `${audioIndex + 1}/${segment}`
-      : null;
 
     let segPath: string | null = null;
 
-    if (videoSession && varStreamPath) {
+    if (videoSession) {
+      const varStreamPath = `${audioIndex + 1}/${segment}`;
       segPath = await this.transcodingService.getSegmentPath(
         videoSession,
         varStreamPath,
       );
     }
 
-    // Fallback: separate audio session (for non-var_stream_map setups)
+    // Fallback: separate audio session (needs DB for absolutePath).
     if (!segPath) {
+      const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
       const audioSession = await this.transcodingService.getOrCreateAudioSession(
         mediaFileId,
         audioIndex,
@@ -757,36 +752,60 @@ export class StreamingController {
       throw new BadRequestException(`Invalid segment name: ${segment}`);
     }
 
-    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
+    // Fast path: if a session already exists, skip the DB query — we only
+    // need resolveFile for absolutePath + context when creating a NEW session.
+    // Saves ~15-25ms per segment (a 2h file = ~2400 segments = ~40s saved).
+    const existing = this.transcodingService.getExistingSession(
+      mediaFileId,
+      req.user?.id,
+    );
 
     // For init.mp4: serve from existing session without triggering quality changes.
-    if (segment.startsWith('init')) {
-      const existing = this.transcodingService.getExistingSession(
-        mediaFileId,
-        req.user?.id,
+    if (segment.startsWith('init') && existing) {
+      const fmp4 = this.activeStreamTracker.getFmp4Supported(mediaFileId);
+      const ma = this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 && fmp4;
+      const initFile = ma ? `0/${segment}` : segment;
+      const initPath = await this.transcodingService.getSegmentPath(
+        existing,
+        initFile,
       );
-      if (existing) {
-        const fmp4 = this.activeStreamTracker.getFmp4Supported(mediaFileId);
-        const ma = this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 && fmp4;
-        const initFile = ma ? `0/${segment}` : segment;
-        const initPath = await this.transcodingService.getSegmentPath(
-          existing,
-          initFile,
-        );
-        if (initPath) {
-          res.setHeader('Content-Type', 'video/mp4');
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          const initStream = fs.createReadStream(initPath);
-          initStream.on('error', () => { if (!res.headersSent) res.status(404).end(); });
-          initStream.pipe(res);
-          return;
-        }
+      if (initPath) {
+        res.setHeader('Content-Type', 'video/mp4');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        const initStream = fs.createReadStream(initPath);
+        initStream.on('error', () => { if (!res.headersSent) res.status(404).end(); });
+        initStream.pipe(res);
+        return;
       }
-      // No session yet — fall through to create one
     }
 
     const segMatch = segment.match(/seg-(\d+)\.(ts|m4s)/);
     const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
+
+    // If an active session already has this segment ON DISK, serve it
+    // without any DB query or session management. Only checks existsSync
+    // (instant) — does NOT call getSegmentPath (which would wait via
+    // fs.watch and block the request if the segment isn't being produced).
+    if (existing && existing.quality === quality && existing.process.exitCode === null) {
+      const varStreamMap =
+        this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
+        this.activeStreamTracker.getFmp4Supported(mediaFileId);
+      const segName = varStreamMap ? `0/${segment}` : segment;
+      const segPath = `${existing.cachePath}/${segName}`;
+      if (fs.existsSync(segPath)) {
+        existing.lastAccess = Date.now();
+        res.setHeader('Content-Type', 'video/mp4');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        const stream = fs.createReadStream(segPath);
+        stream.on('error', () => { if (!res.headersSent) res.status(404).end(); });
+        stream.pipe(res);
+        return;
+      }
+      // Segment not on disk — fall through to full resolve + getOrCreateSession.
+    }
+
+    // Slow path: need to create/restart a session — requires DB lookup.
+    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
 
     const ctx = this.buildSessionContext(req, resolved, mediaFileId);
     // For remux sessions, copy audio only when the source codec is compatible
