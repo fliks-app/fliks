@@ -27,6 +27,7 @@ import * as postProcess from './subtitle-post-processor';
 import { SettingsService } from '../settings/settings.service';
 import { resolveSubtitleAbsolutePath } from './subtitle-path.util';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
+import { APP_LANGUAGES, ISO_639_2_TO_1 } from '../../common/constants/app-languages';
 
 @Injectable()
 export class SubtitlesService {
@@ -397,6 +398,192 @@ export class SubtitlesService {
     }
 
     return { removedMissing, removedDuplicates };
+  }
+
+  // ---------------------------------------------------------------------------
+  // External subtitle discovery (Jellyfin-style filename parsing)
+  // ---------------------------------------------------------------------------
+
+  private static readonly SUBTITLE_EXTS = new Set([
+    '.srt', '.ass', '.ssa', '.vtt', '.sub', '.sup', '.mks', '.smi', '.sami',
+  ]);
+
+  /** Flags parsed right-to-left from the filename suffix. */
+  private static readonly FORCED_FLAGS = new Set(['forced', 'foreign']);
+  private static readonly HI_FLAGS = new Set(['hi', 'cc', 'sdh']);
+  private static readonly SKIP_FLAGS = new Set(['default']);
+
+
+  /** Full language names → ISO 639-1 (built from APP_LANGUAGES). */
+  private static readonly LANG_NAMES: Record<string, string> = Object.fromEntries(
+    APP_LANGUAGES
+      .filter((l) => l.isoCode !== 'xx')
+      .map((l) => [l.name.toLowerCase(), l.isoCode]),
+  );
+
+  /**
+   * Parse a subtitle filename (Jellyfin convention) right-to-left.
+   * Pattern: `<videoBaseName>.<lang>.<flags>.<ext>`
+   * Returns null if the extension isn't a subtitle extension.
+   */
+  parseSubtitleFilename(filename: string): {
+    language: string;
+    forced: boolean;
+    hearingImpaired: boolean;
+  } | null {
+    const ext = path.extname(filename).toLowerCase();
+    if (!SubtitlesService.SUBTITLE_EXTS.has(ext)) return null;
+
+    const withoutExt = filename.slice(0, -ext.length);
+    const parts = withoutExt.split('.');
+
+    let language = 'und';
+    let forced = false;
+    let hearingImpaired = false;
+
+    // Parse right-to-left (skip the leftmost parts = video name)
+    for (let i = parts.length - 1; i >= 1; i--) {
+      const token = parts[i].toLowerCase();
+      if (SubtitlesService.FORCED_FLAGS.has(token)) {
+        forced = true;
+      } else if (SubtitlesService.HI_FLAGS.has(token)) {
+        // Ambiguity: 'hi' = Hindi if no language yet, else hearing-impaired.
+        if (token === 'hi' && language === 'und') {
+          language = 'hi';
+        } else {
+          hearingImpaired = true;
+        }
+      } else if (SubtitlesService.SKIP_FLAGS.has(token)) {
+        // ignore 'default'
+      } else if (this.resolveLanguageCode(token)) {
+        language = this.resolveLanguageCode(token)!;
+      } else {
+        // Stop: this part is the video name, not a flag/lang
+        break;
+      }
+    }
+
+    return { language, forced, hearingImpaired };
+  }
+
+  /** Known ISO 639-1 codes from APP_LANGUAGES. */
+  private static readonly KNOWN_ISO_CODES = new Set(
+    APP_LANGUAGES.map((l) => l.isoCode),
+  );
+
+  private resolveLanguageCode(token: string): string | null {
+    // ISO 639-1 (2 chars) — validate against known codes
+    if (/^[a-z]{2}$/.test(token) && SubtitlesService.KNOWN_ISO_CODES.has(token)) return token;
+    // Culture code: en-us → en
+    const cultureMatch = token.match(/^([a-z]{2})-[a-z]{2,}$/i);
+    if (cultureMatch) return cultureMatch[1].toLowerCase();
+    // ISO 639-2 (3 chars)
+    if (ISO_639_2_TO_1[token]) return ISO_639_2_TO_1[token];
+    // Full name (from APP_LANGUAGES)
+    if (SubtitlesService.LANG_NAMES[token]) return SubtitlesService.LANG_NAMES[token];
+    return null;
+  }
+
+  /**
+   * Discover external subtitle files on disk for a media and insert missing
+   * rows into DB. Matches each .srt/.ass/etc to a MediaFile by comparing the
+   * video basename with the subtitle filename prefix.
+   *
+   * Called after rescan to pick up sidecar files that weren't inserted via
+   * the download flow (e.g. manually placed or from a failed download).
+   */
+  async discoverExternalSubtitles(mediaId: number): Promise<number> {
+    const media = await this.mediaRepo.findOne({
+      where: { id: mediaId },
+      relations: ['files'],
+    });
+    if (!media?.path || !media.files?.length) return 0;
+
+    // Build a map: video basename (without ext, lowercase) → MediaFile
+    const fileByBasename = new Map<string, MediaFile>();
+    for (const f of media.files) {
+      const base = path.basename(f.relativePath, path.extname(f.relativePath)).toLowerCase();
+      fileByBasename.set(base, f);
+    }
+
+    // Load existing external subtitle relative paths to skip duplicates
+    const existingSubs = await this.repo.find({ where: { media: { id: mediaId } } });
+    const existingPaths = new Set(
+      existingSubs
+        .filter((s) => s.relativePath)
+        .map((s) => s.relativePath!.replace(/\\/g, '/')),
+    );
+
+    // Scan the media folder recursively (max depth 2, same dirs as video files)
+    const dirs = new Set<string>();
+    dirs.add(media.path);
+    for (const f of media.files) {
+      const absDir = path.dirname(path.join(media.path, f.relativePath));
+      dirs.add(absDir);
+    }
+
+    let discovered = 0;
+
+    for (const dir of dirs) {
+      let entries: string[];
+      try {
+        entries = await fs.readdir(dir);
+      } catch {
+        continue;
+      }
+
+      for (const entry of entries) {
+        const ext = path.extname(entry).toLowerCase();
+        if (!SubtitlesService.SUBTITLE_EXTS.has(ext)) continue;
+
+        const absPath = path.join(dir, entry);
+        const relPath = path.relative(media.path, absPath).replace(/\\/g, '/');
+
+        // Already in DB?
+        if (existingPaths.has(relPath)) continue;
+
+        // Match to a video file by basename prefix
+        const subBaseParts = path.basename(entry, ext).toLowerCase().split('.');
+        let matchedFile: MediaFile | null = null;
+
+        // Try progressively shorter prefixes to find the video name
+        for (let len = subBaseParts.length - 1; len >= 1; len--) {
+          const candidate = subBaseParts.slice(0, len).join('.');
+          if (fileByBasename.has(candidate)) {
+            matchedFile = fileByBasename.get(candidate)!;
+            break;
+          }
+        }
+
+        if (!matchedFile) continue;
+
+        // Parse language + flags from filename
+        const parsed = this.parseSubtitleFilename(entry);
+        if (!parsed) continue;
+
+        await this.repo.save({
+          media: { id: mediaId },
+          mediaFile: { id: matchedFile.id },
+          episode: matchedFile.episodeId ? { id: matchedFile.episodeId } : null,
+          language: parsed.language,
+          forced: parsed.forced,
+          hearingImpaired: parsed.hearingImpaired,
+          providerType: SubtitleProviderType.DISK,
+          relativePath: relPath,
+          status: SubtitleStatus.DOWNLOADED,
+          score: 0,
+          synced: false,
+        } as any);
+
+        existingPaths.add(relPath);
+        discovered++;
+        this.logger.log(
+          `Discovered external subtitle: "${relPath}" (${parsed.language}${parsed.forced ? '.forced' : ''}${parsed.hearingImpaired ? '.hi' : ''}) → media file #${matchedFile.id}`,
+        );
+      }
+    }
+
+    return discovered;
   }
 
   async deleteSubtitle(id: number): Promise<void> {

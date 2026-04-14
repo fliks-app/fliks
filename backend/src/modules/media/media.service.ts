@@ -2296,9 +2296,17 @@ export class MediaService {
           `Rescan: subtitles reconciled — media #${mediaId} removedMissing=${subtitleRemovedMissing} removedDuplicates=${subtitleRemovedDuplicates}`,
         );
       }
+      // Discover external subtitle files on disk (Jellyfin-style filename parsing)
+      const discovered =
+        await this.subtitles.discoverExternalSubtitles(mediaId);
+      if (discovered) {
+        this.log.log(
+          `Rescan: discovered ${discovered} external subtitle(s) on disk for media #${mediaId}`,
+        );
+      }
     } catch (err) {
       this.log.warn(
-        `Rescan: subtitle reconcile failed for media #${mediaId} — ${err instanceof Error ? err.message : err}`,
+        `Rescan: subtitle reconcile/discover failed for media #${mediaId} — ${err instanceof Error ? err.message : err}`,
       );
     }
 

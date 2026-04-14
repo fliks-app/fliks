@@ -8,59 +8,7 @@ import { MediaFile } from '../media/entities/media-file.entity';
 import { FfprobeService } from './ffprobe.service';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 
-/**
- * Map ISO 639-2/B (ffprobe output) → ISO 639-1 (used in language profiles).
- * Only includes codes where the two differ.
- */
-const ISO_639_2_TO_1: Record<string, string> = {
-  eng: 'en',
-  fre: 'fr',
-  fra: 'fr',
-  ger: 'de',
-  deu: 'de',
-  spa: 'es',
-  ita: 'it',
-  por: 'pt',
-  rus: 'ru',
-  jpn: 'ja',
-  kor: 'ko',
-  zho: 'zh',
-  chi: 'zh',
-  ara: 'ar',
-  hin: 'hi',
-  tha: 'th',
-  vie: 'vi',
-  tur: 'tr',
-  pol: 'pl',
-  nld: 'nl',
-  dut: 'nl',
-  swe: 'sv',
-  nor: 'no',
-  dan: 'da',
-  fin: 'fi',
-  ces: 'cs',
-  cze: 'cs',
-  slk: 'sk',
-  slo: 'sk',
-  ron: 'ro',
-  rum: 'ro',
-  hun: 'hu',
-  bul: 'bg',
-  hrv: 'hr',
-  srp: 'sr',
-  slv: 'sl',
-  ukr: 'uk',
-  ell: 'el',
-  gre: 'el',
-  heb: 'he',
-  ind: 'id',
-  msa: 'ms',
-  may: 'ms',
-  cat: 'ca',
-  eus: 'eu',
-  baq: 'eu',
-  glg: 'gl',
-};
+import { ISO_639_2_TO_1 } from '../../common/constants/app-languages';
 
 function normalizeLanguage(lang: string): string {
   const lower = lang.toLowerCase();

@@ -13,4 +13,6 @@ export enum SubtitleProviderType {
   RADARR = 'radarr',
   /** External subtitle files discovered via Sonarr API import */
   SONARR = 'sonarr',
+  /** External subtitle files discovered on disk during rescan */
+  DISK = 'disk',
 }
