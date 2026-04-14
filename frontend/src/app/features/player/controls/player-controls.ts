@@ -266,33 +266,41 @@ export class PlayerControlsComponent {
       this.updateDragFromPointer(e, bar);
     };
 
-    const onUp = () => {
+    const cleanup = () => {
       bar.removeEventListener('pointermove', onMove);
-      bar.removeEventListener('pointerup', onUp);
-      bar.removeEventListener('pointercancel', onUp);
+      bar.removeEventListener('pointerup', onEnd);
+      bar.removeEventListener('pointercancel', onEnd);
       document.removeEventListener('pointermove', onMoveDoc);
-      document.removeEventListener('pointerup', onUpDoc);
+      document.removeEventListener('pointerup', onEnd);
+      document.removeEventListener('pointercancel', onEnd);
+      // Restore touch-action so normal scrolling resumes
+      document.documentElement.style.removeProperty('touch-action');
+    };
+
+    const onEnd = () => {
+      cleanup();
       this.finishDrag();
     };
 
-    // Fallback: also listen on document in case pointer capture fails (Safari)
+    // Fallback: also listen on document in case pointer capture fails (Safari/iOS)
     const onMoveDoc = (e: PointerEvent) => {
       this.updateDragFromPointer(e, bar);
     };
-    const onUpDoc = () => {
-      bar.removeEventListener('pointermove', onMove);
-      bar.removeEventListener('pointerup', onUp);
-      bar.removeEventListener('pointercancel', onUp);
-      document.removeEventListener('pointermove', onMoveDoc);
-      document.removeEventListener('pointerup', onUpDoc);
-      this.finishDrag();
-    };
 
     bar.addEventListener('pointermove', onMove);
-    bar.addEventListener('pointerup', onUp);
-    bar.addEventListener('pointercancel', onUp);
+    bar.addEventListener('pointerup', onEnd);
+    bar.addEventListener('pointercancel', onEnd);
     document.addEventListener('pointermove', onMoveDoc);
-    document.addEventListener('pointerup', onUpDoc);
+    document.addEventListener('pointerup', onEnd);
+    // iOS WKWebView can fire pointercancel on document when its gesture
+    // recognizers (swipe-back, scroll) steal the touch. Without this,
+    // the drag silently dies and the bar snaps back.
+    document.addEventListener('pointercancel', onEnd);
+
+    // Prevent all competing touch gestures (scroll, swipe-back) during drag.
+    // touch-action:none on the bar alone isn't enough — iOS WKWebView's
+    // navigation gesture recognizer operates at the document level.
+    document.documentElement.style.setProperty('touch-action', 'none');
   }
 
   private _dragBar: HTMLElement | null = null;
