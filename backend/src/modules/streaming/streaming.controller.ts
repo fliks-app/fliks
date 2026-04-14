@@ -240,11 +240,23 @@ export class StreamingController {
     const audioStreamRaw = firstQueryString(req.query, 'audioStreamIndex');
     const audioStreamIndex =
       audioStreamRaw != null ? parseInt(audioStreamRaw, 10) : undefined;
+
+    // Compute segment format early — the stream builder needs it to decide
+    // whether HDR passthrough is possible (HEVC requires fMP4 on iOS).
+    const ss = await this.getStreamingSettings();
+    const audioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 1;
+    const clientFmp4 = deviceProfile.supportsHlsFmp4 ?? true;
+    let useFmp4: boolean;
+    if (ss.segmentFormat === 'ts') useFmp4 = false;
+    else if (ss.segmentFormat === 'fmp4') useFmp4 = clientFmp4;
+    else useFmp4 = audioCount > 1 && clientFmp4; // auto: fMP4 for multi-audio only
+
     const result = this.streamBuilder.evaluate(
       resolved,
       deviceProfile,
       tokenParam,
       burnInSubtitleId,
+      useFmp4,
     );
     // Cache transcode reasons for the admin dashboard
     if (result.transcodeReasons.length) {
@@ -275,14 +287,6 @@ export class StreamingController {
       mediaFileId,
       deviceProfile.supportsMultiAudioMuxed ?? false,
     );
-    // Decide segment format from admin streaming settings
-    const ss = await this.getStreamingSettings();
-    const audioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 1;
-    const clientFmp4 = deviceProfile.supportsHlsFmp4 ?? true;
-    let useFmp4: boolean;
-    if (ss.segmentFormat === 'ts') useFmp4 = false;
-    else if (ss.segmentFormat === 'fmp4') useFmp4 = clientFmp4;
-    else useFmp4 = audioCount > 1 && clientFmp4; // auto: fMP4 for multi-audio only
     this.activeStreamTracker.setFmp4Supported(mediaFileId, useFmp4);
     this.activeStreamTracker.setStreamingDurations(ss.segmentDuration, ss.initTime);
     // Update module-level constants used by buildVodPlaylist and transcoding
