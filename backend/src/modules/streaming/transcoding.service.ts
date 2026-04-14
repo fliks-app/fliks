@@ -105,6 +105,10 @@ export interface TranscodeSession {
   stderr?: string;
   /** True for audio-only sessions (multi-audio HLS renditions) */
   isAudioOnly?: boolean;
+  /** The `-start_number` this session was spawned with. Used to determine
+   *  whether a cache gap is ahead of (reachable) or behind (unreachable)
+   *  the current encoding position. */
+  startSegment?: number;
 }
 
 /** Build the session map key: one transcode per user per file (like Jellyfin/Plex). */
@@ -204,6 +208,34 @@ async function segmentNearby(
     }
   }
   return false;
+}
+
+/**
+ * Starting from `fromSegment`, find the first segment number NOT on disk.
+ * Returns `null` when every segment up to a reasonable lookahead exists.
+ */
+function firstMissingSegment(
+  cachePath: string,
+  fromSegment: number,
+  maxLookahead = 2000,
+): number | null {
+  const exts = ['.m4s', '.ts'];
+  const dirs = [cachePath, path.join(cachePath, '0')];
+  for (let seg = fromSegment; seg < fromSegment + maxLookahead; seg++) {
+    const num = String(seg).padStart(4, '0');
+    let found = false;
+    for (const dir of dirs) {
+      if (found) break;
+      for (const ext of exts) {
+        if (existsSync(path.join(dir, `seg-${num}${ext}`))) {
+          found = true;
+          break;
+        }
+      }
+    }
+    if (!found) return seg;
+  }
+  return null;
 }
 
 let SEGMENT_DURATION = 3;
@@ -452,24 +484,15 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       } else {
         existing.lastAccess = Date.now();
 
-        // If the requested segment isn't in the current cache, restart FFmpeg
-        // with a seek. Covers both forward seeks AND backward seeks (e.g. seek
-        // to t=0 while the current session was started mid-file via resume) —
-        // previously the `> 0` guard skipped the restart for segment 0, so the
-        // cache was missing it and the client got 404.
+        // ── Seek handling ──
+        // Check if the segment (or its neighbour) is already on disk.
         if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
+          // Segment missing and not within tolerance → restart at this segment.
           this.log.log(
-            `Seek: restarting transcode [${key}] from segment ${requestedSegment}`,
+            `Seek: restarting transcode [${key}] from segment ${requestedSegment} (not cached)`,
           );
           this.sessions.delete(key);
-          // Kill ffmpeg but KEEP the cache directory — segments already
-          // written stay servable while the new ffmpeg instance catches up.
-          // Without this, a backward seek wipes all cached segments, the new
-          // session must re-encode in real-time, and the player starves
-          // (buffer underrun → infinite loading on Android).
           await this.killProcess(existing.process);
-          // Ensure dirs exist (var_stream_map subdirs may not if first session
-          // was non-var_stream_map, or vice-versa after a playback-info change).
           await fsp.mkdir(existing.cachePath, { recursive: true });
           if (useVarStreamMap) {
             for (let i = 0; i <= ctxAudioStreams!.length; i++) {
@@ -487,6 +510,47 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           );
         }
 
+        // Segment IS cached — scan ahead for the first gap so ffmpeg
+        // fills it before the player gets there.
+        // Segment is cached. Scan ahead for a gap so ffmpeg can start
+        // filling it before the player gets there. Only restart if the gap
+        // is BEHIND the current session's start (unreachable — ffmpeg only
+        // encodes forward). Gaps at or ahead of startSegment are just the
+        // encoding frontier; ffmpeg will produce them naturally.
+        const gap = firstMissingSegment(
+          existing.cachePath,
+          requestedSegment,
+        );
+        if (
+          gap != null &&
+          gap < (existing.startSegment ?? 0)
+        ) {
+          this.log.log(
+            `Seek: segment ${requestedSegment} cached, restarting transcode [${key}] at unreachable gap ${gap} (session started at ${existing.startSegment})`,
+          );
+          this.sessions.delete(key);
+          await this.killProcess(existing.process);
+          await fsp.mkdir(existing.cachePath, { recursive: true });
+          if (useVarStreamMap) {
+            for (let i = 0; i <= ctxAudioStreams!.length; i++) {
+              await fsp.mkdir(
+                path.join(existing.cachePath, String(i)),
+                { recursive: true },
+              );
+            }
+          }
+          return this.startSeekSession(
+            key,
+            mediaFileId,
+            quality,
+            absolutePath,
+            existing.cachePath,
+            gap,
+            ctx,
+          );
+        }
+        // Gap is null (everything cached) or >= startSegment (ffmpeg will
+        // reach it) — keep session, player reads from cache meanwhile.
         return existing;
       }
     }
@@ -782,6 +846,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       cachePath: sessionDir,
       lastAccess: Date.now(),
       ready: readyPromise,
+      startSegment,
       ...extra,
     };
 
@@ -1567,13 +1632,23 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
         if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
           this.log.log(
-            `Seek: restarting remux [${key}] from segment ${requestedSegment}`,
+            `Seek: restarting remux [${key}] from segment ${requestedSegment} (not cached)`,
           );
           this.sessions.delete(key);
-          // Kill ffmpeg but keep cached segments (same rationale as transcode seek).
           await this.killProcess(existing.process);
         } else {
-          return existing;
+          // Same gap-scan + startSegment guard as transcode path.
+          const gap = firstMissingSegment(existing.cachePath, requestedSegment);
+          if (gap != null && gap < (existing.startSegment ?? 0)) {
+            this.log.log(
+              `Seek: segment ${requestedSegment} cached, restarting remux [${key}] at unreachable gap ${gap}`,
+            );
+            this.sessions.delete(key);
+            await this.killProcess(existing.process);
+            requestedSegment = gap;
+          } else {
+            return existing;
+          }
         }
       }
     }
@@ -1658,17 +1733,24 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       } else {
         existing.lastAccess = Date.now();
 
-        // Handle seek (including seek to 0 when the current session started
-        // later via resume).
         if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
           this.log.log(
-            `Seek: restarting audio session [${key}] from segment ${requestedSegment}`,
+            `Seek: restarting audio session [${key}] from segment ${requestedSegment} (not cached)`,
           );
           this.sessions.delete(key);
-          // Kill ffmpeg but keep cached segments (same rationale as video seek).
           await this.killProcess(existing.process);
         } else {
-          return existing;
+          const gap = firstMissingSegment(existing.cachePath, requestedSegment);
+          if (gap != null && gap < (existing.startSegment ?? 0)) {
+            this.log.log(
+              `Seek: segment ${requestedSegment} cached, restarting audio [${key}] at unreachable gap ${gap}`,
+            );
+            this.sessions.delete(key);
+            await this.killProcess(existing.process);
+            requestedSegment = gap;
+          } else {
+            return existing;
+          }
         }
       }
     }
