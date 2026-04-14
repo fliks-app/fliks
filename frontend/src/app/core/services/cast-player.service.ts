@@ -72,6 +72,7 @@ export class CastPlayerService {
       supportsHlsFmp4: false,  // Default Cast receiver (MPL) doesn't support fMP4 HLS
       supportsHlsTs: true,
       supportsHdr: cs.hdr ?? false,
+      hdrRequiresFmp4: false,  // Cast uses TS — HDR will be tonemapped if needed
       supportsMultiAudioMuxed: false,
     };
   }

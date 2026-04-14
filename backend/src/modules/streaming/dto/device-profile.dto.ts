@@ -82,5 +82,9 @@ export class DeviceProfileDto {
 
   @IsBoolean()
   @IsOptional()
+  hdrRequiresFmp4?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
   supportsMultiAudioMuxed?: boolean;
 }

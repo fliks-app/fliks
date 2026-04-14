@@ -32,6 +32,8 @@ export class StreamBuilderService {
     profile: DeviceProfileDto,
     tokenParam: string,
     burnInSubtitleId?: number,
+    /** Whether the output will use fMP4 segments (false = TS). */
+    useFmp4 = true,
   ): PlaybackInfoResponse {
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
@@ -91,7 +93,15 @@ export class StreamBuilderService {
     // HDR detection
     const isSourceHdr = !!source.hdrFormat;
     const clientSupportsHdr = profile.supportsHdr === true;
-    const needsTonemapping = isSourceHdr && !clientSupportsHdr;
+    // HDR passthrough requires HEVC which some containers can't carry:
+    // iOS AVPlayer crashes on HEVC in TS. When the client declares
+    // hdrRequiresFmp4 and the output is TS, force tonemapping to H264 SDR.
+    const hdrBlockedByFormat =
+      isSourceHdr &&
+      clientSupportsHdr &&
+      profile.hdrRequiresFmp4 === true &&
+      !useFmp4;
+    const needsTonemapping = (isSourceHdr && !clientSupportsHdr) || hdrBlockedByFormat;
     const needsBurnIn = !!burnInSubtitleId;
     const needsCrop = !!v?.crop;
 
@@ -100,14 +110,14 @@ export class StreamBuilderService {
     // --- Step 1: Try DirectPlay ---
     const directPlayResult = this.tryDirectPlay(source, profile, reasons);
 
-    // HDR on SDR client forces transcode even if codecs match
+    // HDR on SDR client or incompatible format forces transcode
     if (needsTonemapping) {
       if (directPlayResult.canDirectPlay)
         directPlayResult.canDirectPlay = false;
-      reasons.push({
-        flag: 'VideoHdrNotSupported',
-        message: `HDR → SDR (tone mapping ${source.hdrFormat})`,
-      });
+      const reason = hdrBlockedByFormat
+        ? `HDR → SDR (HEVC incompatible with TS, ${source.hdrFormat})`
+        : `HDR → SDR (tone mapping ${source.hdrFormat})`;
+      reasons.push({ flag: 'VideoHdrNotSupported', message: reason });
     }
 
     // Subtitle burn-in forces transcode
