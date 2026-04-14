@@ -462,9 +462,15 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             `Seek: restarting transcode [${key}] from segment ${requestedSegment}`,
           );
           this.sessions.delete(key);
-          await this.killAndClean(existing.process, existing.cachePath);
+          // Kill ffmpeg but KEEP the cache directory — segments already
+          // written stay servable while the new ffmpeg instance catches up.
+          // Without this, a backward seek wipes all cached segments, the new
+          // session must re-encode in real-time, and the player starves
+          // (buffer underrun → infinite loading on Android).
+          await this.killProcess(existing.process);
+          // Ensure dirs exist (var_stream_map subdirs may not if first session
+          // was non-var_stream_map, or vice-versa after a playback-info change).
           await fsp.mkdir(existing.cachePath, { recursive: true });
-          // Recreate var_stream_map subdirectories
           if (useVarStreamMap) {
             for (let i = 0; i <= ctxAudioStreams!.length; i++) {
               await fsp.mkdir(path.join(existing.cachePath, String(i)), { recursive: true });
@@ -1564,7 +1570,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             `Seek: restarting remux [${key}] from segment ${requestedSegment}`,
           );
           this.sessions.delete(key);
-          await this.killAndClean(existing.process, existing.cachePath);
+          // Kill ffmpeg but keep cached segments (same rationale as transcode seek).
+          await this.killProcess(existing.process);
         } else {
           return existing;
         }
@@ -1658,7 +1665,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             `Seek: restarting audio session [${key}] from segment ${requestedSegment}`,
           );
           this.sessions.delete(key);
-          await this.killAndClean(existing.process, existing.cachePath);
+          // Kill ffmpeg but keep cached segments (same rationale as video seek).
+          await this.killProcess(existing.process);
         } else {
           return existing;
         }

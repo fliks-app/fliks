@@ -125,7 +125,7 @@ export class StreamingApiService {
    * (e.g. "1080p") — avoids the "first segment fetch spawns FFmpeg at a
    * wrong variant Shaka probed during load" waste.
    */
-  getHlsUrl(mediaFileId: number, startQuality?: string): string {
+  getHlsUrl(mediaFileId: number, startQuality?: string, startAt?: number): string {
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/master.m3u8`)
       : `/api/stream/${mediaFileId}/master.m3u8`;
@@ -133,6 +133,7 @@ export class StreamingApiService {
     const token = this.auth.accessToken;
     if (token) params.push(`token=${encodeURIComponent(token)}`);
     if (startQuality) params.push(`startQuality=${encodeURIComponent(startQuality)}`);
+    if (startAt != null) params.push(`startAt=${startAt}`);
     return params.length ? `${base}?${params.join('&')}` : base;
   }
 

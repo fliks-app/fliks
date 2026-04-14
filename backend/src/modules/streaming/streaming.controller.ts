@@ -450,12 +450,12 @@ export class StreamingController {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(playlist);
 
-    // Pre-spawn ffmpeg as soon as we know the target quality. The player
-    // typically requests seg-0000 ~50-200ms after the master, so kicking
-    // ffmpeg here amortises the spawn + analyse latency. Skipped when no
-    // quality is pinned (auto mode — we can't guess which variant the
-    // player picks).
-    if (effectiveOnlyQuality && effectiveOnlyQuality !== 'auto') {
+    // Pre-spawn ffmpeg when we know the player will start at seg-0 (fresh
+    // play, not resume). For resume the player seeks to a mid-file segment
+    // which would kill this pre-spawned session — wasting the work and
+    // adding a kill+restart penalty.
+    const startAt = parseFloat(firstQueryString(req.query, 'startAt') ?? '0');
+    if (effectiveOnlyQuality && effectiveOnlyQuality !== 'auto' && startAt === 0) {
       const existing = this.transcodingService.getExistingSession(
         mediaFileId,
         req.user?.id,

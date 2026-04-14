@@ -612,7 +612,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           const token = this.authService.accessToken;
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
           const nativeStartQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-          const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId, nativeStartQuality);
+          const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId, nativeStartQuality, startTime);
           await this.engine!.load(hlsUrl, startTime, undefined, headers);
         } else {
           await this.createShakaEngine();
@@ -663,7 +663,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             // the right profile + applies the quality-change grace period to
             // protect the session from Shaka's startup bandwidth probe.
             const startQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-            const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId, startQuality);
+            const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId, startQuality, startTime);
             await this.engine!.load(hlsUrl, startTime);
           }
 
@@ -1403,7 +1403,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } else {
       const savedQualityId = this.activeQualityId();
       const startQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-      await this.engine.load(this.streamingApi.getHlsUrl(this.mediaFileId, startQuality), currentPos);
+      await this.engine.load(this.streamingApi.getHlsUrl(this.mediaFileId, startQuality, currentPos), currentPos);
     }
 
     this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
