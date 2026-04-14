@@ -137,16 +137,6 @@ export class MediaController {
     return this.mediaService.bulkUpdate(dto);
   }
 
-  @Post(':id/rename')
-  @CheckPolicies((ability) => ability.can(Action.Update, Media))
-  async renameFiles(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: User,
-  ) {
-    await this.assertMediaAccessible(id, user);
-    return this.mediaService.renameFiles(id);
-  }
-
   @Get(':id/releases')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
   async movieReleases(

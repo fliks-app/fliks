@@ -240,10 +240,6 @@ export class MediaService {
     return firstValueFrom(this.http.delete(`/api/media/${id}`));
   }
 
-  renameFiles(id: number) {
-    return firstValueFrom(this.http.post<{ renamed: number }>(`/api/media/${id}/rename`, {}));
-  }
-
   getMovieReleases(id: number, q?: string) {
     const params: Record<string, string> = {};
     if (q?.trim()) params['q'] = q.trim();

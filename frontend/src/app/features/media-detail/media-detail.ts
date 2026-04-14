@@ -258,8 +258,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly canEditProfiles = computed(() => this.auth.hasPermission('media.edit'));
   readonly isAdmin = computed(() => this.auth.hasPermission('settings.access'));
   readonly deleteLoading = signal(false);
-  readonly renameLoading = signal(false);
-  readonly renameToast = signal('');
   readonly monitoredLoading = signal(false);
   readonly refreshLoading = signal(false);
   readonly refreshToast = signal('');
@@ -941,25 +939,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.toast.error(this.translate.instant('media_detail.grab_error'));
     } finally {
       this.seasonGrabBusy.set(null);
-    }
-  }
-
-  async renameFiles() {
-    const m = this.media();
-    if (!m) return;
-    this.renameLoading.set(true);
-    this.renameToast.set('');
-    try {
-      const result = await this.mediaService.renameFiles(m.id);
-      this.renameToast.set(this.translate.instant('media_detail.rename_ok', { count: result.renamed }));
-      const updated = await this.mediaService.getOne(m.id);
-      this.media.set(updated);
-      if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      this.renameToast.set(httpErr.error?.message ?? this.translate.instant('media_detail.rename_error'));
-    } finally {
-      this.renameLoading.set(false);
     }
   }
 
