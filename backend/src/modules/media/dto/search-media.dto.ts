@@ -68,6 +68,11 @@ export class SearchMediaDto {
   @Type(() => Number)
   limit?: number;
 
+  @IsNumber()
+  @IsOptional()
+  @Type(() => Number)
+  libraryId?: number;
+
   @IsBoolean()
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)

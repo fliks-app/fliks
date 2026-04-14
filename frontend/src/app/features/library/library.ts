@@ -9,13 +9,15 @@ import {
   OnDestroy,
   ElementRef,
   ViewChild,
+  effect,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { MediaService, Media } from '../../core/services/api/media.service';
 import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { ProfilesService, QualityProfile } from '../../core/services/api/profiles.service';
+import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
@@ -24,23 +26,27 @@ import { LucideSearch, LucideSlidersHorizontal } from '@lucide/angular';
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 @Component({
-  selector: 'app-movies',
+  selector: 'app-library',
   imports: [MediaCardComponent, FormsModule, TranslateModule, LucideSearch, LucideSlidersHorizontal],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  templateUrl: './movies.html',
+  templateUrl: './library.html',
 })
-export class MoviesComponent implements OnInit, OnDestroy {
+export class LibraryComponent implements OnInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly profilesService = inject(ProfilesService);
+  private readonly librariesApi = inject(LibrariesApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly injector = inject(Injector);
-  private readonly scrollKey = 'movies';
+  private readonly translate = inject(TranslateService);
+
+  /** Resolved library (null while loading or if not found). */
+  readonly library = signal<LibrarySummary | null>(null);
+  readonly libraryName = signal('');
 
   readonly list = new InfiniteScrollList<Media>();
-  /** Media IDs fully watched (see GET /api/playback/watched-ids). */
   readonly watchedIds = signal<Set<number>>(new Set());
   readonly loading = signal(false);
   readonly searchQuery = signal('');
@@ -49,11 +55,29 @@ export class MoviesComponent implements OnInit, OnDestroy {
   readonly filterStatus = signal('');
 
   readonly monitoredCount = computed(() => this.list.all().filter((m) => m.monitored).length);
-  readonly movieFileCount = computed(() => this.list.all().filter((m) => (m.files?.length ?? 0) > 0).length);
+  readonly movieFileCount = computed(() =>
+    this.list.all().filter((m) => m.type === 'movie' && (m.files?.length ?? 0) > 0).length,
+  );
+  readonly totalMovies = computed(() =>
+    this.list.all().filter((m) => m.type === 'movie').length,
+  );
+  readonly totalSeries = computed(() =>
+    this.list.all().filter((m) => m.type === 'series').length,
+  );
+  readonly totalEpisodes = computed(() =>
+    this.list.all().reduce((sum, m) => sum + (m.episodeStats?.totalEpisodes ?? 0), 0),
+  );
+  readonly downloadedEpisodes = computed(() =>
+    this.list.all().reduce((sum, m) => sum + (m.episodeStats?.downloadedEpisodes ?? 0), 0),
+  );
+  readonly hasMovies = computed(() => this.totalMovies() > 0);
+  readonly hasSeries = computed(() => this.totalSeries() > 0);
 
   readonly alphabet = ALPHABET;
   readonly filtersOpen = signal(false);
-  readonly hasActiveFilters = computed(() => this.filterMonitored() !== '' || this.filterStatus() !== '' || this.sortBy() !== 'title');
+  readonly hasActiveFilters = computed(() =>
+    this.filterMonitored() !== '' || this.filterStatus() !== '' || this.sortBy() !== 'title',
+  );
 
   @ViewChild('sentinel') set sentinelRef(ref: ElementRef<HTMLElement> | undefined) {
     this.list.observeSentinel(ref);
@@ -67,19 +91,63 @@ export class MoviesComponent implements OnInit, OnDestroy {
   readonly bulkMonitored = signal<'' | 'true' | 'false'>('');
   readonly qualityProfiles = signal<QualityProfile[]>([]);
 
-  ngOnInit() {
-    const qp = this.route.snapshot.queryParamMap;
-    const stored = this.loadFilters();
-    this.searchQuery.set(qp.get('q') ?? stored['q'] ?? '');
-    this.filterMonitored.set((qp.get('monitored') ?? stored['monitored'] ?? '') as '' | 'true' | 'false');
-    this.filterStatus.set(qp.get('status') ?? stored['status'] ?? '');
-    this.sortBy.set(qp.get('sortBy') ?? stored['sortBy'] ?? 'title');
+  private allLibraries: LibrarySummary[] = [];
 
-    this.scrollMemory.activate(this.scrollKey);
-    this.list.trackScroll('movie');
-    this.syncQueryParams();
-    this.load().then(() => this.scrollMemory.restore(this.scrollKey, this.injector));
+  /** Re-load when route param changes (e.g. clicking another library in sidebar). */
+  private readonly paramEffect = effect(() => {
+    // Angular signal-based route params aren't available yet in 21.x for
+    // lazy routes, so we subscribe manually in ngOnInit below.
+  }, { allowSignalWrites: true });
+
+  ngOnInit() {
     this.profilesService.getQualityProfiles().then((p) => this.qualityProfiles.set(p));
+
+    // Subscribe to route param changes (handles initial load + sidebar nav).
+    this.route.params.subscribe(async (params) => {
+      const rawName = params['libraryName'] as string;
+      if (!rawName) return;
+      const name = decodeURIComponent(rawName);
+      this.libraryName.set(name);
+
+      // Resolve library by name
+      if (!this.allLibraries.length) {
+        this.allLibraries = await this.librariesApi.listMine();
+      }
+
+      // Handle legacy redirects (__default_movies__ / __default_series__)
+      if (name === '__default_movies__' || name === '__default_series__') {
+        const flag = name === '__default_movies__' ? 'isDefaultForMovies' : 'isDefaultForSeries';
+        const defaultLib = this.allLibraries.find((l) => l[flag]) ?? this.allLibraries[0];
+        if (defaultLib) {
+          void this.router.navigate(
+            ['/libraries', encodeURIComponent(defaultLib.name)],
+            { replaceUrl: true },
+          );
+        }
+        return;
+      }
+
+      const lib = this.allLibraries.find((l) => l.name === name);
+      this.library.set(lib ?? null);
+      if (!lib) return;
+
+      // Restore filters
+      const scrollKey = `library-${lib.id}`;
+      const qp = this.route.snapshot.queryParamMap;
+      const stored = this.loadFilters(lib.name);
+      this.searchQuery.set(qp.get('q') ?? stored['q'] ?? '');
+      this.filterMonitored.set(
+        (qp.get('monitored') ?? stored['monitored'] ?? '') as '' | 'true' | 'false',
+      );
+      this.filterStatus.set(qp.get('status') ?? stored['status'] ?? '');
+      this.sortBy.set(qp.get('sortBy') ?? stored['sortBy'] ?? 'title');
+
+      this.scrollMemory.activate(scrollKey);
+      this.list.trackScroll('media');
+      this.syncQueryParams();
+      await this.load(lib.id);
+      this.scrollMemory.restore(scrollKey, this.injector);
+    });
   }
 
   ngOnDestroy() {
@@ -88,18 +156,18 @@ export class MoviesComponent implements OnInit, OnDestroy {
   }
 
   scrollToLetter(letter: string) {
-    this.list.scrollToLetter(letter, (m) => m.title, 'movie');
+    this.list.scrollToLetter(letter, (m) => m.title, 'media');
   }
 
   onSearch(query: string) {
     this.searchQuery.set(query);
     this.syncQueryParams();
-    this.load();
+    this.load(this.library()?.id);
   }
 
   onFilterChange() {
     this.syncQueryParams();
-    this.load();
+    this.load(this.library()?.id);
   }
 
   toggleSelect(id: number) {
@@ -147,7 +215,7 @@ export class MoviesComponent implements OnInit, OnDestroy {
       this.bulkQualityProfileId.set(null);
       this.bulkMonitored.set('');
       this.bulkMode.set(false);
-      await this.load();
+      await this.load(this.library()?.id);
     } finally {
       this.bulkSaving.set(false);
     }
@@ -163,7 +231,9 @@ export class MoviesComponent implements OnInit, OnDestroy {
     this.saveFilters();
   }
 
-  private readonly storageKey = 'fliks.filters.movies';
+  private get storageKey(): string {
+    return `fliks.filters.library.${this.libraryName()}`;
+  }
 
   private saveFilters() {
     const data: Record<string, string> = {};
@@ -174,31 +244,23 @@ export class MoviesComponent implements OnInit, OnDestroy {
     localStorage.setItem(this.storageKey, JSON.stringify(data));
   }
 
-  private loadFilters(): Record<string, string> {
+  private loadFilters(name: string): Record<string, string> {
     try {
-      return JSON.parse(localStorage.getItem(this.storageKey) ?? '{}');
+      return JSON.parse(localStorage.getItem(`fliks.filters.library.${name}`) ?? '{}');
     } catch {
       return {};
     }
   }
 
-  async refreshWatchedIds() {
-    try {
-      const ids = await this.streamingApi.getWatchedMediaIds();
-      this.watchedIds.set(new Set(ids));
-    } catch {
-      /* ignore */
-    }
-  }
-
-  private async load() {
+  private async load(libraryId?: number) {
+    if (!libraryId) return;
     this.loading.set(true);
     const monitored = this.filterMonitored();
     try {
       const fs = this.filterStatus();
       const [res, watchedIds] = await Promise.all([
         this.mediaService.getAll({
-          type: 'movie',
+          libraryId,
           q: this.searchQuery() || undefined,
           sortBy: this.sortBy(),
           monitored: monitored ? monitored === 'true' : undefined,

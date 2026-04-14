@@ -22,13 +22,21 @@ import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
 import { User } from '../users/entities/user.entity';
+import { Library } from './entities/library.entity';
 
 @Controller('libraries')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
 export class LibrariesController {
   constructor(private readonly service: LibrariesService) {}
 
-  /** List the libraries the caller can read. Admin sees everything. */
+  /** Lightweight library list for all authenticated users (sidebar). */
+  @Get('mine')
+  @CheckPolicies((ability) => ability.can(Action.Read, Library))
+  findMine(@Req() req: Request) {
+    return this.service.findAccessibleSummaries(req.user as User);
+  }
+
+  /** List the libraries the caller can read (admin — includes root folders + disk info). */
   @Get()
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   findAll(@Req() req: Request) {

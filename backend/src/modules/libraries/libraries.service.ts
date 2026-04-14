@@ -162,6 +162,21 @@ export class LibrariesService implements OnModuleInit {
   // CRUD
   // ---------------------------------------------------------------------------
 
+  /** Lightweight projection for non-admin users (sidebar, route resolution). */
+  async findAccessibleSummaries(user: User): Promise<
+    Pick<Library, 'id' | 'name' | 'mediaTypes' | 'isDefaultForMovies' | 'isDefaultForSeries'>[]
+  > {
+    const accessible = await this.getAccessibleLibraryIds(user);
+    const where = accessible == null
+      ? {}
+      : { id: In(accessible.length ? accessible : [-1]) };
+    return this.repo.find({
+      where,
+      order: { name: 'ASC' },
+      select: ['id', 'name', 'mediaTypes', 'isDefaultForMovies', 'isDefaultForSeries'],
+    });
+  }
+
   async findAllForUser(user: User): Promise<LibraryWithDetails[]> {
     const accessible = await this.getAccessibleLibraryIds(user);
     const where = accessible == null ? {} : { id: In(accessible.length ? accessible : [-1]) };

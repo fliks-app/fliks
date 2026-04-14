@@ -350,6 +350,20 @@ export class MediaService {
     return { movies, series };
   }
 
+  async getCountsByLibrary(
+    accessibleLibraryIds: number[] | null,
+  ): Promise<Record<number, number>> {
+    const qb = this.mediaRepo
+      .createQueryBuilder('m')
+      .select('m."libraryId"', 'libraryId')
+      .addSelect('COUNT(*)::int', 'count')
+      .where('m."libraryId" IS NOT NULL')
+      .groupBy('m."libraryId"');
+    this.applyLibraryAcl(qb, accessibleLibraryIds);
+    const rows: { libraryId: number; count: number }[] = await qb.getRawMany();
+    return Object.fromEntries(rows.map((r) => [r.libraryId, r.count]));
+  }
+
   async findAll(
     query: SearchMediaDto,
     userId?: number,
@@ -1160,6 +1174,11 @@ export class MediaService {
     qb: SelectQueryBuilder<Media>,
     query: SearchMediaDto,
   ): void {
+    if (query.libraryId) {
+      qb.andWhere('media.libraryId = :libraryId', {
+        libraryId: query.libraryId,
+      });
+    }
     if (query.type) {
       qb.andWhere('media.type = :type', { type: query.type });
     }

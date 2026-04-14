@@ -18,6 +18,7 @@ import { Keyboard } from '@capacitor/keyboard';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import { MediaService } from '../../core/services/api/media.service';
+import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { DownloadClientsApiService } from '../../core/services/api/download-clients-api.service';
 import { RequestsService } from '../../core/services/api/requests.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
@@ -78,6 +79,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly mediaService = inject(MediaService);
+  private readonly librariesApi = inject(LibrariesApiService);
   private readonly downloadApi = inject(DownloadClientsApiService);
   private readonly requestsService = inject(RequestsService);
   readonly serverConfig = inject(ServerConfigService);
@@ -127,8 +129,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.lastScrollY = y;
   };
 
-  readonly movieCount = signal(0);
-  readonly seriesCount = signal(0);
+  /** Accessible libraries for the sidebar. */
+  readonly libraries = signal<LibrarySummary[]>([]);
+  /** Media count per library ID. */
+  readonly libraryCounts = signal<Record<number, number>>({});
   readonly queueCount = signal(0);
   readonly pendingRequestCount = signal(0);
 
@@ -212,13 +216,14 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   async refreshCounts() {
     try {
-      const [counts, queue, requests] = await Promise.all([
-        this.mediaService.getCounts(),
+      const [libs, counts, queue, requests] = await Promise.all([
+        this.librariesApi.listMine(),
+        this.mediaService.getCountsByLibrary(),
         this.downloadApi.getQueue(),
         this.requestsService.list({ status: 'pending', limit: 1 }),
       ]);
-      this.movieCount.set(counts.movies);
-      this.seriesCount.set(counts.series);
+      this.libraries.set(libs);
+      this.libraryCounts.set(counts);
       this.queueCount.set(queue.length);
       this.pendingRequestCount.set(requests.total);
     } catch {
@@ -228,10 +233,21 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   private async refreshMediaCounts() {
     try {
-      const counts = await this.mediaService.getCounts();
-      this.movieCount.set(counts.movies);
-      this.seriesCount.set(counts.series);
+      const counts = await this.mediaService.getCountsByLibrary();
+      this.libraryCounts.set(counts);
     } catch { /* ignore */ }
+  }
+
+  libraryUrl(lib: LibrarySummary): string {
+    return `/libraries/${encodeURIComponent(lib.name)}`;
+  }
+
+  /** Icon key for a library based on its media types. */
+  libraryIcon(lib: LibrarySummary): 'film' | 'tv' | 'grid' {
+    const t = lib.mediaTypes;
+    if (t.length === 1 && t[0] === 'movie') return 'film';
+    if (t.length === 1 && t[0] === 'series') return 'tv';
+    return 'grid';
   }
 
   private async refreshQueueCount() {

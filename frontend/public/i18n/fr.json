@@ -348,11 +348,9 @@
     "preview_studios": "Studios",
     "preview_votes": "votes"
   },
-  "movies": {
-    "title": "Films",
-    "empty": "Aucun film dans la bibliothèque",
-    "empty_hint": "Ajoutez des films pour commencer",
-    "load_more": "Charger plus",
+  "library": {
+    "empty": "Aucun média dans cette bibliothèque",
+    "empty_hint": "Ajoutez des films ou des séries pour commencer",
     "filter_all": "Tous",
     "filter_monitored": "Surveillés",
     "filter_unmonitored": "Non surveillés",
@@ -371,34 +369,13 @@
     "bulk_select_all": "Tout sélectionner",
     "bulk_deselect": "Tout désélectionner",
     "bulk_quality_profile": "Profil de qualité",
-    "bulk_monitored": "Surveillance",
-    "no_results_letter": "Aucun film pour cette lettre."
+    "bulk_monitored": "Surveillance"
+  },
+  "movies": {
+    "title": "Films"
   },
   "series": {
-    "title": "Séries TV",
-    "empty": "Aucune série dans la bibliothèque",
-    "empty_hint": "Ajoutez des séries pour commencer",
-    "load_more": "Charger plus",
-    "filter_all": "Toutes",
-    "filter_monitored": "Surveillées",
-    "filter_unmonitored": "Non surveillées",
-    "filter_all_status": "Tous les statuts",
-    "filter_downloaded": "Téléchargées",
-    "filter_missing": "Manquants",
-    "filter_cutoff_unmet": "Cutoff non atteint",
-    "sort_title": "Titre",
-    "sort_year": "Année",
-    "sort_added": "Ajouté",
-    "sort_rating": "Note",
-    "bulk_edit": "Édition groupée",
-    "bulk_selected": "{{count}} sélectionné(s)",
-    "bulk_apply": "Appliquer",
-    "bulk_cancel": "Annuler",
-    "bulk_select_all": "Tout sélectionner",
-    "bulk_deselect": "Tout désélectionner",
-    "bulk_quality_profile": "Profil de qualité",
-    "bulk_monitored": "Surveillance",
-    "no_results_letter": "Aucune série pour cette lettre."
+    "title": "Séries TV"
   },
   "persons": {
     "title": "Personnes",
@@ -1508,6 +1485,7 @@
     "movie_files": "Fichiers",
     "series": "Séries",
     "episodes": "Épisodes",
+    "total": "Total",
     "monitored": "Suivis",
     "unmonitored": "Non suivis"
   }

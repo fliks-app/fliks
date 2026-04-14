@@ -118,6 +118,14 @@ export class MediaController {
     return this.mediaService.getCounts(accessibleLibraryIds);
   }
 
+  @Get('counts-by-library')
+  @CheckPolicies((ability) => ability.can(Action.Read, Media))
+  async countsByLibrary(@CurrentUser() user: User) {
+    const accessibleLibraryIds =
+      await this.libraries.getAccessibleLibraryIds(user);
+    return this.mediaService.getCountsByLibrary(accessibleLibraryIds);
+  }
+
   @Get('qualities')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
   qualityDefinitions() {

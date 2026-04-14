@@ -1,7 +1,7 @@
 <div class="flex flex-col gap-4">
   <!-- Header -->
   <div class="flex flex-col gap-3">
-    <h1 class="sr-only lg:not-sr-only text-2xl font-bold">{{ 'series.title' | translate }}</h1>
+    <h1 class="sr-only lg:not-sr-only text-2xl font-bold">{{ libraryName() }}</h1>
     <!-- Search + filter toggle -->
     <div class="flex gap-2 items-center">
       <div class="relative flex-1">
@@ -26,7 +26,7 @@
         [class.btn-outline]="!bulkMode()"
         (click)="toggleBulkMode()"
       >
-        {{ 'series.bulk_edit' | translate }}
+        {{ 'library.bulk_edit' | translate }}
       </button>
     </div>
     <!-- Collapsible filters -->
@@ -37,29 +37,29 @@
           [ngModel]="filterMonitored()"
           (ngModelChange)="filterMonitored.set($event); onFilterChange()"
         >
-          <option value="">{{ 'series.filter_all' | translate }}</option>
-          <option value="true">{{ 'series.filter_monitored' | translate }}</option>
-          <option value="false">{{ 'series.filter_unmonitored' | translate }}</option>
+          <option value="">{{ 'library.filter_all' | translate }}</option>
+          <option value="true">{{ 'library.filter_monitored' | translate }}</option>
+          <option value="false">{{ 'library.filter_unmonitored' | translate }}</option>
         </select>
         <select
           class="select select-bordered select-sm flex-1 min-w-28"
           [ngModel]="filterStatus()"
           (ngModelChange)="filterStatus.set($event); onFilterChange()"
         >
-          <option value="">{{ 'series.filter_all_status' | translate }}</option>
-          <option value="downloaded">{{ 'series.filter_downloaded' | translate }}</option>
-          <option value="missing">{{ 'series.filter_missing' | translate }}</option>
-          <option value="cutoffUnmet">{{ 'series.filter_cutoff_unmet' | translate }}</option>
+          <option value="">{{ 'library.filter_all_status' | translate }}</option>
+          <option value="downloaded">{{ 'library.filter_downloaded' | translate }}</option>
+          <option value="missing">{{ 'library.filter_missing' | translate }}</option>
+          <option value="cutoffUnmet">{{ 'library.filter_cutoff_unmet' | translate }}</option>
         </select>
         <select
           class="select select-bordered select-sm flex-1 min-w-28"
           [ngModel]="sortBy()"
           (ngModelChange)="sortBy.set($event); onFilterChange()"
         >
-          <option value="title">{{ 'series.sort_title' | translate }}</option>
-          <option value="year">{{ 'series.sort_year' | translate }}</option>
-          <option value="added">{{ 'series.sort_added' | translate }}</option>
-          <option value="rating">{{ 'series.sort_rating' | translate }}</option>
+          <option value="title">{{ 'library.sort_title' | translate }}</option>
+          <option value="year">{{ 'library.sort_year' | translate }}</option>
+          <option value="added">{{ 'library.sort_added' | translate }}</option>
+          <option value="rating">{{ 'library.sort_rating' | translate }}</option>
         </select>
         <button
           class="btn btn-sm lg:hidden"
@@ -67,7 +67,7 @@
           [class.btn-outline]="!bulkMode()"
           (click)="toggleBulkMode()"
         >
-          {{ 'series.bulk_edit' | translate }}
+          {{ 'library.bulk_edit' | translate }}
         </button>
       </div>
     }
@@ -79,37 +79,37 @@
     </div>
   } @else if (list.visible().length === 0) {
     <div class="text-center py-12 text-base-content/50">
-      <p class="text-lg">{{ 'series.empty' | translate }}</p>
-      <p class="text-sm mt-2">{{ 'series.empty_hint' | translate }}</p>
+      <p class="text-lg">{{ 'library.empty' | translate }}</p>
+      <p class="text-sm mt-2">{{ 'library.empty_hint' | translate }}</p>
     </div>
   } @else {
     @if (bulkMode()) {
       <div class="flex items-center gap-2 text-sm">
-        <button class="btn btn-xs btn-ghost" (click)="selectAll()">{{ 'series.bulk_select_all' | translate }}</button>
-        <button class="btn btn-xs btn-ghost" (click)="deselectAll()">{{ 'series.bulk_deselect' | translate }}</button>
+        <button class="btn btn-xs btn-ghost" (click)="selectAll()">{{ 'library.bulk_select_all' | translate }}</button>
+        <button class="btn btn-xs btn-ghost" (click)="deselectAll()">{{ 'library.bulk_deselect' | translate }}</button>
       </div>
     }
     <div class="flex gap-2">
       <div class="flex-1 min-w-0 pr-6 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-1.5 sm:gap-4">
-        @for (show of list.visible(); track show.id) {
+        @for (item of list.visible(); track item.id) {
           @if (bulkMode()) {
             <div
               class="relative cursor-pointer cv-auto"
-              [id]="'series-' + show.id"
-              (click)="toggleSelect(show.id)"
+              [id]="'media-' + item.id"
+              (click)="toggleSelect(item.id)"
             >
               <input
                 type="checkbox"
                 class="checkbox checkbox-primary checkbox-sm absolute top-2 left-2 z-10"
-                [checked]="selectedIds().has(show.id)"
+                [checked]="selectedIds().has(item.id)"
                 (click)="$event.stopPropagation()"
-                (change)="toggleSelect(show.id)"
+                (change)="toggleSelect(item.id)"
               />
-              <app-media-card [media]="show" [showMonitoredLabel]="true" />
+              <app-media-card [media]="item" [showMonitoredLabel]="true" />
             </div>
           } @else {
-            <div class="" [id]="'series-' + show.id">
-              <app-media-card [media]="show" [showMonitoredLabel]="true" />
+            <div [id]="'media-' + item.id">
+              <app-media-card [media]="item" [showMonitoredLabel]="true" />
             </div>
           }
         }
@@ -144,13 +144,13 @@
 
   @if (bulkMode() && selectedIds().size > 0) {
     <div class="sticky bottom-0 z-20 bg-base-200 border-t border-base-300 px-4 py-3 flex flex-wrap items-center gap-3 shadow-lg rounded-t-lg">
-      <span class="font-semibold text-sm">{{ 'series.bulk_selected' | translate:{ count: selectedIds().size } }}</span>
+      <span class="font-semibold text-sm">{{ 'library.bulk_selected' | translate:{ count: selectedIds().size } }}</span>
       <select
         class="select select-bordered select-sm"
         [ngModel]="bulkQualityProfileId()"
         (ngModelChange)="bulkQualityProfileId.set($event)"
       >
-        <option [ngValue]="null">{{ 'series.bulk_quality_profile' | translate }}</option>
+        <option [ngValue]="null">{{ 'library.bulk_quality_profile' | translate }}</option>
         @for (profile of qualityProfiles(); track profile.id) {
           <option [ngValue]="profile.id">{{ profile.name }}</option>
         }
@@ -160,18 +160,18 @@
         [ngModel]="bulkMonitored()"
         (ngModelChange)="bulkMonitored.set($event)"
       >
-        <option value="">{{ 'series.bulk_monitored' | translate }}</option>
-        <option value="true">{{ 'series.filter_monitored' | translate }}</option>
-        <option value="false">{{ 'series.filter_unmonitored' | translate }}</option>
+        <option value="">{{ 'library.bulk_monitored' | translate }}</option>
+        <option value="true">{{ 'library.filter_monitored' | translate }}</option>
+        <option value="false">{{ 'library.filter_unmonitored' | translate }}</option>
       </select>
       <button class="btn btn-sm btn-primary" (click)="applyBulk()" [disabled]="bulkSaving()">
         @if (bulkSaving()) {
           <span class="loading loading-spinner loading-xs"></span>
         }
-        {{ 'series.bulk_apply' | translate }}
+        {{ 'library.bulk_apply' | translate }}
       </button>
       <button class="btn btn-sm btn-ghost" (click)="toggleBulkMode()">
-        {{ 'series.bulk_cancel' | translate }}
+        {{ 'library.bulk_cancel' | translate }}
       </button>
     </div>
   }
@@ -186,8 +186,13 @@
         <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-blue-400"></span> {{ 'legend.unreleased' | translate }}</div>
       </div>
       <div class="flex flex-wrap gap-x-8 gap-y-1">
-        <div><span class="font-semibold">{{ 'legend.series' | translate }}</span> {{ list.total() }}</div>
-        <div><span class="font-semibold">{{ 'legend.episodes' | translate }}</span> {{ downloadedEpisodes() }} / {{ totalEpisodes() }}</div>
+        <div><span class="font-semibold">{{ 'legend.total' | translate }}</span> {{ list.total() }}</div>
+        @if (hasMovies()) {
+          <div><span class="font-semibold">{{ 'legend.movie_files' | translate }}</span> {{ movieFileCount() }}</div>
+        }
+        @if (hasSeries()) {
+          <div><span class="font-semibold">{{ 'legend.episodes' | translate }}</span> {{ downloadedEpisodes() }} / {{ totalEpisodes() }}</div>
+        }
         <div><span class="font-semibold">{{ 'legend.monitored' | translate }}</span> {{ monitoredCount() }}</div>
         <div><span class="font-semibold">{{ 'legend.unmonitored' | translate }}</span> {{ list.total() - monitoredCount() }}</div>
       </div>

@@ -147,6 +147,7 @@ export interface SearchParams {
   cutoffUnmet?: boolean;
   letter?: string;
   excludeWatched?: boolean;
+  libraryId?: number;
 }
 
 export interface VideoStreamInfo {
@@ -200,6 +201,12 @@ export class MediaService {
 
   getCounts() {
     return firstValueFrom(this.http.get<{ movies: number; series: number }>('/api/media/counts'));
+  }
+
+  getCountsByLibrary() {
+    return firstValueFrom(
+      this.http.get<Record<number, number>>('/api/media/counts-by-library'),
+    );
   }
 
   getAll(params: SearchParams = {}) {

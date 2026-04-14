@@ -4,6 +4,15 @@ import { firstValueFrom } from 'rxjs';
 
 export type StalledCleanupProfileKey = 'fast' | 'medium' | 'slow';
 
+/** Lightweight library projection for non-admin users (sidebar, route resolution). */
+export interface LibrarySummary {
+  id: number;
+  name: string;
+  mediaTypes: ('movie' | 'series')[];
+  isDefaultForMovies: boolean;
+  isDefaultForSeries: boolean;
+}
+
 export interface LibraryRootFolder {
   id: number;
   path: string;
@@ -48,6 +57,13 @@ export class LibrariesApiService {
 
   list() {
     return firstValueFrom(this.http.get<Library[]>('/api/libraries'));
+  }
+
+  /** User-accessible lightweight list (sidebar, route resolution). */
+  listMine() {
+    return firstValueFrom(
+      this.http.get<LibrarySummary[]>('/api/libraries/mine'),
+    );
   }
 
   get(id: number) {

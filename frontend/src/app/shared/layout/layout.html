@@ -128,28 +128,25 @@
           <div class="fixed inset-0 z-40" (click)="bottomMenuOpen.set(false)"></div>
           <div class="absolute bottom-full right-2 mb-2 bg-base-100 rounded-box shadow-xl border border-base-200 min-w-48 z-50">
             <ul class="menu p-2 gap-0.5">
-              <li>
-                <a routerLink="/movies" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
-                  <span class="flex items-center gap-2">
-                    <svg lucideFilm class="h-5 w-5"></svg>
-                    {{ 'nav.movies' | translate }}
-                  </span>
-                  @if (movieCount() > 0) {
-                    <span class="badge badge-sm badge-ghost">{{ movieCount() }}</span>
-                  }
-                </a>
-              </li>
-              <li>
-                <a routerLink="/series" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
-                  <span class="flex items-center gap-2">
-                    <svg lucideTv class="h-5 w-5"></svg>
-                    {{ 'nav.series' | translate }}
-                  </span>
-                  @if (seriesCount() > 0) {
-                    <span class="badge badge-sm badge-ghost">{{ seriesCount() }}</span>
-                  }
-                </a>
-              </li>
+              @for (lib of libraries(); track lib.id) {
+                <li>
+                  <a [routerLink]="libraryUrl(lib)" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
+                    <span class="flex items-center gap-2">
+                      @if (libraryIcon(lib) === 'film') {
+                        <svg lucideFilm class="h-5 w-5"></svg>
+                      } @else if (libraryIcon(lib) === 'tv') {
+                        <svg lucideTv class="h-5 w-5"></svg>
+                      } @else {
+                        <svg lucideLayoutGrid class="h-5 w-5"></svg>
+                      }
+                      {{ lib.name }}
+                    </span>
+                    @if (libraryCounts()[lib.id]) {
+                      <span class="badge badge-sm badge-ghost">{{ libraryCounts()[lib.id] }}</span>
+                    }
+                  </a>
+                </li>
+              }
               <li>
                 <a routerLink="/persons" routerLinkActive="active" (click)="resetNavHistory()">
                   <svg lucideUsers class="h-5 w-5"></svg>
@@ -219,28 +216,25 @@
         </li>
 
         <li class="menu-title text-xs uppercase tracking-wider mt-3">{{ 'nav.section_library' | translate }}</li>
-        <li>
-          <a routerLink="/movies" routerLinkActive="active" class="justify-between">
-            <span class="flex items-center gap-2">
-              <svg lucideFilm class="h-5 w-5"></svg>
-              {{ 'nav.movies' | translate }}
-            </span>
-            @if (movieCount() > 0) {
-              <span class="badge badge-sm badge-ghost">{{ movieCount() }}</span>
-            }
-          </a>
-        </li>
-        <li>
-          <a routerLink="/series" routerLinkActive="active" class="justify-between">
-            <span class="flex items-center gap-2">
-              <svg lucideTv class="h-5 w-5"></svg>
-              {{ 'nav.series' | translate }}
-            </span>
-            @if (seriesCount() > 0) {
-              <span class="badge badge-sm badge-ghost">{{ seriesCount() }}</span>
-            }
-          </a>
-        </li>
+        @for (lib of libraries(); track lib.id) {
+          <li>
+            <a [routerLink]="libraryUrl(lib)" routerLinkActive="active" class="justify-between">
+              <span class="flex items-center gap-2">
+                @if (libraryIcon(lib) === 'film') {
+                  <svg lucideFilm class="h-5 w-5"></svg>
+                } @else if (libraryIcon(lib) === 'tv') {
+                  <svg lucideTv class="h-5 w-5"></svg>
+                } @else {
+                  <svg lucideLayoutGrid class="h-5 w-5"></svg>
+                }
+                {{ lib.name }}
+              </span>
+              @if (libraryCounts()[lib.id]) {
+                <span class="badge badge-sm badge-ghost">{{ libraryCounts()[lib.id] }}</span>
+              }
+            </a>
+          </li>
+        }
         <li>
           <a routerLink="/persons" routerLinkActive="active">
             <svg lucideUsers class="h-5 w-5"></svg>

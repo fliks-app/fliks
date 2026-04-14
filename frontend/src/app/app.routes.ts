@@ -35,16 +35,20 @@ export const routes: Routes = [
         data: { titleKey: 'nav.home' },
       },
       {
-        path: 'movies',
+        path: 'libraries/:libraryName',
         loadComponent: () =>
-          import('./features/movies/movies').then((m) => m.MoviesComponent),
-        data: { titleKey: 'movies.title' },
+          import('./features/library/library').then((m) => m.LibraryComponent),
+      },
+      // Legacy redirects — resolved to actual library name in LibraryComponent
+      {
+        path: 'movies',
+        redirectTo: '/libraries/__default_movies__',
+        pathMatch: 'full',
       },
       {
         path: 'series',
-        loadComponent: () =>
-          import('./features/series/series').then((m) => m.SeriesComponent),
-        data: { titleKey: 'series.title' },
+        redirectTo: '/libraries/__default_series__',
+        pathMatch: 'full',
       },
       {
         path: 'downloads',
