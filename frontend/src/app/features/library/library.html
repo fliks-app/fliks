@@ -105,11 +105,11 @@
                 (click)="$event.stopPropagation()"
                 (change)="toggleSelect(item.id)"
               />
-              <app-media-card [media]="item" [showMonitoredLabel]="true" />
+              <app-media-card [media]="item"  />
             </div>
           } @else {
             <div [id]="'media-' + item.id">
-              <app-media-card [media]="item" [showMonitoredLabel]="true" />
+              <app-media-card [media]="item"  />
             </div>
           }
         }

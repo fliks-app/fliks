@@ -47,7 +47,6 @@ export class MediaCardComponent {
   readonly title = input('');
   readonly subtitle = input<string | undefined>(undefined);
   readonly rating = input(0);
-  readonly showMonitoredLabel = input(false);
 
   // Badges
   readonly topLeftBadge = input<string | undefined>(undefined);
@@ -65,6 +64,8 @@ export class MediaCardComponent {
   // Status bar (override media-derived barStatus/barPercent)
   readonly barStatus = input<BarStatus | null>(null);
   readonly barPercent = input(100);
+  /** Hide the colored status bar entirely. */
+  readonly hideStatusBar = input(false);
 
   // State
   readonly dimmed = input(false);
@@ -91,15 +92,12 @@ export class MediaCardComponent {
   });
   protected readonly _subtitle = computed(() => {
     if (this.subtitle() !== undefined) return this.subtitle();
-    if (this.showMonitoredLabel() && this.media()) {
-      const m = this.media()!;
-      let label = this.translate.instant(m.monitored ? 'media_card.monitored' : 'media_card.unmonitored');
-      if (m.qualityProfile) label += ' — ' + m.qualityProfile.name;
-      return label;
-    }
+    const m = this.media();
+    if (m?.year) return '' + m.year;
     return undefined;
   });
   protected readonly _barStatus = computed((): BarStatus | null => {
+    if (this.hideStatusBar()) return null;
     if (this.barStatus()) return this.barStatus();
     const m = this.media();
     return m ? computeMediaBarStatus(m) : null;
@@ -128,15 +126,21 @@ export class MediaCardComponent {
     }
   }
 
-  readonly barColorClass = computed(() => {
-    const map: Record<BarStatus, string> = {
-      'downloaded-monitored': 'bg-green-500',
-      'downloaded-unmonitored': 'bg-green-800',
-      'missing-monitored': 'bg-red-500',
-      'missing-unmonitored': 'bg-amber-500',
-      'queued': 'bg-purple-500',
-      'unreleased': 'bg-blue-400',
-    };
-    return this._barStatus() ? map[this._barStatus()!] : '';
+  /** Status badge shown in the top-left corner of the poster. */
+  protected readonly statusBadge = computed((): { text: string; class: string } | null => {
+    const s = this._barStatus();
+    if (!s) return null;
+    switch (s) {
+      case 'missing-monitored':
+        return { text: this.translate.instant('media_card.monitored'), class: 'badge-warning' };
+      case 'missing-unmonitored':
+        return { text: this.translate.instant('media_card.unmonitored'), class: 'badge-error' };
+      case 'unreleased':
+        return { text: this.translate.instant('media_card.unreleased'), class: 'badge-info' };
+      case 'queued':
+        return { text: this.translate.instant('media_card.queued'), class: 'badge-secondary' };
+      default:
+        return null;
+    }
   });
 }

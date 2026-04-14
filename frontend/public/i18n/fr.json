@@ -1469,8 +1469,10 @@
     "unknown": "Erreur {{code}}"
   },
   "media_card": {
-    "monitored": "Suivi",
-    "unmonitored": "Non suivi",
+    "monitored": "Surveillé",
+    "unmonitored": "Non surveillé",
+    "unreleased": "Non sorti",
+    "queued": "En file",
     "play": "Lire",
     "open_detail": "Voir la fiche",
     "mark_watched": "Marquer comme vu",

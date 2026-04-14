@@ -33,8 +33,12 @@
       </div>
     }
 
-    <!-- Top-left badge (episode number) -->
-    @if (topLeftBadge()) {
+    <!-- Top-left: status badge or episode number -->
+    @if (statusBadge()) {
+      <div class="absolute top-1.5 left-1.5">
+        <span class="badge badge-sm" [ngClass]="statusBadge()!.class">{{ statusBadge()!.text }}</span>
+      </div>
+    } @else if (topLeftBadge()) {
       <div class="absolute top-1.5 left-1.5">
         <span class="badge badge-sm badge-neutral font-mono">{{ topLeftBadge() }}</span>
       </div>
@@ -112,13 +116,6 @@
       }
     }
   </div>
-
-  <!-- Status bar (only when not watching) -->
-  @if (_barStatus() && progressPercent() <= 0) {
-    <div class="h-1 w-full mt-0.5 rounded-full overflow-hidden">
-      <div class="h-full transition-all" [ngClass]="barColorClass()" [style.width.%]="_barPercent()"></div>
-    </div>
-  }
 
   <!-- Dismiss button -->
   @if (dismissable()) {
