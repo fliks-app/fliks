@@ -73,6 +73,9 @@ import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats
       overflow: hidden;
       -webkit-user-select: none;
       user-select: none;
+      /* iOS WKWebView rotation fix: force GPU compositing so WebKit
+         recalculates the fixed position after orientation change. */
+      -webkit-transform: translateZ(0);
     }
     /* When using native player, make WebView layers transparent so ExoPlayer/AVPlayer shows through */
     .player-container.native-player {
@@ -1323,6 +1326,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private onOrientationChange = () => {
     this.isLandscape.set(screen.orientation?.type?.startsWith('landscape') ?? false);
+    // iOS WKWebView sometimes doesn't reflow fixed-position elements after
+    // rotation, leaving the player UI oversized. Force a layout recalc.
+    window.scrollTo(0, 0);
+    document.documentElement.style.setProperty('--vh', `${window.innerHeight}px`);
   };
 
   onCloseStats() {
