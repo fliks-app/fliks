@@ -143,8 +143,7 @@
   "home": {
     "libraries": "Bibliothèques",
     "continue_watching": "Reprendre la lecture",
-    "recent_movies": "Films récemment ajoutés",
-    "recent_series": "Séries récemment ajoutées"
+    "recent_media": "Récemment ajoutés"
   },
   "playback_settings": {
     "title": "Paramètres de lecture",

@@ -38,27 +38,14 @@
       </app-horizontal-scroller>
     }
 
-    <!-- Recent Movies -->
-    @if (recentMovies().length) {
-      <app-horizontal-scroller [title]="'home.recent_movies' | translate">
-        @for (m of recentMovies(); track m.id) {
+    <!-- Recently Added -->
+    @if (recentMedia().length) {
+      <app-horizontal-scroller [title]="'home.recent_media' | translate">
+        @for (m of recentMedia(); track m.id) {
           <app-media-card
             class="shrink-0 w-28 sm:w-36"
             [media]="m"
             [subtitle]="'' + (m.year ?? '')"
-          />
-        }
-      </app-horizontal-scroller>
-    }
-
-    <!-- Recent Series -->
-    @if (recentSeries().length) {
-      <app-horizontal-scroller [title]="'home.recent_series' | translate">
-        @for (s of recentSeries(); track s.id) {
-          <app-media-card
-            class="shrink-0 w-28 sm:w-36"
-            [media]="s"
-            [subtitle]="'' + (s.year ?? '')"
           />
         }
       </app-horizontal-scroller>

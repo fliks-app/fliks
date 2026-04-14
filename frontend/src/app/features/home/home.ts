@@ -34,8 +34,7 @@ export class HomeComponent implements OnInit {
   readonly loading = signal(true);
   readonly libraries = signal<LibrarySummary[]>([]);
   readonly continueWatching = signal<ContinueWatchingItem[]>([]);
-  readonly recentMovies = signal<Media[]>([]);
-  readonly recentSeries = signal<Media[]>([]);
+  readonly recentMedia = signal<Media[]>([]);
 
   libraryUrl(lib: LibrarySummary): string {
     return `/libraries/${encodeURIComponent(lib.name)}`;
@@ -51,16 +50,14 @@ export class HomeComponent implements OnInit {
 
   async ngOnInit() {
     try {
-      const [libs, cw, movies, series] = await Promise.all([
+      const [libs, cw, recent] = await Promise.all([
         this.librariesApi.listMine().catch(() => []),
         this.streamingApi.getContinueWatching().catch(() => []),
-        this.mediaService.getAll({ type: 'movie' as any, sortBy: 'createdAt', sortOrder: 'DESC', limit: 20, excludeWatched: true, missing: false }),
-        this.mediaService.getAll({ type: 'series' as any, sortBy: 'createdAt', sortOrder: 'DESC', limit: 20, excludeWatched: true, missing: false }),
+        this.mediaService.getAll({ sortBy: 'createdAt', sortOrder: 'DESC', limit: 20, excludeWatched: true, missing: false }),
       ]);
       this.libraries.set(libs);
       this.continueWatching.set(cw);
-      this.recentMovies.set(movies.data);
-      this.recentSeries.set(series.data);
+      this.recentMedia.set(recent.data);
     } catch { /* ignore */ }
     this.loading.set(false);
   }
