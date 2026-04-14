@@ -27,6 +27,14 @@ export class Library extends BaseEntity {
   @Column({ unique: true })
   name: string;
 
+  /** Lucide icon name (e.g. 'film', 'tv', 'book', 'gamepad-2'). */
+  @Column({ type: 'varchar', length: 48, nullable: true, default: null })
+  icon: string | null;
+
+  /** CSS color used on the home page card (e.g. 'primary', 'secondary', '#e74c3c'). */
+  @Column({ type: 'varchar', length: 32, nullable: true, default: null })
+  color: string | null;
+
   @Column({ type: 'jsonb', default: [MediaType.MOVIE, MediaType.SERIES] })
   mediaTypes: MediaType[];
 

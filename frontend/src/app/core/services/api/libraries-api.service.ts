@@ -8,6 +8,8 @@ export type StalledCleanupProfileKey = 'fast' | 'medium' | 'slow';
 export interface LibrarySummary {
   id: number;
   name: string;
+  icon: string | null;
+  color: string | null;
   mediaTypes: ('movie' | 'series')[];
   isDefaultForMovies: boolean;
   isDefaultForSeries: boolean;
@@ -25,6 +27,8 @@ export interface LibraryRootFolder {
 export interface Library {
   id: number;
   name: string;
+  icon: string | null;
+  color: string | null;
   mediaTypes: ('movie' | 'series')[];
   preferredProvider: string | null;
   stalledCleanupProfile: StalledCleanupProfileKey | null;
@@ -38,6 +42,8 @@ export interface Library {
 
 export interface CreateLibraryBody {
   name: string;
+  icon?: string | null;
+  color?: string | null;
   mediaTypes?: ('movie' | 'series')[];
   preferredProvider?: string | null;
   stalledCleanupProfile?: StalledCleanupProfileKey | null;

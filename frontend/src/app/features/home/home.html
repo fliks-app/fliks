@@ -7,14 +7,16 @@
 
     <!-- Libraries -->
     <app-horizontal-scroller [title]="'home.libraries' | translate">
-      <a routerLink="/movies" class="shrink-0 w-36 h-20 sm:w-48 sm:h-28 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 flex items-center gap-3 px-4 sm:px-5 hover:shadow-lg transition-shadow">
-        <svg lucideFilm class="h-6 w-6 sm:h-8 sm:w-8 text-primary shrink-0"></svg>
-        <span class="text-sm sm:text-base font-semibold">{{ 'nav.movies' | translate }}</span>
-      </a>
-      <a routerLink="/series" class="shrink-0 w-36 h-20 sm:w-48 sm:h-28 rounded-xl bg-gradient-to-br from-secondary/20 to-secondary/5 border border-secondary/20 flex items-center gap-3 px-4 sm:px-5 hover:shadow-lg transition-shadow">
-        <svg lucideTv class="h-6 w-6 sm:h-8 sm:w-8 text-secondary shrink-0"></svg>
-        <span class="text-sm sm:text-base font-semibold">{{ 'nav.series' | translate }}</span>
-      </a>
+      @for (lib of libraries(); track lib.id) {
+        <a [routerLink]="libraryUrl(lib)"
+           class="shrink-0 w-36 h-20 sm:w-48 sm:h-28 rounded-xl border flex items-center gap-3 px-4 sm:px-5 hover:shadow-lg transition-shadow"
+           [style.background]="'linear-gradient(135deg, color-mix(in oklch, ' + libraryColor(lib) + ' 20%, transparent), color-mix(in oklch, ' + libraryColor(lib) + ' 5%, transparent))'"
+           [style.border-color]="'color-mix(in oklch, ' + libraryColor(lib) + ' 15%, transparent)'"
+        >
+          <app-lucide-icon [name]="lib.icon || 'library'" class="h-6 w-6 sm:h-8 sm:w-8 shrink-0" [style.color]="libraryColor(lib)" />
+          <span class="text-sm sm:text-base font-semibold">{{ lib.name }}</span>
+        </a>
+      }
     </app-horizontal-scroller>
 
     <!-- Continue Watching -->

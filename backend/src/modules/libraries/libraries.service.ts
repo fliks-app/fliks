@@ -173,7 +173,7 @@ export class LibrariesService implements OnModuleInit {
     return this.repo.find({
       where,
       order: { name: 'ASC' },
-      select: ['id', 'name', 'mediaTypes', 'isDefaultForMovies', 'isDefaultForSeries'],
+      select: ['id', 'name', 'icon', 'color', 'mediaTypes', 'isDefaultForMovies', 'isDefaultForSeries'],
     });
   }
 
@@ -206,6 +206,8 @@ export class LibrariesService implements OnModuleInit {
       const lib = await m.save(
         m.create(Library, {
           name: dto.name,
+          icon: dto.icon ?? null,
+          color: dto.color ?? null,
           mediaTypes: dto.mediaTypes ?? [MediaType.MOVIE, MediaType.SERIES],
           preferredProvider: dto.preferredProvider ?? null,
           stalledCleanupProfile: dto.stalledCleanupProfile ?? null,
@@ -248,6 +250,8 @@ export class LibrariesService implements OnModuleInit {
 
       const patch: Partial<Library> = {};
       if (dto.name !== undefined) patch.name = dto.name;
+      if (dto.icon !== undefined) patch.icon = dto.icon;
+      if (dto.color !== undefined) patch.color = dto.color;
       if (dto.mediaTypes !== undefined) patch.mediaTypes = dto.mediaTypes;
       if (dto.preferredProvider !== undefined) patch.preferredProvider = dto.preferredProvider;
       if (dto.stalledCleanupProfile !== undefined) patch.stalledCleanupProfile = dto.stalledCleanupProfile;

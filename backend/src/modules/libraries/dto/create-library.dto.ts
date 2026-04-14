@@ -17,6 +17,16 @@ export class CreateLibraryDto {
   @IsString()
   name: string;
 
+  /** Lucide icon name (e.g. 'film', 'tv', 'book'). */
+  @IsOptional()
+  @IsString()
+  icon?: string | null;
+
+  /** CSS color for home page card (e.g. 'primary', '#e74c3c'). */
+  @IsOptional()
+  @IsString()
+  color?: string | null;
+
   @IsOptional()
   @IsArray()
   @IsEnum(MediaType, { each: true })

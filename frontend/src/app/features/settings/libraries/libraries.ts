@@ -59,6 +59,8 @@ export class LibrariesSettingsComponent implements OnInit {
   // Editor state
   readonly editingId = signal<number | null>(null);
   readonly formName = signal('');
+  readonly formIcon = signal<string | null>(null);
+  readonly formColor = signal<string | null>(null);
   readonly formMovies = signal(true);
   readonly formSeries = signal(true);
   readonly formProvider = signal<string | null>(null);
@@ -70,6 +72,35 @@ export class LibrariesSettingsComponent implements OnInit {
   readonly formPaths = signal<DraftPath[]>([]);
   readonly formUserIds = signal<Set<number>>(new Set());
   readonly saveError = signal('');
+
+  readonly iconOptions = [
+    { value: null, label: 'Par défaut (bibliothèque)' },
+    { value: 'film', label: 'Film' },
+    { value: 'tv', label: 'TV' },
+    { value: 'popcorn', label: 'Popcorn' },
+    { value: 'clapperboard', label: 'Clap' },
+    { value: 'book', label: 'Livre' },
+    { value: 'gamepad-2', label: 'Jeux' },
+    { value: 'music', label: 'Musique' },
+    { value: 'heart', label: 'Cœur' },
+    { value: 'star', label: 'Étoile' },
+    { value: 'globe', label: 'Globe' },
+    { value: 'monitor', label: 'Écran' },
+    { value: 'users', label: 'Utilisateurs' },
+    { value: 'folder', label: 'Dossier' },
+    { value: 'swords', label: 'Épées' },
+  ];
+
+  readonly colorOptions = [
+    { value: null, label: 'Par défaut (primary)' },
+    { value: 'primary', label: 'Primary' },
+    { value: 'secondary', label: 'Secondary' },
+    { value: 'accent', label: 'Accent' },
+    { value: 'info', label: 'Info' },
+    { value: 'success', label: 'Success' },
+    { value: 'warning', label: 'Warning' },
+    { value: 'error', label: 'Error' },
+  ];
 
   readonly providerOptions = [
     { value: null, labelKey: 'settings.libraries.provider_auto' },
@@ -111,6 +142,8 @@ export class LibrariesSettingsComponent implements OnInit {
   openCreate() {
     this.editingId.set(null);
     this.formName.set('');
+    this.formIcon.set(null);
+    this.formColor.set(null);
     this.formMovies.set(true);
     this.formSeries.set(true);
     this.formProvider.set(null);
@@ -128,6 +161,8 @@ export class LibrariesSettingsComponent implements OnInit {
   openEdit(lib: Library) {
     this.editingId.set(lib.id);
     this.formName.set(lib.name);
+    this.formIcon.set(lib.icon);
+    this.formColor.set(lib.color);
     this.formMovies.set(lib.mediaTypes.includes('movie'));
     this.formSeries.set(lib.mediaTypes.includes('series'));
     this.formProvider.set(lib.preferredProvider);
@@ -190,6 +225,8 @@ export class LibrariesSettingsComponent implements OnInit {
     try {
       const payload = {
         name,
+        icon: this.formIcon(),
+        color: this.formColor(),
         mediaTypes,
         preferredProvider: this.formProvider(),
         stalledCleanupProfile: this.formCleanup(),

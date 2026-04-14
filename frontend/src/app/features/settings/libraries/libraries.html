@@ -93,6 +93,27 @@
           [ngModel]="formName()" (ngModelChange)="formName.set($event)" />
       </label>
 
+      <div class="flex gap-4">
+        <label class="form-control flex-1">
+          <span class="label-text">{{ 'settings.libraries.icon' | translate }}</span>
+          <select class="select select-bordered select-sm w-full"
+            [ngModel]="formIcon()" (ngModelChange)="formIcon.set($event || null)">
+            @for (opt of iconOptions; track opt.value) {
+              <option [ngValue]="opt.value">{{ opt.label }}</option>
+            }
+          </select>
+        </label>
+        <label class="form-control flex-1">
+          <span class="label-text">{{ 'settings.libraries.color' | translate }}</span>
+          <select class="select select-bordered select-sm w-full"
+            [ngModel]="formColor()" (ngModelChange)="formColor.set($event || null)">
+            @for (opt of colorOptions; track opt.value) {
+              <option [ngValue]="opt.value">{{ opt.label }}</option>
+            }
+          </select>
+        </label>
+      </div>
+
       <div>
         <span class="label-text">{{ 'settings.libraries.media_types' | translate }}</span>
         <div class="flex gap-4 mt-2">

@@ -31,6 +31,7 @@ import { DownloadManagerService } from '../../core/services/download-manager.ser
 import { NetworkService } from '../../core/services/network.service';
 import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
 import { UserMenuComponent } from '../components/user-menu';
+import { LucideIconComponent } from '../components/lucide-icon';
 import {
   LucideMenu,
   LucideChevronLeft,
@@ -71,6 +72,7 @@ import {
     LucideEllipsisVertical, LucideUsers,
     CastOverlayComponent,
     UserMenuComponent,
+    LucideIconComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './layout.html',
@@ -242,12 +244,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
     return `/libraries/${encodeURIComponent(lib.name)}`;
   }
 
-  /** Icon key for a library based on its media types. */
-  libraryIcon(lib: LibrarySummary): 'film' | 'tv' | 'grid' {
-    const t = lib.mediaTypes;
-    if (t.length === 1 && t[0] === 'movie') return 'film';
-    if (t.length === 1 && t[0] === 'series') return 'tv';
-    return 'grid';
+  /** Icon key for a library: explicit icon > default 'library'. */
+  libraryIcon(lib: LibrarySummary): string {
+    return lib.icon || 'library';
   }
 
   private async refreshQueueCount() {

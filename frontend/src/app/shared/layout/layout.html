@@ -132,13 +132,7 @@
                 <li>
                   <a [routerLink]="libraryUrl(lib)" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
                     <span class="flex items-center gap-2">
-                      @if (libraryIcon(lib) === 'film') {
-                        <svg lucideFilm class="h-5 w-5"></svg>
-                      } @else if (libraryIcon(lib) === 'tv') {
-                        <svg lucideTv class="h-5 w-5"></svg>
-                      } @else {
-                        <svg lucideLayoutGrid class="h-5 w-5"></svg>
-                      }
+                      <app-lucide-icon [name]="libraryIcon(lib)" class="h-5 w-5" />
                       {{ lib.name }}
                     </span>
                     @if (libraryCounts()[lib.id]) {
@@ -220,13 +214,7 @@
           <li>
             <a [routerLink]="libraryUrl(lib)" routerLinkActive="active" class="justify-between">
               <span class="flex items-center gap-2">
-                @if (libraryIcon(lib) === 'film') {
-                  <svg lucideFilm class="h-5 w-5"></svg>
-                } @else if (libraryIcon(lib) === 'tv') {
-                  <svg lucideTv class="h-5 w-5"></svg>
-                } @else {
-                  <svg lucideLayoutGrid class="h-5 w-5"></svg>
-                }
+                <app-lucide-icon [name]="libraryIcon(lib)" class="h-5 w-5" />
                 {{ lib.name }}
               </span>
               @if (libraryCounts()[lib.id]) {

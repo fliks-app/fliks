@@ -23,6 +23,14 @@ export class UpdateLibraryDto {
   name?: string;
 
   @IsOptional()
+  @IsString()
+  icon?: string | null;
+
+  @IsOptional()
+  @IsString()
+  color?: string | null;
+
+  @IsOptional()
   @IsArray()
   @IsEnum(MediaType, { each: true })
   mediaTypes?: MediaType[];

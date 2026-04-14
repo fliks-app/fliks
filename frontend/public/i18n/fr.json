@@ -1156,6 +1156,8 @@
       "edit": "Modifier",
       "name": "Nom",
       "name_required": "Le nom est obligatoire.",
+      "icon": "Icône",
+      "color": "Couleur",
       "media_types": "Types de médias",
       "media_type_required": "Sélectionnez au moins un type de média.",
       "paths": "Chemins",
