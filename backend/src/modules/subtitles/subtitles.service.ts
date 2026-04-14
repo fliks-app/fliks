@@ -244,9 +244,9 @@ export class SubtitlesService {
     }
 
     const subtitleFile = this.repo.create({
-      mediaId,
-      episodeId,
-      mediaFileId,
+      media: { id: mediaId } as any,
+      episode: episodeId ? ({ id: episodeId } as any) : null,
+      mediaFile: { id: mediaFileId } as any,
       language: searchResult.language,
       forced: searchResult.forced,
       hearingImpaired: searchResult.hearingImpaired,
