@@ -38,6 +38,21 @@
       </app-horizontal-scroller>
     }
 
+    <!-- Recommendations -->
+    @if (recommendations().length) {
+      <app-horizontal-scroller [title]="'home.recommendations' | translate">
+        @for (rec of recommendations(); track rec.media.id) {
+          <app-media-card
+            class="shrink-0 w-28 sm:w-36"
+            [imageUrl]="rec.media.posterUrl"
+            [title]="rec.media.title"
+            [subtitle]="'' + (rec.media.year ?? '')"
+            [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
+          />
+        }
+      </app-horizontal-scroller>
+    }
+
     <!-- Coming Soon -->
     @if (comingSoon().length) {
       <app-horizontal-scroller [title]="'home.coming_soon' | translate">
@@ -62,21 +77,6 @@
             [media]="m"
             [subtitle]="'' + (m.year ?? '')"
             [hideStatusBar]="true"
-          />
-        }
-      </app-horizontal-scroller>
-    }
-
-    <!-- Because you watched -->
-    @if (recommendations().length) {
-      <app-horizontal-scroller [title]="'home.recommendations' | translate">
-        @for (rec of recommendations(); track rec.media.id) {
-          <app-media-card
-            class="shrink-0 w-28 sm:w-36"
-            [imageUrl]="rec.media.posterUrl"
-            [title]="rec.media.title"
-            [subtitle]="'' + (rec.media.year ?? '')"
-            [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
           />
         }
       </app-horizontal-scroller>
