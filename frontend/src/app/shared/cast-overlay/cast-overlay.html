@@ -33,11 +33,18 @@
           <div class="shrink-0 px-4 pt-4 space-y-5" style="padding-bottom: max(2rem, env(safe-area-inset-bottom))">
             <!-- Progress -->
             <div>
-              <div class="relative w-full h-2 bg-base-300 rounded-full cursor-pointer touch-none" (pointerdown)="onProgressDown($event)">
-                <div class="absolute inset-y-0 left-0 bg-info rounded-full" [style.width.%]="dragging() ? dragPercent() : progressPercent()"></div>
-              </div>
+              <app-seekbar #mobileSeekbar
+                [currentTime]="cast.currentTime()"
+                [duration]="cast.duration()"
+                [spriteUrl]="cp.spriteUrl()"
+                [spriteMetadata]="cp.spriteMetadata()"
+                variant="cast"
+                [showThumb]="false"
+                [showBuffered]="false"
+                (seek)="cast.seek($event)"
+              />
               <div class="flex justify-between text-xs text-base-content/50 mt-1">
-                <span>{{ formatTime(dragging() ? dragTime() : cast.currentTime()) }}</span>
+                <span>{{ formatTime(mobileSeekbar.displayTime()) }}</span>
                 <span>{{ formatTime(cast.duration()) }}</span>
               </div>
             </div>
@@ -147,11 +154,18 @@
           <div class="px-4 py-4 space-y-4">
             <!-- Progress -->
             <div>
-              <div class="relative w-full h-2 bg-base-300 rounded-full cursor-pointer touch-none" (pointerdown)="onProgressDown($event)">
-                <div class="absolute inset-y-0 left-0 bg-info rounded-full" [style.width.%]="dragging() ? dragPercent() : progressPercent()"></div>
-              </div>
+              <app-seekbar #desktopSeekbar
+                [currentTime]="cast.currentTime()"
+                [duration]="cast.duration()"
+                [spriteUrl]="cp.spriteUrl()"
+                [spriteMetadata]="cp.spriteMetadata()"
+                variant="cast"
+                [showThumb]="false"
+                [showBuffered]="false"
+                (seek)="cast.seek($event)"
+              />
               <div class="flex justify-between text-xs text-base-content/50 mt-1">
-                <span>{{ formatTime(dragging() ? dragTime() : cast.currentTime()) }}</span>
+                <span>{{ formatTime(desktopSeekbar.displayTime()) }}</span>
                 <span>{{ formatTime(cast.duration()) }}</span>
               </div>
             </div>

@@ -6,7 +6,7 @@ import { SubtitlesApiService } from './api/subtitles-api.service';
 import { AuthService } from './auth.service';
 import { BrowserDeviceProfileService, DeviceProfile } from './browser-device-profile.service';
 import { ServerConfigService } from './server-config.service';
-import { parseAudioIndex } from '../utils/player.utils';
+import { parseAudioIndex, SpriteMetadata } from '../utils/player.utils';
 import { PlayerSettingsService } from './player-settings.service';
 import { TrackManagerService } from './track-manager.service';
 import { MediaService } from './api/media.service';
@@ -76,6 +76,10 @@ export class CastPlayerService {
       supportsMultiAudioMuxed: false,
     };
   }
+
+  // Sprite preview
+  readonly spriteUrl = signal<string | null>(null);
+  readonly spriteMetadata = signal<SpriteMetadata | null>(null);
 
   // Media info
   readonly mediaFileId = signal(0);
@@ -157,6 +161,7 @@ export class CastPlayerService {
     this.availableAudioTracks.set(opts.audioTracks);
     this.hasMedia.set(true);
     this.startPositionSaving();
+    this.loadSpriteMetadata(opts.mediaFileId);
   }
 
   /** Clear Cast media state (on disconnect/stop). Saves position first. */
@@ -166,6 +171,8 @@ export class CastPlayerService {
     this.hasMedia.set(false);
     this.expanded.set(false);
     this.mediaFileId.set(0);
+    this.spriteUrl.set(null);
+    this.spriteMetadata.set(null);
   }
 
   async reloadCastStream(positionOverride?: number) {
@@ -343,6 +350,19 @@ export class CastPlayerService {
   saveSubtitleSelection(language: string | null, forced = false) {
     const mId = this.mediaId();
     if (mId) this.trackManager.saveSubtitleSelection(mId, language, forced);
+  }
+
+  private async loadSpriteMetadata(mediaFileId: number) {
+    this.spriteUrl.set(null);
+    this.spriteMetadata.set(null);
+    try {
+      const url = this.streamingApi.getThumbnailMetadataUrl(mediaFileId);
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const meta: SpriteMetadata = await res.json();
+      this.spriteMetadata.set(meta);
+      this.spriteUrl.set(this.streamingApi.getThumbnailSpriteUrl(mediaFileId));
+    } catch { /* sprite not available */ }
   }
 
   async changeBurnIn(subtitleDbId: number | null) {

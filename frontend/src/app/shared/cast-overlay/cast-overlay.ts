@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, HostListener, inject, signal } from '@angular/core';
-import { formatTime, calcDragTime, parseAudioIndex } from '../../core/utils/player.utils';
+import { ChangeDetectionStrategy, Component, HostListener, inject } from '@angular/core';
+import { formatTime, parseAudioIndex } from '../../core/utils/player.utils';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
+import { SeekbarComponent } from '../components/seekbar/seekbar';
 import {
   LucideCaptions,
   LucideCast,
@@ -23,6 +24,7 @@ import {
     LucideCaptions, LucideCast, LucideCheck, LucideChevronDown,
     LucideHeadphones, LucidePause, LucidePlay, LucideRotateCcw, LucideRotateCw,
     LucideSettings, LucideSquare, LucideX,
+    SeekbarComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './cast-overlay.html',
@@ -30,9 +32,6 @@ import {
 export class CastOverlayComponent {
   readonly cast = inject(CastService);
   readonly cp = inject(CastPlayerService);
-  // Drag state for progress bar
-  readonly dragging = signal(false);
-  readonly dragTime = signal(0);
 
   @HostListener('document:keydown.escape')
   onEscape() {
@@ -44,14 +43,6 @@ export class CastOverlayComponent {
   }
 
   readonly formatTime = formatTime;
-
-  progressPercent(): number {
-    return ((this.cast.currentTime() / (this.cast.duration() || 1)) * 100);
-  }
-
-  dragPercent(): number {
-    return ((this.dragTime() / (this.cast.duration() || 1)) * 100);
-  }
 
   selectSubtitle(sub: any | null) {
     if (!sub) {
@@ -87,27 +78,4 @@ export class CastOverlayComponent {
     this.cp.expanded.set(false);
   }
 
-  onProgressDown(event: PointerEvent) {
-    const bar = event.currentTarget as HTMLElement;
-    bar.setPointerCapture(event.pointerId);
-    event.preventDefault();
-    this.dragging.set(true);
-    this.updateDrag(event, bar);
-
-    const onMove = (e: PointerEvent) => this.updateDrag(e, bar);
-    const onUp = () => {
-      bar.removeEventListener('pointermove', onMove);
-      bar.removeEventListener('pointerup', onUp);
-      bar.removeEventListener('pointercancel', onUp);
-      this.cast.seek(this.dragTime());
-      this.dragging.set(false);
-    };
-    bar.addEventListener('pointermove', onMove);
-    bar.addEventListener('pointerup', onUp);
-    bar.addEventListener('pointercancel', onUp);
-  }
-
-  private updateDrag(e: PointerEvent, bar: HTMLElement) {
-    this.dragTime.set(calcDragTime(e, bar, this.cast.duration()));
-  }
 }

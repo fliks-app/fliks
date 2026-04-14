@@ -132,70 +132,21 @@
   </div>
 
   <!-- Progress bar -->
-  <div
-    class="group relative w-full h-6 flex items-center cursor-pointer touch-none"
-    (pointerdown)="onProgressDown($event)"
-    (pointermove)="onProgressHover($event)"
-    (pointerleave)="onProgressLeave()"
-  >
-    <!-- Seek tooltip -->
-    @if ((hovering() || dragging()) && duration()) {
-      <div
-        class="absolute bottom-full mb-3 pointer-events-none z-50 -translate-x-1/2"
-        [style.left]="tooltipLeft()"
-      >
-        <div class="bg-neutral/95 backdrop-blur-sm rounded-lg shadow-2xl overflow-hidden">
-          @if (spriteUrl() && spriteMetadata()) {
-            <div class="relative">
-              <div
-                class="bg-no-repeat"
-                [style.width.px]="previewWidth()"
-                [style.height.px]="previewHeight()"
-                [style.background-image]="'url(' + spriteUrl() + ')'"
-                [style.background-position]="thumbnailBgPositionScaled()"
-                [style.background-size]="spriteBgSizeScaled()"
-              ></div>
-              <div class="absolute bottom-0 inset-x-0 text-center pb-1 pt-3 bg-gradient-to-t from-black/70 to-transparent">
-                <span class="text-white text-xs tabular-nums font-medium drop-shadow">
-                  {{ formatTime(dragging() ? dragTime() : hoverTime()) }}
-                </span>
-              </div>
-            </div>
-          } @else {
-            <div class="px-3 py-1.5 text-center">
-              <span class="text-white text-xs tabular-nums font-medium">
-                {{ formatTime(dragging() ? dragTime() : hoverTime()) }}
-              </span>
-            </div>
-          }
-        </div>
-      </div>
-    }
-
-    <div class="relative w-full h-2 group-hover:h-2.5 transition-all rounded-full bg-white/20 overflow-hidden">
-      <!-- Buffered -->
-      <div
-        class="absolute inset-y-0 left-0 bg-white/30 rounded-full"
-        [style.width.%]="duration() ? (bufferedEnd() / duration()) * 100 : 0"
-      ></div>
-      <!-- Progress -->
-      <div
-        class="absolute inset-y-0 left-0 bg-white rounded-full"
-        [style.width.%]="displayPercent()"
-      ></div>
-    </div>
-    <!-- Thumb -->
-    <div
-      class="absolute h-3.5 w-3.5 rounded-full bg-white shadow -translate-x-1/2 pointer-events-none group-hover:scale-125 transition-transform"
-      [class.scale-125]="dragging()"
-      [style.left.%]="displayPercent()"
-    ></div>
-  </div>
+  <app-seekbar
+    [currentTime]="currentTime()"
+    [duration]="duration()"
+    [bufferedEnd]="bufferedEnd()"
+    [spriteUrl]="spriteUrl()"
+    [spriteMetadata]="spriteMetadata()"
+    variant="player"
+    (seek)="seek.emit($event)"
+    (dragChange)="seekDragChange.emit($event)"
+  />
 
   <!-- Duration row -->
   <div class="flex items-center justify-between mt-0.5">
-    <span class="text-white/70 tabular-nums" [class]="isNative() ? 'text-xs' : 'text-sm'">{{ formatTime(displayTime()) }}</span>
-    <span class="text-white/70 tabular-nums" [class]="isNative() ? 'text-xs' : 'text-sm'">{{ formatRemaining(displayTime(), duration()) }} / {{ formatTime(duration()) }}</span>
+    <span class="text-white/70 tabular-nums" [class]="isNative() ? 'text-xs' : 'text-sm'">{{ formatTime(getDisplayTime()) }}</span>
+    <span class="text-white/70 tabular-nums" [class]="isNative() ? 'text-xs' : 'text-sm'">{{ formatRemaining(getDisplayTime(), duration()) }} / {{ formatTime(duration()) }}</span>
   </div>
 
   <!-- Desktop: buttons row BELOW duration -->
