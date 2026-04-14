@@ -243,10 +243,12 @@ export class SubtitlesService {
       );
     }
 
-    const subtitleFile = this.repo.create({
-      media: { id: mediaId } as any,
-      episode: episodeId ? ({ id: episodeId } as any) : null,
-      mediaFile: { id: mediaFileId } as any,
+    // repo.save() (not create+save) — TypeORM resolves partial relation
+    // objects { id: X } to FK columns on save, but create() drops them.
+    return this.repo.save({
+      media: { id: mediaId },
+      mediaFile: { id: mediaFileId },
+      episode: episodeId ? { id: episodeId } : null,
       language: searchResult.language,
       forced: searchResult.forced,
       hearingImpaired: searchResult.hearingImpaired,
@@ -256,9 +258,7 @@ export class SubtitlesService {
       status: SubtitleStatus.DOWNLOADED,
       score: searchResult.score,
       synced: false,
-    });
-
-    return this.repo.save(subtitleFile);
+    } as any);
   }
 
   /**

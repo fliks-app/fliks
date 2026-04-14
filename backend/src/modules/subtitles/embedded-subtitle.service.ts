@@ -108,30 +108,28 @@ export class EmbeddedSubtitleService {
       providerType: SubtitleProviderType.EMBEDDED,
     });
 
-    const created: SubtitleFile[] = [];
-    for (const stream of streams) {
-      const sub = this.subtitleFileRepo.create({
-        media: { id: mediaId } as any,
-        mediaFile: { id: mediaFileId } as any,
-        episode: episodeId ? ({ id: episodeId } as any) : undefined,
-        language: normalizeLanguage(stream.language),
-        forced: stream.forced,
-        hearingImpaired: stream.hearingImpaired,
-        providerType: SubtitleProviderType.EMBEDDED,
-        providerFileId: undefined,
-        relativePath: undefined,
-        status: SubtitleStatus.EMBEDDED,
-        score: 100,
-        synced: false,
-        streamIndex: stream.streamIndex,
-        codec: stream.codec,
-      });
-      created.push(sub);
-    }
+    // repo.save() directly (not create+save) — TypeORM resolves partial
+    // relation objects { id: X } to FK columns on save.
+    const toSave = streams.map((stream) => ({
+      media: { id: mediaId },
+      mediaFile: { id: mediaFileId },
+      episode: episodeId ? { id: episodeId } : null,
+      language: normalizeLanguage(stream.language),
+      forced: stream.forced,
+      hearingImpaired: stream.hearingImpaired,
+      providerType: SubtitleProviderType.EMBEDDED,
+      providerFileId: undefined,
+      relativePath: undefined,
+      status: SubtitleStatus.EMBEDDED,
+      score: 100,
+      synced: false,
+      streamIndex: stream.streamIndex,
+      codec: stream.codec,
+    }));
 
-    if (created.length) {
-      await this.subtitleFileRepo.save(created);
-    }
+    const created = toSave.length
+      ? await this.subtitleFileRepo.save(toSave as any[])
+      : [];
     this.logger.log(
       `Refreshed embedded subtitles for mediaFile #${mediaFileId}: ${created.length} stored`,
     );
