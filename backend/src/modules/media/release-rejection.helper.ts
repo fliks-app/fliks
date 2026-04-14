@@ -159,13 +159,19 @@ export function computeRejections(opts: {
     if (limits.min > 0 && sizeMbPerHour < limits.min) {
       out.push({
         code: 'SIZE_TOO_LOW',
-        params: { actual: Math.round(sizeMbPerHour), min: Math.round(limits.min) },
+        params: {
+          actual: Math.round(sizeMbPerHour),
+          min: Math.round(limits.min),
+        },
       });
     }
     if (limits.max > 0 && sizeMbPerHour > limits.max) {
       out.push({
         code: 'SIZE_TOO_HIGH',
-        params: { actual: Math.round(sizeMbPerHour), max: Math.round(limits.max) },
+        params: {
+          actual: Math.round(sizeMbPerHour),
+          max: Math.round(limits.max),
+        },
       });
     }
     if (

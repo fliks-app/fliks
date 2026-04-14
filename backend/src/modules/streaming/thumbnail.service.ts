@@ -40,7 +40,10 @@ interface QueueItem {
 @Injectable()
 export class ThumbnailService {
   private readonly log = new Logger(ThumbnailService.name);
-  private readonly generating = new Map<number, Promise<SpriteMetadata | null>>();
+  private readonly generating = new Map<
+    number,
+    Promise<SpriteMetadata | null>
+  >();
   private readonly queue: QueueItem[] = [];
   private running = 0;
 
@@ -76,7 +79,14 @@ export class ThumbnailService {
     }
 
     const promise = new Promise<SpriteMetadata | null>((resolve) => {
-      this.queue.push({ mediaFileId, absolutePath, durationSeconds, mediaTitle, skipTracking, resolve });
+      this.queue.push({
+        mediaFileId,
+        absolutePath,
+        durationSeconds,
+        mediaTitle,
+        skipTracking,
+        resolve,
+      });
       this.processQueue();
     });
 
@@ -113,7 +123,13 @@ export class ThumbnailService {
     while (this.running < SPRITE_CONCURRENCY && this.queue.length > 0) {
       const item = this.queue.shift()!;
       this.running++;
-      this.generate(item.mediaFileId, item.absolutePath, item.durationSeconds, item.mediaTitle, item.skipTracking)
+      this.generate(
+        item.mediaFileId,
+        item.absolutePath,
+        item.durationSeconds,
+        item.mediaTitle,
+        item.skipTracking,
+      )
         .then((meta) => item.resolve(meta))
         .catch(() => item.resolve(null))
         .finally(() => {
@@ -157,7 +173,10 @@ export class ThumbnailService {
           body: { mediaFileId, mediaTitle: label },
         }),
       );
-      this.eventsService.emit({ type: 'command.started', name: 'GenerateSprite' });
+      this.eventsService.emit({
+        type: 'command.started',
+        name: 'GenerateSprite',
+      });
     }
 
     await fsp.mkdir(framesDir, { recursive: true });
@@ -165,25 +184,44 @@ export class ThumbnailService {
 
     try {
       // Step 1: Extract individual frames (trackable progress)
-      await this.extractFrames(absolutePath, framesDir, interval, count, total, label, progressKey);
+      await this.extractFrames(
+        absolutePath,
+        framesDir,
+        interval,
+        count,
+        total,
+        label,
+        progressKey,
+      );
 
       // Step 2: Assemble frames into sprite with tile
-      await execFileAsync('ffmpeg', [
-        '-i', path.join(framesDir, 'frame-%04d.jpg'),
-        '-vf', `tile=${COLUMNS}x${rows}`,
-        '-q:v', '3',
-        '-y',
-        spritePath,
-      ], { timeout: Math.max(60_000, count * 200) });
+      await execFileAsync(
+        'ffmpeg',
+        [
+          '-i',
+          path.join(framesDir, 'frame-%04d.jpg'),
+          '-vf',
+          `tile=${COLUMNS}x${rows}`,
+          '-q:v',
+          '3',
+          '-y',
+          spritePath,
+        ],
+        { timeout: Math.max(60_000, count * 200) },
+      );
 
       // Read actual dimensions via ffprobe
       let thumbHeight: number;
       try {
         const { stdout } = await execFileAsync('ffprobe', [
-          '-v', 'error',
-          '-select_streams', 'v:0',
-          '-show_entries', 'stream=width,height',
-          '-of', 'csv=p=0',
+          '-v',
+          'error',
+          '-select_streams',
+          'v:0',
+          '-show_entries',
+          'stream=width,height',
+          '-of',
+          'csv=p=0',
           spritePath,
         ]);
         const [, h] = stdout.trim().split(',').map(Number);
@@ -209,7 +247,11 @@ export class ThumbnailService {
         cmd.status = 'completed';
         cmd.endedOn = new Date();
         await this.commandRepo.save(cmd);
-        this.eventsService.emit({ type: 'command.completed', name: 'GenerateSprite', status: 'completed' });
+        this.eventsService.emit({
+          type: 'command.completed',
+          name: 'GenerateSprite',
+          status: 'completed',
+        });
       }
 
       return meta;
@@ -219,7 +261,11 @@ export class ThumbnailService {
         cmd.status = 'failed';
         cmd.endedOn = new Date();
         await this.commandRepo.save(cmd);
-        this.eventsService.emit({ type: 'command.completed', name: 'GenerateSprite', status: 'failed' });
+        this.eventsService.emit({
+          type: 'command.completed',
+          name: 'GenerateSprite',
+          status: 'failed',
+        });
       }
       return null;
     } finally {
@@ -255,22 +301,32 @@ export class ThumbnailService {
       if (hw === 'vaapi' || hw === 'qsv') {
         // QSV on Intel piggybacks on VAAPI for decode — same flags work.
         hwArgs.push(
-          '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
-          '-hwaccel', 'vaapi',
-          '-hwaccel_device', 'va',
+          '-init_hw_device',
+          'vaapi=va:/dev/dri/renderD128',
+          '-hwaccel',
+          'vaapi',
+          '-hwaccel_device',
+          'va',
           // Download frames to CPU immediately so fps + scale filters work.
-          '-hwaccel_output_format', 'nv12',
+          '-hwaccel_output_format',
+          'nv12',
         );
       } else if (hw === 'nvenc') {
         hwArgs.push('-hwaccel', 'cuda', '-hwaccel_output_format', 'nv12');
       }
       const proc = spawn('ffmpeg', [
         // Trusted streamInfo was validated at import; skip the redundant probe.
-        '-analyzeduration', '0', '-probesize', '200000',
+        '-analyzeduration',
+        '0',
+        '-probesize',
+        '200000',
         ...hwArgs,
-        '-i', inputPath,
-        '-vf', `fps=1/${interval},scale=${THUMB_WIDTH}:-1`,
-        '-q:v', '3',
+        '-i',
+        inputPath,
+        '-vf',
+        `fps=1/${interval},scale=${THUMB_WIDTH}:-1`,
+        '-q:v',
+        '3',
         '-y',
         path.join(framesDir, 'frame-%04d.jpg'),
       ]);
@@ -296,7 +352,8 @@ export class ThumbnailService {
       proc.on('close', (code) => {
         clearInterval(timer);
         if (code === 0) resolve();
-        else reject(new Error(`ffmpeg frame extraction exited with code ${code}`));
+        else
+          reject(new Error(`ffmpeg frame extraction exited with code ${code}`));
       });
 
       proc.on('error', (err) => {

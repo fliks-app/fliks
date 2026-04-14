@@ -186,7 +186,10 @@ export class DownloadsService implements OnModuleInit {
     }
   }
 
-  async getAvailableQualities(mediaFileId: number, user?: User): Promise<DownloadQuality[]> {
+  async getAvailableQualities(
+    mediaFileId: number,
+    user?: User,
+  ): Promise<DownloadQuality[]> {
     const resolved = await this.streaming.resolveFile(mediaFileId, user);
     const info = resolved.mediaFile.streamInfo;
     const fileSize = resolved.size;

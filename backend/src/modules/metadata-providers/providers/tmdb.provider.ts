@@ -239,7 +239,10 @@ export class TmdbProvider implements IMetadataProvider {
       }));
   }
 
-  async getTvSeason(externalId: string, seasonNumber: number): Promise<SeasonDetails> {
+  async getTvSeason(
+    externalId: string,
+    seasonNumber: number,
+  ): Promise<SeasonDetails> {
     const tmdbId = parseInt(externalId, 10);
     const { data: season } = await this.client.get<TmdbTvSeasonResponse>(
       `/tv/${tmdbId}/season/${seasonNumber}`,

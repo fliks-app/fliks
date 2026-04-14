@@ -91,14 +91,22 @@ export class PlaybackService implements OnModuleInit {
       }
 
       // Drop the old unique constraint if it still exists
-      await this.repo.query(`
+      await this.repo
+        .query(
+          `
         ALTER TABLE playback_states
         DROP CONSTRAINT IF EXISTS "UQ_playback_states_userId_mediaFileId"
-      `).catch(() => {});
+      `,
+        )
+        .catch(() => {});
       // TypeORM may name it differently
-      await this.repo.query(`
+      await this.repo
+        .query(
+          `
         DROP INDEX IF EXISTS "UQ_playback_states_userId_mediaFileId"
-      `).catch(() => {});
+      `,
+        )
+        .catch(() => {});
 
       // Create partial unique indexes
       await this.repo.query(`
@@ -231,7 +239,11 @@ export class PlaybackService implements OnModuleInit {
     userId: number,
     accessibleLibraryIds?: number[] | null,
   ): Promise<ContinueWatchingItem[]> {
-    if (accessibleLibraryIds !== undefined && accessibleLibraryIds !== null && accessibleLibraryIds.length === 0) {
+    if (
+      accessibleLibraryIds !== undefined &&
+      accessibleLibraryIds !== null &&
+      accessibleLibraryIds.length === 0
+    ) {
       return [];
     }
     const libFilter =
@@ -367,7 +379,11 @@ export class PlaybackService implements OnModuleInit {
     limit: number,
     accessibleLibraryIds?: number[] | null,
   ): Promise<{ data: WatchHistoryItem[]; total: number }> {
-    if (accessibleLibraryIds !== undefined && accessibleLibraryIds !== null && accessibleLibraryIds.length === 0) {
+    if (
+      accessibleLibraryIds !== undefined &&
+      accessibleLibraryIds !== null &&
+      accessibleLibraryIds.length === 0
+    ) {
       return { data: [], total: 0 };
     }
     const useAcl =
@@ -428,7 +444,11 @@ export class PlaybackService implements OnModuleInit {
     userId: number,
     accessibleLibraryIds?: number[] | null,
   ): Promise<number[]> {
-    if (accessibleLibraryIds !== undefined && accessibleLibraryIds !== null && accessibleLibraryIds.length === 0) {
+    if (
+      accessibleLibraryIds !== undefined &&
+      accessibleLibraryIds !== null &&
+      accessibleLibraryIds.length === 0
+    ) {
       return [];
     }
     const useAcl =
@@ -437,7 +457,9 @@ export class PlaybackService implements OnModuleInit {
     const seriesFilter = useAcl
       ? ` AND EXISTS (SELECT 1 FROM media m2 WHERE m2.id = s."mediaId" AND m2."libraryId" = ANY($2))`
       : '';
-    const params: unknown[] = useAcl ? [userId, accessibleLibraryIds] : [userId];
+    const params: unknown[] = useAcl
+      ? [userId, accessibleLibraryIds]
+      : [userId];
 
     const rows: { id: number }[] = await this.repo.query(
       `

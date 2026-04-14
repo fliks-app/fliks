@@ -1,4 +1,11 @@
-import { Entity, Column, ManyToOne, JoinColumn, RelationId, Index } from 'typeorm';
+import {
+  Entity,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  RelationId,
+  Index,
+} from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { User } from '../../users/entities/user.entity';
 import { Media } from '../../media/entities/media.entity';

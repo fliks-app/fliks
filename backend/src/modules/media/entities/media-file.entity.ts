@@ -1,4 +1,11 @@
-import { Entity, Column, ManyToOne, JoinColumn, RelationId, Unique } from 'typeorm';
+import {
+  Entity,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  RelationId,
+  Unique,
+} from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import type { MediaFileInfo } from '../../subtitles/ffprobe.service';
 import { Media } from './media.entity';

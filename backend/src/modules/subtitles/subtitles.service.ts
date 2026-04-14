@@ -27,7 +27,10 @@ import * as postProcess from './subtitle-post-processor';
 import { SettingsService } from '../settings/settings.service';
 import { resolveSubtitleAbsolutePath } from './subtitle-path.util';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
-import { APP_LANGUAGES, ISO_639_2_TO_1 } from '../../common/constants/app-languages';
+import {
+  APP_LANGUAGES,
+  ISO_639_2_TO_1,
+} from '../../common/constants/app-languages';
 
 @Injectable()
 export class SubtitlesService {
@@ -405,7 +408,15 @@ export class SubtitlesService {
   // ---------------------------------------------------------------------------
 
   private static readonly SUBTITLE_EXTS = new Set([
-    '.srt', '.ass', '.ssa', '.vtt', '.sub', '.sup', '.mks', '.smi', '.sami',
+    '.srt',
+    '.ass',
+    '.ssa',
+    '.vtt',
+    '.sub',
+    '.sup',
+    '.mks',
+    '.smi',
+    '.sami',
   ]);
 
   /** Flags parsed right-to-left from the filename suffix. */
@@ -413,13 +424,14 @@ export class SubtitlesService {
   private static readonly HI_FLAGS = new Set(['hi', 'cc', 'sdh']);
   private static readonly SKIP_FLAGS = new Set(['default']);
 
-
   /** Full language names → ISO 639-1 (built from APP_LANGUAGES). */
-  private static readonly LANG_NAMES: Record<string, string> = Object.fromEntries(
-    APP_LANGUAGES
-      .filter((l) => l.isoCode !== 'xx')
-      .map((l) => [l.name.toLowerCase(), l.isoCode]),
-  );
+  private static readonly LANG_NAMES: Record<string, string> =
+    Object.fromEntries(
+      APP_LANGUAGES.filter((l) => l.isoCode !== 'xx').map((l) => [
+        l.name.toLowerCase(),
+        l.isoCode,
+      ]),
+    );
 
   /**
    * Parse a subtitle filename (Jellyfin convention) right-to-left.
@@ -473,14 +485,16 @@ export class SubtitlesService {
 
   private resolveLanguageCode(token: string): string | null {
     // ISO 639-1 (2 chars) — validate against known codes
-    if (/^[a-z]{2}$/.test(token) && SubtitlesService.KNOWN_ISO_CODES.has(token)) return token;
+    if (/^[a-z]{2}$/.test(token) && SubtitlesService.KNOWN_ISO_CODES.has(token))
+      return token;
     // Culture code: en-us → en
     const cultureMatch = token.match(/^([a-z]{2})-[a-z]{2,}$/i);
     if (cultureMatch) return cultureMatch[1].toLowerCase();
     // ISO 639-2 (3 chars)
     if (ISO_639_2_TO_1[token]) return ISO_639_2_TO_1[token];
     // Full name (from APP_LANGUAGES)
-    if (SubtitlesService.LANG_NAMES[token]) return SubtitlesService.LANG_NAMES[token];
+    if (SubtitlesService.LANG_NAMES[token])
+      return SubtitlesService.LANG_NAMES[token];
     return null;
   }
 
@@ -502,12 +516,16 @@ export class SubtitlesService {
     // Build a map: video basename (without ext, lowercase) → MediaFile
     const fileByBasename = new Map<string, MediaFile>();
     for (const f of media.files) {
-      const base = path.basename(f.relativePath, path.extname(f.relativePath)).toLowerCase();
+      const base = path
+        .basename(f.relativePath, path.extname(f.relativePath))
+        .toLowerCase();
       fileByBasename.set(base, f);
     }
 
     // Load existing external subtitle relative paths to skip duplicates
-    const existingSubs = await this.repo.find({ where: { media: { id: mediaId } } });
+    const existingSubs = await this.repo.find({
+      where: { media: { id: mediaId } },
+    });
     const existingPaths = new Set(
       existingSubs
         .filter((s) => s.relativePath)

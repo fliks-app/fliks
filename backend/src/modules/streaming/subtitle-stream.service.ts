@@ -166,8 +166,9 @@ export class SubtitleStreamService {
     // batch every uncached text sub of this file into ONE ffmpeg invocation
     // and let the parallel callers join via `inflight`.
     const textSubs =
-      resolved.mediaFile.streamInfo?.subtitles?.filter((s) => !s.isImageBased) ??
-      [];
+      resolved.mediaFile.streamInfo?.subtitles?.filter(
+        (s) => !s.isImageBased,
+      ) ?? [];
     const uncachedIndices = textSubs
       .map((s) => s.streamIndex)
       .filter(
@@ -246,7 +247,10 @@ export class SubtitleStreamService {
         );
         return null;
       });
-    this.eventsService.emit({ type: 'command.started', name: 'WarmupSubtitles' });
+    this.eventsService.emit({
+      type: 'command.started',
+      name: 'WarmupSubtitles',
+    });
 
     const batch: WarmupBatch = {
       cmd,

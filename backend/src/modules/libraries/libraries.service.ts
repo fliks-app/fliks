@@ -100,7 +100,9 @@ export class LibrariesService implements OnModuleInit {
         libraries.push(saved);
 
         // 2. Link the root folder.
-        await m.update(RootFolder, rf.id, { library: { id: saved.id } as Library });
+        await m.update(RootFolder, rf.id, {
+          library: { id: saved.id } as Library,
+        });
 
         // 3. Bulk-update all media under that root folder.
         //    Use QueryBuilder because both `rootFolderId` (where) and
@@ -163,23 +165,40 @@ export class LibrariesService implements OnModuleInit {
   // ---------------------------------------------------------------------------
 
   /** Lightweight projection for non-admin users (sidebar, route resolution). */
-  async findAccessibleSummaries(user: User): Promise<
-    Pick<Library, 'id' | 'name' | 'mediaTypes' | 'isDefaultForMovies' | 'isDefaultForSeries'>[]
+  async findAccessibleSummaries(
+    user: User,
+  ): Promise<
+    Pick<
+      Library,
+      'id' | 'name' | 'mediaTypes' | 'isDefaultForMovies' | 'isDefaultForSeries'
+    >[]
   > {
     const accessible = await this.getAccessibleLibraryIds(user);
-    const where = accessible == null
-      ? {}
-      : { id: In(accessible.length ? accessible : [-1]) };
+    const where =
+      accessible == null
+        ? {}
+        : { id: In(accessible.length ? accessible : [-1]) };
     return this.repo.find({
       where,
       order: { name: 'ASC' },
-      select: ['id', 'name', 'icon', 'color', 'mediaTypes', 'isDefaultForMovies', 'isDefaultForSeries'],
+      select: [
+        'id',
+        'name',
+        'icon',
+        'color',
+        'mediaTypes',
+        'isDefaultForMovies',
+        'isDefaultForSeries',
+      ],
     });
   }
 
   async findAllForUser(user: User): Promise<LibraryWithDetails[]> {
     const accessible = await this.getAccessibleLibraryIds(user);
-    const where = accessible == null ? {} : { id: In(accessible.length ? accessible : [-1]) };
+    const where =
+      accessible == null
+        ? {}
+        : { id: In(accessible.length ? accessible : [-1]) };
     const libs = await this.repo.find({
       where,
       order: { name: 'ASC' },
@@ -200,8 +219,10 @@ export class LibrariesService implements OnModuleInit {
   async create(dto: CreateLibraryDto): Promise<LibraryWithDetails> {
     return this.dataSource.transaction(async (m) => {
       // Enforce at-most-one default per type.
-      if (dto.isDefaultForMovies) await this.clearDefaultFlag(m, 'isDefaultForMovies');
-      if (dto.isDefaultForSeries) await this.clearDefaultFlag(m, 'isDefaultForSeries');
+      if (dto.isDefaultForMovies)
+        await this.clearDefaultFlag(m, 'isDefaultForMovies');
+      if (dto.isDefaultForSeries)
+        await this.clearDefaultFlag(m, 'isDefaultForSeries');
 
       const lib = await m.save(
         m.create(Library, {
@@ -253,8 +274,10 @@ export class LibrariesService implements OnModuleInit {
       if (dto.icon !== undefined) patch.icon = dto.icon;
       if (dto.color !== undefined) patch.color = dto.color;
       if (dto.mediaTypes !== undefined) patch.mediaTypes = dto.mediaTypes;
-      if (dto.preferredProvider !== undefined) patch.preferredProvider = dto.preferredProvider;
-      if (dto.stalledCleanupProfile !== undefined) patch.stalledCleanupProfile = dto.stalledCleanupProfile;
+      if (dto.preferredProvider !== undefined)
+        patch.preferredProvider = dto.preferredProvider;
+      if (dto.stalledCleanupProfile !== undefined)
+        patch.stalledCleanupProfile = dto.stalledCleanupProfile;
       if (dto.defaultQualityProfileId !== undefined) {
         patch.defaultQualityProfile = dto.defaultQualityProfileId
           ? ({ id: dto.defaultQualityProfileId } as QualityProfile)
@@ -265,8 +288,10 @@ export class LibrariesService implements OnModuleInit {
           ? ({ id: dto.defaultLanguageProfileId } as LanguageProfile)
           : null;
       }
-      if (dto.isDefaultForMovies !== undefined) patch.isDefaultForMovies = dto.isDefaultForMovies;
-      if (dto.isDefaultForSeries !== undefined) patch.isDefaultForSeries = dto.isDefaultForSeries;
+      if (dto.isDefaultForMovies !== undefined)
+        patch.isDefaultForMovies = dto.isDefaultForMovies;
+      if (dto.isDefaultForSeries !== undefined)
+        patch.isDefaultForSeries = dto.isDefaultForSeries;
       if (Object.keys(patch).length) await m.update(Library, id, patch);
 
       return this.findOne(id);
@@ -292,8 +317,13 @@ export class LibrariesService implements OnModuleInit {
   // Path management
   // ---------------------------------------------------------------------------
 
-  async addPath(libraryId: number, dto: AddLibraryPathDto): Promise<RootFolder> {
-    return this.dataSource.transaction((m) => this.attachPath(m, libraryId, dto));
+  async addPath(
+    libraryId: number,
+    dto: AddLibraryPathDto,
+  ): Promise<RootFolder> {
+    return this.dataSource.transaction((m) =>
+      this.attachPath(m, libraryId, dto),
+    );
   }
 
   async removePath(libraryId: number, pathId: number): Promise<void> {
@@ -326,7 +356,9 @@ export class LibrariesService implements OnModuleInit {
   }
 
   async setUserAccess(libraryId: number, userIds: number[]): Promise<void> {
-    await this.dataSource.transaction((m) => this.replaceUserAccess(m, libraryId, userIds));
+    await this.dataSource.transaction((m) =>
+      this.replaceUserAccess(m, libraryId, userIds),
+    );
   }
 
   /**

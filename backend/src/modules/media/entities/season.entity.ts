@@ -1,4 +1,11 @@
-import { Entity, Column, ManyToOne, OneToMany, JoinColumn, RelationId } from 'typeorm';
+import {
+  Entity,
+  Column,
+  ManyToOne,
+  OneToMany,
+  JoinColumn,
+  RelationId,
+} from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Media } from './media.entity';
 import { Episode } from './episode.entity';

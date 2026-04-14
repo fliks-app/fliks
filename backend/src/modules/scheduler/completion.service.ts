@@ -406,7 +406,10 @@ export class CompletionService {
           });
           if (season) {
             const episode = await this.episodeRepo.findOne({
-              where: { season: { id: season.id }, episodeNumber: epNums.episode },
+              where: {
+                season: { id: season.id },
+                episodeNumber: epNums.episode,
+              },
             });
             if (episode) {
               epTitle = episode.title ?? undefined;
@@ -469,7 +472,8 @@ export class CompletionService {
       const savedFile = existingFile
         ? await this.mediaFileRepo.save(
             Object.assign(existingFile, {
-              episode: episodeId != null ? ({ id: episodeId } as Episode) : null,
+              episode:
+                episodeId != null ? ({ id: episodeId } as Episode) : null,
               size: videoFile.size,
               quality: history.quality,
               streamInfo,
@@ -478,7 +482,8 @@ export class CompletionService {
         : await this.mediaFileRepo.save(
             this.mediaFileRepo.create({
               media,
-              episode: episodeId != null ? ({ id: episodeId } as Episode) : null,
+              episode:
+                episodeId != null ? ({ id: episodeId } as Episode) : null,
               relativePath,
               size: videoFile.size,
               quality: history.quality,
@@ -703,7 +708,11 @@ export class CompletionService {
 
       // Pre-load the media rows we need (to resolve libraryId).
       const mediaIds = Array.from(
-        new Set(histories.map((h) => h.mediaId).filter((id): id is number => id != null)),
+        new Set(
+          histories
+            .map((h) => h.mediaId)
+            .filter((id): id is number => id != null),
+        ),
       );
       const medias = mediaIds.length
         ? await this.mediaRepo.find({ where: { id: In(mediaIds) } })
@@ -713,7 +722,9 @@ export class CompletionService {
       for (const t of downloading) {
         const history = historyByHash.get(t.hash.toLowerCase());
         if (!history) continue; // Untracked torrent — not our business.
-        const media = history.mediaId ? mediaById.get(history.mediaId) : undefined;
+        const media = history.mediaId
+          ? mediaById.get(history.mediaId)
+          : undefined;
         if (!media?.libraryId) continue;
         const library = libraryById.get(media.libraryId);
         if (!library?.stalledCleanupProfile) continue;

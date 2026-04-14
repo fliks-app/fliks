@@ -32,7 +32,9 @@ export class CleanupProfilesController {
   @Patch(':key')
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   update(@Param('key') key: string, @Body() dto: UpdateCleanupProfileDto) {
-    if (!STALLED_CLEANUP_PROFILE_KEYS.includes(key as StalledCleanupProfileKey)) {
+    if (
+      !STALLED_CLEANUP_PROFILE_KEYS.includes(key as StalledCleanupProfileKey)
+    ) {
       throw new BadRequestException(
         `Unknown profile "${key}". Expected one of: ${STALLED_CLEANUP_PROFILE_KEYS.join(', ')}`,
       );

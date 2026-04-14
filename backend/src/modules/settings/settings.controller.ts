@@ -1,4 +1,12 @@
-import { Controller, Get, Put, Body, Param, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Put,
+  Body,
+  Param,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { IsString, IsOptional, IsObject } from 'class-validator';
 import { SettingsService } from './settings.service';

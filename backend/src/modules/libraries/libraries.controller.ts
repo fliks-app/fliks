@@ -57,10 +57,7 @@ export class LibrariesController {
 
   @Patch(':id')
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateLibraryDto,
-  ) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateLibraryDto) {
     return this.service.update(id, dto);
   }
 

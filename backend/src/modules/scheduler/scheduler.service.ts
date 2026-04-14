@@ -313,7 +313,8 @@ export class SchedulerService implements OnModuleInit {
         await this.doRefreshMissingMetadata();
       else if (name === 'RescanMissingFiles') await this.doRescanMissingFiles();
       else if (name === 'GenerateSprites') await this.doGenerateSprites(true);
-      else if (name === 'GenerateMissingSprites') await this.doGenerateSprites(false);
+      else if (name === 'GenerateMissingSprites')
+        await this.doGenerateSprites(false);
       await this.commandRepo.update(cmdId, {
         status: 'completed',
         endedOn: new Date(),
@@ -419,7 +420,9 @@ export class SchedulerService implements OnModuleInit {
         results,
         {
           allowed: buildAllowedQualityIds(media.qualityProfile?.items),
-          allowedLangs: allowedAudioLanguageIds(media.languageProfile?.audioLanguages),
+          allowedLangs: allowedAudioLanguageIds(
+            media.languageProfile?.audioLanguages,
+          ),
           sizeByQuality,
           indexerMinSeeders,
           indexerUnknownLang,
@@ -504,12 +507,7 @@ export class SchedulerService implements OnModuleInit {
       .andWhere('ep.airDate <= :today', { today })
       .select(['ep.id', 'ep.episodeNumber', 'ep.title', 'ep.airDate'])
       .addSelect(['season.id', 'season.seasonNumber', 'season.mediaId'])
-      .addSelect([
-        'media.id',
-        'media.title',
-        'media.year',
-        'media.runtime',
-      ])
+      .addSelect(['media.id', 'media.title', 'media.year', 'media.runtime'])
       .getMany();
 
     if (!episodes.length) return;
@@ -557,7 +555,9 @@ export class SchedulerService implements OnModuleInit {
         results,
         {
           allowed: buildAllowedQualityIds(media.qualityProfile?.items),
-          allowedLangs: allowedAudioLanguageIds(media.languageProfile?.audioLanguages),
+          allowedLangs: allowedAudioLanguageIds(
+            media.languageProfile?.audioLanguages,
+          ),
           sizeByQuality,
           indexerMinSeeders,
           indexerUnknownLang,
@@ -689,8 +689,8 @@ export class SchedulerService implements OnModuleInit {
       if (!dur || !absPath) return Promise.resolve(null);
 
       const label = file.episodeId
-        ? episodeLabelMap.get(file.episodeId) ?? file.media?.title ?? ''
-        : file.media?.title ?? '';
+        ? (episodeLabelMap.get(file.episodeId) ?? file.media?.title ?? '')
+        : (file.media?.title ?? '');
 
       return this.thumbnailService
         .getOrGenerate(file.id, absPath, dur, label, force, true)

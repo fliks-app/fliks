@@ -571,7 +571,9 @@ export class ImportSonarrService {
                   rootFolder: resolved?.rootFolderId
                     ? ({ id: resolved.rootFolderId } as RootFolder)
                     : null,
-                  library: { id: exists.libraryId ?? targetLibrary.id } as Library,
+                  library: {
+                    id: exists.libraryId ?? targetLibrary.id,
+                  } as Library,
                   folderName: folderName || undefined,
                 });
               } else {

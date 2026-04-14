@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, OnModuleInit, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  OnModuleInit,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CleanupProfile } from './entities/cleanup-profile.entity';
@@ -52,7 +57,8 @@ export class CleanupProfilesService implements OnModuleInit {
   ): Promise<CleanupProfile> {
     const row = await this.findOne(key);
     if (dto.samples !== undefined) row.samples = dto.samples;
-    if (dto.intervalMinutes !== undefined) row.intervalMinutes = dto.intervalMinutes;
+    if (dto.intervalMinutes !== undefined)
+      row.intervalMinutes = dto.intervalMinutes;
     if (dto.autoRestart !== undefined) row.autoRestart = dto.autoRestart;
     return this.repo.save(row);
   }

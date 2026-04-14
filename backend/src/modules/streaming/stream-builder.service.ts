@@ -101,7 +101,8 @@ export class StreamBuilderService {
       clientSupportsHdr &&
       profile.hdrRequiresFmp4 === true &&
       !useFmp4;
-    const needsTonemapping = (isSourceHdr && !clientSupportsHdr) || hdrBlockedByFormat;
+    const needsTonemapping =
+      (isSourceHdr && !clientSupportsHdr) || hdrBlockedByFormat;
     const needsBurnIn = !!burnInSubtitleId;
     const needsCrop = !!v?.crop;
 

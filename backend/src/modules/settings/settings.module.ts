@@ -6,7 +6,10 @@ import { SettingsController } from './settings.controller';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([AppSetting]), forwardRef(() => AuthModule)],
+  imports: [
+    TypeOrmModule.forFeature([AppSetting]),
+    forwardRef(() => AuthModule),
+  ],
   controllers: [SettingsController],
   providers: [SettingsService],
   exports: [SettingsService],

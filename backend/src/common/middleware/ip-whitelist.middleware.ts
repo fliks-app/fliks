@@ -89,7 +89,9 @@ export class IpWhitelistMiddleware implements NestMiddleware {
         const deadline = new Date(this.cachedPendingUntil).getTime();
         if (Date.now() > deadline) {
           // Auto-revert: user didn't confirm in time
-          this.log.warn('IP whitelist pending confirmation expired — reverting to disabled');
+          this.log.warn(
+            'IP whitelist pending confirmation expired — reverting to disabled',
+          );
           await this.settings.set('ip_whitelist_enabled', 'false');
           await this.settings.delete('ip_whitelist_pending_until');
           this.cachedEnabled = 'false';
@@ -107,12 +109,17 @@ export class IpWhitelistMiddleware implements NestMiddleware {
 
     // Check client IP against allowed ranges
     const clientIp = req.ip ?? req.socket.remoteAddress ?? '';
-    if (this.cachedRanges.length === 0 || ipMatchesCidr(clientIp, this.cachedRanges)) {
+    if (
+      this.cachedRanges.length === 0 ||
+      ipMatchesCidr(clientIp, this.cachedRanges)
+    ) {
       return next();
     }
 
     this.log.warn(`Blocked request from ${clientIp} to ${url}`);
-    res.status(403).json({ statusCode: 403, message: 'Access denied: IP not allowed' });
+    res
+      .status(403)
+      .json({ statusCode: 403, message: 'Access denied: IP not allowed' });
   }
 
   private async refreshCache() {

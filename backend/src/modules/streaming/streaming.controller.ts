@@ -167,7 +167,7 @@ export class StreamingController {
       // mapAllAudio (TS) — both paths need language metadata.
       audioStreams:
         this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1
-          ? (si?.audio as { language?: string; title?: string }[]) ?? []
+          ? ((si?.audio as { language?: string; title?: string }[]) ?? [])
           : undefined,
       useFmp4: this.activeStreamTracker.getFmp4Supported(mediaFileId),
       encoderPreset: this.activeStreamTracker.getEncoderPreset(mediaFileId),
@@ -230,7 +230,10 @@ export class StreamingController {
     @Body() deviceProfile: DeviceProfileDto,
     @Req() req: Request,
   ) {
-    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
+    const resolved = await this.streamingService.resolveFile(
+      mediaFileId,
+      req.user as User,
+    );
     const token = firstQueryString(req.query, 'token');
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
     const burnInSubtitleRaw = firstQueryString(req.query, 'burnInSubtitleId');
@@ -288,10 +291,16 @@ export class StreamingController {
       deviceProfile.supportsMultiAudioMuxed ?? false,
     );
     this.activeStreamTracker.setFmp4Supported(mediaFileId, useFmp4);
-    this.activeStreamTracker.setStreamingDurations(ss.segmentDuration, ss.initTime);
+    this.activeStreamTracker.setStreamingDurations(
+      ss.segmentDuration,
+      ss.initTime,
+    );
     // Update module-level constants used by buildVodPlaylist and transcoding
     SEG_DURATION = ss.segmentDuration;
-    this.transcodingService.setSegmentDurations(ss.segmentDuration, ss.initTime);
+    this.transcodingService.setSegmentDurations(
+      ss.segmentDuration,
+      ss.initTime,
+    );
 
     // Persist encoder preset + QSV advanced options for downstream sessions.
     this.activeStreamTracker.setEncoderPreset(mediaFileId, ss.qsvPreset);
@@ -304,8 +313,14 @@ export class StreamingController {
     // Persist source→client codec compatibility so hlsMaster can pick a
     // smart-remux variant when the user's quality lock matches the source
     // resolution (and video codec is copy-compatible).
-    this.activeStreamTracker.setCanCopyVideo(mediaFileId, result.videoCopyStream);
-    this.activeStreamTracker.setCanCopyAudio(mediaFileId, result.audioCopyStream);
+    this.activeStreamTracker.setCanCopyVideo(
+      mediaFileId,
+      result.videoCopyStream,
+    );
+    this.activeStreamTracker.setCanCopyAudio(
+      mediaFileId,
+      result.audioCopyStream,
+    );
     const sv = resolved.mediaFile.streamInfo?.video?.[0];
     this.activeStreamTracker.setSourceDimensions(
       mediaFileId,
@@ -367,7 +382,10 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
+    const resolved = await this.streamingService.resolveFile(
+      mediaFileId,
+      req.user as User,
+    );
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
     const crop = v?.crop;
@@ -414,7 +432,8 @@ export class StreamingController {
       onlyQuality !== 'remux'
     ) {
       const profile = PROFILES.find((p) => p.name === onlyQuality);
-      const canCopyVideo = this.activeStreamTracker.getCanCopyVideo(mediaFileId);
+      const canCopyVideo =
+        this.activeStreamTracker.getCanCopyVideo(mediaFileId);
       const sourceH = this.activeStreamTracker.getSourceHeight(mediaFileId);
       const sourceW = this.activeStreamTracker.getSourceWidth(mediaFileId);
       if (profile && canCopyVideo && sourceW > 0 && sourceH > 0) {
@@ -425,7 +444,7 @@ export class StreamingController {
           smartRemux = true;
           this.log.log(
             `Smart remux for file ${mediaFileId}: source ${sourceW}x${sourceH} ` +
-            `matches requested ${onlyQuality}, skipping transcode`,
+              `matches requested ${onlyQuality}, skipping transcode`,
           );
         }
       }
@@ -459,14 +478,21 @@ export class StreamingController {
     // which would kill this pre-spawned session — wasting the work and
     // adding a kill+restart penalty.
     const startAt = parseFloat(firstQueryString(req.query, 'startAt') ?? '0');
-    if (effectiveOnlyQuality && effectiveOnlyQuality !== 'auto' && startAt === 0) {
+    if (
+      effectiveOnlyQuality &&
+      effectiveOnlyQuality !== 'auto' &&
+      startAt === 0
+    ) {
       const existing = this.transcodingService.getExistingSession(
         mediaFileId,
         req.user?.id,
       );
       if (!existing || existing.process.exitCode !== null) {
         const ctx = this.buildSessionContext(req, resolved, mediaFileId);
-        if (effectiveOnlyQuality === 'remux' || effectiveOnlyQuality === 'original') {
+        if (
+          effectiveOnlyQuality === 'remux' ||
+          effectiveOnlyQuality === 'original'
+        ) {
           const copyAudio =
             this.activeStreamTracker.getCanCopyAudio(mediaFileId);
           void this.transcodingService
@@ -544,7 +570,10 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
+    const resolved = await this.streamingService.resolveFile(
+      mediaFileId,
+      req.user as User,
+    );
     const duration = await this.resolveDuration(
       mediaFileId,
       resolved.absolutePath,
@@ -620,14 +649,18 @@ export class StreamingController {
 
     // Fallback: separate audio session (needs DB for absolutePath).
     if (!segPath) {
-      const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
-      const audioSession = await this.transcodingService.getOrCreateAudioSession(
+      const resolved = await this.streamingService.resolveFile(
         mediaFileId,
-        audioIndex,
-        resolved.absolutePath,
-        segIndex,
-        { userId: user?.id },
+        req.user as User,
       );
+      const audioSession =
+        await this.transcodingService.getOrCreateAudioSession(
+          mediaFileId,
+          audioIndex,
+          resolved.absolutePath,
+          segIndex,
+          { userId: user?.id },
+        );
       segPath = await this.transcodingService.getSegmentPath(
         audioSession,
         segment,
@@ -638,13 +671,14 @@ export class StreamingController {
       return;
     }
 
-    const contentType = segment === 'init.mp4'
-      ? 'video/mp4'
-      : 'video/iso.segment';
+    const contentType =
+      segment === 'init.mp4' ? 'video/mp4' : 'video/iso.segment';
     res.setHeader('Content-Type', contentType);
     res.setHeader('Access-Control-Allow-Origin', '*');
     const stream = fs.createReadStream(segPath);
-    stream.on('error', () => { if (!res.headersSent) res.status(404).end(); });
+    stream.on('error', () => {
+      if (!res.headersSent) res.status(404).end();
+    });
     stream.pipe(res);
   }
 
@@ -659,15 +693,19 @@ export class StreamingController {
     if (!VALID_QUALITIES.has(quality)) {
       throw new BadRequestException(`Invalid quality: ${quality}`);
     }
-    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
+    const resolved = await this.streamingService.resolveFile(
+      mediaFileId,
+      req.user as User,
+    );
     // Use client-provided duration (from playbackInfo) to skip ffprobe
     const durationHint = firstQueryString(req.query, 'duration');
-    const duration = (durationHint ? parseFloat(durationHint) : 0)
-      || await this.resolveDuration(
+    const duration =
+      (durationHint ? parseFloat(durationHint) : 0) ||
+      (await this.resolveDuration(
         mediaFileId,
         resolved.absolutePath,
         resolved.mediaFile.streamInfo,
-      );
+      ));
     if (!duration) {
       res.status(404).send('Duration unknown — rescan the file first');
       return;
@@ -767,7 +805,8 @@ export class StreamingController {
     // For init.mp4: serve from existing session without triggering quality changes.
     if (segment.startsWith('init') && existing) {
       const fmp4 = this.activeStreamTracker.getFmp4Supported(mediaFileId);
-      const ma = this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 && fmp4;
+      const ma =
+        this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 && fmp4;
       const initFile = ma ? `0/${segment}` : segment;
       const initPath = await this.transcodingService.getSegmentPath(
         existing,
@@ -777,7 +816,9 @@ export class StreamingController {
         res.setHeader('Content-Type', 'video/mp4');
         res.setHeader('Access-Control-Allow-Origin', '*');
         const initStream = fs.createReadStream(initPath);
-        initStream.on('error', () => { if (!res.headersSent) res.status(404).end(); });
+        initStream.on('error', () => {
+          if (!res.headersSent) res.status(404).end();
+        });
         initStream.pipe(res);
         return;
       }
@@ -790,7 +831,11 @@ export class StreamingController {
     // without any DB query or session management. Only checks existsSync
     // (instant) — does NOT call getSegmentPath (which would wait via
     // fs.watch and block the request if the segment isn't being produced).
-    if (existing && existing.quality === quality && existing.process.exitCode === null) {
+    if (
+      existing &&
+      existing.quality === quality &&
+      existing.process.exitCode === null
+    ) {
       const varStreamMap =
         this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
         this.activeStreamTracker.getFmp4Supported(mediaFileId);
@@ -801,7 +846,9 @@ export class StreamingController {
         res.setHeader('Content-Type', 'video/mp4');
         res.setHeader('Access-Control-Allow-Origin', '*');
         const stream = fs.createReadStream(segPath);
-        stream.on('error', () => { if (!res.headersSent) res.status(404).end(); });
+        stream.on('error', () => {
+          if (!res.headersSent) res.status(404).end();
+        });
         stream.pipe(res);
         return;
       }
@@ -809,7 +856,10 @@ export class StreamingController {
     }
 
     // Slow path: need to create/restart a session — requires DB lookup.
-    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
+    const resolved = await this.streamingService.resolveFile(
+      mediaFileId,
+      req.user as User,
+    );
 
     const ctx = this.buildSessionContext(req, resolved, mediaFileId);
     // For remux sessions, copy audio only when the source codec is compatible
@@ -850,7 +900,9 @@ export class StreamingController {
     res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Access-Control-Allow-Origin', '*');
     const stream = fs.createReadStream(segPath);
-    stream.on('error', () => { if (!res.headersSent) res.status(404).end(); });
+    stream.on('error', () => {
+      if (!res.headersSent) res.status(404).end();
+    });
     stream.pipe(res);
   }
 
@@ -883,7 +935,10 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
+    const resolved = await this.streamingService.resolveFile(
+      mediaFileId,
+      req.user as User,
+    );
 
     // Track direct play session
     const user = req.user;

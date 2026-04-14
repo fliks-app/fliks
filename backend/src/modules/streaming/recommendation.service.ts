@@ -116,7 +116,14 @@ export class RecommendationService {
 
     const qb = this.mediaRepo
       .createQueryBuilder('m')
-      .select(['m.id', 'm.title', 'm.type', 'm.year', 'm.posterUrl', 'm.genres'])
+      .select([
+        'm.id',
+        'm.title',
+        'm.type',
+        'm.year',
+        'm.posterUrl',
+        'm.genres',
+      ])
       .where('m.genres IS NOT NULL')
       .andWhere("m.genres != '[]'::jsonb");
 
@@ -166,8 +173,7 @@ export class RecommendationService {
         posterUrl: s.media.posterUrl,
         genres: s.media.genres,
       },
-      becauseTitle:
-        genreSource.get(s.topGenre) ?? recentMedia[0].media.title,
+      becauseTitle: genreSource.get(s.topGenre) ?? recentMedia[0].media.title,
       score: Math.round(s.score * 100) / 100,
     }));
   }

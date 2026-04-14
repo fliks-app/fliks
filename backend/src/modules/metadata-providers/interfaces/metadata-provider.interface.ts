@@ -121,5 +121,8 @@ export interface IMetadataProvider {
   getTvShowSeasons(externalId: string): Promise<SeasonDetails[]>;
   getPersonDetails(externalId: string): Promise<PersonDetails>;
   getPersonCredits(externalId: string): Promise<PersonCombinedCredits>;
-  findByExternalId?(source: string, id: string): Promise<ExternalIdResult | null>;
+  findByExternalId?(
+    source: string,
+    id: string,
+  ): Promise<ExternalIdResult | null>;
 }

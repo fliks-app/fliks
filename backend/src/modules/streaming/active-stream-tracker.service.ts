@@ -144,8 +144,12 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     this.initTimeCache = initTime;
   }
 
-  getSegmentDuration(): number { return this.segmentDurationCache; }
-  getInitTime(): number { return this.initTimeCache; }
+  getSegmentDuration(): number {
+    return this.segmentDurationCache;
+  }
+  getInitTime(): number {
+    return this.initTimeCache;
+  }
 
   setAudioStreamIndex(mediaFileId: number, index: number | undefined) {
     if (index != null) this.audioStreamIndexCache.set(mediaFileId, index);
@@ -171,12 +175,20 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
   }
 
   /** QSV advanced options are global (driven by admin streaming settings). */
-  setQsvOptions(opts: { lookahead: boolean; lowPower: boolean; adaptive: boolean }) {
+  setQsvOptions(opts: {
+    lookahead: boolean;
+    lowPower: boolean;
+    adaptive: boolean;
+  }) {
     this.qsvLookaheadCache = opts.lookahead;
     this.qsvLowPowerCache = opts.lowPower;
     this.qsvAdaptiveCache = opts.adaptive;
   }
-  getQsvOptions(): { lookahead: boolean; lowPower: boolean; adaptive: boolean } {
+  getQsvOptions(): {
+    lookahead: boolean;
+    lowPower: boolean;
+    adaptive: boolean;
+  } {
     return {
       lookahead: this.qsvLookaheadCache,
       lowPower: this.qsvLowPowerCache,

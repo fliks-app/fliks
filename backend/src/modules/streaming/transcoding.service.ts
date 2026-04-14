@@ -204,7 +204,8 @@ async function segmentNearby(
   for (const dir of dirs) {
     for (const ext of exts) {
       if (await fileExists(path.join(dir, `seg-${num}${ext}`))) return true;
-      if (prevNum && (await fileExists(path.join(dir, `seg-${prevNum}${ext}`)))) return true;
+      if (prevNum && (await fileExists(path.join(dir, `seg-${prevNum}${ext}`))))
+        return true;
     }
   }
   return false;
@@ -460,7 +461,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ): Promise<TranscodeSession> {
     const isVideoOnly = ctx?.videoOnly ?? false;
     const ctxAudioStreams = ctx?.audioStreams;
-    const useVarStreamMap = isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
+    const useVarStreamMap =
+      isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
 
     const existing = this.sessions.get(key);
     if (existing) {
@@ -496,7 +498,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           await fsp.mkdir(existing.cachePath, { recursive: true });
           if (useVarStreamMap) {
             for (let i = 0; i <= ctxAudioStreams!.length; i++) {
-              await fsp.mkdir(path.join(existing.cachePath, String(i)), { recursive: true });
+              await fsp.mkdir(path.join(existing.cachePath, String(i)), {
+                recursive: true,
+              });
             }
           }
           return this.startSeekSession(
@@ -517,14 +521,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         // is BEHIND the current session's start (unreachable — ffmpeg only
         // encodes forward). Gaps at or ahead of startSegment are just the
         // encoding frontier; ffmpeg will produce them naturally.
-        const gap = firstMissingSegment(
-          existing.cachePath,
-          requestedSegment,
-        );
-        if (
-          gap != null &&
-          gap < (existing.startSegment ?? 0)
-        ) {
+        const gap = firstMissingSegment(existing.cachePath, requestedSegment);
+        if (gap != null && gap < (existing.startSegment ?? 0)) {
           this.log.log(
             `Seek: segment ${requestedSegment} cached, restarting transcode [${key}] at unreachable gap ${gap} (session started at ${existing.startSegment})`,
           );
@@ -533,10 +531,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           await fsp.mkdir(existing.cachePath, { recursive: true });
           if (useVarStreamMap) {
             for (let i = 0; i <= ctxAudioStreams!.length; i++) {
-              await fsp.mkdir(
-                path.join(existing.cachePath, String(i)),
-                { recursive: true },
-              );
+              await fsp.mkdir(path.join(existing.cachePath, String(i)), {
+                recursive: true,
+              });
             }
           }
           return this.startSeekSession(
@@ -622,9 +619,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         `seg-${String(requestedSegment).padStart(4, '0')}.ts`,
       );
       const crashed =
-        session.process.exitCode !== null
-        && !(await fileExists(expectedSeg))
-        && this.sessions.has(key); // Still registered = real crash. Deleted = intentionally killed.
+        session.process.exitCode !== null &&
+        !(await fileExists(expectedSeg)) &&
+        this.sessions.has(key); // Still registered = real crash. Deleted = intentionally killed.
       if (crashed) {
         this.log.warn(
           `Transcode [${key}]: HW accel (${this.detectedHwAccel}) crashed (exit=${session.process.exitCode}), falling back to CPU\n${(session.stderr ?? '').slice(-1000)}`,
@@ -828,9 +825,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // (combined with +temp_file). pollTimer below is a safety net for the
     // rare case where segDir didn't exist at watcher registration time.
     try {
-      readyWatcher = watch(segDir, { persistent: false }, (_event, filename) => {
-        if (filename === firstSegName) checkReady();
-      });
+      readyWatcher = watch(
+        segDir,
+        { persistent: false },
+        (_event, filename) => {
+          if (filename === firstSegName) checkReady();
+        },
+      );
     } catch {
       // Directory will be created by ffmpeg shortly — pollTimer covers this.
     }
@@ -924,7 +925,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       trustedStreamInfo,
     );
 
-    const usesVarStreamMap = videoOnly && audioStreams && audioStreams.length > 1;
+    const usesVarStreamMap =
+      videoOnly && audioStreams && audioStreams.length > 1;
     const segExt = useFmp4 ? '.m4s' : '.ts';
     return this.spawnFfmpegSession({
       id: sessionId,
@@ -1068,7 +1070,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.log.log('Probe: using cached streamInfo (0s / 200KB scan)');
       args.push('-analyzeduration', '0', '-probesize', '200000');
     } else {
-      this.log.log('Probe: no cached streamInfo — running full FFmpeg scan (1s / 1MB)');
+      this.log.log(
+        'Probe: no cached streamInfo — running full FFmpeg scan (1s / 1MB)',
+      );
       args.push('-analyzeduration', '1000000', '-probesize', '1000000');
     }
 
@@ -1366,16 +1370,26 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
 
       args.push(
-        '-f', 'hls',
-        '-hls_time', String(SEGMENT_DURATION),
-        '-hls_init_time', String(INIT_TIME),
-        '-hls_list_size', '0',
-        '-start_number', String(startSegment),
-        '-hls_segment_type', 'fmp4',
-        '-hls_fmp4_init_filename', 'init_%v.mp4',
-        '-hls_flags', 'independent_segments',
-        '-var_stream_map', varParts.join(' '),
-        '-hls_segment_filename', path.join(outputDir, '%v', 'seg-%04d.m4s'),
+        '-f',
+        'hls',
+        '-hls_time',
+        String(SEGMENT_DURATION),
+        '-hls_init_time',
+        String(INIT_TIME),
+        '-hls_list_size',
+        '0',
+        '-start_number',
+        String(startSegment),
+        '-hls_segment_type',
+        'fmp4',
+        '-hls_fmp4_init_filename',
+        'init_%v.mp4',
+        '-hls_flags',
+        'independent_segments',
+        '-var_stream_map',
+        varParts.join(' '),
+        '-hls_segment_filename',
+        path.join(outputDir, '%v', 'seg-%04d.m4s'),
         path.join(outputDir, '%v', 'index.m3u8'),
       );
     } else {
@@ -1401,25 +1415,32 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
 
       args.push(
-        '-f', 'hls',
-        '-hls_time', String(SEGMENT_DURATION),
-        '-hls_init_time', String(INIT_TIME),
-        '-hls_list_size', '0',
-        '-start_number', String(startSegment),
+        '-f',
+        'hls',
+        '-hls_time',
+        String(SEGMENT_DURATION),
+        '-hls_init_time',
+        String(INIT_TIME),
+        '-hls_list_size',
+        '0',
+        '-start_number',
+        String(startSegment),
       );
       if (useFmp4) {
         args.push(
-          '-hls_segment_type', 'fmp4',
-          '-hls_fmp4_init_filename', 'init.mp4',
-          '-hls_segment_filename', path.join(outputDir, 'seg-%04d.m4s'),
+          '-hls_segment_type',
+          'fmp4',
+          '-hls_fmp4_init_filename',
+          'init.mp4',
+          '-hls_segment_filename',
+          path.join(outputDir, 'seg-%04d.m4s'),
         );
       } else {
-        args.push(
-          '-hls_segment_filename', path.join(outputDir, 'seg-%04d.ts'),
-        );
+        args.push('-hls_segment_filename', path.join(outputDir, 'seg-%04d.ts'));
       }
       args.push(
-        '-hls_flags', 'independent_segments',
+        '-hls_flags',
+        'independent_segments',
         path.join(outputDir, 'index.m3u8'),
       );
     }
@@ -1441,10 +1462,14 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ): string[] {
     const args = ['-hide_banner', '-loglevel', 'warning'];
     if (trustedStreamInfo) {
-      this.log.log('Probe [audio-only]: using cached streamInfo (0s / 200KB scan)');
+      this.log.log(
+        'Probe [audio-only]: using cached streamInfo (0s / 200KB scan)',
+      );
       args.push('-analyzeduration', '0', '-probesize', '200000');
     } else {
-      this.log.log('Probe [audio-only]: no cached streamInfo — running full FFmpeg scan (1s / 1MB)');
+      this.log.log(
+        'Probe [audio-only]: no cached streamInfo — running full FFmpeg scan (1s / 1MB)',
+      );
       args.push('-analyzeduration', '1000000', '-probesize', '1000000');
     }
 
@@ -1511,7 +1536,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.log.log('Probe [remux]: using cached streamInfo (0s / 200KB scan)');
       args.push('-analyzeduration', '0', '-probesize', '200000');
     } else {
-      this.log.log('Probe [remux]: no cached streamInfo — running full FFmpeg scan (1s / 1MB)');
+      this.log.log(
+        'Probe [remux]: no cached streamInfo — running full FFmpeg scan (1s / 1MB)',
+      );
       args.push('-analyzeduration', '1000000', '-probesize', '1000000');
     }
 
@@ -1583,17 +1610,19 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     );
     if (useFmp4) {
       args.push(
-        '-hls_segment_type', 'fmp4',
-        '-hls_fmp4_init_filename', 'init.mp4',
-        '-hls_segment_filename', path.join(outputDir, 'seg-%04d.m4s'),
+        '-hls_segment_type',
+        'fmp4',
+        '-hls_fmp4_init_filename',
+        'init.mp4',
+        '-hls_segment_filename',
+        path.join(outputDir, 'seg-%04d.m4s'),
       );
     } else {
-      args.push(
-        '-hls_segment_filename', path.join(outputDir, 'seg-%04d.ts'),
-      );
+      args.push('-hls_segment_filename', path.join(outputDir, 'seg-%04d.ts'));
     }
     args.push(
-      '-hls_flags', 'independent_segments',
+      '-hls_flags',
+      'independent_segments',
       path.join(outputDir, 'index.m3u8'),
     );
 
@@ -1934,10 +1963,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    * about to overwrite the output. SIGTERM is only used when the caller
    * explicitly needs a clean shutdown (e.g. stopSessions on player close).
    */
-  private killProcess(
-    proc: ChildProcess,
-    graceful = false,
-  ): Promise<void> {
+  private killProcess(proc: ChildProcess, graceful = false): Promise<void> {
     if (proc.exitCode !== null) return Promise.resolve();
     return new Promise<void>((resolve) => {
       proc.once('close', () => resolve());
@@ -1953,7 +1979,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Graceful SIGTERM, wait for the process to exit, then rm the directory. */
-  private async killAndClean(proc: ChildProcess, dirPath: string): Promise<void> {
+  private async killAndClean(
+    proc: ChildProcess,
+    dirPath: string,
+  ): Promise<void> {
     await this.killProcess(proc, true);
     await fsp.rm(dirPath, { recursive: true, force: true });
   }

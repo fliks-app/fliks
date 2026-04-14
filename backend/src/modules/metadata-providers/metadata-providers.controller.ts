@@ -34,9 +34,8 @@ export class MetadataProvidersController {
   ) {
     const query = q?.trim();
     if (!query) return [];
-    const results = await this.searchWithFallback(
-      providerName,
-      (p) => p.searchMovie(query, year ? +year : undefined),
+    const results = await this.searchWithFallback(providerName, (p) =>
+      p.searchMovie(query, year ? +year : undefined),
     );
     return this.enrichWithExisting(results, 'movie');
   }
@@ -49,9 +48,8 @@ export class MetadataProvidersController {
   ) {
     const query = q?.trim();
     if (!query) return [];
-    const results = await this.searchWithFallback(
-      providerName,
-      (p) => p.searchTvShow(query, year ? +year : undefined),
+    const results = await this.searchWithFallback(providerName, (p) =>
+      p.searchTvShow(query, year ? +year : undefined),
     );
     return this.enrichWithExisting(results, 'series');
   }
@@ -102,7 +100,8 @@ export class MetadataProvidersController {
     @Param('externalId') externalId: string,
   ) {
     const provider = this.registry.get(providerName);
-    if (!provider) throw new BadRequestException(`Unknown provider: ${providerName}`);
+    if (!provider)
+      throw new BadRequestException(`Unknown provider: ${providerName}`);
     return provider.getMovieDetails(externalId);
   }
 
@@ -112,7 +111,8 @@ export class MetadataProvidersController {
     @Param('externalId') externalId: string,
   ) {
     const provider = this.registry.get(providerName);
-    if (!provider) throw new BadRequestException(`Unknown provider: ${providerName}`);
+    if (!provider)
+      throw new BadRequestException(`Unknown provider: ${providerName}`);
     return provider.getTvShowDetails(externalId);
   }
 
@@ -122,7 +122,8 @@ export class MetadataProvidersController {
     @Param('externalId') externalId: string,
   ) {
     const provider = this.registry.get(providerName);
-    if (!provider) throw new BadRequestException(`Unknown provider: ${providerName}`);
+    if (!provider)
+      throw new BadRequestException(`Unknown provider: ${providerName}`);
     return provider.getTvShowSeasons(externalId);
   }
 
@@ -147,7 +148,10 @@ export class MetadataProvidersController {
 
   private async searchWithFallback(
     providerName: string | undefined,
-    searchFn: (p: { searchMovie: any; searchTvShow: any }) => Promise<MetadataSearchResult[]>,
+    searchFn: (p: {
+      searchMovie: any;
+      searchTvShow: any;
+    }) => Promise<MetadataSearchResult[]>,
   ): Promise<MetadataSearchResult[]> {
     const provider = await this.registry.resolve(providerName ?? null);
     let results = await searchFn(provider);
@@ -170,11 +174,15 @@ export class MetadataProvidersController {
 
     // Match by tmdbId or tvdbId
     const tmdbIds = results.map((r) => r.tmdbId).filter((id) => id > 0);
-    const tvdbIds = results.map((r) => r.tvdbId).filter((id): id is number => !!id && id > 0);
+    const tvdbIds = results
+      .map((r) => r.tvdbId)
+      .filter((id): id is number => !!id && id > 0);
 
     const conditions: any[] = [];
-    if (tmdbIds.length) conditions.push({ tmdbId: In(tmdbIds), type: type as any });
-    if (tvdbIds.length) conditions.push({ tvdbId: In(tvdbIds), type: type as any });
+    if (tmdbIds.length)
+      conditions.push({ tmdbId: In(tmdbIds), type: type as any });
+    if (tvdbIds.length)
+      conditions.push({ tvdbId: In(tvdbIds), type: type as any });
 
     const existing = conditions.length
       ? await this.mediaRepo.find({
@@ -184,14 +192,20 @@ export class MetadataProvidersController {
       : [];
 
     const tmdbMap = new Map(
-      existing.filter((m) => m.tmdbId).map((m) => [m.tmdbId, { id: m.id, type: m.type }]),
+      existing
+        .filter((m) => m.tmdbId)
+        .map((m) => [m.tmdbId, { id: m.id, type: m.type }]),
     );
     const tvdbMap = new Map(
-      existing.filter((m) => m.tvdbId).map((m) => [m.tvdbId!, { id: m.id, type: m.type }]),
+      existing
+        .filter((m) => m.tvdbId)
+        .map((m) => [m.tvdbId!, { id: m.id, type: m.type }]),
     );
 
     return results.map((r) => {
-      const match = (r.tmdbId ? tmdbMap.get(r.tmdbId) : undefined) ?? (r.tvdbId ? tvdbMap.get(r.tvdbId) : undefined);
+      const match =
+        (r.tmdbId ? tmdbMap.get(r.tmdbId) : undefined) ??
+        (r.tvdbId ? tvdbMap.get(r.tvdbId) : undefined);
       return {
         ...r,
         existingMediaId: match?.id ?? null,

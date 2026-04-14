@@ -74,21 +74,33 @@ export class TvdbProvider implements IMetadataProvider {
 
   // ── Search ──
 
-  async searchMovie(query: string, year?: number): Promise<MetadataSearchResult[]> {
+  async searchMovie(
+    query: string,
+    year?: number,
+  ): Promise<MetadataSearchResult[]> {
     await this.ensureAuth();
     const params: Record<string, string> = { q: query, type: 'movie' };
     if (year) params.year = String(year);
 
-    const { data } = await this.client.get<TvdbResponse<TvdbSearchResult[]>>('/search', { params });
+    const { data } = await this.client.get<TvdbResponse<TvdbSearchResult[]>>(
+      '/search',
+      { params },
+    );
     return (data.data ?? []).map((r) => this.mapSearchResult(r, 'movie'));
   }
 
-  async searchTvShow(query: string, year?: number): Promise<MetadataSearchResult[]> {
+  async searchTvShow(
+    query: string,
+    year?: number,
+  ): Promise<MetadataSearchResult[]> {
     await this.ensureAuth();
     const params: Record<string, string> = { q: query, type: 'series' };
     if (year) params.year = String(year);
 
-    const { data } = await this.client.get<TvdbResponse<TvdbSearchResult[]>>('/search', { params });
+    const { data } = await this.client.get<TvdbResponse<TvdbSearchResult[]>>(
+      '/search',
+      { params },
+    );
     return (data.data ?? []).map((r) => this.mapSearchResult(r, 'series'));
   }
 
@@ -106,7 +118,10 @@ export class TvdbProvider implements IMetadataProvider {
     const imdbId = this.extractRemoteId(m.remoteIds, 'IMDB');
 
     return {
-      tmdbId: parseInt(this.extractRemoteId(m.remoteIds, 'TheMovieDB.com') ?? '0', 10),
+      tmdbId: parseInt(
+        this.extractRemoteId(m.remoteIds, 'TheMovieDB.com') ?? '0',
+        10,
+      ),
       tvdbId: m.id,
       imdbId,
       provider: 'tvdb',
@@ -121,7 +136,10 @@ export class TvdbProvider implements IMetadataProvider {
       mediaType: 'movie',
       runtime: m.runtime ?? null,
       releaseDate: m.first_release?.date ?? null,
-      inCinemas: this.pickReleaseDate(m.releases, 'Theatrical') ?? m.first_release?.date ?? null,
+      inCinemas:
+        this.pickReleaseDate(m.releases, 'Theatrical') ??
+        m.first_release?.date ??
+        null,
       digitalRelease: this.pickReleaseDate(m.releases, 'Digital'),
       physicalRelease: this.pickReleaseDate(m.releases, 'Physical'),
       status: m.status?.name?.toLowerCase() ?? 'unknown',
@@ -162,7 +180,10 @@ export class TvdbProvider implements IMetadataProvider {
     const imdbId = this.extractRemoteId(s.remoteIds, 'IMDB');
 
     return {
-      tmdbId: parseInt(this.extractRemoteId(s.remoteIds, 'TheMovieDB.com') ?? '0', 10),
+      tmdbId: parseInt(
+        this.extractRemoteId(s.remoteIds, 'TheMovieDB.com') ?? '0',
+        10,
+      ),
       tvdbId: s.id,
       imdbId,
       provider: 'tvdb',
@@ -227,23 +248,33 @@ export class TvdbProvider implements IMetadataProvider {
     }
 
     // Also fetch season list for metadata
-    const { data: seriesData } = await this.client.get<TvdbResponse<TvdbSeriesExtended>>(
-      `/series/${id}/extended`,
-      { params: { short: 'true' } },
+    const { data: seriesData } = await this.client.get<
+      TvdbResponse<TvdbSeriesExtended>
+    >(`/series/${id}/extended`, { params: { short: 'true' } });
+    const seasonBases: TvdbSeasonBase[] = (
+      seriesData.data?.seasons ?? []
+    ).filter(
+      (s) => s.type?.type === 'official' || s.type?.name === 'Aired Order',
     );
-    const seasonBases: TvdbSeasonBase[] = (seriesData.data?.seasons ?? [])
-      .filter((s) => s.type?.type === 'official' || s.type?.name === 'Aired Order');
 
     // Fetch FR translations for each episode
-    const epTranslations = new Map<number, { name?: string; overview?: string }>();
+    const epTranslations = new Map<
+      number,
+      { name?: string; overview?: string }
+    >();
     for (const ep of allEpisodes) {
-      if (ep.overviewTranslations?.includes('fra') || ep.nameTranslations?.includes('fra')) {
+      if (
+        ep.overviewTranslations?.includes('fra') ||
+        ep.nameTranslations?.includes('fra')
+      ) {
         try {
-          const { data: trData } = await this.client.get<TvdbResponse<{ name: string; overview: string }>>(
-            `/episodes/${ep.id}/translations/fra`,
-          );
+          const { data: trData } = await this.client.get<
+            TvdbResponse<{ name: string; overview: string }>
+          >(`/episodes/${ep.id}/translations/fra`);
           epTranslations.set(ep.id, trData.data);
-        } catch { /* FR not available */ }
+        } catch {
+          /* FR not available */
+        }
       }
     }
 
@@ -294,9 +325,10 @@ export class TvdbProvider implements IMetadataProvider {
       { params: { meta: 'translations' } },
     );
     const p = data.data;
-    const frBio = p.biographies?.find((b) => b.language === 'fra')?.biography
-      ?? p.biographies?.find((b) => b.language === 'eng')?.biography
-      ?? '';
+    const frBio =
+      p.biographies?.find((b) => b.language === 'fra')?.biography ??
+      p.biographies?.find((b) => b.language === 'eng')?.biography ??
+      '';
 
     return {
       externalId: p.id,
@@ -348,12 +380,15 @@ export class TvdbProvider implements IMetadataProvider {
 
   // ── Cross-reference ──
 
-  async findByExternalId(source: string, id: string): Promise<ExternalIdResult | null> {
+  async findByExternalId(
+    source: string,
+    id: string,
+  ): Promise<ExternalIdResult | null> {
     await this.ensureAuth();
     try {
-      const { data } = await this.client.get<TvdbResponse<TvdbSearchByRemoteId[]>>(
-        `/search/remoteid/${id}`,
-      );
+      const { data } = await this.client.get<
+        TvdbResponse<TvdbSearchByRemoteId[]>
+      >(`/search/remoteid/${id}`);
       const results = data.data ?? [];
       for (const r of results) {
         if (r.series) return { id: String(r.series.id), mediaType: 'series' };
@@ -367,10 +402,18 @@ export class TvdbProvider implements IMetadataProvider {
 
   // ── Helpers ──
 
-  private mapSearchResult(r: TvdbSearchResult, mediaType: 'movie' | 'series'): MetadataSearchResult {
-    const imdbId = r.remote_ids?.find((rid) => rid.sourceName === 'IMDB')?.id ?? null;
+  private mapSearchResult(
+    r: TvdbSearchResult,
+    mediaType: 'movie' | 'series',
+  ): MetadataSearchResult {
+    const imdbId =
+      r.remote_ids?.find((rid) => rid.sourceName === 'IMDB')?.id ?? null;
     return {
-      tmdbId: parseInt(r.remote_ids?.find((rid) => rid.sourceName === 'TheMovieDB.com')?.id ?? '0', 10),
+      tmdbId: parseInt(
+        r.remote_ids?.find((rid) => rid.sourceName === 'TheMovieDB.com')?.id ??
+          '0',
+        10,
+      ),
       tvdbId: parseInt(r.tvdb_id ?? r.id, 10),
       imdbId,
       provider: 'tvdb',
@@ -385,7 +428,9 @@ export class TvdbProvider implements IMetadataProvider {
     };
   }
 
-  private mapCast(characters: TvdbCharacter[] | undefined): MetadataDetails['cast'] {
+  private mapCast(
+    characters: TvdbCharacter[] | undefined,
+  ): MetadataDetails['cast'] {
     if (!characters) return [];
     return characters
       .filter((c) => c.peopleType === 'Actor' || c.peopleType === 'Guest Star')
@@ -399,10 +444,17 @@ export class TvdbProvider implements IMetadataProvider {
       }));
   }
 
-  private mapCrew(characters: TvdbCharacter[] | undefined): MetadataDetails['crew'] {
+  private mapCrew(
+    characters: TvdbCharacter[] | undefined,
+  ): MetadataDetails['crew'] {
     if (!characters) return [];
     return characters
-      .filter((c) => c.peopleType !== 'Actor' && c.peopleType !== 'Guest Star' && c.peopleType)
+      .filter(
+        (c) =>
+          c.peopleType !== 'Actor' &&
+          c.peopleType !== 'Guest Star' &&
+          c.peopleType,
+      )
       .map((c) => ({
         externalId: c.peopleId,
         name: c.personName,
@@ -413,12 +465,21 @@ export class TvdbProvider implements IMetadataProvider {
   }
 
   private pickTranslation(
-    translations: { nameTranslations?: TvdbTranslation[]; overviewTranslations?: TvdbTranslation[] } | undefined,
+    translations:
+      | {
+          nameTranslations?: TvdbTranslation[];
+          overviewTranslations?: TvdbTranslation[];
+        }
+      | undefined,
     lang: string,
   ): { name?: string; overview?: string; tagline?: string } | null {
     if (!translations) return null;
-    const name = translations.nameTranslations?.find((t) => t.language === lang);
-    const overview = translations.overviewTranslations?.find((t) => t.language === lang);
+    const name = translations.nameTranslations?.find(
+      (t) => t.language === lang,
+    );
+    const overview = translations.overviewTranslations?.find(
+      (t) => t.language === lang,
+    );
     if (!name && !overview) return null;
     return {
       name: name?.name,
@@ -427,7 +488,10 @@ export class TvdbProvider implements IMetadataProvider {
     };
   }
 
-  private pickArtwork(artworks: TvdbArtwork[] | undefined, type: number): string | null {
+  private pickArtwork(
+    artworks: TvdbArtwork[] | undefined,
+    type: number,
+  ): string | null {
     if (!artworks) return null;
     // Prefer French, then any, sorted by score
     const filtered = artworks
@@ -440,7 +504,10 @@ export class TvdbProvider implements IMetadataProvider {
     return filtered[0]?.image ?? null;
   }
 
-  private extractRemoteId(remoteIds: TvdbRemoteId[] | undefined, source: string): string | null {
+  private extractRemoteId(
+    remoteIds: TvdbRemoteId[] | undefined,
+    source: string,
+  ): string | null {
     return remoteIds?.find((r) => r.sourceName === source)?.id ?? null;
   }
 
@@ -455,15 +522,17 @@ export class TvdbProvider implements IMetadataProvider {
     type: string,
   ): string | null {
     if (!releases) return null;
-    const match = releases.find((r) => r.detail?.toLowerCase().includes(type.toLowerCase()));
+    const match = releases.find((r) =>
+      r.detail?.toLowerCase().includes(type.toLowerCase()),
+    );
     return match?.date ?? null;
   }
 
   private mapSeriesStatus(status: string): string {
     const map: Record<string, string> = {
-      'Continuing': 'continuing',
-      'Ended': 'ended',
-      'Upcoming': 'announced',
+      Continuing: 'continuing',
+      Ended: 'ended',
+      Upcoming: 'announced',
     };
     return map[status] ?? 'unknown';
   }

@@ -103,10 +103,11 @@ export class MediaController {
   @Get()
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
   async findAll(@Query() query: SearchMediaDto, @CurrentUser() user: User) {
-    const accessibleLibraryIds = await this.libraries.getAccessibleLibraryIds(user);
+    const accessibleLibraryIds =
+      await this.libraries.getAccessibleLibraryIds(user);
     return this.mediaService.findAll(
       query,
-      (query.excludeWatched || query.requestedByMe) ? user?.id : undefined,
+      query.excludeWatched || query.requestedByMe ? user?.id : undefined,
       accessibleLibraryIds,
     );
   }
@@ -114,7 +115,8 @@ export class MediaController {
   @Get('counts')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
   async counts(@CurrentUser() user: User) {
-    const accessibleLibraryIds = await this.libraries.getAccessibleLibraryIds(user);
+    const accessibleLibraryIds =
+      await this.libraries.getAccessibleLibraryIds(user);
     return this.mediaService.getCounts(accessibleLibraryIds);
   }
 
@@ -135,7 +137,8 @@ export class MediaController {
   @Get('calendar')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
   async calendar(@Query() query: CalendarQueryDto, @CurrentUser() user: User) {
-    const accessibleLibraryIds = await this.libraries.getAccessibleLibraryIds(user);
+    const accessibleLibraryIds =
+      await this.libraries.getAccessibleLibraryIds(user);
     return this.mediaService.getCalendar(query, accessibleLibraryIds, user?.id);
   }
 
@@ -542,7 +545,8 @@ export class MediaController {
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: User,
   ) {
-    const accessibleLibraryIds = await this.libraries.getAccessibleLibraryIds(user);
+    const accessibleLibraryIds =
+      await this.libraries.getAccessibleLibraryIds(user);
     await this.mediaService.assertAccessible(id, accessibleLibraryIds);
     return this.mediaService.findOne(id);
   }
