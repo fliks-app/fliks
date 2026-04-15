@@ -22,6 +22,8 @@ import { Library } from '../libraries/entities/library.entity';
 export type PublicUser = Omit<User, 'passwordHash' | 'userRole'> & {
   role: string | null;
   permissions: string[];
+  /** IDs of libraries the user currently has access to. */
+  libraryIds: number[];
 };
 
 @Injectable()
@@ -62,7 +64,19 @@ export class UsersService implements OnModuleInit {
       order: { username: 'ASC' },
       relations: ['userRole'],
     });
-    return users.map((u) => this.serialize(u));
+    if (!users.length) return [];
+    const accessRows = await this.libraryAccessRepo
+      .createQueryBuilder('lua')
+      .select(['lua."userId" AS "userId"', 'lua."libraryId" AS "libraryId"'])
+      .where('lua."userId" IN (:...ids)', { ids: users.map((u) => u.id) })
+      .getRawMany<{ userId: number; libraryId: number }>();
+    const byUser = new Map<number, number[]>();
+    for (const r of accessRows) {
+      const arr = byUser.get(r.userId) ?? [];
+      arr.push(r.libraryId);
+      byUser.set(r.userId, arr);
+    }
+    return users.map((u) => this.serialize(u, byUser.get(u.id) ?? []));
   }
 
   async findOne(id: number): Promise<PublicUser> {
@@ -71,17 +85,28 @@ export class UsersService implements OnModuleInit {
       relations: ['userRole'],
     });
     if (!user) throw new NotFoundException(`User #${id} not found`);
-    return this.serialize(user);
+    const libraryIds = await this.loadLibraryIdsForUser(id);
+    return this.serialize(user, libraryIds);
+  }
+
+  private async loadLibraryIdsForUser(userId: number): Promise<number[]> {
+    const rows = await this.libraryAccessRepo
+      .createQueryBuilder('lua')
+      .select('lua."libraryId"', 'libraryId')
+      .where('lua."userId" = :userId', { userId })
+      .getRawMany<{ libraryId: number }>();
+    return rows.map((r) => r.libraryId);
   }
 
   /** Flatten userRole into a role name + strip passwordHash. */
-  private serialize(user: User): PublicUser {
+  private serialize(user: User, libraryIds: number[]): PublicUser {
     const { passwordHash, userRole, ...rest } = user;
     void passwordHash;
     return {
       ...rest,
       role: userRole?.name ?? null,
       permissions: user.permissions,
+      libraryIds,
     };
   }
 
@@ -111,11 +136,15 @@ export class UsersService implements OnModuleInit {
     });
     const saved = await this.userRepo.save(user);
 
-    // Seed library access from the role's defaultLibraryIds template.
-    const defaults = role?.defaultLibraryIds ?? [];
-    if (defaults.length) {
+    // Library access: explicit list from DTO if provided, else seed from
+    // the role's defaultLibraryIds template.
+    const initialLibraryIds =
+      dto.libraryIds !== undefined
+        ? dto.libraryIds
+        : (role?.defaultLibraryIds ?? []);
+    if (initialLibraryIds.length) {
       await this.libraryAccessRepo.save(
-        defaults.map((libraryId) =>
+        initialLibraryIds.map((libraryId) =>
           this.libraryAccessRepo.create({
             user: saved,
             library: { id: libraryId } as Library,
@@ -184,6 +213,28 @@ export class UsersService implements OnModuleInit {
       target.quotaPeriodDays = dto.quotaPeriodDays;
 
     await this.userRepo.save(target);
+
+    // Library access replace (manager-only). Done after the user row save so
+    // FK is valid even for newly-promoted users.
+    if (dto.libraryIds !== undefined) {
+      if (!isManager) {
+        throw new ForbiddenException(
+          'Only users with users.manage permission can change library access',
+        );
+      }
+      await this.libraryAccessRepo.delete({ user: { id: targetId } });
+      if (dto.libraryIds.length) {
+        await this.libraryAccessRepo.save(
+          dto.libraryIds.map((libraryId) =>
+            this.libraryAccessRepo.create({
+              user: { id: targetId } as User,
+              library: { id: libraryId } as Library,
+            }),
+          ),
+        );
+      }
+    }
+
     return this.findOne(targetId);
   }
 

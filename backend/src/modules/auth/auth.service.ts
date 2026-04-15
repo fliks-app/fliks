@@ -109,6 +109,9 @@ export class AuthService {
       ...rest,
       permissions: user.permissions,
       role: userRole?.name ?? null,
+      // Not hydrated here — callers that need libraryIds should use
+      // UsersService.findOne(). Auth payloads don't carry ACL.
+      libraryIds: [],
     };
   }
 

@@ -565,10 +565,13 @@ export class MediaService {
     accessibleLibraryIds: number[] | null,
   ): Promise<void> {
     if (accessibleLibraryIds === null) return;
-    const row = await this.mediaRepo.findOne({
-      where: { id: mediaId },
-      select: ['id', 'libraryId'],
-    });
+    // `libraryId` is a @RelationId virtual — TypeORM's findOne + select
+    // can't project it. Use a raw query on the join column instead.
+    const row = await this.mediaRepo
+      .createQueryBuilder('m')
+      .select('m."libraryId"', 'libraryId')
+      .where('m.id = :mediaId', { mediaId })
+      .getRawOne<{ libraryId: number | null }>();
     if (!row) throw new NotFoundException(`Media #${mediaId} not found`);
     if (
       row.libraryId == null ||
@@ -598,7 +601,9 @@ export class MediaService {
     return e.season.mediaId;
   }
 
-  /** Adds `WHERE media.libraryId IN (...)` when ACL is in effect. */
+  /** Adds `WHERE <alias>.libraryId IN (...)` when ACL is in effect. Uses the
+   *  query builder's own alias so it works whether the caller aliased the
+   *  media table as "media" (default) or "m" (findAll / counts queries). */
   private applyLibraryAcl(
     qb: SelectQueryBuilder<Media>,
     accessibleLibraryIds: number[] | null | undefined,
@@ -609,7 +614,8 @@ export class MediaService {
       qb.andWhere('1 = 0');
       return;
     }
-    qb.andWhere('media.libraryId IN (:...accessibleLibraryIds)', {
+    const alias = qb.alias;
+    qb.andWhere(`${alias}."libraryId" IN (:...accessibleLibraryIds)`, {
       accessibleLibraryIds,
     });
   }

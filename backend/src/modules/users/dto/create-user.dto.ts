@@ -1,9 +1,11 @@
 import {
-  IsString,
+  IsArray,
   IsBoolean,
-  IsOptional,
   IsEmail,
+  IsInt,
   IsNumber,
+  IsOptional,
+  IsString,
   MinLength,
 } from 'class-validator';
 
@@ -30,4 +32,10 @@ export class CreateUserDto {
   @IsBoolean()
   @IsOptional()
   enabled?: boolean;
+
+  /** Override the role's defaultLibraryIds. Undefined = use role defaults. */
+  @IsArray()
+  @IsInt({ each: true })
+  @IsOptional()
+  libraryIds?: number[];
 }

@@ -45,6 +45,22 @@
                 }
               </td>
               <td class="text-end">
+                @if (row.type === 'emby') {
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs gap-1.5"
+                    (click)="importWatchHistory(row)"
+                    [disabled]="importingIds().has(row.id)"
+                    [title]="'settings.media_servers.import_watch_history' | translate"
+                  >
+                    @if (importingIds().has(row.id)) {
+                      <span class="loading loading-spinner loading-xs"></span>
+                    } @else {
+                      <svg lucideDownload class="h-3.5 w-3.5"></svg>
+                    }
+                    {{ 'settings.media_servers.import_watch_history' | translate }}
+                  </button>
+                }
                 <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(row)">
                   {{ 'settings.media_servers.edit' | translate }}
                 </button>

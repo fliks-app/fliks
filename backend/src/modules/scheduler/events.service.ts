@@ -72,6 +72,22 @@ export type SseEvent =
       mediaId: number;
       title: string;
       error: string;
+    }
+  | { type: 'watch-history.import.started'; serverId: number; serverName: string }
+  | {
+      type: 'watch-history.import.completed';
+      serverId: number;
+      serverName: string;
+      users: number;
+      usersCreated: number;
+      imported: number;
+      skipped: number;
+    }
+  | {
+      type: 'watch-history.import.failed';
+      serverId: number;
+      serverName: string;
+      error: string;
     };
 
 @Injectable()

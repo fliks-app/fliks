@@ -75,4 +75,13 @@ export class MediaServersApiService {
       ),
     );
   }
+
+  importWatchHistory(id: number) {
+    return firstValueFrom(
+      this.http.post<{ ok: boolean }>(
+        `/api/media-servers/${id}/import-watch-history`,
+        {},
+      ),
+    );
+  }
 }

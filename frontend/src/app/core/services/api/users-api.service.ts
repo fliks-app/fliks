@@ -10,6 +10,7 @@ export interface UserRow {
   isAdmin: boolean;
   enabled: boolean;
   createdAt: string;
+  libraryIds: number[];
 }
 
 export interface CreateUserBody {
@@ -18,6 +19,7 @@ export interface CreateUserBody {
   email?: string;
   roleId?: number;
   enabled?: boolean;
+  libraryIds?: number[];
 }
 
 export interface UpdateUserBody {
@@ -26,6 +28,7 @@ export interface UpdateUserBody {
   roleId?: number;
   isAdmin?: boolean;
   enabled?: boolean;
+  libraryIds?: number[];
 }
 
 @Injectable({ providedIn: 'root' })

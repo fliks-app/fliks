@@ -138,6 +138,26 @@
           <span class="label-text">{{ 'settings.users.field_enabled' | translate }}</span>
         </label>
 
+        <div>
+          <p class="label-text mb-2">{{ 'settings.users.field_libraries' | translate }}</p>
+          @if (libraries().length === 0) {
+            <p class="text-xs text-base-content/50">{{ 'settings.users.no_libraries' | translate }}</p>
+          } @else {
+            <div class="flex flex-col gap-1">
+              @for (lib of libraries(); track lib.id) {
+                <label class="label cursor-pointer justify-start gap-2 py-1">
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-xs"
+                    [ngModel]="formLibraryIds().has(lib.id)"
+                    (ngModelChange)="toggleLibrary(lib.id)"
+                  />
+                  <span class="label-text text-sm">{{ lib.name }}</span>
+                </label>
+              }
+            </div>
+          }
+        </div>
 
       </div>
 

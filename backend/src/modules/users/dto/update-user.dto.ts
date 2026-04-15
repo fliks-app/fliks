@@ -1,11 +1,14 @@
 import {
-  IsString,
+  ArrayNotContains,
+  IsArray,
   IsBoolean,
+  IsEmail,
+  IsInt,
   IsNumber,
   IsOptional,
-  IsEmail,
-  MinLength,
+  IsString,
   Min,
+  MinLength,
 } from 'class-validator';
 
 export class UpdateUserDto {
@@ -48,4 +51,11 @@ export class UpdateUserDto {
   @Min(1)
   @IsOptional()
   quotaPeriodDays?: number;
+
+  /** Full replacement list of libraries the user has access to. */
+  @IsArray()
+  @IsInt({ each: true })
+  @ArrayNotContains([0])
+  @IsOptional()
+  libraryIds?: number[];
 }

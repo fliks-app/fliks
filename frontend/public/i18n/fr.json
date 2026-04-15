@@ -1129,7 +1129,11 @@
       "url_required": "L'URL est obligatoire.",
       "save_error": "Enregistrement impossible.",
       "save": "Enregistrer",
-      "cancel": "Annuler"
+      "cancel": "Annuler",
+      "import_watch_history": "Importer l'historique",
+      "import_watch_history_started": "Import de l'historique lancé",
+      "import_watch_history_completed": "{{users}} utilisateur(s) ({{usersCreated}} créé(s)) — {{imported}} visionnage(s) importé(s), {{skipped}} ignoré(s)",
+      "import_watch_history_failed": "Échec de l'import Emby : {{error}}"
     },
     "libraries": {
       "title": "Bibliothèques",
@@ -1203,6 +1207,8 @@
       "password_hint": "Laissez vide pour ne pas modifier le mot de passe.",
       "field_role": "Rôle",
       "field_enabled": "Compte actif",
+      "field_libraries": "Bibliothèques accessibles",
+      "no_libraries": "Aucune bibliothèque configurée.",
       "save_error": "Enregistrement impossible.",
       "save_success": "Utilisateur enregistré.",
       "save": "Enregistrer",

@@ -18,6 +18,7 @@ import {
   UpdateUserBody,
 } from '../../../core/services/api/users-api.service';
 import { RolesApiService, RoleRow } from '../../../core/services/api/roles-api.service';
+import { LibrariesApiService, Library } from '../../../core/services/api/libraries-api.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
@@ -31,6 +32,7 @@ import { ToastService } from '../../../core/services/toast.service';
 export class UsersSettingsComponent implements OnInit {
   private readonly api = inject(UsersApiService);
   private readonly rolesApi = inject(RolesApiService);
+  private readonly librariesApi = inject(LibrariesApiService);
   private readonly translate = inject(TranslateService);
   readonly auth = inject(AuthService);
   private readonly confirmation = inject(ConfirmationService);
@@ -39,6 +41,7 @@ export class UsersSettingsComponent implements OnInit {
 
   readonly rows = signal<UserRow[]>([]);
   readonly roles = signal<RoleRow[]>([]);
+  readonly libraries = signal<Library[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
 
@@ -52,6 +55,7 @@ export class UsersSettingsComponent implements OnInit {
   readonly formEmail = signal('');
   readonly formRoleId = signal<number | null>(null);
   readonly formEnabled = signal(true);
+  readonly formLibraryIds = signal<Set<number>>(new Set());
 
   ngOnInit() {
     this.reloadAll();
@@ -60,17 +64,28 @@ export class UsersSettingsComponent implements OnInit {
   async reloadAll() {
     this.loading.set(true);
     try {
-      const [list, roles] = await Promise.all([
+      const [list, roles, libraries] = await Promise.all([
         this.api.list(),
         this.rolesApi.list(),
+        this.librariesApi.list(),
       ]);
       this.rows.set(list);
       this.roles.set(roles);
+      this.libraries.set(libraries);
     } catch {
       this.listError.set(this.translate.instant('settings.users.load_error'));
     } finally {
       this.loading.set(false);
     }
+  }
+
+  toggleLibrary(id: number) {
+    this.formLibraryIds.update((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   openCreate() {
@@ -82,6 +97,10 @@ export class UsersSettingsComponent implements OnInit {
     const defaultRole = this.roles().find((r) => r.isDefault);
     this.formRoleId.set(defaultRole?.id ?? this.roles()[0]?.id ?? null);
     this.formEnabled.set(true);
+    // Seed with the default role's library template if any.
+    const templateIds = (defaultRole as RoleRow & { defaultLibraryIds?: number[] })
+      ?.defaultLibraryIds;
+    this.formLibraryIds.set(new Set(templateIds ?? []));
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -93,6 +112,7 @@ export class UsersSettingsComponent implements OnInit {
     this.formEmail.set('');
     this.formRoleId.set(user.roleId);
     this.formEnabled.set(user.enabled);
+    this.formLibraryIds.set(new Set(user.libraryIds ?? []));
     this.editorDialog()?.nativeElement.showModal();
   }
 
@@ -103,12 +123,14 @@ export class UsersSettingsComponent implements OnInit {
   async save() {
     this.saving.set(true);
     try {
+      const libraryIds = [...this.formLibraryIds()];
       if (this.isCreating()) {
         const body: CreateUserBody = {
           username: this.formUsername().trim(),
           password: this.formPassword(),
           roleId: this.formRoleId() ?? undefined,
           enabled: this.formEnabled(),
+          libraryIds,
         };
         if (this.formEmail().trim()) body.email = this.formEmail().trim();
         await this.api.create(body);
@@ -119,6 +141,7 @@ export class UsersSettingsComponent implements OnInit {
           username: this.formUsername().trim() || undefined,
           roleId: this.formRoleId() ?? undefined,
           enabled: this.formEnabled(),
+          libraryIds,
         };
         if (this.formPassword()) body.password = this.formPassword();
         await this.api.update(user.id, body);
