@@ -5,7 +5,7 @@ import {
   input,
 } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
-import { LucideBookmark, LucideVideo, LucideVolume2 } from '@lucide/angular';
+import { LucideVideo, LucideVolume2 } from '@lucide/angular';
 import {
   MediaFileInfo,
   VideoStreamInfo,
@@ -21,7 +21,7 @@ type FileInput = {
 
 @Component({
   selector: 'app-media-file-info',
-  imports: [TranslateModule, LucideBookmark, LucideVideo, LucideVolume2],
+  imports: [TranslateModule, LucideVideo, LucideVolume2],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-file-info.html',
 })
@@ -30,16 +30,6 @@ export class MediaFileInfoComponent {
 
   readonly videoStream = computed(() => this.file()?.streamInfo?.video[0] ?? null);
   readonly audioStreams = computed(() => this.file()?.streamInfo?.audio ?? []);
-  readonly chapters = computed(() => this.file()?.streamInfo?.chapters ?? []);
-
-  formatChapterTime(seconds: number): string {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    const mm = String(m).padStart(2, '0');
-    const ss = String(s).padStart(2, '0');
-    return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
-  }
 
   /** Container bitrate from ffprobe, or estimated from file size and duration. */
   readonly originalFileBitrate = computed(() => {

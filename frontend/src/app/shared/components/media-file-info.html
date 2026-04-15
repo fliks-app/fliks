@@ -54,25 +54,6 @@
       </div>
     }
 
-    <!-- Chapters (embedded, MKV/MP4) -->
-    @if (chapters().length) {
-      <div>
-        <h3 class="text-sm font-semibold mb-2 flex items-center gap-2">
-          <svg lucideBookmark class="h-4 w-4"></svg>
-          {{ 'file_info.chapters' | translate }}
-          <span class="text-base-content/50 font-normal">({{ chapters().length }})</span>
-        </h3>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1 text-sm">
-          @for (c of chapters(); track $index) {
-            <div class="flex items-baseline gap-2">
-              <span class="tabular-nums text-base-content/50 shrink-0">{{ formatChapterTime(c.startSeconds) }}</span>
-              <span class="font-medium truncate" [title]="c.title ?? ''">{{ c.title || ('file_info.chapter_untitled' | translate) }}</span>
-            </div>
-          }
-        </div>
-      </div>
-    }
-
     <!-- Audio (from ffprobe) -->
     @if (audioStreams().length) {
       <div>
