@@ -27,10 +27,6 @@ export class SettingsApiService {
     return firstValueFrom(this.http.put<{ ok: boolean }>('/api/settings', { data: settings }));
   }
 
-  getMyIp() {
-    return firstValueFrom(this.http.get<{ ip: string; ipv6?: string }>('/api/settings/my-ip'));
-  }
-
   delete(key: string) {
     return firstValueFrom(this.http.delete<void>(`/api/settings/${key}`));
   }
