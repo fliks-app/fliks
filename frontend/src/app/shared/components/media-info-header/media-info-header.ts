@@ -276,9 +276,18 @@ export class MediaInfoHeaderComponent {
     const fileId = this.selectedFileId();
     if (!fileId) return;
     try {
-      this.watched.set(
-        await this.playable.toggleWatched(mediaId, fileId, this.episodeId()),
+      const completed = await this.playable.toggleWatched(
+        mediaId,
+        fileId,
+        this.episodeId(),
       );
+      this.watched.set(completed);
+      // Backend resets positionSeconds to 0 when marking as watched — mirror
+      // that locally so the resume bar disappears without a page reload.
+      if (completed) {
+        this.resumePositionSeconds.set(null);
+        this.durationSeconds.set(null);
+      }
     } catch { /* ignore */ }
   }
 

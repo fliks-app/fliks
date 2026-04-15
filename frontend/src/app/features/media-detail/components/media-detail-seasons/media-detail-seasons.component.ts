@@ -9,7 +9,7 @@ import {
 import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
-import { LucideCircleCheck, LucideCircleX, LucideEllipsisVertical } from '@lucide/angular';
+import { LucideCheck, LucideEllipsisVertical, LucideX } from '@lucide/angular';
 import { HorizontalScrollerComponent } from '../../../../shared/components/horizontal-scroller';
 import { MediaCardComponent } from '../../../../shared/components/media-card/media-card';
 import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
@@ -28,7 +28,7 @@ import {
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, FormsModule, RouterLink, ResolveUrlPipe, HorizontalScrollerComponent, MediaCardComponent, LucideCircleCheck, LucideCircleX, LucideEllipsisVertical],
+  imports: [TranslateModule, FormsModule, RouterLink, ResolveUrlPipe, HorizontalScrollerComponent, MediaCardComponent, LucideCheck, LucideEllipsisVertical, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
@@ -58,6 +58,21 @@ export class MediaDetailSeasonsComponent {
   readonly loadSeasonReleases = output<Season>();
   readonly grabSeason = output<Season>();
   readonly toggleSeasonMonitored = output<Season>();
+  readonly toggleSeasonWatched = output<{ season: Season; watched: boolean }>();
+  readonly seasonWatchedBusyId = input<number | null>(null);
+
+  /** Every episode with a file in the season is in the watched set. */
+  seasonFullyWatched(season: Season | null): boolean {
+    if (!season) return false;
+    const watched = this.watchedEpisodeIds();
+    let total = 0;
+    for (const ep of season.episodes ?? []) {
+      if (!ep.hasFile) continue;
+      total++;
+      if (!watched.has(ep.id)) return false;
+    }
+    return total > 0;
+  }
 
   tabEpisodeCount(season: Season): number {
     return filterSeasonEpisodesOnDisk(season, this.media(), this.episodesHasFileOnly()).length;

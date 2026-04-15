@@ -7,17 +7,38 @@
       <div tabindex="0" role="button" class="btn btn-ghost btn-circle">
         <svg lucideEllipsisVertical class="h-5 w-5"></svg>
       </div>
-      <div tabindex="0" class="dropdown-content bg-base-200 rounded-box z-20 w-max p-3 shadow-lg">
-        <label class="flex items-center gap-2 cursor-pointer select-none text-sm whitespace-nowrap">
-          <input
-            type="checkbox"
-            class="toggle toggle-primary shrink-0"
-            [checked]="episodesHasFileOnly()"
-            (change)="episodesHasFileOnlyChange.emit($any($event.target).checked)"
-          />
-          {{ 'media_detail.episodes_available_only' | translate }}
-        </label>
-      </div>
+      <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-max min-w-56 p-2 shadow-lg">
+        <li>
+          <label class="flex items-center gap-3 cursor-pointer select-none whitespace-nowrap">
+            <input
+              type="checkbox"
+              class="toggle toggle-primary toggle-sm shrink-0"
+              [checked]="episodesHasFileOnly()"
+              (change)="episodesHasFileOnlyChange.emit($any($event.target).checked)"
+            />
+            {{ 'media_detail.episodes_available_only' | translate }}
+          </label>
+        </li>
+        @if (selSeason) {
+          <li>
+            <a
+              class="flex items-center gap-3 whitespace-nowrap"
+              [class.pointer-events-none]="seasonWatchedBusyId() === selSeason.id"
+              (click)="toggleSeasonWatched.emit({ season: selSeason, watched: !seasonFullyWatched(selSeason) })"
+            >
+              @if (seasonWatchedBusyId() === selSeason.id) {
+                <span class="loading loading-spinner loading-xs"></span>
+              } @else if (seasonFullyWatched(selSeason)) {
+                <svg lucideX class="h-4 w-4 shrink-0 opacity-70"></svg>
+                {{ 'media_detail.mark_season_unwatched' | translate }}
+              } @else {
+                <svg lucideCheck class="h-4 w-4 shrink-0 opacity-70"></svg>
+                {{ 'media_detail.mark_season_watched' | translate }}
+              }
+            </a>
+          </li>
+        }
+      </ul>
     </div>
     <select
       class="select select-bordered w-fit shrink-0"

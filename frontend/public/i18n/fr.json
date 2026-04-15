@@ -480,6 +480,8 @@
     "episodes_available_only": "Épisodes disponibles uniquement",
     "episodes_filter_empty": "Aucun épisode avec fichier pour cette saison.",
     "seasons_filter_empty": "Aucune saison avec épisode sur disque.",
+    "mark_season_watched": "Marquer la saison comme vue",
+    "mark_season_unwatched": "Marquer la saison comme non vue",
     "seasons_section": "Saisons & épisodes",
     "season": "Saison",
     "col_ep": "Ep.",

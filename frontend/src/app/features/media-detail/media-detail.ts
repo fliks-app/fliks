@@ -203,21 +203,88 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return m ? ['/series', String(m.id)] : ['/series'];
   });
 
-  /** Resume episode label for series header (e.g. "S01:E03 - Title") */
-  readonly resumeEpisodeLabel = computed(() => {
-    const info = this.resumeInfo();
+  /**
+   * Episode that the header's "Play" button will launch:
+   *   1. resume target (in-progress state)
+   *   2. first unwatched episode with a file, in season/episode order
+   *   3. first episode with a file (all episodes watched)
+   * Seasons with `seasonNumber <= 0` (specials) are skipped.
+   */
+  readonly nextPlayEpisode = computed<{
+    episode: Episode;
+    season: Season;
+    file: { id: number };
+  } | null>(() => {
     const m = this.media();
-    if (!info?.episodeId || !m?.seasons) return null;
-    for (const s of m.seasons) {
-      const ep = s.episodes?.find(e => e.id === info.episodeId);
-      if (ep) {
-        const sn = String(s.seasonNumber).padStart(2, '0');
-        const en = String(ep.episodeNumber).padStart(2, '0');
-        return `S${sn}:E${en} - ${ep.title ?? ''}`;
+    if (m?.type !== 'series' || !m.seasons?.length) return null;
+
+    const seasons = [...m.seasons]
+      .filter((s) => (s.seasonNumber ?? 0) > 0)
+      .sort((a, b) => (a.seasonNumber ?? 0) - (b.seasonNumber ?? 0));
+
+    const resolveFile = (epId: number) => {
+      const files = filesForEpisode(m.files, epId);
+      return files[0] ?? null;
+    };
+
+    // 1. Resume target
+    const info = this.resumeInfo();
+    if (info?.episodeId) {
+      for (const s of seasons) {
+        const ep = s.episodes?.find((e) => e.id === info.episodeId);
+        if (ep) {
+          const file = info.mediaFileId
+            ? { id: info.mediaFileId }
+            : resolveFile(ep.id);
+          if (file) return { episode: ep, season: s, file };
+        }
       }
     }
+
+    const watched = this.watchedEpisodeIds();
+
+    // 2. First unwatched with file
+    for (const s of seasons) {
+      const eps = [...(s.episodes ?? [])].sort(
+        (a, b) => (a.episodeNumber ?? 0) - (b.episodeNumber ?? 0),
+      );
+      for (const ep of eps) {
+        if (!ep.hasFile || watched.has(ep.id)) continue;
+        const file = resolveFile(ep.id);
+        if (file) return { episode: ep, season: s, file };
+      }
+    }
+
+    // 3. First episode with file (series fully watched)
+    for (const s of seasons) {
+      const eps = [...(s.episodes ?? [])].sort(
+        (a, b) => (a.episodeNumber ?? 0) - (b.episodeNumber ?? 0),
+      );
+      for (const ep of eps) {
+        if (!ep.hasFile) continue;
+        const file = resolveFile(ep.id);
+        if (file) return { episode: ep, season: s, file };
+      }
+    }
+
     return null;
   });
+
+  /** Resume episode label for series header (e.g. "S01:E03 - Title") */
+  readonly resumeEpisodeLabel = computed(() => {
+    const ctx = this.nextPlayEpisode();
+    if (!ctx) return null;
+    const sn = String(ctx.season.seasonNumber).padStart(2, '0');
+    const en = String(ctx.episode.episodeNumber).padStart(2, '0');
+    return `S${sn}:E${en} - ${ctx.episode.title ?? ''}`;
+  });
+
+  readonly nextPlayEpisodeId = computed(
+    () => this.nextPlayEpisode()?.episode.id,
+  );
+  readonly nextPlayMediaFileId = computed(
+    () => this.nextPlayEpisode()?.file.id,
+  );
 
   /** Directors for shared header */
   readonly directors = computed(() =>
@@ -265,6 +332,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   /** Active season tab (series) — first season selected after load */
   readonly activeSeasonId = signal<number | null>(null);
   readonly seasonBusy = signal<number | null>(null);
+  readonly seasonWatchedBusy = signal<number | null>(null);
   readonly episodeBusy = signal<number | null>(null);
 
   readonly episodeDrawerContext = signal<{ season: Season; episode: Episode } | null>(null);
@@ -970,9 +1038,38 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
    * episode in a non-special season is watched"); we mirror that same rule
    * locally — no extra round-trip.
    */
+  async onToggleSeasonWatched(mediaId: number, season: Season, watched: boolean) {
+    if (this.seasonWatchedBusy() === season.id) return;
+    this.seasonWatchedBusy.set(season.id);
+    try {
+      await this.streamingApi.toggleSeasonWatched(mediaId, season.id, watched);
+      // Mirror server-side reset locally so progress bars + watched badges
+      // refresh without a reload.
+      const nextWatched = new Set(this.watchedEpisodeIds());
+      const nextProgress = { ...this.episodeProgress() };
+      for (const ep of season.episodes ?? []) {
+        if (watched) {
+          if (ep.hasFile) nextWatched.add(ep.id);
+        } else {
+          nextWatched.delete(ep.id);
+        }
+        delete nextProgress[ep.id];
+      }
+      this.watchedEpisodeIds.set(nextWatched);
+      this.episodeProgress.set(nextProgress);
+    } catch {
+      /* ignore — global error toast handles it */
+    } finally {
+      this.seasonWatchedBusy.set(null);
+    }
+  }
+
   onSeriesWatchedToggled(payload: { watched: boolean }) {
     const m = this.media();
     if (!m?.seasons?.length) return;
+    // Bulk toggle wipes every episode's positionSeconds server-side — mirror
+    // that locally so progress bars on episode cards disappear immediately.
+    this.episodeProgress.set({});
     if (!payload.watched) {
       this.watchedEpisodeIds.set(new Set());
       return;

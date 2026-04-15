@@ -156,6 +156,23 @@ export class PlaybackController {
     );
   }
 
+  /** Mark every episode of a single season as watched (or unwatched). */
+  @Post('media/:mediaId/seasons/:seasonId/toggle-watched')
+  toggleSeasonWatched(
+    @Req() req: Request,
+    @Param('mediaId', ParseIntPipe) mediaId: number,
+    @Param('seasonId', ParseIntPipe) seasonId: number,
+    @Body() body: { watched: boolean },
+  ) {
+    const user = req.user as User;
+    return this.playbackService.toggleSeasonWatched(
+      user.id,
+      mediaId,
+      seasonId,
+      !!body.watched,
+    );
+  }
+
   /** Delete playback state for a media or episode. */
   @Delete('media/:mediaId/state')
   deleteState(

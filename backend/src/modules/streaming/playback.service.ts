@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { PlaybackState } from './entities/playback-state.entity';
@@ -56,6 +56,8 @@ export class PlaybackService implements OnModuleInit {
     private readonly repo: Repository<PlaybackState>,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
+    @InjectRepository(Episode)
+    private readonly episodeRepo: Repository<Episode>,
   ) {}
 
   async onModuleInit() {
@@ -611,6 +613,85 @@ export class PlaybackService implements OnModuleInit {
            AND "episodeId" IS NOT NULL
         `,
         [userId, mediaId],
+      );
+    }
+
+    return { watched };
+  }
+
+  /**
+   * Bulk-mark every episode with a file in a single season as watched or
+   * unwatched. Same semantics as {@link toggleSeriesWatched} but scoped to
+   * one season.
+   */
+  async toggleSeasonWatched(
+    userId: number,
+    mediaId: number,
+    seasonId: number,
+    watched: boolean,
+  ): Promise<{ watched: boolean }> {
+    const episodes = await this.episodeRepo.find({
+      where: { season: { id: seasonId } },
+    });
+    if (!episodes.length) return { watched };
+    const episodeIds = episodes.map((e) => e.id);
+    const now = new Date();
+
+    if (watched) {
+      const withFile = episodes.filter((e) => e.hasFile);
+      if (!withFile.length) return { watched };
+
+      // Latest media file per episode (highest id).
+      const files = await this.mediaFileRepo.find({
+        where: { episode: { id: In(withFile.map((e) => e.id)) } },
+        order: { id: 'DESC' },
+      });
+      const latestByEpisode = new Map<number, MediaFile>();
+      for (const f of files) {
+        if (!latestByEpisode.has(f.episodeId)) latestByEpisode.set(f.episodeId, f);
+      }
+
+      // Delete+recreate wins over ORM-less upsert: the partial unique index
+      // (userId, episodeId) WHERE episodeId IS NOT NULL isn't reachable from
+      // repo.upsert(), and a season is small enough that two round-trips are
+      // fine.
+      await this.repo.delete({
+        user: { id: userId },
+        episode: { id: In(withFile.map((e) => e.id)) },
+      });
+
+      const rows = withFile
+        .map((ep) => {
+          const file = latestByEpisode.get(ep.id);
+          if (!file) return null;
+          return {
+            user: { id: userId },
+            media: { id: mediaId },
+            mediaFile: { id: file.id },
+            episode: { id: ep.id },
+            positionSeconds: 0,
+            durationSeconds: file.streamInfo?.durationSeconds ?? 0,
+            completed: true,
+            lastPlayedAt: now,
+            playedAt: null,
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
+      if (rows.length) {
+        await this.repo.save(rows as Partial<PlaybackState>[]);
+      }
+    } else {
+      await this.repo.update(
+        {
+          user: { id: userId },
+          media: { id: mediaId },
+          episode: { id: In(episodeIds) },
+        },
+        {
+          completed: false,
+          positionSeconds: 0,
+          lastPlayedAt: now,
+        },
       );
     }
 

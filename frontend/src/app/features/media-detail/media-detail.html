@@ -82,8 +82,8 @@
           [genres]="m.genres ?? []"
           [directors]="directors()"
           [resumeEpisodeLabel]="resumeEpisodeLabel()"
-          [resumeEpisodeId]="resumeInfo()?.episodeId ?? undefined"
-          [resumeMediaFileId]="resumeInfo()?.mediaFileId ?? undefined"
+          [resumeEpisodeId]="nextPlayEpisodeId()"
+          [resumeMediaFileId]="nextPlayMediaFileId()"
           [status]="m.status ?? null"
           [monitored]="m.monitored ?? true"
           [path]="m.path ?? null"
@@ -155,6 +155,7 @@
             [seasonReleasesOpenId]="seasonReleasesOpen()"
             [seasonGrabBusy]="seasonGrabBusy()"
             [seasonBusyId]="seasonBusy()"
+            [seasonWatchedBusyId]="seasonWatchedBusy()"
             [canGrab]="canGrab()"
             [isAdmin]="isAdmin()"
             (selectSeason)="selectSeason($event)"
@@ -162,6 +163,7 @@
             (loadSeasonReleases)="loadSeasonReleases(m.id, $event)"
             (grabSeason)="grabSeasonAuto(m.id, $event)"
             (toggleSeasonMonitored)="toggleSeasonMonitored($event)"
+            (toggleSeasonWatched)="onToggleSeasonWatched(m.id, $event.season, $event.watched)"
           />
         }
 

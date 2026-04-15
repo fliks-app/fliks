@@ -363,6 +363,15 @@ export class StreamingApiService {
     );
   }
 
+  toggleSeasonWatched(mediaId: number, seasonId: number, watched: boolean) {
+    return firstValueFrom(
+      this.http.post<{ watched: boolean }>(
+        `/api/playback/media/${mediaId}/seasons/${seasonId}/toggle-watched`,
+        { watched },
+      ),
+    );
+  }
+
   hideFromContinueWatching(mediaId: number) {
     return firstValueFrom(
       this.http.delete<void>(`/api/playback/hide/${mediaId}`),

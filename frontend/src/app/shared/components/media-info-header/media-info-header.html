@@ -94,7 +94,7 @@
     }
 
     <!-- Play buttons (mobile) -->
-    @if (selectedFileId()) {
+    @if (selectedFileId() || resumeMediaFileId()) {
       <div class="flex gap-2" [class.mt-4]="!resumeEpisodeLabel()" [class.mt-2]="resumeEpisodeLabel()">
         <button class="btn btn-primary flex-1 gap-2" (click)="play(false)">
           <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
@@ -367,7 +367,7 @@
 
       <!-- Action buttons -->
       <div class="flex flex-wrap items-center gap-2" [class.mt-4]="!resumeEpisodeLabel()" [class.mt-2]="resumeEpisodeLabel()">
-        @if (selectedFileId()) {
+        @if (selectedFileId() || resumeMediaFileId()) {
           <button class="btn btn-primary btn gap-1" (click)="play(false)">
             <svg lucidePlay class="h-4 w-4" fill="currentColor"></svg>
             @if (resumeLabel()) {
