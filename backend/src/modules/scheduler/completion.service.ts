@@ -25,6 +25,7 @@ import { SettingsService } from '../settings/settings.service';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
+import { ThumbnailService, buildSpriteLabel } from '../streaming/thumbnail.service';
 import { MediaType } from '../../common/enums';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 import { StalledCheck } from './entities/stalled-check.entity';
@@ -68,6 +69,7 @@ export class CompletionService {
     private readonly mediaServers: MediaServersService,
     private readonly events: EventsService,
     private readonly ffprobe: FfprobeService,
+    private readonly thumbnailService: ThumbnailService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -531,6 +533,42 @@ export class CompletionService {
           );
         } catch (e) {
           this.log.warn(`Post-import subtitle search failed: ${e}`);
+        }
+      }
+    })();
+
+    // Generate thumbnail sprites (seekbar preview) for each imported file.
+    // Runs in background — generateForFile is idempotent and ThumbnailService
+    // queues internally to cap concurrency.
+    void (async () => {
+      for (const { savedFile, episodeId: epId } of importedFiles) {
+        let episode:
+          | {
+              seasonNumber?: number | null;
+              episodeNumber?: number | null;
+              title?: string | null;
+            }
+          | null = null;
+        if (epId != null) {
+          const ep = await this.episodeRepo.findOne({
+            where: { id: epId },
+            relations: ['season'],
+          });
+          if (ep) {
+            episode = {
+              seasonNumber: ep.season?.seasonNumber,
+              episodeNumber: ep.episodeNumber,
+              title: ep.title,
+            };
+          }
+        }
+        const label = buildSpriteLabel(media, episode);
+        try {
+          await this.thumbnailService.generateForFile(savedFile, media, label);
+        } catch (e) {
+          this.log.warn(
+            `Post-import sprite generation failed for file #${savedFile.id}: ${e}`,
+          );
         }
       }
     })();

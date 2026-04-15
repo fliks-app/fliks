@@ -1,4 +1,3 @@
-import * as path from 'path';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { In } from 'typeorm';
@@ -25,7 +24,7 @@ import { DelayProfile } from '../profiles/entities/delay-profile.entity';
 import { EventsService } from './events.service';
 import { DownloadsService } from '../downloads/downloads.service';
 import { MediaFile } from '../media/entities/media-file.entity';
-import { ThumbnailService } from '../streaming/thumbnail.service';
+import { ThumbnailService, buildSpriteLabel } from '../streaming/thumbnail.service';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
 import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
@@ -674,33 +673,29 @@ export class SchedulerService implements OnModuleInit {
     const files = await this.mediaFileRepo.find({ relations: ['media'] });
     this.log.log(`${commandName}: processing ${files.length} files`);
 
-    // Build episode labels
+    // Build episode labels upfront (avoid N+1 queries).
     const episodeLabelMap = new Map<number, string>();
-    const episodes = await this.episodeRepo.find({
-      relations: ['season'],
-    });
+    const episodes = await this.episodeRepo.find({ relations: ['season'] });
     for (const ep of episodes) {
-      const sn = String(ep.season.seasonNumber).padStart(2, '0');
-      const en = String(ep.episodeNumber).padStart(2, '0');
-      episodeLabelMap.set(ep.id, `S${sn}E${en} — ${ep.title ?? ''}`);
+      episodeLabelMap.set(
+        ep.id,
+        buildSpriteLabel({ title: ep.title ?? '' }, {
+          seasonNumber: ep.season.seasonNumber,
+          episodeNumber: ep.episodeNumber,
+          title: ep.title,
+        }),
+      );
     }
 
-    // Fire all at once — ThumbnailService queue handles concurrency (2 max)
-    // skipTracking=true avoids creating individual Command records
+    // Fire all at once — ThumbnailService queue handles concurrency.
+    // skipTracking=true avoids creating individual Command records.
     const promises = files.map((file) => {
-      const dur = file.streamInfo?.durationSeconds;
-      const absPath =
-        file.media?.path && file.relativePath
-          ? path.join(file.media.path, file.relativePath)
-          : null;
-      if (!dur || !absPath) return Promise.resolve(null);
-
+      if (!file.media) return Promise.resolve(null);
       const label = file.episodeId
-        ? (episodeLabelMap.get(file.episodeId) ?? file.media?.title ?? '')
-        : (file.media?.title ?? '');
-
+        ? (episodeLabelMap.get(file.episodeId) ?? file.media.title)
+        : file.media.title;
       return this.thumbnailService
-        .getOrGenerate(file.id, absPath, dur, label, force, true)
+        .generateForFile(file, file.media, label, { force, skipTracking: true })
         .catch((e) => {
           this.log.warn(
             `${commandName}: failed for file ${file.id}: ${(e as Error).message}`,

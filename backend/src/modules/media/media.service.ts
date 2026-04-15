@@ -45,7 +45,6 @@ import {
 } from '../../common/constants/app-qualities';
 
 import { ImageService } from '../images/image.service';
-import { ThumbnailService } from '../streaming/thumbnail.service';
 import { SubtitleStreamService } from '../streaming/subtitle-stream.service';
 import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
 import { clearMediaCache } from '../../common/utils/media-cache.util';
@@ -97,7 +96,6 @@ export class MediaService {
     private readonly ffprobe: FfprobeService,
     private readonly subtitles: SubtitlesService,
     private readonly imageService: ImageService,
-    private readonly thumbnailService: ThumbnailService,
     private readonly subtitleStream: SubtitleStreamService,
   ) {}
 
@@ -1086,49 +1084,6 @@ export class MediaService {
 
     await this.updateSearchVector(media.id);
 
-    // Refresh embedded subtitles for all files
-    const files = await this.mediaFileRepo.find({
-      where: { media: { id: media.id } },
-    });
-    for (const file of files) {
-      await this.embeddedSubtitle.detectAndStore(
-        media.id,
-        file.id,
-        file.episodeId ?? undefined,
-      );
-    }
-
-    // Generate thumbnail sprites for all files
-    // Build episode labels for series files
-    const episodeLabelMap = new Map<number, string>();
-    if (media.type === MediaType.SERIES) {
-      const seasons = await this.seasonRepo.find({
-        where: { media: { id: media.id } },
-        relations: ['episodes'],
-      });
-      for (const s of seasons) {
-        for (const ep of s.episodes ?? []) {
-          const sn = String(s.seasonNumber).padStart(2, '0');
-          const en = String(ep.episodeNumber).padStart(2, '0');
-          episodeLabelMap.set(ep.id, `S${sn}E${en} — ${ep.title ?? ''}`);
-        }
-      }
-    }
-
-    for (const file of files) {
-      const dur = file.streamInfo?.durationSeconds;
-      const absPath =
-        media.path && file.relativePath
-          ? path.join(media.path, file.relativePath)
-          : null;
-      if (dur && absPath) {
-        const label = file.episodeId
-          ? (episodeLabelMap.get(file.episodeId) ?? media.title)
-          : media.title;
-        void this.thumbnailService.getOrGenerate(file.id, absPath, dur, label);
-      }
-    }
-
     await this.mediaRepo.update(media.id, {
       metadataRefreshedAt: new Date(),
     });
@@ -1189,27 +1144,6 @@ export class MediaService {
       }
       if (tmdbEp.stillUrl) {
         await this.downloadEpisodeStill(episode.id, tmdbEp.stillUrl);
-      }
-    }
-
-    // Refresh embedded subtitles & thumbnails for episode files only
-    const files = await this.mediaFileRepo.find({
-      where: { media: { id: mediaId }, episode: { id: episodeId } },
-    });
-    const sn = String(episode.season.seasonNumber).padStart(2, '0');
-    const en = String(episode.episodeNumber).padStart(2, '0');
-    const epTitle = tmdbEp?.title ?? episode.title ?? '';
-    const label = `S${sn}E${en} — ${epTitle}`;
-
-    for (const file of files) {
-      await this.embeddedSubtitle.detectAndStore(mediaId, file.id, episodeId);
-      const dur = file.streamInfo?.durationSeconds;
-      const absPath =
-        media.path && file.relativePath
-          ? path.join(media.path, file.relativePath)
-          : null;
-      if (dur && absPath) {
-        void this.thumbnailService.getOrGenerate(file.id, absPath, dur, label);
       }
     }
 
@@ -2438,6 +2372,25 @@ export class MediaService {
         this.log.log(
           `Rescan: discovered ${discovered} external subtitle(s) on disk for media #${mediaId}`,
         );
+      }
+      // Re-detect embedded subtitle streams (ffprobe) for every file so DB
+      // rows stay in sync with the container (tracks added/removed by a
+      // re-encode, language labels updated).
+      const allFiles = await this.mediaFileRepo.find({
+        where: { media: { id: mediaId } },
+      });
+      for (const file of allFiles) {
+        try {
+          await this.embeddedSubtitle.detectAndStore(
+            mediaId,
+            file.id,
+            file.episodeId ?? undefined,
+          );
+        } catch (err) {
+          this.log.warn(
+            `Rescan: embedded subtitle detect failed for file #${file.id} — ${err instanceof Error ? err.message : err}`,
+          );
+        }
       }
     } catch (err) {
       this.log.warn(
