@@ -166,20 +166,63 @@ export class EmbyWatchHistoryImportService {
       errors: 0,
     };
 
-    // 2. Paginate through every played item.
+    // 2. Pull all three views in order:
+    //      - /Items/Resume       → authoritative Continue Watching queue
+    //      - /Items?IsPlayed     → fully watched / history
+    //      - /Items?IsResumable  → broad resumable (includes items the user
+    //        hid from Resume, or never touched — we treat anything here
+    //        that's not in the Resume queue as "hidden CW").
+    //    A single item can appear in several sets — we dedupe by Emby id
+    //    and the first occurrence wins (Resume > Played > Resumable),
+    //    ensuring CW items keep the right flags.
     const batchSize = 500;
-    let offset = 0;
-    while (true) {
-      const { items, total } = await this.embyProvider.getWatchedItems(
-        server.url,
-        server.apiKey,
-        embyUser.Id,
-        offset,
-        batchSize,
-      );
-      if (!items.length) break;
+    const seenEmbyIds = new Set<string>();
+    const resumeIds = new Set<string>();
 
-      for (const item of items) {
+    const fetchAll = async (mode: 'played' | 'resumable' | 'resume') => {
+      const out: EmbyItem[] = [];
+      let offset = 0;
+      while (true) {
+        const { items, total } = await this.embyProvider.getWatchedItems(
+          server.url,
+          server.apiKey,
+          embyUser.Id,
+          mode,
+          offset,
+          batchSize,
+        );
+        if (!items.length) break;
+        out.push(...items);
+        offset += items.length;
+        if (offset >= total) break;
+      }
+      return out;
+    };
+
+    const resumeItems = await fetchAll('resume');
+    for (const it of resumeItems) resumeIds.add(it.Id);
+    const playedItems = await fetchAll('played');
+    const resumableItems = await fetchAll('resumable');
+
+    this.log.log(
+      `Emby import[${embyUser.Name}]: fetched resume=${resumeItems.length} played=${playedItems.length} resumable=${resumableItems.length}`,
+    );
+
+    for (const batch of [resumeItems, playedItems, resumableItems]) {
+      for (const item of batch) {
+        if (seenEmbyIds.has(item.Id)) continue;
+        seenEmbyIds.add(item.Id);
+
+        const played = item.UserData?.Played === true;
+        const positionTicks = item.UserData?.PlaybackPositionTicks ?? 0;
+        const inResume = resumeIds.has(item.Id);
+
+        // Skip rows with nothing useful: never touched, not played, not in CW.
+        if (!played && positionTicks === 0 && !inResume) {
+          userStats.skipped++;
+          continue;
+        }
+
         try {
           const handled = await this.applyItem(
             server,
@@ -189,6 +232,7 @@ export class EmbyWatchHistoryImportService {
             seriesByTmdb,
             movieByTmdb,
             seriesTmdbByEmbyId,
+            inResume,
           );
           if (handled) userStats.imported++;
           else userStats.skipped++;
@@ -199,9 +243,6 @@ export class EmbyWatchHistoryImportService {
           );
         }
       }
-
-      offset += items.length;
-      if (offset >= total) break;
     }
 
     this.log.log(
@@ -222,6 +263,7 @@ export class EmbyWatchHistoryImportService {
     seriesByTmdb: Map<number, Media | null>,
     movieByTmdb: Map<number, Media | null>,
     seriesTmdbByEmbyId: Map<string, number | null>,
+    inResumeQueue: boolean,
   ): Promise<boolean> {
     // Fallback chain for the "history date":
     //   1. UserData.LastPlayedDate — the real thing (when Emby tracked it)
@@ -243,6 +285,17 @@ export class EmbyWatchHistoryImportService {
     const durationSeconds = Math.floor(
       (item.RunTimeTicks ?? 0) / TICKS_PER_SECOND,
     );
+    // Completion + hide rules keyed off Emby's authoritative Resume queue:
+    //   - In Resume       → active CW item (completed=false, not hidden),
+    //                       even if Emby also marks Played=true (re-watches).
+    //   - Not in Resume + Played=true → history entry (completed=true).
+    //   - Not in Resume + position > 0 + Played=false → hidden CW (user
+    //     dismissed it from Emby's Resume row).
+    const played = item.UserData?.Played === true;
+    const positionTicks = item.UserData?.PlaybackPositionTicks ?? 0;
+    const completed = inResumeQueue ? false : played;
+    const hiddenFromContinueWatching =
+      !inResumeQueue && !played && positionTicks > 0;
 
     if (item.Type === 'Movie') {
       const tmdbId = Number(item.ProviderIds?.Tmdb);
@@ -264,6 +317,8 @@ export class EmbyWatchHistoryImportService {
         durationSeconds,
         lastPlayed,
         playedAt,
+        completed,
+        hiddenFromContinueWatching,
       });
     }
 
@@ -317,6 +372,8 @@ export class EmbyWatchHistoryImportService {
       durationSeconds,
       lastPlayed,
       playedAt,
+      completed,
+      hiddenFromContinueWatching,
     });
   }
 
@@ -335,6 +392,12 @@ export class EmbyWatchHistoryImportService {
     /** Resolved with a fallback chain (LastPlayed → DateCreated →
      *  PremiereDate → now) so history always has a displayable date. */
     playedAt: Date;
+    /** True when Emby says the item is fully watched. False for resumable
+     *  (partial-progress) items so they surface in Continue Watching. */
+    completed: boolean;
+    /** Mirrors Emby's HideFromResume flag when exposed; keeps Suitarr's
+     *  Continue Watching list in sync with Emby's. */
+    hiddenFromContinueWatching: boolean;
   }): Promise<boolean> {
     const qb = this.playbackRepo
       .createQueryBuilder('ps')
@@ -360,7 +423,8 @@ export class EmbyWatchHistoryImportService {
       if (opts.durationSeconds > 0) {
         existing.durationSeconds = opts.durationSeconds;
       }
-      existing.completed = true;
+      existing.completed = opts.completed;
+      existing.hiddenFromContinueWatching = opts.hiddenFromContinueWatching;
       existing.lastPlayedAt = opts.lastPlayed;
       existing.playedAt = opts.playedAt;
       await this.playbackRepo.save(existing);
@@ -371,7 +435,8 @@ export class EmbyWatchHistoryImportService {
         episode: opts.episodeId ? { id: opts.episodeId } : null,
         positionSeconds: opts.positionSeconds,
         durationSeconds: opts.durationSeconds,
-        completed: true,
+        completed: opts.completed,
+        hiddenFromContinueWatching: opts.hiddenFromContinueWatching,
         lastPlayedAt: opts.lastPlayed,
         playedAt: opts.playedAt,
       } as Partial<PlaybackState>);

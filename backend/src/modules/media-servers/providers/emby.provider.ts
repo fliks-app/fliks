@@ -25,6 +25,9 @@ export interface EmbyItem {
     /** 1 tick = 100 ns */
     PlaybackPositionTicks?: number;
     PlayCount?: number;
+    /** Undocumented in stable Emby but present on some builds / Jellyfin —
+     *  indicates the user dismissed the item from the Resume row. */
+    HideFromResume?: boolean;
   };
   /** Date the item was added to the Emby library (ISO timestamp). */
   DateCreated?: string;
@@ -90,31 +93,44 @@ export class EmbyProvider implements MediaServerProvider {
   }
 
   /**
-   * Paginated fetch of every movie/episode the given Emby user has played.
-   * Includes provider IDs + user data (last-played, position) + runtime.
+   * Paginated fetch of watched / in-progress items for one Emby user.
+   *
+   * - `mode='played'`: fully-watched items (`/Items?IsPlayed=true`).
+   * - `mode='resumable'`: broad resumable-in-principle items
+   *   (`/Items?IsResumable=true`). This is noisy — Emby can return items
+   *   the user never touched. Use `getResumeQueue` alongside to identify
+   *   the actual Continue-Watching list.
+   * - `mode='resume'`: authoritative CW queue from `/Items/Resume`.
    */
   async getWatchedItems(
     url: string,
     apiKey: string,
     embyUserId: string,
+    mode: 'played' | 'resumable' | 'resume',
     offset = 0,
     limit = 500,
   ): Promise<{ items: EmbyItem[]; total: number }> {
     const base = url.replace(/\/$/, '');
+    const path =
+      mode === 'resume'
+        ? `/Users/${embyUserId}/Items/Resume`
+        : `/Users/${embyUserId}/Items`;
+    const params: Record<string, string | number> = {
+      IncludeItemTypes: 'Movie,Episode',
+      Fields:
+        'ProviderIds,UserData,ParentIndexNumber,IndexNumber,SeriesName,SeriesId,RunTimeTicks,DateCreated,PremiereDate',
+      Recursive: 'true',
+      StartIndex: offset,
+      Limit: limit,
+    };
+    if (mode === 'played') params.IsPlayed = 'true';
+    else if (mode === 'resumable') params.IsResumable = 'true';
     const res = await axios.get<{
       Items: EmbyItem[];
       TotalRecordCount: number;
-    }>(`${base}/Users/${embyUserId}/Items`, {
+    }>(`${base}${path}`, {
       headers: { 'X-Emby-Token': apiKey },
-      params: {
-        IsPlayed: 'true',
-        IncludeItemTypes: 'Movie,Episode',
-        Fields:
-          'ProviderIds,UserData,ParentIndexNumber,IndexNumber,SeriesName,SeriesId,RunTimeTicks,DateCreated,PremiereDate',
-        Recursive: 'true',
-        StartIndex: offset,
-        Limit: limit,
-      },
+      params,
       timeout: 60_000,
     });
     return {
