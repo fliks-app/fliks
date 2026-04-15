@@ -236,10 +236,20 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
         },
       );
       detected = result.introsDetected;
-      // Same pipeline also resolves outros from embedded chapters (cheap,
-      // metadata-only). Runs after intros for clean logs.
+      // Same command also runs outro detection (chapter + fingerprint).
       try {
-        const outroResult = await this.detector.detectSeasonOutros(seasonId);
+        const outroResult = await this.detector.detectSeasonOutros(
+          seasonId,
+          (current, total, message) => {
+            this.events.emit({
+              type: 'task.progress',
+              command: 'IntroDetection',
+              current,
+              total,
+              message,
+            });
+          },
+        );
         detected += outroResult.outrosDetected;
       } catch (err) {
         this.log.warn(

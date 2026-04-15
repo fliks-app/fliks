@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 import { Episode } from '../media/entities/episode.entity';
@@ -18,6 +18,10 @@ interface Fingerprint {
   hashes: number[];
   /** Actual seconds covered by the fingerprint (from fpcalc DURATION line). */
   durationSeconds: number;
+  /** Absolute file offset (seconds) where this fingerprint starts. Used
+   *  to convert sample positions back to absolute file timestamps when
+   *  scanning windows other than the file head (e.g. the outro zone). */
+  baseOffsetSec: number;
 }
 
 interface MatchResult {
@@ -505,13 +509,14 @@ export class IntroDetectionService {
   }
 
   /**
-   * Detect end-credits / outro markers for a season. V1 relies on embedded
-   * chapters only (Netflix / Blu-ray rips usually ship with an "End Credits"
-   * chapter). Files without chapters are skipped — fingerprint-based outro
-   * detection can be added later when we need it.
+   * Detect end-credits / outro markers for a season. Mirrors the intro
+   * pipeline: chapter shortcut → reference-template search using a chapter
+   * peer → pairwise chromaprint fallback. Scans only the last `lookupSec`
+   * seconds of each episode via ffmpeg-seek → fpcalc pipeline.
    */
   async detectSeasonOutros(
     seasonId: number,
+    onProgress?: (current: number, total: number, message: string) => void,
   ): Promise<{ outrosDetected: number; skipped: number }> {
     const t0 = Date.now();
     const season = await this.seasonRepo.findOne({ where: { id: seasonId } });
@@ -519,7 +524,8 @@ export class IntroDetectionService {
     const media = await this.mediaRepo.findOne({
       where: { id: season.mediaId },
     });
-    if (!media) return { outrosDetected: 0, skipped: 0 };
+    if (!media?.path) return { outrosDetected: 0, skipped: 0 };
+    const mediaPath: string = media.path;
 
     const episodes = await this.episodeRepo.find({
       where: { season: { id: seasonId }, hasFile: true },
@@ -540,6 +546,14 @@ export class IntroDetectionService {
       if (!fileByEpisode.has(f.episodeId)) fileByEpisode.set(f.episodeId, f);
     }
 
+    const lookupMin =
+      Number(await this.settings.get('introMaxLookupMinutes')) ||
+      IntroDetectionService.DEFAULT_MAX_LOOKUP_MINUTES;
+    const lookupSec = lookupMin * 60;
+    const minSegmentSec =
+      Number(await this.settings.get('introMinSegmentSeconds')) ||
+      IntroDetectionService.DEFAULT_MIN_SEGMENT_SECONDS;
+
     // Never overwrite manual markers.
     const existingManual = await this.markerRepo.find({
       where: {
@@ -550,8 +564,12 @@ export class IntroDetectionService {
     });
     const manualIds = new Set(existingManual.map((m) => m.episodeId));
 
+    // ── Chapter shortcut ──
+    const needsFingerprint: typeof episodes = [];
+    let referencePeer:
+      | { episode: Episode; startSec: number; endSec: number }
+      | null = null;
     let detected = 0;
-    let skipped = 0;
     for (const ep of episodes) {
       if (manualIds.has(ep.id)) continue;
       const file = fileByEpisode.get(ep.id);
@@ -560,31 +578,227 @@ export class IntroDetectionService {
         file?.streamInfo?.chapters,
         dur,
       );
-      if (!fromChapter) {
-        skipped++;
-        continue;
+      if (fromChapter) {
+        await this.markerRepo.delete({
+          episode: { id: ep.id },
+          type: 'outro',
+          manual: false,
+        });
+        await this.markerRepo.save({
+          episode: { id: ep.id },
+          type: 'outro',
+          startSeconds: fromChapter.startSeconds,
+          endSeconds: fromChapter.endSeconds,
+          confidence: 1,
+          manual: false,
+        } as Partial<EpisodeMarker>);
+        detected++;
+        if (!referencePeer) {
+          referencePeer = {
+            episode: ep,
+            startSec: fromChapter.startSeconds,
+            endSec: fromChapter.endSeconds,
+          };
+        }
+        this.log.log(
+          `  E${ep.episodeNumber}: outro from chapter "${fromChapter.title}" ${this.fmtTime(fromChapter.startSeconds)}–${this.fmtTime(fromChapter.endSeconds)}`,
+        );
+      } else {
+        needsFingerprint.push(ep);
       }
-      await this.markerRepo.delete({
-        episode: { id: ep.id },
-        type: 'outro',
-        manual: false,
-      });
-      await this.markerRepo.save({
-        episode: { id: ep.id },
-        type: 'outro',
-        startSeconds: fromChapter.startSeconds,
-        endSeconds: fromChapter.endSeconds,
-        confidence: 1,
-        manual: false,
-      } as Partial<EpisodeMarker>);
-      detected++;
+    }
+
+    if (needsFingerprint.length === 0) {
       this.log.log(
-        `  E${ep.episodeNumber}: outro from chapter "${fromChapter.title}" ${this.fmtTime(fromChapter.startSeconds)}–${this.fmtTime(fromChapter.endSeconds)}`,
+        `■ Outro detection END — "${media.title}" S${String(season.seasonNumber).padStart(2, '0')}: ${detected} outro(s) via chapters (${((Date.now() - t0) / 1000).toFixed(1)}s)`,
+      );
+      return { outrosDetected: detected, skipped: 0 };
+    }
+    if (needsFingerprint.length < 2 && !referencePeer) {
+      this.log.log(
+        `Season #${seasonId}: ${needsFingerprint.length} chapter-less episode(s), no reference peer — skipping fingerprint fallback`,
+      );
+      return { outrosDetected: detected, skipped: needsFingerprint.length };
+    }
+
+    // ── Fingerprint END of each chapter-less episode (+ reference peer) ──
+    const fingerprints = new Map<number, Fingerprint>();
+    const toFingerprint = referencePeer
+      ? [...needsFingerprint, referencePeer.episode]
+      : needsFingerprint;
+    const concurrency = 4;
+    let processed = 0;
+    onProgress?.(
+      0,
+      toFingerprint.length,
+      `Outro fingerprinting 0/${toFingerprint.length}`,
+    );
+    for (let i = 0; i < toFingerprint.length; i += concurrency) {
+      const slice = toFingerprint.slice(i, i + concurrency);
+      await Promise.all(
+        slice.map(async (ep) => {
+          const file = fileByEpisode.get(ep.id);
+          const dur = file?.streamInfo?.durationSeconds ?? 0;
+          if (!file || !dur) {
+            this.log.warn(
+              `  E${ep.episodeNumber}: no duration known, skipping outro fingerprint`,
+            );
+            return;
+          }
+          const abs = path.resolve(mediaPath, file.relativePath);
+          const startSec = Math.max(0, dur - lookupSec);
+          const epT0 = Date.now();
+          try {
+            const fp = await this.fingerprintWindow(abs, startSec, lookupSec);
+            fingerprints.set(ep.id, fp);
+            this.log.log(
+              `  ✓ E${ep.episodeNumber} outro fingerprint in ${((Date.now() - epT0) / 1000).toFixed(1)}s (${fp.hashes.length} hashes, offset ${this.fmtTime(startSec)})`,
+            );
+          } catch (err) {
+            this.log.warn(
+              `  ✗ E${ep.episodeNumber} outro fingerprint failed: ${(err as Error).message}`,
+            );
+          }
+          processed++;
+          onProgress?.(
+            processed,
+            toFingerprint.length,
+            `Outro fingerprinting ${processed}/${toFingerprint.length}`,
+          );
+        }),
       );
     }
 
+    // ── Reference-based search (peer chapter outro as template) ──
+    const resolvedByReference = new Set<number>();
+    if (referencePeer) {
+      const peerFp = fingerprints.get(referencePeer.episode.id);
+      if (peerFp) {
+        // Chapter position is absolute in the file; convert to index inside
+        // the fingerprint window (subtract baseOffset).
+        const relStart = Math.max(
+          0,
+          this.secondsToSamples(referencePeer.startSec - peerFp.baseOffsetSec),
+        );
+        const relEnd = Math.min(
+          peerFp.hashes.length,
+          this.secondsToSamples(referencePeer.endSec - peerFp.baseOffsetSec),
+        );
+        const refHashes = peerFp.hashes.slice(relStart, relEnd);
+        this.log.log(
+          `Season #${seasonId}: outro reference = E${referencePeer.episode.episodeNumber} ${this.fmtTime(referencePeer.startSec)}–${this.fmtTime(referencePeer.endSec)} (${refHashes.length} hashes)`,
+        );
+        for (const ep of needsFingerprint) {
+          const targetFp = fingerprints.get(ep.id);
+          if (!targetFp) continue;
+          const m = this.findByReference(refHashes, targetFp, lookupSec);
+          if (!m) {
+            this.log.log(
+              `  E${ep.episodeNumber}: outro reference search found no alignment`,
+            );
+            continue;
+          }
+          const absStart = targetFp.baseOffsetSec + m.startSeconds;
+          const absEnd = targetFp.baseOffsetSec + m.endSeconds;
+          await this.markerRepo.delete({
+            episode: { id: ep.id },
+            type: 'outro',
+            manual: false,
+          });
+          await this.markerRepo.save({
+            episode: { id: ep.id },
+            type: 'outro',
+            startSeconds: absStart,
+            endSeconds: absEnd,
+            confidence: m.conf,
+            manual: false,
+          } as Partial<EpisodeMarker>);
+          resolvedByReference.add(ep.id);
+          detected++;
+          this.log.log(
+            `  E${ep.episodeNumber}: outro from reference ${this.fmtTime(absStart)}–${this.fmtTime(absEnd)} (${(absEnd - absStart).toFixed(1)}s, conf=${m.conf.toFixed(2)})`,
+          );
+        }
+      }
+    }
+
+    // ── Pairwise fallback across remaining chapter-less episodes ──
+    const ids = [...fingerprints.keys()].filter(
+      (id) =>
+        !resolvedByReference.has(id) &&
+        id !== referencePeer?.episode.id &&
+        !manualIds.has(id),
+    );
+    if (ids.length >= 2) {
+      const bucket = IntroDetectionService.CLUSTER_BUCKET_SECONDS;
+      for (let i = 0; i < ids.length; i++) {
+        const aId = ids[i];
+        const a = fingerprints.get(aId)!;
+        const matches: { start: number; length: number; conf: number }[] = [];
+        for (let j = 0; j < ids.length; j++) {
+          if (i === j) continue;
+          const b = fingerprints.get(ids[j])!;
+          const all = this.findAllMatches(a.hashes, b.hashes, minSegmentSec, a);
+          for (const m of all) {
+            const start = this.samplesToSeconds(m.aStart);
+            const length = this.samplesToSeconds(m.length);
+            if (length > IntroDetectionService.MAX_PLAUSIBLE_INTRO_SECONDS)
+              continue;
+            matches.push({
+              start,
+              length,
+              conf:
+                1 -
+                m.hammingAvg / IntroDetectionService.HAMMING_THRESHOLD / 4,
+            });
+          }
+        }
+        if (matches.length === 0) continue;
+
+        const clusters = new Map<number, typeof matches>();
+        for (const m of matches) {
+          const key = Math.round(m.start / bucket) * bucket;
+          const arr = clusters.get(key) ?? [];
+          arr.push(m);
+          clusters.set(key, arr);
+        }
+        let bestCluster: typeof matches = [];
+        for (const arr of clusters.values()) {
+          if (arr.length > bestCluster.length) bestCluster = arr;
+        }
+        if (bestCluster.length < 2) continue;
+
+        const relStart = median(bestCluster.map((m) => m.start));
+        const relLen = median(bestCluster.map((m) => m.length));
+        const conf = median(bestCluster.map((m) => m.conf));
+        const absStart = a.baseOffsetSec + Math.max(0, relStart);
+        const absEnd = a.baseOffsetSec + relStart + relLen;
+
+        await this.markerRepo.delete({
+          episode: { id: aId },
+          type: 'outro',
+          manual: false,
+        });
+        await this.markerRepo.save({
+          episode: { id: aId },
+          type: 'outro',
+          startSeconds: absStart,
+          endSeconds: absEnd,
+          confidence: clamp(conf, 0, 1),
+          manual: false,
+        } as Partial<EpisodeMarker>);
+        detected++;
+        this.log.log(
+          `  E#${aId}: outro pairwise ${this.fmtTime(absStart)}–${this.fmtTime(absEnd)} (${(absEnd - absStart).toFixed(1)}s, conf=${conf.toFixed(2)}, ${bestCluster.length} peers)`,
+        );
+      }
+    }
+
+    const skipped = needsFingerprint.filter(
+      (ep) => !resolvedByReference.has(ep.id) && !ids.includes(ep.id),
+    ).length;
     this.log.log(
-      `■ Outro detection END — "${media.title}" S${String(season.seasonNumber).padStart(2, '0')}: ${detected} outro(s) saved, ${skipped} without chapters (${((Date.now() - t0) / 1000).toFixed(1)}s)`,
+      `■ Outro detection END — "${media.title}" S${String(season.seasonNumber).padStart(2, '0')}: ${detected} outro(s) saved, ${skipped} without result (${((Date.now() - t0) / 1000).toFixed(1)}s)`,
     );
     return { outrosDetected: detected, skipped };
   }
@@ -609,7 +823,78 @@ export class IntroDetectionService {
     return {
       hashes,
       durationSeconds: durMatch ? parseFloat(durMatch[1]) : maxSeconds,
+      baseOffsetSec: 0,
     };
+  }
+
+  /**
+   * Fingerprint a specific [startSec, startSec+lengthSec] window of the file
+   * by piping ffmpeg audio output into fpcalc stdin. fpcalc 1.5.1 doesn't
+   * expose a `-start` flag, so we use ffmpeg's `-ss` seek.
+   */
+  private fingerprintWindow(
+    absPath: string,
+    startSec: number,
+    lengthSec: number,
+  ): Promise<Fingerprint> {
+    return new Promise((resolve, reject) => {
+      const ffmpeg = spawn('ffmpeg', [
+        '-nostdin',
+        '-hide_banner',
+        '-loglevel', 'error',
+        '-ss', String(Math.max(0, Math.floor(startSec))),
+        '-i', absPath,
+        '-t', String(lengthSec),
+        '-vn',
+        '-ac', '1',
+        '-ar', '22050',
+        '-f', 'wav',
+        '-',
+      ]);
+      const fpcalc = spawn(
+        'fpcalc',
+        ['-raw', '-length', String(lengthSec), '-'],
+        { stdio: ['pipe', 'pipe', 'pipe'] },
+      );
+
+      let stdout = '';
+      let fpcalcErr = '';
+      let ffmpegErr = '';
+      fpcalc.stdout.on('data', (d) => (stdout += d.toString()));
+      fpcalc.stderr.on('data', (d) => (fpcalcErr += d.toString()));
+      ffmpeg.stderr.on('data', (d) => (ffmpegErr += d.toString()));
+      ffmpeg.stdout.pipe(fpcalc.stdin);
+      ffmpeg.on('error', reject);
+      fpcalc.on('error', reject);
+
+      const timeout = setTimeout(() => {
+        ffmpeg.kill('SIGKILL');
+        fpcalc.kill('SIGKILL');
+        reject(new Error('fingerprintWindow timed out'));
+      }, 180_000);
+
+      fpcalc.on('close', (code) => {
+        clearTimeout(timeout);
+        if (code !== 0) {
+          return reject(
+            new Error(
+              `fpcalc exited ${code}: ${fpcalcErr.trim() || ffmpegErr.trim()}`,
+            ),
+          );
+        }
+        const fpMatch = stdout.match(/FINGERPRINT=([\d,\-]+)/);
+        if (!fpMatch) {
+          return reject(new Error('fpcalc returned no FINGERPRINT line'));
+        }
+        const durMatch = stdout.match(/DURATION=([\d.]+)/);
+        const hashes = fpMatch[1].split(',').map((s) => parseInt(s, 10) | 0);
+        resolve({
+          hashes,
+          durationSeconds: durMatch ? parseFloat(durMatch[1]) : lengthSec,
+          baseOffsetSec: startSec,
+        });
+      });
+    });
   }
 
   /**
