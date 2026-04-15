@@ -195,6 +195,36 @@ export class PlaybackService implements OnModuleInit {
     return rows.map((r) => r.episodeId);
   }
 
+  /**
+   * Progress percent (0–100) per episode for in-progress states of a series.
+   * Excludes completed episodes (watched = shown separately by
+   * {@link getWatchedEpisodeIds}). Used by the seasons panel to draw the
+   * resume bar on episode cards.
+   */
+  async getEpisodeProgress(
+    userId: number,
+    mediaId: number,
+  ): Promise<Record<number, number>> {
+    const rows: { episodeId: number; percent: string }[] = await this.repo
+      .query(
+        `SELECT ps."episodeId",
+                ROUND((ps."positionSeconds" / ps."durationSeconds") * 100) AS percent
+         FROM playback_states ps
+         WHERE ps."userId" = $1 AND ps."mediaId" = $2
+           AND ps."episodeId" IS NOT NULL
+           AND ps.completed = false
+           AND ps."durationSeconds" > 0
+           AND ps."positionSeconds" > 0`,
+        [userId, mediaId],
+      );
+    const out: Record<number, number> = {};
+    for (const r of rows) {
+      const p = Number(r.percent);
+      if (p > 0 && p < 100) out[r.episodeId] = p;
+    }
+    return out;
+  }
+
   async updateState(
     userId: number,
     mediaId: number,

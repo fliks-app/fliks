@@ -103,6 +103,7 @@
             [subtitle]="ep.airDate ?? '—'"
             [topLeftBadge]="'' + ep.episodeNumber"
             [status]="watchedEpisodeIds().has(ep.id) ? 'watched' : (!ep.hasFile ? 'missing' : null)"
+            [progressPercent]="episodeProgress()[ep.id] ?? 0"
             [link]="episodeRoute(ep)"
             [playable]="ep.hasFile"
             [dimmed]="!ep.monitored"

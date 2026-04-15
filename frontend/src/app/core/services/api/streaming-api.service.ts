@@ -278,6 +278,14 @@ export class StreamingApiService {
     );
   }
 
+  getEpisodeProgress(mediaId: number) {
+    return firstValueFrom(
+      this.http.get<Record<number, number>>(
+        `/api/playback/media/${mediaId}/episode-progress`,
+      ),
+    );
+  }
+
   getMediaResumeInfo(mediaId: number) {
     return firstValueFrom(
       this.http.get<MediaResumeInfo | null>(`/api/playback/media/${mediaId}`),

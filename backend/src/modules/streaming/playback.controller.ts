@@ -73,6 +73,16 @@ export class PlaybackController {
     return this.playbackService.getWatchedEpisodeIds(user.id, mediaId);
   }
 
+  /** Progress percent per in-progress episode (episodeId → 0-100). */
+  @Get('media/:mediaId/episode-progress')
+  getEpisodeProgress(
+    @Req() req: Request,
+    @Param('mediaId', ParseIntPipe) mediaId: number,
+  ) {
+    const user = req.user as User;
+    return this.playbackService.getEpisodeProgress(user.id, mediaId);
+  }
+
   /** Resume info — which episode/file to resume for a media. */
   @Get('media/:mediaId')
   getMediaResumeInfo(

@@ -49,6 +49,7 @@ export class MediaDetailSeasonsComponent {
   readonly seasonGrabBusy = input<string | null>(null);
   readonly seasonBusyId = input<number | null>(null);
   readonly watchedEpisodeIds = input<Set<number>>(new Set());
+  readonly episodeProgress = input<Record<number, number>>({});
   readonly canGrab = input(false);
   readonly isAdmin = input(false);
 

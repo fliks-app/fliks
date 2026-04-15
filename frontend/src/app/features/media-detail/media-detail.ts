@@ -118,6 +118,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly crew = signal<MediaCrewEntry[]>([]);
   readonly resumeInfo = signal<MediaResumeInfo | null>(null);
   readonly watchedEpisodeIds = signal<Set<number>>(new Set());
+  readonly episodeProgress = signal<Record<number, number>>({});
   readonly mediaFiles = computed(() => {
     const m = this.media();
     if (!m) return [];
@@ -384,16 +385,22 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // Load cast/crew async — doesn't block page render
       this.mediaService.getCast(m.id).then((c) => this.cast.set(c)).catch(() => {});
       this.mediaService.getCrew(m.id).then((c) => this.crew.set(c)).catch(() => {});
-      // Load resume + watched episodes for series
-      const [resumeInfo, watchedIds] = await Promise.all([
+      // Load resume + watched episodes + per-episode progress for series
+      const [resumeInfo, watchedIds, progress] = await Promise.all([
         this.streamingApi.getMediaResumeInfo(m.id).catch(() => null),
         m.type === 'series'
           ? this.streamingApi.getWatchedEpisodeIds(m.id).catch(() => [] as number[])
           : Promise.resolve([] as number[]),
+        m.type === 'series'
+          ? this.streamingApi
+              .getEpisodeProgress(m.id)
+              .catch(() => ({}) as Record<number, number>)
+          : Promise.resolve({} as Record<number, number>),
       ]);
       this.resumeInfo.set(resumeInfo);
       const watchedSet = new Set(watchedIds);
       this.watchedEpisodeIds.set(watchedSet);
+      this.episodeProgress.set(progress);
 
       // Pre-select the last-played file if available
       if (resumeInfo?.mediaFileId) {

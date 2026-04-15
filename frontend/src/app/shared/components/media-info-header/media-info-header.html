@@ -89,13 +89,13 @@
       </div>
     }
 
-    @if (resumeEpisodeLabel() && resumeLabel()) {
+    @if (resumeEpisodeLabel()) {
       <p class="mt-4 mb-4 font-semibold">{{ resumeEpisodeLabel() }}</p>
     }
 
     <!-- Play buttons (mobile) -->
     @if (selectedFileId()) {
-      <div class="flex gap-2" [class.mt-4]="!resumeEpisodeLabel() || !resumeLabel()" [class.mt-2]="resumeEpisodeLabel() && resumeLabel()">
+      <div class="flex gap-2" [class.mt-4]="!resumeEpisodeLabel()" [class.mt-2]="resumeEpisodeLabel()">
         <button class="btn btn-primary flex-1 gap-2" (click)="play(false)">
           <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
           @if (resumeLabel()) {
@@ -361,12 +361,12 @@
         </div>
       }
 
-      @if (resumeEpisodeLabel() && resumeLabel()) {
+      @if (resumeEpisodeLabel()) {
         <p class="mt-4 mb-4 font-semibold">{{ resumeEpisodeLabel() }}</p>
       }
 
       <!-- Action buttons -->
-      <div class="flex flex-wrap items-center gap-2" [class.mt-4]="!resumeEpisodeLabel() || !resumeLabel()" [class.mt-2]="resumeEpisodeLabel() && resumeLabel()">
+      <div class="flex flex-wrap items-center gap-2" [class.mt-4]="!resumeEpisodeLabel()" [class.mt-2]="resumeEpisodeLabel()">
         @if (selectedFileId()) {
           <button class="btn btn-primary btn gap-1" (click)="play(false)">
             <svg lucidePlay class="h-4 w-4" fill="currentColor"></svg>
