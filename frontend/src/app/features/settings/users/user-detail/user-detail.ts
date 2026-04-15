@@ -65,7 +65,7 @@ export class UserDetailComponent implements OnInit {
       return;
     try {
       await this.api.remove(user.id);
-      void this.router.navigate(['/settings/users']);
+      void this.router.navigate(['/admin/settings/users']);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
       void this.confirmation.alert({

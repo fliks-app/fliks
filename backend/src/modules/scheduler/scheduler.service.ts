@@ -742,7 +742,6 @@ export class SchedulerService implements OnModuleInit {
     const monitored = await this.mediaRepo.find({
       where: { monitored: true, type: MediaType.MOVIE },
       select: ['id', 'title', 'year'],
-      relations: ['tags'],
     });
     const clients = await this.clientRepo.find({ where: { enabled: true } });
     const qbitClient = clients.find((c) => this.qbittorrent.supports(c));
@@ -1068,17 +1067,13 @@ export class SchedulerService implements OnModuleInit {
   }
 
   private isDelayed(
-    media: Media,
+    _media: Media,
     publishDate: string,
     delayProfiles: DelayProfile[],
   ): boolean {
     if (!delayProfiles.length) return false;
-    const mediaTags = new Set((media.tags ?? []).map((t) => t.id));
-    // Find the first matching delay profile (by tag intersection, or empty tags = matches all)
-    const profile = delayProfiles.find((dp) => {
-      if (!dp.tags?.length) return true; // no tags = global default
-      return dp.tags.some((t) => mediaTags.has(t.id));
-    });
+    // Pick the first profile (lowest order) and apply its delay to all media.
+    const profile = delayProfiles[0];
     if (!profile || profile.torrentDelay <= 0) return false;
     const ageHours = (Date.now() - new Date(publishDate).getTime()) / 3_600_000;
     return ageHours < profile.torrentDelay;

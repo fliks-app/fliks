@@ -12,7 +12,6 @@ import { Indexer } from '../../indexers/entities/indexer.entity';
 import { DownloadClient } from '../../download-clients/entities/download-client.entity';
 import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
-import { Tag } from '../../tags/entities/tag.entity';
 import { SubtitleProvider } from '../../subtitles/entities/subtitle-provider.entity';
 import { SubtitleFile } from '../../subtitles/entities/subtitle-file.entity';
 import { Library } from '../../libraries/entities/library.entity';
@@ -27,7 +26,6 @@ type Subjects =
       | typeof DownloadClient
       | typeof QualityProfile
       | typeof LanguageProfile
-      | typeof Tag
       | typeof SubtitleProvider
       | typeof SubtitleFile
       | typeof Library
@@ -57,7 +55,6 @@ export class CaslAbilityFactory {
     // --- media ---
     if (perms.has('media.read')) {
       can(Action.Read, Media);
-      can(Action.Read, Tag);
       can(Action.Read, QualityProfile);
       can(Action.Read, LanguageProfile);
       can(Action.Read, SubtitleFile);
@@ -106,7 +103,6 @@ export class CaslAbilityFactory {
       can(Action.Manage, DownloadClient);
       can(Action.Manage, QualityProfile);
       can(Action.Manage, LanguageProfile);
-      can(Action.Manage, Tag);
       can(Action.Manage, SubtitleProvider);
       can(Action.Manage, Library);
     }

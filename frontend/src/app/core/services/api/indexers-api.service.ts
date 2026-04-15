@@ -11,7 +11,6 @@ export interface IndexerRow {
   enableSearch: boolean;
   priority: number;
   enabled: boolean;
-  tags?: { id: number; label: string }[];
 }
 
 export interface CreateIndexerBody {
@@ -22,7 +21,6 @@ export interface CreateIndexerBody {
   enableSearch?: boolean;
   priority?: number;
   enabled?: boolean;
-  tagIds?: number[];
 }
 
 export interface TestIndexerConnectionBody {

@@ -17,7 +17,6 @@ interface DelayProfileRow {
   id: number;
   torrentDelay: number;
   order: number;
-  tags: { id: number; label: string }[];
 }
 
 @Component({
@@ -82,7 +81,6 @@ export class DelayProfilesComponent implements OnInit {
     const body = {
       torrentDelay: this.formDelay(),
       order: this.formOrder(),
-      tagIds: [] as number[],
     };
     const id = this.editingId();
     try {

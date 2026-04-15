@@ -105,6 +105,35 @@ export class ImportRadarrService {
     return `Radarr Import ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
   }
 
+  /**
+   * Hits Radarr's `/api/v3/system/status` to validate the URL + API key. Same
+   * shape as Jellyseerr's test result for symmetric frontend handling.
+   */
+  async testConnection(
+    url: string,
+    apiKey: string,
+  ): Promise<{ ok: boolean; message: string }> {
+    const baseUrl = url.replace(/\/+$/, '');
+    try {
+      const res = await fetch(`${baseUrl}/api/v3/system/status`, {
+        headers: { 'X-Api-Key': apiKey },
+      });
+      if (!res.ok) {
+        return {
+          ok: false,
+          message: `Radarr returned ${res.status} ${res.statusText}`,
+        };
+      }
+      const data = (await res.json()) as { instanceName?: string };
+      return {
+        ok: true,
+        message: `Connecté à ${data.instanceName ?? 'Radarr'}`,
+      };
+    } catch (e) {
+      return { ok: false, message: (e as Error).message };
+    }
+  }
+
   async importFromApi(
     url: string,
     apiKey: string,

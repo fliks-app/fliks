@@ -75,19 +75,21 @@
                 </span>
               </div>
 
-              <p class="text-sm text-base-content/70">
-                <span class="text-base-content/50">{{ 'requests.requested_by' | translate }}</span>
-                @if (auth.canManageUsers()) {
-                  <a
-                    [routerLink]="['/settings/users', row.user.id]"
-                    class="link link-hover link-primary font-medium"
-                  >
-                    {{ row.user.username }}
-                  </a>
-                } @else {
-                  <span class="font-medium text-base-content">{{ row.user.username }}</span>
-                }
-              </p>
+              @if (auth.hasPermission('requests.manage')) {
+                <p class="text-sm text-base-content/70">
+                  <span class="text-base-content/50">{{ 'requests.requested_by' | translate }}</span>
+                  @if (auth.canManageUsers()) {
+                    <a
+                      [routerLink]="['/admin/users', row.user.id]"
+                      class="link link-hover link-primary font-medium"
+                    >
+                      {{ row.user.username }}
+                    </a>
+                  } @else {
+                    <span class="font-medium text-base-content">{{ row.user.username }}</span>
+                  }
+                </p>
+              }
 
               <div class="flex flex-col gap-0.5 text-xs text-base-content/65">
                 <p>
@@ -157,9 +159,11 @@
                     {{ 'requests.decline' | translate }}
                   </button>
                 }
-                <button type="button" class="btn btn-ghost btn-sm" (click)="openEdit(row)">
-                  {{ 'requests.edit' | translate }}
-                </button>
+                @if (canEdit(row)) {
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="openEdit(row)">
+                    {{ 'requests.edit' | translate }}
+                  </button>
+                }
                 @if (auth.hasPermission('requests.manage')) {
                   <button
                     type="button"

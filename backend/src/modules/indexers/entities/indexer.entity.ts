@@ -1,6 +1,5 @@
-import { Entity, Column, ManyToMany, JoinTable } from 'typeorm';
+import { Entity, Column } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
-import { Tag } from '../../tags/entities/tag.entity';
 
 @Entity('indexers')
 export class Indexer extends BaseEntity {
@@ -25,7 +24,4 @@ export class Indexer extends BaseEntity {
   @Column({ default: true })
   enabled: boolean;
 
-  @ManyToMany(() => Tag, { eager: true })
-  @JoinTable({ name: 'indexer_tags' })
-  tags: Tag[];
 }

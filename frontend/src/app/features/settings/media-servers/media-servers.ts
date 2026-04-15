@@ -7,14 +7,11 @@ import {
   viewChild,
   inject,
   OnInit,
-  effect,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { LucideDownload, LucideX } from '@lucide/angular';
+import { LucideX } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
-import { ToastService } from '../../../core/services/toast.service';
-import { SseService } from '../../../core/services/sse.service';
 import {
   MediaServersApiService,
   MediaServerRow,
@@ -23,7 +20,7 @@ import {
 
 @Component({
   selector: 'app-media-servers-settings',
-  imports: [FormsModule, LucideDownload, LucideX, TranslateModule],
+  imports: [FormsModule, LucideX, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-servers.html',
 })
@@ -31,53 +28,7 @@ export class MediaServersSettingsComponent implements OnInit {
   private readonly api = inject(MediaServersApiService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
-  private readonly toast = inject(ToastService);
-  private readonly sse = inject(SseService);
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
-
-  /** Server ids currently running an Emby watch-history import. */
-  readonly importingIds = signal<Set<number>>(new Set());
-  private lastHandledSseEvent: unknown = null;
-
-  private readonly watchHistoryEffect = effect(() => {
-    const event = this.sse.lastEvent();
-    if (!event || event === this.lastHandledSseEvent) return;
-    this.lastHandledSseEvent = event;
-    if (event.type === 'watch-history.import.completed') {
-      this.setImporting(Number(event['serverId']), false);
-      this.toast.success(
-        this.translate.instant(
-          'settings.media_servers.import_watch_history_completed',
-          {
-            users: Number(event['users'] ?? 0),
-            usersCreated: Number(event['usersCreated'] ?? 0),
-            imported: Number(event['imported'] ?? 0),
-            skipped: Number(event['skipped'] ?? 0),
-          },
-        ),
-      );
-    } else if (event.type === 'watch-history.import.failed') {
-      this.setImporting(Number(event['serverId']), false);
-      const err =
-        (event['error'] as string | undefined) ??
-        this.translate.instant('common.error');
-      this.toast.error(
-        this.translate.instant(
-          'settings.media_servers.import_watch_history_failed',
-          { error: err },
-        ),
-      );
-    }
-  });
-
-  private setImporting(serverId: number, running: boolean) {
-    this.importingIds.update((s) => {
-      const next = new Set(s);
-      if (running) next.add(serverId);
-      else next.delete(serverId);
-      return next;
-    });
-  }
 
   readonly serverTypes = signal<MediaServerTypeInfo[]>([]);
   readonly rows = signal<MediaServerRow[]>([]);
@@ -210,29 +161,6 @@ export class MediaServersSettingsComponent implements OnInit {
       // handled by global error interceptor
     } finally {
       this.saving.set(false);
-    }
-  }
-
-  async importWatchHistory(row: MediaServerRow) {
-    if (this.importingIds().has(row.id)) return;
-    this.setImporting(row.id, true);
-    try {
-      await this.api.importWatchHistory(row.id);
-      this.toast.success(
-        this.translate.instant(
-          'settings.media_servers.import_watch_history_started',
-        ),
-      );
-    } catch (err: unknown) {
-      this.setImporting(row.id, false);
-      const httpErr = err as { error?: { message?: string } };
-      this.toast.error(
-        httpErr.error?.message ??
-          this.translate.instant(
-            'settings.media_servers.import_watch_history_failed',
-            { error: '' },
-          ),
-      );
     }
   }
 

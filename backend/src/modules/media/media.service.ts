@@ -17,7 +17,6 @@ import { MediaMetadata } from './entities/media-metadata.entity';
 import { Person } from './entities/person.entity';
 import { MediaCast } from './entities/media-cast.entity';
 import { MediaCrew } from './entities/media-crew.entity';
-import { Tag } from '../tags/entities/tag.entity';
 import { CreateMediaDto } from './dto/create-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
 import { SearchMediaDto } from './dto/search-media.dto';
@@ -62,8 +61,6 @@ export class MediaService {
   constructor(
     @InjectRepository(Media)
     private readonly mediaRepo: Repository<Media>,
-    @InjectRepository(Tag)
-    private readonly tagRepo: Repository<Tag>,
     @InjectRepository(Season)
     private readonly seasonRepo: Repository<Season>,
     @InjectRepository(Episode)
@@ -366,12 +363,7 @@ export class MediaService {
   }
 
   async create(dto: CreateMediaDto): Promise<Media> {
-    const { tagIds, ...rest } = dto;
-    const media = this.mediaRepo.create(rest);
-
-    if (tagIds?.length) {
-      media.tags = await this.tagRepo.findByIds(tagIds);
-    }
+    const media = this.mediaRepo.create(dto);
 
     const saved = await this.mediaRepo.save(media);
     await this.updateSearchVector(saved.id);
@@ -423,7 +415,6 @@ export class MediaService {
       .leftJoinAndSelect('media.rootFolder', 'rootFolder')
       .leftJoinAndSelect('media.qualityProfile', 'qualityProfile')
       .leftJoinAndSelect('media.languageProfile', 'languageProfile')
-      .leftJoinAndSelect('media.tags', 'tags')
       .leftJoinAndSelect('media.files', 'files');
 
     this.applyLibraryAcl(qb, accessibleLibraryIds);
@@ -645,7 +636,6 @@ export class MediaService {
       where: { id },
       relationLoadStrategy: 'query',
       relations: [
-        'tags',
         'seasons',
         'seasons.episodes',
         'files',
@@ -682,13 +672,9 @@ export class MediaService {
 
   async update(id: number, dto: UpdateMediaDto): Promise<Media> {
     const media = await this.findOne(id);
-    const { tagIds, path: _path, ...rest } = dto;
+    const { path: _path, ...rest } = dto;
 
     Object.assign(media, rest);
-
-    if (tagIds !== undefined) {
-      media.tags = tagIds.length ? await this.tagRepo.findByIds(tagIds) : [];
-    }
 
     const saved = await this.mediaRepo.save(media);
     await this.updateSearchVector(saved.id);
@@ -1246,9 +1232,6 @@ export class MediaService {
       qb.andWhere('media.genres @> :genre', {
         genre: JSON.stringify([query.genre]),
       });
-    }
-    if (query.tagId) {
-      qb.andWhere('tags.id = :tagId', { tagId: query.tagId });
     }
     if (query.qualityProfileId) {
       qb.andWhere('media.qualityProfileId = :qpId', {

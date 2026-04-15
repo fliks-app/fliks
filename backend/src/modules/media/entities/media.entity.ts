@@ -4,8 +4,6 @@ import {
   ManyToOne,
   OneToOne,
   OneToMany,
-  ManyToMany,
-  JoinTable,
   JoinColumn,
   RelationId,
   Index,
@@ -21,7 +19,6 @@ import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
 import { RootFolder } from '../../root-folders/entities/root-folder.entity';
 import { Library } from '../../libraries/entities/library.entity';
-import { Tag } from '../../tags/entities/tag.entity';
 import { Season } from './season.entity';
 import { MediaFile } from './media-file.entity';
 import { MediaMetadata } from './media-metadata.entity';
@@ -160,10 +157,6 @@ export class Media extends BaseEntity {
 
   @RelationId((m: Media) => m.languageProfile)
   languageProfileId: number | null;
-
-  @ManyToMany(() => Tag, { eager: true })
-  @JoinTable({ name: 'media_tags' })
-  tags: Tag[];
 
   @OneToOne(() => MediaMetadata, (mm) => mm.media, {
     cascade: true,

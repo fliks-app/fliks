@@ -1,8 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Indexer } from './entities/indexer.entity';
-import { Tag } from '../tags/entities/tag.entity';
 import { CreateIndexerDto } from './dto/create-indexer.dto';
 import { UpdateIndexerDto } from './dto/update-indexer.dto';
 import { TorznabService } from './torznab.service';
@@ -13,8 +12,6 @@ export class IndexersService {
   constructor(
     @InjectRepository(Indexer)
     private readonly indexerRepo: Repository<Indexer>,
-    @InjectRepository(Tag)
-    private readonly tagRepo: Repository<Tag>,
     private readonly torznab: TorznabService,
   ) {}
 
@@ -40,20 +37,15 @@ export class IndexersService {
   }
 
   async create(dto: CreateIndexerDto): Promise<Indexer> {
-    const { tagIds, ...fields } = dto;
     const row = this.indexerRepo.create({
-      name: fields.name,
-      implementation: fields.implementation,
+      name: dto.name,
+      implementation: dto.implementation,
       settings: this.sanitizeSettings(dto.settings),
-      enableRss: fields.enableRss ?? true,
-      enableSearch: fields.enableSearch ?? true,
-      priority: fields.priority ?? 25,
-      enabled: fields.enabled ?? true,
+      enableRss: dto.enableRss ?? true,
+      enableSearch: dto.enableSearch ?? true,
+      priority: dto.priority ?? 25,
+      enabled: dto.enabled ?? true,
     });
-
-    if (tagIds?.length) {
-      row.tags = await this.tagRepo.find({ where: { id: In(tagIds) } });
-    }
 
     return this.indexerRepo.save(row);
   }
@@ -73,22 +65,15 @@ export class IndexersService {
   async update(id: number, dto: UpdateIndexerDto): Promise<Indexer> {
     const ix = await this.findOne(id);
 
-    const { tagIds, ...patch } = dto;
-    if (patch.name !== undefined) ix.name = patch.name;
-    if (patch.implementation !== undefined)
-      ix.implementation = patch.implementation;
-    if (patch.enableRss !== undefined) ix.enableRss = patch.enableRss;
-    if (patch.enableSearch !== undefined) ix.enableSearch = patch.enableSearch;
-    if (patch.priority !== undefined) ix.priority = patch.priority;
-    if (patch.enabled !== undefined) ix.enabled = patch.enabled;
-    if (patch.settings !== undefined)
-      ix.settings = this.sanitizeSettings(patch.settings);
-
-    if (tagIds !== undefined) {
-      ix.tags = tagIds.length
-        ? await this.tagRepo.find({ where: { id: In(tagIds) } })
-        : [];
-    }
+    if (dto.name !== undefined) ix.name = dto.name;
+    if (dto.implementation !== undefined)
+      ix.implementation = dto.implementation;
+    if (dto.enableRss !== undefined) ix.enableRss = dto.enableRss;
+    if (dto.enableSearch !== undefined) ix.enableSearch = dto.enableSearch;
+    if (dto.priority !== undefined) ix.priority = dto.priority;
+    if (dto.enabled !== undefined) ix.enabled = dto.enabled;
+    if (dto.settings !== undefined)
+      ix.settings = this.sanitizeSettings(dto.settings);
 
     return this.indexerRepo.save(ix);
   }

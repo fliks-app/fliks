@@ -1,3 +1,9 @@
+<div class="flex flex-col gap-4">
+  <div>
+    <h1 class="text-2xl font-bold">{{ 'system.tab_streams' | translate }}</h1>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'system.streams_subtitle' | translate }}</p>
+  </div>
+
 @if (loading()) {
   <div class="flex justify-center py-12">
     <span class="loading loading-spinner loading-lg"></span>
@@ -109,3 +115,5 @@
     }
   </div>
 }
+</div>
+

@@ -236,8 +236,14 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'statistics' },
       { path: 'statistics', loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.DashboardComponent) },
-      { path: 'import-disk', loadComponent: () => import('./features/import-disk/import-disk').then((m) => m.ImportDiskComponent) },
-      { path: 'import', loadComponent: () => import('./features/import/import').then((m) => m.ImportComponent) },
+      {
+        path: 'users/:id',
+        loadComponent: () => import('./features/settings/users/user-detail/user-detail').then((m) => m.UserDetailComponent),
+        children: [
+          { path: '', loadComponent: () => import('./features/settings/users/user-detail/user-general').then((m) => m.UserGeneralComponent) },
+          { path: 'requests', loadComponent: () => import('./features/settings/users/user-detail/user-requests').then((m) => m.UserRequestsComponent) },
+        ],
+      },
       {
         path: 'system',
         loadComponent: () => import('./features/system/system').then((m) => m.SystemComponent),
@@ -245,9 +251,9 @@ export const routes: Routes = [
           { path: '', loadComponent: () => import('./features/system/status/status').then((m) => m.SystemStatusComponent) },
           { path: 'backups', loadComponent: () => import('./features/system/backups/backups').then((m) => m.SystemBackupsComponent) },
           { path: 'logs', loadComponent: () => import('./features/system/logs/logs').then((m) => m.SystemLogsComponent) },
-          { path: 'streams', loadComponent: () => import('./features/system/streams/streams').then((m) => m.SystemStreamsComponent) },
         ],
       },
+      { path: 'streams', loadComponent: () => import('./features/system/streams/streams').then((m) => m.SystemStreamsComponent) },
       {
         path: 'settings',
         loadComponent: () => import('./features/settings/settings-shell').then((m) => m.SettingsShellComponent),
@@ -264,17 +270,9 @@ export const routes: Routes = [
           { path: 'blocklist', loadComponent: () => import('./features/settings/blocklist/blocklist').then((m) => m.BlocklistSettingsComponent) },
           { path: 'notifications', loadComponent: () => import('./features/settings/notifications/notifications').then((m) => m.NotificationsSettingsComponent) },
           { path: 'media-servers', loadComponent: () => import('./features/settings/media-servers/media-servers').then((m) => m.MediaServersSettingsComponent) },
+          { path: 'data-imports', loadComponent: () => import('./features/settings/data-imports/data-imports').then((m) => m.DataImportsSettingsComponent) },
           { path: 'libraries', loadComponent: () => import('./features/settings/libraries/libraries').then((m) => m.LibrariesSettingsComponent) },
-          { path: 'tags', loadComponent: () => import('./features/settings/tags/tags').then((m) => m.TagsSettingsComponent) },
           { path: 'users', loadComponent: () => import('./features/settings/users/users').then((m) => m.UsersSettingsComponent) },
-          {
-            path: 'users/:id',
-            loadComponent: () => import('./features/settings/users/user-detail/user-detail').then((m) => m.UserDetailComponent),
-            children: [
-              { path: '', loadComponent: () => import('./features/settings/users/user-detail/user-general').then((m) => m.UserGeneralComponent) },
-              { path: 'requests', loadComponent: () => import('./features/settings/users/user-detail/user-requests').then((m) => m.UserRequestsComponent) },
-            ],
-          },
           { path: 'roles', loadComponent: () => import('./features/settings/roles/roles').then((m) => m.RolesSettingsComponent) },
           { path: 'subtitle-providers', loadComponent: () => import('./features/settings/subtitle-providers/subtitle-providers').then((m) => m.SubtitleProvidersSettingsComponent) },
           {

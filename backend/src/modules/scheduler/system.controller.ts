@@ -253,6 +253,18 @@ export class SystemController {
     });
   }
 
+  @Post('test-radarr-connection')
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
+  testRadarrConnection(@Body() body: { url: string; apiKey: string }) {
+    return this.importRadarrService.testConnection(body.url, body.apiKey);
+  }
+
+  @Post('test-sonarr-connection')
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
+  testSonarrConnection(@Body() body: { url: string; apiKey: string }) {
+    return this.importSonarrService.testConnection(body.url, body.apiKey);
+  }
+
   @Post('import-radarr-api')
   @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
   importRadarrApi(@Body() dto: ImportApiDto): Promise<ApiImportResult> {

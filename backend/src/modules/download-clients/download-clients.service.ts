@@ -1,8 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { DownloadClient } from './entities/download-client.entity';
-import { Tag } from '../tags/entities/tag.entity';
 import { DownloadHistory } from '../media/entities/download-history.entity';
 import { Media } from '../media/entities/media.entity';
 import { QbittorrentService, QbittorrentTorrent } from './qbittorrent.service';
@@ -53,8 +52,6 @@ export class DownloadClientsService {
   constructor(
     @InjectRepository(DownloadClient)
     private readonly repo: Repository<DownloadClient>,
-    @InjectRepository(Tag)
-    private readonly tagRepo: Repository<Tag>,
     @InjectRepository(DownloadHistory)
     private readonly historyRepo: Repository<DownloadHistory>,
     private readonly qbittorrent: QbittorrentService,
@@ -67,17 +64,13 @@ export class DownloadClientsService {
   }
 
   async create(dto: CreateDownloadClientDto): Promise<DownloadClient> {
-    const { tagIds, ...fields } = dto;
     const row = this.repo.create({
-      name: fields.name,
-      implementation: fields.implementation,
-      settings: fields.settings ?? {},
-      enabled: fields.enabled ?? true,
-      priority: fields.priority ?? 1,
+      name: dto.name,
+      implementation: dto.implementation,
+      settings: dto.settings ?? {},
+      enabled: dto.enabled ?? true,
+      priority: dto.priority ?? 1,
     });
-    if (tagIds?.length) {
-      row.tags = await this.tagRepo.find({ where: { id: In(tagIds) } });
-    }
     return this.repo.save(row);
   }
 
@@ -96,18 +89,12 @@ export class DownloadClientsService {
     dto: UpdateDownloadClientDto,
   ): Promise<DownloadClient> {
     const dc = await this.findOne(id);
-    const { tagIds, ...patch } = dto;
-    if (patch.name !== undefined) dc.name = patch.name;
-    if (patch.implementation !== undefined)
-      dc.implementation = patch.implementation;
-    if (patch.settings !== undefined) dc.settings = patch.settings;
-    if (patch.enabled !== undefined) dc.enabled = patch.enabled;
-    if (patch.priority !== undefined) dc.priority = patch.priority;
-    if (tagIds !== undefined) {
-      dc.tags = tagIds.length
-        ? await this.tagRepo.find({ where: { id: In(tagIds) } })
-        : [];
-    }
+    if (dto.name !== undefined) dc.name = dto.name;
+    if (dto.implementation !== undefined)
+      dc.implementation = dto.implementation;
+    if (dto.settings !== undefined) dc.settings = dto.settings;
+    if (dto.enabled !== undefined) dc.enabled = dto.enabled;
+    if (dto.priority !== undefined) dc.priority = dto.priority;
     return this.repo.save(dc);
   }
 

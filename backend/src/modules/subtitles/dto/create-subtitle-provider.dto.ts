@@ -4,7 +4,6 @@ import {
   IsNumber,
   IsOptional,
   IsObject,
-  IsArray,
   IsIn,
   Min,
 } from 'class-validator';
@@ -32,8 +31,4 @@ export class CreateSubtitleProviderDto {
   @IsOptional()
   priority?: number;
 
-  @IsArray()
-  @IsNumber({}, { each: true })
-  @IsOptional()
-  tagIds?: number[];
 }

@@ -9,7 +9,6 @@ import { MediaMetadata } from './entities/media-metadata.entity';
 import { Person } from './entities/person.entity';
 import { MediaCast } from './entities/media-cast.entity';
 import { MediaCrew } from './entities/media-crew.entity';
-import { Tag } from '../tags/entities/tag.entity';
 import { MediaService } from './media.service';
 import { MediaController } from './media.controller';
 import { AuthModule } from '../auth/auth.module';
@@ -44,7 +43,6 @@ import { StreamingModule } from '../streaming/streaming.module';
       Person,
       MediaCast,
       MediaCrew,
-      Tag,
       RootFolder,
       Library,
     ]),

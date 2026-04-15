@@ -90,6 +90,35 @@ export class ImportSonarrService {
     return `Sonarr Import ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
   }
 
+  /**
+   * Hits Sonarr's `/api/v3/system/status` to validate the URL + API key. Same
+   * shape as Jellyseerr / Radarr test results for symmetric frontend handling.
+   */
+  async testConnection(
+    url: string,
+    apiKey: string,
+  ): Promise<{ ok: boolean; message: string }> {
+    const baseUrl = url.replace(/\/+$/, '');
+    try {
+      const res = await fetch(`${baseUrl}/api/v3/system/status`, {
+        headers: { 'X-Api-Key': apiKey },
+      });
+      if (!res.ok) {
+        return {
+          ok: false,
+          message: `Sonarr returned ${res.status} ${res.statusText}`,
+        };
+      }
+      const data = (await res.json()) as { instanceName?: string };
+      return {
+        ok: true,
+        message: `Connecté à ${data.instanceName ?? 'Sonarr'}`,
+      };
+    } catch (e) {
+      return { ok: false, message: (e as Error).message };
+    }
+  }
+
   async importFromApi(
     url: string,
     apiKey: string,

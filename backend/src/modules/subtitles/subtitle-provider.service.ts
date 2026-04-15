@@ -1,8 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 import { SubtitleProvider } from './entities/subtitle-provider.entity';
-import { Tag } from '../tags/entities/tag.entity';
 import { CreateSubtitleProviderDto } from './dto/create-subtitle-provider.dto';
 import { UpdateSubtitleProviderDto } from './dto/update-subtitle-provider.dto';
 import { SubtitleProviderFactory } from './providers/subtitle-provider.factory';
@@ -12,8 +11,6 @@ export class SubtitleProviderService {
   constructor(
     @InjectRepository(SubtitleProvider)
     private readonly repo: Repository<SubtitleProvider>,
-    @InjectRepository(Tag)
-    private readonly tagRepo: Repository<Tag>,
     private readonly factory: SubtitleProviderFactory,
   ) {}
 
@@ -25,11 +22,6 @@ export class SubtitleProviderService {
       enabled: dto.enabled ?? true,
       priority: dto.priority ?? 25,
     });
-    if (dto.tagIds?.length) {
-      provider.tags = await this.tagRepo.find({
-        where: { id: In(dto.tagIds) },
-      });
-    }
     return this.repo.save(provider);
   }
 
@@ -61,11 +53,6 @@ export class SubtitleProviderService {
     if (dto.settings !== undefined) provider.settings = dto.settings;
     if (dto.enabled !== undefined) provider.enabled = dto.enabled;
     if (dto.priority !== undefined) provider.priority = dto.priority;
-    if (dto.tagIds) {
-      provider.tags = await this.tagRepo.find({
-        where: { id: In(dto.tagIds) },
-      });
-    }
     return this.repo.save(provider);
   }
 

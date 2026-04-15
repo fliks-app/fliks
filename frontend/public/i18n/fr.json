@@ -419,7 +419,6 @@
     "back": "Retour à la liste",
     "refresh_metadata": "Rafraîchir les métadonnées",
     "edit_profiles": "Profils",
-    "path_label": "Chemin",
     "path_label": "Chemin du fichier",
     "library_label": "Bibliothèque",
     "no_library": "Aucune bibliothèque",
@@ -614,6 +613,7 @@
     "delete_success": "Demande supprimée.",
     "load_more": "Charger plus",
     "requested_by": "Demandé par ",
+    "media_title_label": "Titre",
     "date_label": "Date · ",
     "seasons_label": "Saisons",
     "status": {
@@ -679,6 +679,7 @@
     "tab_backups": "Sauvegardes",
     "tab_logs": "Journaux",
     "tab_streams": "Activités vidéos",
+    "streams_subtitle": "Sessions de lecture en cours sur l'ensemble des clients.",
     "commands_title": "Déclencher une tâche",
     "cmd_rss_sync": "Synchronisation RSS",
     "cmd_search_missing": "Rechercher les manquants",
@@ -761,6 +762,7 @@
     "copy": "Copier",
     "copied": "Copié",
     "settings_saved": "Paramètres enregistrés",
+    "saved": "Enregistré",
     "selections_cleared": "Sélections effacées"
   },
   "downloads": {
@@ -794,9 +796,9 @@
       "blocklist": "Liste de blocage",
       "notifications": "Notifications",
       "media_servers": "Serveurs de medias",
+      "data_imports": "Imports",
       "libraries": "Bibliothèques",
       "cleanup_profiles": "Profils de nettoyage",
-      "tags": "Tags",
       "users": "Utilisateurs",
       "roles": "Rôles",
       "delay_profiles": "Profils de délai",
@@ -1135,6 +1137,31 @@
       "import_watch_history_completed": "{{users}} utilisateur(s) ({{usersCreated}} créé(s)) — {{imported}} visionnage(s) importé(s), {{skipped}} ignoré(s)",
       "import_watch_history_failed": "Échec de l'import Emby : {{error}}"
     },
+    "data_imports": {
+      "title": "Imports",
+      "subtitle": "Importer des données depuis des services externes (Jellyseerr, Emby…).",
+      "test": "Tester la connexion",
+      "emby": {
+        "section": "Emby — Historique de visionnage",
+        "description": "Pour chaque serveur Emby configuré, importer l'historique de lecture (films vus, épisodes en cours, items masqués) dans Suitarr.",
+        "empty": "Aucun serveur Emby configuré. Ajoute-en un dans Serveurs de médias.",
+        "import_btn": "Importer l'historique",
+        "import_started": "Import lancé pour « {{name}} »",
+        "import_completed": "{{users}} utilisateur(s) ({{usersCreated}} créé(s)) — {{imported}} visionnage(s) importé(s), {{skipped}} ignoré(s)",
+        "import_failed": "Échec de l'import Emby : {{error}}"
+      },
+      "jellyseerr": {
+        "section": "Jellyseerr",
+        "description": "Importer les demandes de films et séries faites depuis Jellyseerr (ou Overseerr).",
+        "url": "URL Jellyseerr",
+        "api_key": "Clé API Jellyseerr",
+        "test": "Tester la connexion",
+        "import_requests": "Importer les demandes",
+        "import_started": "Import Jellyseerr lancé",
+        "import_completed": "{{users}} utilisateur(s) ({{usersCreated}} créé(s)) — {{imported}} demande(s) importée(s), {{updated}} mise(s) à jour, {{skipped}} ignorée(s)",
+        "import_failed": "Échec de l'import Jellyseerr : {{error}}"
+      }
+    },
     "libraries": {
       "title": "Bibliothèques",
       "subtitle": "Une bibliothèque regroupe un ou plusieurs chemins disque, un type de média et qui peut y accéder.",
@@ -1173,17 +1200,6 @@
       "media_type_movie": "Films",
       "media_type_series": "Séries",
       "inaccessible": "Inaccessible"
-    },
-    "tags": {
-      "title": "Tags",
-      "subtitle": "Tags applicables aux médias, indexeurs et profils.",
-      "new_placeholder": "Nouveau tag…",
-      "add": "Ajouter",
-      "empty": "Aucun tag.",
-      "load_error": "Impossible de charger les tags.",
-      "add_error": "Impossible d'ajouter le tag.",
-      "save_error": "Impossible d'enregistrer.",
-      "confirm_delete": "Supprimer le tag « {{label}} » ?"
     },
     "users": {
       "title": "Utilisateurs",
@@ -1280,7 +1296,6 @@
       "empty": "Aucun profil de délai. Les releases seront téléchargées immédiatement.",
       "col_delay": "Délai",
       "col_order": "Priorité",
-      "col_tags": "Tags",
       "all_media": "Tous les médias",
       "editor_create": "Nouveau profil de délai",
       "editor_edit": "Modifier le profil de délai",

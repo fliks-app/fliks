@@ -192,7 +192,13 @@ export class UsersService implements OnModuleInit {
 
     // Manager-only fields
     if (isManager) {
-      if (dto.roleId !== undefined) target.roleId = dto.roleId;
+      if (dto.roleId !== undefined) {
+        target.roleId = dto.roleId;
+        // Sync the eager-loaded relation too — otherwise TypeORM rewrites the
+        // FK from the old `userRole.id` during `save()`, silently undoing the
+        // role change.
+        target.userRole = dto.roleId ? ({ id: dto.roleId } as Role) : null;
+      }
       if (dto.isAdmin !== undefined) target.isAdmin = dto.isAdmin;
       if (dto.enabled !== undefined) target.enabled = dto.enabled;
     } else if (

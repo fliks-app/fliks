@@ -32,6 +32,12 @@ export interface UpdateRequestBody {
   libraryId?: number;
 }
 
+export interface RequestMedia {
+  id: number;
+  title: string;
+  year: number | null;
+}
+
 export interface FliksRequestRow {
   id: number;
   userId: number;
@@ -47,6 +53,9 @@ export interface FliksRequestRow {
   languageProfileId: number | null;
   libraryId: number | null;
   mediaId: number | null;
+  /** Joined media row when linked. Use `media?.title` to display the live
+   *  title (the cached `title` field may be stale or empty). */
+  media: RequestMedia | null;
   seasons: number[] | null;
   createdAt: string;
   updatedAt: string;

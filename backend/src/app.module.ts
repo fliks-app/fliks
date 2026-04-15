@@ -5,7 +5,6 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { MediaModule } from './modules/media/media.module';
 import { ProfilesModule } from './modules/profiles/profiles.module';
-import { TagsModule } from './modules/tags/tags.module';
 import { MetadataProvidersModule } from './modules/metadata-providers/metadata-providers.module';
 import { IndexersModule } from './modules/indexers/indexers.module';
 import { DownloadClientsModule } from './modules/download-clients/download-clients.module';
@@ -25,6 +24,7 @@ import { MarkersModule } from './modules/markers/markers.module';
 import { PersonsModule } from './modules/persons/persons.module';
 import { DownloadsModule } from './modules/downloads/downloads.module';
 import { ImageModule } from './modules/images/image.module';
+import { JellyseerrModule } from './modules/jellyseerr/jellyseerr.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 
@@ -68,7 +68,6 @@ import { join } from 'path';
     PersonsModule,
     DownloadsModule,
     ProfilesModule,
-    TagsModule,
     MetadataProvidersModule,
     IndexersModule,
     DownloadClientsModule,
@@ -85,6 +84,7 @@ import { join } from 'path';
     StreamingModule,
     ImageModule,
     MarkersModule,
+    JellyseerrModule,
   ],
 })
 export class AppModule {}

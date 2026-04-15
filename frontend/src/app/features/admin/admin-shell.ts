@@ -5,9 +5,8 @@ import { ServerConfigService } from '../../core/services/server-config.service';
 import { SettingsDrawerComponent } from '../../shared/components/settings-drawer/settings-drawer';
 import {
   LucideLayoutGrid,
-  LucideUpload,
-  LucideArrowRightLeft,
   LucideBarChart3,
+  LucidePlay,
   LucideShield,
 } from '@lucide/angular';
 
@@ -16,8 +15,8 @@ import {
   imports: [
     RouterLink, RouterLinkActive, TranslateModule,
     SettingsDrawerComponent,
-    LucideLayoutGrid, LucideUpload,
-    LucideArrowRightLeft, LucideBarChart3, LucideShield,
+    LucideLayoutGrid, LucidePlay,
+    LucideBarChart3, LucideShield,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './admin-shell.html',

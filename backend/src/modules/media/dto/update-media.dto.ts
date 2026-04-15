@@ -84,8 +84,4 @@ export class UpdateMediaDto {
   @IsOptional()
   languageProfileId?: number;
 
-  @IsArray()
-  @IsNumber({}, { each: true })
-  @IsOptional()
-  tagIds?: number[];
 }

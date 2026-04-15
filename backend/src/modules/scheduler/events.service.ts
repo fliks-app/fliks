@@ -88,7 +88,17 @@ export type SseEvent =
       serverId: number;
       serverName: string;
       error: string;
-    };
+    }
+  | { type: 'jellyseerr.import.started' }
+  | {
+      type: 'jellyseerr.import.completed';
+      users: number;
+      usersCreated: number;
+      imported: number;
+      updated: number;
+      skipped: number;
+    }
+  | { type: 'jellyseerr.import.failed'; error: string };
 
 @Injectable()
 export class EventsService {

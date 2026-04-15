@@ -11,10 +11,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { DelayProfile } from './entities/delay-profile.entity';
 import { CreateDelayProfileDto } from './dto/create-delay-profile.dto';
-import { Tag } from '../tags/entities/tag.entity';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
@@ -26,8 +25,6 @@ export class DelayProfilesController {
   constructor(
     @InjectRepository(DelayProfile)
     private readonly repo: Repository<DelayProfile>,
-    @InjectRepository(Tag)
-    private readonly tagRepo: Repository<Tag>,
   ) {}
 
   @Get()
@@ -43,9 +40,6 @@ export class DelayProfilesController {
       torrentDelay: dto.torrentDelay,
       order: dto.order ?? 1,
     });
-    if (dto.tagIds?.length) {
-      row.tags = await this.tagRepo.find({ where: { id: In(dto.tagIds) } });
-    }
     return this.repo.save(row);
   }
 
@@ -59,11 +53,6 @@ export class DelayProfilesController {
     if (!row) throw new NotFoundException(`DelayProfile #${id} not found`);
     row.torrentDelay = dto.torrentDelay;
     row.order = dto.order ?? row.order;
-    if (dto.tagIds !== undefined) {
-      row.tags = dto.tagIds.length
-        ? await this.tagRepo.find({ where: { id: In(dto.tagIds) } })
-        : [];
-    }
     return this.repo.save(row);
   }
 

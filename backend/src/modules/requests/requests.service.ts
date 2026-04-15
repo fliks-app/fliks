@@ -222,6 +222,9 @@ export class RequestsService {
       .createQueryBuilder('r')
       .leftJoinAndSelect('r.user', 'user')
       .leftJoinAndSelect('r.approvedBy', 'approvedBy')
+      // Joined so the UI can display the live media title (the cached
+      // `request.title` may be empty for Jellyseerr-imported orphans).
+      .leftJoinAndSelect('r.media', 'media')
       .orderBy('r.createdAt', 'DESC');
 
     if (!this.canManageRequests(user)) {
@@ -244,7 +247,7 @@ export class RequestsService {
   async findOne(id: number, user: User): Promise<FliksRequest> {
     const row = await this.requestRepo.findOne({
       where: { id },
-      relations: ['user', 'approvedBy', 'comments', 'comments.user'],
+      relations: ['user', 'approvedBy', 'media', 'comments', 'comments.user'],
     });
     if (!row) throw new NotFoundException(`Request #${id} not found`);
     if (!this.canManageRequests(user) && row.userId !== user.id) {

@@ -128,7 +128,20 @@ export class RequestsComponent implements OnInit {
   canCancel(row: FliksRequestRow): boolean {
     if (row.status !== 'pending') return false;
     const u = this.auth.user();
-    return !!u && row.userId === u.id;
+    if (!u) return false;
+    // Prefer `row.user.id` (always populated via leftJoinAndSelect) over the
+    // `@RelationId` virtual `row.userId` which can be missing depending on
+    // how TypeORM serializes the entity.
+    const ownerId = row.user?.id ?? row.userId;
+    return ownerId === u.id;
+  }
+
+  /** Show Edit button when: caller is a manager OR owns this pending request.
+   *  Same condition as `canCancel` — a user who can cancel can also tweak
+   *  quality / language profile before approval. */
+  canEdit(row: FliksRequestRow): boolean {
+    if (this.auth.hasPermission('requests.manage')) return true;
+    return this.canCancel(row);
   }
 
   /** Colonne d’actions : supprimer seul (hors pending / refus avec motif gérés ailleurs). */

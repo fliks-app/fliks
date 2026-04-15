@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsArray, Min } from 'class-validator';
+import { IsNumber, IsOptional, Min } from 'class-validator';
 
 export class CreateDelayProfileDto {
   @IsNumber()
@@ -9,8 +9,4 @@ export class CreateDelayProfileDto {
   @IsOptional()
   order?: number;
 
-  @IsArray()
-  @IsNumber({}, { each: true })
-  @IsOptional()
-  tagIds?: number[];
 }

@@ -86,7 +86,6 @@ export interface Media {
   inCinemas?: string | null;
   digitalRelease?: string | null;
   physicalRelease?: string | null;
-  tags: { id: number; label: string }[];
   seasons?: Season[];
   files?: { id: number; quality: string; relativePath: string; size: number; episodeId?: number | null; streamInfo?: MediaFileInfo | null }[];
   qualityProfile?: QualityProfileBrief | null;
@@ -138,7 +137,6 @@ export interface SearchParams {
   monitored?: boolean;
   year?: number;
   genre?: string;
-  tagId?: number;
   sortBy?: string;
   sortOrder?: 'ASC' | 'DESC';
   page?: number;

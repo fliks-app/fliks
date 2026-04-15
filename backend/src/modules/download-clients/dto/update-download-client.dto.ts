@@ -4,7 +4,6 @@ import {
   IsNumber,
   IsOptional,
   IsObject,
-  IsArray,
   IsIn,
   Min,
 } from 'class-validator';
@@ -31,8 +30,4 @@ export class UpdateDownloadClientDto {
   @IsOptional()
   priority?: number;
 
-  @IsArray()
-  @IsNumber({}, { each: true })
-  @IsOptional()
-  tagIds?: number[];
 }

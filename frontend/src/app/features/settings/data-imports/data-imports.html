@@ -1,0 +1,488 @@
+<div class="flex flex-col gap-6">
+  <div>
+    <h1 class="text-2xl font-bold">{{ 'settings.data_imports.title' | translate }}</h1>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'settings.data_imports.subtitle' | translate }}</p>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else {
+    <!-- Disk import (manual scan + match) -->
+    <section class="card bg-base-200/60 border border-base-200">
+      <div class="card-body gap-4">
+        <div>
+          <h2 class="card-title text-lg">{{ 'import_disk.title' | translate }}</h2>
+          <p class="text-sm text-base-content/60 mt-1">{{ 'import_disk.subtitle' | translate }}</p>
+        </div>
+        <app-import-disk />
+      </div>
+    </section>
+
+    <!-- Emby — watch history per server -->
+    <section class="card bg-base-200/60 border border-base-200">
+      <div class="card-body gap-4">
+        <div>
+          <h2 class="card-title text-lg">{{ 'settings.data_imports.emby.section' | translate }}</h2>
+          <p class="text-sm text-base-content/60 mt-1">{{ 'settings.data_imports.emby.description' | translate }}</p>
+        </div>
+
+        @if (embyServers().length === 0) {
+          <p class="text-sm text-base-content/50">
+            {{ 'settings.data_imports.emby.empty' | translate }}
+          </p>
+        } @else {
+          <div class="overflow-x-auto rounded-lg border border-base-200">
+            <table class="table table-zebra table-sm">
+              <thead>
+                <tr>
+                  <th>{{ 'settings.media_servers.col_name' | translate }}</th>
+                  <th>{{ 'settings.media_servers.col_url' | translate }}</th>
+                  <th class="text-center">{{ 'settings.media_servers.col_enabled' | translate }}</th>
+                  <th class="text-end w-48"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (server of embyServers(); track server.id) {
+                  <tr>
+                    <td class="font-medium">{{ server.name }}</td>
+                    <td class="text-sm text-base-content/60 truncate max-w-[16rem]">{{ server.url }}</td>
+                    <td class="text-center">
+                      @if (server.enabled) {
+                        <span class="badge badge-success badge-sm">{{ 'common.yes' | translate }}</span>
+                      } @else {
+                        <span class="badge badge-ghost badge-sm">{{ 'common.no' | translate }}</span>
+                      }
+                    </td>
+                    <td class="text-end">
+                      <button
+                        type="button"
+                        class="btn btn-primary btn-sm gap-1.5"
+                        [disabled]="embyImportingIds().has(server.id) || !server.enabled"
+                        (click)="importEmbyWatchHistory(server)"
+                      >
+                        @if (embyImportingIds().has(server.id)) {
+                          <span class="loading loading-spinner loading-xs"></span>
+                        } @else {
+                          <svg lucideDownload class="h-4 w-4"></svg>
+                        }
+                        {{ 'settings.data_imports.emby.import_btn' | translate }}
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    </section>
+
+    <!-- Jellyseerr -->
+    <section class="card bg-base-200/60 border border-base-200">
+      <div class="card-body gap-4">
+        <div>
+          <h2 class="card-title text-lg">{{ 'settings.data_imports.jellyseerr.section' | translate }}</h2>
+          <p class="text-sm text-base-content/60 mt-1">{{ 'settings.data_imports.jellyseerr.description' | translate }}</p>
+        </div>
+
+        <label class="form-control w-full max-w-xl">
+          <span class="label-text">{{ 'settings.data_imports.jellyseerr.url' | translate }}</span>
+          <input
+            type="url"
+            class="input input-bordered input-sm w-full"
+            placeholder="http://jellyseerr:5055"
+            [ngModel]="jellyseerrUrl()"
+            (ngModelChange)="jellyseerrUrl.set($event)"
+          />
+        </label>
+
+        <label class="form-control w-full max-w-xl">
+          <span class="label-text">{{ 'settings.data_imports.jellyseerr.api_key' | translate }}</span>
+          <input
+            type="password"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="jellyseerrApiKey()"
+            (ngModelChange)="jellyseerrApiKey.set($event)"
+          />
+        </label>
+
+        <div class="flex flex-wrap gap-2 pt-2">
+          <button
+            type="button"
+            class="btn btn-outline btn-sm"
+            [disabled]="!canSubmitJellyseerr || jellyseerrSaving()"
+            (click)="saveJellyseerrCredentials()"
+          >
+            @if (jellyseerrSaving()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'common.save' | translate }}
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-outline btn-sm"
+            [disabled]="!canSubmitJellyseerr || jellyseerrTesting()"
+            (click)="testJellyseerr()"
+          >
+            @if (jellyseerrTesting()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'settings.data_imports.jellyseerr.test' | translate }}
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            [disabled]="!canSubmitJellyseerr || jellyseerrImporting()"
+            (click)="importJellyseerrRequests()"
+          >
+            @if (jellyseerrImporting()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            } @else {
+              <svg lucideDownload class="h-4 w-4"></svg>
+            }
+            {{ 'settings.data_imports.jellyseerr.import_requests' | translate }}
+          </button>
+        </div>
+
+        @if (jellyseerrTestResult(); as tr) {
+          <div
+            role="alert"
+            class="alert text-sm py-2"
+            [class.alert-success]="tr.ok"
+            [class.alert-error]="!tr.ok"
+          >
+            {{ tr.message }}
+          </div>
+        }
+
+        @if (jellyseerrLastSummary(); as s) {
+          <div role="alert" class="alert alert-info text-sm py-2">
+            {{ 'settings.data_imports.jellyseerr.import_completed' | translate: s }}
+          </div>
+        }
+      </div>
+    </section>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Radarr -->
+      <section class="card bg-base-200/60 border border-base-200">
+        <div class="card-body gap-4">
+          <div>
+            <h2 class="card-title text-lg">{{ 'import.radarr_title' | translate }}</h2>
+            <p class="text-sm text-base-content/60 mt-1">{{ 'import.radarr_desc' | translate }}</p>
+          </div>
+
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'import.url_label' | translate }}</span>
+            <input
+              type="url"
+              class="input input-bordered input-sm w-full"
+              [placeholder]="'import.radarr_url_placeholder' | translate"
+              [ngModel]="radarrUrl()"
+              (ngModelChange)="radarrUrl.set($event)"
+            />
+          </label>
+
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'import.api_key_label' | translate }}</span>
+            <input
+              type="password"
+              class="input input-bordered input-sm w-full"
+              [placeholder]="'import.api_key_placeholder' | translate"
+              [ngModel]="radarrApiKey()"
+              (ngModelChange)="radarrApiKey.set($event)"
+            />
+          </label>
+
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'import.mode_label' | translate }}</span>
+            <select
+              class="select select-bordered select-sm w-full"
+              [ngModel]="radarrMode()"
+              (ngModelChange)="radarrMode.set($event)"
+            >
+              <option value="skip">{{ 'import.mode_skip' | translate }}</option>
+              <option value="update">{{ 'import.mode_update' | translate }}</option>
+            </select>
+          </label>
+
+          <label class="label cursor-pointer justify-start gap-3">
+            <input
+              type="checkbox"
+              class="toggle toggle-sm"
+              [ngModel]="radarrImportSubs()"
+              (ngModelChange)="radarrImportSubs.set($event)"
+            />
+            <span class="label-text">{{ 'import.import_subtitles' | translate }}</span>
+          </label>
+
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.libraries.import_target' | translate }}</span>
+            <select
+              class="select select-bordered select-sm w-full"
+              [ngModel]="radarrLibrary()"
+              (ngModelChange)="radarrLibrary.set($event)"
+            >
+              <option [ngValue]="null">—</option>
+              @for (l of movieLibraries(); track l.id) {
+                <option [ngValue]="l.id">{{ l.name }}</option>
+              }
+              <option [ngValue]="'new'">{{ 'settings.libraries.import_target_new' | translate }}</option>
+            </select>
+            @if (radarrLibrary() === 'new') {
+              <input
+                type="text"
+                class="input input-bordered input-sm w-full mt-2"
+                [placeholder]="'settings.libraries.import_new_name_placeholder' | translate"
+                [ngModel]="radarrNewLibraryName()"
+                (ngModelChange)="radarrNewLibraryName.set($event)"
+              />
+            }
+          </label>
+
+          <div class="flex flex-wrap gap-2 pt-2">
+            <button
+              type="button"
+              class="btn btn-outline btn-sm"
+              [disabled]="!canSubmitRadarr || radarrSaving()"
+              (click)="saveRadarrCredentials()"
+            >
+              @if (radarrSaving()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+              {{ 'common.save' | translate }}
+            </button>
+
+            <button
+              type="button"
+              class="btn btn-outline btn-sm"
+              [disabled]="!canSubmitRadarr || radarrTesting()"
+              (click)="testRadarr()"
+            >
+              @if (radarrTesting()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+              {{ 'settings.data_imports.test' | translate }}
+            </button>
+
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              [disabled]="radarrLoading() || !canSubmitRadarr"
+              (click)="importRadarr()"
+            >
+              @if (radarrLoading()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              } @else {
+                <svg lucideDownload class="h-4 w-4"></svg>
+              }
+              {{ 'import.import_btn' | translate }}
+            </button>
+          </div>
+
+          @if (radarrTestResult(); as tr) {
+            <div
+              role="alert"
+              class="alert text-sm py-2"
+              [class.alert-success]="tr.ok"
+              [class.alert-error]="!tr.ok"
+            >
+              {{ tr.message }}
+            </div>
+          }
+
+          @if (radarrError()) {
+            <div role="alert" class="alert alert-error text-sm">{{ radarrError() }}</div>
+          }
+
+          @if (radarrResult(); as r) {
+            <div
+              role="alert"
+              class="alert text-sm"
+              [class.alert-success]="r.errors.length === 0"
+              [class.alert-warning]="r.errors.length > 0"
+            >
+              <div>
+                <p>{{ 'import.result_imported' | translate: { count: r.imported } }}</p>
+                @if (r.subtitlesImported) {
+                  <p class="mt-1">{{ 'import.result_subtitles' | translate: { count: r.subtitlesImported } }}</p>
+                }
+                @if (r.qualityProfilesCreated.length) {
+                  <p class="mt-1">{{ 'import.quality_profiles_created' | translate: { count: r.qualityProfilesCreated.length } }}: {{ r.qualityProfilesCreated.join(', ') }}</p>
+                }
+                @if (r.rootFoldersCreated.length) {
+                  <p class="mt-1">{{ 'import.root_folders_created' | translate: { count: r.rootFoldersCreated.length } }}: {{ r.rootFoldersCreated.join(', ') }}</p>
+                }
+                @if (r.errors.length) {
+                  <p class="mt-1">{{ r.errors.length }} {{ 'import.result_errors' | translate }}: {{ r.errors.slice(0, 5).join(', ') }}</p>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </section>
+
+      <!-- Sonarr -->
+      <section class="card bg-base-200/60 border border-base-200">
+        <div class="card-body gap-4">
+          <div>
+            <h2 class="card-title text-lg">{{ 'import.sonarr_title' | translate }}</h2>
+            <p class="text-sm text-base-content/60 mt-1">{{ 'import.sonarr_desc' | translate }}</p>
+          </div>
+
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'import.url_label' | translate }}</span>
+            <input
+              type="url"
+              class="input input-bordered input-sm w-full"
+              [placeholder]="'import.sonarr_url_placeholder' | translate"
+              [ngModel]="sonarrUrl()"
+              (ngModelChange)="sonarrUrl.set($event)"
+            />
+          </label>
+
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'import.api_key_label' | translate }}</span>
+            <input
+              type="password"
+              class="input input-bordered input-sm w-full"
+              [placeholder]="'import.api_key_placeholder' | translate"
+              [ngModel]="sonarrApiKey()"
+              (ngModelChange)="sonarrApiKey.set($event)"
+            />
+          </label>
+
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'import.mode_label' | translate }}</span>
+            <select
+              class="select select-bordered select-sm w-full"
+              [ngModel]="sonarrMode()"
+              (ngModelChange)="sonarrMode.set($event)"
+            >
+              <option value="skip">{{ 'import.mode_skip' | translate }}</option>
+              <option value="update">{{ 'import.mode_update' | translate }}</option>
+            </select>
+          </label>
+
+          <label class="label cursor-pointer justify-start gap-3">
+            <input
+              type="checkbox"
+              class="toggle toggle-sm"
+              [ngModel]="sonarrImportSubs()"
+              (ngModelChange)="sonarrImportSubs.set($event)"
+            />
+            <span class="label-text">{{ 'import.import_subtitles' | translate }}</span>
+          </label>
+
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.libraries.import_target' | translate }}</span>
+            <select
+              class="select select-bordered select-sm w-full"
+              [ngModel]="sonarrLibrary()"
+              (ngModelChange)="sonarrLibrary.set($event)"
+            >
+              <option [ngValue]="null">—</option>
+              @for (l of seriesLibraries(); track l.id) {
+                <option [ngValue]="l.id">{{ l.name }}</option>
+              }
+              <option [ngValue]="'new'">{{ 'settings.libraries.import_target_new' | translate }}</option>
+            </select>
+            @if (sonarrLibrary() === 'new') {
+              <input
+                type="text"
+                class="input input-bordered input-sm w-full mt-2"
+                [placeholder]="'settings.libraries.import_new_name_placeholder' | translate"
+                [ngModel]="sonarrNewLibraryName()"
+                (ngModelChange)="sonarrNewLibraryName.set($event)"
+              />
+            }
+          </label>
+
+          <div class="flex flex-wrap gap-2 pt-2">
+            <button
+              type="button"
+              class="btn btn-outline btn-sm"
+              [disabled]="!canSubmitSonarr || sonarrSaving()"
+              (click)="saveSonarrCredentials()"
+            >
+              @if (sonarrSaving()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+              {{ 'common.save' | translate }}
+            </button>
+
+            <button
+              type="button"
+              class="btn btn-outline btn-sm"
+              [disabled]="!canSubmitSonarr || sonarrTesting()"
+              (click)="testSonarr()"
+            >
+              @if (sonarrTesting()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+              {{ 'settings.data_imports.test' | translate }}
+            </button>
+
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              [disabled]="sonarrLoading() || !canSubmitSonarr"
+              (click)="importSonarr()"
+            >
+              @if (sonarrLoading()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              } @else {
+                <svg lucideDownload class="h-4 w-4"></svg>
+              }
+              {{ 'import.import_btn' | translate }}
+            </button>
+          </div>
+
+          @if (sonarrTestResult(); as tr) {
+            <div
+              role="alert"
+              class="alert text-sm py-2"
+              [class.alert-success]="tr.ok"
+              [class.alert-error]="!tr.ok"
+            >
+              {{ tr.message }}
+            </div>
+          }
+
+          @if (sonarrError()) {
+            <div role="alert" class="alert alert-error text-sm">{{ sonarrError() }}</div>
+          }
+
+          @if (sonarrResult(); as r) {
+            <div
+              role="alert"
+              class="alert text-sm"
+              [class.alert-success]="r.errors.length === 0"
+              [class.alert-warning]="r.errors.length > 0"
+            >
+              <div>
+                <p>{{ 'import.result_imported' | translate: { count: r.imported } }}</p>
+                @if (r.subtitlesImported) {
+                  <p class="mt-1">{{ 'import.result_subtitles' | translate: { count: r.subtitlesImported } }}</p>
+                }
+                @if (r.qualityProfilesCreated.length) {
+                  <p class="mt-1">{{ 'import.quality_profiles_created' | translate: { count: r.qualityProfilesCreated.length } }}: {{ r.qualityProfilesCreated.join(', ') }}</p>
+                }
+                @if (r.rootFoldersCreated.length) {
+                  <p class="mt-1">{{ 'import.root_folders_created' | translate: { count: r.rootFoldersCreated.length } }}: {{ r.rootFoldersCreated.join(', ') }}</p>
+                }
+                @if (r.errors.length) {
+                  <p class="mt-1">{{ r.errors.length }} {{ 'import.result_errors' | translate }}: {{ r.errors.slice(0, 5).join(', ') }}</p>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </section>
+    </div>
+  }
+</div>

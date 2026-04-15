@@ -1,6 +1,5 @@
-import { Entity, Column, ManyToMany, JoinTable } from 'typeorm';
+import { Entity, Column } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
-import { Tag } from '../../tags/entities/tag.entity';
 
 @Entity('download_clients')
 export class DownloadClient extends BaseEntity {
@@ -19,7 +18,4 @@ export class DownloadClient extends BaseEntity {
   @Column({ default: 1 })
   priority: number;
 
-  @ManyToMany(() => Tag, { eager: true })
-  @JoinTable({ name: 'download_client_tags' })
-  tags: Tag[];
 }

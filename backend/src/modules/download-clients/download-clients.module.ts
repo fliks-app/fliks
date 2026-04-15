@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DownloadClient } from './entities/download-client.entity';
-import { Tag } from '../tags/entities/tag.entity';
 import { DownloadHistory } from '../media/entities/download-history.entity';
 import { QbittorrentService } from './qbittorrent.service';
 import { DownloadClientsService } from './download-clients.service';
@@ -10,7 +9,7 @@ import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([DownloadClient, Tag, DownloadHistory]),
+    TypeOrmModule.forFeature([DownloadClient, DownloadHistory]),
     AuthModule,
   ],
   controllers: [DownloadClientsController],

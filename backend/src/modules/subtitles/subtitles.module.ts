@@ -6,7 +6,6 @@ import { SubtitleFile } from './entities/subtitle-file.entity';
 import { SubtitleBlacklist } from './entities/subtitle-blacklist.entity';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
-import { Tag } from '../tags/entities/tag.entity';
 import { AuthModule } from '../auth/auth.module';
 import { SettingsModule } from '../settings/settings.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -29,7 +28,6 @@ import { SubtitleActivityController } from './subtitle-activity.controller';
       SubtitleBlacklist,
       Media,
       MediaFile,
-      Tag,
     ]),
     AuthModule,
     SettingsModule,

@@ -12,7 +12,6 @@ import { CustomFormatsService } from './custom-formats.service';
 import { CustomFormatsController } from './custom-formats.controller';
 import { DelayProfile } from './entities/delay-profile.entity';
 import { DelayProfilesController } from './delay-profiles.controller';
-import { Tag } from '../tags/entities/tag.entity';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
@@ -23,7 +22,6 @@ import { AuthModule } from '../auth/auth.module';
       LanguageProfile,
       CustomFormat,
       DelayProfile,
-      Tag,
     ]),
     AuthModule,
   ],

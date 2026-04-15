@@ -38,7 +38,7 @@ function parseDate(raw?: string | null): Date | null {
 }
 
 /**
- * Import watch history from an Emby server into Suitarr `PlaybackState` rows.
+ * Import watch history from an Emby server into Fliks `PlaybackState` rows.
  *
  * Matching strategy:
  *   - Users: by username (exact match). Missing users are auto-created with
@@ -48,7 +48,7 @@ function parseDate(raw?: string | null): Date | null {
  *     not on the episode) and then match by season/episode number.
  *
  * Conflict resolution: if an existing `PlaybackState` has `lastPlayedAt`
- * strictly newer than the Emby value, we skip — Suitarr wins because the
+ * strictly newer than the Emby value, we skip — Fliks wins because the
  * user probably played the item locally since the last import.
  */
 @Injectable()
@@ -139,7 +139,7 @@ export class EmbyWatchHistoryImportService {
     movieByTmdb: Map<number, Media | null>,
     seriesTmdbByEmbyId: Map<string, number | null>,
   ): Promise<ImportUserStats> {
-    // 1. Resolve / create Suitarr user by username.
+    // 1. Resolve / create Fliks user by username.
     let user = await this.userRepo.findOne({
       where: { username: embyUser.Name },
     });
@@ -154,7 +154,7 @@ export class EmbyWatchHistoryImportService {
       } as unknown as User);
       created = true;
       this.log.log(
-        `Emby import: created Suitarr user "${embyUser.Name}" (role=${defaultRole?.name ?? 'none'})`,
+        `Emby import: created Fliks user "${embyUser.Name}" (role=${defaultRole?.name ?? 'none'})`,
       );
     }
 
@@ -253,12 +253,12 @@ export class EmbyWatchHistoryImportService {
 
   /**
    * Returns true when a marker was actually written (imported), false when
-   * the item was skipped (no match, Suitarr newer, etc.).
+   * the item was skipped (no match, Fliks newer, etc.).
    */
   private async applyItem(
     server: MediaServer,
     embyUser: EmbyUser,
-    suitarrUserId: number,
+    FliksUserId: number,
     item: EmbyItem,
     seriesByTmdb: Map<number, Media | null>,
     movieByTmdb: Map<number, Media | null>,
@@ -310,7 +310,7 @@ export class EmbyWatchHistoryImportService {
       if (!media) return false;
 
       return this.upsertPlaybackState({
-        userId: suitarrUserId,
+        userId: FliksUserId,
         mediaId: media.id,
         episodeId: null,
         positionSeconds,
@@ -365,7 +365,7 @@ export class EmbyWatchHistoryImportService {
     if (!episode) return false;
 
     return this.upsertPlaybackState({
-      userId: suitarrUserId,
+      userId: FliksUserId,
       mediaId: series.id,
       episodeId: episode.id,
       positionSeconds,
@@ -379,7 +379,7 @@ export class EmbyWatchHistoryImportService {
 
   /**
    * Insert-or-update a PlaybackState row from Emby data. Returns true when
-   * the row was actually touched; false when skipped because Suitarr has a
+   * the row was actually touched; false when skipped because Fliks has a
    * more recent record for this (user, media/episode).
    */
   private async upsertPlaybackState(opts: {
@@ -395,7 +395,7 @@ export class EmbyWatchHistoryImportService {
     /** True when Emby says the item is fully watched. False for resumable
      *  (partial-progress) items so they surface in Continue Watching. */
     completed: boolean;
-    /** Mirrors Emby's HideFromResume flag when exposed; keeps Suitarr's
+    /** Mirrors Emby's HideFromResume flag when exposed; keeps Fliks's
      *  Continue Watching list in sync with Emby's. */
     hiddenFromContinueWatching: boolean;
   }): Promise<boolean> {

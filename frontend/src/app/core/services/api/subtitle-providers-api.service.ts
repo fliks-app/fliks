@@ -9,7 +9,6 @@ export interface SubtitleProviderRow {
   enabled: boolean;
   settings: Record<string, unknown>;
   priority: number;
-  tags?: { id: number; label: string }[];
 }
 
 export interface CreateSubtitleProviderBody {
@@ -18,7 +17,6 @@ export interface CreateSubtitleProviderBody {
   settings?: Record<string, unknown>;
   enabled?: boolean;
   priority?: number;
-  tagIds?: number[];
 }
 
 export interface TestSubtitleProviderBody {

@@ -22,7 +22,6 @@
           <tr>
             <th>{{ 'settings.delay_profiles.col_delay' | translate }}</th>
             <th>{{ 'settings.delay_profiles.col_order' | translate }}</th>
-            <th>{{ 'settings.delay_profiles.col_tags' | translate }}</th>
             <th class="text-end w-40">{{ 'common.delete' | translate }}</th>
           </tr>
         </thead>
@@ -31,14 +30,6 @@
             <tr>
               <td class="tabular-nums">{{ row.torrentDelay }}h</td>
               <td class="tabular-nums">{{ row.order }}</td>
-              <td>
-                @for (t of row.tags; track t.id) {
-                  <span class="badge badge-xs badge-outline mr-1">{{ t.label }}</span>
-                }
-                @if (!row.tags.length) {
-                  <span class="text-base-content/40">{{ 'settings.delay_profiles.all_media' | translate }}</span>
-                }
-              </td>
               <td class="text-end">
                 <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(row)">{{ 'settings.quality_profiles.edit' | translate }}</button>
                 <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRow(row)">{{ 'common.delete' | translate }}</button>

@@ -1,14 +1,8 @@
-<div class="flex flex-col gap-6">
-  <div>
-    <h1 class="text-2xl font-bold">{{ 'import_disk.title' | translate }}</h1>
-    <p class="text-sm text-base-content/60 mt-1">{{ 'import_disk.subtitle' | translate }}</p>
-  </div>
-
+<div class="flex flex-col gap-4">
   <!-- Step 1: folder input -->
-  <div class="card bg-base-100 border border-base-200">
-    <div class="card-body gap-4">
-      <h2 class="card-title text-base">{{ 'import_disk.step_scan' | translate }}</h2>
-      <div class="flex gap-2 items-end">
+  <div>
+    <h3 class="text-sm font-semibold mb-2">{{ 'import_disk.step_scan' | translate }}</h3>
+    <div class="flex gap-2 items-end">
         <label class="form-control flex-1">
           <span class="label-text">{{ 'import_disk.folder_label' | translate }}</span>
           <input
@@ -32,10 +26,9 @@
           {{ 'import_disk.scan_btn' | translate }}
         </button>
       </div>
-      @if (scanError()) {
-        <div role="alert" class="alert alert-error text-sm">{{ scanError() }}</div>
-      }
-    </div>
+    @if (scanError()) {
+      <div role="alert" class="alert alert-error text-sm mt-2">{{ scanError() }}</div>
+    }
   </div>
 
   <!-- Step 2: review candidates -->
