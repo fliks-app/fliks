@@ -111,16 +111,21 @@ export class QualityManagerService {
    * @param engine        Playback engine (Shaka/Native/Cast)
    * @param playbackMode  Current playback mode ('direct' | 'remux' | 'transcode')
    * @param force         If true, apply even if already the active quality
+   * @param persist       If true, write the choice to localStorage. False for
+   *                      internal restore / fallback calls so a media that
+   *                      lacks the user's preferred rung doesn't silently
+   *                      overwrite the app-level preference with "auto".
    */
   selectQuality(
     option: QualityOption,
     engine: PlaybackEngine | null,
     playbackMode: 'direct' | 'remux' | 'transcode',
     force = false,
+    persist = false,
   ): void {
     if (!force && option.id === this.activeQualityId()) return;
     this.activeQualityId.set(option.id);
-    this.persistPreference(option.id);
+    if (persist) this.persistPreference(option.id);
 
     if (!engine) return;
 

@@ -1500,7 +1500,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const option = this.availableQualities().find(q => q.id === id);
     if (!option) return;
     const mode = this.playbackMode();
-    this.qualityManager.selectQuality(option, this.engine, mode);
+    // User picked this explicitly → persist at app level.
+    this.qualityManager.selectQuality(option, this.engine, mode, false, true);
 
     // Transcode mode: the backend emits a single-variant master playlist
     // (the one matching savedQualityId), so switching quality requires a
