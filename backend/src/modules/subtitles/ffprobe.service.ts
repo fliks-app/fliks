@@ -79,6 +79,12 @@ export interface SubtitleStreamInfo {
   isImageBased: boolean;
 }
 
+export interface Chapter {
+  startSeconds: number;
+  endSeconds: number;
+  title?: string;
+}
+
 export interface MediaFileInfo {
   video: VideoStreamInfo[];
   audio: AudioStreamInfo[];
@@ -86,6 +92,8 @@ export interface MediaFileInfo {
   /** Overall container bitrate from ffprobe `format.bit_rate` (bits/s). */
   formatBitRate?: number;
   durationSeconds?: number;
+  /** Embedded chapter markers from the container (MKV/MP4). Empty if none. */
+  chapters?: Chapter[];
   error?: string;
 }
 
@@ -200,6 +208,7 @@ export class FfprobeService {
           'json',
           '-show_streams',
           '-show_format',
+          '-show_chapters',
           videoPath,
         ],
         { timeout: 30_000 },
@@ -208,6 +217,11 @@ export class FfprobeService {
       const parsed = JSON.parse(stdout) as {
         streams?: FfprobeStream[];
         format?: { duration?: string; bit_rate?: string };
+        chapters?: {
+          start_time?: string;
+          end_time?: string;
+          tags?: { title?: string };
+        }[];
       };
       const streams = parsed.streams ?? [];
       const durationSeconds = parsed.format?.duration
@@ -273,6 +287,14 @@ export class FfprobeService {
           isImageBased: IMAGE_BASED_SUBTITLE_CODECS.has(s.codec_name ?? ''),
         }));
 
+      const chapters: Chapter[] = (parsed.chapters ?? [])
+        .map((c) => ({
+          startSeconds: c.start_time ? Number(c.start_time) : 0,
+          endSeconds: c.end_time ? Number(c.end_time) : 0,
+          title: c.tags?.title,
+        }))
+        .filter((c) => c.endSeconds > c.startSeconds);
+
       if (!video.length && !audio.length) {
         return {
           video: [],
@@ -280,10 +302,18 @@ export class FfprobeService {
           subtitles: [],
           formatBitRate,
           durationSeconds,
+          chapters,
           error: 'No streams detected',
         };
       }
-      return { video, audio, subtitles, formatBitRate, durationSeconds };
+      return {
+        video,
+        audio,
+        subtitles,
+        formatBitRate,
+        durationSeconds,
+        chapters,
+      };
     } catch (err: unknown) {
       const e = err as { message?: string; stderr?: string };
       const message =

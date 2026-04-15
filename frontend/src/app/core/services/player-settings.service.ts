@@ -21,6 +21,8 @@ export interface PlayerSettings {
   // Subtitle position
   subtitleBottomMargin: number;
   subtitleTopMargin: number;
+  // Skip intro
+  autoSkipIntro: boolean;
 }
 
 const SETTINGS_KEY = 'player.settings';
@@ -42,6 +44,7 @@ const DEFAULTS: PlayerSettings = {
   subtitleBackground: 'transparent',
   subtitleBottomMargin: 10,
   subtitleTopMargin: 5,
+  autoSkipIntro: false,
 };
 
 /** Map ISO 639-1 (2-letter) to ISO 639-2/B (3-letter) for language matching. */

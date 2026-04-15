@@ -85,6 +85,9 @@
     (toggleCast)="onToggleCast()"
     [spriteUrl]="spriteUrl()"
     [spriteMetadata]="spriteMetadata()"
+    [chapters]="chapters()"
+    [showSkipIntro]="inIntroRange()"
+    (skipIntro)="skipIntro()"
   />
   }
 

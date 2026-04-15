@@ -33,6 +33,7 @@ import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { SubtitleBurnInService } from './subtitle-burn-in.service';
 import { PlaybackService } from './playback.service';
+import { MarkersService } from '../markers/markers.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 
 const VALID_QUALITIES = new Set([...PROFILES.map((p) => p.name), 'remux']);
@@ -91,6 +92,7 @@ export class StreamingController {
     private readonly thumbnailService: ThumbnailService,
     private readonly settingsService: SettingsService,
     private readonly playbackService: PlaybackService,
+    private readonly markersService: MarkersService,
   ) {}
 
   /** Read streaming settings from DB with defaults. */
@@ -348,7 +350,30 @@ export class StreamingController {
 
     // Include duration so the player can skip ffprobe in hlsPlaylist
     const duration = resolved.mediaFile.streamInfo?.durationSeconds ?? 0;
-    return { ...result, durationSeconds: duration };
+
+    // Episode-level markers for the player (skip-intro UI). Episode-only.
+    const episodeId = resolved.mediaFile.episodeId;
+    let intro: { startSeconds: number; endSeconds: number } | undefined;
+    if (episodeId) {
+      const m = await this.markersService.findIntroForEpisode(episodeId);
+      if (m) {
+        intro = { startSeconds: m.startSeconds, endSeconds: m.endSeconds };
+        this.log.log(
+          `playback-info: episode #${episodeId} intro ${m.startSeconds.toFixed(0)}–${m.endSeconds.toFixed(0)}s`,
+        );
+      } else {
+        this.log.debug(`playback-info: episode #${episodeId} has no intro marker`);
+      }
+    }
+    const markers = intro ? { intro } : undefined;
+
+    // Embedded chapter markers (MKV/MP4). Always forwarded when present so
+    // the player can render them on the seekbar.
+    const chapters = resolved.mediaFile.streamInfo?.chapters?.length
+      ? resolved.mediaFile.streamInfo.chapters
+      : undefined;
+
+    return { ...result, durationSeconds: duration, markers, chapters };
   }
 
   // ---------------------------------------------------------------------------

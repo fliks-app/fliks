@@ -29,6 +29,7 @@ import {
 } from '../../core/services/api/libraries-api.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { StreamingApiService, MediaResumeInfo } from '../../core/services/api/streaming-api.service';
+import { MarkersApiService } from '../../core/services/api/markers-api.service';
 import { MediaInfoHeaderComponent } from '../../shared/components/media-info-header/media-info-header';
 import { SubtitleSectionComponent } from '../../shared/components/subtitle-section/subtitle-section';
 import { MediaFileInfoComponent } from '../../shared/components/media-file-info';
@@ -95,6 +96,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly sse = inject(SseService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly markersApi = inject(MarkersApiService);
   private readonly downloadManager = inject(DownloadManagerService);
   private readonly downloadModal = viewChild<DownloadQualityModalComponent>('downloadModal');
   /** Same SSE payload must run handlers once; `media` updates (e.g. after rescan) re-run this effect. */
@@ -730,6 +732,17 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.toast.error(
         this.translate.instant('media_detail.rescan_launch_error'),
       );
+    }
+  }
+
+  async detectIntros(mediaId: number) {
+    try {
+      await this.markersApi.detectSeries(mediaId);
+      this.toast.success(
+        this.translate.instant('markers.detection_started'),
+      );
+    } catch {
+      this.toast.error(this.translate.instant('common.error'));
     }
   }
 

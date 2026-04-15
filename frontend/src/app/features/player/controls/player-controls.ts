@@ -92,9 +92,12 @@ export class PlayerControlsComponent {
   readonly castConnecting = input(false);
   readonly spriteUrl = input<string | null>(null);
   readonly spriteMetadata = input<SpriteMetadata | null>(null);
+  readonly chapters = input<{ startSeconds: number; endSeconds: number; title?: string }[]>([]);
   readonly fillScreen = input(false);
   readonly statsVisible = input(false);
+  readonly showSkipIntro = input(false);
   readonly togglePlay = output<void>();
+  readonly skipIntro = output<void>();
   readonly tapOverlay = output<void>();
   readonly seek = output<number>();
   readonly volumeChange = output<number>();

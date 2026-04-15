@@ -57,6 +57,14 @@
       [class]="variant() === 'player' ? 'bg-white' : 'bg-info'"
       [style.width.%]="displayPercent()"
     ></div>
+    <!-- Chapter ticks -->
+    @for (t of chapterTicks(); track t.percent) {
+      <div
+        class="absolute inset-y-0 w-0.5 bg-black/60 pointer-events-none"
+        [style.left.%]="t.percent"
+        [title]="t.title ?? ''"
+      ></div>
+    }
   </div>
 
   <!-- Thumb -->

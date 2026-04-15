@@ -167,6 +167,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly statsRefreshTick = signal(0);
   readonly subtitlePickerOpen = signal(false);
   readonly qualityPickerOpen = signal(false);
+
+  // ── Skip-intro state ──
+  /** Episode-level intro marker received in playback-info (null for movies / no marker). */
+  readonly introMarker = signal<{ startSeconds: number; endSeconds: number } | null>(null);
+  /** Embedded chapters from playback-info (MKV/MP4). */
+  readonly chapters = signal<{ startSeconds: number; endSeconds: number; title?: string }[]>([]);
+  /** Set after a manual seek to suppress auto-skip for a short window. */
+  private autoSkipSuppressedUntil = 0;
+  /** Tracks last episodeId we auto-skipped for to ensure we only auto-skip once per session. */
+  private autoSkipFiredForEpisode: number | null = null;
   readonly spriteUrl = signal<string | null>(null);
   readonly spriteMetadata = signal<SpriteMetadata | null>(null);
   readonly activeSubtitleId = signal<string | null>(null);
@@ -556,6 +566,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         );
         const pi = this.playbackInfo;
         this.isHdrContent.set(!!pi.source?.hdrFormat);
+        this.introMarker.set(pi.markers?.intro ?? null);
+        this.chapters.set(pi.chapters ?? []);
 
         // Map backend decision to mode signal
         if (pi.playMethod === 'DirectPlay') {
@@ -935,8 +947,45 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.engine.seek(t).catch(() => {});
       this.state.currentTime.set(t);
     }
+    // Suppress auto-skip for 2s after a manual seek so the user can step back
+    // into the intro on purpose without being kicked forward again.
+    this.autoSkipSuppressedUntil = Date.now() + 2000;
     this.resetHideTimer();
   }
+
+  // ── Skip-intro UX ──
+
+  /** True when the cursor is inside the detected intro window. */
+  readonly inIntroRange = computed(() => {
+    const m = this.introMarker();
+    if (!m) return false;
+    const t = this.currentTime();
+    return t >= m.startSeconds && t < m.endSeconds - 1;
+  });
+
+  /** Player-controls click handler — seek to the end of the intro. */
+  skipIntro(): void {
+    const m = this.introMarker();
+    if (!m || !this.engine) return;
+    this.engine.seek(m.endSeconds).catch(() => {});
+    this.state.currentTime.set(m.endSeconds);
+    this.resetHideTimer();
+  }
+
+  /**
+   * Auto-skip when the cursor enters the intro window AND the user has the
+   * setting on AND we haven't already auto-skipped this episode AND there
+   * was no recent manual seek (2s cooldown).
+   */
+  private readonly autoSkipEffect = effect(() => {
+    if (!this.inIntroRange()) return;
+    if (!this.playerSettings.get().autoSkipIntro) return;
+    if (Date.now() < this.autoSkipSuppressedUntil) return;
+    const epId = this.episodeId ?? -1;
+    if (this.autoSkipFiredForEpisode === epId) return;
+    this.autoSkipFiredForEpisode = epId;
+    this.skipIntro();
+  });
 
   onVolumeChange(vol: number) {
     if (!this.engine) return;
@@ -1393,6 +1442,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.mediaFileId, deviceProfile, this.activeBurnInId ?? undefined, this.activeAudioStreamIndex,
     );
     const pi = this.playbackInfo;
+    this.introMarker.set(pi.markers?.intro ?? null);
 
     if (pi.playMethod === 'DirectPlay') {
       this.state.playbackMode.set('direct');

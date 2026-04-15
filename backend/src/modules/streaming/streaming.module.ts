@@ -21,6 +21,7 @@ import { Command } from '../scheduler/entities/command.entity';
 import { AuthModule } from '../auth/auth.module';
 import { SettingsModule } from '../settings/settings.module';
 import { LibrariesModule } from '../libraries/libraries.module';
+import { MarkersModule } from '../markers/markers.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { LibrariesModule } from '../libraries/libraries.module';
     AuthModule,
     SettingsModule,
     LibrariesModule,
+    MarkersModule,
   ],
   controllers: [StreamingController, PlaybackController],
   providers: [

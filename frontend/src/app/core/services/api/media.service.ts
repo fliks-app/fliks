@@ -186,6 +186,12 @@ export interface SubtitleStreamInfo {
   hearingImpaired: boolean;
 }
 
+export interface Chapter {
+  startSeconds: number;
+  endSeconds: number;
+  title?: string;
+}
+
 export interface MediaFileInfo {
   video: VideoStreamInfo[];
   audio: AudioStreamInfo[];
@@ -193,6 +199,7 @@ export interface MediaFileInfo {
   /** Overall container bitrate from ffprobe (bits/s). */
   formatBitRate?: number;
   durationSeconds?: number;
+  chapters?: Chapter[];
   error?: string;
 }
 

@@ -23,12 +23,15 @@
     "sample_rate": "Échantillonnage",
     "track_title": "Piste",
     "default_track": "Par défaut",
-    "probe_error": "Métadonnées indisponibles"
+    "probe_error": "Métadonnées indisponibles",
+    "chapters": "Chapitres",
+    "chapter_untitled": "Chapitre"
   },
   "player": {
     "play": "Lire",
     "play_from_start": "Depuis le début",
     "resume_at": "Reprendre à {{time}}",
+    "skip_intro": "Passer l'intro",
     "pause": "Pause",
     "next_episode": "Épisode suivant",
     "prev_episode": "Épisode précédent",
@@ -169,6 +172,8 @@
     "player_hdr_brightness": "Luminosité maximale en HDR",
     "player_hdr_brightness_hint": "Monte automatiquement la luminosité au maximum lors de la lecture de contenu HDR. Se désactive en pause ou en quittant le lecteur.",
     "player_clear_saved": "Vider les sélections audio enregistrées",
+    "player_auto_skip_intro": "Passer l'intro automatiquement",
+    "player_auto_skip_intro_hint": "Saute automatiquement l'intro quand elle est détectée. Vous pouvez toujours revenir en arrière manuellement.",
     "tab_subtitles": "Sous-titres",
     "sub_preferred_lang": "Langue préférée pour les sous-titres",
     "sub_mode": "Mode des sous-titres",
@@ -684,6 +689,7 @@
     "cmd_rescan_missing_files": "Rescanner les fichiers manquants",
     "cmd_generate_sprites": "Générer les sprites",
     "cmd_generate_missing_sprites": "Générer les sprites manquants",
+    "cmd_intro_detection": "Détection des intros",
     "cmd_group_metadata": "Métadonnées",
     "cmd_group_rescan": "Rescan",
     "cmd_group_sprites": "Sprites",
@@ -722,6 +728,13 @@
     "import_subtitle": "Uploadez un dump PostgreSQL de Radarr/Sonarr (pg_dump en SQL ou format custom .dump). Le conteneur backend doit pouvoir exécuter psql/pg_restore vers la même base que Fliks.",
     "import_radarr": "Importer Radarr (pg_dump)",
     "import_sonarr": "Importer Sonarr (pg_dump)"
+  },
+  "markers": {
+    "detect_intros": "Détecter les intros",
+    "detection_started": "Détection lancée — vous serez notifié à la fin",
+    "intro": "Intro",
+    "outro": "Outro",
+    "recap": "Résumé"
   },
   "common": {
     "search": "Rechercher…",

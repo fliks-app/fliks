@@ -57,6 +57,12 @@ export interface PlaybackInfoResponse {
     colorTransfer?: string;
     colorPrimaries?: string;
   };
+  /** Episode-level skip markers — only present for series episodes. */
+  markers?: {
+    intro?: { startSeconds: number; endSeconds: number };
+  };
+  /** Embedded chapters from the container (MKV/MP4). */
+  chapters?: { startSeconds: number; endSeconds: number; title?: string }[];
 }
 
 export interface MediaResumeInfo {

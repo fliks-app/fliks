@@ -169,6 +169,12 @@
           @if (isAdmin()) {
             <li><a class="flex items-center gap-3" (click)="refreshMetadata.emit()"><svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.refresh_metadata' | translate }}</a></li>
             <li><a class="flex items-center gap-3" (click)="rescanFiles.emit()"><svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.rescan_files' | translate }}</a></li>
+            @if (mediaType() === 'series') {
+              <li><a class="flex items-center gap-3" (click)="detectIntros.emit()">
+                <svg lucideSkipForward class="h-4 w-4 shrink-0 opacity-70"></svg>
+                {{ 'markers.detect_intros' | translate }}
+              </a></li>
+            }
             <li><a class="flex items-center gap-3" (click)="toggleMonitored.emit()">
               @if (monitored()) { <svg lucideEyeOff class="h-4 w-4 shrink-0 opacity-70"></svg> {{ 'media_detail.unmonitor' | translate }} }
               @else { <svg lucideEye class="h-4 w-4 shrink-0 opacity-70"></svg> {{ 'media_detail.monitor' | translate }} }
@@ -425,6 +431,12 @@
                 {{ 'media_detail.refresh_metadata' | translate }}
               </a></li>
               <li><a class="flex items-center gap-3" (click)="rescanFiles.emit()"><svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.rescan_files' | translate }}</a></li>
+              @if (mediaType() === 'series') {
+                <li><a class="flex items-center gap-3" (click)="detectIntros.emit()">
+                  <svg lucideSkipForward class="h-4 w-4 shrink-0 opacity-70"></svg>
+                  {{ 'markers.detect_intros' | translate }}
+                </a></li>
+              }
               <li><a class="flex items-center gap-3" (click)="toggleMonitored.emit()" [class.pointer-events-none]="monitoredLoading()">
                 @if (monitored()) { <svg lucideEyeOff class="h-4 w-4 shrink-0 opacity-70"></svg> {{ 'media_detail.unmonitor' | translate }} }
                 @else { <svg lucideEye class="h-4 w-4 shrink-0 opacity-70"></svg> {{ 'media_detail.monitor' | translate }} }

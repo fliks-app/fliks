@@ -23,6 +23,16 @@ export class SeekbarComponent {
   readonly showTooltip = input(true);
   readonly showThumb = input(true);
   readonly showBuffered = input(true);
+  readonly chapters = input<{ startSeconds: number; endSeconds: number; title?: string }[]>([]);
+
+  /** Chapter start times as % of duration for seekbar tick rendering. */
+  readonly chapterTicks = computed(() => {
+    const dur = this.duration() || 0;
+    if (dur <= 0) return [];
+    return this.chapters()
+      .map((c) => ({ percent: (c.startSeconds / dur) * 100, title: c.title }))
+      .filter((t) => t.percent > 0.5 && t.percent < 99.5);
+  });
 
   readonly seek = output<number>();
   readonly dragChange = output<boolean>();

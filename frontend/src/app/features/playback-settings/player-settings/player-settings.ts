@@ -26,6 +26,7 @@ export class PlayerSettingsPageComponent implements OnInit {
   readonly forceDisableHdr = signal(false);
   readonly hdrAutoBrightness = signal(false);
   readonly showHdrToggle = signal(false);
+  readonly autoSkipIntro = signal(false);
 
   ngOnInit() {
     const p = this.ps.get();
@@ -35,6 +36,7 @@ export class PlayerSettingsPageComponent implements OnInit {
     this.forceDisableHdr.set(p.forceDisableHdr);
     this.hdrAutoBrightness.set(p.hdrAutoBrightness);
     this.showHdrToggle.set(this.deviceProfile.hardwareSupportsHdr);
+    this.autoSkipIntro.set(p.autoSkipIntro);
   }
 
   clearAudioSelections() {
@@ -51,6 +53,7 @@ export class PlayerSettingsPageComponent implements OnInit {
       rememberAudioSelections: this.rememberAudioSelections(),
       forceDisableHdr: this.forceDisableHdr(),
       hdrAutoBrightness: this.hdrAutoBrightness(),
+      autoSkipIntro: this.autoSkipIntro(),
     });
     this.toast.success(this.translate.instant('common.settings_saved'));
   }

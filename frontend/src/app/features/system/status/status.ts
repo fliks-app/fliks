@@ -54,9 +54,15 @@ export class SystemStatusComponent implements OnInit {
   ];
 
   /** Flat list for label lookups in command history. */
-  readonly availableCommands = this.commandItems.flatMap(item =>
-    item.type === 'single' ? [item] : item.items,
-  );
+  readonly availableCommands = [
+    ...this.commandItems.flatMap(item =>
+      item.type === 'single' ? [item] : item.items,
+    ),
+    // Non-triggerable commands (background-only) that still appear in history.
+    { name: 'IntroDetection', label: 'system.cmd_intro_detection' },
+    { name: 'SubtitleSearch', label: 'system.cmd_subtitle_search' },
+    { name: 'SubtitleUpgrade', label: 'system.cmd_subtitle_upgrade' },
+  ];
 
   constructor() {
     effect(() => {
