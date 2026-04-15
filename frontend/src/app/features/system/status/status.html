@@ -95,7 +95,17 @@
 <div class="mt-4">
   <div class="flex items-center justify-between mb-3">
     <h2 class="text-lg font-semibold">{{ 'system.recent_commands' | translate }}</h2>
-    <button type="button" class="btn btn-ghost btn-xs" (click)="loadCommands()">{{ 'common.refresh' | translate }}</button>
+    <div class="flex items-center gap-2">
+      <button type="button" class="btn btn-ghost btn-xs gap-1.5" (click)="clearHistory()" [disabled]="clearing()">
+        @if (clearing()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        } @else {
+          <svg lucideTrash2 class="h-3.5 w-3.5"></svg>
+        }
+        {{ 'system.clear_history' | translate }}
+      </button>
+      <button type="button" class="btn btn-ghost btn-xs" (click)="loadCommands()">{{ 'common.refresh' | translate }}</button>
+    </div>
   </div>
   @if (loading()) {
     <div class="flex justify-center py-8"><span class="loading loading-spinner loading-md"></span></div>

@@ -1,6 +1,5 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { Media } from '../media/entities/media.entity';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
@@ -10,12 +9,6 @@ import {
 } from '../profiles/entities/quality-profile.entity';
 import { APP_QUALITIES } from '../../common/constants/app-qualities';
 import { MediaType, MediaStatus } from '../../common/enums';
-import {
-  withTemporaryRestoredDatabase,
-  queryRadarrMovies,
-  queryRadarrRootFolderPaths,
-  rowMonitored,
-} from './pg-restore-import.util';
 import {
   ensureRootFolderPathsExist,
   parseLanguageFromPath,
@@ -103,7 +96,6 @@ export class ImportRadarrService {
     private readonly subtitleRepo: Repository<SubtitleFile>,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
-    private readonly config: ConfigService,
     private readonly libraries: LibrariesService,
   ) {}
 
@@ -504,117 +496,4 @@ export class ImportRadarrService {
     }
   }
 
-  async importFromDump(
-    buffer: Buffer,
-    target: ImportTargetSpec = {},
-  ): Promise<{ imported: number; skipped: number; errors: string[] }> {
-    if (!buffer?.length) {
-      throw new BadRequestException('Empty file');
-    }
-
-    let imported = 0;
-    const errors: string[] = [];
-
-    const targetLibrary = await this.libraries.resolveTargetLibrary({
-      targetLibraryId: target.targetLibraryId,
-      newLibraryName: target.newLibraryName,
-      mediaType: MediaType.MOVIE,
-      autoLabel: this.autoLibraryName(),
-    });
-
-    try {
-      await withTemporaryRestoredDatabase(
-        this.config,
-        buffer,
-        async (client) => {
-          const dumpPaths = await queryRadarrRootFolderPaths(client);
-          const createdRf: string[] = [];
-          await ensureRootFolderPathsExist(
-            this.rootFolderRepo,
-            dumpPaths,
-            createdRf,
-            targetLibrary.id,
-            errors,
-          );
-          for (const p of createdRf) {
-            this.log.log(`Created root folder from Radarr dump: ${p}`);
-          }
-
-          const rows = await queryRadarrMovies(client);
-          if (!rows.length) {
-            errors.push('No movies found in database');
-            return;
-          }
-
-          const rootFolders = await this.rootFolderRepo.find();
-
-          for (const row of rows) {
-            const title = row.title ?? '';
-            const tmdbId = Number(row.tmdbId);
-            if (!Number.isFinite(tmdbId)) {
-              errors.push(`${title || '(no title)'}: invalid TmdbId`);
-              continue;
-            }
-            try {
-              const exists = await this.mediaRepo.findOne({
-                where: { tmdbId, type: MediaType.MOVIE },
-              });
-
-              const resolved = resolveRootFolderFromArrPaths(
-                row.path,
-                row.rootFolderPath,
-                rootFolders,
-              );
-              const folderName =
-                resolved?.folderName ??
-                (row.path
-                  ? path.basename(row.path.replace(/\/+$/, ''))
-                  : undefined);
-
-              if (exists) {
-                await this.mediaRepo.update(exists.id, {
-                  title,
-                  year: row.year ?? undefined,
-                  monitored: rowMonitored(row.monitored),
-                  rootFolder: resolved?.rootFolderId
-                    ? ({ id: resolved.rootFolderId } as RootFolder)
-                    : null,
-                  library: {
-                    id: exists.libraryId ?? targetLibrary.id,
-                  } as Library,
-                  folderName: folderName || undefined,
-                });
-              } else {
-                await this.mediaRepo.save(
-                  this.mediaRepo.create({
-                    title,
-                    tmdbId,
-                    year: row.year ?? undefined,
-                    type: MediaType.MOVIE,
-                    status: MediaStatus.RELEASED,
-                    monitored: rowMonitored(row.monitored),
-                    rootFolder: resolved?.rootFolderId
-                      ? ({ id: resolved.rootFolderId } as RootFolder)
-                      : null,
-                    library: targetLibrary,
-                    folderName: folderName || undefined,
-                  }),
-                );
-              }
-              imported++;
-            } catch (e) {
-              errors.push(`${title}: ${(e as Error).message}`);
-            }
-          }
-        },
-      );
-    } catch (e) {
-      throw new BadRequestException((e as Error).message);
-    }
-
-    this.log.log(
-      `Radarr import: ${imported} imported, ${errors.length} errors`,
-    );
-    return { imported, skipped: 0, errors };
-  }
 }

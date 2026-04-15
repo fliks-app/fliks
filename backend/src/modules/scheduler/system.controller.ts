@@ -9,11 +9,8 @@ import {
   Res,
   Sse,
   UseGuards,
-  UseInterceptors,
-  UploadedFile,
   BadRequestException,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -253,42 +250,6 @@ export class SystemController {
       level: level || undefined,
       q: q || undefined,
       limit: limit ? parseInt(limit, 10) : 200,
-    });
-  }
-
-  @Post('import-radarr')
-  @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
-  @UseInterceptors(FileInterceptor('file'))
-  importRadarr(
-    @UploadedFile() file: Express.Multer.File,
-    @Body() body: { targetLibraryId?: string; newLibraryName?: string },
-  ) {
-    if (!file?.buffer?.length) {
-      throw new BadRequestException('No file uploaded');
-    }
-    return this.importRadarrService.importFromDump(file.buffer, {
-      targetLibraryId: body.targetLibraryId
-        ? Number(body.targetLibraryId)
-        : undefined,
-      newLibraryName: body.newLibraryName?.trim() || undefined,
-    });
-  }
-
-  @Post('import-sonarr')
-  @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
-  @UseInterceptors(FileInterceptor('file'))
-  importSonarr(
-    @UploadedFile() file: Express.Multer.File,
-    @Body() body: { targetLibraryId?: string; newLibraryName?: string },
-  ) {
-    if (!file?.buffer?.length) {
-      throw new BadRequestException('No file uploaded');
-    }
-    return this.importSonarrService.importFromDump(file.buffer, {
-      targetLibraryId: body.targetLibraryId
-        ? Number(body.targetLibraryId)
-        : undefined,
-      newLibraryName: body.newLibraryName?.trim() || undefined,
     });
   }
 

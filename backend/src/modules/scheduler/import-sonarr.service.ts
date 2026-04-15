@@ -1,6 +1,5 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { Media } from '../media/entities/media.entity';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
@@ -10,12 +9,6 @@ import {
 } from '../profiles/entities/quality-profile.entity';
 import { APP_QUALITIES } from '../../common/constants/app-qualities';
 import { MediaType, MediaStatus } from '../../common/enums';
-import {
-  withTemporaryRestoredDatabase,
-  querySonarrSeries,
-  querySonarrRootFolderPaths,
-  rowMonitored,
-} from './pg-restore-import.util';
 import {
   ensureRootFolderPathsExist,
   parseLanguageFromPath,
@@ -87,7 +80,6 @@ export class ImportSonarrService {
     private readonly subtitleRepo: Repository<SubtitleFile>,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
-    private readonly config: ConfigService,
     private readonly mediaService: MediaService,
     private readonly libraries: LibrariesService,
   ) {}
@@ -495,125 +487,6 @@ export class ImportSonarrService {
     }
   }
 
-  async importFromDump(
-    buffer: Buffer,
-    target: ImportTargetSpec = {},
-  ): Promise<{ imported: number; skipped: number; errors: string[] }> {
-    if (!buffer?.length) {
-      throw new BadRequestException('Empty file');
-    }
-
-    let imported = 0;
-    const errors: string[] = [];
-
-    const targetLibrary = await this.libraries.resolveTargetLibrary({
-      targetLibraryId: target.targetLibraryId,
-      newLibraryName: target.newLibraryName,
-      mediaType: MediaType.SERIES,
-      autoLabel: this.autoLibraryName(),
-    });
-
-    try {
-      await withTemporaryRestoredDatabase(
-        this.config,
-        buffer,
-        async (client) => {
-          const dumpPaths = await querySonarrRootFolderPaths(client);
-          const createdRf: string[] = [];
-          await ensureRootFolderPathsExist(
-            this.rootFolderRepo,
-            dumpPaths,
-            createdRf,
-            targetLibrary.id,
-            errors,
-          );
-          for (const p of createdRf) {
-            this.log.log(`Created root folder from Sonarr dump: ${p}`);
-          }
-
-          const rows = await querySonarrSeries(client);
-          if (!rows.length) {
-            errors.push('No series found in database');
-            return;
-          }
-
-          const rootFolders = await this.rootFolderRepo.find();
-          const dumpNewIds: number[] = [];
-
-          for (const row of rows) {
-            const title = row.title ?? '';
-            const externalId = Number(row.externalId);
-            if (!Number.isFinite(externalId)) {
-              errors.push(`${title || '(no title)'}: invalid external id`);
-              continue;
-            }
-            try {
-              const exists = await this.mediaRepo.findOne({
-                where: { tmdbId: externalId, type: MediaType.SERIES },
-              });
-
-              const resolved = resolveRootFolderFromArrPaths(
-                row.path,
-                row.rootFolderPath,
-                rootFolders,
-              );
-              const folderName =
-                resolved?.folderName ??
-                (row.path
-                  ? path.basename(row.path.replace(/\/+$/, ''))
-                  : undefined);
-
-              if (exists) {
-                await this.mediaRepo.update(exists.id, {
-                  title,
-                  year: row.year ?? undefined,
-                  monitored: rowMonitored(row.monitored),
-                  rootFolder: resolved?.rootFolderId
-                    ? ({ id: resolved.rootFolderId } as RootFolder)
-                    : null,
-                  library: {
-                    id: exists.libraryId ?? targetLibrary.id,
-                  } as Library,
-                  folderName: folderName || undefined,
-                });
-              } else {
-                const saved = await this.mediaRepo.save(
-                  this.mediaRepo.create({
-                    title,
-                    tmdbId: externalId,
-                    year: row.year ?? undefined,
-                    type: MediaType.SERIES,
-                    status: MediaStatus.CONTINUING,
-                    monitored: rowMonitored(row.monitored),
-                    rootFolder: resolved?.rootFolderId
-                      ? ({ id: resolved.rootFolderId } as RootFolder)
-                      : null,
-                    library: targetLibrary,
-                    folderName: folderName || undefined,
-                  }),
-                );
-                dumpNewIds.push(saved.id);
-              }
-              imported++;
-            } catch (e) {
-              errors.push(`${title}: ${(e as Error).message}`);
-            }
-          }
-
-          if (dumpNewIds.length) {
-            void this.refreshNewSeries(dumpNewIds);
-          }
-        },
-      );
-    } catch (e) {
-      throw new BadRequestException((e as Error).message);
-    }
-
-    this.log.log(
-      `Sonarr import: ${imported} imported, ${errors.length} errors`,
-    );
-    return { imported, skipped: 0, errors };
-  }
 
   /** Fetch seasons/episodes from TMDB for newly imported series (best-effort). */
   private async refreshNewSeries(ids: number[]): Promise<void> {

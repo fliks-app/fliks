@@ -5,6 +5,7 @@ import { DatePipe, DecimalPipe, NgClass, KeyValuePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
+import { LucideTrash2 } from '@lucide/angular';
 import { SseService } from '../../../core/services/sse.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 
@@ -14,7 +15,7 @@ interface HealthReport { version: string; uptimeSeconds: number; database: Servi
 
 @Component({
   selector: 'app-system-status',
-  imports: [TranslateModule, DatePipe, DecimalPipe, NgClass, KeyValuePipe],
+  imports: [TranslateModule, DatePipe, DecimalPipe, NgClass, KeyValuePipe, LucideTrash2],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './status.html',
 })
@@ -31,6 +32,7 @@ export class SystemStatusComponent implements OnInit {
   readonly commandsPage = signal(1);
   readonly loading = signal(true);
   readonly triggering = signal<string | null>(null);
+  readonly clearing = signal(false);
 
   readonly commandItems: (
     | { type: 'single'; name: string; label: string }
@@ -117,6 +119,24 @@ export class SystemStatusComponent implements OnInit {
       const httpErr = err as { error?: { message?: string } };
       void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? this.translate.instant('system.trigger_error'), variant: 'danger' });
     } finally { this.triggering.set(null); }
+  }
+
+  async clearHistory() {
+    const confirmed = await this.confirmation.confirm({
+      title: this.translate.instant('system.clear_history'),
+      message: this.translate.instant('system.clear_history_confirm'),
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    this.clearing.set(true);
+    try {
+      await firstValueFrom(
+        this.http.delete<{ deleted: number }>('/api/commands/history'),
+      );
+      await this.loadCommands();
+    } finally {
+      this.clearing.set(false);
+    }
   }
 
   formatUptime(seconds: number): string {

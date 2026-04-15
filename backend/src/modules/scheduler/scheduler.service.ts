@@ -256,6 +256,22 @@ export class SchedulerService implements OnModuleInit {
     return { data, total };
   }
 
+  /**
+   * Delete every command row except those still running or queued. Used by
+   * the admin "clear history" button.
+   */
+  async clearCommandHistory(): Promise<{ deleted: number }> {
+    const result = await this.commandRepo
+      .createQueryBuilder()
+      .delete()
+      .where('status NOT IN (:...keep)', { keep: ['running', 'queued'] })
+      .execute();
+    this.log.log(
+      `Command history cleared — ${result.affected ?? 0} row(s) deleted`,
+    );
+    return { deleted: result.affected ?? 0 };
+  }
+
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------

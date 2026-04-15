@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { IsString } from 'class-validator';
 import { SchedulerService } from './scheduler.service';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
@@ -34,5 +42,11 @@ export class CommandsController {
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   trigger(@Body() dto: TriggerCommandDto) {
     return this.scheduler.triggerCommand(dto.name);
+  }
+
+  @Delete('history')
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
+  clearHistory() {
+    return this.scheduler.clearCommandHistory();
   }
 }

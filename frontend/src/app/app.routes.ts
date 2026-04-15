@@ -245,7 +245,6 @@ export const routes: Routes = [
           { path: '', loadComponent: () => import('./features/system/status/status').then((m) => m.SystemStatusComponent) },
           { path: 'backups', loadComponent: () => import('./features/system/backups/backups').then((m) => m.SystemBackupsComponent) },
           { path: 'logs', loadComponent: () => import('./features/system/logs/logs').then((m) => m.SystemLogsComponent) },
-          { path: 'import', loadComponent: () => import('./features/system/import/import').then((m) => m.SystemImportComponent) },
           { path: 'streams', loadComponent: () => import('./features/system/streams/streams').then((m) => m.SystemStreamsComponent) },
         ],
       },

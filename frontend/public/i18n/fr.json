@@ -678,7 +678,6 @@
     "tab_status": "Statut",
     "tab_backups": "Sauvegardes",
     "tab_logs": "Journaux",
-    "tab_import": "Import",
     "tab_streams": "Activités vidéos",
     "commands_title": "Déclencher une tâche",
     "cmd_rss_sync": "Synchronisation RSS",
@@ -699,6 +698,8 @@
     "cmd_detect_missing_markers": "Calculer les manquants",
     "recent_commands": "Historique des tâches",
     "no_commands": "Aucune tâche récente.",
+    "clear_history": "Vider l'historique",
+    "clear_history_confirm": "Supprimer toutes les tâches terminées, échouées et annulées ? Les tâches en cours ne seront pas impactées.",
     "col_command": "Tâche",
     "col_trigger": "Déclencheur",
     "col_status": "Statut",
@@ -727,11 +728,7 @@
     "col_log_time": "Heure",
     "col_log_level": "Niveau",
     "col_log_context": "Contexte",
-    "col_log_message": "Message",
-    "import_title": "Importer depuis Radarr / Sonarr",
-    "import_subtitle": "Uploadez un dump PostgreSQL de Radarr/Sonarr (pg_dump en SQL ou format custom .dump). Le conteneur backend doit pouvoir exécuter psql/pg_restore vers la même base que Fliks.",
-    "import_radarr": "Importer Radarr (pg_dump)",
-    "import_sonarr": "Importer Sonarr (pg_dump)"
+    "col_log_message": "Message"
   },
   "markers": {
     "detect_intros": "Détecter les intros",
