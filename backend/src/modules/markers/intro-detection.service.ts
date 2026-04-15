@@ -505,6 +505,91 @@ export class IntroDetectionService {
   }
 
   /**
+   * Detect end-credits / outro markers for a season. V1 relies on embedded
+   * chapters only (Netflix / Blu-ray rips usually ship with an "End Credits"
+   * chapter). Files without chapters are skipped — fingerprint-based outro
+   * detection can be added later when we need it.
+   */
+  async detectSeasonOutros(
+    seasonId: number,
+  ): Promise<{ outrosDetected: number; skipped: number }> {
+    const t0 = Date.now();
+    const season = await this.seasonRepo.findOne({ where: { id: seasonId } });
+    if (!season) throw new Error(`Season #${seasonId} not found`);
+    const media = await this.mediaRepo.findOne({
+      where: { id: season.mediaId },
+    });
+    if (!media) return { outrosDetected: 0, skipped: 0 };
+
+    const episodes = await this.episodeRepo.find({
+      where: { season: { id: seasonId }, hasFile: true },
+      order: { episodeNumber: 'ASC' },
+    });
+    if (!episodes.length) return { outrosDetected: 0, skipped: 0 };
+
+    this.log.log(
+      `▶ Outro detection START — "${media.title}" S${String(season.seasonNumber).padStart(2, '0')} (season #${seasonId}): ${episodes.length} episode(s)`,
+    );
+
+    const files = await this.mediaFileRepo.find({
+      where: { episode: { id: In(episodes.map((e) => e.id)) } },
+      order: { id: 'DESC' },
+    });
+    const fileByEpisode = new Map<number, MediaFile>();
+    for (const f of files) {
+      if (!fileByEpisode.has(f.episodeId)) fileByEpisode.set(f.episodeId, f);
+    }
+
+    // Never overwrite manual markers.
+    const existingManual = await this.markerRepo.find({
+      where: {
+        episode: { id: In(episodes.map((e) => e.id)) },
+        type: 'outro',
+        manual: true,
+      },
+    });
+    const manualIds = new Set(existingManual.map((m) => m.episodeId));
+
+    let detected = 0;
+    let skipped = 0;
+    for (const ep of episodes) {
+      if (manualIds.has(ep.id)) continue;
+      const file = fileByEpisode.get(ep.id);
+      const dur = file?.streamInfo?.durationSeconds ?? 0;
+      const fromChapter = extractOutroFromChapters(
+        file?.streamInfo?.chapters,
+        dur,
+      );
+      if (!fromChapter) {
+        skipped++;
+        continue;
+      }
+      await this.markerRepo.delete({
+        episode: { id: ep.id },
+        type: 'outro',
+        manual: false,
+      });
+      await this.markerRepo.save({
+        episode: { id: ep.id },
+        type: 'outro',
+        startSeconds: fromChapter.startSeconds,
+        endSeconds: fromChapter.endSeconds,
+        confidence: 1,
+        manual: false,
+      } as Partial<EpisodeMarker>);
+      detected++;
+      this.log.log(
+        `  E${ep.episodeNumber}: outro from chapter "${fromChapter.title}" ${this.fmtTime(fromChapter.startSeconds)}–${this.fmtTime(fromChapter.endSeconds)}`,
+      );
+    }
+
+    this.log.log(
+      `■ Outro detection END — "${media.title}" S${String(season.seasonNumber).padStart(2, '0')}: ${detected} outro(s) saved, ${skipped} without chapters (${((Date.now() - t0) / 1000).toFixed(1)}s)`,
+    );
+    return { outrosDetected: detected, skipped };
+  }
+
+  /**
    * Run `fpcalc -raw -length <s> <path>` and parse out the int32 fingerprint.
    * fpcalc uses libavcodec internally and accepts video containers directly.
    */
@@ -685,6 +770,39 @@ function extractIntroFromChapters(
     // Sanity: intros are 10–180s, anywhere in the first 6 minutes.
     if (len < 10 || len > 180) continue;
     if (c.startSeconds > 360) continue;
+    return {
+      startSeconds: c.startSeconds,
+      endSeconds: c.endSeconds,
+      title: c.title,
+    };
+  }
+  return null;
+}
+
+/**
+ * Look for an outro/credits-labeled chapter. Typically appears at the very
+ * end of the episode — "End Credits", "Credits", "Outro", "Ending", etc.
+ * Returns null if no chapter looks like an outro.
+ */
+const OUTRO_CHAPTER_REGEX = /\b(outro|ending|end.?credits?|credits?|closing)\b/i;
+function extractOutroFromChapters(
+  chapters: { startSeconds: number; endSeconds: number; title?: string }[] | undefined,
+  fileDurationSec: number,
+): { startSeconds: number; endSeconds: number; title: string } | null {
+  if (!chapters?.length) return null;
+  // Prefer the LAST matching chapter (some files have both "Opening Credits"
+  // and "End Credits" — we only want the tail one).
+  for (let i = chapters.length - 1; i >= 0; i--) {
+    const c = chapters[i];
+    if (!c.title) continue;
+    if (!OUTRO_CHAPTER_REGEX.test(c.title)) continue;
+    if (c.endSeconds <= c.startSeconds) continue;
+    const len = c.endSeconds - c.startSeconds;
+    if (len < 10 || len > 300) continue;
+    // Outros sit in the last quarter of the file — skip matches near the head
+    // (e.g. the INTRO_CHAPTER_REGEX could overlap on "Opening Credits", but
+    // we want only the tail one).
+    if (fileDurationSec > 0 && c.startSeconds < fileDurationSec * 0.6) continue;
     return {
       startSeconds: c.startSeconds,
       endSeconds: c.endSeconds,

@@ -351,21 +351,35 @@ export class StreamingController {
     // Include duration so the player can skip ffprobe in hlsPlaylist
     const duration = resolved.mediaFile.streamInfo?.durationSeconds ?? 0;
 
-    // Episode-level markers for the player (skip-intro UI). Episode-only.
+    // Episode-level markers for the player (skip-intro / next-episode UI).
     const episodeId = resolved.mediaFile.episodeId;
     let intro: { startSeconds: number; endSeconds: number } | undefined;
+    let outro: { startSeconds: number; endSeconds: number } | undefined;
     if (episodeId) {
-      const m = await this.markersService.findIntroForEpisode(episodeId);
-      if (m) {
-        intro = { startSeconds: m.startSeconds, endSeconds: m.endSeconds };
+      const [introMarker, outroMarker] = await Promise.all([
+        this.markersService.findIntroForEpisode(episodeId),
+        this.markersService.findOutroForEpisode(episodeId),
+      ]);
+      if (introMarker) {
+        intro = {
+          startSeconds: introMarker.startSeconds,
+          endSeconds: introMarker.endSeconds,
+        };
+      }
+      if (outroMarker) {
+        outro = {
+          startSeconds: outroMarker.startSeconds,
+          endSeconds: outroMarker.endSeconds,
+        };
+      }
+      if (intro || outro) {
         this.log.log(
-          `playback-info: episode #${episodeId} intro ${m.startSeconds.toFixed(0)}–${m.endSeconds.toFixed(0)}s`,
+          `playback-info: episode #${episodeId} markers intro=${intro ? `${intro.startSeconds.toFixed(0)}–${intro.endSeconds.toFixed(0)}` : '∅'} outro=${outro ? `${outro.startSeconds.toFixed(0)}–${outro.endSeconds.toFixed(0)}` : '∅'}`,
         );
-      } else {
-        this.log.debug(`playback-info: episode #${episodeId} has no intro marker`);
       }
     }
-    const markers = intro ? { intro } : undefined;
+    const markers =
+      intro || outro ? { intro, outro } : undefined;
 
     // Embedded chapter markers (MKV/MP4). Always forwarded when present so
     // the player can render them on the seekbar.

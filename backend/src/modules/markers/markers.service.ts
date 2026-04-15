@@ -76,6 +76,14 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  async findOutroForEpisode(
+    episodeId: number,
+  ): Promise<EpisodeMarker | null> {
+    return this.markerRepo.findOne({
+      where: { episode: { id: episodeId }, type: 'outro' },
+    });
+  }
+
   async findForSeason(seasonId: number): Promise<EpisodeMarker[]> {
     const episodes = await this.episodeRepo.find({
       where: { season: { id: seasonId } },
@@ -228,6 +236,16 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
         },
       );
       detected = result.introsDetected;
+      // Same pipeline also resolves outros from embedded chapters (cheap,
+      // metadata-only). Runs after intros for clean logs.
+      try {
+        const outroResult = await this.detector.detectSeasonOutros(seasonId);
+        detected += outroResult.outrosDetected;
+      } catch (err) {
+        this.log.warn(
+          `Outro detection failed for season #${seasonId}: ${(err as Error).message}`,
+        );
+      }
       await this.commandRepo.update(cmdId, {
         status: 'completed',
         endedOn: new Date(),

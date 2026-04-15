@@ -171,6 +171,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // ── Skip-intro state ──
   /** Episode-level intro marker received in playback-info (null for movies / no marker). */
   readonly introMarker = signal<{ startSeconds: number; endSeconds: number } | null>(null);
+  /** Outro / end-credits marker — drives the "Épisode suivant" floating button. */
+  readonly outroMarker = signal<{ startSeconds: number; endSeconds: number } | null>(null);
   /** Embedded chapters from playback-info (MKV/MP4). */
   readonly chapters = signal<{ startSeconds: number; endSeconds: number; title?: string }[]>([]);
   /** Set after a manual seek to suppress auto-skip for a short window. */
@@ -567,6 +569,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const pi = this.playbackInfo;
         this.isHdrContent.set(!!pi.source?.hdrFormat);
         this.introMarker.set(pi.markers?.intro ?? null);
+        this.outroMarker.set(pi.markers?.outro ?? null);
         this.chapters.set(pi.chapters ?? []);
 
         // Map backend decision to mode signal
@@ -987,6 +990,96 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.skipIntro();
   });
 
+  // ── Next-episode UX (outro) ──
+
+  /**
+   * Next episode to play for the current series — returned with its media
+   * file so the "Épisode suivant" button can navigate directly. Returns null
+   * for movies or when the series is on its last episode.
+   */
+  readonly nextEpisodeContext = computed<{
+    episodeId: number;
+    mediaFileId: number;
+  } | null>(() => {
+    const m = this.media;
+    const currentEpId = this.episodeId;
+    if (!m || m.type !== 'series' || !currentEpId || !m.seasons?.length) return null;
+    // Flatten episodes in S/E order (skip specials: seasonNumber <= 0).
+    const flat: { seasonNumber: number; episodeNumber: number; id: number }[] = [];
+    for (const s of m.seasons) {
+      if ((s.seasonNumber ?? 0) <= 0) continue;
+      for (const ep of s.episodes ?? []) {
+        flat.push({
+          seasonNumber: s.seasonNumber,
+          episodeNumber: ep.episodeNumber ?? 0,
+          id: ep.id,
+        });
+      }
+    }
+    flat.sort(
+      (a, b) =>
+        a.seasonNumber - b.seasonNumber || a.episodeNumber - b.episodeNumber,
+    );
+    const idx = flat.findIndex((e) => e.id === currentEpId);
+    if (idx < 0 || idx >= flat.length - 1) return null;
+    const next = flat[idx + 1];
+    const file = (m.files ?? []).find((f) => f.episodeId === next.id);
+    if (!file) return null;
+    return { episodeId: next.id, mediaFileId: file.id };
+  });
+
+  /** True when the cursor is inside the detected outro window. */
+  readonly inOutroRange = computed(() => {
+    const m = this.outroMarker();
+    if (!m) return false;
+    return this.currentTime() >= m.startSeconds;
+  });
+
+  /** Drives visibility of the floating "Épisode suivant" button. */
+  readonly showNextEpisodeButton = computed(
+    () => this.inOutroRange() && this.nextEpisodeContext() !== null,
+  );
+
+  /** Navigate to the next episode identified by {@link nextEpisodeContext}.
+   *  Marks the current episode as watched (position := duration) before
+   *  navigating. Detour through `/` forces Angular to remount this same
+   *  route with fresh params (default router reuses the component and
+   *  only snapshot-params are read once in ngAfterViewInit). */
+  async goToNextEpisode(): Promise<void> {
+    const next = this.nextEpisodeContext();
+    if (!next || !this.mediaId) return;
+    const mediaId = this.mediaId;
+
+    // Force the current episode to be marked as completed server-side.
+    // Backend threshold: position >= duration - 30s OR position >= duration * 0.9.
+    const dur =
+      (this.castService.isConnected()
+        ? this.castService.duration()
+        : this.engine?.duration) ||
+      this.duration() ||
+      0;
+    if (dur > 0) {
+      try {
+        await this.streamingApi.updatePlaybackState(this.mediaId, {
+          positionSeconds: dur,
+          durationSeconds: dur,
+          mediaFileId: this.mediaFileId,
+          episodeId: this.episodeId,
+        });
+      } catch {
+        /* non-blocking — navigate even if the update fails */
+      }
+    }
+
+    void this.router
+      .navigateByUrl('/', { skipLocationChange: true })
+      .then(() =>
+        this.router.navigate(['/watch', next.mediaFileId], {
+          queryParams: { mediaId, episodeId: next.episodeId },
+        }),
+      );
+  }
+
   onVolumeChange(vol: number) {
     if (!this.engine) return;
     this.engine.volume = vol;
@@ -1119,7 +1212,25 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   onBack() {
     this.savePosition();
-    window.history.back();
+    // Explicit navigation rather than history.back() — nav-inside-player
+    // (e.g. next-episode) leaves multiple /watch entries on the stack, and
+    // router-reuse across same routes means history.back() only rewrites
+    // the URL without exiting the player.
+    if (!this.mediaId) {
+      void this.router.navigate(['/']);
+      return;
+    }
+    const kind = this.media?.type === 'series' ? 'series' : 'movies';
+    if (this.episodeId && kind === 'series') {
+      void this.router.navigate([
+        '/series',
+        this.mediaId,
+        'episode',
+        this.episodeId,
+      ]);
+    } else {
+      void this.router.navigate(['/' + kind, this.mediaId]);
+    }
   }
 
   onOpenMedia() {

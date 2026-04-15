@@ -256,12 +256,24 @@
   <button
     type="button"
     class="btn btn-primary absolute right-6 z-50 shadow-lg gap-2"
-    [class]="isNative() ? 'bottom-32' : 'bottom-32'"
     style="right: max(1.5rem, env(safe-area-inset-right)); bottom: max(8rem, calc(8rem + env(safe-area-inset-bottom)));"
     (click)="skipIntro.emit()"
   >
     <svg lucideSkipForward class="h-4 w-4"></svg>
     {{ 'player.skip_intro' | translate }}
+  </button>
+}
+
+<!-- ===== Next episode floating button (during outro) ===== -->
+@if (showNextEpisode()) {
+  <button
+    type="button"
+    class="btn btn-primary absolute right-6 z-50 shadow-lg gap-2"
+    style="right: max(1.5rem, env(safe-area-inset-right)); bottom: max(8rem, calc(8rem + env(safe-area-inset-bottom)));"
+    (click)="skipToNextEpisode.emit()"
+  >
+    <svg lucideSkipForward class="h-4 w-4"></svg>
+    {{ 'player.next_episode' | translate }}
   </button>
 }
 

@@ -60,6 +60,7 @@ export interface PlaybackInfoResponse {
   /** Episode-level skip markers — only present for series episodes. */
   markers?: {
     intro?: { startSeconds: number; endSeconds: number };
+    outro?: { startSeconds: number; endSeconds: number };
   };
   /** Embedded chapters from the container (MKV/MP4). */
   chapters?: { startSeconds: number; endSeconds: number; title?: string }[];
