@@ -39,7 +39,11 @@ export function buildSpriteLabel(
     title?: string | null;
   } | null,
 ): string {
-  if (!episode || episode.seasonNumber == null || episode.episodeNumber == null) {
+  if (
+    !episode ||
+    episode.seasonNumber == null ||
+    episode.episodeNumber == null
+  ) {
     return media.title;
   }
   const sn = String(episode.seasonNumber).padStart(2, '0');
@@ -86,7 +90,11 @@ export class ThumbnailService {
    * Shared by the scheduler bulk command and the post-import completion flow.
    */
   async generateForFile(
-    file: { id: number; relativePath: string; streamInfo?: { durationSeconds?: number } | null },
+    file: {
+      id: number;
+      relativePath: string;
+      streamInfo?: { durationSeconds?: number } | null;
+    },
     media: { path: string | null; title: string },
     label: string,
     options: { force?: boolean; skipTracking?: boolean } = {},

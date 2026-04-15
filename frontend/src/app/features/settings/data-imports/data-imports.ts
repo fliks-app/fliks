@@ -13,7 +13,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucideDownload } from '@lucide/angular';
 import { firstValueFrom } from 'rxjs';
 import { ImportDiskComponent } from '../../import-disk/import-disk';
-import { JellyseerrApiService } from '../../../core/services/api/jellyseerr-api.service';
+import { SeerrApiService } from '../../../core/services/api/seerr-api.service';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import {
   LibrariesApiService,
@@ -26,14 +26,14 @@ import {
 import { SseService } from '../../../core/services/sse.service';
 import { ToastService } from '../../../core/services/toast.service';
 
-const SETTING_JELLYSEERR_URL = 'jellyseerr_url';
-const SETTING_JELLYSEERR_API_KEY = 'jellyseerr_api_key';
+const SETTING_SEERR_URL = 'seerr_url';
+const SETTING_SEERR_API_KEY = 'seerr_api_key';
 const SETTING_RADARR_URL = 'radarr_url';
 const SETTING_RADARR_API_KEY = 'radarr_api_key';
 const SETTING_SONARR_URL = 'sonarr_url';
 const SETTING_SONARR_API_KEY = 'sonarr_api_key';
 
-interface JellyseerrSummary {
+interface SeerrSummary {
   users: number;
   usersCreated: number;
   imported: number;
@@ -50,7 +50,7 @@ interface ArrImportResult {
 }
 
 /**
- * "new" sentinel for the library select → tells the import to create a new
+ * "new" sentinel for the library select -> tells the import to create a new
  * library (optionally with `newLibraryName`). null/undefined means "auto-create
  * with a timestamped default name" on the backend.
  */
@@ -65,7 +65,7 @@ type LibrarySelection = number | 'new' | null;
 export class DataImportsSettingsComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly settingsApi = inject(SettingsApiService);
-  private readonly jellyseerrApi = inject(JellyseerrApiService);
+  private readonly seerrApi = inject(SeerrApiService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly mediaServersApi = inject(MediaServersApiService);
   private readonly sse = inject(SseService);
@@ -79,17 +79,17 @@ export class DataImportsSettingsComponent implements OnInit {
   /** Server IDs whose watch-history import is currently running. */
   readonly embyImportingIds = signal<Set<number>>(new Set());
 
-  // ---- Jellyseerr ----
-  readonly jellyseerrSaving = signal(false);
-  readonly jellyseerrTesting = signal(false);
-  readonly jellyseerrImporting = signal(false);
-  readonly jellyseerrUrl = signal('');
-  readonly jellyseerrApiKey = signal('');
-  readonly jellyseerrTestResult = signal<{
+  // ---- Seerr ----
+  readonly seerrSaving = signal(false);
+  readonly seerrTesting = signal(false);
+  readonly seerrImporting = signal(false);
+  readonly seerrUrl = signal('');
+  readonly seerrApiKey = signal('');
+  readonly seerrTestResult = signal<{
     ok: boolean;
     message: string;
   } | null>(null);
-  readonly jellyseerrLastSummary = signal<JellyseerrSummary | null>(null);
+  readonly seerrLastSummary = signal<SeerrSummary | null>(null);
 
   // ---- Radarr / Sonarr ----
   readonly libraries = signal<Library[]>([]);
@@ -134,7 +134,7 @@ export class DataImportsSettingsComponent implements OnInit {
 
   private lastHandledEvent: unknown = null;
 
-  // Listen for Jellyseerr + Emby watch-history import SSE events. Toasts on
+  // Listen for Seerr + Emby watch-history import SSE events. Toasts on
   // completion / failure and updates `importing` flags so buttons re-enable.
   private readonly importEffect = effect(() => {
     const event = this.sse.lastEvent();
@@ -168,30 +168,30 @@ export class DataImportsSettingsComponent implements OnInit {
       );
       return;
     }
-    if (event.type === 'jellyseerr.import.completed') {
-      this.jellyseerrImporting.set(false);
-      const summary: JellyseerrSummary = {
+    if (event.type === 'seerr.import.completed') {
+      this.seerrImporting.set(false);
+      const summary: SeerrSummary = {
         users: Number(event['users'] ?? 0),
         usersCreated: Number(event['usersCreated'] ?? 0),
         imported: Number(event['imported'] ?? 0),
         updated: Number(event['updated'] ?? 0),
         skipped: Number(event['skipped'] ?? 0),
       };
-      this.jellyseerrLastSummary.set(summary);
+      this.seerrLastSummary.set(summary);
       this.toast.success(
         this.translate.instant(
-          'settings.data_imports.jellyseerr.import_completed',
+          'settings.data_imports.seerr.import_completed',
           summary,
         ),
       );
-    } else if (event.type === 'jellyseerr.import.failed') {
-      this.jellyseerrImporting.set(false);
+    } else if (event.type === 'seerr.import.failed') {
+      this.seerrImporting.set(false);
       const err =
         (event['error'] as string | undefined) ??
         this.translate.instant('common.error');
       this.toast.error(
         this.translate.instant(
-          'settings.data_imports.jellyseerr.import_failed',
+          'settings.data_imports.seerr.import_failed',
           { error: err },
         ),
       );
@@ -206,8 +206,8 @@ export class DataImportsSettingsComponent implements OnInit {
         this.librariesApi.list().catch(() => [] as Library[]),
         this.mediaServersApi.list().catch(() => [] as MediaServerRow[]),
       ]);
-      this.jellyseerrUrl.set(all[SETTING_JELLYSEERR_URL] ?? '');
-      this.jellyseerrApiKey.set(all[SETTING_JELLYSEERR_API_KEY] ?? '');
+      this.seerrUrl.set(all[SETTING_SEERR_URL] ?? '');
+      this.seerrApiKey.set(all[SETTING_SEERR_API_KEY] ?? '');
       this.radarrUrl.set(all[SETTING_RADARR_URL] ?? '');
       this.radarrApiKey.set(all[SETTING_RADARR_API_KEY] ?? '');
       this.sonarrUrl.set(all[SETTING_SONARR_URL] ?? '');
@@ -257,74 +257,74 @@ export class DataImportsSettingsComponent implements OnInit {
   }
 
   // ---------------------------------------------------------------------------
-  // Jellyseerr
+  // Seerr
   // ---------------------------------------------------------------------------
 
-  get canSubmitJellyseerr(): boolean {
+  get canSubmitSeerr(): boolean {
     return (
-      this.jellyseerrUrl().trim().length > 0 &&
-      this.jellyseerrApiKey().trim().length > 0
+      this.seerrUrl().trim().length > 0 &&
+      this.seerrApiKey().trim().length > 0
     );
   }
 
-  async saveJellyseerrCredentials() {
-    if (this.jellyseerrSaving()) return;
-    this.jellyseerrSaving.set(true);
+  async saveSeerrCredentials() {
+    if (this.seerrSaving()) return;
+    this.seerrSaving.set(true);
     try {
       await this.settingsApi.setBulk({
-        [SETTING_JELLYSEERR_URL]: this.jellyseerrUrl()
+        [SETTING_SEERR_URL]: this.seerrUrl()
           .trim()
           .replace(/\/$/, ''),
-        [SETTING_JELLYSEERR_API_KEY]: this.jellyseerrApiKey().trim(),
+        [SETTING_SEERR_API_KEY]: this.seerrApiKey().trim(),
       });
       this.toast.success(this.translate.instant('common.saved'));
     } finally {
-      this.jellyseerrSaving.set(false);
+      this.seerrSaving.set(false);
     }
   }
 
-  async testJellyseerr() {
-    if (!this.canSubmitJellyseerr || this.jellyseerrTesting()) return;
-    this.jellyseerrTesting.set(true);
-    this.jellyseerrTestResult.set(null);
+  async testSeerr() {
+    if (!this.canSubmitSeerr || this.seerrTesting()) return;
+    this.seerrTesting.set(true);
+    this.seerrTestResult.set(null);
     try {
-      const r = await this.jellyseerrApi.testConnection(
-        this.jellyseerrUrl().trim().replace(/\/$/, ''),
-        this.jellyseerrApiKey().trim(),
+      const r = await this.seerrApi.testConnection(
+        this.seerrUrl().trim().replace(/\/$/, ''),
+        this.seerrApiKey().trim(),
       );
-      this.jellyseerrTestResult.set(r);
+      this.seerrTestResult.set(r);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      this.jellyseerrTestResult.set({
+      this.seerrTestResult.set({
         ok: false,
         message:
           httpErr.error?.message ?? this.translate.instant('common.error'),
       });
     } finally {
-      this.jellyseerrTesting.set(false);
+      this.seerrTesting.set(false);
     }
   }
 
-  async importJellyseerrRequests() {
-    if (!this.canSubmitJellyseerr || this.jellyseerrImporting()) return;
+  async importSeerrRequests() {
+    if (!this.canSubmitSeerr || this.seerrImporting()) return;
     // Persist credentials first so the backend reads the latest values.
-    await this.saveJellyseerrCredentials();
-    this.jellyseerrImporting.set(true);
-    this.jellyseerrLastSummary.set(null);
+    await this.saveSeerrCredentials();
+    this.seerrImporting.set(true);
+    this.seerrLastSummary.set(null);
     try {
-      await this.jellyseerrApi.importRequests();
+      await this.seerrApi.importRequests();
       this.toast.success(
         this.translate.instant(
-          'settings.data_imports.jellyseerr.import_started',
+          'settings.data_imports.seerr.import_started',
         ),
       );
     } catch (err: unknown) {
-      this.jellyseerrImporting.set(false);
+      this.seerrImporting.set(false);
       const httpErr = err as { error?: { message?: string } };
       this.toast.error(
         httpErr.error?.message ??
           this.translate.instant(
-            'settings.data_imports.jellyseerr.import_failed',
+            'settings.data_imports.seerr.import_failed',
             { error: '' },
           ),
       );
@@ -370,7 +370,7 @@ export class DataImportsSettingsComponent implements OnInit {
     try {
       const r = await firstValueFrom(
         this.http.post<{ ok: boolean; message: string }>(
-          '/api/system/test-radarr-connection',
+          '/api/imports/radarr/test',
           {
             url: this.radarrUrl().trim().replace(/\/$/, ''),
             apiKey: this.radarrApiKey().trim(),
@@ -411,7 +411,7 @@ export class DataImportsSettingsComponent implements OnInit {
     try {
       const r = await firstValueFrom(
         this.http.post<{ ok: boolean; message: string }>(
-          '/api/system/test-sonarr-connection',
+          '/api/imports/sonarr/test',
           {
             url: this.sonarrUrl().trim().replace(/\/$/, ''),
             apiKey: this.sonarrApiKey().trim(),
@@ -450,7 +450,7 @@ export class DataImportsSettingsComponent implements OnInit {
     this.radarrError.set('');
     try {
       const result = await firstValueFrom(
-        this.http.post<ArrImportResult>('/api/system/import-radarr-api', {
+        this.http.post<ArrImportResult>('/api/imports/radarr', {
           url,
           apiKey,
           mode: this.radarrMode(),
@@ -485,7 +485,7 @@ export class DataImportsSettingsComponent implements OnInit {
     this.sonarrError.set('');
     try {
       const result = await firstValueFrom(
-        this.http.post<ArrImportResult>('/api/system/import-sonarr-api', {
+        this.http.post<ArrImportResult>('/api/imports/sonarr', {
           url,
           apiKey,
           mode: this.sonarrMode(),

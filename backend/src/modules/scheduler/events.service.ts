@@ -73,7 +73,11 @@ export type SseEvent =
       title: string;
       error: string;
     }
-  | { type: 'watch-history.import.started'; serverId: number; serverName: string }
+  | {
+      type: 'watch-history.import.started';
+      serverId: number;
+      serverName: string;
+    }
   | {
       type: 'watch-history.import.completed';
       serverId: number;
@@ -89,16 +93,16 @@ export type SseEvent =
       serverName: string;
       error: string;
     }
-  | { type: 'jellyseerr.import.started' }
+  | { type: 'seerr.import.started' }
   | {
-      type: 'jellyseerr.import.completed';
+      type: 'seerr.import.completed';
       users: number;
       usersCreated: number;
       imported: number;
       updated: number;
       skipped: number;
     }
-  | { type: 'jellyseerr.import.failed'; error: string };
+  | { type: 'seerr.import.failed'; error: string };
 
 @Injectable()
 export class EventsService {

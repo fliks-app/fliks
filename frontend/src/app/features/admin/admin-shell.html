@@ -12,32 +12,47 @@
     <li><a routerLink="/admin/system" routerLinkActive="active"><svg lucideLayoutGrid class="h-4 w-4"></svg>{{ 'nav.system' | translate }}</a></li>
     <li><a routerLink="/admin/streams" routerLinkActive="active"><svg lucidePlay class="h-4 w-4"></svg>{{ 'system.tab_streams' | translate }}</a></li>
 
-    <!-- Settings -->
+    <!-- General -->
     <li class="menu-title text-xs uppercase tracking-wider mt-4">{{ 'admin.section_settings' | translate }}</li>
     <li><a routerLink="/admin/settings/general" routerLinkActive="active">{{ 'settings.nav.general' | translate }}</a></li>
+    <li><a routerLink="/admin/settings/libraries" routerLinkActive="active">{{ 'settings.nav.libraries' | translate }}</a></li>
+    <li><a routerLink="/admin/settings/naming" routerLinkActive="active">{{ 'settings.nav.naming' | translate }}</a></li>
+
+    <!-- Médias / profils -->
+    <li class="menu-title text-xs uppercase tracking-wider mt-4">{{ 'admin.section_media' | translate }}</li>
     <li><a routerLink="/admin/settings/quality-profiles" routerLinkActive="active">{{ 'settings.nav.quality_profiles' | translate }}</a></li>
     <li><a routerLink="/admin/settings/language-profiles" routerLinkActive="active">{{ 'settings.nav.language_profiles' | translate }}</a></li>
     <li><a routerLink="/admin/settings/quality-definitions" routerLinkActive="active">{{ 'settings.nav.quality_definitions' | translate }}</a></li>
     <li><a routerLink="/admin/settings/custom-formats" routerLinkActive="active">{{ 'settings.nav.custom_formats' | translate }}</a></li>
     <li><a routerLink="/admin/settings/delay-profiles" routerLinkActive="active">{{ 'settings.nav.delay_profiles' | translate }}</a></li>
+    <li><a routerLink="/admin/settings/cleanup-profiles" routerLinkActive="active">{{ 'settings.nav.cleanup_profiles' | translate }}</a></li>
+
+    <!-- Indexation & téléchargement -->
+    <li class="menu-title text-xs uppercase tracking-wider mt-4">{{ 'admin.section_indexers' | translate }}</li>
     <li><a routerLink="/admin/settings/indexers" routerLinkActive="active">{{ 'settings.nav.indexers' | translate }}</a></li>
     <li><a routerLink="/admin/settings/download-clients" routerLinkActive="active">{{ 'settings.nav.download_clients' | translate }}</a></li>
-    <li><a routerLink="/admin/settings/naming" routerLinkActive="active">{{ 'settings.nav.naming' | translate }}</a></li>
     <li><a routerLink="/admin/settings/blocklist" routerLinkActive="active">{{ 'settings.nav.blocklist' | translate }}</a></li>
-    <li><a routerLink="/admin/settings/subtitle-providers" routerLinkActive="active">{{ 'settings.nav.subtitle_providers' | translate }}</a></li>
+
+    <!-- Sous-titres -->
+    <li class="menu-title text-xs uppercase tracking-wider mt-4">{{ 'admin.section_subtitles' | translate }}</li>
     <li><a routerLink="/admin/settings/subtitles" routerLinkActive="active">{{ 'settings.nav.subtitles' | translate }}</a></li>
-    <li><a routerLink="/admin/settings/notifications" routerLinkActive="active">{{ 'settings.nav.notifications' | translate }}</a></li>
+    <li><a routerLink="/admin/settings/subtitle-providers" routerLinkActive="active">{{ 'settings.nav.subtitle_providers' | translate }}</a></li>
+
+    <!-- Intégrations -->
+    <li class="menu-title text-xs uppercase tracking-wider mt-4">{{ 'admin.section_integrations' | translate }}</li>
     <li><a routerLink="/admin/settings/media-servers" routerLinkActive="active">{{ 'settings.nav.media_servers' | translate }}</a></li>
     <li><a routerLink="/admin/settings/data-imports" routerLinkActive="active">{{ 'settings.nav.data_imports' | translate }}</a></li>
-    <li><a routerLink="/admin/settings/libraries" routerLinkActive="active">{{ 'settings.nav.libraries' | translate }}</a></li>
-    <li><a routerLink="/admin/settings/cleanup-profiles" routerLinkActive="active">{{ 'settings.nav.cleanup_profiles' | translate }}</a></li>
+    <li><a routerLink="/admin/settings/notifications" routerLinkActive="active">{{ 'settings.nav.notifications' | translate }}</a></li>
+
+    <!-- Utilisateurs -->
+    <li class="menu-title text-xs uppercase tracking-wider mt-4">{{ 'admin.section_users' | translate }}</li>
     <li><a routerLink="/admin/settings/users" routerLinkActive="active">{{ 'settings.nav.users' | translate }}</a></li>
     <li><a routerLink="/admin/settings/roles" routerLinkActive="active">{{ 'settings.nav.roles' | translate }}</a></li>
-    <li><a routerLink="/admin/settings/schedulers" routerLinkActive="active">{{ 'settings.nav.schedulers' | translate }}</a></li>
     <li><a routerLink="/admin/settings/auto-approval" routerLinkActive="active">{{ 'settings.nav.auto_approval' | translate }}</a></li>
+
+    <!-- Avancé -->
+    <li class="menu-title text-xs uppercase tracking-wider mt-4">{{ 'admin.section_advanced' | translate }}</li>
+    <li><a routerLink="/admin/settings/schedulers" routerLinkActive="active">{{ 'settings.nav.schedulers' | translate }}</a></li>
     <li><a routerLink="/admin/settings/streaming" routerLinkActive="active">{{ 'settings.nav.streaming' | translate }}</a></li>
-    @if (serverConfig.isNative) {
-      <li><a routerLink="/setup">{{ 'settings.nav.server' | translate }}</a></li>
-    }
   </ng-container>
 </app-settings-drawer>

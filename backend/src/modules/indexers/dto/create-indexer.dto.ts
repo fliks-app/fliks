@@ -35,5 +35,4 @@ export class CreateIndexerDto {
   @IsBoolean()
   @IsOptional()
   enabled?: boolean;
-
 }

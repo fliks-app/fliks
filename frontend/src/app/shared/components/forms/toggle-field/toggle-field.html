@@ -1,0 +1,18 @@
+<div class="form-control">
+  <label class="label cursor-pointer justify-start gap-4">
+    <input
+      type="checkbox"
+      class="toggle"
+      [class]="toggleClass()"
+      [ngModel]="value()"
+      (ngModelChange)="value.set($event)"
+      [disabled]="disabled()"
+    />
+    <span class="label-text font-medium">{{ label() }}</span>
+  </label>
+  @if (hint()) {
+    <div class="label">
+      <span class="label-text-alt text-base-content/50">{{ hint() }}</span>
+    </div>
+  }
+</div>

@@ -16,9 +16,6 @@ import { CompletionService } from './completion.service';
 import { NamingService } from './naming.service';
 import { BackupService } from './backup.service';
 import { LogBufferService } from './log-buffer.service';
-import { EventsService } from './events.service';
-import { ImportRadarrService } from './import-radarr.service';
-import { ImportSonarrService } from './import-sonarr.service';
 import { CommandsController } from './commands.controller';
 import { SystemController } from './system.controller';
 import { IndexersModule } from '../indexers/indexers.module';
@@ -34,7 +31,7 @@ import { SubtitlesModule } from '../subtitles/subtitles.module';
 import { SettingsModule } from '../settings/settings.module';
 import { MediaServersModule } from '../media-servers/media-servers.module';
 import { StreamingModule } from '../streaming/streaming.module';
-import { DownloadsModule } from '../downloads/downloads.module';
+import { InappDownloadsModule } from '../inapp-downloads/inapp-downloads.module';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { StalledCheck } from './entities/stalled-check.entity';
 import { CleanupProfilesModule } from '../cleanup-profiles/cleanup-profiles.module';
@@ -73,7 +70,7 @@ import { Library } from '../libraries/entities/library.entity';
     SettingsModule,
     MediaServersModule,
     StreamingModule,
-    DownloadsModule,
+    InappDownloadsModule,
     CleanupProfilesModule,
     LibrariesModule,
     ProfilesModule,
@@ -86,8 +83,6 @@ import { Library } from '../libraries/entities/library.entity';
     NamingService,
     BackupService,
     LogBufferService,
-    ImportRadarrService,
-    ImportSonarrService,
     SubtitleSchedulerService,
   ],
   exports: [

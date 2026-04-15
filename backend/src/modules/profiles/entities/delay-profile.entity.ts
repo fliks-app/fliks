@@ -10,5 +10,4 @@ export class DelayProfile extends BaseEntity {
   /** Lower = higher priority when multiple profiles match. */
   @Column({ default: 1 })
   order: number;
-
 }

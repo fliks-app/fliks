@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Media } from '../media/entities/media.entity';
@@ -14,33 +14,49 @@ import {
   parseLanguageFromPath,
   parseSubtitleTags,
   resolveRootFolderFromArrPaths,
-  subtitlePathsBesideEpisode,
+  SUBTITLE_FILE_EXTENSIONS,
   upsertImportedSubtitleFile,
-} from './utils/arr-import.util';
+} from '../scheduler/utils/arr-import.util';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
-import { MediaService } from '../media/media.service';
 import { SubtitleProviderType } from '../../common/enums';
 import { LibrariesService } from '../libraries/libraries.service';
 import { Library } from '../libraries/entities/library.entity';
-import type { ImportTargetSpec } from './import-radarr.service';
 import * as path from 'path';
-import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 
-interface SonarrSeries {
-  /** Sonarr API series id (required for extra files / episode files) */
+export interface ImportTargetSpec {
+  targetLibraryId?: number;
+  newLibraryName?: string;
+}
+
+interface RadarrMovie {
   id?: number;
   title?: string;
   tmdbId?: number;
-  tvdbId?: number;
   imdbId?: string;
   year?: number;
   monitored?: boolean;
   path?: string;
-  /** Sonarr API: path of the library root */
+  /** Radarr API: path of the library root */
   rootFolderPath?: string;
   overview?: string;
   qualityProfileId?: number;
+  movieFile?: {
+    relativePath?: string;
+    size?: number;
+    quality?: { quality?: { name?: string } };
+  };
+}
+
+interface RadarrExtraFile {
+  movieId: number;
+  relativePath: string;
+  extension: string;
+  type: string;
+  /** Language object from Radarr v3+ */
+  language?: { name?: string; id?: number };
+  /** Tags from filename parsing (e.g. "forced", "sdh", "cc") */
+  tags?: string[];
 }
 
 interface RemoteQualityItem {
@@ -66,8 +82,8 @@ export interface ApiImportResult {
 }
 
 @Injectable()
-export class ImportSonarrService {
-  private readonly log = new Logger(ImportSonarrService.name);
+export class ImportRadarrService {
+  private readonly log = new Logger(ImportRadarrService.name);
 
   constructor(
     @InjectRepository(Media)
@@ -80,19 +96,18 @@ export class ImportSonarrService {
     private readonly subtitleRepo: Repository<SubtitleFile>,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
-    private readonly mediaService: MediaService,
     private readonly libraries: LibrariesService,
   ) {}
 
   private autoLibraryName(): string {
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
-    return `Sonarr Import ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    return `Radarr Import ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
   }
 
   /**
-   * Hits Sonarr's `/api/v3/system/status` to validate the URL + API key. Same
-   * shape as Jellyseerr / Radarr test results for symmetric frontend handling.
+   * Hits Radarr's `/api/v3/system/status` to validate the URL + API key. Same
+   * shape as Seerr's test result for symmetric frontend handling.
    */
   async testConnection(
     url: string,
@@ -106,13 +121,13 @@ export class ImportSonarrService {
       if (!res.ok) {
         return {
           ok: false,
-          message: `Sonarr returned ${res.status} ${res.statusText}`,
+          message: `Radarr returned ${res.status} ${res.statusText}`,
         };
       }
       const data = (await res.json()) as { instanceName?: string };
       return {
         ok: true,
-        message: `Connecté à ${data.instanceName ?? 'Sonarr'}`,
+        message: `Connecté à ${data.instanceName ?? 'Radarr'}`,
       };
     } catch (e) {
       return { ok: false, message: (e as Error).message };
@@ -135,32 +150,32 @@ export class ImportSonarrService {
     const targetLibrary = await this.libraries.resolveTargetLibrary({
       targetLibraryId: target.targetLibraryId,
       newLibraryName: target.newLibraryName,
-      mediaType: MediaType.SERIES,
+      mediaType: MediaType.MOVIE,
       autoLabel: this.autoLibraryName(),
     });
 
-    let series: SonarrSeries[];
+    let movies: RadarrMovie[];
     try {
-      const res = await fetch(`${baseUrl}/api/v3/series`, {
+      const res = await fetch(`${baseUrl}/api/v3/movie`, {
         headers: { 'X-Api-Key': apiKey },
       });
       if (!res.ok) {
         throw new BadRequestException(
-          `Sonarr API returned ${res.status}: ${res.statusText}`,
+          `Radarr API returned ${res.status}: ${res.statusText}`,
         );
       }
-      series = (await res.json()) as SonarrSeries[];
+      movies = (await res.json()) as RadarrMovie[];
     } catch (e) {
       if (e instanceof BadRequestException) throw e;
       throw new BadRequestException(
-        `Cannot connect to Sonarr: ${(e as Error).message}`,
+        `Cannot connect to Radarr: ${(e as Error).message}`,
       );
     }
 
-    if (!Array.isArray(series) || !series.length) {
+    if (!Array.isArray(movies) || !movies.length) {
       return {
         imported: 0,
-        errors: ['No series found in Sonarr'],
+        errors: ['No movies found in Radarr'],
         rootFoldersCreated,
         qualityProfilesCreated,
       };
@@ -181,65 +196,65 @@ export class ImportSonarrService {
 
     const rootFolders = await this.rootFolderRepo.find();
 
-    const newSeriesIds: number[] = [];
-
-    for (const s of series) {
-      const title = s.title ?? '';
-      const tmdbId = Number(s.tmdbId || s.tvdbId);
+    for (const movie of movies) {
+      const title = movie.title ?? '';
+      const tmdbId = Number(movie.tmdbId);
       if (!Number.isFinite(tmdbId)) {
-        errors.push(`${title || '(no title)'}: no valid tmdbId or tvdbId`);
+        errors.push(`${title || '(no title)'}: invalid tmdbId`);
         continue;
       }
       try {
         const exists = await this.mediaRepo.findOne({
-          where: { tmdbId, type: MediaType.SERIES },
+          where: { tmdbId, type: MediaType.MOVIE },
         });
         const localProfileId =
-          s.qualityProfileId != null
-            ? profileMap.get(s.qualityProfileId)
+          movie.qualityProfileId != null
+            ? profileMap.get(movie.qualityProfileId)
             : undefined;
 
         const resolved = resolveRootFolderFromArrPaths(
-          s.path,
-          s.rootFolderPath,
+          movie.path,
+          movie.rootFolderPath,
           rootFolders,
         );
         const folderName =
           resolved?.folderName ??
-          (s.path ? path.basename(s.path.replace(/\/+$/, '')) : undefined);
+          (movie.path
+            ? path.basename(movie.path.replace(/\/+$/, ''))
+            : undefined);
 
         if (exists) {
           if (mode === 'skip') continue;
+          // mode === 'update': update existing fields without deleting
           await this.mediaRepo.update(exists.id, {
             title,
-            year: s.year ?? exists.year,
-            monitored: s.monitored ?? exists.monitored,
+            year: movie.year ?? exists.year,
+            monitored: movie.monitored ?? exists.monitored,
             folderName: folderName || exists.folderName,
-            imdbId: s.imdbId || exists.imdbId,
-            overview: s.overview || exists.overview,
+            imdbId: movie.imdbId || exists.imdbId,
+            overview: movie.overview || exists.overview,
             qualityProfileId: localProfileId ?? exists.qualityProfileId,
             library: { id: exists.libraryId ?? targetLibrary.id } as Library,
           });
         } else {
-          const saved = await this.mediaRepo.save(
+          await this.mediaRepo.save(
             this.mediaRepo.create({
               title,
               tmdbId,
-              year: s.year ?? undefined,
-              type: MediaType.SERIES,
-              status: MediaStatus.CONTINUING,
-              monitored: s.monitored ?? true,
+              year: movie.year ?? undefined,
+              type: MediaType.MOVIE,
+              status: MediaStatus.RELEASED,
+              monitored: movie.monitored ?? true,
               rootFolder: resolved?.rootFolderId
                 ? ({ id: resolved.rootFolderId } as RootFolder)
                 : null,
               library: targetLibrary,
               folderName: folderName || undefined,
-              imdbId: s.imdbId || undefined,
-              overview: s.overview || undefined,
+              imdbId: movie.imdbId || undefined,
+              overview: movie.overview || undefined,
               qualityProfileId: localProfileId ?? undefined,
             }),
           );
-          newSeriesIds.push(saved.id);
         }
         imported++;
       } catch (e) {
@@ -247,25 +262,20 @@ export class ImportSonarrService {
       }
     }
 
-    // Fetch seasons/episodes from TMDB for newly imported series (fire-and-forget)
-    if (newSeriesIds.length) {
-      this.log.log(
-        `Sonarr import: refreshing metadata for ${newSeriesIds.length} new series`,
-      );
-      void this.refreshNewSeries(newSeriesIds);
-    }
-
+    // Import subtitles if requested
     let subtitlesImported = 0;
     if (importSubtitles) {
-      subtitlesImported = await this.importSidecarSubtitlesForSyncedSeries(
-        series,
+      subtitlesImported = await this.importSubtitlesFromRadarr(
+        baseUrl,
+        apiKey,
+        movies,
         errors,
         mode,
       );
     }
 
     this.log.log(
-      `Sonarr API import: ${imported} imported, ${subtitlesImported} subtitles, ${errors.length} errors`,
+      `Radarr API import: ${imported} imported, ${subtitlesImported} subtitles, ${errors.length} errors`,
     );
     return {
       imported,
@@ -276,76 +286,69 @@ export class ImportSonarrService {
     };
   }
 
-  /**
-   * Sidecar subtitles next to already-imported episode files. Uses only Fliks DB +
-   * disk (same paths as streaming); no Sonarr episodefile API.
-   */
-  private async importSidecarSubtitlesForSyncedSeries(
-    seriesList: SonarrSeries[],
+  private async importSubtitlesFromRadarr(
+    baseUrl: string,
+    apiKey: string,
+    movies: RadarrMovie[],
     errors: string[],
     mode: 'skip' | 'update',
   ): Promise<number> {
     let count = 0;
 
-    for (const series of seriesList) {
-      if (!series.id) continue;
-
-      const tmdbId = Number(series.tmdbId || series.tvdbId);
-      if (!Number.isFinite(tmdbId)) continue;
+    for (const movie of movies) {
+      if (!movie.id || !movie.tmdbId) continue;
 
       const media = await this.mediaRepo.findOne({
-        where: { tmdbId, type: MediaType.SERIES },
-        relations: ['rootFolder'],
+        where: { tmdbId: movie.tmdbId, type: MediaType.MOVIE },
       });
-      if (!media?.path) continue;
+      if (!media) continue;
+
+      const mediaFile = await this.mediaFileRepo.findOne({
+        where: { media: { id: media.id } },
+        order: { id: 'DESC' },
+      });
+      if (!mediaFile) continue;
 
       try {
-        const mediaFiles = await this.mediaFileRepo.find({
-          where: { media: { id: media.id } },
-          order: { id: 'ASC' },
-        });
+        const res = await fetch(
+          `${baseUrl}/api/v3/extrafile?movieId=${movie.id}`,
+          {
+            headers: { 'X-Api-Key': apiKey },
+          },
+        );
+        if (!res.ok) continue;
+        const extras = (await res.json()) as RadarrExtraFile[];
 
-        for (const mediaFile of mediaFiles) {
-          const subtitlePaths = await subtitlePathsBesideEpisode(
-            media.path,
-            mediaFile.relativePath,
-          );
+        for (const extra of extras) {
+          if (extra.type !== 'subtitle') continue;
+          const ext = path.extname(extra.relativePath).toLowerCase();
+          if (!SUBTITLE_FILE_EXTENSIONS.has(ext)) continue;
 
-          for (const absSubtitlePath of subtitlePaths) {
-            const relativeName = path.basename(absSubtitlePath);
-            const lang = parseLanguageFromPath(relativeName);
-            const tags = parseSubtitleTags(relativeName);
-            const forced = tags.includes('forced');
-            const rel = relativePathUnderMediaRoot(media.path, absSubtitlePath);
-            if (!rel) {
-              this.log.error(
-                `Sonarr subtitles: path outside media root — mediaId=${media.id} path=${media.path} subtitle=${absSubtitlePath}`,
-              );
-              continue;
-            }
+          const lang =
+            extra.language?.name?.toLowerCase() ??
+            parseLanguageFromPath(extra.relativePath);
+          const tags = parseSubtitleTags(extra.relativePath);
+          const forced = tags.includes('forced');
+          const relativePath = extra.relativePath?.trim() || null;
+          if (!relativePath) continue;
 
-            count += await upsertImportedSubtitleFile(this.subtitleRepo, {
-              mediaId: media.id,
-              mediaFileId: mediaFile.id,
-              episodeId: mediaFile.episodeId,
-              language: lang,
-              forced,
-              tags,
-              relativePath: rel,
-              mode,
-              providerType: SubtitleProviderType.SONARR,
-            });
-          }
+          count += await upsertImportedSubtitleFile(this.subtitleRepo, {
+            mediaId: media.id,
+            mediaFileId: mediaFile.id,
+            language: lang,
+            forced,
+            tags,
+            relativePath,
+            mode,
+            providerType: SubtitleProviderType.RADARR,
+          });
         }
       } catch (e) {
-        const msg = (e as Error).message;
-        this.log.error(
-          `Sonarr subtitles: error for "${series.title ?? 'series'}": ${msg}`,
-        );
-        errors.push(`Subtitles for "${series.title ?? 'series'}": ${msg}`);
+        errors.push(`Subtitles for "${movie.title}": ${(e as Error).message}`);
       }
     }
 
+    this.log.log(`Radarr subtitle import: ${count} subtitles imported`);
     return count;
   }
 
@@ -364,7 +367,7 @@ export class ImportSonarrService {
       const existingProfiles = await this.qpRepo.find();
       const existingByName = new Map(existingProfiles.map((p) => [p.name, p]));
 
-      this.log.log(`Found ${remoteProfiles.length} quality profiles in Sonarr`);
+      this.log.log(`Found ${remoteProfiles.length} quality profiles in Radarr`);
 
       for (const remote of remoteProfiles) {
         const existing = existingByName.get(remote.name);
@@ -389,11 +392,11 @@ export class ImportSonarrService {
         );
         map.set(remote.id, saved.id);
         created.push(remote.name);
-        this.log.log(`Created quality profile from Sonarr: ${remote.name}`);
+        this.log.log(`Created quality profile from Radarr: ${remote.name}`);
       }
     } catch (e) {
       this.log.warn(
-        `Could not import Sonarr quality profiles: ${(e as Error).message}`,
+        `Could not import Radarr quality profiles: ${(e as Error).message}`,
       );
     }
     return map;
@@ -422,9 +425,11 @@ export class ImportSonarrService {
     };
 
     for (const item of remoteItems) {
+      // Single quality
       if (item.quality?.name) {
         addQuality(item.quality.name, item.allowed);
       }
+      // Group: flatten sub-items
       if (item.items?.length) {
         for (const sub of item.items) {
           if (sub.quality?.name) {
@@ -434,6 +439,7 @@ export class ImportSonarrService {
       }
     }
 
+    // Fill in missing qualities as not allowed
     const presentIds = new Set(items.map((i) => i.quality.id));
     for (const q of APP_QUALITIES) {
       if (!presentIds.has(q.id)) {
@@ -454,16 +460,19 @@ export class ImportSonarrService {
   }
 
   private findLocalQuality(remoteName: string) {
+    // Normalize: remove spaces, dashes, case -> e.g. "webdl1080p"
     const normalized = remoteName.replace(/[\s\-_]/g, '').toLowerCase();
     return APP_QUALITIES.find(
       (q) => q.name.replace(/[\s\-_]/g, '').toLowerCase() === normalized,
     );
   }
 
+  /** Map Radarr cutoff quality ID to our local quality ID. */
   private resolveCutoff(
     remoteCutoffId: number,
     remoteItems: RemoteQualityItem[],
   ): number {
+    // Find the quality name that matches the remote cutoff ID
     const findName = (items: RemoteQualityItem[]): string | undefined => {
       for (const item of items) {
         if (item.quality?.id === remoteCutoffId) return item.quality.name;
@@ -479,7 +488,7 @@ export class ImportSonarrService {
       const local = this.findLocalQuality(name);
       if (local) return local.id;
     }
-    return 16;
+    return 16; // fallback WEBDL-1080p
   }
 
   private async reconcileRootFolders(
@@ -505,31 +514,14 @@ export class ImportSonarrService {
         );
         for (let i = before; i < rootFoldersCreated.length; i++) {
           this.log.log(
-            `Created root folder from Sonarr: ${rootFoldersCreated[i]}`,
+            `Created root folder from Radarr: ${rootFoldersCreated[i]}`,
           );
         }
       }
     } catch (e) {
       this.log.warn(
-        `Could not fetch Sonarr root folders: ${(e as Error).message}`,
+        `Could not fetch Radarr root folders: ${(e as Error).message}`,
       );
     }
-  }
-
-
-  /** Fetch seasons/episodes from TMDB for newly imported series (best-effort). */
-  private async refreshNewSeries(ids: number[]): Promise<void> {
-    for (const id of ids) {
-      try {
-        await this.mediaService.refreshMetadata(id);
-      } catch (e) {
-        this.log.warn(
-          `Could not refresh metadata for series #${id}: ${(e as Error).message}`,
-        );
-      }
-    }
-    this.log.log(
-      `Sonarr import: metadata refreshed for ${ids.length} new series`,
-    );
   }
 }

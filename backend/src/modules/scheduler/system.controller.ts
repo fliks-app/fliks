@@ -27,9 +27,6 @@ import { Action } from '../auth/casl/actions.enum';
 import { BackupService } from './backup.service';
 import { LogBufferService } from './log-buffer.service';
 import { EventsService } from './events.service';
-import { ImportRadarrService, ApiImportResult } from './import-radarr.service';
-import { ImportSonarrService } from './import-sonarr.service';
-import { ImportApiDto } from './dto/import-api.dto';
 import { Observable } from 'rxjs';
 import { TranscodingService } from '../streaming/transcoding.service';
 import { ActiveStreamTracker } from '../streaming/active-stream-tracker.service';
@@ -119,8 +116,6 @@ export class SystemController {
     private readonly backup: BackupService,
     private readonly logBuffer: LogBufferService,
     private readonly eventsService: EventsService,
-    private readonly importRadarrService: ImportRadarrService,
-    private readonly importSonarrService: ImportSonarrService,
     private readonly transcodingService: TranscodingService,
     private readonly activeStreamTracker: ActiveStreamTracker,
     private readonly playbackService: PlaybackService,
@@ -251,48 +246,6 @@ export class SystemController {
       q: q || undefined,
       limit: limit ? parseInt(limit, 10) : 200,
     });
-  }
-
-  @Post('test-radarr-connection')
-  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
-  testRadarrConnection(@Body() body: { url: string; apiKey: string }) {
-    return this.importRadarrService.testConnection(body.url, body.apiKey);
-  }
-
-  @Post('test-sonarr-connection')
-  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
-  testSonarrConnection(@Body() body: { url: string; apiKey: string }) {
-    return this.importSonarrService.testConnection(body.url, body.apiKey);
-  }
-
-  @Post('import-radarr-api')
-  @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
-  importRadarrApi(@Body() dto: ImportApiDto): Promise<ApiImportResult> {
-    return this.importRadarrService.importFromApi(
-      dto.url,
-      dto.apiKey,
-      dto.mode ?? 'skip',
-      dto.importSubtitles ?? false,
-      {
-        targetLibraryId: dto.targetLibraryId,
-        newLibraryName: dto.newLibraryName,
-      },
-    );
-  }
-
-  @Post('import-sonarr-api')
-  @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
-  importSonarrApi(@Body() dto: ImportApiDto): Promise<ApiImportResult> {
-    return this.importSonarrService.importFromApi(
-      dto.url,
-      dto.apiKey,
-      dto.mode ?? 'skip',
-      dto.importSubtitles ?? false,
-      {
-        targetLibraryId: dto.targetLibraryId,
-        newLibraryName: dto.newLibraryName,
-      },
-    );
   }
 
   private async checkClients(): Promise<ServiceStatus[]> {

@@ -23,11 +23,9 @@
     <div class="form-control">
       <label class="label cursor-pointer justify-start gap-4">
         <input type="checkbox" class="toggle toggle-primary" [ngModel]="rememberSubtitleSelections()" (ngModelChange)="rememberSubtitleSelections.set($event)" />
-        <div>
-          <span class="label-text font-medium">{{ 'playback_settings.sub_remember' | translate }}</span>
-          <p class="text-xs text-base-content/50 mt-0.5">{{ 'playback_settings.sub_remember_hint' | translate }}</p>
-        </div>
+        <span class="label-text font-medium">{{ 'playback_settings.sub_remember' | translate }}</span>
       </label>
+      <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.sub_remember_hint' | translate }}</span></div>
     </div>
 
     <button class="btn btn-ghost btn-sm text-error gap-2 self-start" (click)="clearSubtitleSelections()">
@@ -38,7 +36,7 @@
     <div class="divider my-0"></div>
 
     <h2 class="text-lg font-bold">{{ 'playback_settings.sub_appearance_title' | translate }}</h2>
-    <p class="text-xs text-base-content/50 -mt-4">{{ 'playback_settings.sub_appearance_hint' | translate }}</p>
+    <p class="text-sm text-base-content/60 -mt-4">{{ 'playback_settings.sub_appearance_hint' | translate }}</p>
 
     <label class="form-control w-full max-w-xs">
       <div class="label"><span class="label-text font-medium">{{ 'playback_settings.sub_size' | translate }}</span></div>

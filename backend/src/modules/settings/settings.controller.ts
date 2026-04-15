@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Put,
-  Body,
-  Param,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Put, Body, Param, UseGuards } from '@nestjs/common';
 import { IsString, IsOptional, IsObject } from 'class-validator';
 import { SettingsService } from './settings.service';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';

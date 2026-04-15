@@ -1,26 +1,26 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 
-export interface JellyseerrUser {
+export interface SeerrUser {
   id: number;
   email?: string;
   displayName?: string;
   jellyfinUsername?: string;
   plexUsername?: string;
-  /** Local jellyseerr account name (when not linked to Jellyfin/Plex). */
+  /** Local Seerr account name (when not linked to Jellyfin/Plex). */
   username?: string;
 }
 
-/** Jellyseerr request status codes. */
-export const JELLYSEERR_REQUEST_STATUS = {
+/** Seerr request status codes. */
+export const SEERR_REQUEST_STATUS = {
   PENDING: 1,
   APPROVED: 2,
   DECLINED: 3,
   FAILED: 4,
 } as const;
 
-/** Jellyseerr media availability status codes. */
-export const JELLYSEERR_MEDIA_STATUS = {
+/** Seerr media availability status codes. */
+export const SEERR_MEDIA_STATUS = {
   UNKNOWN: 1,
   PENDING: 2,
   PROCESSING: 3,
@@ -28,7 +28,7 @@ export const JELLYSEERR_MEDIA_STATUS = {
   AVAILABLE: 5,
 } as const;
 
-export interface JellyseerrMediaRequest {
+export interface SeerrMediaRequest {
   id: number;
   status: 1 | 2 | 3 | 4;
   type: 'movie' | 'tv';
@@ -40,23 +40,23 @@ export interface JellyseerrMediaRequest {
     tmdbId: number;
     /** 1=UNKNOWN 2=PENDING 3=PROCESSING 4=PARTIALLY_AVAILABLE 5=AVAILABLE */
     status: 1 | 2 | 3 | 4 | 5;
-    /** Some Jellyseerr builds expose the title here, others don't. */
+    /** Some Seerr builds expose the title here, others don't. */
     title?: string;
     name?: string;
   };
-  requestedBy: JellyseerrUser;
+  requestedBy: SeerrUser;
   seasons?: { seasonNumber: number }[];
 }
 
 /**
- * Thin client for Jellyseerr's REST API (also compatible with Overseerr — same
- * endpoints / auth scheme since Jellyseerr is a fork).
+ * Thin client for Seerr's REST API (compatible with both Jellyseerr and
+ * Overseerr — same endpoints / auth scheme since Jellyseerr is a fork).
  *
  * Auth: send the admin API key in the `X-Api-Key` header.
  */
 @Injectable()
-export class JellyseerrService {
-  private readonly log = new Logger(JellyseerrService.name);
+export class SeerrService {
+  private readonly log = new Logger(SeerrService.name);
 
   /**
    * Verify connectivity + API key by hitting `/api/v1/settings/main`. Any 2xx
@@ -75,7 +75,7 @@ export class JellyseerrService {
           timeout: 15_000,
         },
       );
-      const name = res.data?.applicationTitle ?? 'Jellyseerr';
+      const name = res.data?.applicationTitle ?? 'Seerr';
       return { ok: true, message: `Connecté à ${name}` };
     } catch (e) {
       return { ok: false, message: (e as Error).message };
@@ -83,8 +83,8 @@ export class JellyseerrService {
   }
 
   /**
-   * Resolve a movie/tv title via Jellyseerr's TMDB proxy. The `/request`
-   * endpoint only returns IDs, not titles — Jellyseerr fetches them from
+   * Resolve a movie/tv title via Seerr's TMDB proxy. The `/request`
+   * endpoint only returns IDs, not titles — Seerr fetches them from
    * TMDB at display time. We use the same proxy for orphan requests where
    * the matching Fliks `Media` row doesn't exist yet.
    *
@@ -125,11 +125,11 @@ export class JellyseerrService {
     apiKey: string,
     skip: number,
     take: number,
-  ): Promise<{ total: number; results: JellyseerrMediaRequest[] }> {
+  ): Promise<{ total: number; results: SeerrMediaRequest[] }> {
     const base = this.normalize(url);
     const res = await axios.get<{
       pageInfo?: { results: number };
-      results: JellyseerrMediaRequest[];
+      results: SeerrMediaRequest[];
     }>(`${base}/api/v1/request`, {
       headers: { 'X-Api-Key': apiKey },
       params: { take, skip, filter: 'all', sort: 'added' },

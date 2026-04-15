@@ -22,7 +22,6 @@ import { SubtitlesModule } from '../subtitles/subtitles.module';
 import { MediaServersModule } from '../media-servers/media-servers.module';
 import { MovieDownloadService } from './movie-download.service';
 import { EpisodeDownloadService } from './episode-download.service';
-import { DiskImportService } from './disk-import.service';
 import { NamingService } from '../scheduler/naming.service';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { Library } from '../libraries/entities/library.entity';
@@ -65,7 +64,6 @@ import { StreamingModule } from '../streaming/streaming.module';
     MediaService,
     MovieDownloadService,
     EpisodeDownloadService,
-    DiskImportService,
     NamingService,
   ],
   exports: [MediaService],

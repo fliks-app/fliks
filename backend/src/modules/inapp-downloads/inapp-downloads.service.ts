@@ -127,8 +127,8 @@ export interface DownloadQuality {
 }
 
 @Injectable()
-export class DownloadsService implements OnModuleInit {
-  private readonly log = new Logger(DownloadsService.name);
+export class InappDownloadsService implements OnModuleInit {
+  private readonly log = new Logger(InappDownloadsService.name);
   private readonly cachePath: string;
   /** Active transcode processes — keyed by task ID */
   private readonly activeJobs = new Map<number, { kill: () => void }>();

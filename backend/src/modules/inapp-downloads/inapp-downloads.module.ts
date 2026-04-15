@@ -6,8 +6,8 @@ import { Episode } from '../media/entities/episode.entity';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { StreamingModule } from '../streaming/streaming.module';
 import { AuthModule } from '../auth/auth.module';
-import { DownloadsService } from './downloads.service';
-import { DownloadsController } from './downloads.controller';
+import { InappDownloadsService } from './inapp-downloads.service';
+import { InappDownloadsController } from './inapp-downloads.controller';
 
 @Module({
   imports: [
@@ -15,8 +15,8 @@ import { DownloadsController } from './downloads.controller';
     StreamingModule,
     AuthModule,
   ],
-  controllers: [DownloadsController],
-  providers: [DownloadsService],
-  exports: [DownloadsService],
+  controllers: [InappDownloadsController],
+  providers: [InappDownloadsService],
+  exports: [InappDownloadsService],
 })
-export class DownloadsModule {}
+export class InappDownloadsModule {}

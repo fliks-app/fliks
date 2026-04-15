@@ -17,15 +17,12 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { MediaService } from './media.service';
 import { MovieDownloadService } from './movie-download.service';
 import { EpisodeDownloadService } from './episode-download.service';
-import { DiskImportService } from './disk-import.service';
 import { CreateMediaDto } from './dto/create-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
 import { SearchMediaDto } from './dto/search-media.dto';
 import { ImportTmdbDto } from './dto/import-tmdb.dto';
 import { ImportMediaDto } from './dto/import-media.dto';
 import { GrabMovieDto } from './dto/grab-movie.dto';
-import { ScanFolderDto } from './dto/scan-folder.dto';
-import { ConfirmDiskImportDto } from './dto/confirm-disk-import.dto';
 import { UpdateMediaProfilesDto } from './dto/update-media-profiles.dto';
 import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
@@ -53,7 +50,6 @@ export class MediaController {
     private readonly mediaService: MediaService,
     private readonly movieDownload: MovieDownloadService,
     private readonly episodeDownload: EpisodeDownloadService,
-    private readonly diskImport: DiskImportService,
     private readonly subtitlesService: SubtitlesService,
     private readonly subtitleSync: SubtitleSyncService,
     private readonly ffprobe: FfprobeService,
@@ -80,18 +76,6 @@ export class MediaController {
   @CheckPolicies((ability) => ability.can(Action.Create, Media))
   importMedia(@Body() dto: ImportMediaDto) {
     return this.mediaService.importMedia(dto);
-  }
-
-  @Post('import/disk/scan')
-  @CheckPolicies((ability) => ability.can(Action.Create, Media))
-  diskScan(@Body() dto: ScanFolderDto) {
-    return this.diskImport.scanFolder(dto.folderPath);
-  }
-
-  @Post('import/disk/confirm')
-  @CheckPolicies((ability) => ability.can(Action.Create, Media))
-  diskConfirm(@Body() dto: ConfirmDiskImportDto) {
-    return this.diskImport.confirmImport(dto.imports);
   }
 
   @Post()

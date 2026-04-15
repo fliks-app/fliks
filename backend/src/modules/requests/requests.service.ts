@@ -223,7 +223,7 @@ export class RequestsService {
       .leftJoinAndSelect('r.user', 'user')
       .leftJoinAndSelect('r.approvedBy', 'approvedBy')
       // Joined so the UI can display the live media title (the cached
-      // `request.title` may be empty for Jellyseerr-imported orphans).
+      // `request.title` may be empty for Seerr-imported orphans).
       .leftJoinAndSelect('r.media', 'media')
       .orderBy('r.createdAt', 'DESC');
 

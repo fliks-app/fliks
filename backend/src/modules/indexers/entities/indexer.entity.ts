@@ -23,5 +23,4 @@ export class Indexer extends BaseEntity {
 
   @Column({ default: true })
   enabled: boolean;
-
 }

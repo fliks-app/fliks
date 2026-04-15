@@ -83,5 +83,4 @@ export class UpdateMediaDto {
   @IsNumber()
   @IsOptional()
   languageProfileId?: number;
-
 }

@@ -91,7 +91,7 @@ export class ImportDiskComponent implements OnInit {
     this.importResult.set(null);
     try {
       const candidates = await firstValueFrom(
-        this.http.post<ScanCandidate[]>('/api/media/import/disk/scan', { folderPath: folder }),
+        this.http.post<ScanCandidate[]>('/api/imports/disk/scan', { folderPath: folder }),
       );
       this.rows.set(
         candidates.map((c) => ({
@@ -156,7 +156,7 @@ export class ImportDiskComponent implements OnInit {
     try {
       const result = await firstValueFrom(
         this.http.post<{ imported: number; errors: string[] }>(
-          '/api/media/import/disk/confirm',
+          '/api/imports/disk/confirm',
           { imports: toImport },
         ),
       );

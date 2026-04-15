@@ -10,15 +10,15 @@ import { Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
-import { Media } from './entities/media.entity';
-import { MediaFile } from './entities/media-file.entity';
-import { Season } from './entities/season.entity';
-import { Episode } from './entities/episode.entity';
+import { Media } from '../media/entities/media.entity';
+import { MediaFile } from '../media/entities/media-file.entity';
+import { Season } from '../media/entities/season.entity';
+import { Episode } from '../media/entities/episode.entity';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { Library } from '../libraries/entities/library.entity';
-import { parseReleaseQuality } from './release-quality.parser';
+import { parseReleaseQuality } from '../media/release-quality.parser';
 import { ImportFileEntry } from './dto/confirm-disk-import.dto';
-import { MediaService } from './media.service';
+import { MediaService } from '../media/media.service';
 import { SubtitleSchedulerService } from '../scheduler/subtitle-scheduler.service';
 
 const VIDEO_EXTS = new Set([
@@ -64,6 +64,7 @@ export class DiskImportService {
     private readonly episodeRepo: Repository<Episode>,
     @InjectRepository(RootFolder)
     private readonly rootFolderRepo: Repository<RootFolder>,
+    @Inject(forwardRef(() => MediaService))
     private readonly mediaService: MediaService,
     @Inject(forwardRef(() => SubtitleSchedulerService))
     private readonly subtitleScheduler: SubtitleSchedulerService,
@@ -344,7 +345,7 @@ export class DiskImportService {
     );
     if (match) return match;
 
-    // Target starts with media title (e.g. "inception 2010" → "inception")
+    // Target starts with media title (e.g. "inception 2010" -> "inception")
     match = allMedia.find((m) => {
       const mt = norm(m.title);
       return mt.length >= 2 && target.startsWith(mt);

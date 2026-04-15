@@ -1,0 +1,17 @@
+<label class="form-control w-full">
+  <div class="label"><span class="label-text font-medium">{{ label() }}</span></div>
+  <input
+    [type]="type()"
+    class="input input-bordered w-full"
+    [class.input-sm]="size() === 'sm'"
+    [placeholder]="placeholder()"
+    [ngModel]="value()"
+    (ngModelChange)="value.set($event)"
+    [disabled]="disabled()"
+  />
+  @if (hint()) {
+    <div class="label">
+      <span class="label-text-alt text-base-content/50">{{ hint() }}</span>
+    </div>
+  }
+</label>

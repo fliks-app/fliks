@@ -8,5 +8,4 @@ export class CreateDelayProfileDto {
   @IsNumber()
   @IsOptional()
   order?: number;
-
 }

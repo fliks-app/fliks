@@ -37,5 +37,4 @@ export class UpdateIndexerDto {
   @IsBoolean()
   @IsOptional()
   enabled?: boolean;
-
 }

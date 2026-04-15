@@ -1,6 +1,6 @@
 <div class="drawer lg:drawer-open min-h-screen">
   <input [id]="drawerId" type="checkbox" class="drawer-toggle" />
-  <div class="drawer-content flex flex-col relative">
+  <div class="drawer-content flex flex-col relative min-w-0">
     <!-- Mobile top bar -->
     <nav
       class="navbar bg-base-100 shadow-sm lg:hidden fixed top-0 left-0 right-0 z-30 transition-all duration-300"
@@ -19,8 +19,13 @@
         <span class="text-lg font-bold">{{ title }}</span>
       </div>
     </nav>
-    <div class="h-16 lg:hidden"></div>
-    <main class="flex-1 p-4 lg:p-6">
+    <!-- Spacer pushes content below the fixed mobile navbar; needs to match
+         the navbar's actual height (safe-area-inset-top + 64px nav body). -->
+    <div
+      class="lg:hidden"
+      style="height: calc(env(safe-area-inset-top, 0px) + 4rem)"
+    ></div>
+    <main class="flex-1 p-4 lg:p-6 min-w-0 overflow-x-hidden">
       <router-outlet />
     </main>
   </div>
@@ -36,7 +41,7 @@
       "
     >
       <div class="p-4 border-b border-base-200">
-        <a routerLink="/" class="flex items-center gap-2 text-base-content/60 hover:text-base-content text-sm mb-2">
+        <a routerLink="/" class="flex items-center gap-2 text-base-content/60 hover:text-base-content text-sm mb-2 mt-4">
           <svg lucideChevronLeft class="h-4 w-4"></svg>
           {{ backLabel }}
         </a>

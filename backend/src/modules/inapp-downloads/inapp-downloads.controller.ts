@@ -14,15 +14,15 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
-import { DownloadsService } from './downloads.service';
+import { InappDownloadsService } from './inapp-downloads.service';
 import { User } from '../users/entities/user.entity';
 import * as fs from 'fs';
 import * as path from 'path';
 
 @Controller('downloads')
 @UseGuards(JwtOrApiKeyGuard)
-export class DownloadsController {
-  constructor(private readonly downloads: DownloadsService) {}
+export class InappDownloadsController {
+  constructor(private readonly downloads: InappDownloadsService) {}
 
   @Get('qualities/:mediaFileId')
   getQualities(

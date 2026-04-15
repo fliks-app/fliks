@@ -18,5 +18,4 @@ export class SubtitleProvider extends BaseEntity {
 
   @Column({ default: 25 })
   priority: number;
-
 }

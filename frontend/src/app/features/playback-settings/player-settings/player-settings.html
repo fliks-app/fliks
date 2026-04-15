@@ -1,77 +1,59 @@
 <h1 class="text-2xl font-bold mb-4">{{ 'app_settings.nav.player' | translate }}</h1>
 <div class="card bg-base-100 border border-base-200">
   <div class="card-body gap-5">
-    <label class="form-control w-full max-w-xs">
-      <div class="label"><span class="label-text font-medium">{{ 'playback_settings.player_preferred_lang' | translate }}</span></div>
-      <select class="select select-bordered w-full" [ngModel]="preferredAudioLanguage()" (ngModelChange)="preferredAudioLanguage.set($event)">
-        @for (l of languageOptions; track l.value) { <option [value]="l.value">{{ l.label }}</option> }
-      </select>
-      <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.player_preferred_lang_hint' | translate }}</span></div>
-    </label>
+    <app-select-field
+      class="w-full max-w-xs"
+      [(value)]="preferredAudioLanguage"
+      [label]="'playback_settings.player_preferred_lang' | translate"
+      [hint]="'playback_settings.player_preferred_lang_hint' | translate"
+    >
+      @for (l of languageOptions; track l.value) {
+        <option [value]="l.value">{{ l.label }}</option>
+      }
+    </app-select-field>
 
     <div class="divider my-0"></div>
 
-    <div class="form-control">
-      <label class="label cursor-pointer justify-start gap-4">
-        <input type="checkbox" class="toggle toggle-primary" [ngModel]="useDefaultAudioStream()" (ngModelChange)="useDefaultAudioStream.set($event)" />
-        <div>
-          <span class="label-text font-medium">{{ 'playback_settings.player_use_default' | translate }}</span>
-          <p class="text-xs text-base-content/50 mt-0.5">{{ 'playback_settings.player_use_default_hint' | translate }}</p>
-        </div>
-      </label>
-    </div>
+    <app-toggle-field
+      [(value)]="useDefaultAudioStream"
+      [label]="'playback_settings.player_use_default' | translate"
+      [hint]="'playback_settings.player_use_default_hint' | translate"
+    />
 
     <div class="divider my-0"></div>
 
-    <div class="form-control">
-      <label class="label cursor-pointer justify-start gap-4">
-        <input type="checkbox" class="toggle toggle-primary" [ngModel]="rememberAudioSelections()" (ngModelChange)="rememberAudioSelections.set($event)" />
-        <div>
-          <span class="label-text font-medium">{{ 'playback_settings.player_remember_audio' | translate }}</span>
-          <p class="text-xs text-base-content/50 mt-0.5">{{ 'playback_settings.player_remember_audio_hint' | translate }}</p>
-        </div>
-      </label>
-    </div>
+    <app-toggle-field
+      [(value)]="rememberAudioSelections"
+      [label]="'playback_settings.player_remember_audio' | translate"
+      [hint]="'playback_settings.player_remember_audio_hint' | translate"
+    />
 
     @if (showHdrToggle()) {
       <div class="divider my-0"></div>
 
-      <div class="form-control">
-        <label class="label cursor-pointer justify-start gap-4">
-          <input type="checkbox" class="toggle toggle-primary" [ngModel]="forceDisableHdr()" (ngModelChange)="forceDisableHdr.set($event)" />
-          <div>
-            <span class="label-text font-medium">{{ 'playback_settings.player_disable_hdr' | translate }}</span>
-            <p class="text-xs text-base-content/50 mt-0.5">{{ 'playback_settings.player_disable_hdr_hint' | translate }}</p>
-          </div>
-        </label>
-      </div>
+      <app-toggle-field
+        [(value)]="forceDisableHdr"
+        [label]="'playback_settings.player_disable_hdr' | translate"
+        [hint]="'playback_settings.player_disable_hdr_hint' | translate"
+      />
 
       @if (!forceDisableHdr()) {
-        <div class="form-control">
-          <label class="label cursor-pointer justify-start gap-4">
-            <input type="checkbox" class="toggle toggle-primary" [ngModel]="hdrAutoBrightness()" (ngModelChange)="hdrAutoBrightness.set($event)" />
-            <div>
-              <span class="label-text font-medium">{{ 'playback_settings.player_hdr_brightness' | translate }}</span>
-              <p class="text-xs text-base-content/50 mt-0.5">{{ 'playback_settings.player_hdr_brightness_hint' | translate }}</p>
-            </div>
-          </label>
-        </div>
+        <app-toggle-field
+          [(value)]="hdrAutoBrightness"
+          [label]="'playback_settings.player_hdr_brightness' | translate"
+          [hint]="'playback_settings.player_hdr_brightness_hint' | translate"
+        />
       }
     }
 
     <div class="divider my-0"></div>
 
-    <div class="form-control">
-      <label class="label cursor-pointer justify-start gap-4">
-        <input type="checkbox" class="toggle toggle-primary" [ngModel]="autoSkipIntro()" (ngModelChange)="autoSkipIntro.set($event)" />
-        <div>
-          <span class="label-text font-medium">{{ 'playback_settings.player_auto_skip_intro' | translate }}</span>
-          <p class="text-xs text-base-content/50 mt-0.5">{{ 'playback_settings.player_auto_skip_intro_hint' | translate }}</p>
-        </div>
-      </label>
-    </div>
+    <app-toggle-field
+      [(value)]="autoSkipIntro"
+      [label]="'playback_settings.player_auto_skip_intro' | translate"
+      [hint]="'playback_settings.player_auto_skip_intro_hint' | translate"
+    />
 
-    <!-- Clear saved audio selections -->
     <button class="btn btn-ghost btn-sm text-error gap-2 self-start" (click)="clearAudioSelections()">
       <svg lucideTrash2 class="h-4 w-4"></svg>
       {{ 'playback_settings.player_clear_saved' | translate }}

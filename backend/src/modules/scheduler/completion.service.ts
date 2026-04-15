@@ -25,7 +25,10 @@ import { SettingsService } from '../settings/settings.service';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
-import { ThumbnailService, buildSpriteLabel } from '../streaming/thumbnail.service';
+import {
+  ThumbnailService,
+  buildSpriteLabel,
+} from '../streaming/thumbnail.service';
 import { MediaType } from '../../common/enums';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 import { StalledCheck } from './entities/stalled-check.entity';
@@ -542,13 +545,11 @@ export class CompletionService {
     // queues internally to cap concurrency.
     void (async () => {
       for (const { savedFile, episodeId: epId } of importedFiles) {
-        let episode:
-          | {
-              seasonNumber?: number | null;
-              episodeNumber?: number | null;
-              title?: string | null;
-            }
-          | null = null;
+        let episode: {
+          seasonNumber?: number | null;
+          episodeNumber?: number | null;
+          title?: string | null;
+        } | null = null;
         if (epId != null) {
           const ep = await this.episodeRepo.findOne({
             where: { id: epId },

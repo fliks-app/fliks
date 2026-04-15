@@ -32,5 +32,4 @@ export class UpdateSubtitleProviderDto {
   @Min(0)
   @IsOptional()
   priority?: number;
-
 }

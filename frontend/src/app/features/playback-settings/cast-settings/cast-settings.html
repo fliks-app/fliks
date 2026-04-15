@@ -4,11 +4,9 @@
     <div class="form-control">
       <label class="label cursor-pointer justify-start gap-4">
         <input type="checkbox" class="toggle toggle-primary" [ngModel]="hdr()" (ngModelChange)="hdr.set($event)" />
-        <div>
-          <span class="label-text font-medium">{{ 'playback_settings.cast_hdr' | translate }}</span>
-          <p class="text-xs text-base-content/50 mt-0.5">{{ 'playback_settings.cast_hdr_hint' | translate }}</p>
-        </div>
+        <span class="label-text font-medium">{{ 'playback_settings.cast_hdr' | translate }}</span>
       </label>
+      <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.cast_hdr_hint' | translate }}</span></div>
     </div>
 
     <div class="divider my-0"></div>

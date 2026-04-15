@@ -141,7 +141,13 @@
     "title": "Administration",
     "back_to_app": "Retour à l'application",
     "section_system": "Système",
-    "section_settings": "Paramètres"
+    "section_settings": "Paramètres",
+    "section_media": "Médias",
+    "section_indexers": "Indexation & téléchargement",
+    "section_subtitles": "Sous-titres",
+    "section_integrations": "Intégrations",
+    "section_users": "Utilisateurs",
+    "section_advanced": "Avancé"
   },
   "home": {
     "libraries": "Bibliothèques",
@@ -1150,16 +1156,16 @@
         "import_completed": "{{users}} utilisateur(s) ({{usersCreated}} créé(s)) — {{imported}} visionnage(s) importé(s), {{skipped}} ignoré(s)",
         "import_failed": "Échec de l'import Emby : {{error}}"
       },
-      "jellyseerr": {
-        "section": "Jellyseerr",
-        "description": "Importer les demandes de films et séries faites depuis Jellyseerr (ou Overseerr).",
-        "url": "URL Jellyseerr",
-        "api_key": "Clé API Jellyseerr",
+      "seerr": {
+        "section": "Seerr (Jellyseerr / Overseerr)",
+        "description": "Importer les demandes de films et séries faites depuis Jellyseerr ou Overseerr.",
+        "url": "URL Seerr",
+        "api_key": "Clé API Seerr",
         "test": "Tester la connexion",
         "import_requests": "Importer les demandes",
-        "import_started": "Import Jellyseerr lancé",
+        "import_started": "Import Seerr lancé",
         "import_completed": "{{users}} utilisateur(s) ({{usersCreated}} créé(s)) — {{imported}} demande(s) importée(s), {{updated}} mise(s) à jour, {{skipped}} ignorée(s)",
-        "import_failed": "Échec de l'import Jellyseerr : {{error}}"
+        "import_failed": "Échec de l'import Seerr : {{error}}"
       }
     },
     "libraries": {

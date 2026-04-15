@@ -22,9 +22,9 @@ import { RolesModule } from './modules/roles/roles.module';
 import { StreamingModule } from './modules/streaming/streaming.module';
 import { MarkersModule } from './modules/markers/markers.module';
 import { PersonsModule } from './modules/persons/persons.module';
-import { DownloadsModule } from './modules/downloads/downloads.module';
+import { InappDownloadsModule } from './modules/inapp-downloads/inapp-downloads.module';
 import { ImageModule } from './modules/images/image.module';
-import { JellyseerrModule } from './modules/jellyseerr/jellyseerr.module';
+import { ImportsModule } from './modules/imports/imports.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 
@@ -66,7 +66,7 @@ import { join } from 'path';
     UsersModule,
     MediaModule,
     PersonsModule,
-    DownloadsModule,
+    InappDownloadsModule,
     ProfilesModule,
     MetadataProvidersModule,
     IndexersModule,
@@ -84,7 +84,7 @@ import { join } from 'path';
     StreamingModule,
     ImageModule,
     MarkersModule,
-    JellyseerrModule,
+    ImportsModule,
   ],
 })
 export class AppModule {}

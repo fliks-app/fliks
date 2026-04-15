@@ -22,9 +22,12 @@ import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { NamingService } from './naming.service';
 import { DelayProfile } from '../profiles/entities/delay-profile.entity';
 import { EventsService } from './events.service';
-import { DownloadsService } from '../downloads/downloads.service';
+import { InappDownloadsService } from '../inapp-downloads/inapp-downloads.service';
 import { MediaFile } from '../media/entities/media-file.entity';
-import { ThumbnailService, buildSpriteLabel } from '../streaming/thumbnail.service';
+import {
+  ThumbnailService,
+  buildSpriteLabel,
+} from '../streaming/thumbnail.service';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
 import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
@@ -64,7 +67,7 @@ export class SchedulerService implements OnModuleInit {
     private readonly delayProfileRepo: Repository<DelayProfile>,
     private readonly eventsService: EventsService,
     private readonly subtitleScheduler: SubtitleSchedulerService,
-    private readonly downloadsService: DownloadsService,
+    private readonly downloadsService: InappDownloadsService,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly thumbnailService: ThumbnailService,
@@ -695,11 +698,14 @@ export class SchedulerService implements OnModuleInit {
     for (const ep of episodes) {
       episodeLabelMap.set(
         ep.id,
-        buildSpriteLabel({ title: ep.title ?? '' }, {
-          seasonNumber: ep.season.seasonNumber,
-          episodeNumber: ep.episodeNumber,
-          title: ep.title,
-        }),
+        buildSpriteLabel(
+          { title: ep.title ?? '' },
+          {
+            seasonNumber: ep.season.seasonNumber,
+            episodeNumber: ep.episodeNumber,
+            title: ep.title,
+          },
+        ),
       );
     }
 
@@ -840,9 +846,7 @@ export class SchedulerService implements OnModuleInit {
   private async doDetectMarkers(onlyMissing: boolean): Promise<void> {
     const name = onlyMissing ? 'DetectMissingMarkers' : 'DetectMarkers';
     const seasons = await this.markers.listSeasonsForScan(onlyMissing);
-    this.log.log(
-      `${name}: started — ${seasons.length} season(s) to scan`,
-    );
+    this.log.log(`${name}: started — ${seasons.length} season(s) to scan`);
     let detected = 0;
     let skipped = 0;
     for (let i = 0; i < seasons.length; i++) {

@@ -170,16 +170,16 @@ export class IntroDetectionService {
     /** First chapter-based peer — used as a reference template when other
      *  episodes lack chapter metadata (reference-based search bypasses
      *  pairwise all-to-all and tolerates variable cold-open offsets). */
-    let referencePeer:
-      | { episode: Episode; startSec: number; endSec: number }
-      | null = null;
+    let referencePeer: {
+      episode: Episode;
+      startSec: number;
+      endSec: number;
+    } | null = null;
     let chapterHits = 0;
     for (const ep of episodes) {
       if (manualIds.has(ep.id)) continue;
       const file = fileByEpisode.get(ep.id);
-      const fromChapter = extractIntroFromChapters(
-        file?.streamInfo?.chapters,
-      );
+      const fromChapter = extractIntroFromChapters(file?.streamInfo?.chapters);
       if (fromChapter) {
         await this.markerRepo.delete({
           episode: { id: ep.id },
@@ -382,12 +382,14 @@ export class IntroDetectionService {
         for (const m of all) {
           const start = this.samplesToSeconds(m.aStart);
           const length = this.samplesToSeconds(m.length);
-          if (length > IntroDetectionService.MAX_PLAUSIBLE_INTRO_SECONDS) continue;
+          if (length > IntroDetectionService.MAX_PLAUSIBLE_INTRO_SECONDS)
+            continue;
           if (start > IntroDetectionService.MAX_PLAUSIBLE_INTRO_START) continue;
           matches.push({
             start,
             length,
-            conf: 1 - m.hammingAvg / IntroDetectionService.HAMMING_THRESHOLD / 4,
+            conf:
+              1 - m.hammingAvg / IntroDetectionService.HAMMING_THRESHOLD / 4,
           });
         }
       }
@@ -566,9 +568,11 @@ export class IntroDetectionService {
 
     // ── Chapter shortcut ──
     const needsFingerprint: typeof episodes = [];
-    let referencePeer:
-      | { episode: Episode; startSec: number; endSec: number }
-      | null = null;
+    let referencePeer: {
+      episode: Episode;
+      startSec: number;
+      endSec: number;
+    } | null = null;
     let detected = 0;
     for (const ep of episodes) {
       if (manualIds.has(ep.id)) continue;
@@ -748,8 +752,7 @@ export class IntroDetectionService {
               start,
               length,
               conf:
-                1 -
-                m.hammingAvg / IntroDetectionService.HAMMING_THRESHOLD / 4,
+                1 - m.hammingAvg / IntroDetectionService.HAMMING_THRESHOLD / 4,
             });
           }
         }
@@ -841,14 +844,21 @@ export class IntroDetectionService {
       const ffmpeg = spawn('ffmpeg', [
         '-nostdin',
         '-hide_banner',
-        '-loglevel', 'error',
-        '-ss', String(Math.max(0, Math.floor(startSec))),
-        '-i', absPath,
-        '-t', String(lengthSec),
+        '-loglevel',
+        'error',
+        '-ss',
+        String(Math.max(0, Math.floor(startSec))),
+        '-i',
+        absPath,
+        '-t',
+        String(lengthSec),
         '-vn',
-        '-ac', '1',
-        '-ar', '22050',
-        '-f', 'wav',
+        '-ac',
+        '1',
+        '-ar',
+        '22050',
+        '-f',
+        'wav',
         '-',
       ]);
       const fpcalc = spawn(
@@ -1042,9 +1052,12 @@ function clamp(n: number, min: number, max: number): number {
  * Matches common titles used by Netflix, Blu-ray authoring tools, etc.
  * Returns null if no chapter looks like an intro.
  */
-const INTRO_CHAPTER_REGEX = /\b(intro|opening|opening credits|main title|main titles|theme|titles?)\b/i;
+const INTRO_CHAPTER_REGEX =
+  /\b(intro|opening|opening credits|main title|main titles|theme|titles?)\b/i;
 function extractIntroFromChapters(
-  chapters: { startSeconds: number; endSeconds: number; title?: string }[] | undefined,
+  chapters:
+    | { startSeconds: number; endSeconds: number; title?: string }[]
+    | undefined,
 ): { startSeconds: number; endSeconds: number; title: string } | null {
   if (!chapters?.length) return null;
   for (const c of chapters) {
@@ -1069,9 +1082,12 @@ function extractIntroFromChapters(
  * end of the episode — "End Credits", "Credits", "Outro", "Ending", etc.
  * Returns null if no chapter looks like an outro.
  */
-const OUTRO_CHAPTER_REGEX = /\b(outro|ending|end.?credits?|credits?|closing)\b/i;
+const OUTRO_CHAPTER_REGEX =
+  /\b(outro|ending|end.?credits?|credits?|closing)\b/i;
 function extractOutroFromChapters(
-  chapters: { startSeconds: number; endSeconds: number; title?: string }[] | undefined,
+  chapters:
+    | { startSeconds: number; endSeconds: number; title?: string }[]
+    | undefined,
   fileDurationSec: number,
 ): { startSeconds: number; endSeconds: number; title: string } | null {
   if (!chapters?.length) return null;

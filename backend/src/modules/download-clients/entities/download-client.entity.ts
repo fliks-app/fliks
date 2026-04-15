@@ -17,5 +17,4 @@ export class DownloadClient extends BaseEntity {
 
   @Column({ default: 1 })
   priority: number;
-
 }

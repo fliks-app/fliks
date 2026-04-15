@@ -378,8 +378,7 @@ export class StreamingController {
         );
       }
     }
-    const markers =
-      intro || outro ? { intro, outro } : undefined;
+    const markers = intro || outro ? { intro, outro } : undefined;
 
     // Embedded chapter markers (MKV/MP4). Always forwarded when present so
     // the player can render them on the seekbar.

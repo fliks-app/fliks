@@ -30,5 +30,4 @@ export class CreateSubtitleProviderDto {
   @Min(0)
   @IsOptional()
   priority?: number;
-
 }

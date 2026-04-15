@@ -68,17 +68,13 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async findIntroForEpisode(
-    episodeId: number,
-  ): Promise<EpisodeMarker | null> {
+  async findIntroForEpisode(episodeId: number): Promise<EpisodeMarker | null> {
     return this.markerRepo.findOne({
       where: { episode: { id: episodeId }, type: 'intro' },
     });
   }
 
-  async findOutroForEpisode(
-    episodeId: number,
-  ): Promise<EpisodeMarker | null> {
+  async findOutroForEpisode(episodeId: number): Promise<EpisodeMarker | null> {
     return this.markerRepo.findOne({
       where: { episode: { id: episodeId }, type: 'outro' },
     });
@@ -146,7 +142,10 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
   // ─────────────────────────────────────────────────────────────────────────
 
   /** Enqueue an IntroDetection command and run it in the background. */
-  async detectSeason(seasonId: number, trigger: 'manual' | 'auto'): Promise<Command> {
+  async detectSeason(
+    seasonId: number,
+    trigger: 'manual' | 'auto',
+  ): Promise<Command> {
     if (this.inFlight.has(seasonId)) {
       throw new BadRequestException(
         `Detection already running for season #${seasonId}`,
@@ -172,12 +171,16 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
     );
 
     // Fire-and-forget.
-    void this.runDetection(cmd.id, season.id, season.mediaId, season.seasonNumber).catch(
-      (err) =>
-        this.log.error(
-          `IntroDetection #${cmd.id} crashed: ${(err as Error).message}`,
-          err instanceof Error ? err.stack : err,
-        ),
+    void this.runDetection(
+      cmd.id,
+      season.id,
+      season.mediaId,
+      season.seasonNumber,
+    ).catch((err) =>
+      this.log.error(
+        `IntroDetection #${cmd.id} crashed: ${(err as Error).message}`,
+        err instanceof Error ? err.stack : err,
+      ),
     );
     return cmd;
   }
@@ -189,7 +192,9 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
    */
   async listSeasonsForScan(
     onlyMissing: boolean,
-  ): Promise<{ id: number; mediaId: number; seasonNumber: number; mediaTitle: string }[]> {
+  ): Promise<
+    { id: number; mediaId: number; seasonNumber: number; mediaTitle: string }[]
+  > {
     if (!onlyMissing) {
       const rows: {
         id: number;
@@ -252,7 +257,10 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async detectSeries(mediaId: number, trigger: 'manual' | 'auto'): Promise<Command[]> {
+  async detectSeries(
+    mediaId: number,
+    trigger: 'manual' | 'auto',
+  ): Promise<Command[]> {
     const seasons = await this.seasonRepo.find({
       where: { media: { id: mediaId } },
       order: { seasonNumber: 'ASC' },
@@ -361,7 +369,8 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async maybeAutoDetect(mediaId: number): Promise<void> {
-    const enabled = (await this.settings.get('enableAutoIntroDetection')) ?? 'true';
+    const enabled =
+      (await this.settings.get('enableAutoIntroDetection')) ?? 'true';
     if (enabled !== 'true') return;
     // Only series have seasons; movies skipped naturally because findOne
     // below returns no seasons.

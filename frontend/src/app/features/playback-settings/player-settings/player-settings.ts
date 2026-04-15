@@ -5,11 +5,19 @@ import { LucideTrash2 } from '@lucide/angular';
 import { PlayerSettingsService } from '../../../core/services/player-settings.service';
 import { BrowserDeviceProfileService } from '../../../core/services/browser-device-profile.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
+import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
 import { LANGUAGE_OPTIONS } from '../playback-options';
 
 @Component({
   selector: 'app-player-settings',
-  imports: [FormsModule, TranslateModule, LucideTrash2],
+  imports: [
+    FormsModule,
+    TranslateModule,
+    LucideTrash2,
+    ToggleFieldComponent,
+    SelectFieldComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player-settings.html',
 })

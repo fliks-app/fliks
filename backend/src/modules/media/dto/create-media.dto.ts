@@ -80,5 +80,4 @@ export class CreateMediaDto {
   @IsNumber()
   @IsOptional()
   languageProfileId?: number;
-
 }

@@ -27,5 +27,4 @@ export class CreateDownloadClientDto {
   @Min(1)
   @IsOptional()
   priority?: number;
-
 }

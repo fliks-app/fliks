@@ -79,32 +79,32 @@
       </div>
     </section>
 
-    <!-- Jellyseerr -->
+    <!-- Seerr -->
     <section class="card bg-base-200/60 border border-base-200">
       <div class="card-body gap-4">
         <div>
-          <h2 class="card-title text-lg">{{ 'settings.data_imports.jellyseerr.section' | translate }}</h2>
-          <p class="text-sm text-base-content/60 mt-1">{{ 'settings.data_imports.jellyseerr.description' | translate }}</p>
+          <h2 class="card-title text-lg">{{ 'settings.data_imports.seerr.section' | translate }}</h2>
+          <p class="text-sm text-base-content/60 mt-1">{{ 'settings.data_imports.seerr.description' | translate }}</p>
         </div>
 
         <label class="form-control w-full max-w-xl">
-          <span class="label-text">{{ 'settings.data_imports.jellyseerr.url' | translate }}</span>
+          <span class="label-text">{{ 'settings.data_imports.seerr.url' | translate }}</span>
           <input
             type="url"
             class="input input-bordered input-sm w-full"
             placeholder="http://jellyseerr:5055"
-            [ngModel]="jellyseerrUrl()"
-            (ngModelChange)="jellyseerrUrl.set($event)"
+            [ngModel]="seerrUrl()"
+            (ngModelChange)="seerrUrl.set($event)"
           />
         </label>
 
         <label class="form-control w-full max-w-xl">
-          <span class="label-text">{{ 'settings.data_imports.jellyseerr.api_key' | translate }}</span>
+          <span class="label-text">{{ 'settings.data_imports.seerr.api_key' | translate }}</span>
           <input
             type="password"
             class="input input-bordered input-sm w-full"
-            [ngModel]="jellyseerrApiKey()"
-            (ngModelChange)="jellyseerrApiKey.set($event)"
+            [ngModel]="seerrApiKey()"
+            (ngModelChange)="seerrApiKey.set($event)"
           />
         </label>
 
@@ -112,10 +112,10 @@
           <button
             type="button"
             class="btn btn-outline btn-sm"
-            [disabled]="!canSubmitJellyseerr || jellyseerrSaving()"
-            (click)="saveJellyseerrCredentials()"
+            [disabled]="!canSubmitSeerr || seerrSaving()"
+            (click)="saveSeerrCredentials()"
           >
-            @if (jellyseerrSaving()) {
+            @if (seerrSaving()) {
               <span class="loading loading-spinner loading-xs"></span>
             }
             {{ 'common.save' | translate }}
@@ -124,31 +124,31 @@
           <button
             type="button"
             class="btn btn-outline btn-sm"
-            [disabled]="!canSubmitJellyseerr || jellyseerrTesting()"
-            (click)="testJellyseerr()"
+            [disabled]="!canSubmitSeerr || seerrTesting()"
+            (click)="testSeerr()"
           >
-            @if (jellyseerrTesting()) {
+            @if (seerrTesting()) {
               <span class="loading loading-spinner loading-xs"></span>
             }
-            {{ 'settings.data_imports.jellyseerr.test' | translate }}
+            {{ 'settings.data_imports.seerr.test' | translate }}
           </button>
 
           <button
             type="button"
             class="btn btn-primary btn-sm"
-            [disabled]="!canSubmitJellyseerr || jellyseerrImporting()"
-            (click)="importJellyseerrRequests()"
+            [disabled]="!canSubmitSeerr || seerrImporting()"
+            (click)="importSeerrRequests()"
           >
-            @if (jellyseerrImporting()) {
+            @if (seerrImporting()) {
               <span class="loading loading-spinner loading-xs"></span>
             } @else {
               <svg lucideDownload class="h-4 w-4"></svg>
             }
-            {{ 'settings.data_imports.jellyseerr.import_requests' | translate }}
+            {{ 'settings.data_imports.seerr.import_requests' | translate }}
           </button>
         </div>
 
-        @if (jellyseerrTestResult(); as tr) {
+        @if (seerrTestResult(); as tr) {
           <div
             role="alert"
             class="alert text-sm py-2"
@@ -159,9 +159,9 @@
           </div>
         }
 
-        @if (jellyseerrLastSummary(); as s) {
+        @if (seerrLastSummary(); as s) {
           <div role="alert" class="alert alert-info text-sm py-2">
-            {{ 'settings.data_imports.jellyseerr.import_completed' | translate: s }}
+            {{ 'settings.data_imports.seerr.import_completed' | translate: s }}
           </div>
         }
       </div>

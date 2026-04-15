@@ -207,8 +207,8 @@ export class PlaybackService implements OnModuleInit {
     userId: number,
     mediaId: number,
   ): Promise<Record<number, number>> {
-    const rows: { episodeId: number; percent: string }[] = await this.repo
-      .query(
+    const rows: { episodeId: number; percent: string }[] =
+      await this.repo.query(
         `SELECT ps."episodeId",
                 ROUND((ps."positionSeconds" / ps."durationSeconds") * 100) AS percent
          FROM playback_states ps
@@ -279,11 +279,7 @@ export class PlaybackService implements OnModuleInit {
     mediaFileId: number,
     episodeId?: number | null,
   ): Promise<void> {
-    const state = await this.findState(
-      userId,
-      mediaId,
-      episodeId ?? undefined,
-    );
+    const state = await this.findState(userId, mediaId, episodeId ?? undefined);
     const now = new Date();
     if (state) {
       state.playedAt = now;
@@ -648,7 +644,8 @@ export class PlaybackService implements OnModuleInit {
       });
       const latestByEpisode = new Map<number, MediaFile>();
       for (const f of files) {
-        if (!latestByEpisode.has(f.episodeId)) latestByEpisode.set(f.episodeId, f);
+        if (!latestByEpisode.has(f.episodeId))
+          latestByEpisode.set(f.episodeId, f);
       }
 
       // Delete+recreate wins over ORM-less upsert: the partial unique index
