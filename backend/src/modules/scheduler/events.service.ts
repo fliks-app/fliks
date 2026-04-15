@@ -64,6 +64,14 @@ export type SseEvent =
       seasonId: number;
       seasonNumber: number;
       introsDetected: number;
+    }
+  | { type: 'metadata.started'; mediaId: number; title: string }
+  | { type: 'metadata.refreshed'; mediaId: number; title: string }
+  | {
+      type: 'metadata.failed';
+      mediaId: number;
+      title: string;
+      error: string;
     };
 
 @Injectable()

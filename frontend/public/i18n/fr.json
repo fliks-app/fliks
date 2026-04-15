@@ -439,6 +439,7 @@
     "status_label": "Statut",
     "tags_label": "Tags",
     "refresh_ok": "Métadonnées mises à jour avec succès",
+    "refresh_launched": "Rafraîchissement des métadonnées lancé",
     "refresh_error": "Erreur lors du rafraîchissement des métadonnées",
     "rescan_files": "Rescanner les fichiers",
     "rescan_launched": "Scan lancé. Le résultat s'affichera une fois le scan terminé.",

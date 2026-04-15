@@ -292,7 +292,36 @@ export class MediaController {
     @CurrentUser() user: User,
   ) {
     await this.assertMediaAccessible(id, user);
-    return this.mediaService.refreshMetadata(id);
+    const media = await this.mediaService.findOne(id);
+    if (!media) throw new NotFoundException(`Media #${id} not found`);
+    const title = media.title;
+
+    this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
+    // Fire-and-forget so the client doesn't sit waiting on TMDB + image
+    // downloads. SSE event signals completion.
+    void this.mediaService.refreshMetadata(id).then(
+      () => {
+        this.eventsService.emit({
+          type: 'metadata.refreshed',
+          mediaId: id,
+          title,
+        });
+      },
+      (err) => {
+        const message = (err as Error).message;
+        this.logger.error(
+          `Metadata refresh failed — id=${id} title="${title}" error=${message}`,
+          err instanceof Error ? err.stack : err,
+        );
+        this.eventsService.emit({
+          type: 'metadata.failed',
+          mediaId: id,
+          title,
+          error: message,
+        });
+      },
+    );
+    return { ok: true };
   }
 
   @Post(':id/episodes/:episodeId/refresh')
@@ -303,7 +332,34 @@ export class MediaController {
     @CurrentUser() user: User,
   ) {
     await this.assertMediaAccessible(id, user);
-    return this.mediaService.refreshEpisodeMetadata(id, episodeId);
+    const media = await this.mediaService.findOne(id);
+    if (!media) throw new NotFoundException(`Media #${id} not found`);
+    const title = media.title;
+
+    this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
+    void this.mediaService.refreshEpisodeMetadata(id, episodeId).then(
+      () => {
+        this.eventsService.emit({
+          type: 'metadata.refreshed',
+          mediaId: id,
+          title,
+        });
+      },
+      (err) => {
+        const message = (err as Error).message;
+        this.logger.error(
+          `Episode metadata refresh failed — id=${id} ep=${episodeId} error=${message}`,
+          err instanceof Error ? err.stack : err,
+        );
+        this.eventsService.emit({
+          type: 'metadata.failed',
+          mediaId: id,
+          title,
+          error: message,
+        });
+      },
+    );
+    return { ok: true };
   }
 
   @Post(':id/rescan')

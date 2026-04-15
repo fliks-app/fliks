@@ -125,7 +125,6 @@ export class MediaInfoHeaderComponent {
   readonly isAdmin = input(false);
   readonly releasesLoading = input(false);
   readonly grabBusy = input<string | null>(null);
-  readonly refreshLoading = input(false);
   readonly monitoredLoading = input(false);
   readonly deleteLoading = input(false);
 

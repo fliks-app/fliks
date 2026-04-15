@@ -102,7 +102,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   /** Same SSE payload must run handlers once; `media` updates (e.g. after rescan) re-run this effect. */
   private lastHandledSseEvent: SseEvent | null = null;
 
-  /** React to SSE rescan events for this media */
+  /** React to SSE rescan + metadata-refresh events for this media */
   private readonly sseEffect = effect(() => {
     const event = this.sse.lastEvent();
     const m = this.media();
@@ -112,6 +112,16 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.lastHandledSseEvent = event;
     if (event.type === 'rescan.completed') {
       void this.reloadAfterRescan(m.id);
+    } else if (event.type === 'metadata.refreshed') {
+      void this.reloadAfterRescan(m.id);
+      this.toast.success(
+        this.translate.instant('media_detail.refresh_ok'),
+      );
+    } else if (event.type === 'metadata.failed') {
+      this.toast.error(
+        (event as { error?: string }).error ??
+          this.translate.instant('media_detail.refresh_error'),
+      );
     }
   });
 
@@ -329,8 +339,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly isAdmin = computed(() => this.auth.hasPermission('settings.access'));
   readonly deleteLoading = signal(false);
   readonly monitoredLoading = signal(false);
-  readonly refreshLoading = signal(false);
-  readonly refreshToast = signal('');
   /** Active season tab (series) — first season selected after load */
   readonly activeSeasonId = signal<number | null>(null);
   readonly seasonBusy = signal<number | null>(null);
@@ -670,30 +678,24 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   async refreshMetadata() {
     const m = this.media();
     if (!m) return;
-    this.refreshLoading.set(true);
-    this.refreshToast.set('');
+    // Fire-and-forget. Backend emits SSE `metadata.refreshed` / `metadata.failed`
+    // which the sseEffect below catches to toast + reload the media row.
     try {
       const ep = this.focusedEpisode();
-      const updated = ep
-        ? await this.mediaService.refreshEpisodeMetadata(m.id, ep.id)
-        : await this.mediaService.refreshMetadata(m.id);
-      this.media.set(updated);
-      if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
-      // Re-resolve focused episode
       if (ep) {
-        for (const s of updated.seasons ?? []) {
-          const fresh = s.episodes?.find(e => e.id === ep.id);
-          if (fresh) { this.focusedSeason.set(s); this.focusedEpisode.set(fresh); break; }
-        }
+        await this.mediaService.refreshEpisodeMetadata(m.id, ep.id);
+      } else {
+        await this.mediaService.refreshMetadata(m.id);
       }
-      this.refreshToast.set(this.translate.instant('media_detail.refresh_ok'));
+      this.toast.success(
+        this.translate.instant('media_detail.refresh_launched'),
+      );
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      this.refreshToast.set(
-        httpErr.error?.message ?? this.translate.instant('media_detail.refresh_error'),
+      this.toast.error(
+        httpErr.error?.message ??
+          this.translate.instant('media_detail.refresh_error'),
       );
-    } finally {
-      this.refreshLoading.set(false);
     }
   }
 
