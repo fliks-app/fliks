@@ -51,6 +51,10 @@ export class SystemStatusComponent implements OnInit {
       { name: 'GenerateSprites', label: 'system.cmd_generate_sprites' },
       { name: 'GenerateMissingSprites', label: 'system.cmd_generate_missing_sprites' },
     ]},
+    { type: 'group', label: 'system.cmd_group_markers', items: [
+      { name: 'DetectMarkers', label: 'system.cmd_detect_markers' },
+      { name: 'DetectMissingMarkers', label: 'system.cmd_detect_missing_markers' },
+    ]},
   ];
 
   /** Flat list for label lookups in command history. */

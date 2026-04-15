@@ -29,6 +29,7 @@ import { ThumbnailService } from '../streaming/thumbnail.service';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
 import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
+import { MarkersService } from '../markers/markers.service';
 import {
   buildAllowedQualityIds,
   buildIndexerMinSeeders,
@@ -71,6 +72,7 @@ export class SchedulerService implements OnModuleInit {
     private readonly customFormats: CustomFormatsService,
     private readonly qualityDefs: QualityDefinitionsService,
     private readonly blocklist: BlocklistService,
+    private readonly markers: MarkersService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -223,6 +225,8 @@ export class SchedulerService implements OnModuleInit {
       'RescanMissingFiles',
       'GenerateSprites',
       'GenerateMissingSprites',
+      'DetectMarkers',
+      'DetectMissingMarkers',
     ];
     if (!known.includes(name)) {
       throw new Error(`Unknown command: ${name}. Valid: ${known.join(', ')}`);
@@ -315,6 +319,9 @@ export class SchedulerService implements OnModuleInit {
       else if (name === 'GenerateSprites') await this.doGenerateSprites(true);
       else if (name === 'GenerateMissingSprites')
         await this.doGenerateSprites(false);
+      else if (name === 'DetectMarkers') await this.doDetectMarkers(false);
+      else if (name === 'DetectMissingMarkers')
+        await this.doDetectMarkers(true);
       await this.commandRepo.update(cmdId, {
         status: 'completed',
         endedOn: new Date(),
@@ -813,6 +820,52 @@ export class SchedulerService implements OnModuleInit {
       total: indexers.length,
       message: 'RssSync',
     });
+  }
+
+  /**
+   * Bulk intro + outro detection across every series. When `onlyMissing` is
+   * true, only scans seasons that still have at least one episode lacking
+   * an intro or outro marker.
+   */
+  private async doDetectMarkers(onlyMissing: boolean): Promise<void> {
+    const name = onlyMissing ? 'DetectMissingMarkers' : 'DetectMarkers';
+    const seasons = await this.markers.listSeasonsForScan(onlyMissing);
+    this.log.log(
+      `${name}: started — ${seasons.length} season(s) to scan`,
+    );
+    let detected = 0;
+    let skipped = 0;
+    for (let i = 0; i < seasons.length; i++) {
+      const s = seasons[i];
+      this.eventsService.emit({
+        type: 'task.progress',
+        command: name,
+        current: i,
+        total: seasons.length,
+        message: `${s.mediaTitle} S${String(s.seasonNumber).padStart(2, '0')}`,
+      });
+      try {
+        const r = await this.markers.runDetectionInline(s.id);
+        detected += r.introsDetected + r.outrosDetected;
+      } catch (e) {
+        skipped++;
+        this.log.warn(
+          `${name}: skipped "${s.mediaTitle}" S${s.seasonNumber} — ${(e as Error).message}`,
+        );
+      }
+    }
+    if (seasons.length > 0) {
+      this.eventsService.emit({
+        type: 'task.progress',
+        command: name,
+        current: seasons.length,
+        total: seasons.length,
+        message: name,
+      });
+    }
+    this.log.log(
+      `${name}: done — ${detected} marker(s) saved across ${seasons.length - skipped}/${seasons.length} season(s)`,
+    );
   }
 
   private async doRescanAll(): Promise<void> {

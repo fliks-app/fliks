@@ -182,6 +182,76 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
     return cmd;
   }
 
+  /**
+   * Return the list of seasons eligible for automatic marker detection
+   * (non-special, belonging to a series). When `onlyMissing` is true, returns
+   * only seasons with at least one episode lacking an intro OR outro marker.
+   */
+  async listSeasonsForScan(
+    onlyMissing: boolean,
+  ): Promise<{ id: number; mediaId: number; seasonNumber: number; mediaTitle: string }[]> {
+    if (!onlyMissing) {
+      const rows: {
+        id: number;
+        mediaId: number;
+        seasonNumber: number;
+        mediaTitle: string;
+      }[] = await this.seasonRepo.query(`
+        SELECT s.id, s."mediaId", s."seasonNumber", m.title AS "mediaTitle"
+        FROM seasons s
+        JOIN media m ON m.id = s."mediaId"
+        WHERE s."seasonNumber" > 0 AND m.type = 'series'
+        ORDER BY m.title ASC, s."seasonNumber" ASC
+      `);
+      return rows;
+    }
+    const rows: {
+      id: number;
+      mediaId: number;
+      seasonNumber: number;
+      mediaTitle: string;
+    }[] = await this.seasonRepo.query(`
+      SELECT DISTINCT s.id, s."mediaId", s."seasonNumber", m.title AS "mediaTitle"
+      FROM seasons s
+      JOIN media m ON m.id = s."mediaId"
+      JOIN episodes e ON e."seasonId" = s.id
+      WHERE s."seasonNumber" > 0 AND m.type = 'series' AND e."hasFile" = true
+        AND (
+          NOT EXISTS (SELECT 1 FROM episode_markers em
+                      WHERE em."episodeId" = e.id AND em.type = 'intro')
+          OR NOT EXISTS (SELECT 1 FROM episode_markers em
+                         WHERE em."episodeId" = e.id AND em.type = 'outro')
+        )
+      ORDER BY m.title ASC, s."seasonNumber" ASC
+    `);
+    return rows;
+  }
+
+  /**
+   * Run intro + outro detection for a single season inline (no Command row,
+   * no per-season SSE noise). Intended for bulk operations triggered from
+   * the admin system page.
+   */
+  async runDetectionInline(
+    seasonId: number,
+  ): Promise<{ introsDetected: number; outrosDetected: number }> {
+    if (this.inFlight.has(seasonId)) {
+      // Concurrent per-series trigger already handles it — don't double-run.
+      return { introsDetected: 0, outrosDetected: 0 };
+    }
+    this.inFlight.add(seasonId);
+    try {
+      const intros = await this.detector.detectSeasonIntros(seasonId);
+      const outros = await this.detector.detectSeasonOutros(seasonId);
+      return {
+        introsDetected: intros.introsDetected,
+        outrosDetected: outros.outrosDetected,
+      };
+    } finally {
+      this.inFlight.delete(seasonId);
+    }
+  }
+
   async detectSeries(mediaId: number, trigger: 'manual' | 'auto'): Promise<Command[]> {
     const seasons = await this.seasonRepo.find({
       where: { media: { id: mediaId } },
