@@ -32,6 +32,7 @@ import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { SubtitleBurnInService } from './subtitle-burn-in.service';
+import { PlaybackService } from './playback.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 
 const VALID_QUALITIES = new Set([...PROFILES.map((p) => p.name), 'remux']);
@@ -89,6 +90,7 @@ export class StreamingController {
     private readonly subtitleBurnIn: SubtitleBurnInService,
     private readonly thumbnailService: ThumbnailService,
     private readonly settingsService: SettingsService,
+    private readonly playbackService: PlaybackService,
   ) {}
 
   /** Read streaming settings from DB with defaults. */
@@ -327,6 +329,22 @@ export class StreamingController {
       sv?.width ?? 0,
       sv?.height ?? 0,
     );
+
+    // Mark a new watch-history entry (Jellyfin-style: history = sessions
+    // started). Fire-and-forget — a DB hiccup should not block stream start.
+    const user = req.user as User;
+    if (user?.id && resolved.mediaFile.mediaId) {
+      this.playbackService
+        .markSessionStarted(
+          user.id,
+          resolved.mediaFile.mediaId,
+          mediaFileId,
+          resolved.mediaFile.episodeId ?? null,
+        )
+        .catch((err) =>
+          this.log.warn(`Failed to mark session started: ${err}`),
+        );
+    }
 
     // Include duration so the player can skip ffprobe in hlsPlaylist
     const duration = resolved.mediaFile.streamInfo?.durationSeconds ?? 0;

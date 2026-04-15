@@ -62,4 +62,12 @@ export class PlaybackState extends BaseEntity {
 
   @Column({ type: 'timestamptz', default: () => 'NOW()' })
   lastPlayedAt: Date;
+
+  /**
+   * Set only when real playback progress occurs. Stays NULL for manual
+   * "mark as watched" actions (single or bulk season). Used by the history
+   * endpoint to distinguish actually-watched rows from manually-marked ones.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  playedAt: Date | null;
 }

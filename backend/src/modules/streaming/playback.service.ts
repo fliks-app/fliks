@@ -235,6 +235,44 @@ export class PlaybackService implements OnModuleInit {
     return this.repo.save(state);
   }
 
+  /**
+   * Mark a playback session as started. Creates the playback_states row if
+   * missing and stamps `playedAt = NOW()` so the media appears in the user's
+   * watch history (Jellyfin-style: history = sessions started, not a progress
+   * threshold). Called by the streaming controller at playback-info time.
+   */
+  async markSessionStarted(
+    userId: number,
+    mediaId: number,
+    mediaFileId: number,
+    episodeId?: number | null,
+  ): Promise<void> {
+    const state = await this.findState(
+      userId,
+      mediaId,
+      episodeId ?? undefined,
+    );
+    const now = new Date();
+    if (state) {
+      state.playedAt = now;
+      state.lastPlayedAt = now;
+      if (mediaFileId) state.mediaFileId = mediaFileId;
+      await this.repo.save(state);
+    } else {
+      await this.repo.save({
+        user: { id: userId },
+        media: { id: mediaId },
+        mediaFile: mediaFileId ? { id: mediaFileId } : null,
+        episode: episodeId != null ? { id: episodeId } : null,
+        positionSeconds: 0,
+        durationSeconds: 0,
+        completed: false,
+        lastPlayedAt: now,
+        playedAt: now,
+      } as Partial<PlaybackState>);
+    }
+  }
+
   async getContinueWatching(
     userId: number,
     accessibleLibraryIds?: number[] | null,
@@ -393,7 +431,7 @@ export class PlaybackService implements OnModuleInit {
     const countResult = await this.repo.query(
       `SELECT COUNT(*) AS cnt
        FROM playback_states ps
-       WHERE ps."userId" = $1 AND ps."positionSeconds" >= 10${useAcl ? ` AND EXISTS (SELECT 1 FROM media mAcl WHERE mAcl.id = ps."mediaId" AND mAcl."libraryId" = ANY($2))` : ''}`,
+       WHERE ps."userId" = $1 AND ps."playedAt" IS NOT NULL${useAcl ? ` AND EXISTS (SELECT 1 FROM media mAcl WHERE mAcl.id = ps."mediaId" AND mAcl."libraryId" = ANY($2))` : ''}`,
       useAcl ? [userId, accessibleLibraryIds] : [userId],
     );
     const total = Number(countResult[0]?.cnt ?? 0);
@@ -416,8 +454,8 @@ export class PlaybackService implements OnModuleInit {
        JOIN media m ON m.id = ps."mediaId"
        LEFT JOIN episodes e ON e.id = ps."episodeId"
        LEFT JOIN seasons s ON s.id = e."seasonId"
-       WHERE ps."userId" = $1 AND ps."positionSeconds" >= 10${useAcl ? ` AND m."libraryId" = ANY($4)` : ''}
-       ORDER BY ps."lastPlayedAt" DESC
+       WHERE ps."userId" = $1 AND ps."playedAt" IS NOT NULL${useAcl ? ` AND m."libraryId" = ANY($4)` : ''}
+       ORDER BY ps."playedAt" DESC
        LIMIT $2 OFFSET $3`,
       useAcl
         ? [userId, limit, (page - 1) * limit, accessibleLibraryIds]
