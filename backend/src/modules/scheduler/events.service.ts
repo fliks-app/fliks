@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Subject, Observable } from 'rxjs';
+import { Subject, Observable, Subscription } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 export type SseEvent =
@@ -57,7 +57,14 @@ export type SseEvent =
     }
   | { type: 'download.progress'; downloadId: number; progress: number }
   | { type: 'download.ready'; downloadId: number }
-  | { type: 'download.failed'; downloadId: number; error: string };
+  | { type: 'download.failed'; downloadId: number; error: string }
+  | {
+      type: 'markers.season.completed';
+      mediaId: number;
+      seasonId: number;
+      seasonNumber: number;
+      introsDetected: number;
+    };
 
 @Injectable()
 export class EventsService {
@@ -71,5 +78,10 @@ export class EventsService {
     return this.subject
       .asObservable()
       .pipe(map((data) => ({ data: JSON.stringify(data) }) as MessageEvent));
+  }
+
+  /** Backend-internal listener — used by services that react to other modules' events. */
+  subscribe(handler: (event: SseEvent) => void): Subscription {
+    return this.subject.subscribe(handler);
   }
 }

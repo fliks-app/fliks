@@ -26,6 +26,7 @@ import {
   LucideRotateCcw,
   LucideSearch,
   LucideSettings,
+  LucideSkipForward,
   LucideTrash2,
 } from '@lucide/angular';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
@@ -65,7 +66,8 @@ interface AudioTrack {
     DecimalPipe, FormsModule, RouterLink, TranslateModule,
     LucideChevronLeft, LucideCheck, LucideDownload, LucideEllipsisVertical,
     LucideEye, LucideEyeOff, LucideFileText, LucideFilm, LucideFolder,
-    LucidePlay, LucideRotateCcw, LucideSearch, LucideSettings, LucideTrash2,
+    LucidePlay, LucideRotateCcw, LucideSearch, LucideSettings,
+    LucideSkipForward, LucideTrash2,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-info-header.html',
@@ -149,6 +151,7 @@ export class MediaInfoHeaderComponent {
   readonly loadReleases = output<void>();
   readonly grabBest = output<void>();
   readonly rescanFiles = output<void>();
+  readonly detectIntros = output<void>();
   /** Emitted after a series-level bulk watched toggle. Parent should refresh its episode watched list. */
   readonly seriesWatchedToggled = output<{ watched: boolean }>();
 
