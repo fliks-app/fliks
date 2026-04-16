@@ -28,7 +28,7 @@
             @if (task.episodeLabel) {
               <p class="text-xs text-base-content/60 line-clamp-1">{{ task.episodeLabel }}</p>
             }
-            <p class="text-xs text-base-content/50 mt-0.5">{{ task.quality }} · {{ formatSize(task.fileSize) }}</p>
+            <p class="text-xs text-base-content/50 mt-0.5">{{ task.quality }}</p>
 
             @if (task.status === 'transcoding' || task.status === 'pending') {
               <progress class="progress progress-info w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>

@@ -59,10 +59,6 @@ export class DownloadTask extends BaseEntity {
   @Column({ type: 'float', default: 0 })
   progress: number;
 
-  /** Final file size in bytes */
-  @Column({ type: 'bigint', nullable: true })
-  fileSize: number;
-
   /** e.g. "S02E05 - Tout regarder brûler" */
   @Column({ nullable: true })
   episodeLabel: string;
@@ -71,30 +67,6 @@ export class DownloadTask extends BaseEntity {
   @Column({ type: 'timestamptz', nullable: true })
   clientDownloadedAt: Date | null;
 
-  /** Extracted VTT subtitle files — for offline playback */
-  @Column({ type: 'jsonb', nullable: true })
-  subtitles: { language: string; forced: boolean; filename: string }[];
-
   @Column({ nullable: true })
   error: string;
-
-  // ---------------------------------------------------------------------------
-  // Progressive download (HLS segments downloaded as they're transcoded)
-  // ---------------------------------------------------------------------------
-
-  /** Number of HLS segments written so far (updated every ~1s during transcode). */
-  @Column({ type: 'int', nullable: true })
-  segmentCount: number | null;
-
-  /** Estimated total segments: ceil(duration / segmentDuration). */
-  @Column({ type: 'int', nullable: true })
-  totalSegments: number | null;
-
-  /** HLS segment duration in seconds (from admin settings, typically 3). */
-  @Column({ type: 'float', nullable: true })
-  segmentDuration: number | null;
-
-  /** Absolute path to the session directory containing init.mp4 + seg-NNNN.m4s files. */
-  @Column({ type: 'varchar', nullable: true })
-  sessionDir: string | null;
 }

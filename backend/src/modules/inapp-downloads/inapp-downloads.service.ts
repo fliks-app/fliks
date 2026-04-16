@@ -6,98 +6,15 @@ import {
   ForbiddenException,
   OnModuleInit,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DownloadTask } from './entities/download-task.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
-import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { Media } from '../media/entities/media.entity';
 import { User } from '../users/entities/user.entity';
-import { Season } from '../media/entities/season.entity';
-import { StreamingService, ResolvedFile } from '../streaming/streaming.service';
-import { TranscodingService, PROFILES } from '../streaming/transcoding.service';
-import { EventsService } from '../scheduler/events.service';
-import { spawn } from 'child_process';
-import * as path from 'path';
-import * as fs from 'fs/promises';
-
-/**
- * Run an FFmpeg command with reliable progress tracking via `-progress pipe:1`.
- * Parses structured `out_time_us` from stdout (not affected by pipe buffering).
- * Stderr is kept for error diagnostics only.
- */
-function runFfmpegWithProgress(
-  args: string[],
-  durationSeconds: number,
-  onProgress: (pct: number) => void,
-  onJobRef: (kill: () => void) => void,
-  onJobDone: () => void,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const fullArgs = [
-      ...args.slice(0, -1),
-      '-progress',
-      'pipe:1',
-      args[args.length - 1],
-    ];
-    const proc = spawn('ffmpeg', fullArgs, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    onJobRef(() => proc.kill('SIGTERM'));
-
-    let lastPct = -1;
-    let stdoutBuf = '';
-    proc.stdout!.on('data', (chunk: Buffer) => {
-      stdoutBuf += chunk.toString();
-      // Process complete lines
-      const lines = stdoutBuf.split('\n');
-      stdoutBuf = lines.pop() ?? '';
-      for (const line of lines) {
-        const m = line.match(/^out_time_us=(\d+)/);
-        if (m) {
-          const secs = parseInt(m[1]) / 1_000_000;
-          const pct =
-            durationSeconds > 0
-              ? Math.min(99, Math.round((secs / durationSeconds) * 100))
-              : 0;
-          if (pct !== lastPct && pct >= 0) {
-            lastPct = pct;
-            onProgress(pct);
-          }
-        }
-      }
-    });
-
-    // Keep stderr for error diagnostics
-    let stderrTail = '';
-    proc.stderr!.on('data', (chunk: Buffer) => {
-      stderrTail = (stderrTail + chunk.toString()).slice(-4096);
-    });
-
-    proc.on('close', (code) => {
-      onJobDone();
-      if (code === 0) resolve();
-      else reject(new Error(`ffmpeg exited with code ${code}\n${stderrTail}`));
-    });
-    proc.on('error', (err) => {
-      onJobDone();
-      reject(err);
-    });
-  });
-}
-
-/** Max concurrent FFmpeg download transcodes */
-const MAX_CONCURRENT_DOWNLOADS = 2;
-
-/** Image-based subtitle codecs that cannot be converted to mov_text */
-const BITMAP_SUB_CODECS = new Set([
-  'hdmv_pgs_subtitle',
-  'dvd_subtitle',
-  'dvb_subtitle',
-  'xsub',
-]);
+import { StreamingService } from '../streaming/streaming.service';
+import { PROFILES } from '../streaming/transcoding.service';
 
 export interface DownloadQuality {
   key: string;
@@ -105,38 +22,35 @@ export interface DownloadQuality {
   estimatedSize: number;
 }
 
+/**
+ * Simplified in-app downloads service.
+ *
+ * Clients download via the streaming endpoint (`/api/stream/{mfid}/master.m3u8`)
+ * using native platform APIs (Shaka offline for web, ExoPlayer for Android,
+ * AVFoundation for iOS). This service only tracks task metadata.
+ *
+ * Flow:
+ *   1. POST /api/downloads → create task with status 'transcoding'
+ *   2. Client downloads via streaming endpoint (TranscodingService handles FFmpeg)
+ *   3. Client → POST /api/downloads/:id/ack → marks downloaded
+ *   4. DELETE → cancel
+ */
 @Injectable()
 export class InappDownloadsService implements OnModuleInit {
   private readonly log = new Logger(InappDownloadsService.name);
-  private readonly cachePath: string;
-  /** Active transcode processes — keyed by task ID */
-  private readonly activeJobs = new Map<number, { kill: () => void }>();
-  /** Concurrency control for FFmpeg download processes */
-  private runningCount = 0;
-  private readonly waitQueue: Array<() => void> = [];
 
   constructor(
     @InjectRepository(DownloadTask)
     private readonly taskRepo: Repository<DownloadTask>,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
-    @InjectRepository(SubtitleFile)
-    private readonly subtitleRepo: Repository<SubtitleFile>,
     @InjectRepository(Episode)
     private readonly episodeRepo: Repository<Episode>,
     private readonly streaming: StreamingService,
-    private readonly transcoding: TranscodingService,
-    private readonly events: EventsService,
-    private readonly config: ConfigService,
-  ) {
-    this.cachePath = this.config.get<string>(
-      'DOWNLOAD_CACHE_PATH',
-      '/tmp/fliks-downloads',
-    );
-  }
+  ) {}
 
   async onModuleInit() {
-    // Mark any in-progress tasks as failed (server restarted, ffmpeg processes are gone)
+    // Mark any in-progress tasks as failed (server restarted)
     const stale = await this.taskRepo.find({
       where: [
         { status: 'transcoding' },
@@ -144,17 +58,11 @@ export class InappDownloadsService implements OnModuleInit {
       ],
     });
     if (stale.length) {
-      for (const task of stale) {
-        if (task.sessionDir) {
-          await fs.rm(task.sessionDir, { recursive: true, force: true }).catch(() => {});
-        }
-      }
       await this.taskRepo.update(
         stale.map((t) => t.id),
         {
           status: 'failed',
           error: 'Server restarted during processing',
-          sessionDir: null,
         },
       );
       this.log.warn(
@@ -178,9 +86,6 @@ export class InappDownloadsService implements OnModuleInit {
     const qualities: DownloadQuality[] = [];
 
     for (const p of PROFILES) {
-      // Skip profiles with higher resolution than the source (upscaling is
-      // pointless). Use > instead of >= so the profile matching the source
-      // resolution is included — that's the "max quality" download option.
       if (p.maxWidth > sourceWidth && p.maxHeight > sourceHeight) continue;
       const videoBps = this.parseBitrate(p.videoBitrate);
       const audioBps = this.parseBitrate(p.audioBitrate);
@@ -255,14 +160,11 @@ export class InappDownloadsService implements OnModuleInit {
         file.episodeId != null ? ({ id: file.episodeId } as Episode) : null,
       mediaFile: { id: mediaFileId } as MediaFile,
       quality,
-      status: 'pending',
+      status: 'transcoding',
       episodeLabel,
     });
     const saved = await this.taskRepo.save(task);
-
-    const dp = deviceProfile ?? {};
-    this.log.log(`Download #${saved.id}: device profile — videoCodecs=[${dp.videoCodecs?.join(', ') ?? 'none'}] audioCodecs=[${dp.audioCodecs?.join(', ') ?? 'none'}]`);
-    void this.runProgressiveTranscode(saved.id, resolved, quality, dp);
+    this.log.log(`Download #${saved.id}: created (streaming endpoint handles transcoding)`);
     return saved;
   }
 
@@ -303,710 +205,47 @@ export class InappDownloadsService implements OnModuleInit {
       );
     }
 
-    // Clean up leftover session dir
-    if (task.sessionDir) {
-      await fs.rm(task.sessionDir, { recursive: true, force: true }).catch(() => {});
-    }
-
     // Reset task state
     await this.taskRepo.update(task.id, {
-      status: 'pending',
+      status: 'transcoding',
       progress: 0,
-      sessionDir: null,
-      segmentCount: null,
-      totalSegments: null,
       error: undefined,
-      fileSize: undefined,
-      subtitles: undefined,
       clientDownloadedAt: undefined,
     });
 
-    const resolved = await this.streaming.resolveFile(task.mediaFileId);
-    const dp = deviceProfile ?? {};
-    void this.runProgressiveTranscode(task.id, resolved, task.quality, dp);
-
     return this.getOne(userId, taskId);
-  }
-
-  /**
-   * Return the absolute path to a segment file for a progressive download.
-   * Waits up to 30s for the segment to appear and stabilise (FFmpeg may still
-   * be writing it). Throws if the task isn't progressive or timed out.
-   */
-  async getSegmentPath(
-    userId: number,
-    taskId: number,
-    filename: string,
-  ): Promise<string> {
-    const task = await this.getOne(userId, taskId);
-    if (!task.sessionDir) {
-      throw new BadRequestException('Not a segment-based download');
-    }
-    // Sanitise filename — only allow init.mp4 and seg-NNNN.m4s
-    if (!/^(init\.mp4|seg-\d{4}\.m4s)$/.test(filename)) {
-      throw new BadRequestException('Invalid segment name');
-    }
-    const segPath = path.join(task.sessionDir, filename);
-    return this.waitForFile(segPath, 60_000);
-  }
-
-  /** Progresssive download status for polling */
-  async getProgressiveStatus(
-    userId: number,
-    taskId: number,
-  ): Promise<{
-    segmentCount: number;
-    totalSegments: number | null;
-    segmentDuration: number;
-    done: boolean;
-  }> {
-    const task = await this.getOne(userId, taskId);
-    return {
-      segmentCount: task.segmentCount ?? 0,
-      totalSegments: task.totalSegments,
-      segmentDuration: task.segmentDuration ?? 3,
-      done: task.status === 'ready',
-    };
-  }
-
-  /**
-   * Wait for a file to exist and stop growing (stability check).
-   * Used for serving HLS segments that FFmpeg may still be writing.
-   */
-  private async waitForFile(
-    filePath: string,
-    timeoutMs: number,
-  ): Promise<string> {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      try {
-        const stat = await fs.stat(filePath);
-        // File exists — wait 50ms then check size didn't change (stable)
-        await new Promise((r) => setTimeout(r, 50));
-        const stat2 = await fs.stat(filePath);
-        if (stat2.size === stat.size && stat.size > 0) {
-          return filePath;
-        }
-      } catch {
-        // File doesn't exist yet — wait and retry
-      }
-      await new Promise((r) => setTimeout(r, 200));
-    }
-    throw new NotFoundException(
-      `Segment not available within ${timeoutMs / 1000}s`,
-    );
   }
 
   async ackDownloaded(userId: number, taskId: number): Promise<void> {
     const task = await this.getOne(userId, taskId);
     await this.taskRepo.update(task.id, { clientDownloadedAt: new Date() });
-    if (task.sessionDir) {
-      await fs.rm(task.sessionDir, { recursive: true, force: true }).catch(() => {});
-      await this.taskRepo.update(task.id, { sessionDir: null });
-    }
   }
 
-  /** Cleanup session dirs older than maxAge that were never downloaded by client */
+  /** Expire old unacked tasks */
   async cleanupStaleFiles(maxAgeMs = 24 * 60 * 60 * 1000): Promise<number> {
     const cutoff = new Date(Date.now() - maxAgeMs);
     const stale = await this.taskRepo
       .createQueryBuilder('t')
       .where('t.status = :status', { status: 'ready' })
-      .andWhere('t."sessionDir" IS NOT NULL')
       .andWhere('t."clientDownloadedAt" IS NULL')
       .andWhere('t."updatedAt" < :cutoff', { cutoff })
       .getMany();
 
-    for (const task of stale) {
-      if (task.sessionDir) {
-        await fs.rm(task.sessionDir, { recursive: true, force: true }).catch(() => {});
-      }
-      await this.taskRepo.update(task.id, {
-        sessionDir: null,
-        status: 'expired',
-        error: 'File expired — client never downloaded',
-      });
-    }
     if (stale.length) {
-      this.log.log(`Cleanup: removed ${stale.length} stale session dirs`);
+      for (const task of stale) {
+        await this.taskRepo.update(task.id, {
+          status: 'expired',
+          error: 'File expired — client never downloaded',
+        });
+      }
+      this.log.log(`Cleanup: expired ${stale.length} stale download tasks`);
     }
     return stale.length;
   }
 
   async delete(userId: number, taskId: number): Promise<void> {
     const task = await this.getOne(userId, taskId);
-    this.activeJobs.get(taskId)?.kill();
-    this.activeJobs.delete(taskId);
-    if (task.sessionDir) {
-      await fs.rm(task.sessionDir, { recursive: true, force: true }).catch(() => {});
-    }
     await this.taskRepo.remove(task);
-  }
-
-  /** Wait until a concurrency slot is available */
-  private acquireSlot(): Promise<void> {
-    if (this.runningCount < MAX_CONCURRENT_DOWNLOADS) {
-      this.runningCount++;
-      return Promise.resolve();
-    }
-    return new Promise((resolve) => this.waitQueue.push(resolve));
-  }
-
-  private releaseSlot(): void {
-    const next = this.waitQueue.shift();
-    if (next) {
-      next(); // hand the slot to the next waiter
-    } else {
-      this.runningCount--;
-    }
-  }
-
-  /**
-   * Transcode to HLS segments (fMP4) that can be downloaded incrementally as
-   * they appear on disk. Subtitle extraction runs in parallel from the source.
-   * Web clients get a single concatenated fMP4 via `/file`; native clients
-   * download segments individually via `/segment/:filename`.
-   */
-  private async runProgressiveTranscode(
-    taskId: number,
-    resolved: ResolvedFile,
-    quality: string,
-    deviceProfile: {
-      supportsHdr?: boolean;
-      audioCodecs?: string[];
-      videoCodecs?: string[];
-      maxAudioChannels?: number;
-    } = {},
-  ): Promise<void> {
-    const profile = PROFILES.find((p) => p.name === quality);
-    if (!profile) {
-      await this.taskRepo.update(taskId, {
-        status: 'failed',
-        error: `Unknown quality: ${quality}`,
-      });
-      return;
-    }
-
-    await this.acquireSlot();
-    this.log.log(
-      `Download #${taskId}: progressive slot acquired (${this.runningCount}/${MAX_CONCURRENT_DOWNLOADS})`,
-    );
-    try {
-      const sessionDir = path.join(this.cachePath, `dl-${taskId}`);
-      await fs.mkdir(sessionDir, { recursive: true });
-
-      const inputPath = resolved.absolutePath;
-      const info = resolved.mediaFile.streamInfo;
-      const video = info?.video?.[0];
-      const isHdr = video?.colorSpace === 'bt2020nc' || video?.bitDepth === 10;
-      const hwAccel = this.transcoding.getDetectedHwAccel();
-      const duration = info?.durationSeconds ?? 0;
-      const segmentDuration = this.transcoding.getSegmentDuration();
-      const totalSegments =
-        duration > 0 ? Math.ceil(duration / segmentDuration) : null;
-
-      const subtitles = await this.subtitleRepo.find({
-        where: { mediaFile: { id: resolved.mediaFile.id } },
-      });
-      const crop = (video as any)?.crop as
-        | { width: number; height: number; x: number; y: number }
-        | undefined;
-      const args = this.buildFullFileFfmpegArgs(
-        inputPath,
-        profile,
-        hwAccel,
-        isHdr,
-        subtitles,
-        resolved,
-        crop,
-        { dir: sessionDir, segmentDuration },
-        deviceProfile.audioCodecs,
-        deviceProfile.videoCodecs,
-      );
-
-      await this.taskRepo.update(taskId, {
-        status: 'transcoding',
-        sessionDir,
-        segmentDuration,
-        totalSegments,
-        segmentCount: 0,
-      });
-      this.log.log(
-        `Download #${taskId}: progressive transcode → ${quality} (${hwAccel}), est. ${totalSegments} segments`,
-      );
-
-      // Monitor segment creation (1s interval) — updates DB + SSE.
-      // Progress is based on time (segment index × estimated segment duration)
-      // rather than segment count, since FFmpeg's actual segment count differs
-      // from the estimate (keyframe alignment).
-      const monitorInterval = setInterval(async () => {
-        try {
-          const files = await fs.readdir(sessionDir);
-          const count = files.filter((f) => /^seg-\d+\.m4s$/.test(f)).length;
-          // Time-based progress: each segment ≈ segmentDuration seconds
-          const estimatedTime = count * segmentDuration;
-          const pct =
-            duration > 0
-              ? Math.min(99, Math.round((estimatedTime / duration) * 100))
-              : 0;
-          await this.taskRepo.update(taskId, {
-            segmentCount: count,
-            progress: pct,
-          });
-          this.events.emit({
-            type: 'download.progress',
-            downloadId: taskId,
-            progress: pct,
-          });
-        } catch {
-          /* dir deleted → ignore */
-        }
-      }, 1000);
-
-      // Extract VTT subtitles in parallel from the *source* file.
-      const vttPromise = this.extractSubtitlesAsVtt(
-        inputPath,
-        taskId,
-        resolved.mediaFile.streamInfo?.subtitles ?? [],
-      );
-
-      try {
-        await runFfmpegWithProgress(
-          args,
-          duration,
-          () => {}, // progress tracked via segment monitor
-          (kill) => this.activeJobs.set(taskId, { kill }),
-          () => this.activeJobs.delete(taskId),
-        );
-
-        clearInterval(monitorInterval);
-
-        // Final segment count after FFmpeg exits
-        const files = await fs.readdir(sessionDir);
-        const finalCount = files.filter((f) =>
-          /^seg-\d+\.m4s$/.test(f),
-        ).length;
-
-        const vttFiles = await vttPromise;
-        const subtitleMeta = vttFiles.map((v) => ({
-          language: v.language,
-          forced: v.forced,
-          filename: path.basename(v.path),
-        }));
-
-        // Compute actual segment duration (FFmpeg aligns to keyframes,
-        // so real duration per segment differs from the target -hls_time).
-        const actualSegDuration = duration > 0 && finalCount > 0
-          ? duration / finalCount
-          : segmentDuration;
-        await this.taskRepo.update(taskId, {
-          status: 'ready',
-          progress: 100,
-          segmentDuration: actualSegDuration,
-          segmentCount: finalCount,
-          totalSegments: finalCount,
-          subtitles: subtitleMeta.length ? subtitleMeta : undefined,
-        });
-        this.events.emit({
-          type: 'download.progress',
-          downloadId: taskId,
-          progress: 100,
-        });
-        this.events.emit({ type: 'download.ready', downloadId: taskId });
-        this.log.log(
-          `Download #${taskId}: progressive transcode complete — ${finalCount} segments, ${subtitleMeta.length} VTT subs`,
-        );
-      } catch (err) {
-        clearInterval(monitorInterval);
-        const msg = (err as Error).message;
-        await this.taskRepo.update(taskId, { status: 'failed', error: msg });
-        this.events.emit({
-          type: 'download.failed',
-          downloadId: taskId,
-          error: msg,
-        });
-        this.log.warn(
-          `Download #${taskId}: progressive transcode failed: ${msg}`,
-        );
-        await fs.rm(sessionDir, { recursive: true, force: true }).catch(() => {});
-      }
-    } finally {
-      this.releaseSlot();
-    }
-  }
-
-  /**
-   * Extract each text subtitle stream as a separate .vtt file.
-   * Returns array of { index, language, path } for successfully extracted subs.
-   */
-  private buildFullFileFfmpegArgs(
-    inputPath: string,
-    profile: { maxWidth: number; maxHeight: number; videoBitrate: string; audioBitrate: string },
-    hwAccel: string,
-    isHdr: boolean,
-    subtitles: SubtitleFile[],
-    resolved: ResolvedFile,
-    crop?: { width: number; height: number; x: number; y: number },
-    hlsConfig?: { dir: string; segmentDuration: number },
-    deviceAudioCodecs?: string[],
-    deviceVideoCodecs?: string[],
-  ): string[] {
-    const args: string[] = [
-      '-y',
-      '-hide_banner',
-      '-loglevel',
-      'info',
-      '-threads',
-      '4',
-      '-filter_threads',
-      '1',
-    ];
-
-    const info = resolved.mediaFile.streamInfo;
-    const video = info?.video?.[0];
-    const sourceWidth = video?.width ?? 1920;
-    const sourceHeight = video?.height ?? 1080;
-
-    // Determine if video needs re-encoding:
-    //   - Downscale: profile resolution < source resolution
-    //   - HDR tonemap: HDR source + device doesn't support HDR
-    //   - Crop: black bars detected
-    //   - Unsupported codec: source codec (e.g. HEVC) not in device profile
-    // If none apply → copy video stream (remux speed, zero quality loss).
-    const needsScale =
-      profile.maxWidth < sourceWidth || profile.maxHeight < sourceHeight;
-    const sourceVideoCodec = (video?.codec ?? '').toLowerCase();
-    // HEVC/H265 copy into fMP4 HLS is unreliable with browser MSE (Shaka
-    // throws 3014 even when the browser advertises HEVC support). Only copy
-    // H264 — everything else gets transcoded to H264.
-    const isH264 = ['h264', 'avc', 'avc1'].includes(sourceVideoCodec);
-    const needsVideoTranscode = needsScale || isHdr || !!crop || !isH264;
-
-    if (needsVideoTranscode) {
-      // Full video transcode path — HW accel + filters
-      const effectiveHw =
-        crop && (hwAccel === 'qsv' || hwAccel === 'vaapi') ? 'vaapi' : hwAccel;
-      switch (effectiveHw) {
-        case 'qsv':
-          args.push(
-            '-init_hw_device',
-            'vaapi=va:/dev/dri/renderD128',
-            '-init_hw_device',
-            'qsv=qs@va',
-            '-hwaccel',
-            'vaapi',
-            '-hwaccel_output_format',
-            'vaapi',
-            '-hwaccel_device',
-            'va',
-          );
-          if (isHdr)
-            args.push(
-              '-init_hw_device',
-              'opencl=ocl:0.0',
-              '-filter_hw_device',
-              'ocl',
-            );
-          break;
-        case 'vaapi':
-          args.push(
-            '-init_hw_device',
-            'vaapi=va:/dev/dri/renderD128',
-            '-hwaccel',
-            'vaapi',
-            '-hwaccel_output_format',
-            'vaapi',
-            '-hwaccel_device',
-            'va',
-          );
-          if (isHdr)
-            args.push(
-              '-init_hw_device',
-              'opencl=ocl:0.0',
-              '-filter_hw_device',
-              'ocl',
-            );
-          break;
-        case 'nvenc':
-          args.push('-hwaccel', 'cuda');
-          if (!isHdr && !crop) args.push('-hwaccel_output_format', 'cuda');
-          break;
-      }
-
-      args.push('-i', inputPath);
-
-      // External subtitle file inputs
-      const extSubs = subtitles.filter((s) => s.relativePath);
-      for (const sub of extSubs) {
-        args.push('-i', path.resolve(resolved.media.path!, sub.relativePath!));
-      }
-
-      const w = profile.maxWidth;
-      const cropF = crop
-        ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},`
-        : '';
-      const hwCrop = crop
-        ? `hwdownload,format=nv12,${cropF}hwupload=derive_device=vaapi,`
-        : '';
-
-      switch (effectiveHw) {
-        case 'qsv':
-          args.push('-c:v', 'h264_qsv');
-          if (isHdr) {
-            args.push(
-              '-vf',
-              `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
-            );
-          } else {
-            args.push(
-              '-vf',
-              `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
-            );
-          }
-          break;
-        case 'vaapi':
-          args.push('-c:v', 'h264_vaapi');
-          if (isHdr) {
-            args.push(
-              '-vf',
-              `${hwCrop}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
-            );
-          } else if (crop) {
-            args.push('-vf', `${hwCrop}scale_vaapi=w=${w}:h=-16:format=nv12`);
-          } else {
-            args.push('-vf', `scale_vaapi=w=${w}:h=-16:format=nv12`);
-          }
-          break;
-        case 'nvenc':
-          args.push('-c:v', 'h264_nvenc', '-preset', 'p4');
-          if (isHdr) {
-            args.push(
-              '-vf',
-              `hwdownload,format=p010le,${cropF}zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=${w}:-2`,
-            );
-          } else if (crop) {
-            args.push(
-              '-vf',
-              `hwdownload,format=nv12,${cropF}scale=${w}:-2,format=yuv420p`,
-            );
-          } else {
-            args.push('-vf', `scale_cuda=w=${w}:h=-2:format=nv12`);
-          }
-          break;
-        default:
-          args.push('-c:v', 'libx264', '-preset', 'veryfast');
-          if (isHdr) {
-            args.push(
-              '-vf',
-              `${cropF}zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=${w}:-2:flags=lanczos`,
-            );
-          } else {
-            args.push(
-              '-vf',
-              `${cropF}scale=${w}:-2:flags=lanczos,format=yuv420p`,
-            );
-          }
-      }
-
-      const bufsize = `${parseInt(profile.videoBitrate) * 2}${profile.videoBitrate.replace(/[0-9.]/g, '')}`;
-      args.push(
-        '-b:v',
-        profile.videoBitrate,
-        '-maxrate',
-        profile.videoBitrate,
-        '-bufsize',
-        bufsize,
-      );
-      const reasons = [needsScale ? 'scale' : '', isHdr ? 'HDR' : '', crop ? 'crop' : '', !isH264 ? `codec "${sourceVideoCodec}"→H264` : ''].filter(Boolean).join(', ');
-      this.log.log(`Download: video "${sourceVideoCodec}" → transcode (${reasons})`);
-    } else {
-      // Video copy — no re-encode needed (same resolution, no HDR, no crop,
-      // codec supported). Massively faster: remux speed.
-      args.push('-i', inputPath);
-
-      const extSubs = subtitles.filter((s) => s.relativePath);
-      for (const sub of extSubs) {
-        args.push('-i', path.resolve(resolved.media.path!, sub.relativePath!));
-      }
-
-      args.push('-c:v', 'copy');
-      this.log.log(`Download: video "${sourceVideoCodec}" → copy`);
-    }
-
-    // Map video + ALL audio tracks (multi-language offline playback).
-    const audioStreams: { language?: string; codec?: string }[] =
-      resolved.mediaFile.streamInfo?.audio ?? [];
-    args.push('-map', '0:v:0');
-    if (audioStreams.length > 1) {
-      for (let i = 0; i < audioStreams.length; i++) {
-        args.push('-map', `0:a:${i}`);
-        const lang = audioStreams[i].language;
-        if (lang) args.push(`-metadata:s:a:${i}`, `language=${lang}`);
-        const codec = (audioStreams[i].codec ?? '').toLowerCase();
-        if (deviceAudioCodecs?.length && !this.isAudioSupported(codec, deviceAudioCodecs)) {
-          this.log.log(`Download: audio track ${i} "${codec}" → AAC`);
-          args.push(`-c:a:${i}`, 'aac', `-b:a:${i}`, profile.audioBitrate);
-        } else {
-          this.log.log(`Download: audio track ${i} "${codec}" → copy`);
-          args.push(`-c:a:${i}`, 'copy');
-        }
-      }
-    } else {
-      args.push('-map', '0:a');
-      const codec = (audioStreams[0]?.codec ?? '').toLowerCase();
-      if (deviceAudioCodecs?.length && !this.isAudioSupported(codec, deviceAudioCodecs)) {
-        this.log.log(`Download: audio "${codec}" → AAC`);
-        args.push('-c:a', 'aac', '-b:a', profile.audioBitrate);
-      } else {
-        this.log.log(`Download: audio "${codec}" → copy`);
-        args.push('-c:a', 'copy');
-      }
-    }
-
-    // Limit muxer packet queue — prevents unbounded memory growth during full-file encodes
-    args.push('-max_muxing_queue_size', '4096');
-
-    if (hlsConfig) {
-      // HLS fMP4 output for progressive downloads — subtitles extracted
-      // separately as VTT, so no embedded subs in HLS.
-      args.push(
-        '-f',
-        'hls',
-        '-hls_time',
-        String(hlsConfig.segmentDuration),
-        '-hls_list_size',
-        '0',
-        '-start_number',
-        '0',
-        '-hls_segment_type',
-        'fmp4',
-        '-hls_fmp4_init_filename',
-        'init.mp4',
-        '-hls_flags',
-        'independent_segments',
-        '-hls_segment_filename',
-        path.join(hlsConfig.dir, 'seg-%04d.m4s'),
-        path.join(hlsConfig.dir, 'index.m3u8'),
-      );
-    }
-    return args;
-  }
-
-  /**
-   * Check if a source audio codec is supported by the device.
-   * Normalises common codec names (ffprobe → device profile).
-   */
-  private isVideoSupported(codec: string, supported: string[]): boolean {
-    if (!codec || !supported.length) return true;
-    const norm = supported.map((c) => c.toLowerCase());
-    if (norm.includes(codec)) return true;
-    const aliases: Record<string, string[]> = {
-      h264: ['h264', 'avc', 'avc1'],
-      hevc: ['hevc', 'h265', 'hvc1', 'hev1'],
-      vp9: ['vp9', 'vp09'],
-      vp8: ['vp8'],
-      av1: ['av1', 'av01'],
-    };
-    for (const [, variants] of Object.entries(aliases)) {
-      if (variants.includes(codec) && norm.some((n) => variants.includes(n))) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private isAudioSupported(codec: string, supported: string[]): boolean {
-    if (!codec || !supported.length) return true;
-    const norm = supported.map((c) => c.toLowerCase());
-    // Direct match
-    if (norm.includes(codec)) return true;
-    // Common aliases: eac3 ↔ ec-3, ac3 ↔ ac-3, aac variants
-    const aliases: Record<string, string[]> = {
-      eac3: ['ec-3', 'e-ac-3', 'eac3'],
-      ac3: ['ac-3', 'ac3'],
-      aac: ['aac', 'mp4a', 'mp4a.40.2'],
-      opus: ['opus'],
-      flac: ['flac'],
-      dts: ['dts', 'dca'],
-    };
-    for (const [key, variants] of Object.entries(aliases)) {
-      if (variants.includes(codec) && norm.some((n) => variants.includes(n) || n === key)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private async extractSubtitlesAsVtt(
-    inputPath: string,
-    taskId: number,
-    subtitles: {
-      streamIndex: number;
-      codec: string;
-      language: string;
-      forced: boolean;
-    }[],
-  ): Promise<
-    { index: number; language: string; forced: boolean; path: string }[]
-  > {
-    const textSubs = subtitles.filter((s) => !BITMAP_SUB_CODECS.has(s.codec));
-    if (!textSubs.length) return [];
-
-    const results: {
-      index: number;
-      language: string;
-      forced: boolean;
-      path: string;
-    }[] = [];
-    for (const sub of textSubs) {
-      const vttPath = path.join(
-        this.cachePath,
-        `dl-${taskId}-sub-${sub.streamIndex}.vtt`,
-      );
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const proc = spawn(
-            'ffmpeg',
-            [
-              '-y',
-              '-hide_banner',
-              '-loglevel',
-              'error',
-              '-i',
-              inputPath,
-              '-map',
-              `0:${sub.streamIndex}`,
-              '-c:s',
-              'webvtt',
-              vttPath,
-            ],
-            { stdio: ['ignore', 'ignore', 'pipe'] },
-          );
-          let err = '';
-          proc.stderr.on('data', (c: Buffer) => {
-            err += c.toString();
-          });
-          proc.on('close', (code) =>
-            code === 0 ? resolve() : reject(new Error(err || `exit ${code}`)),
-          );
-          proc.on('error', reject);
-        });
-        results.push({
-          index: sub.streamIndex,
-          language: sub.language,
-          forced: sub.forced,
-          path: vttPath,
-        });
-      } catch (e) {
-        this.log.warn(
-          `Download #${taskId}: failed to extract sub stream ${sub.streamIndex}: ${(e as Error).message}`,
-        );
-      }
-    }
-    this.log.log(
-      `Download #${taskId}: extracted ${results.length}/${textSubs.length} subtitle tracks as VTT`,
-    );
-    return results;
   }
 
   private parseBitrate(s: string): number {

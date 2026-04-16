@@ -1,8 +1,12 @@
 import { Injectable, inject } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
+import shaka from 'shaka-player';
 import { AuthService } from './auth.service';
 
 const CACHE_NAME = 'offline-media';
+
+/** Map mediaFileId → Shaka offline:xxx URI. Persisted in localStorage. */
+const SHAKA_OFFLINE_KEY = 'fliks.shakaOfflineUris';
 
 /** Lazy-loaded Filesystem reference — avoids crash on web where the plugin isn't available. */
 let _fs: typeof import('@capacitor/filesystem') | null = null;
@@ -20,12 +24,111 @@ export class OfflineStorageService {
     if (this.isNative) {
       return this.getNativeHlsUrl(key);
     }
-    return this.buildOfflineHlsManifest(key);
+    // Web: check Shaka offline URI (stored in localStorage)
+    const mfid = key.replace('download-', '');
+    const offlineUri = this.getShakaOfflineUri(Number(mfid));
+    return offlineUri ?? null;
+  }
+
+  // --- Shaka offline storage (web only) ---
+
+  /** Get stored Shaka offline URI for a media file, or null. */
+  getShakaOfflineUri(mediaFileId: number): string | null {
+    try {
+      const map = JSON.parse(localStorage.getItem(SHAKA_OFFLINE_KEY) ?? '{}');
+      return map[String(mediaFileId)] ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private setShakaOfflineUri(mediaFileId: number, uri: string): void {
+    try {
+      const map = JSON.parse(localStorage.getItem(SHAKA_OFFLINE_KEY) ?? '{}');
+      map[String(mediaFileId)] = uri;
+      localStorage.setItem(SHAKA_OFFLINE_KEY, JSON.stringify(map));
+    } catch { /* ignore */ }
+  }
+
+  private removeShakaOfflineUri(mediaFileId: number): void {
+    try {
+      const map = JSON.parse(localStorage.getItem(SHAKA_OFFLINE_KEY) ?? '{}');
+      delete map[String(mediaFileId)];
+      localStorage.setItem(SHAKA_OFFLINE_KEY, JSON.stringify(map));
+    } catch { /* ignore */ }
+  }
+
+  /**
+   * Use Shaka's built-in offline storage to download an HLS stream into
+   * IndexedDB. Returns the `offline:` URI for playback, or null on failure.
+   */
+  async shakaStore(
+    hlsUrl: string,
+    mediaFileId: number,
+    meta: { title: string; episode?: string },
+    onProgress?: (progress: number) => void,
+  ): Promise<string | null> {
+    if (this.isNative) return null;
+
+    // Create a temporary headless Shaka player for the storage API
+    const video = document.createElement('video');
+    const player = new shaka.Player();
+    await player.attach(video);
+
+    // Configure auth header for segment fetches
+    const token = this.auth.accessToken;
+    if (token) {
+      player.getNetworkingEngine()?.registerRequestFilter((_type: any, request: any) => {
+        if (request.uris?.[0]?.includes('/api/')) {
+          request.headers['Authorization'] = `Bearer ${token}`;
+        }
+      });
+    }
+
+    const storage = new shaka.offline.Storage(player);
+    storage.configure({
+      progressCallback: (_content: any, progress: number) => {
+        onProgress?.(progress);
+      },
+    });
+
+    try {
+      const stored: any = await storage.store(hlsUrl, { title: meta.title, episode: meta.episode ?? '' });
+      const offlineUri: string | undefined = stored.offlineUri;
+      if (offlineUri) {
+        this.setShakaOfflineUri(mediaFileId, offlineUri);
+      }
+      return offlineUri ?? null;
+    } finally {
+      await storage.destroy();
+      await player.destroy();
+      video.remove();
+    }
+  }
+
+  /** Remove Shaka offline content for a media file. */
+  async shakaRemove(mediaFileId: number): Promise<void> {
+    const uri = this.getShakaOfflineUri(mediaFileId);
+    if (!uri) return;
+
+    const video = document.createElement('video');
+    const player = new shaka.Player();
+    await player.attach(video);
+    const storage = new shaka.offline.Storage(player);
+    try {
+      await storage.remove(uri);
+    } catch { /* already removed or not found */ }
+    await storage.destroy();
+    await player.destroy();
+    video.remove();
+    this.removeShakaOfflineUri(mediaFileId);
   }
 
   async delete(key: string): Promise<void> {
     if (this.isNative) return this.deleteNative(key);
-    return this.deleteSegments(key);
+    // Web: remove Shaka offline content
+    const mfid = Number(key.replace('download-', ''));
+    await this.shakaRemove(mfid);
   }
 
   /** Download a small text file (VTT subtitle) and store locally. */
@@ -83,7 +186,9 @@ export class OfflineStorageService {
     if (this.isNative) {
       return this.hasNative(`${key}/index.m3u8`);
     }
-    return this.hasSegments(key);
+    // Web: check Shaka offline URI
+    const mfid = key.replace('download-', '');
+    return !!this.getShakaOfflineUri(Number(mfid));
   }
 
   /** Get the native directory path for progressive downloads (HLS segments). */
@@ -151,109 +256,4 @@ export class OfflineStorageService {
     } catch { /* doesn't exist — fine */ }
   }
 
-  // --- Web: segment-based progressive storage (Cache API) ---
-
-  /** Store a single segment directly into Cache API (zero RAM). */
-  async cacheSegment(key: string, response: Response): Promise<void> {
-    const cache = await caches.open(CACHE_NAME);
-    await cache.put(key, response);
-  }
-
-  /** Store JSON metadata for a completed progressive download. */
-  async cacheProgressMeta(
-    key: string,
-    meta: { segmentCount: number; segmentDuration: number },
-  ): Promise<void> {
-    const cache = await caches.open(CACHE_NAME);
-    await cache.put(
-      `${key}/meta`,
-      new Response(JSON.stringify(meta), {
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    );
-  }
-
-  /**
-   * Build a local HLS manifest using `/offline-hls/` URLs. A Service Worker
-   * intercepts these requests and serves segments from Cache API — Shaka
-   * sees normal HTTP responses. No custom scheme, no blob URLs.
-   */
-  async buildOfflineHlsManifest(key: string): Promise<string | null> {
-    const cache = await caches.open(CACHE_NAME);
-    const metaResp = await cache.match(`${key}/meta`);
-    if (!metaResp) return null;
-    const meta = await metaResp.json();
-    const count: number = meta.segmentCount;
-    const segDuration: number = meta.segmentDuration ?? 3;
-    const totalDuration = count * segDuration;
-
-    if (!(await cache.match(`${key}/init.mp4`))) return null;
-
-    // Ensure Service Worker is registered
-    await this.ensureOfflineSw();
-
-    const base = `/offline-hls/${key}`;
-    const lines = [
-      '#EXTM3U',
-      '#EXT-X-VERSION:7',
-      `#EXT-X-TARGETDURATION:${Math.ceil(segDuration)}`,
-      '#EXT-X-MEDIA-SEQUENCE:0',
-      '#EXT-X-PLAYLIST-TYPE:VOD',
-      `#EXT-X-MAP:URI="${base}/init.mp4"`,
-    ];
-    for (let i = 0; i < count; i++) {
-      const segLen = Math.min(segDuration, totalDuration - i * segDuration);
-      lines.push(`#EXTINF:${segLen.toFixed(3)},`);
-      lines.push(`${base}/seg-${String(i).padStart(4, '0')}.m4s`);
-    }
-    lines.push('#EXT-X-ENDLIST');
-
-    // Store manifest in cache so the SW can serve it too
-    const m3u8 = lines.join('\n');
-    await cache.put(
-      `${key}/index.m3u8`,
-      new Response(m3u8, { headers: { 'Content-Type': 'application/x-mpegURL' } }),
-    );
-    return `${base}/index.m3u8#hls`;
-  }
-
-  private swRegistered = false;
-  private async ensureOfflineSw(): Promise<void> {
-    if (this.swRegistered || this.isNative || !('serviceWorker' in navigator)) return;
-    try {
-      await navigator.serviceWorker.register('/offline-sw.js');
-      // Wait for the SW to activate so it can intercept fetches
-      const reg = await navigator.serviceWorker.ready;
-      if (reg.active) this.swRegistered = true;
-    } catch (e) {
-      console.warn('[offline] SW registration failed:', e);
-    }
-  }
-
-  /** Delete all cached segments + metadata. Scans cache keys to catch
-   *  incomplete downloads (where meta wasn't stored yet). */
-  async deleteSegments(key: string): Promise<void> {
-    try {
-      const cache = await caches.open(CACHE_NAME);
-      const keys = await cache.keys();
-      for (const req of keys) {
-        // Match entries whose URL contains our key prefix
-        // Cache API keys are Request objects; url can be relative or absolute
-        const url = req.url ?? String(req);
-        if (url.includes(key + '/') || url.includes(key + '%2F')) {
-          await cache.delete(req);
-        }
-      }
-    } catch { /* ignore */ }
-  }
-
-  /** Check if progressive web download is complete (has metadata). */
-  async hasSegments(key: string): Promise<boolean> {
-    try {
-      const cache = await caches.open(CACHE_NAME);
-      return !!(await cache.match(`${key}/meta`));
-    } catch {
-      return false;
-    }
-  }
 }

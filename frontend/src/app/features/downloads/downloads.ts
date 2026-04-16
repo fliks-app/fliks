@@ -158,20 +158,19 @@ export class DownloadsComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Pull current progress/status from Java service into nativeState */
+  /** Pull current progress/status from native DownloadManager into nativeState */
   private async syncFromNativeService() {
-    const tasks = await this.notif.getActiveTasks();
+    const downloads = await this.notif.getDownloads();
     const next = new Map<number, { progress: number; status: string }>();
-    for (const t of tasks) {
-      // Normalize Java statuses to DB statuses:
-      // "error" → "failed", "downloading" → "transcoding" (all-in-one progressive)
-      const status = t.status === 'error' ? 'failed'
-        : t.status === 'downloading' ? 'transcoding'
-        : t.status;
-      next.set(t.taskId, { progress: t.progress, status });
+    for (const dl of downloads) {
+      const tid = Number(dl.id) || 0;
+      // Normalize native states to DB-compatible statuses
+      const status = dl.state === 'failed' ? 'failed'
+        : dl.state === 'completed' ? 'ready'
+        : 'transcoding'; // downloading/queued/stopped all show as "in progress"
+      next.set(tid, { progress: dl.progress, status });
     }
 
-    // Detect tasks that disappeared from Java (completed/failed) — reload from server
     const prev = this.nativeState();
     let needsReload = false;
     for (const tid of prev.keys()) {
@@ -239,10 +238,4 @@ export class DownloadsComponent implements OnInit, OnDestroy {
     }
   }
 
-  formatSize(bytes: number | undefined): string {
-    if (!bytes) return '';
-    if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
-    if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(0)} MB`;
-    return `${(bytes / 1e3).toFixed(0)} KB`;
-  }
 }

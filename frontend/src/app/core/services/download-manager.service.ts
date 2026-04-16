@@ -1,15 +1,15 @@
 import { Injectable, inject, effect, signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
-import { SseService } from './sse.service';
+import shaka from 'shaka-player';
 import {
   DownloadsApiService,
   DownloadTask,
 } from './api/downloads-api.service';
+import { StreamingApiService } from './api/streaming-api.service';
 import { OfflineStorageService } from './offline-storage.service';
 import { DownloadCacheService } from './download-cache.service';
-import { DownloadNotificationService, NativeDownloadEvent } from './download-notification.service';
+import { DownloadNotificationService } from './download-notification.service';
 import { BrowserDeviceProfileService } from './browser-device-profile.service';
-import { ServerConfigService } from './server-config.service';
 import { AuthService } from './auth.service';
 
 export interface DownloadEvent {
@@ -36,13 +36,12 @@ export interface DownloadEvent {
 export class DownloadManagerService {
   private readonly isNative = Capacitor.isNativePlatform();
   private readonly isAndroid = Capacitor.getPlatform() === 'android';
-  private readonly sse = inject(SseService);
   private readonly api = inject(DownloadsApiService);
+  private readonly streamingApi = inject(StreamingApiService);
   private readonly storage = inject(OfflineStorageService);
   private readonly cache = inject(DownloadCacheService);
   private readonly notif = inject(DownloadNotificationService);
   private readonly deviceProfile = inject(BrowserDeviceProfileService);
-  private readonly serverConfig = inject(ServerConfigService);
   private readonly auth = inject(AuthService);
 
   private readonly titles = new Map<number, { title: string; episode?: string }>();
@@ -56,33 +55,25 @@ export class DownloadManagerService {
     this.lastDownloadEvent.set({ type, taskId, progress, status, seq: ++this.eventSeq });
   }
 
-  // --- Web: SSE listener for failures (only active on non-native) ---
-  private readonly sseEffect = effect(() => {
-    if (this.isNative) return;
-    const event = this.sse.lastEvent();
-    if (!event) return;
-    if (event.type === 'download.failed') {
-      const id = event['downloadId'] as number;
-      if (!this.titles.has(id) && !this.cache.has(id)) return;
-      const info = this.titles.get(id);
-      this.notif.show(id, info?.title ?? 'Téléchargement', 0, 'error');
-      this.emitEvent('failed', id, 0);
-      this.decActive();
-    }
-  });
-
-  // --- Native: Java service events (only active on native) ---
+  // --- Native: ExoPlayer DownloadManager events ---
   private readonly nativeEffect = effect(() => {
     if (!this.isNative) return;
     const event = this.notif.nativeEvent();
     if (!event) return;
 
-    this.emitEvent(event.type, event.taskId, event.progress, event.status);
+    // Map native string id back to numeric task id
+    const taskId = Number(event.id) || 0;
+    this.emitEvent(
+      event.type === 'removed' ? 'failed' : event.type,
+      taskId,
+      event.progress,
+      event.state,
+    );
 
     if (event.type === 'failed') {
       this.decActive();
     } else if (event.type === 'complete') {
-      void this.handleNativeDownloadComplete(event.taskId);
+      void this.handleNativeDownloadComplete(taskId);
     }
   });
 
@@ -124,7 +115,7 @@ export class DownloadManagerService {
     this.incActive();
 
     if (this.isNative) {
-      void this.startNativeProgressiveDownload(task);
+      this.startNativeDownload(task);
     } else {
       void this.handleProgressiveWeb(task);
     }
@@ -145,7 +136,7 @@ export class DownloadManagerService {
     const info = this.titles.get(taskId);
     const title = info?.title ?? task.media?.title ?? 'Téléchargement';
     if (this.isNative) {
-      void this.startNativeProgressiveDownload(task);
+      this.startNativeDownload(task);
     } else {
       void this.handleProgressiveWeb(task);
     }
@@ -158,9 +149,8 @@ export class DownloadManagerService {
     this.cache.remove(task.id);
     this.cache.removeLocal(task.id);
     this.titles.delete(task.id);
-    // Cancel notification + remove from Java service tracking
-    this.notif.dismiss(task.id);
-    // Decrement active count if task was in progress
+    // Native: remove from ExoPlayer DownloadManager
+    this.notif.removeDownload(String(task.id));
     if (['transcoding', 'pending', 'ready'].includes(task.status)) {
       this.decActive();
     }
@@ -186,7 +176,7 @@ export class DownloadManagerService {
           }
           // Not downloaded yet — restart
           if (this.isNative) {
-            void this.startNativeProgressiveDownload(task);
+            this.startNativeDownload(task);
           } else {
             void this.handleProgressiveWeb(task);
           }
@@ -205,29 +195,14 @@ export class DownloadManagerService {
   // ===== NATIVE PATHS =====
 
   /**
-   * Progressive download: tell Java to poll for segments and download them
-   * as they appear. Combines transcode + download into one phase.
+   * Start a native download via ExoPlayer DownloadManager (Android) or
+   * AVAssetDownloadTask (iOS). The native API handles fetching the HLS
+   * manifest + segments, caching, resume, notifications — everything.
    */
-  private async startNativeProgressiveDownload(task: DownloadTask) {
-    const baseUrl = this.serverConfig.isNative
-      ? this.serverConfig.resolveUrl('')
-      : window.location.origin;
-    const destDir = await this.storage.getNativeDestDir(`download-${task.mediaFileId}`);
-    console.log('[DL] startNativeProgressiveDownload', {
-      taskId: task.id, mediaFileId: task.mediaFileId, destDir, baseUrl,
-      token: this.auth.accessToken ? '(set)' : '(null)',
-    });
-    if (!destDir) {
-      console.error('[DL] destDir is null — aborting progressive download');
-      return;
-    }
-    const info = this.titles.get(task.id);
-    const title = info?.title ?? task.media?.title ?? 'Téléchargement';
-    console.log('[DL] calling plugin progressiveDownload', { taskId: task.id, title, episode: info?.episode });
-    this.notif.startProgressiveDownload(
-      baseUrl, this.auth.accessToken ?? '', task.id,
-      destDir, title, info?.episode, task.segmentDuration ?? 3,
-    );
+  private startNativeDownload(task: DownloadTask): void {
+    const hlsUrl = this.streamingApi.getHlsUrl(task.mediaFileId, task.quality);
+    const token = this.auth.accessToken ?? '';
+    this.notif.startDownload(String(task.id), hlsUrl, token);
   }
 
   /**
@@ -250,18 +225,18 @@ export class DownloadManagerService {
   // ===== WEB PATH =====
 
   /**
-   * Progressive segment download for web (JS).
-   * Each segment is stored directly into Cache API as it's fetched — zero
-   * RAM accumulation. At playback time, segments are reassembled into a
-   * blob URL via `assembleSegmentsAsBlob()`.
+   * Web offline download using Shaka's built-in offline storage API.
+   * Shaka handles manifest parsing, segment download, IndexedDB storage,
+   * and offline playback via `offline:` URIs — no custom Cache API, no
+   * Service Worker, no manual manifest generation.
    */
   private async handleProgressiveWeb(task: DownloadTask) {
     const downloadId = task.id;
     if (this.cache.isDownloading(downloadId)) return;
 
-    const cacheKey = `download-${task.mediaFileId}`;
-    const hasLocal = await this.storage.has(cacheKey);
-    if (hasLocal) {
+    const offlineUri = this.storage.getShakaOfflineUri(task.mediaFileId);
+    if (offlineUri) {
+      // Already stored in Shaka offline — nothing to do
       this.decActive();
       return;
     }
@@ -269,121 +244,39 @@ export class DownloadManagerService {
     const info = this.titles.get(downloadId);
     const title = info?.title ?? task.media?.title ?? 'Téléchargement';
     this.cache.markDownloading(downloadId);
-    this.notif.show(downloadId, title, 0, 'downloading');
+    // Notification handled by Shaka progress callback below
     this.emitEvent('progress', downloadId, 0, 'downloading');
 
     try {
-      // Resume from cached segments (survives page refresh).
-      // But if the task was just created (status=pending/transcoding, progress=0),
-      // it's a fresh download — clear stale segments from a previous attempt.
-      let nextSeg = await this.findLastCachedSegment(cacheKey);
-      if (nextSeg > 0 && (task.progress ?? 0) === 0) {
-        await this.storage.deleteSegments(cacheKey);
-        nextSeg = -1;
-      }
-
-      // Get initial status to know total segments
-      const initStatus = await this.api.getProgressiveStatus(downloadId);
-      let total = initStatus.totalSegments ?? 0;
-      const segDuration = initStatus.segmentDuration;
-
-      // Fetch init.mp4 — server waits via fs.watch if not ready yet
-      if (nextSeg === -1) {
-        await this.cacheSegmentFromServer(downloadId, cacheKey, 'init.mp4');
-        nextSeg = 0;
-      }
-
-      // Fetch segments one by one — no polling, the server blocks until
-      // each segment is ready (waitForFile with 30s timeout). This is as
-      // fast as FFmpeg produces segments, with zero poll overhead.
-      while (true) {
-        const name = `seg-${String(nextSeg).padStart(4, '0')}.m4s`;
-        try {
-          await this.cacheSegmentFromServer(downloadId, cacheKey, name);
-          nextSeg++;
-
-          const pct = total > 0 ? Math.min(99, Math.round((nextSeg / total) * 100)) : 0;
+      // Use Shaka's offline storage to download the HLS stream into IndexedDB.
+      // The streaming endpoint serves the manifest immediately and blocks on
+      // segment requests until the transcode produces them.
+      const hlsUrl = this.streamingApi.getHlsUrl(task.mediaFileId, task.quality);
+      const storedUri = await this.storage.shakaStore(
+        hlsUrl,
+        task.mediaFileId,
+        { title, episode: info?.episode },
+        (progress) => {
+          const pct = Math.round(progress * 100);
           this.cache.updateProgress(downloadId, pct);
-          this.notif.show(downloadId, title, pct, 'downloading');
-          this.emitEvent('progress', downloadId, pct, 'downloading');
-        } catch {
-          // Segment fetch failed (404 = past the end, or timeout).
-          // Check if transcode is done.
-          const st = await this.api.getProgressiveStatus(downloadId);
-          total = st.totalSegments ?? total;
-          if (st.done && nextSeg >= (st.segmentCount ?? 0)) break;
-          // Not done — retry after short wait (transient error)
-          await new Promise((r) => setTimeout(r, 500));
-        }
+                this.emitEvent('progress', downloadId, pct, 'downloading');
+        },
+      );
+
+      if (storedUri) {
+        await this.api.ackDownloaded(downloadId).catch(() => {});
+        const freshTask = await this.api.getOne(downloadId);
+        this.persistTask(freshTask);
+          this.emitEvent('complete', downloadId, 100);
+      } else {
+        throw new Error('Shaka offline store returned null');
       }
-
-      // Fetch final status — segmentDuration is updated by the backend after
-      // transcode completes with the actual per-segment duration (FFmpeg
-      // aligns to keyframes, so real duration ≠ target -hls_time).
-      const finalSt = await this.api.getProgressiveStatus(downloadId);
-      await this.storage.cacheProgressMeta(cacheKey, {
-        segmentCount: nextSeg,
-        segmentDuration: finalSt.segmentDuration,
-      });
-
-      // Download subtitles
-      const freshTask = await this.api.getOne(downloadId);
-      if (freshTask.subtitles?.length) {
-        for (const sub of freshTask.subtitles) {
-          const subUrl = this.api.getSubtitleUrl(downloadId, sub.filename);
-          await this.storage.downloadSmallFile(
-            subUrl,
-            `download-${task.mediaFileId}-sub-${sub.filename}`,
-          ).catch(() => {});
-        }
-      }
-
-      await this.api.ackDownloaded(downloadId).catch(() => {});
-      this.persistTask(freshTask);
-      this.notif.show(downloadId, title, 100, 'complete');
-      this.emitEvent('complete', downloadId, 100);
     } catch (err) {
-      this.notif.show(downloadId, title, 0, 'error');
+      console.error('[DL] Shaka offline store failed:', err);
       this.emitEvent('failed', downloadId, 0);
     } finally {
       this.cache.markDone(downloadId);
       this.decActive();
-    }
-  }
-
-  /** Fetch a segment from server and store directly into Cache API (zero RAM). */
-  private async cacheSegmentFromServer(
-    taskId: number,
-    cacheKey: string,
-    filename: string,
-  ): Promise<void> {
-    const url = this.api.getSegmentUrl(taskId, filename);
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${this.auth.accessToken}` },
-    });
-    if (!res.ok) throw new Error(`Segment ${filename} HTTP ${res.status}`);
-    await this.storage.cacheSegment(`${cacheKey}/${filename}`, res);
-  }
-
-  /**
-   * Scan Cache API to find how many segments are already cached for a
-   * download. Returns the next segment index to fetch (-1 = init.mp4
-   * not cached, 0+ = resume from that segment number).
-   */
-  private async findLastCachedSegment(cacheKey: string): Promise<number> {
-    try {
-      const cache = await caches.open('offline-media');
-      const hasInit = !!(await cache.match(`${cacheKey}/init.mp4`));
-      if (!hasInit) return -1;
-      let i = 0;
-      while (true) {
-        const segKey = `${cacheKey}/seg-${String(i).padStart(4, '0')}.m4s`;
-        if (!(await cache.match(segKey))) break;
-        i++;
-      }
-      return i;
-    } catch {
-      return -1;
     }
   }
 
@@ -398,19 +291,10 @@ export class DownloadManagerService {
 
   private incActive() {
     this.activeCount++;
-    if (this.activeCount === 1) {
-      this.notif.startService();
-    }
   }
 
   private decActive() {
     this.activeCount = Math.max(0, this.activeCount - 1);
-    // Android: DownloadForegroundService already calls stopSelf() when the task queue is empty.
-    // Calling stopService() here relaunches the service with STOP and runs cancel(NOTIFICATION_ID),
-    // which can remove the "Terminé" notification when taskId maps to that id.
-    if (this.activeCount === 0 && !this.isAndroid) {
-      this.notif.stopService();
-    }
   }
 
   private async recover() {
@@ -445,7 +329,7 @@ export class DownloadManagerService {
           if (hasLocal) this.cache.removeLocal(t.id);
           this.incActive();
           if (this.isNative) {
-            void this.startNativeProgressiveDownload(t);
+            this.startNativeDownload(t);
           } else {
             void this.handleProgressiveWeb(t);
           }

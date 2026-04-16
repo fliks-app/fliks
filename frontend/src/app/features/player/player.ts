@@ -561,9 +561,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           const mime = isHls ? 'application/x-mpegURL' : 'video/mp4';
           await this.engine!.load(fileUrl, startTime, mime);
         } else {
+          // Web offline: Shaka offline URI ("offline:123") or legacy HLS URL
           await this.createShakaEngine();
-          const mime = isHls ? 'application/x-mpegURL' : 'video/mp4';
-          await this.engine!.load(offlineCheck!, startTime, mime);
+          if (offlineCheck!.startsWith('offline:')) {
+            // Shaka offline — load directly, no MIME needed
+            await this.engine!.load(offlineCheck!, startTime);
+          } else {
+            const mime = isHls ? 'application/x-mpegURL' : 'video/mp4';
+            await this.engine!.load(offlineCheck!, startTime, mime);
+          }
         }
       } else {
         // Pre-compute audio preference
@@ -1258,41 +1264,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // ── Subtitles ──
 
-  /** Load VTT subtitle files from offline storage. */
+  /** Subtitles come from the HLS stream (embedded in the manifest). No-op. */
   private async loadOfflineSubtitles() {
-    const cached = this.dlCache.load();
-    const task = cached.find((t) => t.mediaFileId === this.mediaFileId);
-    if (!task?.subtitles?.length) return;
-
-    const options: SubtitleOption[] = [];
-    for (let i = 0; i < task.subtitles.length; i++) {
-      const sub = task.subtitles[i];
-
-      // Native HLS: VTT files stored in the HLS directory by Java
-      let vttUrl: string | null = null;
-      if (this.isNative) {
-        const hlsDir = await this.offlineStorage.getNativeDestDir(`download-${task.mediaFileId}`);
-        if (hlsDir) {
-          vttUrl = `file://${hlsDir}/${sub.filename}`;
-        }
-      }
-      // Web fallback: stored via downloadSmallFile with key prefix
-      if (!vttUrl) {
-        const key = `download-${task.mediaFileId}-sub-${sub.filename}`;
-        vttUrl = await this.offlineStorage.getSmallFileUrl(key);
-      }
-      if (!vttUrl) continue;
-
-      options.push({
-        id: `offline-${i}`,
-        label: `${sub.language}${sub.forced ? ' (Forced)' : ''}`,
-        url: vttUrl,
-        language: sub.language,
-        burnIn: false,
-        forced: sub.forced,
-      });
-    }
-    this.availableSubtitles.set(options);
+    // Native players (Shaka/ExoPlayer/AVFoundation) parse subtitle tracks
+    // from the HLS manifest. No separate extraction needed.
   }
 
   /** Load audio tracks (Shaka variant tracks or streamInfo fallback). */
