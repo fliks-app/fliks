@@ -16,6 +16,8 @@ export interface DownloadTask {
   hlsUrl?: string;
   /** Pre-downloaded subtitle metadata for offline playback. */
   offlineSubtitles?: { key: string; language: string; label: string; forced?: boolean }[];
+  /** Audio stream info for offline audio track picker. */
+  audioStreams?: { language?: string; title?: string; codec?: string; channels?: number }[];
   media?: {
     id: number;
     title: string;

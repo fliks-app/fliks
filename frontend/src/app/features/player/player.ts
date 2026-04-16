@@ -482,10 +482,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     try {
       // Only use offline playback if explicitly requested via query param
-      const offlineCheck = qp['offline'] === '1'
-        ? await this.offlineStorage.getLocalUrl(`download-${this.mediaFileId}`).catch(() => null)
-        : null;
-      if (offlineCheck) this.isOfflinePlayback = true;
+      let offlineCheck: string | null = null;
+      if (qp['offline'] === '1') {
+        offlineCheck = await this.offlineStorage.getLocalUrl(`download-${this.mediaFileId}`).catch(() => null);
+        if (!offlineCheck) {
+          this.state.error.set('Contenu offline introuvable. Re-téléchargez le média.');
+          return;
+        }
+        this.isOfflinePlayback = true;
+      }
 
       // Load media info + playback state in parallel
       // No stopSessions here — getOrCreateSession handles stale sessions naturally
@@ -1312,11 +1317,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const engineTracks = this.engine.getAudioTracks();
 
       if (engineTracks.length <= 1) {
-        // Fallback: use streamInfo if engine only sees one audio track
+        // Offline: don't show si-* fallback tracks — they can't be switched
+        // via the engine. Only real engine-detected tracks are switchable.
+        if (this.isOfflinePlayback) return;
+        // Fallback: use streamInfo for online playback
         const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
         const si = file?.streamInfo as any;
-        if (si?.audio?.length > 1) {
-          const tracks = si.audio.map((a: any, i: number) => ({
+        const audioList = si?.audio;
+        if (audioList?.length > 1) {
+          const tracks = audioList.map((a: any, i: number) => ({
             id: `si-${i}`,
             label: `${a.language ?? 'und'}${a.title ? ' - ' + a.title : ''} (${(a.codec ?? '').toUpperCase()}${a.channels ? ' ' + a.channels + 'ch' : ''})`,
             language: normalizeLang(a.language),
@@ -1380,8 +1389,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    // Fallback: legacy reload (direct play, single-audio files)
-    await this.reloadStream();
+    // Fallback: reload only for direct play (MP4) where the backend must
+    // re-serve with a different audio stream. In HLS (transcode/remux),
+    // audio tracks are in the manifest — the engine handles switching.
+    // In offline, no backend to reload from.
+    if (!this.isOfflinePlayback && this.playbackMode() === 'direct') {
+      await this.reloadStream();
+    }
   }
 
   async selectSubtitle(sub: SubtitleOption | null) {

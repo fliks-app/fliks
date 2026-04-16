@@ -2,6 +2,7 @@ import { Injectable, inject, effect, signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
+import { MediaService } from './api/media.service';
 import { OfflineStorageService } from './offline-storage.service';
 import { DownloadCacheService, DownloadTask } from './download-cache.service';
 import { DownloadNotificationService } from './download-notification.service';
@@ -32,6 +33,7 @@ export class DownloadManagerService {
   private readonly isNative = Capacitor.isNativePlatform();
   private readonly streamingApi = inject(StreamingApiService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
+  private readonly mediaService = inject(MediaService);
   private readonly storage = inject(OfflineStorageService);
   private readonly cache = inject(DownloadCacheService);
   private readonly notif = inject(DownloadNotificationService);
@@ -220,10 +222,21 @@ export class DownloadManagerService {
           forced: sub.forced,
         });
       }
-      // Persist subtitle metadata on the task
+      // Fetch audio stream info for offline audio track picker
+      let audioStreams: { language?: string; title?: string; codec?: string; channels?: number }[] | undefined;
+      try {
+        const media = await this.mediaService.getOne(task.mediaId);
+        const file = media.files?.find((f: any) => f.id === task.mediaFileId);
+        const si = (file as any)?.streamInfo;
+        if (si?.audio?.length > 1) {
+          audioStreams = si.audio;
+        }
+      } catch { /* non-critical */ }
+
+      // Persist subtitle + audio metadata on the task
       const tasks = this.cache.load();
       this.cache.save(tasks.map((t) =>
-        t.id === taskId ? { ...t, offlineSubtitles: offlineSubs } : t,
+        t.id === taskId ? { ...t, offlineSubtitles: offlineSubs, ...(audioStreams ? { audioStreams } : {}) } : t,
       ));
     } catch (e) {
       console.warn('[DL] Failed to pre-download subtitles:', e);
