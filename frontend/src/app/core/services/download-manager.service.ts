@@ -56,26 +56,12 @@ export class DownloadManagerService {
     this.lastDownloadEvent.set({ type, taskId, progress, status, seq: ++this.eventSeq });
   }
 
-  // --- Web: SSE listener (only active on non-native) ---
+  // --- Web: SSE listener for failures (only active on non-native) ---
   private readonly sseEffect = effect(() => {
     if (this.isNative) return;
     const event = this.sse.lastEvent();
     if (!event) return;
-
-    if (event.type === 'download.progress') {
-      const id = event['downloadId'] as number;
-      // Ignore events from other devices
-      if (!this.titles.has(id) && !this.cache.has(id)) return;
-      const pct = event['progress'] as number;
-      const info = this.titles.get(id);
-      this.notif.show(id, info?.title ?? 'Transcodage', pct, 'transcoding');
-      this.emitEvent('progress', id, pct);
-    } else if (event.type === 'download.ready') {
-      const id = event['downloadId'] as number;
-      if (!this.titles.has(id) && !this.cache.has(id)) return;
-      this.emitEvent('ready', id, 100);
-      void this.handleReadyWeb(id);
-    } else if (event.type === 'download.failed') {
+    if (event.type === 'download.failed') {
       const id = event['downloadId'] as number;
       if (!this.titles.has(id) && !this.cache.has(id)) return;
       const info = this.titles.get(id);
@@ -136,21 +122,10 @@ export class DownloadManagerService {
 
     this.incActive();
 
-    if (task.status === 'ready') {
-      if (this.isNative) {
-        // Native: Java service handles notification from startDownload
-        void this.startNativeDownload(task);
-      } else {
-        this.notif.show(task.id, title, 0, 'downloading', episode);
-        void this.handleReadyWeb(task.id);
-      }
+    if (this.isNative) {
+      void this.startNativeProgressiveDownload(task);
     } else {
-      if (this.isNative) {
-        // Native: Java service handles notification from setPollingConfig
-        void this.startNativeTranscode(task.id, task.mediaFileId);
-      } else {
-        this.notif.show(task.id, title, 0, 'transcoding', episode);
-      }
+      void this.handleProgressiveWeb(task);
     }
 
     return task;
@@ -169,9 +144,9 @@ export class DownloadManagerService {
     const info = this.titles.get(taskId);
     const title = info?.title ?? task.media?.title ?? 'Téléchargement';
     if (this.isNative) {
-      void this.startNativeTranscode(taskId, task.mediaFileId);
+      void this.startNativeProgressiveDownload(task);
     } else {
-      this.notif.show(taskId, title, 0, 'transcoding', info?.episode);
+      void this.handleProgressiveWeb(task);
     }
     return task;
   }
@@ -184,7 +159,7 @@ export class DownloadManagerService {
     // Cancel notification + remove from Java service tracking
     this.notif.dismiss(task.id);
     // Decrement active count if task was in progress
-    if (['transcoding', 'remuxing', 'pending', 'ready'].includes(task.status)) {
+    if (['transcoding', 'pending', 'ready'].includes(task.status)) {
       this.decActive();
     }
   }
@@ -208,14 +183,14 @@ export class DownloadManagerService {
           }
           // Not downloaded yet — restart
           if (this.isNative) {
-            void this.startNativeDownload(task);
+            void this.startNativeProgressiveDownload(task);
           } else {
-            void this.handleReadyWeb(task.id);
+            void this.handleProgressiveWeb(task);
           }
         } else if (task.status === 'failed') {
           this.emitEvent('failed', task.id, 0);
           this.decActive();
-        } else if (task.status === 'transcoding' || task.status === 'remuxing') {
+        } else if (task.status === 'transcoding') {
           this.emitEvent('progress', task.id, task.progress ?? 0, task.status);
         }
       }
@@ -227,36 +202,29 @@ export class DownloadManagerService {
   // ===== NATIVE PATHS =====
 
   /**
-   * Start native Java polling for a transcode task.
-   * Java polls server, updates notifications, chains to download when ready.
+   * Progressive download: tell Java to poll for segments and download them
+   * as they appear. Combines transcode + download into one phase.
    */
-  private async startNativeTranscode(taskId: number, mediaFileId?: number) {
+  private async startNativeProgressiveDownload(task: DownloadTask) {
     const baseUrl = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl('')
       : window.location.origin;
-    const info = this.titles.get(taskId);
-    const title = info?.title ?? 'Transcodage';
-    const fileUrl = this.api.getFileUrl(taskId);
-    const destPath = mediaFileId
-      ? (await this.storage.getNativeDestPath(`download-${mediaFileId}`)) ?? ''
-      : '';
-    this.notif.startPolling(
-      baseUrl, this.auth.accessToken ?? '', taskId, title,
-      info?.episode, fileUrl, destPath, 0,
-    );
-  }
-
-  /**
-   * Start native Java download directly (no transcode needed).
-   * Used when task.status is already 'ready'.
-   */
-  private async startNativeDownload(task: DownloadTask) {
-    const url = this.api.getFileUrl(task.id);
-    const destPath = await this.storage.getNativeDestPath(`download-${task.mediaFileId}`);
-    if (!destPath) return;
+    const destDir = await this.storage.getNativeDestDir(`download-${task.mediaFileId}`);
+    console.log('[DL] startNativeProgressiveDownload', {
+      taskId: task.id, mediaFileId: task.mediaFileId, destDir, baseUrl,
+      token: this.auth.accessToken ? '(set)' : '(null)',
+    });
+    if (!destDir) {
+      console.error('[DL] destDir is null — aborting progressive download');
+      return;
+    }
     const info = this.titles.get(task.id);
     const title = info?.title ?? task.media?.title ?? 'Téléchargement';
-    this.notif.nativeDownload(url, this.auth.accessToken ?? '', destPath, task.fileSize ?? 0, title, task.id);
+    console.log('[DL] calling plugin progressiveDownload', { taskId: task.id, title, episode: info?.episode });
+    this.notif.startProgressiveDownload(
+      baseUrl, this.auth.accessToken ?? '', task.id,
+      destDir, title, info?.episode, task.segmentDuration ?? 3,
+    );
   }
 
   /**
@@ -279,18 +247,13 @@ export class DownloadManagerService {
   // ===== WEB PATH =====
 
   /**
-   * Download to device via JS (web/iOS only). Never called on native.
+   * Progressive segment download for web (JS).
+   * Polls `/status`, downloads segments as they appear, concatenates them
+   * into a single fMP4 blob for offline storage via Cache API.
    */
-  private async handleReadyWeb(downloadId: number) {
+  private async handleProgressiveWeb(task: DownloadTask) {
+    const downloadId = task.id;
     if (this.cache.isDownloading(downloadId)) return;
-
-    let task: DownloadTask;
-    try {
-      task = await this.api.getOne(downloadId);
-      if (task.status !== 'ready') return;
-    } catch {
-      return;
-    }
 
     const hasLocal = await this.storage.has(`download-${task.mediaFileId}`);
     if (hasLocal) {
@@ -300,24 +263,53 @@ export class DownloadManagerService {
 
     const info = this.titles.get(downloadId);
     const title = info?.title ?? task.media?.title ?? 'Téléchargement';
-
-    this.cache.markDownloading(task.id);
+    this.cache.markDownloading(downloadId);
     this.notif.show(downloadId, title, 0, 'downloading');
+    this.emitEvent('progress', downloadId, 0, 'downloading');
 
     try {
-      const url = this.api.getFileUrl(task.id);
-      await this.storage.download(
-        url,
-        `download-${task.mediaFileId}`,
-        (pct) => {
-          this.cache.updateProgress(task.id, pct);
-          this.notif.show(downloadId, title, pct, 'downloading');
-        },
-      );
+      const chunks: ArrayBuffer[] = [];
+      let nextSeg = -1; // -1 = init.mp4 not yet fetched
 
-      if (task.subtitles?.length) {
-        for (const sub of task.subtitles) {
-          const subUrl = this.api.getSubtitleUrl(task.id, sub.filename);
+      while (true) {
+        const st = await this.api.getProgressiveStatus(downloadId);
+        const available = st.segmentCount;
+        const total = st.totalSegments ?? 0;
+        const done = st.done;
+
+        // Download init.mp4 first
+        if (nextSeg === -1 && (available > 0 || done)) {
+          chunks.push(await this.fetchSegment(downloadId, 'init.mp4'));
+          nextSeg = 0;
+        }
+
+        // Download new segments
+        while (nextSeg >= 0 && nextSeg < available) {
+          const name = `seg-${String(nextSeg).padStart(4, '0')}.m4s`;
+          chunks.push(await this.fetchSegment(downloadId, name));
+          nextSeg++;
+
+          const pct = total > 0 ? Math.min(99, Math.round((nextSeg / total) * 100)) : 0;
+          this.cache.updateProgress(downloadId, pct);
+          this.notif.show(downloadId, title, pct, 'downloading');
+          this.emitEvent('progress', downloadId, pct, 'downloading');
+        }
+
+        if (done && nextSeg >= available) break;
+
+        // Wait before next poll
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+
+      // Concatenate all chunks into a single fMP4 blob and store
+      const blob = new Blob(chunks, { type: 'video/mp4' });
+      await this.storage.storeBlob(`download-${task.mediaFileId}`, blob);
+
+      // Download subtitles
+      const freshTask = await this.api.getOne(downloadId);
+      if (freshTask.subtitles?.length) {
+        for (const sub of freshTask.subtitles) {
+          const subUrl = this.api.getSubtitleUrl(downloadId, sub.filename);
           await this.storage.downloadSmallFile(
             subUrl,
             `download-${task.mediaFileId}-sub-${sub.filename}`,
@@ -325,15 +317,26 @@ export class DownloadManagerService {
         }
       }
 
-      await this.api.ackDownloaded(task.id).catch(() => {});
-      this.persistTask(task);
+      await this.api.ackDownloaded(downloadId).catch(() => {});
+      this.persistTask(freshTask);
       this.notif.show(downloadId, title, 100, 'complete');
-    } catch {
+      this.emitEvent('complete', downloadId, 100);
+    } catch (err) {
       this.notif.show(downloadId, title, 0, 'error');
+      this.emitEvent('failed', downloadId, 0);
     } finally {
-      this.cache.markDone(task.id);
+      this.cache.markDone(downloadId);
       this.decActive();
     }
+  }
+
+  private async fetchSegment(taskId: number, filename: string): Promise<ArrayBuffer> {
+    const url = this.api.getSegmentUrl(taskId, filename);
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${this.auth.accessToken}` },
+    });
+    if (!res.ok) throw new Error(`Segment ${filename} HTTP ${res.status}`);
+    return res.arrayBuffer();
   }
 
   // ===== HELPERS =====
@@ -386,25 +389,17 @@ export class DownloadManagerService {
     for (const t of tasks) {
       if (t.status === 'failed' || t.status === 'expired') {
         this.api.delete(t.id).catch(() => {});
-      } else if (t.status === 'transcoding' || t.status === 'remuxing') {
-        this.incActive();
-        if (this.isNative) {
-          void this.startNativeTranscode(t.id, t.mediaFileId);
-        } else {
-          const info = this.titles.get(t.id);
-          this.notif.show(t.id, info?.title ?? 'Transcodage', t.progress ?? 0, t.status, info?.episode);
-        }
-      } else if (t.status === 'ready') {
+      } else if (t.status === 'transcoding' || t.status === 'ready') {
         const hasLocal = await this.storage.has(`download-${t.mediaFileId}`);
-        if (hasLocal) {
+        if (t.status === 'ready' && hasLocal) {
           this.cache.markLocal(t.id);
         } else {
-          this.cache.removeLocal(t.id);
+          if (hasLocal) this.cache.removeLocal(t.id);
           this.incActive();
           if (this.isNative) {
-            void this.startNativeDownload(t);
+            void this.startNativeProgressiveDownload(t);
           } else {
-            void this.handleReadyWeb(t.id);
+            void this.handleProgressiveWeb(t);
           }
         }
       }

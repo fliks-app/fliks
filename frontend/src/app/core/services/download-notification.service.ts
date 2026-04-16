@@ -16,12 +16,11 @@ interface DownloadNotificationPlugin {
   dismissAll(): Promise<void>;
   startService(): Promise<void>;
   stopService(): Promise<void>;
-  setPollingConfig(opts: {
-    baseUrl: string; token: string; taskId: number; title: string;
-    episode?: string; fileUrl: string; destPath: string; expectedSize: number;
-  }): Promise<void>;
   clearPolling(): Promise<void>;
-  nativeDownload(opts: { url: string; token: string; destPath: string; expectedSize: number; title: string; taskId: number }): Promise<void>;
+  progressiveDownload(opts: {
+    baseUrl: string; token: string; taskId: number; destDir: string;
+    title: string; episode?: string; segmentDuration: number;
+  }): Promise<void>;
   getActiveTasks(): Promise<{ tasks: string }>;
   addListener(event: string, cb: (data: any) => void): Promise<any>;
 }
@@ -100,30 +99,11 @@ export class DownloadNotificationService {
     DownloadNotification.stopService().catch(() => {});
   }
 
-  /**
-   * Start native polling + pre-configure download URL for automatic chaining.
-   * When transcode completes, Java service chains directly to native download.
-   */
-  startPolling(
-    baseUrl: string, token: string, taskId: number, title: string,
-    episode: string | undefined, fileUrl: string, destPath: string, expectedSize: number,
-  ) {
-    if (!this.isAndroid || !DownloadNotification) return;
-    DownloadNotification.setPollingConfig({
-      baseUrl, token, taskId, title, episode, fileUrl, destPath, expectedSize,
-    }).catch(() => {});
-  }
-
   stopPolling() {
     if (!this.isAndroid || !DownloadNotification) return;
     DownloadNotification.clearPolling().catch(() => {});
   }
 
-  /**
-   * Download a file natively with progress notification (Android only).
-   * Runs in Java foreground service — survives WebView freeze.
-   * On iOS/web: returns false (caller should use JS download instead).
-   */
   /**
    * Get all active task states from Java service (single source of truth).
    * Used to sync WebView UI after visibility change / events loss.
@@ -138,9 +118,20 @@ export class DownloadNotificationService {
     }
   }
 
-  nativeDownload(url: string, token: string, destPath: string, expectedSize: number, title: string, taskId: number): boolean {
+  /**
+   * Start a progressive segment-by-segment download in the Java foreground
+   * service. The service polls `/api/downloads/{id}/status`, downloads each
+   * segment as it appears, and generates a local HLS manifest when done.
+   */
+  startProgressiveDownload(
+    baseUrl: string, token: string, taskId: number,
+    destDir: string, title: string, episode: string | undefined,
+    segmentDuration: number,
+  ): boolean {
     if (!this.isAndroid || !DownloadNotification) return false;
-    DownloadNotification.nativeDownload({ url, token, destPath, expectedSize, title, taskId }).catch(() => {});
+    DownloadNotification.progressiveDownload({
+      baseUrl, token, taskId, destDir, title, episode, segmentDuration,
+    }).catch(() => {});
     return true;
   }
 }

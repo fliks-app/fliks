@@ -63,11 +63,7 @@ export class InappDownloadsController {
     return this.downloads.list(user.id, deviceId);
   }
 
-  @Get(':id')
-  getOne(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
-    const user = req.user as User;
-    return this.downloads.getOne(user.id, id);
-  }
+  // --- Sub-resource routes MUST come before the catch-all `GET :id` ---
 
   @Get(':id/file')
   async getFile(
@@ -76,32 +72,47 @@ export class InappDownloadsController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     const user = req.user as User;
-    const filePath = await this.downloads.getFilePath(user.id, id);
-    if (!fs.existsSync(filePath)) {
-      throw new NotFoundException(`Download file not found`);
+    const task = await this.downloads.getOne(user.id, id);
+
+    if (task.status !== 'ready') {
+      res.status(400).json({ message: 'Download not ready' });
+      return;
     }
-    const stat = fs.statSync(filePath);
-    const filename = path.basename(filePath);
+
+    if (!task.sessionDir || !fs.existsSync(task.sessionDir)) {
+      throw new NotFoundException('Session directory not found');
+    }
+    const dir = task.sessionDir;
+    const initPath = path.join(dir, 'init.mp4');
+    const segFiles = fs
+      .readdirSync(dir)
+      .filter((f: string) => /^seg-\d+\.m4s$/.test(f))
+      .sort();
+
+    let totalSize = 0;
+    const files = [initPath, ...segFiles.map((f: string) => path.join(dir, f))];
+    for (const f of files) {
+      totalSize += fs.statSync(f).size;
+    }
 
     res.setHeader('Content-Type', 'video/mp4');
-    res.setHeader('Content-Length', stat.size);
+    res.setHeader('Content-Length', totalSize);
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${encodeURIComponent(filename)}"`,
+      `attachment; filename="download-${id}.mp4"`,
     );
 
-    const range = req.headers.range;
-    if (range) {
-      const parts = range.replace(/bytes=/, '').split('-');
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
-      res.status(206);
-      res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`);
-      res.setHeader('Content-Length', end - start + 1);
-      fs.createReadStream(filePath, { start, end }).pipe(res);
-    } else {
-      fs.createReadStream(filePath).pipe(res);
-    }
+    const streamNext = (index: number) => {
+      if (index >= files.length) {
+        res.end();
+        return;
+      }
+      const stream = fs.createReadStream(files[index]);
+      stream.on('end', () => streamNext(index + 1));
+      stream.on('error', () => res.end());
+      stream.pipe(res, { end: false });
+    };
+    streamNext(0);
   }
 
   @Get(':id/subtitle/:filename')
@@ -117,9 +128,52 @@ export class InappDownloadsController {
       res.status(404).send('Subtitle not found');
       return;
     }
-    const filePath = path.join(path.dirname(task.outputPath || ''), filename);
+    const cachePath = task.sessionDir
+      ? path.dirname(task.sessionDir)
+      : '/tmp/fliks-downloads';
+    const filePath = path.join(cachePath, filename);
+    if (!fs.existsSync(filePath)) {
+      res.status(404).send('Subtitle file not found');
+      return;
+    }
     res.setHeader('Content-Type', 'text/vtt');
     fs.createReadStream(filePath).pipe(res);
+  }
+
+  @Get(':id/segment/:filename')
+  async getSegment(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('filename') filename: string,
+  ) {
+    const user = req.user as User;
+    const segPath = await this.downloads.getSegmentPath(user.id, id, filename);
+    if (!fs.existsSync(segPath)) {
+      throw new NotFoundException('Segment not found');
+    }
+    const mime = filename.endsWith('.mp4') ? 'video/mp4' : 'video/iso.segment';
+    const stat = fs.statSync(segPath);
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Length', stat.size);
+    fs.createReadStream(segPath).pipe(res);
+  }
+
+  @Get(':id/status')
+  async progressiveStatus(
+    @Req() req: Request,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const user = req.user as User;
+    return this.downloads.getProgressiveStatus(user.id, id);
+  }
+
+  // --- Catch-all single resource AFTER sub-routes ---
+
+  @Get(':id')
+  getOne(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
+    const user = req.user as User;
+    return this.downloads.getOne(user.id, id);
   }
 
   @Post(':id/retry')

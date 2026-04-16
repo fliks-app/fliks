@@ -89,39 +89,17 @@ public class DownloadNotificationPlugin extends Plugin {
         call.resolve();
     }
 
-    /**
-     * Start service with POLL action — config passed via Intent extras.
-     * Service reads config in onStartCommand. No race condition.
-     */
     @PluginMethod()
-    public void setPollingConfig(PluginCall call) {
+    public void progressiveDownload(PluginCall call) {
         Intent intent = new Intent(getContext(), DownloadForegroundService.class);
-        intent.setAction("POLL");
+        intent.setAction("PROGRESSIVE_DOWNLOAD");
         intent.putExtra("baseUrl", call.getString("baseUrl", ""));
         intent.putExtra("token", call.getString("token", ""));
         intent.putExtra("taskId", call.getInt("taskId", -1));
+        intent.putExtra("destDir", call.getString("destDir", ""));
         intent.putExtra("title", call.getString("title", ""));
-        intent.putExtra("episode", call.getString("episode", (String) null));
-        intent.putExtra("fileUrl", call.getString("fileUrl", ""));
-        intent.putExtra("destPath", call.getString("destPath", ""));
-        intent.putExtra("expectedSize", call.getLong("expectedSize", 0L));
-        startForegroundServiceCompat(intent);
-        call.resolve();
-    }
-
-    /**
-     * Start service with DOWNLOAD action — config passed via Intent extras.
-     */
-    @PluginMethod()
-    public void nativeDownload(PluginCall call) {
-        Intent intent = new Intent(getContext(), DownloadForegroundService.class);
-        intent.setAction("DOWNLOAD");
-        intent.putExtra("url", call.getString("url", ""));
-        intent.putExtra("token", call.getString("token", ""));
-        intent.putExtra("destPath", call.getString("destPath", ""));
-        intent.putExtra("expectedSize", call.getLong("expectedSize", 0L));
-        intent.putExtra("title", call.getString("title", ""));
-        intent.putExtra("taskId", call.getInt("taskId", -1));
+        intent.putExtra("episode", call.getString("episode"));
+        intent.putExtra("segmentDuration", call.getFloat("segmentDuration", 3.0f));
         startForegroundServiceCompat(intent);
         call.resolve();
     }

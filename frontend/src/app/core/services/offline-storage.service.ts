@@ -28,7 +28,12 @@ export class OfflineStorageService {
   }
 
   async getLocalUrl(key: string): Promise<string | null> {
-    if (this.isNative) return this.getNativeUrl(key);
+    if (this.isNative) {
+      // HLS dir takes priority over single MP4
+      const hlsUrl = await this.getNativeUrl(`${key}/index.m3u8`);
+      if (hlsUrl) return hlsUrl;
+      return this.getNativeUrl(key);
+    }
     return this.getWebUrl(key);
   }
 
@@ -37,24 +42,26 @@ export class OfflineStorageService {
     return this.deleteWeb(key);
   }
 
-  /**
-   * Get the native filesystem path for a download key (Android only).
-   * Returns null on web.
-   */
-  async getNativeDestPath(key: string): Promise<string | null> {
-    if (!this.isNative) return null;
-    try {
+  /** Store a pre-built blob (e.g. concatenated fMP4 segments) in offline cache. */
+  async storeBlob(key: string, blob: Blob): Promise<void> {
+    if (this.isNative) {
+      // Native: write blob to filesystem
       const { Filesystem, Directory } = await getFs();
       await this.ensureDir();
-      // Get the real filesystem URI and extract the path
-      const uri = await Filesystem.getUri({
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () =>
+          resolve((reader.result as string).split(',')[1]);
+        reader.readAsDataURL(blob);
+      });
+      await Filesystem.writeFile({
         path: this.filePath(key),
+        data: base64,
         directory: Directory.Data,
       });
-      // uri.uri is like "file:///data/user/0/com.fliks.app/files/fliks-downloads/download-42.mp4"
-      return uri.uri.replace('file://', '');
-    } catch {
-      return null;
+    } else {
+      const cache = await caches.open('offline-media');
+      await cache.put(key, new Response(blob));
     }
   }
 
@@ -110,8 +117,26 @@ export class OfflineStorageService {
   }
 
   async has(key: string): Promise<boolean> {
-    if (this.isNative) return this.hasNative(key);
+    if (this.isNative) {
+      // Check HLS dir first (progressive), then MP4 (classic)
+      return (await this.hasNative(`${key}/index.m3u8`)) || (await this.hasNative(key));
+    }
     return this.hasWeb(key);
+  }
+
+  /** Get the native directory path for progressive downloads (HLS segments). */
+  async getNativeDestDir(key: string): Promise<string | null> {
+    if (!this.isNative) return null;
+    try {
+      const { Filesystem, Directory } = await getFs();
+      const dirPath = `fliks-downloads/${key}`;
+      // mkdir may throw if dir already exists — ignore that error
+      await Filesystem.mkdir({ path: dirPath, directory: Directory.Data, recursive: true }).catch(() => {});
+      const uri = await Filesystem.getUri({ path: dirPath, directory: Directory.Data });
+      return uri.uri.replace('file://', '');
+    } catch {
+      return null;
+    }
   }
 
   // --- Native (Capacitor Filesystem) ---
@@ -199,10 +224,11 @@ export class OfflineStorageService {
   private async hasNative(key: string): Promise<boolean> {
     try {
       const { Filesystem, Directory } = await getFs();
-      await Filesystem.stat({
-        path: this.filePath(key),
-        directory: Directory.Data,
-      });
+      // If key contains / (e.g. "download-42/index.m3u8"), treat as literal path
+      const p = key.includes('/')
+        ? `fliks-downloads/${key}`
+        : this.filePath(key);
+      await Filesystem.stat({ path: p, directory: Directory.Data });
       return true;
     } catch {
       return false;
@@ -213,10 +239,10 @@ export class OfflineStorageService {
     if (!(await this.hasNative(key))) return null;
     try {
       const { Filesystem, Directory } = await getFs();
-      const result = await Filesystem.getUri({
-        path: this.filePath(key),
-        directory: Directory.Data,
-      });
+      const p = key.includes('/')
+        ? `fliks-downloads/${key}`
+        : this.filePath(key);
+      const result = await Filesystem.getUri({ path: p, directory: Directory.Data });
       return Capacitor.convertFileSrc(result.uri);
     } catch {
       return null;

@@ -541,16 +541,27 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       if (this.isOfflinePlayback) {
         this.state.playbackMode.set('direct');
+        const isHls = offlineCheck?.includes('index.m3u8');
         if (this.isNative) {
-          // Offline on native: use ExoPlayer with the native file path
+          // Offline on native: use ExoPlayer with the native file/HLS path
           await this.createNativeEngine();
-          const nativePath = await this.offlineStorage.getNativeDestPath(`download-${this.mediaFileId}`);
-          const fileUrl = nativePath ? `file://${nativePath}` : offlineCheck!;
-          await this.engine!.load(fileUrl, startTime, 'video/mp4');
+          if (isHls) {
+            // Progressive download → local HLS. Convert the Capacitor web
+            // URL (http://localhost/_capacitor_file_/...) back to file://
+            // so ExoPlayer reads from disk instead of trying HTTP.
+            await this.engine!.load(
+              this.toFileUrl(offlineCheck!), startTime, 'application/x-mpegURL',
+            );
+          } else {
+            await this.engine!.load(
+              this.toFileUrl(offlineCheck!), startTime, 'video/mp4',
+            );
+          }
         } else {
           // Offline on web: use Shaka
           await this.createShakaEngine();
-          await this.engine!.load(offlineCheck!, startTime, 'video/mp4');
+          const mime = isHls ? 'application/x-mpegURL' : 'video/mp4';
+          await this.engine!.load(offlineCheck!, startTime, mime);
         }
       } else {
         // Pre-compute audio preference
@@ -1691,5 +1702,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } catch {
       // Sprite not available, tooltip will show time only
     }
+  }
+
+  /**
+   * Convert a Capacitor web-bridge URL
+   * (`http://localhost/_capacitor_file_/data/…`) back to a `file://` URI that
+   * ExoPlayer can open directly via FileDataSource.
+   */
+  private toFileUrl(url: string): string {
+    const marker = '/_capacitor_file_';
+    const idx = url.indexOf(marker);
+    if (idx >= 0) {
+      return 'file://' + url.substring(idx + marker.length);
+    }
+    return url;
   }
 }

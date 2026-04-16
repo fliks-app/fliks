@@ -30,12 +30,9 @@
             }
             <p class="text-xs text-base-content/50 mt-0.5">{{ task.quality }} · {{ formatSize(task.fileSize) }}</p>
 
-            @if (task.status === 'transcoding' || task.status === 'remuxing') {
-              <progress class="progress progress-primary w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
-              <p class="text-[10px] text-base-content/40 mt-0.5">{{ statusLabel(task.status) | translate }} {{ task.progress }}%</p>
-            } @else if (task.status === 'downloading') {
-              <progress class="progress progress-info w-full h-1.5 mt-2" [value]="task.downloadProgress ?? 0" max="100"></progress>
-              <p class="text-[10px] text-base-content/40 mt-0.5">{{ 'downloads.downloading' | translate }} {{ task.downloadProgress ?? 0 }}%</p>
+            @if (task.status === 'transcoding' || task.status === 'pending') {
+              <progress class="progress progress-info w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
+              <p class="text-[10px] text-base-content/40 mt-0.5">{{ 'downloads.downloading' | translate }} {{ task.progress }}%</p>
             } @else if (task.status === 'failed') {
               <div class="flex items-center gap-1 mt-1 text-error text-xs">
                 <svg lucideAlertCircle class="h-3 w-3"></svg>

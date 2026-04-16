@@ -18,12 +18,22 @@ export interface DownloadTask {
   subtitles?: { language: string; forced: boolean; filename: string }[];
   error?: string;
   createdAt: string;
+  segmentCount?: number;
+  totalSegments?: number;
+  segmentDuration?: number;
   media?: {
     id: number;
     title: string;
     posterUrl: string | null;
     type: string;
   };
+}
+
+export interface ProgressiveStatus {
+  segmentCount: number;
+  totalSegments: number | null;
+  segmentDuration: number;
+  done: boolean;
 }
 
 export interface DownloadQuality {
@@ -98,11 +108,18 @@ export class DownloadsApiService {
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
 
-  getFileUrl(id: number): string {
+  getProgressiveStatus(id: number) {
+    return firstValueFrom(
+      this.http.get<ProgressiveStatus>(`/api/downloads/${id}/status`),
+    );
+  }
+
+  getSegmentUrl(id: number, filename: string): string {
     const base = this.serverConfig.isNative
-      ? this.serverConfig.resolveUrl(`/api/downloads/${id}/file`)
-      : `/api/downloads/${id}/file`;
+      ? this.serverConfig.resolveUrl(`/api/downloads/${id}/segment/${filename}`)
+      : `/api/downloads/${id}/segment/${filename}`;
     const token = this.auth.accessToken;
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
+
 }

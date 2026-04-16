@@ -26,7 +26,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 import com.getcapacitor.JSObject;
 import org.json.JSONArray;
@@ -46,8 +45,6 @@ public class DownloadForegroundService extends Service {
     /** New id so devices get a fresh channel (IMPORTANCE cannot be upgraded on an existing channel). */
     static final String CHANNEL_ID = "fliks_downloads_fgs";
     static final int NOTIFICATION_ID = 888888;
-    private static final long POLL_INTERVAL_SECONDS = 5;
-
     private static DownloadForegroundService instance;
     private boolean started = false;
     private PowerManager.WakeLock wakeLock;
@@ -62,9 +59,6 @@ public class DownloadForegroundService extends Service {
         volatile String episode;
         volatile int progress;
         volatile String status;
-        String fileUrl;
-        String destPath;
-        long expectedSize;
 
         TaskState(int id, String title, String episode, String sortKey) {
             this.id = id; this.title = title; this.episode = episode;
@@ -73,13 +67,13 @@ public class DownloadForegroundService extends Service {
     }
 
     final ConcurrentHashMap<Integer, TaskState> activeTasks = new ConcurrentHashMap<>();
+    /** Task IDs currently running a progressive download thread. Prevents duplicates on app resume. */
+    private final java.util.Set<Integer> progressiveRunning = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
     private volatile int primaryTaskId = -1;
     private int taskCounter = 0;
 
     private volatile String serverBaseUrl;
     private volatile String authToken;
-    private volatile boolean downloading = false;
-    private volatile int downloadTaskId = -1;
 
     public static DownloadForegroundService getInstance() { return instance; }
 
@@ -136,30 +130,18 @@ public class DownloadForegroundService extends Service {
             started = true;
             acquireWakeLock();
             startForeground(NOTIFICATION_ID, buildTaskNotification(null, "Téléchargement", 0, "downloading", null));
-            startPolling();
             Log.d(TAG, "Foreground service started");
         }
 
-        // Handle config passed via Intent extras (no race — processed in onStartCommand)
-        if (intent != null && "POLL".equals(intent.getAction())) {
-            setPollingConfig(
+        if (intent != null && "PROGRESSIVE_DOWNLOAD".equals(intent.getAction())) {
+            doProgressiveDownload(
                 intent.getStringExtra("baseUrl"),
                 intent.getStringExtra("token"),
                 intent.getIntExtra("taskId", -1),
+                intent.getStringExtra("destDir"),
                 intent.getStringExtra("title"),
                 intent.getStringExtra("episode"),
-                intent.getStringExtra("fileUrl"),
-                intent.getStringExtra("destPath"),
-                intent.getLongExtra("expectedSize", 0)
-            );
-        } else if (intent != null && "DOWNLOAD".equals(intent.getAction())) {
-            startNativeDownload(
-                intent.getStringExtra("url"),
-                intent.getStringExtra("token"),
-                intent.getStringExtra("destPath"),
-                intent.getLongExtra("expectedSize", 0),
-                intent.getStringExtra("title"),
-                intent.getIntExtra("taskId", -1)
+                intent.getFloatExtra("segmentDuration", 3.0f)
             );
         }
 
@@ -196,27 +178,7 @@ public class DownloadForegroundService extends Service {
 
     // ===== PUBLIC API =====
 
-    public void setPollingConfig(String baseUrl, String token, int taskId, String title,
-                                  String episode, String fileUrl, String destPath, long expectedSize) {
-        this.serverBaseUrl = baseUrl;
-        this.authToken = token;
-        TaskState ts = ensureTask(taskId, title, episode);
-        ts.fileUrl = fileUrl;
-        ts.destPath = destPath;
-        ts.expectedSize = expectedSize;
-        updateSingleNotification(taskId);
-        Log.d(TAG, "Polling config: task #" + taskId + " — " + title);
-    }
-
     public void clearPolling() {}
-    public void setDownloadTaskId(int id) { this.downloadTaskId = id; }
-
-    public void setEpisode(String episode) {
-        if (downloadTaskId > 0) {
-            TaskState ts = activeTasks.get(downloadTaskId);
-            if (ts != null) ts.episode = episode;
-        }
-    }
 
     public void showTaskNotification(int tid, String title, int progress, String status, String episode) {
         renewWakeLock();
@@ -237,20 +199,6 @@ public class DownloadForegroundService extends Service {
             NotificationManagerCompat.from(DownloadForegroundService.this).cancel(notifId(tid));
             if (wasPrimary) promoteOrStop();
         });
-    }
-
-    public void startNativeDownload(String url, String token, String destPath,
-                                     long expectedSize, String title, int taskId) {
-        this.authToken = token;
-        this.downloadTaskId = taskId;
-        TaskState ts = ensureTask(taskId, title, null);
-        ts.status = "downloading";
-        ts.fileUrl = url;
-        ts.destPath = destPath;
-        ts.expectedSize = expectedSize;
-        this.downloading = true;
-        updateSingleNotification(taskId);
-        downloadExecutor.submit(() -> doDownload(url, token, destPath, expectedSize, title, taskId));
     }
 
     public JSONArray getActiveTasksJson() {
@@ -363,169 +311,154 @@ public class DownloadForegroundService extends Service {
 
     // ===== POLLING =====
 
-    private void startPolling() {
-        if (pollFuture != null) return;
-        pollFuture = pollExecutor.scheduleAtFixedRate(this::poll, POLL_INTERVAL_SECONDS, POLL_INTERVAL_SECONDS, TimeUnit.SECONDS);
-    }
-
     private void stopPolling() {
         if (pollFuture != null) { pollFuture.cancel(false); pollFuture = null; }
     }
 
-    private void poll() {
-        String baseUrl = this.serverBaseUrl;
-        String token = this.authToken;
-        if (baseUrl == null || activeTasks.isEmpty()) return;
+    // ===== PROGRESSIVE DOWNLOAD =====
 
-        boolean needsPoll = false;
-        for (TaskState ts : activeTasks.values()) {
-            if ("transcoding".equals(ts.status) || "remuxing".equals(ts.status)) {
-                needsPoll = true; break;
-            }
+    /**
+     * Download HLS segments incrementally as they are transcoded on the server.
+     * Polls /api/downloads/{id}/status to discover new segments, downloads each
+     * one sequentially, and generates a local index.m3u8 when done.
+     */
+    private void doProgressiveDownload(String baseUrl, String token, int taskId,
+                                        String destDir, String title, String episode,
+                                        float segDuration) {
+        if (progressiveRunning.contains(taskId)) {
+            Log.d(TAG, "Progressive #" + taskId + ": already running, skipping duplicate");
+            return;
         }
-        if (!needsPoll) return;
+        this.serverBaseUrl = baseUrl;
+        this.authToken = token;
+        Log.d(TAG, "Progressive #" + taskId + ": title=\"" + title + "\", episode=\"" + episode + "\", destDir=" + destDir);
+        TaskState ts = ensureTask(taskId, title, episode);
+        ts.status = "downloading";
+        updateSingleNotification(taskId);
+        progressiveRunning.add(taskId);
 
-        try {
-            HttpURLConnection conn = (HttpURLConnection) new URL(baseUrl + "/api/downloads").openConnection();
-            conn.setRequestMethod("GET");
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(5000);
-            if (token != null && !token.isEmpty()) {
-                conn.setRequestProperty("Authorization", "Bearer " + token);
-            }
+        downloadExecutor.submit(() -> {
+            int nextSeg = -1; // -1 = init.mp4 not yet downloaded
+            try {
+                java.io.File dir = new java.io.File(destDir);
+                if (!dir.exists()) dir.mkdirs();
 
-            if (conn.getResponseCode() == 200) {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) sb.append(line);
-                reader.close();
+                while (true) {
+                    // Poll status
+                    String statusUrl = baseUrl + "/api/downloads/" + taskId + "/status";
+                    JSONObject st = httpGetJson(statusUrl, token);
+                    int available = st.optInt("segmentCount", 0);
+                    boolean done = st.optBoolean("done", false);
+                    int total = st.optInt("totalSegments", 0);
 
-                JSONArray tasks = new JSONArray(sb.toString());
-                for (int i = 0; i < tasks.length(); i++) {
-                    JSONObject json = tasks.getJSONObject(i);
-                    int tid = json.optInt("id", -1);
-                    TaskState ts = activeTasks.get(tid);
-                    if (ts == null) continue;
-
-                    String status = json.optString("status", "");
-                    int progress = json.optInt("progress", 0);
-                    Log.d(TAG, "Poll: #" + tid + " " + status + " " + progress + "%");
-
-                    if ("transcoding".equals(status) || "remuxing".equals(status)) {
-                        ts.progress = progress;
-                        ts.status = status;
-                        updateSingleNotification(tid);
-                        emitToWebView("downloadProgress", tid, progress, status);
-                    } else if ("ready".equals(status)
-                            && ("transcoding".equals(ts.status) || "remuxing".equals(ts.status))) {
-                        emitToWebView("downloadReady", tid, 100, "ready");
-                        if (ts.fileUrl != null && ts.destPath != null && !ts.destPath.isEmpty()) {
-                            Log.d(TAG, "Task #" + tid + " ready — chaining to download");
-                            ts.progress = 0;
-                            ts.status = "downloading";
-                            updateSingleNotification(tid);
-                            this.downloadTaskId = tid;
-                            this.downloading = true;
-                            downloadExecutor.submit(() -> doDownload(
-                                ts.fileUrl, this.authToken, ts.destPath, ts.expectedSize, ts.title, tid));
+                    // Download init.mp4 first
+                    if (nextSeg == -1) {
+                        if (available > 0 || done) {
+                            downloadSegment(baseUrl, token, taskId, "init.mp4", destDir);
+                            nextSeg = 0;
                         }
-                    } else if ("failed".equals(status)) {
-                        emitToWebView("downloadFailed", tid, 0, "failed");
-                        postTerminal(tid, ts.title, "error", ts.episode);
                     }
+
+                    // Download newly available segments
+                    while (nextSeg >= 0 && nextSeg < available) {
+                        String segName = String.format("seg-%04d.m4s", nextSeg);
+                        downloadSegment(baseUrl, token, taskId, segName, destDir);
+                        nextSeg++;
+
+                        int pct = total > 0 ? Math.min(99, (nextSeg * 100) / total) : 0;
+                        if (pct != ts.progress) {
+                            Log.d(TAG, "Progressive #" + taskId + ": " + pct + "% (" + nextSeg + "/" + total + " segments)");
+                        }
+                        ts.progress = pct;
+                        ts.status = "downloading";
+                        updateSingleNotification(taskId);
+                        emitToWebView("downloadProgress", taskId, pct, "downloading");
+                    }
+
+                    if (done && nextSeg >= available) {
+                        // All segments downloaded — generate local manifest
+                        generateLocalManifest(destDir, nextSeg, segDuration);
+
+                        ts.progress = 100;
+                        ts.status = "downloading";
+                        updateSingleNotification(taskId);
+                        emitToWebView("downloadProgress", taskId, 100, "downloading");
+                        try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+                        emitToWebView("downloadComplete", taskId, 100, "complete");
+                        postTerminal(taskId, title, "complete", episode);
+                        return;
+                    }
+
+                    // Wait before next poll
+                    Thread.sleep(2000);
                 }
+            } catch (Exception e) {
+                Log.w(TAG, "Progressive download #" + taskId + " failed: " + e.getMessage());
+                emitToWebView("downloadFailed", taskId, 0, "error");
+                postTerminal(taskId, title, "error", episode);
+            } finally {
+                progressiveRunning.remove(taskId);
             }
-            conn.disconnect();
-        } catch (Exception e) {
-            Log.w(TAG, "Poll error: " + e.getMessage());
-        }
+        });
     }
 
-    // ===== NATIVE DOWNLOAD =====
-
-    private void doDownload(String url, String authToken, String destPath,
-                             long expectedSize, String title, int tid) {
-        TaskState ts = activeTasks.get(tid);
-        String episode = ts != null ? ts.episode : null;
-
-        try {
-            HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-            conn.setRequestMethod("GET");
-            conn.setConnectTimeout(15000);
-            conn.setReadTimeout(60000);
-            if (authToken != null && !authToken.isEmpty()) {
-                conn.setRequestProperty("Authorization", "Bearer " + authToken);
-            }
-
-            int code = conn.getResponseCode();
-            if (code != 200) {
-                Log.w(TAG, "Download HTTP " + code);
-                downloading = false;
-                emitToWebView("downloadFailed", tid, 0, "error");
-                postTerminal(tid, title, "error", episode);
-                return;
-            }
-
-            long contentLength = conn.getContentLengthLong();
-            Log.d(TAG, "Download #" + tid + ": contentLength=" + contentLength + ", expectedSize=" + expectedSize);
-            if (contentLength <= 0) contentLength = expectedSize;
-
-            java.io.InputStream in = conn.getInputStream();
-            java.io.FileOutputStream out = new java.io.FileOutputStream(destPath);
-            byte[] buffer = new byte[8192];
-            long downloaded = 0;
-            int lastPct = -1;
-            long lastNotifTime = 0;
-            int bytesRead;
-
-            while ((bytesRead = in.read(buffer)) != -1) {
-                out.write(buffer, 0, bytesRead);
-                downloaded += bytesRead;
-                if (contentLength > 0) {
-                    int pct = (int) (downloaded * 100L / contentLength);
-                    if (pct > 100) pct = 100;
-                    if (pct != lastPct) {
-                        lastPct = pct;
-                        if (ts != null) { ts.progress = pct; ts.status = "downloading"; }
-                        long now = System.currentTimeMillis();
-                        if (now - lastNotifTime >= 250) {
-                            lastNotifTime = now;
-                            updateSingleNotification(tid);
-                            emitToWebView("downloadProgress", tid, pct, "downloading");
-                        }
-                    }
-                }
-            }
-
-            out.close();
-            in.close();
-            conn.disconnect();
-            downloading = false;
-
-            // Stream finished successfully: always show 100% (Content-Length often mismatches body size).
-            if (ts != null) {
-                ts.progress = 100;
-                ts.status = "downloading";
-            }
-            updateSingleNotification(tid);
-            emitToWebView("downloadProgress", tid, 100, "downloading");
-
-            // Update the notification to show the complete state
-            // Pause for 1 second to prevent the notification from being throttled
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                Log.w(TAG, "Thread sleep interrupted: " + e.getMessage());
-            }
-            emitToWebView("downloadComplete", tid, 100, "complete");
-            postTerminal(tid, title, "complete", episode);
-        } catch (Exception e) {
-            downloading = false;
-            Log.w(TAG, "Download failed: " + e.getMessage());
-            emitToWebView("downloadFailed", tid, 0, "error");
-            postTerminal(tid, title, "error", episode);
+    private void downloadSegment(String baseUrl, String token, int taskId,
+                                  String filename, String destDir) throws Exception {
+        String url = baseUrl + "/api/downloads/" + taskId + "/segment/" + filename;
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        conn.setRequestMethod("GET");
+        conn.setConnectTimeout(15000);
+        conn.setReadTimeout(60000);
+        if (token != null && !token.isEmpty()) {
+            conn.setRequestProperty("Authorization", "Bearer " + token);
         }
+        int code = conn.getResponseCode();
+        if (code != 200) throw new Exception("Segment " + filename + " HTTP " + code);
+        java.io.InputStream in = conn.getInputStream();
+        java.io.FileOutputStream out = new java.io.FileOutputStream(destDir + "/" + filename);
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+        out.close();
+        in.close();
+        conn.disconnect();
+    }
+
+    private JSONObject httpGetJson(String urlStr, String token) throws Exception {
+        HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
+        conn.setRequestMethod("GET");
+        conn.setConnectTimeout(10000);
+        conn.setReadTimeout(10000);
+        if (token != null && !token.isEmpty()) {
+            conn.setRequestProperty("Authorization", "Bearer " + token);
+        }
+        int code = conn.getResponseCode();
+        if (code != 200) throw new Exception("Status poll HTTP " + code);
+        BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+        StringBuilder sb = new StringBuilder();
+        String line;
+        while ((line = reader.readLine()) != null) sb.append(line);
+        reader.close();
+        conn.disconnect();
+        return new JSONObject(sb.toString());
+    }
+
+    private void generateLocalManifest(String destDir, int segmentCount, float segDuration) throws Exception {
+        StringBuilder m3u8 = new StringBuilder();
+        m3u8.append("#EXTM3U\n");
+        m3u8.append("#EXT-X-VERSION:7\n");
+        m3u8.append("#EXT-X-TARGETDURATION:").append((int) Math.ceil(segDuration)).append("\n");
+        m3u8.append("#EXT-X-MEDIA-SEQUENCE:0\n");
+        m3u8.append("#EXT-X-PLAYLIST-TYPE:VOD\n");
+        m3u8.append("#EXT-X-MAP:URI=\"init.mp4\"\n");
+        for (int i = 0; i < segmentCount; i++) {
+            m3u8.append(String.format("#EXTINF:%.3f,\n", segDuration));
+            m3u8.append(String.format("seg-%04d.m4s\n", i));
+        }
+        m3u8.append("#EXT-X-ENDLIST\n");
+        java.io.FileWriter fw = new java.io.FileWriter(destDir + "/index.m3u8");
+        fw.write(m3u8.toString());
+        fw.close();
     }
 
     // ===== EVENT BRIDGE =====
@@ -549,14 +482,7 @@ public class DownloadForegroundService extends Service {
         boolean showProgress;
 
         switch (status != null ? status : "") {
-            case "transcoding": case "remuxing":
-                color = Color.parseColor("#2196F3");
-                icon = android.R.drawable.ic_popup_sync;
-                subText = "⚙ Transcodage";
-                prefix = progress + "% — ";
-                showProgress = true;
-                break;
-            case "downloading":
+            case "transcoding": case "downloading":
                 color = Color.parseColor("#00BCD4");
                 icon = android.R.drawable.stat_sys_download;
                 subText = "⬇ Téléchargement";

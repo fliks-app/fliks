@@ -104,9 +104,6 @@ export class DownloadsComponent implements OnInit, OnDestroy {
     return tasks.map((task) => {
       const ns = native.get(task.id);
       if (ns) {
-        if (ns.status === 'downloading') {
-          return { ...task, status: 'downloading' as const, downloadProgress: ns.progress };
-        }
         return { ...task, status: ns.status, progress: ns.progress } as DisplayDownloadTask;
       }
       // Server "ready" = transcode done. Only show "ready" if file is on device.
@@ -114,13 +111,9 @@ export class DownloadsComponent implements OnInit, OnDestroy {
         if (localIds.has(task.id)) {
           return task; // File on device — show "ready" (playable)
         }
-        // File not on device — show "downloading" (recover/native will start it)
-        if (this.isNative) {
-          return { ...task, status: 'downloading' as const, downloadProgress: 0 };
-        }
-        if (active.has(task.id)) {
-          return { ...task, status: 'downloading', downloadProgress: active.get(task.id) ?? 0 };
-        }
+        // File not on device — show as in-progress (progressive DL still running)
+        const pct = active.get(task.id) ?? 0;
+        return { ...task, status: 'transcoding', progress: pct } as DisplayDownloadTask;
       }
       return task;
     });
@@ -167,8 +160,11 @@ export class DownloadsComponent implements OnInit, OnDestroy {
     const tasks = await this.notif.getActiveTasks();
     const next = new Map<number, { progress: number; status: string }>();
     for (const t of tasks) {
-      // Java uses "error" internally; UI template expects "failed"
-      const status = t.status === 'error' ? 'failed' : t.status;
+      // Normalize Java statuses to DB statuses:
+      // "error" → "failed", "downloading" → "transcoding" (all-in-one progressive)
+      const status = t.status === 'error' ? 'failed'
+        : t.status === 'downloading' ? 'transcoding'
+        : t.status;
       next.set(t.taskId, { progress: t.progress, status });
     }
 
@@ -185,7 +181,7 @@ export class DownloadsComponent implements OnInit, OnDestroy {
 
   private applyFilter(list: DownloadTask[]) {
     const filtered = list.filter((t) =>
-      ['transcoding', 'remuxing', 'pending', 'failed', 'ready'].includes(t.status),
+      ['transcoding', 'pending', 'failed', 'ready'].includes(t.status),
     );
     this.baseTasks.set(filtered);
   }
@@ -227,8 +223,8 @@ export class DownloadsComponent implements OnInit, OnDestroy {
   statusLabel(status: string): string {
     switch (status) {
       case 'transcoding':
-      case 'remuxing':
-        return 'downloads.transcoding';
+      case 'pending':
+        return 'downloads.downloading';
       case 'downloading':
         return 'downloads.downloading';
       case 'ready':
