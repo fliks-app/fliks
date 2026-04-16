@@ -547,6 +547,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           // Android: ExoPlayer with CacheDataSource (offline HLS from cache)
           // iOS: AVPlayer with local .movpkg asset
           await this.createNativeEngine();
+          (this.engine as any).setOffline(true);
           // Native players handle subtitles from the cached HLS stream directly
           await this.engine!.load(offlineCheck!, startTime, 'application/x-mpegURL');
         } else {

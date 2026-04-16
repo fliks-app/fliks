@@ -10,6 +10,7 @@ import android.util.Log;
 
 import androidx.annotation.OptIn;
 import androidx.core.app.NotificationCompat;
+import com.getcapacitor.JSObject;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.database.StandaloneDatabaseProvider;
@@ -72,6 +73,40 @@ public class FlixDownloadUtil {
                 Executors.newFixedThreadPool(2)
             );
             downloadManager.setMaxParallelDownloads(2);
+            // Emit progress/completion events to WebView — registered once on
+            // the singleton so events flow regardless of service lifecycle.
+            downloadManager.addListener(new DownloadManager.Listener() {
+                @Override
+                public void onDownloadChanged(DownloadManager manager, Download download, Exception finalException) {
+                    JSObject data = new JSObject();
+                    data.put("id", download.request.id);
+                    data.put("progress", Math.round(download.getPercentDownloaded()));
+                    String state;
+                    switch (download.state) {
+                        case Download.STATE_COMPLETED: state = "completed"; break;
+                        case Download.STATE_FAILED: state = "failed"; break;
+                        case Download.STATE_DOWNLOADING: state = "downloading"; break;
+                        default: state = "queued";
+                    }
+                    data.put("state", state);
+                    if (download.state == Download.STATE_COMPLETED) {
+                        DownloadNotificationPlugin.emitEvent("downloadComplete", data);
+                    } else if (download.state == Download.STATE_FAILED) {
+                        DownloadNotificationPlugin.emitEvent("downloadFailed", data);
+                    } else {
+                        DownloadNotificationPlugin.emitEvent("downloadProgress", data);
+                    }
+                }
+
+                @Override
+                public void onDownloadRemoved(DownloadManager manager, Download download) {
+                    JSObject data = new JSObject();
+                    data.put("id", download.request.id);
+                    data.put("state", "removed");
+                    data.put("progress", 0);
+                    DownloadNotificationPlugin.emitEvent("downloadRemoved", data);
+                }
+            });
         }
         return downloadManager;
     }
@@ -119,7 +154,7 @@ public class FlixDownloadUtil {
 
     /** Remove a download (cancel + delete cached data). */
     public static void removeDownload(Context ctx, String id) {
-        DownloadService.sendRemoveDownload(ctx, FlixDownloadService.class, id, /* foreground= */ false);
+        DownloadService.sendRemoveDownload(ctx, FlixDownloadService.class, id, /* foreground= */ true);
     }
 
     /** Pause all downloads. */

@@ -62,9 +62,10 @@ export class DownloadManagerService {
     );
 
     if (event.type === 'failed') {
+      this.updateTaskStatus(taskId, 'failed', 0);
       this.decActive();
     } else if (event.type === 'complete') {
-      this.cache.markLocal(taskId);
+      this.updateTaskStatus(taskId, 'ready', 100);
       this.decActive();
     }
   });
@@ -92,25 +93,27 @@ export class DownloadManagerService {
     quality: string,
     title: string,
     episode?: string,
+    meta?: { mediaId?: number; posterUrl?: string | null; type?: string },
   ): Promise<DownloadTask> {
     const taskId = this.nextLocalId++;
     const task: DownloadTask = {
       id: taskId,
-      mediaId: 0,
+      mediaId: meta?.mediaId ?? 0,
       mediaFileId,
       quality,
       status: 'transcoding',
       progress: 0,
       episodeLabel: episode,
       createdAt: new Date().toISOString(),
-      media: { id: 0, title, posterUrl: null, type: '' },
+      media: { id: meta?.mediaId ?? 0, title, posterUrl: meta?.posterUrl ?? null, type: meta?.type ?? '' },
     };
+
+    const hlsUrl = this.streamingApi.getHlsUrl(mediaFileId, quality);
+    task.hlsUrl = hlsUrl;
 
     this.titles.set(taskId, { title, episode });
     this.persistTask(task);
     this.incActive();
-
-    const hlsUrl = this.streamingApi.getHlsUrl(mediaFileId, quality);
 
     if (this.isNative) {
       const token = this.auth.accessToken ?? '';
@@ -124,7 +127,7 @@ export class DownloadManagerService {
 
   async deleteDownload(task: DownloadTask) {
     if (this.isNative) {
-      this.notif.removeDownload(String(task.id));
+      await this.notif.removeDownload(String(task.id));
     }
     await this.storage.delete(`download-${task.mediaFileId}`);
     this.cache.remove(task.id);
@@ -225,10 +228,15 @@ export class DownloadManagerService {
     // Prune tasks whose local content is gone
     for (const t of tasks) {
       if (t.status === 'ready') {
-        const hasLocal = await this.storage.has(`download-${t.mediaFileId}`);
-        if (!hasLocal) {
-          this.cache.remove(t.id);
-          this.cache.removeLocal(t.id);
+        // Native: trust localStorage — ExoPlayer's SimpleCache persists across
+        // restarts and querying DownloadIndex has timing issues.
+        // Web: verify Shaka offline URI still exists in localStorage.
+        if (!this.isNative) {
+          const hasLocal = await this.storage.has(`download-${t.mediaFileId}`);
+          if (!hasLocal) {
+            this.cache.remove(t.id);
+            this.cache.removeLocal(t.id);
+          }
         }
       } else if (t.status === 'failed') {
         // Remove stale failed tasks

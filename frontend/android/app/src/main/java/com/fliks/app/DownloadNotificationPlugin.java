@@ -1,9 +1,14 @@
 package com.fliks.app;
 
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.database.StandaloneDatabaseProvider;
+import androidx.media3.exoplayer.offline.DefaultDownloadIndex;
 import androidx.media3.exoplayer.offline.Download;
 import androidx.media3.exoplayer.offline.DownloadManager;
 
@@ -29,9 +34,12 @@ public class DownloadNotificationPlugin extends Plugin {
     @Override
     public void load() {
         instance = this;
+        // Initialize DownloadManager early so its event listener is registered
+        // before any download starts (listener lives in FlixDownloadUtil).
+        FlixDownloadUtil.getDownloadManager(getContext());
     }
 
-    /** Emit event to WebView JS (called from FlixDownloadService) */
+    /** Emit event to WebView JS (called from FlixDownloadUtil listener) */
     public static void emitEvent(String eventName, JSObject data) {
         if (instance != null) {
             instance.notifyListeners(eventName, data);
@@ -55,12 +63,25 @@ public class DownloadNotificationPlugin extends Plugin {
         call.resolve();
     }
 
-    /** Remove a download (cancel + delete cached data). */
+    /** Remove a download (cancel + delete cached data). Waits for removal to complete. */
     @PluginMethod()
     public void removeDownload(PluginCall call) {
         String id = call.getString("id", "");
+        DownloadManager dm = FlixDownloadUtil.getDownloadManager(getContext());
+        dm.addListener(new DownloadManager.Listener() {
+            @Override
+            public void onDownloadRemoved(DownloadManager manager, Download download) {
+                if (download.request.id.equals(id)) {
+                    dm.removeListener(this);
+                    call.resolve();
+                }
+            }
+        });
         FlixDownloadUtil.removeDownload(getContext(), id);
-        call.resolve();
+        // Timeout fallback — resolve after 3s if event never fires
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (!call.isReleased()) call.resolve();
+        }, 3000);
     }
 
     /** Get all downloads with their current state + progress. */
@@ -72,7 +93,7 @@ public class DownloadNotificationPlugin extends Plugin {
             for (Download dl : dm.getCurrentDownloads()) {
                 JSObject obj = new JSObject();
                 obj.put("id", dl.request.id);
-                obj.put("progress", dl.getPercentDownloaded());
+                obj.put("progress", Math.round(dl.getPercentDownloaded()));
                 obj.put("state", stateToString(dl.state));
                 obj.put("bytesDownloaded", dl.getBytesDownloaded());
                 arr.put(obj);
@@ -93,14 +114,12 @@ public class DownloadNotificationPlugin extends Plugin {
     public void isDownloaded(PluginCall call) {
         try {
             String id = call.getString("id", "");
-            DownloadManager dm = FlixDownloadUtil.getDownloadManager(getContext());
-            boolean found = false;
-            for (Download dl : dm.getCurrentDownloads()) {
-                if (dl.request.id.equals(id) && dl.state == Download.STATE_COMPLETED) {
-                    found = true;
-                    break;
-                }
-            }
+            // Query DownloadIndex directly — synchronous DB read, works even
+            // before DownloadManager finishes async initialization.
+            DefaultDownloadIndex index = new DefaultDownloadIndex(
+                new StandaloneDatabaseProvider(getContext()));
+            Download dl = index.getDownload(id);
+            boolean found = dl != null && dl.state == Download.STATE_COMPLETED;
             JSObject result = new JSObject();
             result.put("downloaded", found);
             call.resolve(result);

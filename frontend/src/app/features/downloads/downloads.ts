@@ -13,9 +13,6 @@ import { Router } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { DownloadCacheService, DownloadTask } from '../../core/services/download-cache.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
-import {
-  DownloadNotificationService,
-} from '../../core/services/download-notification.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { LucideDownload, LucideTrash2, LucidePlay, LucideAlertCircle } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
@@ -40,13 +37,11 @@ export interface DisplayDownloadTask extends DownloadTask {
 })
 export class DownloadsComponent implements OnInit, OnDestroy {
   private readonly isNative = Capacitor.isNativePlatform();
-  private syncTimer: ReturnType<typeof setInterval> | null = null;
   private visibilityHandler = () => {
     if (document.visibilityState === 'visible') void this.load();
   };
   private readonly cache = inject(DownloadCacheService);
   private readonly dlManager = inject(DownloadManagerService);
-  private readonly notif = inject(DownloadNotificationService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);
@@ -74,6 +69,11 @@ export class DownloadsComponent implements OnInit, OnDestroy {
         return next;
       });
     } else if (event.type === 'complete') {
+      this.nativeState.update((m) => {
+        const next = new Map(m);
+        next.delete(event.taskId);
+        return next;
+      });
       this.cache.markLocal(event.taskId);
       void this.load();
     } else {
@@ -107,47 +107,19 @@ export class DownloadsComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.load();
     document.addEventListener('visibilitychange', this.visibilityHandler);
-    if (this.isNative) {
-      this.syncTimer = setInterval(() => void this.syncFromNativeService(), 2000);
-    }
   }
 
   ngOnDestroy() {
     document.removeEventListener('visibilitychange', this.visibilityHandler);
-    if (this.syncTimer) { clearInterval(this.syncTimer); this.syncTimer = null; }
   }
 
   async load() {
-    if (this.isNative) {
-      await this.syncFromNativeService();
-    }
-
     const cached = this.cache.load();
     this.applyFilter(cached);
     this.loading.set(false);
   }
 
-  /** Pull current progress/status from native DownloadManager into nativeState */
-  private async syncFromNativeService() {
-    const downloads = await this.notif.getDownloads();
-    const next = new Map<number, { progress: number; status: string }>();
-    for (const dl of downloads) {
-      const tid = Number(dl.id) || 0;
-      const status = dl.state === 'failed' ? 'failed'
-        : dl.state === 'completed' ? 'ready'
-        : 'transcoding';
-      next.set(tid, { progress: dl.progress, status });
-    }
 
-    const prev = this.nativeState();
-    let needsReload = false;
-    for (const tid of prev.keys()) {
-      if (!next.has(tid)) needsReload = true;
-    }
-
-    this.nativeState.set(next);
-    if (needsReload) void this.load();
-  }
 
   private applyFilter(list: DownloadTask[]) {
     const filtered = list.filter((t) =>

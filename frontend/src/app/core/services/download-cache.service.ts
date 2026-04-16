@@ -12,6 +12,8 @@ export interface DownloadTask {
   episodeLabel?: string;
   error?: string;
   createdAt: string;
+  /** HLS URL used for the download — needed for native offline playback via CacheDataSource. */
+  hlsUrl?: string;
   media?: {
     id: number;
     title: string;

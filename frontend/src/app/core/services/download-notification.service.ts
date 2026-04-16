@@ -60,9 +60,9 @@ export class DownloadNotificationService {
   }
 
   /** Remove a download (cancel + delete cached data). */
-  removeDownload(id: string): void {
+  async removeDownload(id: string): Promise<void> {
     if (!this.isNative || !DownloadNotification) return;
-    DownloadNotification.removeDownload({ id }).catch(() => {});
+    await DownloadNotification.removeDownload({ id }).catch(() => {});
   }
 
   /** Get all downloads with their current state + progress. */

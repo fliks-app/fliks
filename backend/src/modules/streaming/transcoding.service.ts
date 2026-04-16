@@ -315,6 +315,25 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Estimate transcode progress as a percentage (0-100) by looking at the highest segment on disk. */
+  /** Find the highest segment number on disk (fast readdir scan). */
+  private async highestSegmentOnDisk(cachePath: string): Promise<number> {
+    let maxSeg = -1;
+    const scanDir = async (dir: string) => {
+      try {
+        for (const f of await fsp.readdir(dir)) {
+          const m = f.match(/^seg-(\d+)\.(m4s|ts)$/);
+          if (m) {
+            const n = parseInt(m[1], 10);
+            if (n > maxSeg) maxSeg = n;
+          }
+        }
+      } catch { /* dir doesn't exist */ }
+    };
+    await scanDir(cachePath);
+    await scanDir(path.join(cachePath, '0'));
+    return maxSeg;
+  }
+
   async getTranscodePercent(
     session: TranscodeSession,
     durationSeconds: number,
@@ -470,10 +489,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     const existing = this.sessions.get(key);
     if (existing) {
-      // If FFmpeg process has exited, clean up and start fresh
+      // If FFmpeg exited successfully (code 0), segments are still valid on
+      // disk. Return the session so getSegmentPath can serve cached segments
+      // or return null for truly non-existent ones (end of file).
+      if (existing.process.exitCode === 0 && existing.quality === quality) {
+        existing.lastAccess = Date.now();
+        return existing;
+      }
+      // If FFmpeg crashed (non-zero exit), clean up and restart.
       if (existing.process.exitCode !== null) {
         this.log.warn(
-          `Session [${key}]: FFmpeg already exited (code ${existing.process.exitCode}), restarting`,
+          `Session [${key}]: FFmpeg crashed (code ${existing.process.exitCode}), restarting`,
         );
         this.sessions.delete(key);
         await fsp.rm(existing.cachePath, { recursive: true, force: true });
@@ -493,7 +519,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         // ── Seek handling ──
         // Check if the segment (or its neighbour) is already on disk.
         if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
-          // Segment missing and not within tolerance → restart at this segment.
+          // Check if FFmpeg is close to the requested segment (within ~30
+          // segments = ~90s). If so, it's a sequential request outpacing
+          // FFmpeg (download) — wait. If far away, it's a real seek → restart.
+          if (requestedSegment >= (existing.startSegment ?? 0)) {
+            const frontier = await this.highestSegmentOnDisk(existing.cachePath);
+            const gap = requestedSegment - frontier;
+            if (gap <= 30) {
+              // FFmpeg is close — let getSegmentPath wait for it.
+              return existing;
+            }
+          }
+          // Far ahead or behind start → restart at requested segment.
           this.log.log(
             `Seek: restarting transcode [${key}] from segment ${requestedSegment} (not cached)`,
           );
@@ -1667,10 +1704,15 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ): Promise<TranscodeSession> {
     const existing = this.sessions.get(key);
     if (existing) {
-      // If FFmpeg process has exited, clean up and start fresh
+      // If FFmpeg exited successfully, segments still valid on disk.
+      if (existing.process.exitCode === 0 && existing.remux) {
+        existing.lastAccess = Date.now();
+        return existing;
+      }
+      // If FFmpeg crashed, clean up and restart.
       if (existing.process.exitCode !== null) {
         this.log.warn(
-          `Session [${key}]: FFmpeg already exited (code ${existing.process.exitCode}), restarting`,
+          `Session [${key}]: FFmpeg crashed (code ${existing.process.exitCode}), restarting`,
         );
         this.sessions.delete(key);
         await fsp.rm(existing.cachePath, { recursive: true, force: true });
@@ -1687,6 +1729,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         existing.lastAccess = Date.now();
 
         if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
+          if (requestedSegment >= (existing.startSegment ?? 0)) {
+            const frontier = await this.highestSegmentOnDisk(existing.cachePath);
+            if (requestedSegment - frontier <= 30) {
+              return existing;
+            }
+          }
           this.log.log(
             `Seek: restarting remux [${key}] from segment ${requestedSegment} (not cached)`,
           );
@@ -1932,7 +1980,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   private cleanupStaleSessions() {
     const now = Date.now();
     for (const [id, session] of this.sessions) {
-      if (now - session.lastAccess > SESSION_TIMEOUT_MS) {
+      // Don't kill sessions whose FFmpeg is still running — they're actively
+      // transcoding (e.g. for a download). Only clean up sessions that have
+      // been idle AND whose process has already exited.
+      const processDone = session.process.exitCode !== null;
+      if (now - session.lastAccess > SESSION_TIMEOUT_MS && processDone) {
         this.log.log(`Cleanup stale session: ${id}`);
         this.sessions.delete(id);
         this.gracefulKill(session);

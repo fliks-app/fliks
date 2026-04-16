@@ -47,7 +47,10 @@ function buildVodPlaylist(
   segmentUrl: (index: string) => string,
   initUrl?: string,
 ): string {
-  const segCount = Math.ceil(duration / SEG_DURATION);
+  // Subtract small epsilon before ceil to avoid phantom last segment when
+  // ffprobe duration has floating-point imprecision (e.g. 120.001 → ceil
+  // produces 41 segments but FFmpeg only writes 40).
+  const segCount = Math.max(1, Math.ceil((duration - 0.05) / SEG_DURATION));
   const lines = [
     '#EXTM3U',
     '#EXT-X-VERSION:7',
@@ -932,15 +935,10 @@ export class StreamingController {
     const segMatch = segment.match(/seg-(\d+)\.(ts|m4s)/);
     const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
 
-    // If an active session already has this segment ON DISK, serve it
-    // without any DB query or session management. Only checks existsSync
-    // (instant) — does NOT call getSegmentPath (which would wait via
-    // fs.watch and block the request if the segment isn't being produced).
-    if (
-      existing &&
-      existing.quality === quality &&
-      existing.process.exitCode === null
-    ) {
+    // If a session (running OR completed) already has this segment ON DISK,
+    // serve it without any DB query or session management. Completed sessions
+    // (exitCode !== null) still have valid segments in cache — don't skip them.
+    if (existing && existing.quality === quality) {
       const varStreamMap =
         this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
         this.activeStreamTracker.getFmp4Supported(mediaFileId);
@@ -998,6 +996,9 @@ export class StreamingController {
       segName,
     );
     if (!segPath) {
+      this.log.warn(
+        `Segment 404: ${segment} (quality=${quality}, mfid=${mediaFileId}, exitCode=${session.process.exitCode})`,
+      );
       res.status(404).send('Segment not found');
       return;
     }

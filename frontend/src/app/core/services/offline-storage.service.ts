@@ -22,12 +22,28 @@ export class OfflineStorageService {
 
   async getLocalUrl(key: string): Promise<string | null> {
     if (this.isNative) {
-      return this.getNativeHlsUrl(key);
+      // ExoPlayer stores content in SimpleCache, not filesystem.
+      // Return the stored HLS URL — native player uses CacheDataSource to
+      // read from cache. The URL is stored in the DownloadTask.
+      return this.getNativeOfflineUrl(key);
     }
     // Web: check Shaka offline URI (stored in localStorage)
     const mfid = key.replace('download-', '');
     const offlineUri = this.getShakaOfflineUri(Number(mfid));
     return offlineUri ?? null;
+  }
+
+  /** Look up the stored HLS URL for a native download from localStorage. */
+  private getNativeOfflineUrl(key: string): string | null {
+    try {
+      const mfid = Number(key.replace('download-', ''));
+      const raw = localStorage.getItem('fliks.downloads.cache');
+      const tasks: any[] = raw ? JSON.parse(raw) : [];
+      const task = tasks.find((t: any) => t.mediaFileId === mfid && t.status === 'ready');
+      return task?.hlsUrl ?? null;
+    } catch {
+      return null;
+    }
   }
 
   // --- Shaka offline storage (web only) ---
@@ -70,8 +86,10 @@ export class OfflineStorageService {
   ): Promise<string | null> {
     if (this.isNative) return null;
 
-    // Create a temporary headless Shaka player for the storage API
+    // Create a temporary Shaka player for the storage API.
     const video = document.createElement('video');
+    video.style.display = 'none';
+    document.body.appendChild(video);
     const player = new shaka.Player();
     await player.attach(video);
 
@@ -87,14 +105,20 @@ export class OfflineStorageService {
 
     const storage = new shaka.offline.Storage(player);
     storage.configure({
-      progressCallback: (_content: any, progress: number) => {
-        onProgress?.(progress);
+      offline: {
+        numberOfParallelDownloads: 1,
+        progressCallback: (_content: any, progress: number) => {
+          onProgress?.(progress);
+        },
       },
-    });
+    } as any);
 
     try {
-      const stored: any = await storage.store(hlsUrl, { title: meta.title, episode: meta.episode ?? '' });
-      const offlineUri: string | undefined = stored.offlineUri;
+      const op: any = storage.store(hlsUrl, { title: meta.title, episode: meta.episode ?? '' });
+      // storage.store() returns an AbortableOperation — await its .promise
+      const stored = await (op.promise ?? op);
+      console.log('[Shaka offline] store result:', stored);
+      const offlineUri: string | undefined = stored?.offlineUri;
       if (offlineUri) {
         this.setShakaOfflineUri(mediaFileId, offlineUri);
       }
@@ -184,7 +208,8 @@ export class OfflineStorageService {
 
   async has(key: string): Promise<boolean> {
     if (this.isNative) {
-      return this.hasNative(`${key}/index.m3u8`);
+      // ExoPlayer stores in SimpleCache, not filesystem — check localStorage.
+      return this.getNativeOfflineUrl(key) !== null;
     }
     // Web: check Shaka offline URI
     const mfid = key.replace('download-', '');

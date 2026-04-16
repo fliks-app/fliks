@@ -62,6 +62,11 @@ export class NativeEngine implements PlaybackEngine {
 
   // ── Loading ──
 
+  private _offline = false;
+
+  /** Mark next load() as offline — uses CacheDataSource on Android. */
+  setOffline(offline: boolean) { this._offline = offline; }
+
   async load(
     url: string,
     startTime?: number,
@@ -71,7 +76,7 @@ export class NativeEngine implements PlaybackEngine {
     const subtitles = this._preloadedSubtitles.length > 0
       ? this._preloadedSubtitles
       : undefined;
-    await NativePlayer.load({ url, startTime, headers, subtitles });
+    await NativePlayer.load({ url, startTime, headers, subtitles, offline: this._offline });
 
     // Apply subtitle style settings
     if (this._subtitleStyle) {

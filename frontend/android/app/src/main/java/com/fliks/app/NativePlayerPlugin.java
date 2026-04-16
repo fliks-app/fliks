@@ -23,6 +23,7 @@ import androidx.media3.common.TrackSelectionOverride;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.VideoSize;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -160,6 +161,7 @@ public class NativePlayerPlugin extends Plugin {
         double startTime = call.getDouble("startTime", 0.0);
         JSObject headers = call.getObject("headers", new JSObject());
         JSArray subtitles = call.getArray("subtitles", new JSArray());
+        boolean offline = call.getBoolean("offline", false);
 
         if (url == null) {
             call.reject("URL is required");
@@ -203,8 +205,11 @@ public class NativePlayerPlugin extends Plugin {
                 }
             }
 
-            // DefaultDataSource wraps httpFactory for HTTP + FileDataSource for file:// URLs
-            DefaultDataSource.Factory dataSourceFactory = new DefaultDataSource.Factory(getContext(), httpFactory);
+            // Offline: read from ExoPlayer SimpleCache (downloaded content).
+            // Online: DefaultDataSource (HTTP + file:// support).
+            DataSource.Factory dataSourceFactory = offline
+                    ? FlixDownloadUtil.getCacheDataSourceFactory(getContext())
+                    : new DefaultDataSource.Factory(getContext(), httpFactory);
             DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory);
             player = new ExoPlayer.Builder(getContext())
                     .setMediaSourceFactory(mediaSourceFactory)
