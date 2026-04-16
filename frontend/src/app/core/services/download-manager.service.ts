@@ -114,6 +114,7 @@ export class DownloadManagerService {
     const task = await this.api.create(mediaFileId, quality, {
       supportsHdr: dp.supportsHdr,
       audioCodecs: dp.directPlayProfiles[0]?.audioCodecs,
+      videoCodecs: dp.directPlayProfiles[0]?.videoCodecs,
       maxAudioChannels: dp.maxAudioChannels,
     });
 
@@ -155,6 +156,7 @@ export class DownloadManagerService {
     await this.storage.delete(`download-${task.mediaFileId}`);
     this.api.delete(task.id).catch(() => {});
     this.cache.remove(task.id);
+    this.cache.removeLocal(task.id);
     this.titles.delete(task.id);
     // Cancel notification + remove from Java service tracking
     this.notif.dismiss(task.id);
@@ -249,14 +251,16 @@ export class DownloadManagerService {
 
   /**
    * Progressive segment download for web (JS).
-   * Polls `/status`, downloads segments as they appear, concatenates them
-   * into a single fMP4 blob for offline storage via Cache API.
+   * Each segment is stored directly into Cache API as it's fetched — zero
+   * RAM accumulation. At playback time, segments are reassembled into a
+   * blob URL via `assembleSegmentsAsBlob()`.
    */
   private async handleProgressiveWeb(task: DownloadTask) {
     const downloadId = task.id;
     if (this.cache.isDownloading(downloadId)) return;
 
-    const hasLocal = await this.storage.has(`download-${task.mediaFileId}`);
+    const cacheKey = `download-${task.mediaFileId}`;
+    const hasLocal = await this.storage.has(cacheKey);
     if (hasLocal) {
       this.decActive();
       return;
@@ -269,42 +273,58 @@ export class DownloadManagerService {
     this.emitEvent('progress', downloadId, 0, 'downloading');
 
     try {
-      const chunks: ArrayBuffer[] = [];
-      let nextSeg = -1; // -1 = init.mp4 not yet fetched
+      // Resume from cached segments (survives page refresh).
+      // But if the task was just created (status=pending/transcoding, progress=0),
+      // it's a fresh download — clear stale segments from a previous attempt.
+      let nextSeg = await this.findLastCachedSegment(cacheKey);
+      if (nextSeg > 0 && (task.progress ?? 0) === 0) {
+        await this.storage.deleteSegments(cacheKey);
+        nextSeg = -1;
+      }
 
+      // Get initial status to know total segments
+      const initStatus = await this.api.getProgressiveStatus(downloadId);
+      let total = initStatus.totalSegments ?? 0;
+      const segDuration = initStatus.segmentDuration;
+
+      // Fetch init.mp4 — server waits via fs.watch if not ready yet
+      if (nextSeg === -1) {
+        await this.cacheSegmentFromServer(downloadId, cacheKey, 'init.mp4');
+        nextSeg = 0;
+      }
+
+      // Fetch segments one by one — no polling, the server blocks until
+      // each segment is ready (waitForFile with 30s timeout). This is as
+      // fast as FFmpeg produces segments, with zero poll overhead.
       while (true) {
-        const st = await this.api.getProgressiveStatus(downloadId);
-        const available = st.segmentCount;
-        const total = st.totalSegments ?? 0;
-        const done = st.done;
-
-        // Download init.mp4 first
-        if (nextSeg === -1 && (available > 0 || done)) {
-          chunks.push(await this.fetchSegment(downloadId, 'init.mp4'));
-          nextSeg = 0;
-        }
-
-        // Download new segments
-        while (nextSeg >= 0 && nextSeg < available) {
-          const name = `seg-${String(nextSeg).padStart(4, '0')}.m4s`;
-          chunks.push(await this.fetchSegment(downloadId, name));
+        const name = `seg-${String(nextSeg).padStart(4, '0')}.m4s`;
+        try {
+          await this.cacheSegmentFromServer(downloadId, cacheKey, name);
           nextSeg++;
 
           const pct = total > 0 ? Math.min(99, Math.round((nextSeg / total) * 100)) : 0;
           this.cache.updateProgress(downloadId, pct);
           this.notif.show(downloadId, title, pct, 'downloading');
           this.emitEvent('progress', downloadId, pct, 'downloading');
+        } catch {
+          // Segment fetch failed (404 = past the end, or timeout).
+          // Check if transcode is done.
+          const st = await this.api.getProgressiveStatus(downloadId);
+          total = st.totalSegments ?? total;
+          if (st.done && nextSeg >= (st.segmentCount ?? 0)) break;
+          // Not done — retry after short wait (transient error)
+          await new Promise((r) => setTimeout(r, 500));
         }
-
-        if (done && nextSeg >= available) break;
-
-        // Wait before next poll
-        await new Promise((r) => setTimeout(r, 2000));
       }
 
-      // Concatenate all chunks into a single fMP4 blob and store
-      const blob = new Blob(chunks, { type: 'video/mp4' });
-      await this.storage.storeBlob(`download-${task.mediaFileId}`, blob);
+      // Fetch final status — segmentDuration is updated by the backend after
+      // transcode completes with the actual per-segment duration (FFmpeg
+      // aligns to keyframes, so real duration ≠ target -hls_time).
+      const finalSt = await this.api.getProgressiveStatus(downloadId);
+      await this.storage.cacheProgressMeta(cacheKey, {
+        segmentCount: nextSeg,
+        segmentDuration: finalSt.segmentDuration,
+      });
 
       // Download subtitles
       const freshTask = await this.api.getOne(downloadId);
@@ -331,13 +351,40 @@ export class DownloadManagerService {
     }
   }
 
-  private async fetchSegment(taskId: number, filename: string): Promise<ArrayBuffer> {
+  /** Fetch a segment from server and store directly into Cache API (zero RAM). */
+  private async cacheSegmentFromServer(
+    taskId: number,
+    cacheKey: string,
+    filename: string,
+  ): Promise<void> {
     const url = this.api.getSegmentUrl(taskId, filename);
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${this.auth.accessToken}` },
     });
     if (!res.ok) throw new Error(`Segment ${filename} HTTP ${res.status}`);
-    return res.arrayBuffer();
+    await this.storage.cacheSegment(`${cacheKey}/${filename}`, res);
+  }
+
+  /**
+   * Scan Cache API to find how many segments are already cached for a
+   * download. Returns the next segment index to fetch (-1 = init.mp4
+   * not cached, 0+ = resume from that segment number).
+   */
+  private async findLastCachedSegment(cacheKey: string): Promise<number> {
+    try {
+      const cache = await caches.open('offline-media');
+      const hasInit = !!(await cache.match(`${cacheKey}/init.mp4`));
+      if (!hasInit) return -1;
+      let i = 0;
+      while (true) {
+        const segKey = `${cacheKey}/seg-${String(i).padStart(4, '0')}.m4s`;
+        if (!(await cache.match(segKey))) break;
+        i++;
+      }
+      return i;
+    } catch {
+      return -1;
+    }
   }
 
   // ===== HELPERS =====

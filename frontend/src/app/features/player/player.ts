@@ -541,7 +541,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       if (this.isOfflinePlayback) {
         this.state.playbackMode.set('direct');
-        const isHls = offlineCheck?.includes('index.m3u8');
+        // No quality switching offline — clear any stale options
+        this.qualityManager.availableQualities.set([]);
+        const isHls = offlineCheck?.includes('index.m3u8') || offlineCheck?.endsWith('#hls');
 
         // Load offline subtitles BEFORE engine.load() — ExoPlayer needs
         // them as SubtitleConfigurations on the MediaItem at build time.

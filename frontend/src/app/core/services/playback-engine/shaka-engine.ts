@@ -19,6 +19,7 @@ type Handler<E extends EngineEvent> = (data: EngineEventMap[E]) => void;
  * This is a plain TypeScript class with NO Angular dependencies.
  */
 export class ShakaEngine implements PlaybackEngine {
+
   private player: shaka.Player | null = null;
   private video: HTMLVideoElement | null = null;
 
@@ -352,6 +353,7 @@ export class ShakaEngine implements PlaybackEngine {
     // Video element errors
     this.addVideoListener('error', () => {
       const e = video.error;
+      console.error('[Shaka] Video element error:', e?.code, e?.message);
       this.emit('error', {
         code: e?.code ?? 0,
         message: e?.message ?? `Video error code ${e?.code}`,
@@ -364,6 +366,7 @@ export class ShakaEngine implements PlaybackEngine {
     // Shaka error events (separate from HTMLVideoElement errors)
     this.addShakaListener('error', (e: any) => {
       const detail = e.detail;
+      console.error('[Shaka] Player error:', detail?.code, detail?.category, detail?.message, detail?.data);
       this.emit('error', {
         code: detail?.code ?? 0,
         message: detail?.message ?? 'Shaka playback error',

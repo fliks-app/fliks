@@ -43,6 +43,7 @@ export class InappDownloadsController {
       deviceProfile?: {
         supportsHdr?: boolean;
         audioCodecs?: string[];
+        videoCodecs?: string[];
         maxAudioChannels?: number;
       };
     },
@@ -185,6 +186,7 @@ export class InappDownloadsController {
       deviceProfile?: {
         supportsHdr?: boolean;
         audioCodecs?: string[];
+        videoCodecs?: string[];
         maxAudioChannels?: number;
       };
     },

@@ -184,6 +184,7 @@
       <!-- Right: action buttons -->
       <div class="flex items-center gap-1.5">
         <!-- Subtitles dropdown -->
+        @if (availableSubtitles().length > 0) {
         <div class="dropdown dropdown-top dropdown-end" (focusin)="onDropdownFocus()" (focusout)="onDropdownBlur()">
           <button tabindex="0" type="button" class="btn btn-ghost btn-md btn-circle text-white/80">
             <svg lucideCaptions class="h-6 w-6"></svg>
@@ -204,6 +205,7 @@
             }
           </div>
         </div>
+        }
         <!-- Audio track dropdown (desktop) -->
         @if (availableAudioTracks().length > 1) {
           <div class="dropdown dropdown-top dropdown-end" (focusin)="onDropdownFocus()" (focusout)="onDropdownBlur()">

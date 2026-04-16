@@ -58,6 +58,7 @@ export class DownloadsApiService {
   create(mediaFileId: number, quality: string, deviceProfile?: {
     supportsHdr?: boolean;
     audioCodecs?: string[];
+    videoCodecs?: string[];
     maxAudioChannels?: number;
   }) {
     return firstValueFrom(

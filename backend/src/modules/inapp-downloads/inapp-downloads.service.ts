@@ -208,6 +208,7 @@ export class InappDownloadsService implements OnModuleInit {
     deviceProfile?: {
       supportsHdr?: boolean;
       audioCodecs?: string[];
+      videoCodecs?: string[];
       maxAudioChannels?: number;
     },
     deviceId?: string,
@@ -260,6 +261,7 @@ export class InappDownloadsService implements OnModuleInit {
     const saved = await this.taskRepo.save(task);
 
     const dp = deviceProfile ?? {};
+    this.log.log(`Download #${saved.id}: device profile — videoCodecs=[${dp.videoCodecs?.join(', ') ?? 'none'}] audioCodecs=[${dp.audioCodecs?.join(', ') ?? 'none'}]`);
     void this.runProgressiveTranscode(saved.id, resolved, quality, dp);
     return saved;
   }
@@ -290,6 +292,7 @@ export class InappDownloadsService implements OnModuleInit {
     deviceProfile?: {
       supportsHdr?: boolean;
       audioCodecs?: string[];
+      videoCodecs?: string[];
       maxAudioChannels?: number;
     },
   ): Promise<DownloadTask> {
@@ -344,7 +347,7 @@ export class InappDownloadsService implements OnModuleInit {
       throw new BadRequestException('Invalid segment name');
     }
     const segPath = path.join(task.sessionDir, filename);
-    return this.waitForFile(segPath, 30_000);
+    return this.waitForFile(segPath, 60_000);
   }
 
   /** Progresssive download status for polling */
@@ -471,6 +474,7 @@ export class InappDownloadsService implements OnModuleInit {
     deviceProfile: {
       supportsHdr?: boolean;
       audioCodecs?: string[];
+      videoCodecs?: string[];
       maxAudioChannels?: number;
     } = {},
   ): Promise<void> {
@@ -497,7 +501,7 @@ export class InappDownloadsService implements OnModuleInit {
       const isHdr = video?.colorSpace === 'bt2020nc' || video?.bitDepth === 10;
       const hwAccel = this.transcoding.getDetectedHwAccel();
       const duration = info?.durationSeconds ?? 0;
-      const segmentDuration = 3;
+      const segmentDuration = this.transcoding.getSegmentDuration();
       const totalSegments =
         duration > 0 ? Math.ceil(duration / segmentDuration) : null;
 
@@ -516,6 +520,8 @@ export class InappDownloadsService implements OnModuleInit {
         resolved,
         crop,
         { dir: sessionDir, segmentDuration },
+        deviceProfile.audioCodecs,
+        deviceProfile.videoCodecs,
       );
 
       await this.taskRepo.update(taskId, {
@@ -530,13 +536,18 @@ export class InappDownloadsService implements OnModuleInit {
       );
 
       // Monitor segment creation (1s interval) — updates DB + SSE.
+      // Progress is based on time (segment index × estimated segment duration)
+      // rather than segment count, since FFmpeg's actual segment count differs
+      // from the estimate (keyframe alignment).
       const monitorInterval = setInterval(async () => {
         try {
           const files = await fs.readdir(sessionDir);
           const count = files.filter((f) => /^seg-\d+\.m4s$/.test(f)).length;
+          // Time-based progress: each segment ≈ segmentDuration seconds
+          const estimatedTime = count * segmentDuration;
           const pct =
-            totalSegments && totalSegments > 0
-              ? Math.min(99, Math.round((count / totalSegments) * 100))
+            duration > 0
+              ? Math.min(99, Math.round((estimatedTime / duration) * 100))
               : 0;
           await this.taskRepo.update(taskId, {
             segmentCount: count,
@@ -583,9 +594,15 @@ export class InappDownloadsService implements OnModuleInit {
           filename: path.basename(v.path),
         }));
 
+        // Compute actual segment duration (FFmpeg aligns to keyframes,
+        // so real duration per segment differs from the target -hls_time).
+        const actualSegDuration = duration > 0 && finalCount > 0
+          ? duration / finalCount
+          : segmentDuration;
         await this.taskRepo.update(taskId, {
           status: 'ready',
           progress: 100,
+          segmentDuration: actualSegDuration,
           segmentCount: finalCount,
           totalSegments: finalCount,
           subtitles: subtitleMeta.length ? subtitleMeta : undefined,
@@ -624,13 +641,15 @@ export class InappDownloadsService implements OnModuleInit {
    */
   private buildFullFileFfmpegArgs(
     inputPath: string,
-    profile: { maxWidth: number; videoBitrate: string; audioBitrate: string },
+    profile: { maxWidth: number; maxHeight: number; videoBitrate: string; audioBitrate: string },
     hwAccel: string,
     isHdr: boolean,
     subtitles: SubtitleFile[],
     resolved: ResolvedFile,
     crop?: { width: number; height: number; x: number; y: number },
     hlsConfig?: { dir: string; segmentDuration: number },
+    deviceAudioCodecs?: string[],
+    deviceVideoCodecs?: string[],
   ): string[] {
     const args: string[] = [
       '-y',
@@ -643,147 +662,179 @@ export class InappDownloadsService implements OnModuleInit {
       '1',
     ];
 
-    // Hardware acceleration input
-    const effectiveHw =
-      crop && (hwAccel === 'qsv' || hwAccel === 'vaapi') ? 'vaapi' : hwAccel;
-    switch (effectiveHw) {
-      case 'qsv':
-        args.push(
-          '-init_hw_device',
-          'vaapi=va:/dev/dri/renderD128',
-          '-init_hw_device',
-          'qsv=qs@va',
-          '-hwaccel',
-          'vaapi',
-          '-hwaccel_output_format',
-          'vaapi',
-          '-hwaccel_device',
-          'va',
-        );
-        if (isHdr)
+    const info = resolved.mediaFile.streamInfo;
+    const video = info?.video?.[0];
+    const sourceWidth = video?.width ?? 1920;
+    const sourceHeight = video?.height ?? 1080;
+
+    // Determine if video needs re-encoding:
+    //   - Downscale: profile resolution < source resolution
+    //   - HDR tonemap: HDR source + device doesn't support HDR
+    //   - Crop: black bars detected
+    //   - Unsupported codec: source codec (e.g. HEVC) not in device profile
+    // If none apply → copy video stream (remux speed, zero quality loss).
+    const needsScale =
+      profile.maxWidth < sourceWidth || profile.maxHeight < sourceHeight;
+    const sourceVideoCodec = (video?.codec ?? '').toLowerCase();
+    // HEVC/H265 copy into fMP4 HLS is unreliable with browser MSE (Shaka
+    // throws 3014 even when the browser advertises HEVC support). Only copy
+    // H264 — everything else gets transcoded to H264.
+    const isH264 = ['h264', 'avc', 'avc1'].includes(sourceVideoCodec);
+    const needsVideoTranscode = needsScale || isHdr || !!crop || !isH264;
+
+    if (needsVideoTranscode) {
+      // Full video transcode path — HW accel + filters
+      const effectiveHw =
+        crop && (hwAccel === 'qsv' || hwAccel === 'vaapi') ? 'vaapi' : hwAccel;
+      switch (effectiveHw) {
+        case 'qsv':
           args.push(
             '-init_hw_device',
-            'opencl=ocl:0.0',
-            '-filter_hw_device',
-            'ocl',
+            'vaapi=va:/dev/dri/renderD128',
+            '-init_hw_device',
+            'qsv=qs@va',
+            '-hwaccel',
+            'vaapi',
+            '-hwaccel_output_format',
+            'vaapi',
+            '-hwaccel_device',
+            'va',
           );
-        break;
-      case 'vaapi':
-        args.push(
-          '-init_hw_device',
-          'vaapi=va:/dev/dri/renderD128',
-          '-hwaccel',
-          'vaapi',
-          '-hwaccel_output_format',
-          'vaapi',
-          '-hwaccel_device',
-          'va',
-        );
-        if (isHdr)
+          if (isHdr)
+            args.push(
+              '-init_hw_device',
+              'opencl=ocl:0.0',
+              '-filter_hw_device',
+              'ocl',
+            );
+          break;
+        case 'vaapi':
           args.push(
             '-init_hw_device',
-            'opencl=ocl:0.0',
-            '-filter_hw_device',
-            'ocl',
+            'vaapi=va:/dev/dri/renderD128',
+            '-hwaccel',
+            'vaapi',
+            '-hwaccel_output_format',
+            'vaapi',
+            '-hwaccel_device',
+            'va',
           );
-        break;
-      case 'nvenc':
-        args.push('-hwaccel', 'cuda');
-        if (!isHdr && !crop) args.push('-hwaccel_output_format', 'cuda');
-        break;
+          if (isHdr)
+            args.push(
+              '-init_hw_device',
+              'opencl=ocl:0.0',
+              '-filter_hw_device',
+              'ocl',
+            );
+          break;
+        case 'nvenc':
+          args.push('-hwaccel', 'cuda');
+          if (!isHdr && !crop) args.push('-hwaccel_output_format', 'cuda');
+          break;
+      }
+
+      args.push('-i', inputPath);
+
+      // External subtitle file inputs
+      const extSubs = subtitles.filter((s) => s.relativePath);
+      for (const sub of extSubs) {
+        args.push('-i', path.resolve(resolved.media.path!, sub.relativePath!));
+      }
+
+      const w = profile.maxWidth;
+      const cropF = crop
+        ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},`
+        : '';
+      const hwCrop = crop
+        ? `hwdownload,format=nv12,${cropF}hwupload=derive_device=vaapi,`
+        : '';
+
+      switch (effectiveHw) {
+        case 'qsv':
+          args.push('-c:v', 'h264_qsv');
+          if (isHdr) {
+            args.push(
+              '-vf',
+              `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
+            );
+          } else {
+            args.push(
+              '-vf',
+              `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
+            );
+          }
+          break;
+        case 'vaapi':
+          args.push('-c:v', 'h264_vaapi');
+          if (isHdr) {
+            args.push(
+              '-vf',
+              `${hwCrop}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
+            );
+          } else if (crop) {
+            args.push('-vf', `${hwCrop}scale_vaapi=w=${w}:h=-16:format=nv12`);
+          } else {
+            args.push('-vf', `scale_vaapi=w=${w}:h=-16:format=nv12`);
+          }
+          break;
+        case 'nvenc':
+          args.push('-c:v', 'h264_nvenc', '-preset', 'p4');
+          if (isHdr) {
+            args.push(
+              '-vf',
+              `hwdownload,format=p010le,${cropF}zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=${w}:-2`,
+            );
+          } else if (crop) {
+            args.push(
+              '-vf',
+              `hwdownload,format=nv12,${cropF}scale=${w}:-2,format=yuv420p`,
+            );
+          } else {
+            args.push('-vf', `scale_cuda=w=${w}:h=-2:format=nv12`);
+          }
+          break;
+        default:
+          args.push('-c:v', 'libx264', '-preset', 'veryfast');
+          if (isHdr) {
+            args.push(
+              '-vf',
+              `${cropF}zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=${w}:-2:flags=lanczos`,
+            );
+          } else {
+            args.push(
+              '-vf',
+              `${cropF}scale=${w}:-2:flags=lanczos,format=yuv420p`,
+            );
+          }
+      }
+
+      const bufsize = `${parseInt(profile.videoBitrate) * 2}${profile.videoBitrate.replace(/[0-9.]/g, '')}`;
+      args.push(
+        '-b:v',
+        profile.videoBitrate,
+        '-maxrate',
+        profile.videoBitrate,
+        '-bufsize',
+        bufsize,
+      );
+      const reasons = [needsScale ? 'scale' : '', isHdr ? 'HDR' : '', crop ? 'crop' : '', !isH264 ? `codec "${sourceVideoCodec}"→H264` : ''].filter(Boolean).join(', ');
+      this.log.log(`Download: video "${sourceVideoCodec}" → transcode (${reasons})`);
+    } else {
+      // Video copy — no re-encode needed (same resolution, no HDR, no crop,
+      // codec supported). Massively faster: remux speed.
+      args.push('-i', inputPath);
+
+      const extSubs = subtitles.filter((s) => s.relativePath);
+      for (const sub of extSubs) {
+        args.push('-i', path.resolve(resolved.media.path!, sub.relativePath!));
+      }
+
+      args.push('-c:v', 'copy');
+      this.log.log(`Download: video "${sourceVideoCodec}" → copy`);
     }
-
-    args.push('-i', inputPath);
-
-    // External subtitle file inputs
-    const extSubs = subtitles.filter((s) => s.relativePath);
-    for (const sub of extSubs) {
-      args.push('-i', path.resolve(resolved.media.path!, sub.relativePath!));
-    }
-
-    // Video filter chain
-    const w = profile.maxWidth;
-    const cropF = crop
-      ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},`
-      : '';
-    const hwCrop = crop
-      ? `hwdownload,format=nv12,${cropF}hwupload=derive_device=vaapi,`
-      : '';
-
-    switch (effectiveHw) {
-      case 'qsv':
-        args.push('-c:v', 'h264_qsv');
-        if (isHdr) {
-          args.push(
-            '-vf',
-            `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
-          );
-        } else {
-          args.push(
-            '-vf',
-            `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
-          );
-        }
-        break;
-      case 'vaapi':
-        args.push('-c:v', 'h264_vaapi');
-        if (isHdr) {
-          args.push(
-            '-vf',
-            `${hwCrop}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
-          );
-        } else if (crop) {
-          args.push('-vf', `${hwCrop}scale_vaapi=w=${w}:h=-16:format=nv12`);
-        } else {
-          args.push('-vf', `scale_vaapi=w=${w}:h=-16:format=nv12`);
-        }
-        break;
-      case 'nvenc':
-        args.push('-c:v', 'h264_nvenc', '-preset', 'p4');
-        if (isHdr) {
-          args.push(
-            '-vf',
-            `hwdownload,format=p010le,${cropF}zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=${w}:-2`,
-          );
-        } else if (crop) {
-          args.push(
-            '-vf',
-            `hwdownload,format=nv12,${cropF}scale=${w}:-2,format=yuv420p`,
-          );
-        } else {
-          args.push('-vf', `scale_cuda=w=${w}:h=-2:format=nv12`);
-        }
-        break;
-      default: // CPU
-        args.push('-c:v', 'libx264', '-preset', 'veryfast');
-        if (isHdr) {
-          args.push(
-            '-vf',
-            `${cropF}zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=${w}:-2:flags=lanczos`,
-          );
-        } else {
-          args.push(
-            '-vf',
-            `${cropF}scale=${w}:-2:flags=lanczos,format=yuv420p`,
-          );
-        }
-    }
-
-    // Rate control: cap VBV buffer to prevent unbounded memory growth on long encodes
-    const bufsize = `${parseInt(profile.videoBitrate) * 2}${profile.videoBitrate.replace(/[0-9.]/g, '')}`;
-    args.push(
-      '-b:v',
-      profile.videoBitrate,
-      '-maxrate',
-      profile.videoBitrate,
-      '-bufsize',
-      bufsize,
-    );
 
     // Map video + ALL audio tracks (multi-language offline playback).
-    // Each audio track → AAC. Language metadata preserved so players expose
-    // track names (ExoPlayer, AVPlayer, Shaka).
-    const audioStreams: { language?: string }[] =
+    const audioStreams: { language?: string; codec?: string }[] =
       resolved.mediaFile.streamInfo?.audio ?? [];
     args.push('-map', '0:v:0');
     if (audioStreams.length > 1) {
@@ -791,13 +842,26 @@ export class InappDownloadsService implements OnModuleInit {
         args.push('-map', `0:a:${i}`);
         const lang = audioStreams[i].language;
         if (lang) args.push(`-metadata:s:a:${i}`, `language=${lang}`);
+        const codec = (audioStreams[i].codec ?? '').toLowerCase();
+        if (deviceAudioCodecs?.length && !this.isAudioSupported(codec, deviceAudioCodecs)) {
+          this.log.log(`Download: audio track ${i} "${codec}" → AAC`);
+          args.push(`-c:a:${i}`, 'aac', `-b:a:${i}`, profile.audioBitrate);
+        } else {
+          this.log.log(`Download: audio track ${i} "${codec}" → copy`);
+          args.push(`-c:a:${i}`, 'copy');
+        }
       }
     } else {
       args.push('-map', '0:a');
+      const codec = (audioStreams[0]?.codec ?? '').toLowerCase();
+      if (deviceAudioCodecs?.length && !this.isAudioSupported(codec, deviceAudioCodecs)) {
+        this.log.log(`Download: audio "${codec}" → AAC`);
+        args.push('-c:a', 'aac', '-b:a', profile.audioBitrate);
+      } else {
+        this.log.log(`Download: audio "${codec}" → copy`);
+        args.push('-c:a', 'copy');
+      }
     }
-    // Copy audio as-is — no re-encode, keep original codec (EAC3/AC3/AAC/etc.)
-    // and channel layout (5.1/7.1/stereo). All modern players handle these in fMP4.
-    args.push('-c:a', 'copy');
 
     // Limit muxer packet queue — prevents unbounded memory growth during full-file encodes
     args.push('-max_muxing_queue_size', '4096');
@@ -826,6 +890,51 @@ export class InappDownloadsService implements OnModuleInit {
       );
     }
     return args;
+  }
+
+  /**
+   * Check if a source audio codec is supported by the device.
+   * Normalises common codec names (ffprobe → device profile).
+   */
+  private isVideoSupported(codec: string, supported: string[]): boolean {
+    if (!codec || !supported.length) return true;
+    const norm = supported.map((c) => c.toLowerCase());
+    if (norm.includes(codec)) return true;
+    const aliases: Record<string, string[]> = {
+      h264: ['h264', 'avc', 'avc1'],
+      hevc: ['hevc', 'h265', 'hvc1', 'hev1'],
+      vp9: ['vp9', 'vp09'],
+      vp8: ['vp8'],
+      av1: ['av1', 'av01'],
+    };
+    for (const [, variants] of Object.entries(aliases)) {
+      if (variants.includes(codec) && norm.some((n) => variants.includes(n))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private isAudioSupported(codec: string, supported: string[]): boolean {
+    if (!codec || !supported.length) return true;
+    const norm = supported.map((c) => c.toLowerCase());
+    // Direct match
+    if (norm.includes(codec)) return true;
+    // Common aliases: eac3 ↔ ec-3, ac3 ↔ ac-3, aac variants
+    const aliases: Record<string, string[]> = {
+      eac3: ['ec-3', 'e-ac-3', 'eac3'],
+      ac3: ['ac-3', 'ac3'],
+      aac: ['aac', 'mp4a', 'mp4a.40.2'],
+      opus: ['opus'],
+      flac: ['flac'],
+      dts: ['dts', 'dca'],
+    };
+    for (const [key, variants] of Object.entries(aliases)) {
+      if (variants.includes(codec) && norm.some((n) => variants.includes(n) || n === key)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private async extractSubtitlesAsVtt(

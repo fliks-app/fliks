@@ -343,39 +343,44 @@ public class DownloadForegroundService extends Service {
                 java.io.File dir = new java.io.File(destDir);
                 if (!dir.exists()) dir.mkdirs();
 
-                // Resume from last saved progress if available
+                // Resume from last saved progress if available.
+                // Validate that init.mp4 exists — if not, the dir is stale
+                // (previous download was deleted) and we must start fresh.
                 java.io.File progressFile = new java.io.File(destDir, ".progress");
-                if (progressFile.exists()) {
+                java.io.File initFile = new java.io.File(destDir, "init.mp4");
+                if (progressFile.exists() && initFile.exists()) {
                     try {
                         String val = new java.util.Scanner(progressFile).useDelimiter("\\A").next().trim();
                         nextSeg = Integer.parseInt(val);
                         Log.d(TAG, "Progressive #" + taskId + ": resuming from segment " + nextSeg);
                     } catch (Exception ignored) {}
+                } else if (progressFile.exists()) {
+                    // Stale progress from a deleted download — reset
+                    progressFile.delete();
+                    Log.d(TAG, "Progressive #" + taskId + ": stale .progress deleted, starting fresh");
                 }
 
+                // Get initial total for progress display
+                String statusUrl = baseUrl + "/api/downloads/" + taskId + "/status";
+                JSONObject initSt = httpGetJson(statusUrl, token);
+                int total = initSt.optInt("totalSegments", 0);
+
+                // Fetch init.mp4 — server blocks via waitForFile if not ready
+                if (nextSeg == -1) {
+                    downloadSegment(baseUrl, token, taskId, "init.mp4", destDir);
+                    nextSeg = 0;
+                }
+
+                // Fetch segments one by one — no polling. The server's
+                // /segment/:filename endpoint blocks until the segment is
+                // written by FFmpeg (waitForFile, 30s timeout). Zero overhead.
                 while (true) {
-                    // Poll status
-                    String statusUrl = baseUrl + "/api/downloads/" + taskId + "/status";
-                    JSONObject st = httpGetJson(statusUrl, token);
-                    int available = st.optInt("segmentCount", 0);
-                    boolean done = st.optBoolean("done", false);
-                    int total = st.optInt("totalSegments", 0);
-
-                    // Download init.mp4 first
-                    if (nextSeg == -1) {
-                        if (available > 0 || done) {
-                            downloadSegment(baseUrl, token, taskId, "init.mp4", destDir);
-                            nextSeg = 0;
-                        }
-                    }
-
-                    // Download newly available segments
-                    while (nextSeg >= 0 && nextSeg < available) {
-                        String segName = String.format("seg-%04d.m4s", nextSeg);
+                    String segName = String.format("seg-%04d.m4s", nextSeg);
+                    try {
                         downloadSegment(baseUrl, token, taskId, segName, destDir);
                         nextSeg++;
                         renewWakeLock();
-                        // Persist progress for resume after kill
+                        // Persist progress
                         try {
                             java.io.FileWriter pw = new java.io.FileWriter(destDir + "/.progress");
                             pw.write(String.valueOf(nextSeg));
@@ -390,9 +395,18 @@ public class DownloadForegroundService extends Service {
                         ts.status = "downloading";
                         updateSingleNotification(taskId);
                         emitToWebView("downloadProgress", taskId, pct, "downloading");
+                    } catch (Exception segErr) {
+                        // Segment fetch failed — check if transcode is done
+                        JSONObject st = httpGetJson(statusUrl, token);
+                        total = st.optInt("totalSegments", total);
+                        if (st.optBoolean("done", false) && nextSeg >= st.optInt("segmentCount", 0)) break;
+                        // Not done — transient error, brief wait and retry
+                        Thread.sleep(500);
+                        continue;
                     }
+                }
 
-                    if (done && nextSeg >= available) {
+                {
                         // All segments downloaded — generate local manifest + cleanup progress
                         new java.io.File(destDir, ".progress").delete();
                         generateLocalManifest(destDir, nextSeg, segDuration);
@@ -429,7 +443,7 @@ public class DownloadForegroundService extends Service {
 
                     // Wait before next poll — InterruptedException means service
                     // is shutting down; exit gracefully without marking as failed.
-                    try { Thread.sleep(2000); } catch (InterruptedException ie) {
+                    try { Thread.sleep(500); } catch (InterruptedException ie) {
                         Log.d(TAG, "Progressive #" + taskId + ": interrupted during sleep, exiting");
                         return;
                     }

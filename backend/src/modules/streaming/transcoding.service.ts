@@ -306,6 +306,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     INIT_TIME = initTime;
   }
 
+  getSegmentDuration(): number {
+    return SEGMENT_DURATION;
+  }
+
   getActiveSessions(): TranscodeSession[] {
     return Array.from(this.sessions.values());
   }

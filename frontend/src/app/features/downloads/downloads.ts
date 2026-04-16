@@ -70,14 +70,17 @@ export class DownloadsComponent implements OnInit, OnDestroy {
    */
   private readonly nativeState = signal<Map<number, { progress: number; status: string }>>(new Map());
 
-  /** Web only: react to SSE events */
+  /** Web only: react to download manager events */
   private readonly sseEffect = !this.isNative ? effect(() => {
     const event = this.dlManager.lastDownloadEvent();
     if (!event) return;
     if (event.type === 'progress') {
+      // Normalize status to DB values (template only matches transcoding/pending)
+      const status = event.status === 'downloading' ? 'transcoding'
+        : (event.status ?? 'transcoding');
       this.nativeState.update((m) => {
         const next = new Map(m);
-        next.set(event.taskId, { progress: event.progress, status: event.status ?? 'transcoding' });
+        next.set(event.taskId, { progress: event.progress, status });
         return next;
       });
     } else {
