@@ -10,9 +10,9 @@ import {
 } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
 import {
-  DownloadsApiService,
+  StreamingApiService,
   DownloadQuality,
-} from '../../../core/services/api/downloads-api.service';
+} from '../../../core/services/api/streaming-api.service';
 import { LucideDownload, LucideX } from '@lucide/angular';
 
 @Component({
@@ -63,7 +63,7 @@ import { LucideDownload, LucideX } from '@lucide/angular';
   `,
 })
 export class DownloadQualityModalComponent {
-  private readonly downloadsApi = inject(DownloadsApiService);
+  private readonly streamingApi = inject(StreamingApiService);
 
   @ViewChild('dialog') dialogRef!: ElementRef<HTMLDialogElement>;
 
@@ -83,7 +83,7 @@ export class DownloadQualityModalComponent {
     this.downloadProgress.set(0);
     this.dialogRef.nativeElement.showModal();
     try {
-      const q = await this.downloadsApi.getQualities(mediaFileId);
+      const q = await this.streamingApi.getDownloadQualities(mediaFileId);
       this.qualities.set(q);
     } finally {
       this.loading.set(false);

@@ -1,5 +1,30 @@
 import { Injectable, signal } from '@angular/core';
-import { DownloadTask } from './api/downloads-api.service';
+
+/** Client-side download task tracked in localStorage. */
+export interface DownloadTask {
+  id: number;
+  mediaId: number;
+  episodeId?: number;
+  mediaFileId: number;
+  quality: string;
+  status: string;
+  progress: number;
+  episodeLabel?: string;
+  error?: string;
+  createdAt: string;
+  /** HLS URL used for the download — needed for native offline playback via CacheDataSource. */
+  hlsUrl?: string;
+  /** Pre-downloaded subtitle metadata for offline playback. */
+  offlineSubtitles?: { key: string; language: string; label: string; forced?: boolean }[];
+  /** Audio stream info for offline audio track picker. */
+  audioStreams?: { language?: string; title?: string; codec?: string; channels?: number }[];
+  media?: {
+    id: number;
+    title: string;
+    posterUrl: string | null;
+    type: string;
+  };
+}
 
 const STORAGE_KEY = 'fliks.downloads.cache';
 const LOCAL_IDS_KEY = 'fliks.downloads.localIds';

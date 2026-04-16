@@ -384,4 +384,16 @@ export class StreamingApiService {
       this.http.delete<void>(`/api/playback/hide/${mediaId}`),
     );
   }
+
+  getDownloadQualities(mediaFileId: number) {
+    return firstValueFrom(
+      this.http.get<DownloadQuality[]>(`/api/stream/info/qualities/${mediaFileId}`),
+    );
+  }
+}
+
+export interface DownloadQuality {
+  key: string;
+  label: string;
+  estimatedSize: number;
 }

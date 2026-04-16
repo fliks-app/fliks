@@ -55,9 +55,6 @@ export type SseEvent =
       action: 'pause' | 'play' | 'stop' | 'message';
       message?: string;
     }
-  | { type: 'download.progress'; downloadId: number; progress: number }
-  | { type: 'download.ready'; downloadId: number }
-  | { type: 'download.failed'; downloadId: number; error: string }
   | {
       type: 'markers.season.completed';
       mediaId: number;

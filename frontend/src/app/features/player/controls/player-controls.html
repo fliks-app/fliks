@@ -115,9 +115,11 @@
             <svg lucideSkipForward class="h-5 w-5"></svg>
           </button>
         }
-        <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" (click)="openSheet('subtitles')">
-          <svg lucideCaptions class="h-5 w-5"></svg>
-        </button>
+        @if (availableSubtitles().length > 0) {
+          <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" (click)="openSheet('subtitles')">
+            <svg lucideCaptions class="h-5 w-5"></svg>
+          </button>
+        }
         @if (availableAudioTracks().length > 1) {
           <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" (click)="openSheet('audio')">
             <svg lucideHeadphones class="h-5 w-5"></svg>
@@ -182,6 +184,7 @@
       <!-- Right: action buttons -->
       <div class="flex items-center gap-1.5">
         <!-- Subtitles dropdown -->
+        @if (availableSubtitles().length > 0) {
         <div class="dropdown dropdown-top dropdown-end" (focusin)="onDropdownFocus()" (focusout)="onDropdownBlur()">
           <button tabindex="0" type="button" class="btn btn-ghost btn-md btn-circle text-white/80">
             <svg lucideCaptions class="h-6 w-6"></svg>
@@ -202,6 +205,7 @@
             }
           </div>
         </div>
+        }
         <!-- Audio track dropdown (desktop) -->
         @if (availableAudioTracks().length > 1) {
           <div class="dropdown dropdown-top dropdown-end" (focusin)="onDropdownFocus()" (focusout)="onDropdownBlur()">
@@ -326,11 +330,13 @@
   <div class="px-4 pb-4">
     @if (settingsPanel() === 'main') {
       <div class="text-center text-white/60 text-xs font-medium mb-3">Paramètres</div>
-      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="settingsPanel.set('quality')">
-        <span class="flex-1 text-left">Qualité</span>
-        <span class="text-white/40 text-xs">{{ activeQualityLabel() }}</span>
-        <svg lucideChevronRight class="h-4 w-4 text-white/30 shrink-0"></svg>
-      </button>
+      @if (availableQualities().length > 1) {
+        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="settingsPanel.set('quality')">
+          <span class="flex-1 text-left">Qualité</span>
+          <span class="text-white/40 text-xs">{{ activeQualityLabel() }}</span>
+          <svg lucideChevronRight class="h-4 w-4 text-white/30 shrink-0"></svg>
+        </button>
+      }
       <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="toggleFillScreen.emit()">
         <span class="flex-1 text-left">Remplir l'écran</span>
         @if (fillScreen()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
@@ -367,11 +373,13 @@
     @if (settingsPanel() === 'main') {
       <div class="py-2 px-1">
         <!-- Quality row → opens sub-panel -->
-        <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="settingsPanel.set('quality')">
-          <span class="flex-1 text-left">Qualité</span>
-          <span class="text-white/50 text-xs">{{ activeQualityLabel() }}</span>
-          <svg lucideChevronRight class="h-4 w-4 text-white/40 shrink-0"></svg>
-        </button>
+        @if (availableQualities().length > 1) {
+          <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="settingsPanel.set('quality')">
+            <span class="flex-1 text-left">Qualité</span>
+            <span class="text-white/50 text-xs">{{ activeQualityLabel() }}</span>
+            <svg lucideChevronRight class="h-4 w-4 text-white/40 shrink-0"></svg>
+          </button>
+        }
         <!-- Fill screen -->
         <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="toggleFillScreen.emit()">
           <span class="flex-1 text-left">Remplir l'écran</span>

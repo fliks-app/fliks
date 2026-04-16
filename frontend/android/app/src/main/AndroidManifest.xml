@@ -42,7 +42,7 @@
         </provider>
 
         <service
-            android:name=".DownloadForegroundService"
+            android:name=".FlixDownloadService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
     </application>

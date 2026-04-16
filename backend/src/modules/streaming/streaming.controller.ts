@@ -47,7 +47,10 @@ function buildVodPlaylist(
   segmentUrl: (index: string) => string,
   initUrl?: string,
 ): string {
-  const segCount = Math.ceil(duration / SEG_DURATION);
+  // Subtract small epsilon before ceil to avoid phantom last segment when
+  // ffprobe duration has floating-point imprecision (e.g. 120.001 → ceil
+  // produces 41 segments but FFmpeg only writes 40).
+  const segCount = Math.max(1, Math.ceil((duration - 0.05) / SEG_DURATION));
   const lines = [
     '#EXTM3U',
     '#EXT-X-VERSION:7',
@@ -216,6 +219,55 @@ export class StreamingController {
       }
     }
     return duration;
+  }
+
+  /** Available download qualities for a media file (used by download-quality modal). */
+  @Get('info/qualities/:mediaFileId')
+  async downloadQualities(
+    @Req() req: Request,
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+  ) {
+    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
+    const info = resolved.mediaFile.streamInfo;
+    const fileSize = resolved.size;
+    const video = (info as any)?.video?.[0];
+    const sourceWidth = video?.width ?? 1920;
+    const sourceHeight = video?.height ?? 1080;
+    const sourceBitrate = (info as any)?.formatBitRate ?? 0;
+
+    const qualities: { key: string; label: string; estimatedSize: number }[] = [];
+    for (const p of PROFILES) {
+      if (p.maxWidth > sourceWidth && p.maxHeight > sourceHeight) continue;
+      const videoBps = this.parseBitrateString(p.videoBitrate);
+      const audioBps = this.parseBitrateString(p.audioBitrate);
+      const duration = (info as any)?.durationSeconds ?? 0;
+      const estimated =
+        duration > 0
+          ? Math.floor(((videoBps + audioBps) * duration) / 8)
+          : Math.floor(fileSize * (videoBps / Math.max(sourceBitrate, videoBps)));
+      const sizeLabel =
+        estimated >= 1e9
+          ? `${(estimated / 1e9).toFixed(1)} GB`
+          : estimated >= 1e6
+            ? `${(estimated / 1e6).toFixed(0)} MB`
+            : `${(estimated / 1e3).toFixed(0)} KB`;
+      qualities.push({
+        key: p.name,
+        label: `${p.name} (~${sizeLabel})`,
+        estimatedSize: estimated,
+      });
+    }
+    return qualities;
+  }
+
+  private parseBitrateString(s: string): number {
+    const match = s.match(/^(\d+(?:\.\d+)?)\s*(k|m)?$/i);
+    if (!match) return 0;
+    const n = parseFloat(match[1]);
+    const unit = (match[2] ?? '').toLowerCase();
+    if (unit === 'k') return n * 1000;
+    if (unit === 'm') return n * 1_000_000;
+    return n;
   }
 
   /** Current hardware acceleration type detected by the server. */
@@ -883,15 +935,10 @@ export class StreamingController {
     const segMatch = segment.match(/seg-(\d+)\.(ts|m4s)/);
     const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
 
-    // If an active session already has this segment ON DISK, serve it
-    // without any DB query or session management. Only checks existsSync
-    // (instant) — does NOT call getSegmentPath (which would wait via
-    // fs.watch and block the request if the segment isn't being produced).
-    if (
-      existing &&
-      existing.quality === quality &&
-      existing.process.exitCode === null
-    ) {
+    // If a session (running OR completed) already has this segment ON DISK,
+    // serve it without any DB query or session management. Completed sessions
+    // (exitCode !== null) still have valid segments in cache — don't skip them.
+    if (existing && existing.quality === quality) {
       const varStreamMap =
         this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
         this.activeStreamTracker.getFmp4Supported(mediaFileId);
@@ -949,6 +996,9 @@ export class StreamingController {
       segName,
     );
     if (!segPath) {
+      this.log.warn(
+        `Segment 404: ${segment} (quality=${quality}, mfid=${mediaFileId}, exitCode=${session.process.exitCode})`,
+      );
       res.status(404).send('Segment not found');
       return;
     }

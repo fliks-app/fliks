@@ -48,6 +48,7 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>fetch</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Fliks uses the local network to discover and connect to Cast-enabled devices.</string>

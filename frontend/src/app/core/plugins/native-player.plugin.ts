@@ -67,6 +67,8 @@ export interface NativePlayerPlugin {
     startTime?: number;
     headers?: Record<string, string>;
     subtitles?: { url: string; language: string; label: string }[];
+    /** Use CacheDataSource for offline playback (Android). */
+    offline?: boolean;
   }): Promise<void>;
 
   play(): Promise<void>;

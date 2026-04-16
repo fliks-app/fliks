@@ -295,6 +295,7 @@ export class CompletionService {
 
     const media = await this.mediaRepo.findOne({
       where: { id: history.mediaId },
+      relations: ['rootFolder'],
     });
     if (!media) {
       this.log.warn(
@@ -308,8 +309,9 @@ export class CompletionService {
 
     const releaseGroup = this.naming.extractReleaseGroup(history.sourceTitle);
 
-    // Destination root folder
-    let rootPath = media.path ?? '';
+    // Destination root folder (just the root, without folderName — folderName
+    // is appended separately when building destDir).
+    let rootPath = media.rootFolder?.path ?? '';
     if (!rootPath) {
       if (!rootFolders.length) {
         this.log.warn(
@@ -352,7 +354,9 @@ export class CompletionService {
       );
     }
 
-    const libraryRoot = path.normalize(rootPath);
+    // libraryRoot = rootPath + folderName (= media.path) — relativePath is
+    // stored relative to this because resolveFile joins media.path + relativePath.
+    const libraryRoot = path.normalize(path.join(rootPath, folderName));
     const companionExts = await this.getCompanionExts();
 
     // For movies or single episode: import the largest file

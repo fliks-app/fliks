@@ -1,8 +1,12 @@
 import { Injectable, inject } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
+import shaka from 'shaka-player';
 import { AuthService } from './auth.service';
 
 const CACHE_NAME = 'offline-media';
+
+/** Map mediaFileId → Shaka offline:xxx URI. Persisted in localStorage. */
+const SHAKA_OFFLINE_KEY = 'fliks.shakaOfflineUris';
 
 /** Lazy-loaded Filesystem reference — avoids crash on web where the plugin isn't available. */
 let _fs: typeof import('@capacitor/filesystem') | null = null;
@@ -16,46 +20,139 @@ export class OfflineStorageService {
   private readonly isNative = Capacitor.isNativePlatform();
   private readonly auth = inject(AuthService);
 
-  async download(
-    url: string,
-    key: string,
-    onProgress?: (percent: number) => void,
-  ): Promise<string> {
+  async getLocalUrl(key: string): Promise<string | null> {
     if (this.isNative) {
-      return this.downloadNative(url, key, onProgress);
+      // ExoPlayer stores content in SimpleCache, not filesystem.
+      // Return the stored HLS URL — native player uses CacheDataSource to
+      // read from cache. The URL is stored in the DownloadTask.
+      return this.getNativeOfflineUrl(key);
     }
-    return this.downloadWeb(url, key, onProgress);
+    // Web: check Shaka offline URI (stored in localStorage)
+    const mfid = key.replace('download-', '');
+    const offlineUri = this.getShakaOfflineUri(Number(mfid));
+    return offlineUri ?? null;
   }
 
-  async getLocalUrl(key: string): Promise<string | null> {
-    if (this.isNative) return this.getNativeUrl(key);
-    return this.getWebUrl(key);
+  /** Look up the stored HLS URL for a native download from localStorage. */
+  private getNativeOfflineUrl(key: string): string | null {
+    try {
+      const mfid = Number(key.replace('download-', ''));
+      const raw = localStorage.getItem('fliks.downloads.cache');
+      const tasks: any[] = raw ? JSON.parse(raw) : [];
+      const task = tasks.find((t: any) => t.mediaFileId === mfid && t.status === 'ready');
+      return task?.hlsUrl ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  // --- Shaka offline storage (web only) ---
+
+  /** Get stored Shaka offline URI for a media file, or null. */
+  getShakaOfflineUri(mediaFileId: number): string | null {
+    try {
+      const map = JSON.parse(localStorage.getItem(SHAKA_OFFLINE_KEY) ?? '{}');
+      return map[String(mediaFileId)] ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private setShakaOfflineUri(mediaFileId: number, uri: string): void {
+    try {
+      const map = JSON.parse(localStorage.getItem(SHAKA_OFFLINE_KEY) ?? '{}');
+      map[String(mediaFileId)] = uri;
+      localStorage.setItem(SHAKA_OFFLINE_KEY, JSON.stringify(map));
+    } catch { /* ignore */ }
+  }
+
+  private removeShakaOfflineUri(mediaFileId: number): void {
+    try {
+      const map = JSON.parse(localStorage.getItem(SHAKA_OFFLINE_KEY) ?? '{}');
+      delete map[String(mediaFileId)];
+      localStorage.setItem(SHAKA_OFFLINE_KEY, JSON.stringify(map));
+    } catch { /* ignore */ }
+  }
+
+  /**
+   * Use Shaka's built-in offline storage to download an HLS stream into
+   * IndexedDB. Returns the `offline:` URI for playback, or null on failure.
+   */
+  async shakaStore(
+    hlsUrl: string,
+    mediaFileId: number,
+    meta: { title: string; episode?: string },
+    onProgress?: (progress: number) => void,
+  ): Promise<string | null> {
+    if (this.isNative) return null;
+
+    // Create a temporary Shaka player for the storage API.
+    const video = document.createElement('video');
+    video.style.display = 'none';
+    document.body.appendChild(video);
+    const player = new shaka.Player();
+    await player.attach(video);
+
+    // Configure auth header for segment fetches
+    const token = this.auth.accessToken;
+    if (token) {
+      player.getNetworkingEngine()?.registerRequestFilter((_type: any, request: any) => {
+        if (request.uris?.[0]?.includes('/api/')) {
+          request.headers['Authorization'] = `Bearer ${token}`;
+        }
+      });
+    }
+
+    const storage = new shaka.offline.Storage(player);
+    storage.configure({
+      offline: {
+        numberOfParallelDownloads: 1,
+        progressCallback: (_content: any, progress: number) => {
+          onProgress?.(progress);
+        },
+      },
+    } as any);
+
+    try {
+      const op: any = storage.store(hlsUrl, { title: meta.title, episode: meta.episode ?? '' });
+      // storage.store() returns an AbortableOperation — await its .promise
+      const stored = await (op.promise ?? op);
+      console.log('[Shaka offline] store result:', stored);
+      const offlineUri: string | undefined = stored?.offlineUri;
+      if (offlineUri) {
+        this.setShakaOfflineUri(mediaFileId, offlineUri);
+      }
+      return offlineUri ?? null;
+    } finally {
+      await storage.destroy();
+      await player.destroy();
+      video.remove();
+    }
+  }
+
+  /** Remove Shaka offline content for a media file. */
+  async shakaRemove(mediaFileId: number): Promise<void> {
+    const uri = this.getShakaOfflineUri(mediaFileId);
+    if (!uri) return;
+
+    const video = document.createElement('video');
+    const player = new shaka.Player();
+    await player.attach(video);
+    const storage = new shaka.offline.Storage(player);
+    try {
+      await storage.remove(uri);
+    } catch { /* already removed or not found */ }
+    await storage.destroy();
+    await player.destroy();
+    video.remove();
+    this.removeShakaOfflineUri(mediaFileId);
   }
 
   async delete(key: string): Promise<void> {
     if (this.isNative) return this.deleteNative(key);
-    return this.deleteWeb(key);
-  }
-
-  /**
-   * Get the native filesystem path for a download key (Android only).
-   * Returns null on web.
-   */
-  async getNativeDestPath(key: string): Promise<string | null> {
-    if (!this.isNative) return null;
-    try {
-      const { Filesystem, Directory } = await getFs();
-      await this.ensureDir();
-      // Get the real filesystem URI and extract the path
-      const uri = await Filesystem.getUri({
-        path: this.filePath(key),
-        directory: Directory.Data,
-      });
-      // uri.uri is like "file:///data/user/0/com.fliks.app/files/fliks-downloads/download-42.mp4"
-      return uri.uri.replace('file://', '');
-    } catch {
-      return null;
-    }
+    // Web: remove Shaka offline content
+    const mfid = Number(key.replace('download-', ''));
+    await this.shakaRemove(mfid);
   }
 
   /** Download a small text file (VTT subtitle) and store locally. */
@@ -109,16 +206,46 @@ export class OfflineStorageService {
     }
   }
 
+  /** Get native file URI for a small file (for ExoPlayer — not a blob URL). */
+  async getSmallFileNativeUri(key: string): Promise<string | null> {
+    if (!this.isNative) return this.getSmallFileUrl(key);
+    try {
+      const { Filesystem, Directory } = await getFs();
+      const result = await Filesystem.getUri({
+        path: `fliks-downloads/${key}`,
+        directory: Directory.Data,
+      });
+      return result.uri; // file:///data/... — ExoPlayer can read this
+    } catch {
+      return null;
+    }
+  }
+
   async has(key: string): Promise<boolean> {
-    if (this.isNative) return this.hasNative(key);
-    return this.hasWeb(key);
+    if (this.isNative) {
+      // ExoPlayer stores in SimpleCache, not filesystem — check localStorage.
+      return this.getNativeOfflineUrl(key) !== null;
+    }
+    // Web: check Shaka offline URI
+    const mfid = key.replace('download-', '');
+    return !!this.getShakaOfflineUri(Number(mfid));
+  }
+
+  /** Get the native directory path for progressive downloads (HLS segments). */
+  async getNativeDestDir(key: string): Promise<string | null> {
+    if (!this.isNative) return null;
+    try {
+      const { Filesystem, Directory } = await getFs();
+      const dirPath = `fliks-downloads/${key}`;
+      await Filesystem.mkdir({ path: dirPath, directory: Directory.Data, recursive: true }).catch(() => {});
+      const uri = await Filesystem.getUri({ path: dirPath, directory: Directory.Data });
+      return uri.uri.replace('file://', '');
+    } catch {
+      return null;
+    }
   }
 
   // --- Native (Capacitor Filesystem) ---
-
-  private filePath(key: string): string {
-    return `fliks-downloads/${key}.mp4`;
-  }
 
   private async ensureDir(): Promise<void> {
     try {
@@ -128,79 +255,14 @@ export class OfflineStorageService {
         directory: Directory.Data,
         recursive: true,
       });
-    } catch {
-      // Already exists
-    }
-  }
-
-  private async downloadNative(
-    url: string,
-    key: string,
-    onProgress?: (percent: number) => void,
-  ): Promise<string> {
-    const { Filesystem, Directory } = await getFs();
-    await this.ensureDir();
-
-    // Get expected size via HEAD request
-    let expectedSize = 0;
-    if (onProgress) {
-      try {
-        const head = await fetch(url, {
-          method: 'HEAD',
-          headers: { Authorization: `Bearer ${this.auth.accessToken}` },
-        });
-        expectedSize = Number(head.headers.get('content-length') ?? 0);
-      } catch {
-        // ignore — progress won't work
-      }
-    }
-
-    // Poll file size for progress during download
-    let pollTimer: ReturnType<typeof setInterval> | null = null;
-    if (onProgress && expectedSize > 0) {
-      pollTimer = setInterval(async () => {
-        try {
-          const stat = await Filesystem.stat({
-            path: this.filePath(key),
-            directory: Directory.Data,
-          });
-          const pct = Math.min(99, Math.round((stat.size / expectedSize) * 100));
-          onProgress(pct);
-        } catch {
-          // File not created yet
-        }
-      }, 1000);
-    }
-
-    try {
-      const result = await Filesystem.downloadFile({
-        url,
-        path: this.filePath(key),
-        directory: Directory.Data,
-        headers: { Authorization: `Bearer ${this.auth.accessToken}` },
-      });
-
-      onProgress?.(100);
-
-      if (result.path) {
-        return Capacitor.convertFileSrc(result.path);
-      }
-
-      const uri = await Filesystem.getUri({
-        path: this.filePath(key),
-        directory: Directory.Data,
-      });
-      return Capacitor.convertFileSrc(uri.uri);
-    } finally {
-      if (pollTimer) clearInterval(pollTimer);
-    }
+    } catch { /* Already exists */ }
   }
 
   private async hasNative(key: string): Promise<boolean> {
     try {
       const { Filesystem, Directory } = await getFs();
       await Filesystem.stat({
-        path: this.filePath(key),
+        path: `fliks-downloads/${key}`,
         directory: Directory.Data,
       });
       return true;
@@ -209,12 +271,12 @@ export class OfflineStorageService {
     }
   }
 
-  private async getNativeUrl(key: string): Promise<string | null> {
-    if (!(await this.hasNative(key))) return null;
+  private async getNativeHlsUrl(key: string): Promise<string | null> {
+    if (!(await this.hasNative(`${key}/index.m3u8`))) return null;
     try {
       const { Filesystem, Directory } = await getFs();
       const result = await Filesystem.getUri({
-        path: this.filePath(key),
+        path: `fliks-downloads/${key}/index.m3u8`,
         directory: Directory.Data,
       });
       return Capacitor.convertFileSrc(result.uri);
@@ -226,77 +288,12 @@ export class OfflineStorageService {
   private async deleteNative(key: string): Promise<void> {
     try {
       const { Filesystem, Directory } = await getFs();
-      await Filesystem.deleteFile({
-        path: this.filePath(key),
+      await Filesystem.rmdir({
+        path: `fliks-downloads/${key}`,
         directory: Directory.Data,
+        recursive: true,
       });
-    } catch {
-      // File doesn't exist — fine
-    }
+    } catch { /* doesn't exist — fine */ }
   }
 
-  // --- Web (Cache API) ---
-
-  private async downloadWeb(
-    url: string,
-    key: string,
-    onProgress?: (percent: number) => void,
-  ): Promise<string> {
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${this.auth.accessToken}` },
-    });
-    if (!response.ok) throw new Error(`Download failed: ${response.status}`);
-
-    const contentLength = Number(response.headers.get('content-length') ?? 0);
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error('No response body');
-    const chunks: BlobPart[] = [];
-    let received = 0;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      received += value.length;
-      if (contentLength > 0 && onProgress) {
-        onProgress(Math.round((received / contentLength) * 100));
-      }
-    }
-
-    const blob = new Blob(chunks, { type: 'video/mp4' });
-    const cache = await caches.open(CACHE_NAME);
-    await cache.put(key, new Response(blob));
-    return URL.createObjectURL(blob);
-  }
-
-  private async hasWeb(key: string): Promise<boolean> {
-    try {
-      const cache = await caches.open(CACHE_NAME);
-      const match = await cache.match(key);
-      return match !== undefined;
-    } catch {
-      return false;
-    }
-  }
-
-  private async getWebUrl(key: string): Promise<string | null> {
-    try {
-      const cache = await caches.open(CACHE_NAME);
-      const response = await cache.match(key);
-      if (!response) return null;
-      const blob = await response.blob();
-      return URL.createObjectURL(blob);
-    } catch {
-      return null;
-    }
-  }
-
-  private async deleteWeb(key: string): Promise<void> {
-    try {
-      const cache = await caches.open(CACHE_NAME);
-      await cache.delete(key);
-    } catch {
-      // ignore
-    }
-  }
 }

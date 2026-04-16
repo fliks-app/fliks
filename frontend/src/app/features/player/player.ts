@@ -482,10 +482,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     try {
       // Only use offline playback if explicitly requested via query param
-      const offlineCheck = qp['offline'] === '1'
-        ? await this.offlineStorage.getLocalUrl(`download-${this.mediaFileId}`).catch(() => null)
-        : null;
-      if (offlineCheck) this.isOfflinePlayback = true;
+      let offlineCheck: string | null = null;
+      if (qp['offline'] === '1') {
+        offlineCheck = await this.offlineStorage.getLocalUrl(`download-${this.mediaFileId}`).catch(() => null);
+        if (!offlineCheck) {
+          this.state.error.set('Contenu offline introuvable. Re-téléchargez le média.');
+          return;
+        }
+        this.isOfflinePlayback = true;
+      }
 
       // Load media info + playback state in parallel
       // No stopSessions here — getOrCreateSession handles stale sessions naturally
@@ -541,16 +546,25 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       if (this.isOfflinePlayback) {
         this.state.playbackMode.set('direct');
+        this.qualityManager.availableQualities.set([]);
+
         if (this.isNative) {
-          // Offline on native: use ExoPlayer with the native file path
+          // Android: ExoPlayer with CacheDataSource (offline HLS from cache)
           await this.createNativeEngine();
-          const nativePath = await this.offlineStorage.getNativeDestPath(`download-${this.mediaFileId}`);
-          const fileUrl = nativePath ? `file://${nativePath}` : offlineCheck!;
-          await this.engine!.load(fileUrl, startTime, 'video/mp4');
+          (this.engine as NativeEngine).setOffline(true);
+          this.applyNativeSubtitleStyle();
+
+          // Pre-load offline subtitles so they're included in ExoPlayer's MediaItem
+          const offlineSubs = await this.getOfflineSubtitleConfigs();
+          if (offlineSubs.length) {
+            (this.engine as NativeEngine).setPreloadedSubtitles(offlineSubs);
+          }
+
+          await this.engine!.load(offlineCheck!, startTime, 'application/x-mpegURL');
         } else {
-          // Offline on web: use Shaka
+          // Web: Shaka offline URI ("offline:123") — IndexedDB-backed
           await this.createShakaEngine();
-          await this.engine!.load(offlineCheck!, startTime, 'video/mp4');
+          await this.engine!.load(offlineCheck!, startTime);
         }
       } else {
         // Pre-compute audio preference
@@ -592,15 +606,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (this.isNative && mode !== 'direct') {
           await this.createNativeEngine();
 
-          // Apply subtitle style to native player
-          const subSettings = this.playerSettings.get();
-          (this.engine as NativeEngine).setSubtitleStyle({
-            size: subSettings.subtitleSize,
-            color: subSettings.subtitleColor,
-            shadow: subSettings.subtitleShadow,
-            background: subSettings.subtitleBackground,
-            bottomMargin: subSettings.subtitleBottomMargin,
-          });
+          this.applyNativeSubtitleStyle();
 
           // Pre-load subtitles so they're included in ExoPlayer's MediaItem (no rebuild needed)
           const subs = await this.trackManager.loadSubtitles(
@@ -693,6 +699,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       // Load tracks (skip subtitle loading if already preloaded for native engine)
       if (this.isOfflinePlayback) {
+        // Offline: load pre-downloaded subtitles from local storage (no API)
         await this.loadOfflineSubtitles();
         this.loadAudioTracks();
       } else if (!this.availableSubtitles().length) {
@@ -1243,32 +1250,57 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  // ── Subtitles ──
+  // ── Offline subtitles ──
 
-  /** Load VTT subtitle files from offline storage. */
-  private async loadOfflineSubtitles() {
-    const cached = this.dlCache.load();
-    const task = cached.find((t) => t.mediaFileId === this.mediaFileId);
-    if (!task?.subtitles?.length) return;
-
-    const options: SubtitleOption[] = [];
-    for (let i = 0; i < task.subtitles.length; i++) {
-      const sub = task.subtitles[i];
-      const key = `download-${task.mediaFileId}-sub-${sub.filename}`;
-      const vttUrl = await this.offlineStorage.getSmallFileUrl(key);
-      if (!vttUrl) continue;
-
-      options.push({
-        id: `offline-${i}`,
-        label: `${sub.language}${sub.forced ? ' (Forced)' : ''}`,
-        url: vttUrl,
-        language: sub.language,
-        burnIn: false,
-        forced: sub.forced,
-      });
+  /** Get subtitle configs from pre-downloaded local VTT files (for native ExoPlayer preload). */
+  private async getOfflineSubtitleConfigs(): Promise<{ url: string; language: string; label: string }[]> {
+    const task = this.dlCache.load().find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready');
+    if (!task?.offlineSubtitles?.length) return [];
+    const configs: { url: string; language: string; label: string }[] = [];
+    for (const sub of task.offlineSubtitles) {
+      // Native: file:// URI (ExoPlayer can read). Web: blob URL (Shaka).
+      const localUrl = await this.offlineStorage.getSmallFileNativeUri(sub.key);
+      if (localUrl) configs.push({ url: localUrl, language: sub.language, label: sub.label });
     }
-    this.availableSubtitles.set(options);
+    return configs;
   }
+
+  /** Load offline subtitles into the subtitle picker (no API calls). */
+  private async loadOfflineSubtitles() {
+    const task = this.dlCache.load().find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready');
+    if (!task?.offlineSubtitles?.length) return;
+    const subs: { id: string; label: string; url: string; language: string; burnIn: false; forced: boolean }[] = [];
+    for (const sub of task.offlineSubtitles) {
+      // Native: file:// URI (must match preloaded URLs for track matching).
+      // Web: blob URL (Shaka handles both).
+      const localUrl = await this.offlineStorage.getSmallFileNativeUri(sub.key);
+      if (localUrl) {
+        subs.push({
+          id: `offline-${sub.key}`,
+          label: sub.label,
+          url: localUrl,
+          language: sub.language,
+          burnIn: false,
+          forced: sub.forced ?? false,
+        });
+      }
+    }
+    this.availableSubtitles.set(subs);
+  }
+
+  /** Apply user's subtitle style settings to native engine. */
+  private applyNativeSubtitleStyle() {
+    const s = this.playerSettings.get();
+    (this.engine as NativeEngine).setSubtitleStyle({
+      size: s.subtitleSize,
+      color: s.subtitleColor,
+      shadow: s.subtitleShadow,
+      background: s.subtitleBackground,
+      bottomMargin: s.subtitleBottomMargin,
+    });
+  }
+
+  // ── Subtitles ──
 
   /** Load audio tracks (Shaka variant tracks or streamInfo fallback). */
   private loadAudioTracks() {
@@ -1285,11 +1317,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const engineTracks = this.engine.getAudioTracks();
 
       if (engineTracks.length <= 1) {
-        // Fallback: use streamInfo if engine only sees one audio track
+        // Offline: don't show si-* fallback tracks — they can't be switched
+        // via the engine. Only real engine-detected tracks are switchable.
+        if (this.isOfflinePlayback) return;
+        // Fallback: use streamInfo for online playback
         const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
         const si = file?.streamInfo as any;
-        if (si?.audio?.length > 1) {
-          const tracks = si.audio.map((a: any, i: number) => ({
+        const audioList = si?.audio;
+        if (audioList?.length > 1) {
+          const tracks = audioList.map((a: any, i: number) => ({
             id: `si-${i}`,
             label: `${a.language ?? 'und'}${a.title ? ' - ' + a.title : ''} (${(a.codec ?? '').toUpperCase()}${a.channels ? ' ' + a.channels + 'ch' : ''})`,
             language: normalizeLang(a.language),
@@ -1353,8 +1389,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    // Fallback: legacy reload (direct play, single-audio files)
-    await this.reloadStream();
+    // Fallback: reload only for direct play (MP4) where the backend must
+    // re-serve with a different audio stream. In HLS (transcode/remux),
+    // audio tracks are in the manifest — the engine handles switching.
+    // In offline, no backend to reload from.
+    if (!this.isOfflinePlayback && this.playbackMode() === 'direct') {
+      await this.reloadStream();
+    }
   }
 
   async selectSubtitle(sub: SubtitleOption | null) {
@@ -1692,4 +1733,5 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Sprite not available, tooltip will show time only
     }
   }
+
 }

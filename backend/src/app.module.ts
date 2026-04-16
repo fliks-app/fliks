@@ -22,7 +22,6 @@ import { RolesModule } from './modules/roles/roles.module';
 import { StreamingModule } from './modules/streaming/streaming.module';
 import { MarkersModule } from './modules/markers/markers.module';
 import { PersonsModule } from './modules/persons/persons.module';
-import { InappDownloadsModule } from './modules/inapp-downloads/inapp-downloads.module';
 import { ImageModule } from './modules/images/image.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
@@ -66,7 +65,6 @@ import { join } from 'path';
     UsersModule,
     MediaModule,
     PersonsModule,
-    InappDownloadsModule,
     ProfilesModule,
     MetadataProvidersModule,
     IndexersModule,

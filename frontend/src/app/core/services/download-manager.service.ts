@@ -1,22 +1,18 @@
 import { Injectable, inject, effect, signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
-import { SseService } from './sse.service';
-import {
-  DownloadsApiService,
-  DownloadTask,
-} from './api/downloads-api.service';
+import { StreamingApiService } from './api/streaming-api.service';
+import { SubtitlesApiService } from './api/subtitles-api.service';
+import { MediaService } from './api/media.service';
 import { OfflineStorageService } from './offline-storage.service';
-import { DownloadCacheService } from './download-cache.service';
-import { DownloadNotificationService, NativeDownloadEvent } from './download-notification.service';
-import { BrowserDeviceProfileService } from './browser-device-profile.service';
-import { ServerConfigService } from './server-config.service';
+import { DownloadCacheService, DownloadTask } from './download-cache.service';
+import { DownloadNotificationService } from './download-notification.service';
 import { AuthService } from './auth.service';
 
 export interface DownloadEvent {
   type: 'progress' | 'ready' | 'failed' | 'complete';
   taskId: number;
   progress: number;
-  /** Task status from native: 'transcoding' | 'downloading' | etc. */
+  /** Task status: 'downloading' | etc. */
   status?: string;
   /** Monotonic counter for signal uniqueness */
   seq: number;
@@ -25,84 +21,64 @@ export interface DownloadEvent {
 /**
  * Single entry point for all download operations.
  *
- * Event sources:
- *   - Web: SSE from server (download.progress / download.ready / download.failed)
- *   - Native (Android): Java foreground service → Capacitor plugin → nativeEvent signal
+ * Downloads are fully client-side:
+ *   - Native (Android/iOS): ExoPlayer DownloadManager / AVAssetDownloadURLSession
+ *   - Web: Shaka offline storage (IndexedDB)
+ *   - UI tracking: DownloadCacheService (localStorage)
  *
- * On native, ALL work (transcode polling + file download) happens in Java.
- * SSE download events are ignored. Java notifies WebView so UI stays in sync.
+ * No backend API involvement.
  */
 @Injectable({ providedIn: 'root' })
 export class DownloadManagerService {
   private readonly isNative = Capacitor.isNativePlatform();
-  private readonly isAndroid = Capacitor.getPlatform() === 'android';
-  private readonly sse = inject(SseService);
-  private readonly api = inject(DownloadsApiService);
+  private readonly streamingApi = inject(StreamingApiService);
+  private readonly subtitlesApi = inject(SubtitlesApiService);
+  private readonly mediaService = inject(MediaService);
   private readonly storage = inject(OfflineStorageService);
   private readonly cache = inject(DownloadCacheService);
   private readonly notif = inject(DownloadNotificationService);
-  private readonly deviceProfile = inject(BrowserDeviceProfileService);
-  private readonly serverConfig = inject(ServerConfigService);
   private readonly auth = inject(AuthService);
 
   private readonly titles = new Map<number, { title: string; episode?: string }>();
   private activeCount = 0;
   private eventSeq = 0;
+  private nextLocalId = Date.now();
 
-  /** Unified download event — fed by SSE (web) or native bridge (Android). */
+  /** Unified download event — fed by native bridge (Android/iOS) or Shaka (web). */
   readonly lastDownloadEvent = signal<DownloadEvent | null>(null);
 
   private emitEvent(type: DownloadEvent['type'], taskId: number, progress: number, status?: string) {
     this.lastDownloadEvent.set({ type, taskId, progress, status, seq: ++this.eventSeq });
   }
 
-  // --- Web: SSE listener (only active on non-native) ---
-  private readonly sseEffect = effect(() => {
-    if (this.isNative) return;
-    const event = this.sse.lastEvent();
-    if (!event) return;
-
-    if (event.type === 'download.progress') {
-      const id = event['downloadId'] as number;
-      // Ignore events from other devices
-      if (!this.titles.has(id) && !this.cache.has(id)) return;
-      const pct = event['progress'] as number;
-      const info = this.titles.get(id);
-      this.notif.show(id, info?.title ?? 'Transcodage', pct, 'transcoding');
-      this.emitEvent('progress', id, pct);
-    } else if (event.type === 'download.ready') {
-      const id = event['downloadId'] as number;
-      if (!this.titles.has(id) && !this.cache.has(id)) return;
-      this.emitEvent('ready', id, 100);
-      void this.handleReadyWeb(id);
-    } else if (event.type === 'download.failed') {
-      const id = event['downloadId'] as number;
-      if (!this.titles.has(id) && !this.cache.has(id)) return;
-      const info = this.titles.get(id);
-      this.notif.show(id, info?.title ?? 'Téléchargement', 0, 'error');
-      this.emitEvent('failed', id, 0);
-      this.decActive();
-    }
-  });
-
-  // --- Native: Java service events (only active on native) ---
+  // --- Native: ExoPlayer DownloadManager events ---
   private readonly nativeEffect = effect(() => {
     if (!this.isNative) return;
     const event = this.notif.nativeEvent();
     if (!event) return;
 
-    this.emitEvent(event.type, event.taskId, event.progress, event.status);
+    const taskId = Number(event.id) || 0;
+    this.emitEvent(
+      event.type === 'removed' ? 'failed' : event.type,
+      taskId,
+      event.progress,
+      event.state,
+    );
 
     if (event.type === 'failed') {
+      this.updateTaskStatus(taskId, 'failed', 0);
       this.decActive();
     } else if (event.type === 'complete') {
-      void this.handleNativeDownloadComplete(event.taskId);
+      this.updateTaskStatus(taskId, 'ready', 100);
+      this.decActive();
+      // Pre-download subtitles for offline playback (fire-and-forget)
+      void this.preDownloadSubtitles(taskId);
     }
   });
 
   private recovered = false;
 
-  /** Recover once auth is ready (token needed for API calls and native polling) */
+  /** Recover cached tasks once auth is ready. */
   private readonly authEffect = effect(() => {
     if (this.auth.isAuthenticated() && !this.recovered) {
       this.recovered = true;
@@ -123,155 +99,47 @@ export class DownloadManagerService {
     quality: string,
     title: string,
     episode?: string,
+    meta?: { mediaId?: number; posterUrl?: string | null; type?: string },
   ): Promise<DownloadTask> {
-    const dp = this.deviceProfile.getProfile();
-    const task = await this.api.create(mediaFileId, quality, {
-      supportsHdr: dp.supportsHdr,
-      audioCodecs: dp.directPlayProfiles[0]?.audioCodecs,
-      maxAudioChannels: dp.maxAudioChannels,
-    });
+    const taskId = this.nextLocalId++;
+    const task: DownloadTask = {
+      id: taskId,
+      mediaId: meta?.mediaId ?? 0,
+      mediaFileId,
+      quality,
+      status: 'transcoding',
+      progress: 0,
+      episodeLabel: episode,
+      createdAt: new Date().toISOString(),
+      media: { id: meta?.mediaId ?? 0, title, posterUrl: meta?.posterUrl ?? null, type: meta?.type ?? '' },
+    };
 
-    this.titles.set(task.id, { title, episode });
+    const hlsUrl = this.streamingApi.getHlsUrl(mediaFileId, quality);
+    task.hlsUrl = hlsUrl;
+
+    this.titles.set(taskId, { title, episode });
     this.persistTask(task);
-
     this.incActive();
 
-    if (task.status === 'ready') {
-      if (this.isNative) {
-        // Native: Java service handles notification from startDownload
-        void this.startNativeDownload(task);
-      } else {
-        this.notif.show(task.id, title, 0, 'downloading', episode);
-        void this.handleReadyWeb(task.id);
-      }
-    } else {
-      if (this.isNative) {
-        // Native: Java service handles notification from setPollingConfig
-        void this.startNativeTranscode(task.id, task.mediaFileId);
-      } else {
-        this.notif.show(task.id, title, 0, 'transcoding', episode);
-      }
-    }
-
-    return task;
-  }
-
-  async retryDownload(taskId: number): Promise<DownloadTask> {
-    const dp = this.deviceProfile.getProfile();
-    const task = await this.api.retry(taskId, {
-      supportsHdr: dp.supportsHdr,
-      audioCodecs: dp.directPlayProfiles[0]?.audioCodecs,
-      maxAudioChannels: dp.maxAudioChannels,
-    });
-    this.persistTask(task);
-
-    this.incActive();
-    const info = this.titles.get(taskId);
-    const title = info?.title ?? task.media?.title ?? 'Téléchargement';
     if (this.isNative) {
-      void this.startNativeTranscode(taskId, task.mediaFileId);
+      const token = this.auth.accessToken ?? '';
+      this.notif.startDownload(String(taskId), hlsUrl, token);
     } else {
-      this.notif.show(taskId, title, 0, 'transcoding', info?.episode);
+      void this.handleWebDownload(task, hlsUrl);
     }
+
     return task;
   }
 
   async deleteDownload(task: DownloadTask) {
+    if (this.isNative) {
+      await this.notif.removeDownload(String(task.id));
+    }
     await this.storage.delete(`download-${task.mediaFileId}`);
-    this.api.delete(task.id).catch(() => {});
     this.cache.remove(task.id);
+    this.cache.removeLocal(task.id);
     this.titles.delete(task.id);
-    // Cancel notification + remove from Java service tracking
-    this.notif.dismiss(task.id);
-    // Decrement active count if task was in progress
-    if (['transcoding', 'remuxing', 'pending', 'ready'].includes(task.status)) {
-      this.decActive();
-    }
-  }
-
-  async syncAfterResume() {
-    try {
-      const tasks = await this.api.list();
-      for (const task of tasks) {
-        const info = this.titles.get(task.id);
-        if (!info) continue;
-
-        if (task.status === 'ready') {
-          const hasLocal = await this.storage.has(`download-${task.mediaFileId}`);
-          if (hasLocal) {
-            this.api.ackDownloaded(task.id).catch(() => {});
-            this.persistTask(task);
-            this.cache.markDone(task.id);
-            this.decActive();
-            this.notif.stopService();
-            continue;
-          }
-          // Not downloaded yet — restart
-          if (this.isNative) {
-            void this.startNativeDownload(task);
-          } else {
-            void this.handleReadyWeb(task.id);
-          }
-        } else if (task.status === 'failed') {
-          this.emitEvent('failed', task.id, 0);
-          this.decActive();
-        } else if (task.status === 'transcoding' || task.status === 'remuxing') {
-          this.emitEvent('progress', task.id, task.progress ?? 0, task.status);
-        }
-      }
-    } catch {
-      // Offline
-    }
-  }
-
-  // ===== NATIVE PATHS =====
-
-  /**
-   * Start native Java polling for a transcode task.
-   * Java polls server, updates notifications, chains to download when ready.
-   */
-  private async startNativeTranscode(taskId: number, mediaFileId?: number) {
-    const baseUrl = this.serverConfig.isNative
-      ? this.serverConfig.resolveUrl('')
-      : window.location.origin;
-    const info = this.titles.get(taskId);
-    const title = info?.title ?? 'Transcodage';
-    const fileUrl = this.api.getFileUrl(taskId);
-    const destPath = mediaFileId
-      ? (await this.storage.getNativeDestPath(`download-${mediaFileId}`)) ?? ''
-      : '';
-    this.notif.startPolling(
-      baseUrl, this.auth.accessToken ?? '', taskId, title,
-      info?.episode, fileUrl, destPath, 0,
-    );
-  }
-
-  /**
-   * Start native Java download directly (no transcode needed).
-   * Used when task.status is already 'ready'.
-   */
-  private async startNativeDownload(task: DownloadTask) {
-    const url = this.api.getFileUrl(task.id);
-    const destPath = await this.storage.getNativeDestPath(`download-${task.mediaFileId}`);
-    if (!destPath) return;
-    const info = this.titles.get(task.id);
-    const title = info?.title ?? task.media?.title ?? 'Téléchargement';
-    this.notif.nativeDownload(url, this.auth.accessToken ?? '', destPath, task.fileSize ?? 0, title, task.id);
-  }
-
-  /**
-   * Native download completed — ACK server and persist task.
-   */
-  private async handleNativeDownloadComplete(taskId: number) {
-    try {
-      const task = await this.api.getOne(taskId);
-      await this.api.ackDownloaded(taskId).catch(() => {});
-      this.persistTask(task);
-    } catch {
-      // Will be handled by syncAfterResume
-    } finally {
-      this.cache.markDone(taskId);
-
+    if (['transcoding', 'pending', 'ready'].includes(task.status)) {
       this.decActive();
     }
   }
@@ -279,64 +147,101 @@ export class DownloadManagerService {
   // ===== WEB PATH =====
 
   /**
-   * Download to device via JS (web/iOS only). Never called on native.
+   * Web offline download using Shaka's built-in offline storage API.
    */
-  private async handleReadyWeb(downloadId: number) {
+  private async handleWebDownload(task: DownloadTask, hlsUrl: string) {
+    const downloadId = task.id;
     if (this.cache.isDownloading(downloadId)) return;
 
-    let task: DownloadTask;
-    try {
-      task = await this.api.getOne(downloadId);
-      if (task.status !== 'ready') return;
-    } catch {
-      return;
-    }
-
-    const hasLocal = await this.storage.has(`download-${task.mediaFileId}`);
-    if (hasLocal) {
+    const offlineUri = this.storage.getShakaOfflineUri(task.mediaFileId);
+    if (offlineUri) {
       this.decActive();
       return;
     }
 
     const info = this.titles.get(downloadId);
-    const title = info?.title ?? task.media?.title ?? 'Téléchargement';
-
-    this.cache.markDownloading(task.id);
-    this.notif.show(downloadId, title, 0, 'downloading');
+    const title = info?.title ?? task.media?.title ?? 'Download';
+    this.cache.markDownloading(downloadId);
+    this.emitEvent('progress', downloadId, 0, 'downloading');
 
     try {
-      const url = this.api.getFileUrl(task.id);
-      await this.storage.download(
-        url,
-        `download-${task.mediaFileId}`,
-        (pct) => {
-          this.cache.updateProgress(task.id, pct);
-          this.notif.show(downloadId, title, pct, 'downloading');
+      const storedUri = await this.storage.shakaStore(
+        hlsUrl,
+        task.mediaFileId,
+        { title, episode: info?.episode },
+        (progress) => {
+          const pct = Math.round(progress * 100);
+          this.cache.updateProgress(downloadId, pct);
+          this.emitEvent('progress', downloadId, pct, 'downloading');
         },
       );
 
-      if (task.subtitles?.length) {
-        for (const sub of task.subtitles) {
-          const subUrl = this.api.getSubtitleUrl(task.id, sub.filename);
-          await this.storage.downloadSmallFile(
-            subUrl,
-            `download-${task.mediaFileId}-sub-${sub.filename}`,
-          ).catch(() => {});
-        }
+      if (storedUri) {
+        this.updateTaskStatus(downloadId, 'ready', 100);
+        this.emitEvent('complete', downloadId, 100);
+        void this.preDownloadSubtitles(downloadId);
+      } else {
+        throw new Error('Shaka offline store returned null');
       }
-
-      await this.api.ackDownloaded(task.id).catch(() => {});
-      this.persistTask(task);
-      this.notif.show(downloadId, title, 100, 'complete');
-    } catch {
-      this.notif.show(downloadId, title, 0, 'error');
+    } catch (err) {
+      console.error('[DL] Shaka offline store failed:', err);
+      this.updateTaskStatus(downloadId, 'failed', 0);
+      this.emitEvent('failed', downloadId, 0);
     } finally {
-      this.cache.markDone(task.id);
+      this.cache.markDone(downloadId);
       this.decActive();
     }
   }
 
   // ===== HELPERS =====
+
+  /** Download subtitle VTTs for offline playback. Called after native download completes. */
+  private async preDownloadSubtitles(taskId: number) {
+    const task = this.cache.load().find((t) => t.id === taskId);
+    if (!task?.mediaId || !task.mediaFileId) return;
+    try {
+      const bitmapCodecs = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle']);
+      const allSubs = await this.subtitlesApi.getForMedia(task.mediaId);
+      const subs = allSubs.filter(
+        (s) => s.mediaFileId === task.mediaFileId && !bitmapCodecs.has(s.codec ?? ''),
+      );
+      const offlineSubs: { key: string; language: string; label: string; forced?: boolean }[] = [];
+      for (const sub of subs) {
+        const url = sub.streamIndex != null
+          ? this.streamingApi.getEmbeddedSubtitleUrl(task.mediaFileId, sub.streamIndex)
+          : sub.relativePath
+            ? this.streamingApi.getSubtitleUrl(task.mediaFileId, sub.id)
+            : null;
+        if (!url) continue;
+        const key = `sub-${task.mediaFileId}-${sub.id}`;
+        await this.storage.downloadSmallFile(url, key);
+        offlineSubs.push({
+          key,
+          language: sub.language,
+          label: `${sub.language}${sub.hearingImpaired ? ' (HI)' : ''}${sub.forced ? ' (Forced)' : ''}${sub.streamIndex != null ? ' [embedded]' : ''}`,
+          forced: sub.forced,
+        });
+      }
+      // Fetch audio stream info for offline audio track picker
+      let audioStreams: { language?: string; title?: string; codec?: string; channels?: number }[] | undefined;
+      try {
+        const media = await this.mediaService.getOne(task.mediaId);
+        const file = media.files?.find((f: any) => f.id === task.mediaFileId);
+        const si = (file as any)?.streamInfo;
+        if (si?.audio?.length > 1) {
+          audioStreams = si.audio;
+        }
+      } catch { /* non-critical */ }
+
+      // Persist subtitle + audio metadata on the task
+      const tasks = this.cache.load();
+      this.cache.save(tasks.map((t) =>
+        t.id === taskId ? { ...t, offlineSubtitles: offlineSubs, ...(audioStreams ? { audioStreams } : {}) } : t,
+      ));
+    } catch (e) {
+      console.warn('[DL] Failed to pre-download subtitles:', e);
+    }
+  }
 
   private persistTask(task: DownloadTask) {
     this.cache.save([
@@ -345,31 +250,29 @@ export class DownloadManagerService {
     ]);
   }
 
+  private updateTaskStatus(taskId: number, status: string, progress: number) {
+    const tasks = this.cache.load();
+    const updated = tasks.map((t) =>
+      t.id === taskId ? { ...t, status, progress } : t,
+    );
+    this.cache.save(updated);
+    if (status === 'ready') this.cache.markLocal(taskId);
+  }
+
   private incActive() {
     this.activeCount++;
-    if (this.activeCount === 1) {
-      this.notif.startService();
-    }
   }
 
   private decActive() {
     this.activeCount = Math.max(0, this.activeCount - 1);
-    // Android: DownloadForegroundService already calls stopSelf() when the task queue is empty.
-    // Calling stopService() here relaunches the service with STOP and runs cancel(NOTIFICATION_ID),
-    // which can remove the "Terminé" notification when taskId maps to that id.
-    if (this.activeCount === 0 && !this.isAndroid) {
-      this.notif.stopService();
-    }
   }
 
+  /**
+   * Recover download state from localStorage cache.
+   * Re-populates the titles map for UI display.
+   */
   private async recover() {
-    let tasks: DownloadTask[];
-    try {
-      tasks = await this.api.list();
-      this.cache.save(tasks);
-    } catch {
-      tasks = this.cache.load();
-    }
+    const tasks = this.cache.load();
 
     for (const t of tasks) {
       if (t.media?.title) {
@@ -377,36 +280,22 @@ export class DownloadManagerService {
       }
     }
 
-    // Prune localTaskIds for tasks gone from server
-    const serverIds = new Set(tasks.map((t) => t.id));
-    for (const id of this.cache.localTaskIds()) {
-      if (!serverIds.has(id)) this.cache.removeLocal(id);
-    }
-
+    // Prune tasks whose local content is gone
     for (const t of tasks) {
-      if (t.status === 'failed' || t.status === 'expired') {
-        this.api.delete(t.id).catch(() => {});
-      } else if (t.status === 'transcoding' || t.status === 'remuxing') {
-        this.incActive();
-        if (this.isNative) {
-          void this.startNativeTranscode(t.id, t.mediaFileId);
-        } else {
-          const info = this.titles.get(t.id);
-          this.notif.show(t.id, info?.title ?? 'Transcodage', t.progress ?? 0, t.status, info?.episode);
-        }
-      } else if (t.status === 'ready') {
-        const hasLocal = await this.storage.has(`download-${t.mediaFileId}`);
-        if (hasLocal) {
-          this.cache.markLocal(t.id);
-        } else {
-          this.cache.removeLocal(t.id);
-          this.incActive();
-          if (this.isNative) {
-            void this.startNativeDownload(t);
-          } else {
-            void this.handleReadyWeb(t.id);
+      if (t.status === 'ready') {
+        // Native: trust localStorage — ExoPlayer's SimpleCache persists across
+        // restarts and querying DownloadIndex has timing issues.
+        // Web: verify Shaka offline URI still exists in localStorage.
+        if (!this.isNative) {
+          const hasLocal = await this.storage.has(`download-${t.mediaFileId}`);
+          if (!hasLocal) {
+            this.cache.remove(t.id);
+            this.cache.removeLocal(t.id);
           }
         }
+      } else if (t.status === 'failed') {
+        // Remove stale failed tasks
+        this.cache.remove(t.id);
       }
     }
   }
