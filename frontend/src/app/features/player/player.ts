@@ -541,35 +541,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       if (this.isOfflinePlayback) {
         this.state.playbackMode.set('direct');
-        // No quality switching offline — clear any stale options
         this.qualityManager.availableQualities.set([]);
-        const isHls = offlineCheck?.includes('index.m3u8') || offlineCheck?.endsWith('#hls');
-
-        // Load offline subtitles BEFORE engine.load() — ExoPlayer needs
-        // them as SubtitleConfigurations on the MediaItem at build time.
-        await this.loadOfflineSubtitles();
 
         if (this.isNative) {
+          // Android: ExoPlayer with CacheDataSource (offline HLS from cache)
+          // iOS: AVPlayer with local .movpkg asset
           await this.createNativeEngine();
-          // Preload subtitle URLs so ExoPlayer includes them in the MediaItem
-          const offlineSubs = this.availableSubtitles()
-            .filter((s) => !s.burnIn && s.url)
-            .map((s) => ({ url: s.url, language: s.language, label: s.label }));
-          (this.engine as NativeEngine).setPreloadedSubtitles(offlineSubs);
-
-          const fileUrl = this.toFileUrl(offlineCheck!);
-          const mime = isHls ? 'application/x-mpegURL' : 'video/mp4';
-          await this.engine!.load(fileUrl, startTime, mime);
+          // Native players handle subtitles from the cached HLS stream directly
+          await this.engine!.load(offlineCheck!, startTime, 'application/x-mpegURL');
         } else {
-          // Web offline: Shaka offline URI ("offline:123") or legacy HLS URL
+          // Web: Shaka offline URI ("offline:123") — IndexedDB-backed
           await this.createShakaEngine();
-          if (offlineCheck!.startsWith('offline:')) {
-            // Shaka offline — load directly, no MIME needed
-            await this.engine!.load(offlineCheck!, startTime);
-          } else {
-            const mime = isHls ? 'application/x-mpegURL' : 'video/mp4';
-            await this.engine!.load(offlineCheck!, startTime, mime);
-          }
+          await this.engine!.load(offlineCheck!, startTime);
         }
       } else {
         // Pre-compute audio preference
@@ -1264,12 +1247,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // ── Subtitles ──
 
-  /** Subtitles come from the HLS stream (embedded in the manifest). No-op. */
-  private async loadOfflineSubtitles() {
-    // Native players (Shaka/ExoPlayer/AVFoundation) parse subtitle tracks
-    // from the HLS manifest. No separate extraction needed.
-  }
-
   /** Load audio tracks (Shaka variant tracks or streamInfo fallback). */
   private loadAudioTracks() {
     if (!this.engine) return;
@@ -1693,17 +1670,4 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  /**
-   * Convert a Capacitor web-bridge URL
-   * (`http://localhost/_capacitor_file_/data/…`) back to a `file://` URI that
-   * ExoPlayer can open directly via FileDataSource.
-   */
-  private toFileUrl(url: string): string {
-    const marker = '/_capacitor_file_';
-    const idx = url.indexOf(marker);
-    if (idx >= 0) {
-      return 'file://' + url.substring(idx + marker.length);
-    }
-    return url;
-  }
 }
