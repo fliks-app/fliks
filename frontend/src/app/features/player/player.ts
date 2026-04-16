@@ -547,16 +547,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           // Android: ExoPlayer with CacheDataSource (offline HLS from cache)
           await this.createNativeEngine();
           (this.engine as NativeEngine).setOffline(true);
-
-          // Apply subtitle style
-          const subSettings = this.playerSettings.get();
-          (this.engine as NativeEngine).setSubtitleStyle({
-            size: subSettings.subtitleSize,
-            color: subSettings.subtitleColor,
-            shadow: subSettings.subtitleShadow,
-            background: subSettings.subtitleBackground,
-            bottomMargin: subSettings.subtitleBottomMargin,
-          });
+          this.applyNativeSubtitleStyle();
 
           // Pre-load offline subtitles so they're included in ExoPlayer's MediaItem
           const offlineSubs = await this.getOfflineSubtitleConfigs();
@@ -610,15 +601,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (this.isNative && mode !== 'direct') {
           await this.createNativeEngine();
 
-          // Apply subtitle style to native player
-          const subSettings = this.playerSettings.get();
-          (this.engine as NativeEngine).setSubtitleStyle({
-            size: subSettings.subtitleSize,
-            color: subSettings.subtitleColor,
-            shadow: subSettings.subtitleShadow,
-            background: subSettings.subtitleBackground,
-            bottomMargin: subSettings.subtitleBottomMargin,
-          });
+          this.applyNativeSubtitleStyle();
 
           // Pre-load subtitles so they're included in ExoPlayer's MediaItem (no rebuild needed)
           const subs = await this.trackManager.loadSubtitles(
@@ -1298,6 +1281,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
     }
     this.availableSubtitles.set(subs);
+  }
+
+  /** Apply user's subtitle style settings to native engine. */
+  private applyNativeSubtitleStyle() {
+    const s = this.playerSettings.get();
+    (this.engine as NativeEngine).setSubtitleStyle({
+      size: s.subtitleSize,
+      color: s.subtitleColor,
+      shadow: s.subtitleShadow,
+      background: s.subtitleBackground,
+      bottomMargin: s.subtitleBottomMargin,
+    });
   }
 
   // ── Subtitles ──
