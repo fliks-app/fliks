@@ -205,10 +205,11 @@ public class NativePlayerPlugin extends Plugin {
                 }
             }
 
-            // Offline: read from ExoPlayer SimpleCache (downloaded content).
-            // Online: DefaultDataSource (HTTP + file:// support).
+            // Offline: CacheDataSource (cached HLS) wrapped in DefaultDataSource
+            // (adds file:// support for local subtitle VTTs).
+            // Online: DefaultDataSource with HTTP factory.
             DataSource.Factory dataSourceFactory = offline
-                    ? FlixDownloadUtil.getCacheDataSourceFactory(getContext())
+                    ? new DefaultDataSource.Factory(getContext(), FlixDownloadUtil.getCacheDataSourceFactory(getContext()))
                     : new DefaultDataSource.Factory(getContext(), httpFactory);
             DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory);
             player = new ExoPlayer.Builder(getContext())

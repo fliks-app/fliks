@@ -1,6 +1,7 @@
 import { Injectable, inject, effect, signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { StreamingApiService } from './api/streaming-api.service';
+import { SubtitlesApiService } from './api/subtitles-api.service';
 import { OfflineStorageService } from './offline-storage.service';
 import { DownloadCacheService, DownloadTask } from './download-cache.service';
 import { DownloadNotificationService } from './download-notification.service';
@@ -30,6 +31,7 @@ export interface DownloadEvent {
 export class DownloadManagerService {
   private readonly isNative = Capacitor.isNativePlatform();
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly storage = inject(OfflineStorageService);
   private readonly cache = inject(DownloadCacheService);
   private readonly notif = inject(DownloadNotificationService);
@@ -67,6 +69,8 @@ export class DownloadManagerService {
     } else if (event.type === 'complete') {
       this.updateTaskStatus(taskId, 'ready', 100);
       this.decActive();
+      // Pre-download subtitles for offline playback (fire-and-forget)
+      void this.preDownloadSubtitles(taskId);
     }
   });
 
@@ -173,6 +177,7 @@ export class DownloadManagerService {
       if (storedUri) {
         this.updateTaskStatus(downloadId, 'ready', 100);
         this.emitEvent('complete', downloadId, 100);
+        void this.preDownloadSubtitles(downloadId);
       } else {
         throw new Error('Shaka offline store returned null');
       }
@@ -187,6 +192,43 @@ export class DownloadManagerService {
   }
 
   // ===== HELPERS =====
+
+  /** Download subtitle VTTs for offline playback. Called after native download completes. */
+  private async preDownloadSubtitles(taskId: number) {
+    const task = this.cache.load().find((t) => t.id === taskId);
+    if (!task?.mediaId || !task.mediaFileId) return;
+    try {
+      const bitmapCodecs = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle']);
+      const allSubs = await this.subtitlesApi.getForMedia(task.mediaId);
+      const subs = allSubs.filter(
+        (s) => s.mediaFileId === task.mediaFileId && !bitmapCodecs.has(s.codec ?? ''),
+      );
+      const offlineSubs: { key: string; language: string; label: string; forced?: boolean }[] = [];
+      for (const sub of subs) {
+        const url = sub.streamIndex != null
+          ? this.streamingApi.getEmbeddedSubtitleUrl(task.mediaFileId, sub.streamIndex)
+          : sub.relativePath
+            ? this.streamingApi.getSubtitleUrl(task.mediaFileId, sub.id)
+            : null;
+        if (!url) continue;
+        const key = `sub-${task.mediaFileId}-${sub.id}`;
+        await this.storage.downloadSmallFile(url, key);
+        offlineSubs.push({
+          key,
+          language: sub.language,
+          label: `${sub.language}${sub.hearingImpaired ? ' (HI)' : ''}${sub.forced ? ' (Forced)' : ''}${sub.streamIndex != null ? ' [embedded]' : ''}`,
+          forced: sub.forced,
+        });
+      }
+      // Persist subtitle metadata on the task
+      const tasks = this.cache.load();
+      this.cache.save(tasks.map((t) =>
+        t.id === taskId ? { ...t, offlineSubtitles: offlineSubs } : t,
+      ));
+    } catch (e) {
+      console.warn('[DL] Failed to pre-download subtitles:', e);
+    }
+  }
 
   private persistTask(task: DownloadTask) {
     this.cache.save([

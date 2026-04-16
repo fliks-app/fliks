@@ -545,10 +545,25 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
         if (this.isNative) {
           // Android: ExoPlayer with CacheDataSource (offline HLS from cache)
-          // iOS: AVPlayer with local .movpkg asset
           await this.createNativeEngine();
-          (this.engine as any).setOffline(true);
-          // Native players handle subtitles from the cached HLS stream directly
+          (this.engine as NativeEngine).setOffline(true);
+
+          // Apply subtitle style
+          const subSettings = this.playerSettings.get();
+          (this.engine as NativeEngine).setSubtitleStyle({
+            size: subSettings.subtitleSize,
+            color: subSettings.subtitleColor,
+            shadow: subSettings.subtitleShadow,
+            background: subSettings.subtitleBackground,
+            bottomMargin: subSettings.subtitleBottomMargin,
+          });
+
+          // Pre-load offline subtitles so they're included in ExoPlayer's MediaItem
+          const offlineSubs = await this.getOfflineSubtitleConfigs();
+          if (offlineSubs.length) {
+            (this.engine as NativeEngine).setPreloadedSubtitles(offlineSubs);
+          }
+
           await this.engine!.load(offlineCheck!, startTime, 'application/x-mpegURL');
         } else {
           // Web: Shaka offline URI ("offline:123") — IndexedDB-backed
@@ -696,7 +711,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       // Load tracks (skip subtitle loading if already preloaded for native engine)
       if (this.isOfflinePlayback) {
-        // Subtitles already loaded before engine.load() above
+        // Offline: load pre-downloaded subtitles from local storage (no API)
+        await this.loadOfflineSubtitles();
         this.loadAudioTracks();
       } else if (!this.availableSubtitles().length) {
         // subsPromise was started in parallel with engine.load (Shaka path)
@@ -1244,6 +1260,44 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } else {
       this.router.navigate(['/' + kind, this.mediaId]);
     }
+  }
+
+  // ── Offline subtitles ──
+
+  /** Get subtitle configs from pre-downloaded local VTT files (for native ExoPlayer preload). */
+  private async getOfflineSubtitleConfigs(): Promise<{ url: string; language: string; label: string }[]> {
+    const task = this.dlCache.load().find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready');
+    if (!task?.offlineSubtitles?.length) return [];
+    const configs: { url: string; language: string; label: string }[] = [];
+    for (const sub of task.offlineSubtitles) {
+      // Native: file:// URI (ExoPlayer can read). Web: blob URL (Shaka).
+      const localUrl = await this.offlineStorage.getSmallFileNativeUri(sub.key);
+      if (localUrl) configs.push({ url: localUrl, language: sub.language, label: sub.label });
+    }
+    return configs;
+  }
+
+  /** Load offline subtitles into the subtitle picker (no API calls). */
+  private async loadOfflineSubtitles() {
+    const task = this.dlCache.load().find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready');
+    if (!task?.offlineSubtitles?.length) return;
+    const subs: { id: string; label: string; url: string; language: string; burnIn: false; forced: boolean }[] = [];
+    for (const sub of task.offlineSubtitles) {
+      // Native: file:// URI (must match preloaded URLs for track matching).
+      // Web: blob URL (Shaka handles both).
+      const localUrl = await this.offlineStorage.getSmallFileNativeUri(sub.key);
+      if (localUrl) {
+        subs.push({
+          id: `offline-${sub.key}`,
+          label: sub.label,
+          url: localUrl,
+          language: sub.language,
+          burnIn: false,
+          forced: sub.forced ?? false,
+        });
+      }
+    }
+    this.availableSubtitles.set(subs);
   }
 
   // ── Subtitles ──

@@ -206,6 +206,21 @@ export class OfflineStorageService {
     }
   }
 
+  /** Get native file URI for a small file (for ExoPlayer — not a blob URL). */
+  async getSmallFileNativeUri(key: string): Promise<string | null> {
+    if (!this.isNative) return this.getSmallFileUrl(key);
+    try {
+      const { Filesystem, Directory } = await getFs();
+      const result = await Filesystem.getUri({
+        path: `fliks-downloads/${key}`,
+        directory: Directory.Data,
+      });
+      return result.uri; // file:///data/... — ExoPlayer can read this
+    } catch {
+      return null;
+    }
+  }
+
   async has(key: string): Promise<boolean> {
     if (this.isNative) {
       // ExoPlayer stores in SimpleCache, not filesystem — check localStorage.

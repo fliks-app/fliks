@@ -14,6 +14,8 @@ export interface DownloadTask {
   createdAt: string;
   /** HLS URL used for the download — needed for native offline playback via CacheDataSource. */
   hlsUrl?: string;
+  /** Pre-downloaded subtitle metadata for offline playback. */
+  offlineSubtitles?: { key: string; language: string; label: string; forced?: boolean }[];
   media?: {
     id: number;
     title: string;
