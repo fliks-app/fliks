@@ -542,23 +542,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (this.isOfflinePlayback) {
         this.state.playbackMode.set('direct');
         const isHls = offlineCheck?.includes('index.m3u8');
+
+        // Load offline subtitles BEFORE engine.load() — ExoPlayer needs
+        // them as SubtitleConfigurations on the MediaItem at build time.
+        await this.loadOfflineSubtitles();
+
         if (this.isNative) {
-          // Offline on native: use ExoPlayer with the native file/HLS path
           await this.createNativeEngine();
-          if (isHls) {
-            // Progressive download → local HLS. Convert the Capacitor web
-            // URL (http://localhost/_capacitor_file_/...) back to file://
-            // so ExoPlayer reads from disk instead of trying HTTP.
-            await this.engine!.load(
-              this.toFileUrl(offlineCheck!), startTime, 'application/x-mpegURL',
-            );
-          } else {
-            await this.engine!.load(
-              this.toFileUrl(offlineCheck!), startTime, 'video/mp4',
-            );
-          }
+          // Preload subtitle URLs so ExoPlayer includes them in the MediaItem
+          const offlineSubs = this.availableSubtitles()
+            .filter((s) => !s.burnIn && s.url)
+            .map((s) => ({ url: s.url, language: s.language, label: s.label }));
+          (this.engine as NativeEngine).setPreloadedSubtitles(offlineSubs);
+
+          const fileUrl = this.toFileUrl(offlineCheck!);
+          const mime = isHls ? 'application/x-mpegURL' : 'video/mp4';
+          await this.engine!.load(fileUrl, startTime, mime);
         } else {
-          // Offline on web: use Shaka
           await this.createShakaEngine();
           const mime = isHls ? 'application/x-mpegURL' : 'video/mp4';
           await this.engine!.load(offlineCheck!, startTime, mime);
@@ -704,7 +704,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       // Load tracks (skip subtitle loading if already preloaded for native engine)
       if (this.isOfflinePlayback) {
-        await this.loadOfflineSubtitles();
+        // Subtitles already loaded before engine.load() above
         this.loadAudioTracks();
       } else if (!this.availableSubtitles().length) {
         // subsPromise was started in parallel with engine.load (Shaka path)
@@ -1265,8 +1265,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const options: SubtitleOption[] = [];
     for (let i = 0; i < task.subtitles.length; i++) {
       const sub = task.subtitles[i];
-      const key = `download-${task.mediaFileId}-sub-${sub.filename}`;
-      const vttUrl = await this.offlineStorage.getSmallFileUrl(key);
+
+      // Native HLS: VTT files stored in the HLS directory by Java
+      let vttUrl: string | null = null;
+      if (this.isNative) {
+        const hlsDir = await this.offlineStorage.getNativeDestDir(`download-${task.mediaFileId}`);
+        if (hlsDir) {
+          vttUrl = `file://${hlsDir}/${sub.filename}`;
+        }
+      }
+      // Web fallback: stored via downloadSmallFile with key prefix
+      if (!vttUrl) {
+        const key = `download-${task.mediaFileId}-sub-${sub.filename}`;
+        vttUrl = await this.offlineStorage.getSmallFileUrl(key);
+      }
       if (!vttUrl) continue;
 
       options.push({

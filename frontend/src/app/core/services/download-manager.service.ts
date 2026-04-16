@@ -177,8 +177,9 @@ export class DownloadManagerService {
             this.api.ackDownloaded(task.id).catch(() => {});
             this.persistTask(task);
             this.cache.markDone(task.id);
-            this.decActive();
-            this.notif.stopService();
+            // Don't call stopService() — Java's promoteOrStop() handles
+            // shutdown when its task queue empties. Calling STOP here kills
+            // in-flight progressive downloads on other tasks.
             continue;
           }
           // Not downloaded yet — restart

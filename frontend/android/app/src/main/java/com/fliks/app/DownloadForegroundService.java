@@ -343,6 +343,16 @@ public class DownloadForegroundService extends Service {
                 java.io.File dir = new java.io.File(destDir);
                 if (!dir.exists()) dir.mkdirs();
 
+                // Resume from last saved progress if available
+                java.io.File progressFile = new java.io.File(destDir, ".progress");
+                if (progressFile.exists()) {
+                    try {
+                        String val = new java.util.Scanner(progressFile).useDelimiter("\\A").next().trim();
+                        nextSeg = Integer.parseInt(val);
+                        Log.d(TAG, "Progressive #" + taskId + ": resuming from segment " + nextSeg);
+                    } catch (Exception ignored) {}
+                }
+
                 while (true) {
                     // Poll status
                     String statusUrl = baseUrl + "/api/downloads/" + taskId + "/status";
@@ -364,6 +374,13 @@ public class DownloadForegroundService extends Service {
                         String segName = String.format("seg-%04d.m4s", nextSeg);
                         downloadSegment(baseUrl, token, taskId, segName, destDir);
                         nextSeg++;
+                        renewWakeLock();
+                        // Persist progress for resume after kill
+                        try {
+                            java.io.FileWriter pw = new java.io.FileWriter(destDir + "/.progress");
+                            pw.write(String.valueOf(nextSeg));
+                            pw.close();
+                        } catch (Exception ignored) {}
 
                         int pct = total > 0 ? Math.min(99, (nextSeg * 100) / total) : 0;
                         if (pct != ts.progress) {
@@ -376,8 +393,29 @@ public class DownloadForegroundService extends Service {
                     }
 
                     if (done && nextSeg >= available) {
-                        // All segments downloaded — generate local manifest
+                        // All segments downloaded — generate local manifest + cleanup progress
+                        new java.io.File(destDir, ".progress").delete();
                         generateLocalManifest(destDir, nextSeg, segDuration);
+
+                        // Download VTT subtitles into the same directory
+                        try {
+                            JSONObject taskJson = httpGetJson(
+                                baseUrl + "/api/downloads/" + taskId, token);
+                            JSONArray subs = taskJson.optJSONArray("subtitles");
+                            if (subs != null) {
+                                for (int si = 0; si < subs.length(); si++) {
+                                    String filename = subs.getJSONObject(si).getString("filename");
+                                    String subUrl = baseUrl + "/api/downloads/"
+                                        + taskId + "/subtitle/" + filename;
+                                    downloadFile(subUrl, token, destDir + "/" + filename);
+                                    Log.d(TAG, "Progressive #" + taskId
+                                        + ": downloaded subtitle " + filename);
+                                }
+                            }
+                        } catch (Exception subErr) {
+                            Log.w(TAG, "Progressive #" + taskId
+                                + ": subtitle download failed: " + subErr.getMessage());
+                        }
 
                         ts.progress = 100;
                         ts.status = "downloading";
@@ -389,9 +427,15 @@ public class DownloadForegroundService extends Service {
                         return;
                     }
 
-                    // Wait before next poll
-                    Thread.sleep(2000);
+                    // Wait before next poll — InterruptedException means service
+                    // is shutting down; exit gracefully without marking as failed.
+                    try { Thread.sleep(2000); } catch (InterruptedException ie) {
+                        Log.d(TAG, "Progressive #" + taskId + ": interrupted during sleep, exiting");
+                        return;
+                    }
                 }
+            } catch (InterruptedException e) {
+                Log.d(TAG, "Progressive #" + taskId + ": interrupted, exiting gracefully");
             } catch (Exception e) {
                 Log.w(TAG, "Progressive download #" + taskId + " failed: " + e.getMessage());
                 emitToWebView("downloadFailed", taskId, 0, "error");
@@ -400,6 +444,27 @@ public class DownloadForegroundService extends Service {
                 progressiveRunning.remove(taskId);
             }
         });
+    }
+
+    /** Download any URL to a local file path. Used for subtitles. */
+    private void downloadFile(String url, String token, String destPath) throws Exception {
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        conn.setRequestMethod("GET");
+        conn.setConnectTimeout(15000);
+        conn.setReadTimeout(30000);
+        if (token != null && !token.isEmpty()) {
+            conn.setRequestProperty("Authorization", "Bearer " + token);
+        }
+        int code = conn.getResponseCode();
+        if (code != 200) throw new Exception("Download " + url + " HTTP " + code);
+        java.io.InputStream in = conn.getInputStream();
+        java.io.FileOutputStream out = new java.io.FileOutputStream(destPath);
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+        out.close();
+        in.close();
+        conn.disconnect();
     }
 
     private void downloadSegment(String baseUrl, String token, int taskId,
@@ -510,21 +575,28 @@ public class DownloadForegroundService extends Service {
                 showProgress = true;
         }
 
-        // Ongoing + no autoCancel.
+        // Ongoing + no autoCancel. No contentIntent during progress — clicking the
+        // notification on some devices/Capacitor configs can restart the Activity which
+        // kills the WebView and cascades into service destruction. Only set contentIntent
+        // on terminal notifications (complete/error) where the service is already stopping.
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(icon)
             .setContentTitle(prefix + (mediaTitle != null ? mediaTitle : ""))
             .setSubText(subText)
             .setColor(color)
             .setCategory(Notification.CATEGORY_PROGRESS)
-            .setOngoing(true)
-            .setAutoCancel(false)
+            .setOngoing(showProgress)
+            .setAutoCancel(!showProgress)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .setContentIntent(getLaunchIntent())
             .setDeleteIntent(getRepostIntent());
+
+        // Terminal states (complete/error): clickable → opens app, dismissible
+        if (!showProgress) {
+            builder.setContentIntent(getLaunchIntent());
+        }
 
         if (sortKey != null) builder.setSortKey(sortKey);
         if (episode != null && !episode.isEmpty()) builder.setContentText(episode);
@@ -547,6 +619,10 @@ public class DownloadForegroundService extends Service {
 
     private PendingIntent getLaunchIntent() {
         Intent launchIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+        if (launchIntent != null) {
+            // Bring existing Activity to front — don't recreate (which kills the process + service)
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+        }
         return PendingIntent.getActivity(this, 0, launchIntent,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
@@ -568,7 +644,10 @@ public class DownloadForegroundService extends Service {
         super.onDestroy();
         stopPolling();
         if (pollExecutor != null) { pollExecutor.shutdownNow(); pollExecutor = null; }
-        if (downloadExecutor != null) { downloadExecutor.shutdownNow(); downloadExecutor = null; }
+        // Don't shutdownNow the download executor — let in-flight segment
+        // downloads finish. The thread will exit on the next poll/sleep cycle
+        // when the service is gone, or on InterruptedException.
+        if (downloadExecutor != null) { downloadExecutor.shutdown(); downloadExecutor = null; }
         releaseWakeLock();
         instance = null;
         Log.d(TAG, "Service destroyed");
@@ -578,7 +657,8 @@ public class DownloadForegroundService extends Service {
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (pm != null) {
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "fliks:download");
-            wakeLock.acquire(60 * 60 * 1000L);
+            // No timeout — held for entire download. Released in onDestroy.
+            wakeLock.acquire();
         }
     }
 
