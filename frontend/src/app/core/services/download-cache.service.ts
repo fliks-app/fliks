@@ -1,5 +1,24 @@
 import { Injectable, signal } from '@angular/core';
-import { DownloadTask } from './api/downloads-api.service';
+
+/** Client-side download task tracked in localStorage. */
+export interface DownloadTask {
+  id: number;
+  mediaId: number;
+  episodeId?: number;
+  mediaFileId: number;
+  quality: string;
+  status: string;
+  progress: number;
+  episodeLabel?: string;
+  error?: string;
+  createdAt: string;
+  media?: {
+    id: number;
+    title: string;
+    posterUrl: string | null;
+    type: string;
+  };
+}
 
 const STORAGE_KEY = 'fliks.downloads.cache';
 const LOCAL_IDS_KEY = 'fliks.downloads.localIds';

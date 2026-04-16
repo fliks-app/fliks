@@ -20,6 +20,7 @@ export class App implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly castPlayer = inject(CastPlayerService);
   private readonly sse = inject(SseService);
+  /** Injected to ensure DownloadManagerService singleton is created (authEffect, nativeEffect). */
   private readonly dlManager = inject(DownloadManagerService);
   private readonly deviceProfile = inject(BrowserDeviceProfileService);
   private backButtonListener?: { remove: () => Promise<void> };
@@ -47,10 +48,9 @@ export class App implements OnInit, OnDestroy {
         this.backButtonListener = handle;
       });
 
-      // Reconnect SSE + sync downloads when app comes back from background
+      // Reconnect SSE when app comes back from background
       CapApp.addListener('resume', () => {
         this.sse.reconnect();
-        this.dlManager.syncAfterResume();
       }).then((handle) => {
         this.resumeListener = handle;
       });

@@ -11,17 +11,13 @@ import {
 import { Capacitor } from '@capacitor/core';
 import { Router } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import {
-  DownloadsApiService,
-  DownloadTask,
-} from '../../core/services/api/downloads-api.service';
-import { DownloadCacheService } from '../../core/services/download-cache.service';
+import { DownloadCacheService, DownloadTask } from '../../core/services/download-cache.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
 import {
   DownloadNotificationService,
 } from '../../core/services/download-notification.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
-import { LucideDownload, LucideTrash2, LucidePlay, LucideAlertCircle, LucideRotateCcw } from '@lucide/angular';
+import { LucideDownload, LucideTrash2, LucidePlay, LucideAlertCircle } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 export interface DisplayDownloadTask extends DownloadTask {
@@ -32,17 +28,13 @@ export interface DisplayDownloadTask extends DownloadTask {
  * Downloads page.
  *
  * Data sources:
- *   - Server API: task metadata (title, quality, file size, poster)
- *   - Java service (native): real-time progress/status (single source of truth on Android)
- *   - SSE events (web): real-time progress
- *   - DownloadCacheService (web): device download progress
- *
- * On native, every load() syncs progress from Java service.
- * Native events are only used between load() calls for responsiveness.
+ *   - DownloadCacheService (localStorage): task metadata and status
+ *   - Java service (native): real-time progress/status
+ *   - DownloadManagerService events: real-time progress (web + native)
  */
 @Component({
   selector: 'app-downloads',
-  imports: [TranslateModule, ResolveUrlPipe, LucideDownload, LucideTrash2, LucidePlay, LucideAlertCircle, LucideRotateCcw],
+  imports: [TranslateModule, ResolveUrlPipe, LucideDownload, LucideTrash2, LucidePlay, LucideAlertCircle],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './downloads.html',
 })
@@ -52,7 +44,6 @@ export class DownloadsComponent implements OnInit, OnDestroy {
   private visibilityHandler = () => {
     if (document.visibilityState === 'visible') void this.load();
   };
-  private readonly api = inject(DownloadsApiService);
   private readonly cache = inject(DownloadCacheService);
   private readonly dlManager = inject(DownloadManagerService);
   private readonly notif = inject(DownloadNotificationService);
@@ -65,17 +56,16 @@ export class DownloadsComponent implements OnInit, OnDestroy {
 
 
   /**
-   * Java service state — synced on every load().
-   * Key = taskId, Value = { progress, status } from Java's activeTasks.
+   * Native/web state — synced on every load().
+   * Key = taskId, Value = { progress, status }.
    */
   private readonly nativeState = signal<Map<number, { progress: number; status: string }>>(new Map());
 
-  /** Web only: react to download manager events */
-  private readonly sseEffect = !this.isNative ? effect(() => {
+  /** React to download manager events for real-time UI updates */
+  private readonly eventEffect = effect(() => {
     const event = this.dlManager.lastDownloadEvent();
     if (!event) return;
     if (event.type === 'progress') {
-      // Normalize status to DB values (template only matches transcoding/pending)
       const status = event.status === 'downloading' ? 'transcoding'
         : (event.status ?? 'transcoding');
       this.nativeState.update((m) => {
@@ -83,21 +73,15 @@ export class DownloadsComponent implements OnInit, OnDestroy {
         next.set(event.taskId, { progress: event.progress, status });
         return next;
       });
+    } else if (event.type === 'complete') {
+      this.cache.markLocal(event.taskId);
+      void this.load();
     } else {
       void this.load();
     }
-  }) : null;
+  });
 
-  /** Native: react to complete/failed events for immediate UI update */
-  private readonly nativeEventEffect = this.isNative ? effect(() => {
-    const event = this.dlManager.lastDownloadEvent();
-    if (!event) return;
-    if (event.type === 'complete') {
-      this.cache.markLocal(event.taskId);
-    }
-  }) : null;
-
-  /** Derived: merge server tasks with native state (native always wins) */
+  /** Derived: merge cached tasks with live state */
   readonly items = computed<DisplayDownloadTask[]>(() => {
     const tasks = this.baseTasks();
     const native = this.nativeState();
@@ -109,12 +93,10 @@ export class DownloadsComponent implements OnInit, OnDestroy {
       if (ns) {
         return { ...task, status: ns.status, progress: ns.progress } as DisplayDownloadTask;
       }
-      // Server "ready" = transcode done. Only show "ready" if file is on device.
       if (task.status === 'ready') {
         if (localIds.has(task.id)) {
-          return task; // File on device — show "ready" (playable)
+          return task;
         }
-        // File not on device — show as in-progress (progressive DL still running)
         const pct = active.get(task.id) ?? 0;
         return { ...task, status: 'transcoding', progress: pct } as DisplayDownloadTask;
       }
@@ -125,7 +107,6 @@ export class DownloadsComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.load();
     document.addEventListener('visibilitychange', this.visibilityHandler);
-    // Native: poll Java service every 2s for real-time progress (reliable, no event loss)
     if (this.isNative) {
       this.syncTimer = setInterval(() => void this.syncFromNativeService(), 2000);
     }
@@ -137,25 +118,13 @@ export class DownloadsComponent implements OnInit, OnDestroy {
   }
 
   async load() {
-    // On native: sync from Java service first (single source of truth for progress)
     if (this.isNative) {
       await this.syncFromNativeService();
     }
 
     const cached = this.cache.load();
-    if (cached.length) {
-      this.applyFilter(cached);
-      this.loading.set(false);
-    }
-    try {
-      const list = await this.api.list();
-      this.cache.save(list);
-      this.applyFilter(list);
-    } catch {
-      // Offline — cached data already shown
-    } finally {
-      this.loading.set(false);
-    }
+    this.applyFilter(cached);
+    this.loading.set(false);
   }
 
   /** Pull current progress/status from native DownloadManager into nativeState */
@@ -164,10 +133,9 @@ export class DownloadsComponent implements OnInit, OnDestroy {
     const next = new Map<number, { progress: number; status: string }>();
     for (const dl of downloads) {
       const tid = Number(dl.id) || 0;
-      // Normalize native states to DB-compatible statuses
       const status = dl.state === 'failed' ? 'failed'
         : dl.state === 'completed' ? 'ready'
-        : 'transcoding'; // downloading/queued/stopped all show as "in progress"
+        : 'transcoding';
       next.set(tid, { progress: dl.progress, status });
     }
 
@@ -186,17 +154,6 @@ export class DownloadsComponent implements OnInit, OnDestroy {
       ['transcoding', 'pending', 'failed', 'ready'].includes(t.status),
     );
     this.baseTasks.set(filtered);
-  }
-
-  async retryItem(task: DownloadTask) {
-    try {
-      const updated = await this.dlManager.retryDownload(task.id);
-      this.baseTasks.update((list) =>
-        list.map((t) => (t.id === task.id ? updated : t)),
-      );
-    } catch {
-      // ignore
-    }
   }
 
   async deleteItem(task: DownloadTask) {

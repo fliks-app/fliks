@@ -218,6 +218,55 @@ export class StreamingController {
     return duration;
   }
 
+  /** Available download qualities for a media file (used by download-quality modal). */
+  @Get('info/qualities/:mediaFileId')
+  async downloadQualities(
+    @Req() req: Request,
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+  ) {
+    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
+    const info = resolved.mediaFile.streamInfo;
+    const fileSize = resolved.size;
+    const video = (info as any)?.video?.[0];
+    const sourceWidth = video?.width ?? 1920;
+    const sourceHeight = video?.height ?? 1080;
+    const sourceBitrate = (info as any)?.formatBitRate ?? 0;
+
+    const qualities: { key: string; label: string; estimatedSize: number }[] = [];
+    for (const p of PROFILES) {
+      if (p.maxWidth > sourceWidth && p.maxHeight > sourceHeight) continue;
+      const videoBps = this.parseBitrateString(p.videoBitrate);
+      const audioBps = this.parseBitrateString(p.audioBitrate);
+      const duration = (info as any)?.durationSeconds ?? 0;
+      const estimated =
+        duration > 0
+          ? Math.floor(((videoBps + audioBps) * duration) / 8)
+          : Math.floor(fileSize * (videoBps / Math.max(sourceBitrate, videoBps)));
+      const sizeLabel =
+        estimated >= 1e9
+          ? `${(estimated / 1e9).toFixed(1)} GB`
+          : estimated >= 1e6
+            ? `${(estimated / 1e6).toFixed(0)} MB`
+            : `${(estimated / 1e3).toFixed(0)} KB`;
+      qualities.push({
+        key: p.name,
+        label: `${p.name} (~${sizeLabel})`,
+        estimatedSize: estimated,
+      });
+    }
+    return qualities;
+  }
+
+  private parseBitrateString(s: string): number {
+    const match = s.match(/^(\d+(?:\.\d+)?)\s*(k|m)?$/i);
+    if (!match) return 0;
+    const n = parseFloat(match[1]);
+    const unit = (match[2] ?? '').toLowerCase();
+    if (unit === 'k') return n * 1000;
+    if (unit === 'm') return n * 1_000_000;
+    return n;
+  }
+
   /** Current hardware acceleration type detected by the server. */
   @Get('info/hw-accel')
   hwAccelInfo() {

@@ -31,7 +31,6 @@ import { SubtitlesModule } from '../subtitles/subtitles.module';
 import { SettingsModule } from '../settings/settings.module';
 import { MediaServersModule } from '../media-servers/media-servers.module';
 import { StreamingModule } from '../streaming/streaming.module';
-import { InappDownloadsModule } from '../inapp-downloads/inapp-downloads.module';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { StalledCheck } from './entities/stalled-check.entity';
 import { CleanupProfilesModule } from '../cleanup-profiles/cleanup-profiles.module';
@@ -70,7 +69,6 @@ import { Library } from '../libraries/entities/library.entity';
     SettingsModule,
     MediaServersModule,
     StreamingModule,
-    InappDownloadsModule,
     CleanupProfilesModule,
     LibrariesModule,
     ProfilesModule,

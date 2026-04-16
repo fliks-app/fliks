@@ -22,7 +22,6 @@ import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { NamingService } from './naming.service';
 import { DelayProfile } from '../profiles/entities/delay-profile.entity';
 import { EventsService } from './events.service';
-import { InappDownloadsService } from '../inapp-downloads/inapp-downloads.service';
 import { MediaFile } from '../media/entities/media-file.entity';
 import {
   ThumbnailService,
@@ -67,7 +66,6 @@ export class SchedulerService implements OnModuleInit {
     private readonly delayProfileRepo: Repository<DelayProfile>,
     private readonly eventsService: EventsService,
     private readonly subtitleScheduler: SubtitleSchedulerService,
-    private readonly downloadsService: InappDownloadsService,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly thumbnailService: ThumbnailService,
@@ -143,17 +141,6 @@ export class SchedulerService implements OnModuleInit {
   // ---------------------------------------------------------------------------
   // Scheduled jobs
   // ---------------------------------------------------------------------------
-
-  /** Search for missing monitored movies every 6 hours */
-  /** Cleanup transcoded download files that were never fetched by a client */
-  @Cron(CronExpression.EVERY_6_HOURS)
-  async cleanupDownloads(): Promise<void> {
-    try {
-      await this.downloadsService.cleanupStaleFiles();
-    } catch (e) {
-      this.log.warn(`CleanupDownloads failed: ${(e as Error).message}`);
-    }
-  }
 
   @Cron(CronExpression.EVERY_6_HOURS)
   async searchMissing(): Promise<void> {
