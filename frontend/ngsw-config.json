@@ -28,5 +28,17 @@
       }
     }
   ],
+  "dataGroups": [
+    {
+      "name": "media-images",
+      "urls": ["/images/posters/**", "/images/fanart/**", "/images/persons/**"],
+      "cacheConfig": {
+        "strategy": "freshness",
+        "maxSize": 2000,
+        "maxAge": "30d",
+        "timeout": "3s"
+      }
+    }
+  ],
   "navigationRequestStrategy": "freshness"
 }

@@ -13,6 +13,7 @@ import { routes } from './app.routes';
 import { serverUrlInterceptor } from './core/interceptors/server-url.interceptor';
 import { credentialsInterceptor } from './core/interceptors/credentials.interceptor';
 import { errorInterceptor } from './core/interceptors/error.interceptor';
+import { cacheInterceptor } from './core/interceptors/cache.interceptor';
 import { translateBrowserLoaderFactory } from './utils/translate-loader';
 
 export const appConfig: ApplicationConfig = {
@@ -21,7 +22,7 @@ export const appConfig: ApplicationConfig = {
     provideZonelessChangeDetection(),
     provideRouter(routes, withInMemoryScrolling({ scrollPositionRestoration: 'top' })),
     provideHttpClient(
-      withInterceptors([serverUrlInterceptor, credentialsInterceptor, errorInterceptor]),
+      withInterceptors([serverUrlInterceptor, credentialsInterceptor, cacheInterceptor, errorInterceptor]),
     ),
     provideTranslateService({
       loader: {

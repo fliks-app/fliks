@@ -225,6 +225,13 @@ export const routes: Routes = [
             (m) => m.CastSettingsPageComponent,
           ),
       },
+      {
+        path: 'storage',
+        loadComponent: () =>
+          import('./features/playback-settings/storage-settings/storage-settings').then(
+            (m) => m.StorageSettingsPageComponent,
+          ),
+      },
     ],
   },
   // Admin area — own layout with dedicated sidebar

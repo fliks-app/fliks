@@ -96,8 +96,19 @@
     "nav": {
       "player": "Lecture",
       "subtitles": "Sous-titres",
-      "cast": "Chromecast"
+      "cast": "Chromecast",
+      "storage": "Stockage"
     }
+  },
+  "storage_settings": {
+    "clear_cache": "Vider le cache",
+    "clear_cache_hint": "Supprime les données mises en cache (listes, métadonnées). Les pages se rechargeront depuis le serveur.",
+    "clear": "Vider",
+    "cache_cleared": "Cache vidé",
+    "delete_downloads": "Supprimer tous les téléchargements",
+    "delete_downloads_hint": "Supprime tous les médias téléchargés pour la lecture hors-ligne sur cet appareil.",
+    "delete_downloads_confirm": "Supprimer tous les téléchargements ? Cette action est irréversible.",
+    "downloads_deleted": "Tous les téléchargements ont été supprimés"
   },
   "nav": {
     "home": "Accueil",
@@ -769,7 +780,9 @@
     "copied": "Copié",
     "settings_saved": "Paramètres enregistrés",
     "saved": "Enregistré",
-    "selections_cleared": "Sélections effacées"
+    "selections_cleared": "Sélections effacées",
+    "retry": "Réessayer",
+    "offline_banner": "Mode hors-ligne — les données affichées peuvent ne pas être à jour"
   },
   "downloads": {
     "title": "Téléchargements",

@@ -277,6 +277,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.location.back();
   }
 
+  retryConnection() {
+    window.location.reload();
+  }
+
   toggleCastOverlay() {
     this.castPlayer.expanded.update(v => !v);
   }
