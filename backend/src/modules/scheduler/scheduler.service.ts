@@ -878,53 +878,53 @@ export class SchedulerService implements OnModuleInit {
     );
   }
 
-  private async doRescanAll(): Promise<void> {
-    const allMedia = await this.mediaRepo.find({
-      select: ['id', 'title'],
-    });
-
-    this.log.log(`RescanAll: started — ${allMedia.length} media to scan`);
-
+  /** Shared rescan loop — skip subtitle warmup to avoid queue flooding. */
+  private async rescanMediaList(
+    mediaList: { id: number; title: string }[],
+    commandName: string,
+  ): Promise<void> {
+    this.log.log(`${commandName}: started — ${mediaList.length} media to scan`);
     let totalUpdated = 0;
     let skipped = 0;
-    for (let i = 0; i < allMedia.length; i++) {
-      const media = allMedia[i];
+    for (let i = 0; i < mediaList.length; i++) {
+      const media = mediaList[i];
       this.eventsService.emit({
         type: 'task.progress',
-        command: 'RescanAll',
+        command: commandName,
         current: i,
-        total: allMedia.length,
+        total: mediaList.length,
         message: media.title,
       });
       try {
-        const result = await this.mediaService.rescanFiles(media.id);
+        const result = await this.mediaService.rescanFiles(media.id, { skipWarmup: true });
         totalUpdated += result.added + result.removed + result.updated;
       } catch (e) {
         skipped++;
         this.log.warn(
-          `RescanAll: skipped "${media.title}" — ${(e as Error).message}`,
+          `${commandName}: skipped "${media.title}" — ${(e as Error).message}`,
         );
       }
     }
-
-    if (allMedia.length > 0) {
+    if (mediaList.length > 0) {
       this.eventsService.emit({
         type: 'task.progress',
-        command: 'RescanAll',
-        current: allMedia.length,
-        total: allMedia.length,
-        message: 'RescanAll',
+        command: commandName,
+        current: mediaList.length,
+        total: mediaList.length,
+        message: commandName,
       });
     }
-
     this.log.log(
-      `RescanAll: scanned ${allMedia.length - skipped}/${allMedia.length} media, ${totalUpdated} change(s), ${skipped} skipped`,
+      `${commandName}: scanned ${mediaList.length - skipped}/${mediaList.length} media, ${totalUpdated} change(s), ${skipped} skipped`,
     );
     if (skipped > 0) {
-      this.log.warn(
-        `RescanAll: ${skipped} media failed (see WARN lines above per title)`,
-      );
+      this.log.warn(`${commandName}: ${skipped} media failed (see WARN lines above per title)`);
     }
+  }
+
+  private async doRescanAll(): Promise<void> {
+    const allMedia = await this.mediaRepo.find({ select: ['id', 'title'] });
+    await this.rescanMediaList(allMedia, 'RescanAll');
   }
 
   /**
@@ -1024,46 +1024,7 @@ export class SchedulerService implements OnModuleInit {
       `RescanMissingFiles: started — ${candidates.length} media to scan`,
     );
 
-    let totalUpdated = 0;
-    let skipped = 0;
-    for (let i = 0; i < candidates.length; i++) {
-      const media = candidates[i];
-      this.eventsService.emit({
-        type: 'task.progress',
-        command: 'RescanMissingFiles',
-        current: i,
-        total: candidates.length,
-        message: media.title,
-      });
-      try {
-        const result = await this.mediaService.rescanFiles(media.id);
-        totalUpdated += result.added + result.removed + result.updated;
-      } catch (e) {
-        skipped++;
-        this.log.warn(
-          `RescanMissingFiles: skipped "${media.title}" — ${(e as Error).message}`,
-        );
-      }
-    }
-
-    if (candidates.length > 0) {
-      this.eventsService.emit({
-        type: 'task.progress',
-        command: 'RescanMissingFiles',
-        current: candidates.length,
-        total: candidates.length,
-        message: 'RescanMissingFiles',
-      });
-    }
-
-    this.log.log(
-      `RescanMissingFiles: scanned ${candidates.length - skipped}/${candidates.length} media, ${totalUpdated} change(s) (from ${allMedia.length} total)`,
-    );
-    if (skipped > 0) {
-      this.log.warn(
-        `RescanMissingFiles: ${skipped} media failed (see WARN lines above per title)`,
-      );
-    }
+    await this.rescanMediaList(candidates, 'RescanMissingFiles');
   }
 
   private isDelayed(

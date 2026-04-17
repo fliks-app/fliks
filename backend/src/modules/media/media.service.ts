@@ -1938,7 +1938,7 @@ export class MediaService {
     '.flv',
   ]);
 
-  async rescanFiles(mediaId: number): Promise<{
+  async rescanFiles(mediaId: number, options?: { skipWarmup?: boolean }): Promise<{
     added: number;
     removed: number;
     updated: number;
@@ -2183,13 +2183,15 @@ export class MediaService {
         this.log.log(
           `Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${qualityName})`,
         );
-        void this.subtitleStream.warmupCache(
-          absPath,
-          media.path,
-          dbFile.id,
-          streamInfo?.subtitles,
-          media.title,
-        );
+        if (!options?.skipWarmup) {
+          void this.subtitleStream.warmupCache(
+            absPath,
+            media.path,
+            dbFile.id,
+            streamInfo?.subtitles,
+            media.title,
+          );
+        }
       } catch (err) {
         this.log.error(
           `Rescan[media #${mediaId}]: failed to save refreshed metadata for "${normPath}"`,
@@ -2327,13 +2329,15 @@ export class MediaService {
         if (episodeId != null) {
           await this.episodeRepo.update(episodeId, { hasFile: true });
         }
-        void this.subtitleStream.warmupCache(
-          absPath,
-          media.path,
-          savedFile.id,
-          streamInfo.subtitles,
-          media.title,
-        );
+        if (!options?.skipWarmup) {
+          void this.subtitleStream.warmupCache(
+            absPath,
+            media.path,
+            savedFile.id,
+            streamInfo.subtitles,
+            media.title,
+          );
+        }
       } catch (err) {
         this.log.error(
           `Rescan[media #${mediaId}]: failed to save new file row "${relativePath}" abs="${absPath}"`,
