@@ -658,6 +658,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
               );
             }
 
+            // Resolve the target audio language BEFORE load so Shaka picks
+            // the matching variant during manifest parse — otherwise
+            // autoSelectAudioTrack would fire selectVariantTrack after load
+            // and trigger a second init.mp4 + seg-0 fetch.
+            const audioSettings = this.playerSettings.get();
+            let preferredLang: string | undefined;
+            if (audioSettings.rememberAudioSelections && this.mediaId) {
+              preferredLang =
+                this.playerSettings.getRememberedAudioTrack(this.mediaId) ?? undefined;
+            }
+            if (!preferredLang && !audioSettings.useDefaultAudioStream) {
+              preferredLang = audioSettings.preferredAudioLanguage || undefined;
+            }
+
             // Disable ABR when a specific quality is saved — avoids background
             // variant-switch chatter mid-playback. The backend serves a
             // single-variant master playlist in that case so there's only one
@@ -681,6 +695,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
                     'video/mp2t; codecs="avc1.640028,mp4a.40.2"',
                 },
               },
+              ...(preferredLang ? { preferredAudioLanguage: preferredLang } : {}),
             });
 
             // Tell the backend the target quality so it pre-starts FFmpeg at

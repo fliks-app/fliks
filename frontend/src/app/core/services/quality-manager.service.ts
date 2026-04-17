@@ -14,7 +14,11 @@ const PLAYER_QUALITY_STORAGE_KEY = 'player.qualityId';
  * ABR: prefer starting at 720p+ and staying there when possible; below 720 only
  * when no variant meets the restriction (very slow network / low source res).
  */
-const ABR_DEFAULT_BANDWIDTH_ESTIMATE = 4_500_000;
+// Seed the ABR bandwidth estimator high so Shaka picks the top variant on
+// the first segment instead of probing low→high (which fetches a throw-away
+// low-quality init+seg-0 before upgrading). Once the first segment's real
+// bandwidth is observed, ABR recalibrates within seconds.
+const ABR_DEFAULT_BANDWIDTH_ESTIMATE = 100_000_000;
 
 /**
  * Find a variant track by profile name in the variant URL (e.g. '480p' matches '/480p/').
@@ -137,7 +141,11 @@ export class QualityManagerService {
           abr: {
             enabled: true,
             defaultBandwidthEstimate: ABR_DEFAULT_BANDWIDTH_ESTIMATE,
-            useNetworkInformation: true,
+            // useNetworkInformation: navigator.connection values are usually
+            // conservative (and unsupported on some browsers), which drags
+            // ABR toward low variants at startup. Seed from our estimate and
+            // let Shaka measure actual throughput from real segments.
+            useNetworkInformation: false,
             switchInterval: 5,              // Re-evaluate every 5s (default: 8)
             bandwidthUpgradeTarget: 0.7,    // Upgrade at 70% headroom (default: 0.85 = more conservative)
             bandwidthDowngradeTarget: 0.95, // Downgrade only when nearly saturated
