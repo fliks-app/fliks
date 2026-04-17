@@ -971,9 +971,6 @@ export class StreamingController {
     }
 
     // Slow path: need to create/restart a session — requires DB lookup.
-    this.log.log(
-      `hlsSegment slow-path: mfid=${mediaFileId} quality=${quality} seg=${segment} segIndex=${segIndex} existing=${existing ? `q=${existing.quality},startSeg=${existing.startSegment},exit=${existing.process.exitCode}` : 'none'}`,
-    );
     const resolved = await this.streamingService.resolveFile(
       mediaFileId,
       req.user as User,

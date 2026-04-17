@@ -586,9 +586,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
 
     const existing = this.sessions.get(key);
-    this.log.log(
-      `doGetOrCreateSession [${key}] req=${requestedSegment} quality=${quality} existingQ=${existing?.quality} existingStartSeg=${existing?.startSegment} existingExit=${existing?.process.exitCode}`,
-    );
     if (existing) {
       const qualityMatch = existing.quality === quality && !existing.remux;
       if (!qualityMatch && existing.process.exitCode === null) {
@@ -2094,13 +2091,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   /** Simple keyed lock: serialises access per session key (like Jellyfin's AsyncKeyedLocker). */
   private async withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
     // Wait for any existing operation on this key
-    if (this.locks.has(key)) {
-      this.log.log(`withLock [${key}] WAITING for previous lock`);
-    }
     while (this.locks.has(key)) {
       await this.locks.get(key);
     }
-    this.log.log(`withLock [${key}] acquired`);
     let release!: () => void;
     const lock = new Promise<void>((r) => {
       release = r;

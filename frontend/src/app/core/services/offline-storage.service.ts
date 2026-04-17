@@ -110,6 +110,25 @@ export class OfflineStorageService {
         progressCallback: (_content: any, progress: number) => {
           onProgress?.(progress);
         },
+        // Default Shaka stores a single audio track. Keep every audio
+        // rendition + the chosen video variant so offline playback exposes
+        // all languages in the track picker.
+        trackSelectionCallback: (tracks: any[]) => {
+          const variants = tracks.filter((t) => t.type === 'variant');
+          if (!variants.length) return tracks;
+          const best = variants.reduce((a, b) =>
+            (a.bandwidth ?? 0) >= (b.bandwidth ?? 0) ? a : b,
+          );
+          const seenAudioIds = new Set<number>();
+          const selected = variants.filter((v) => {
+            if (v.videoId !== best.videoId) return false;
+            if (v.audioId == null) return true;
+            if (seenAudioIds.has(v.audioId)) return false;
+            seenAudioIds.add(v.audioId);
+            return true;
+          });
+          return [...selected, ...tracks.filter((t) => t.type !== 'variant')];
+        },
       },
     } as any);
 
