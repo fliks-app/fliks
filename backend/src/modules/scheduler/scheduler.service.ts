@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { existsSync } from 'fs';
 import { In } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -678,10 +679,17 @@ export class SchedulerService implements OnModuleInit {
     const commandName = force ? 'GenerateSprites' : 'GenerateMissingSprites';
     const BATCH = 2;
     // Only load IDs — avoid pulling full streamInfo/media into memory.
-    const fileIds: { id: number }[] = await this.mediaFileRepo.find({
+    const allIds: { id: number }[] = await this.mediaFileRepo.find({
       select: ['id'],
     });
-    this.log.log(`${commandName}: processing ${fileIds.length} files`);
+    // Pre-filter: skip files that already have a sprite on disk (fast existsSync).
+    // Only when not forcing regeneration.
+    const fileIds = force
+      ? allIds
+      : allIds.filter(({ id }) => !existsSync(this.thumbnailService.getMetadataPath(id)));
+    this.log.log(
+      `${commandName}: ${fileIds.length} to generate (${allIds.length - fileIds.length} already exist, ${allIds.length} total)`,
+    );
 
     let generated = 0;
     // Process in batches of BATCH — each file is queued into ThumbnailService

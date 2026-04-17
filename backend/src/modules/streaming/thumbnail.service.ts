@@ -262,21 +262,32 @@ export class ThumbnailService {
       message: label,
     });
 
-    try {
-      // Two-pass via seek: spawn N parallel `ffmpeg -ss` processes (one per
-      // thumbnail timestamp) that extract a single frame each — much faster
-      // than sequentially decoding the full video. Then tile the frames.
-      await this.extractFramesBySeek(
-        absolutePath,
-        framesDir,
-        interval,
-        count,
-        total,
-        label,
-        progressKey,
-      );
+    // Global 4-minute timeout for the entire sprite (extraction + tiling).
+    const SPRITE_TIMEOUT_MS = 4 * 60_000;
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Sprite generation timed out after 4 minutes`)), SPRITE_TIMEOUT_MS),
+    );
 
-      await this.tileSprite(framesDir, spritePath, rows);
+    try {
+      await Promise.race([
+        (async () => {
+          // Two-pass via seek: spawn N parallel `ffmpeg -ss` processes (one per
+          // thumbnail timestamp) that extract a single frame each — much faster
+          // than sequentially decoding the full video. Then tile the frames.
+          await this.extractFramesBySeek(
+            absolutePath,
+            framesDir,
+            interval,
+            count,
+            total,
+            label,
+            progressKey,
+          );
+
+          await this.tileSprite(framesDir, spritePath, rows);
+        })(),
+        timeoutPromise,
+      ]);
 
       // Read actual dimensions via ffprobe
       let thumbHeight: number;
@@ -378,9 +389,9 @@ export class ThumbnailService {
   ): Promise<void> {
     let completed = 0;
     let failed = 0;
-    let consecutiveFails = 0;
     let aborted = false;
     let nextIndex = 0;
+    const MAX_FAILS = 5;
 
     const runOne = async (): Promise<void> => {
       while (true) {
@@ -395,19 +406,17 @@ export class ThumbnailService {
         try {
           await this.extractFrameAt(inputPath, timestamp, outPath);
           completed++;
-          consecutiveFails = 0;
         } catch (err) {
           failed++;
-          consecutiveFails++;
-          if (consecutiveFails <= 3) {
+          if (failed <= 3) {
             this.log.warn(
               `Sprite frame ${idx + 1}/${count} @ ${timestamp}s failed for "${label}": ${(err as Error).message}`,
             );
           }
-          if (consecutiveFails >= 3) {
+          if (failed >= MAX_FAILS) {
             aborted = true;
             this.log.warn(
-              `Sprite aborted for "${label}": ${consecutiveFails} consecutive failures (file missing or unreadable)`,
+              `Sprite aborted for "${label}": ${failed} failures out of ${completed + failed} attempts`,
             );
             return;
           }
@@ -493,7 +502,9 @@ export class ThumbnailService {
       proc.stderr.on('data', (chunk: Buffer) => {
         if (stderr.length < 4096) stderr += chunk.toString();
       });
+      let killed = false;
       const killTimer = setTimeout(() => {
+        killed = true;
         try {
           proc.kill('SIGKILL');
         } catch {
@@ -503,8 +514,9 @@ export class ThumbnailService {
       proc.on('close', (code) => {
         clearTimeout(killTimer);
         if (code === 0) return resolve();
+        const reason = killed ? 'timeout (60s)' : `code ${code}`;
         const err = new Error(
-          `ffmpeg -ss exited with code ${code}: ${stderr.trim().split('\n').slice(-2).join(' ')}`,
+          `ffmpeg -ss exited with ${reason}: ${stderr.trim().split('\n').slice(-2).join(' ')}`,
         );
         reject(err);
       });

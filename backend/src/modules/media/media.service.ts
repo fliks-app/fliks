@@ -2018,6 +2018,7 @@ export class MediaService {
 
     let added = 0;
     let removed = 0;
+    const changedFileIds = new Set<number>();
 
     // 3. Remove DB records whose files no longer exist on disk
     for (const dbFile of dbFiles) {
@@ -2139,14 +2140,16 @@ export class MediaService {
         }
       }
 
-      // Always re-probe streamInfo on rescan
+      // Always re-probe streamInfo (fast, ~1s) to pick up schema changes.
+      // Skip detectCrop (~5-10s) if file size is unchanged — crop doesn't change.
+      const sizeUnchanged = dbFile.size === diskSize;
       dbFile.size = diskSize;
       let streamInfo: Awaited<
         ReturnType<FfprobeService['detectMediaFileInfo']>
       >;
       try {
         streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
-        if (streamInfo?.video?.[0]) {
+        if (streamInfo?.video?.[0] && !sizeUnchanged) {
           try {
             const v = streamInfo.video[0];
             const crop = await this.ffprobe.detectCrop(
@@ -2162,6 +2165,9 @@ export class MediaService {
               err instanceof Error ? err.stack : err,
             );
           }
+        } else if (sizeUnchanged && (dbFile.streamInfo as any)?.video?.[0]?.crop) {
+          // Preserve existing crop from previous scan
+          streamInfo.video[0].crop = (dbFile.streamInfo as any).video[0].crop;
         }
         dbFile.streamInfo = streamInfo;
       } catch (err) {
@@ -2180,8 +2186,9 @@ export class MediaService {
       try {
         await this.mediaFileRepo.save(dbFile);
         updated++;
+        if (!sizeUnchanged) changedFileIds.add(dbFile.id);
         this.log.log(
-          `Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${qualityName})`,
+          `Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${qualityName}${sizeUnchanged ? ', skipped crop' : ''})`,
         );
         if (!options?.skipWarmup) {
           void this.subtitleStream.warmupCache(
@@ -2323,6 +2330,7 @@ export class MediaService {
           }),
         );
         added++;
+        changedFileIds.add(savedFile.id);
         this.log.log(
           `Rescan: added new file "${relativePath}" for media #${mediaId}`,
         );
@@ -2366,13 +2374,13 @@ export class MediaService {
           `Rescan: discovered ${discovered} external subtitle(s) on disk for media #${mediaId}`,
         );
       }
-      // Re-detect embedded subtitle streams (ffprobe) for every file so DB
-      // rows stay in sync with the container (tracks added/removed by a
-      // re-encode, language labels updated).
+      // Re-detect embedded subtitle streams only for files that changed
+      // (size differs) or were newly added — skip unchanged files.
       const allFiles = await this.mediaFileRepo.find({
         where: { media: { id: mediaId } },
       });
       for (const file of allFiles) {
+        if (!changedFileIds.has(file.id)) continue;
         try {
           await this.embeddedSubtitle.detectAndStore(
             mediaId,
