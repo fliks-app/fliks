@@ -100,9 +100,15 @@ export class MediaDetailSeasonsComponent {
     const files = this.trackedFilesForEpisode(ep.id);
     if (files.length) {
       const m = this.media();
-      void this.router.navigate(['/watch', files[0].id], {
-        queryParams: { mediaId: m.id, episodeId: ep.id },
-      });
+      // Detour via '/' forces Angular to remount the player component
+      // (same-route navigation reuses the component without re-reading params).
+      void this.router
+        .navigateByUrl('/', { skipLocationChange: true })
+        .then(() =>
+          this.router.navigate(['/watch', files[0].id], {
+            queryParams: { mediaId: m.id, episodeId: ep.id },
+          }),
+        );
     }
   }
 }

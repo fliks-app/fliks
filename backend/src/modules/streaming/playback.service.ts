@@ -1,8 +1,10 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
+import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';
+import { User } from '../users/entities/user.entity';
 import { PlaybackState } from './entities/playback-state.entity';
 
 export interface WatchHistoryItem {
@@ -237,6 +239,9 @@ export class PlaybackService implements OnModuleInit {
       episodeId?: number;
     },
   ): Promise<PlaybackState> {
+    if (!mediaId || !body.mediaFileId) {
+      throw new BadRequestException('mediaId and mediaFileId are required');
+    }
     let state = await this.findState(userId, mediaId, body.episodeId);
 
     const dur = body.durationSeconds ?? 0;
@@ -249,12 +254,12 @@ export class PlaybackService implements OnModuleInit {
       state.completed = completed;
       state.hiddenFromContinueWatching = false;
       state.lastPlayedAt = new Date();
-      state.mediaFileId = body.mediaFileId;
+      state.mediaFile = { id: body.mediaFileId } as MediaFile;
     } else {
       state = this.repo.create({
-        userId,
-        mediaId,
-        mediaFileId: body.mediaFileId,
+        user: { id: userId } as User,
+        media: { id: mediaId } as Media,
+        mediaFile: { id: body.mediaFileId } as MediaFile,
         episode:
           body.episodeId != null ? ({ id: body.episodeId } as Episode) : null,
         positionSeconds: pos,

@@ -34,12 +34,12 @@ export class PlaybackState extends BaseEntity {
   mediaId: number;
 
   /** Last played file — used to know which file to resume on the detail page. */
-  @ManyToOne(() => MediaFile, { onDelete: 'SET NULL', nullable: true })
+  @ManyToOne(() => MediaFile, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'mediaFileId' })
-  mediaFile: MediaFile | null;
+  mediaFile: MediaFile;
 
   @RelationId((ps: PlaybackState) => ps.mediaFile)
-  mediaFileId: number | null;
+  mediaFileId: number;
 
   @ManyToOne(() => Episode, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'episodeId' })
