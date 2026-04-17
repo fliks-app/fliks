@@ -256,6 +256,8 @@ export function parseBitrateToBps(s: string): number {
 }
 const SESSION_TIMEOUT_MS = 60 * 1000; // 60s (like Jellyfin HLS timeout)
 const MAX_SESSIONS = 4;
+/** Max gap (in segments) between FFmpeg frontier and requested segment before restarting. */
+const SEEK_WAIT_THRESHOLD = 15;
 
 @Injectable()
 export class TranscodingService implements OnModuleInit, OnModuleDestroy {
@@ -505,14 +507,14 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         await fsp.rm(existing.cachePath, { recursive: true, force: true });
         // Fall through to create a new session below
       } else if (existing.quality !== quality || existing.remux) {
-        // Quality changed — kill process but keep cache dir (faster restart).
-        // Old segments will be overwritten by the new FFmpeg.
+        // Quality changed — kill old process. Each quality has its own cache
+        // dir so no segment collision. Old segments remain for switch-back.
         this.log.log(
           `Quality change [${key}]: ${existing.quality} → ${quality}, killing old session`,
         );
         this.sessions.delete(key);
         await this.killProcess(existing.process);
-        // Fall through to create a new session (reuses existing cache dir)
+        // Fall through to create a new session in a new quality-specific dir
       } else {
         existing.lastAccess = Date.now();
 
@@ -525,7 +527,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           if (requestedSegment >= (existing.startSegment ?? 0)) {
             const frontier = await this.highestSegmentOnDisk(existing.cachePath);
             const gap = requestedSegment - frontier;
-            if (gap <= 30) {
+            if (gap <= SEEK_WAIT_THRESHOLD) {
               // FFmpeg is close — let getSegmentPath wait for it.
               return existing;
             }
@@ -602,7 +604,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     }
 
     const profile = PROFILES.find((p) => p.name === quality) ?? PROFILES[0];
-    const sessionDir = path.join(this.cachePath, key);
+    const sessionDir = path.join(this.cachePath, key, quality);
     await fsp.mkdir(sessionDir, { recursive: true });
 
     const shouldTonemap = ctx?.tonemap ?? false;
@@ -1037,6 +1039,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
     await Promise.all(promises);
+    // Clean up parent dir (stream/key/) if now empty.
+    const parentDir = path.join(this.cachePath, key);
+    fsp.rm(parentDir, { recursive: true, force: true }).catch(() => {});
   }
 
   /** Kill a session by its map key (used by admin dashboard). */
@@ -1731,7 +1736,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
           if (requestedSegment >= (existing.startSegment ?? 0)) {
             const frontier = await this.highestSegmentOnDisk(existing.cachePath);
-            if (requestedSegment - frontier <= 30) {
+            if (requestedSegment - frontier <= SEEK_WAIT_THRESHOLD) {
               return existing;
             }
           }
@@ -1761,7 +1766,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.evictOldestSession();
     }
 
-    const sessionDir = path.join(this.cachePath, key);
+    const sessionDir = path.join(this.cachePath, key, 'remux');
     await fsp.mkdir(sessionDir, { recursive: true });
 
     const isVideoOnly = ctx?.videoOnly ?? false;
@@ -1859,7 +1864,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const sessionDir = path.join(this.cachePath, key);
+    const sessionDir = path.join(this.cachePath, key, 'audio');
     await fsp.mkdir(sessionDir, { recursive: true });
 
     const args = this.buildAudioOnlyFfmpegArgs(
