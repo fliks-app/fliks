@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { Readable } from 'stream';
-import { execFile, spawn } from 'child_process';
+import { execFile, spawn, type ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import * as fsSync from 'fs';
 import * as fs from 'fs/promises';
@@ -573,9 +573,10 @@ export class SubtitleStreamService {
 
     try {
       await new Promise<void>((resolve, reject) => {
-        const proc = spawn('ffmpeg', args, {
-          stdio: ['ignore', 'ignore', 'pipe'],
-        });
+        // Low priority — this is a background warmup batch, not a live request.
+        const proc = process.platform === 'linux'
+          ? spawn('ionice', ['-c3', 'nice', '-n19', 'ffmpeg', ...args], { stdio: ['ignore', 'ignore', 'pipe'] })
+          : spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
         let stderrTail = '';
         proc.stderr?.on('data', (chunk: Buffer) => {
           stderrTail = (stderrTail + chunk.toString()).slice(-2000);

@@ -57,7 +57,7 @@ import { join } from 'path';
         database: config.get('DB_NAME', 'fliks'),
         autoLoadEntities: true,
         synchronize: true,
-        extra: { max: 20 },
+        extra: { max: 30 },
       }),
     }),
     EventsModule,

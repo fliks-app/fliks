@@ -841,7 +841,7 @@ export class IntroDetectionService {
     lengthSec: number,
   ): Promise<Fingerprint> {
     return new Promise((resolve, reject) => {
-      const ffmpeg = spawn('ffmpeg', [
+      const ffmpegArgs = [
         '-nostdin',
         '-hide_banner',
         '-loglevel',
@@ -860,7 +860,11 @@ export class IntroDetectionService {
         '-f',
         'wav',
         '-',
-      ]);
+      ];
+      // Low I/O + CPU priority for background detection
+      const ffmpeg = process.platform === 'linux'
+        ? spawn('ionice', ['-c3', 'nice', '-n19', 'ffmpeg', ...ffmpegArgs])
+        : spawn('ffmpeg', ffmpegArgs);
       const fpcalc = spawn(
         'fpcalc',
         ['-raw', '-length', String(lengthSec), '-'],
@@ -872,8 +876,8 @@ export class IntroDetectionService {
       let ffmpegErr = '';
       fpcalc.stdout.on('data', (d) => (stdout += d.toString()));
       fpcalc.stderr.on('data', (d) => (fpcalcErr += d.toString()));
-      ffmpeg.stderr.on('data', (d) => (ffmpegErr += d.toString()));
-      ffmpeg.stdout.pipe(fpcalc.stdin);
+      ffmpeg.stderr?.on('data', (d) => (ffmpegErr += d.toString()));
+      ffmpeg.stdout!.pipe(fpcalc.stdin);
       ffmpeg.on('error', reject);
       fpcalc.on('error', reject);
 

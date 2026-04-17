@@ -1,7 +1,7 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { execFile, spawn } from 'child_process';
+import { execFile, spawn, type ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import { existsSync } from 'fs';
 import * as fsp from 'fs/promises';
@@ -11,6 +11,14 @@ import { Command } from '../scheduler/entities/command.entity';
 import { TranscodingService } from './transcoding.service';
 
 const execFileAsync = promisify(execFile);
+
+/** Spawn with low I/O and CPU priority (ionice idle + nice 19) on Linux. */
+function spawnLowPriority(cmd: string, args: string[]): ChildProcess {
+  if (process.platform === 'linux') {
+    return spawn('ionice', ['-c3', 'nice', '-n19', cmd, ...args]);
+  }
+  return spawn(cmd, args);
+}
 
 export interface SpriteMetadata {
   interval: number;
@@ -497,9 +505,9 @@ export class ThumbnailService {
         '-y',
         outputPath,
       ];
-      const proc = spawn('ffmpeg', args);
+      const proc = spawnLowPriority('ffmpeg', args);
       let stderr = '';
-      proc.stderr.on('data', (chunk: Buffer) => {
+      proc.stderr?.on('data', (chunk: Buffer) => {
         if (stderr.length < 4096) stderr += chunk.toString();
       });
       let killed = false;
@@ -548,9 +556,9 @@ export class ThumbnailService {
         '-y',
         spritePath,
       ];
-      const proc = spawn('ffmpeg', args);
+      const proc = spawnLowPriority('ffmpeg', args);
       let stderr = '';
-      proc.stderr.on('data', (chunk: Buffer) => {
+      proc.stderr?.on('data', (chunk: Buffer) => {
         if (stderr.length < 16 * 1024) stderr += chunk.toString();
       });
       proc.on('close', (code) => {
