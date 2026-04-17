@@ -1,3 +1,6 @@
+// Must be set before any I/O — libuv initializes the pool on first use.
+process.env.UV_THREADPOOL_SIZE = '16';
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DataSource } from 'typeorm';

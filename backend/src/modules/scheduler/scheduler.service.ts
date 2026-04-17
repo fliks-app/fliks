@@ -39,6 +39,9 @@ import {
   scoreAndSortReleases,
 } from '../media/release-rejection.helper';
 
+/** Yield the event loop so HTTP requests aren't starved by bulk tasks. */
+const yieldLoop = () => new Promise<void>((r) => setTimeout(r, 50));
+
 @Injectable()
 export class SchedulerService implements OnModuleInit {
   private readonly log = new Logger(SchedulerService.name);
@@ -658,6 +661,7 @@ export class SchedulerService implements OnModuleInit {
           `RefreshMetadata: failed for "${media.title}": ${(e as Error).message}`,
         );
       }
+      await yieldLoop();
     }
 
     if (allMedia.length > 0) {
@@ -743,6 +747,7 @@ export class SchedulerService implements OnModuleInit {
 
       const results = await Promise.all(promises);
       generated += results.filter((r) => r != null).length;
+      await yieldLoop();
     }
 
     this.log.log(
@@ -881,6 +886,7 @@ export class SchedulerService implements OnModuleInit {
           `${name}: skipped "${s.mediaTitle}" S${s.seasonNumber} — ${(e as Error).message}`,
         );
       }
+      await yieldLoop();
     }
     if (seasons.length > 0) {
       this.eventsService.emit({
@@ -922,6 +928,7 @@ export class SchedulerService implements OnModuleInit {
           `${commandName}: skipped "${media.title}" — ${(e as Error).message}`,
         );
       }
+      await yieldLoop();
     }
     if (mediaList.length > 0) {
       this.eventsService.emit({
