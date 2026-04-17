@@ -676,7 +676,7 @@ export class SchedulerService implements OnModuleInit {
 
   private async doGenerateSprites(force: boolean): Promise<void> {
     const commandName = force ? 'GenerateSprites' : 'GenerateMissingSprites';
-    const BATCH = 4;
+    const BATCH = 2;
     // Only load IDs — avoid pulling full streamInfo/media into memory.
     const fileIds: { id: number }[] = await this.mediaFileRepo.find({
       select: ['id'],

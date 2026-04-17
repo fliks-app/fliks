@@ -24,7 +24,7 @@ const BASE_DIR = path.join(process.cwd(), 'images', 'thumbnails');
 const FRAMES_TMP_DIR = path.join(process.cwd(), 'images', 'thumbnails-tmp');
 /** Concurrent ffmpeg `-ss` seeks per sprite. Saturates the GPU / CPU for
  *  fast extraction while leaving headroom for concurrent streams. */
-const SEEK_CONCURRENCY = 16;
+const SEEK_CONCURRENCY = 8;
 
 /**
  * Build a human-readable label for a sprite: "S01E03 — Episode Title" for a
@@ -54,7 +54,7 @@ const COLUMNS = 10;
 const THUMB_WIDTH = 240;
 
 /** Max concurrent sprite generations */
-const SPRITE_CONCURRENCY = 4;
+const SPRITE_CONCURRENCY = 2;
 
 interface QueueItem {
   mediaFileId: number;
