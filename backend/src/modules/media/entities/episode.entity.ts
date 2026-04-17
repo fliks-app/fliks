@@ -44,6 +44,10 @@ export class Episode extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   stillUrl: string | null;
 
+  /** Set after intro/outro detection runs — prevents re-scanning episodes where detection found nothing. */
+  @Column({ type: 'timestamptz', nullable: true })
+  markersScannedAt: Date | null;
+
   @Column({
     type: 'tsvector',
     nullable: true,

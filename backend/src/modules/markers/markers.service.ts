@@ -221,6 +221,7 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
       JOIN media m ON m.id = s."mediaId"
       JOIN episodes e ON e."seasonId" = s.id
       WHERE s."seasonNumber" > 0 AND m.type = 'series' AND e."hasFile" = true
+        AND e."markersScannedAt" IS NULL
         AND (
           NOT EXISTS (SELECT 1 FROM episode_markers em
                       WHERE em."episodeId" = e.id AND em.type = 'intro')
@@ -241,17 +242,11 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
     seasonId: number,
   ): Promise<{ introsDetected: number; outrosDetected: number }> {
     if (this.inFlight.has(seasonId)) {
-      // Concurrent per-series trigger already handles it — don't double-run.
       return { introsDetected: 0, outrosDetected: 0 };
     }
     this.inFlight.add(seasonId);
     try {
-      const intros = await this.detector.detectSeasonIntros(seasonId);
-      const outros = await this.detector.detectSeasonOutros(seasonId);
-      return {
-        introsDetected: intros.introsDetected,
-        outrosDetected: outros.outrosDetected,
-      };
+      return await this.detectIntrosAndOutros(seasonId);
     } finally {
       this.inFlight.delete(seasonId);
     }
@@ -286,6 +281,31 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
   // Internals
   // ─────────────────────────────────────────────────────────────────────────
 
+  /** Shared: detect intros + outros for a season, mark episodes as scanned. */
+  private async detectIntrosAndOutros(
+    seasonId: number,
+    onProgress?: (current: number, total: number, message: string) => void,
+  ): Promise<{ introsDetected: number; outrosDetected: number }> {
+    const intros = await this.detector.detectSeasonIntros(seasonId, onProgress);
+    let outrosDetected = 0;
+    try {
+      const outros = await this.detector.detectSeasonOutros(seasonId, onProgress);
+      outrosDetected = outros.outrosDetected;
+    } catch (err) {
+      this.log.warn(
+        `Outro detection failed for season #${seasonId}: ${(err as Error).message}`,
+      );
+    }
+    // Mark episodes as scanned so DetectMissingMarkers skips them.
+    await this.episodeRepo
+      .createQueryBuilder()
+      .update()
+      .set({ markersScannedAt: new Date() })
+      .where('"seasonId" = :seasonId AND "hasFile" = true', { seasonId })
+      .execute();
+    return { introsDetected: intros.introsDetected, outrosDetected };
+  }
+
   private async runDetection(
     cmdId: number,
     seasonId: number,
@@ -299,70 +319,27 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
     });
     this.events.emit({ type: 'command.started', name: 'IntroDetection' });
 
-    let detected = 0;
+    const onProgress = (current: number, total: number, message: string) => {
+      this.events.emit({ type: 'task.progress', command: 'IntroDetection', current, total, message });
+    };
+
     try {
-      const result = await this.detector.detectSeasonIntros(
-        seasonId,
-        (current, total, message) => {
-          this.events.emit({
-            type: 'task.progress',
-            command: 'IntroDetection',
-            current,
-            total,
-            message,
-          });
-        },
-      );
-      detected = result.introsDetected;
-      // Same command also runs outro detection (chapter + fingerprint).
-      try {
-        const outroResult = await this.detector.detectSeasonOutros(
-          seasonId,
-          (current, total, message) => {
-            this.events.emit({
-              type: 'task.progress',
-              command: 'IntroDetection',
-              current,
-              total,
-              message,
-            });
-          },
-        );
-        detected += outroResult.outrosDetected;
-      } catch (err) {
-        this.log.warn(
-          `Outro detection failed for season #${seasonId}: ${(err as Error).message}`,
-        );
-      }
-      await this.commandRepo.update(cmdId, {
-        status: 'completed',
-        endedOn: new Date(),
-      });
-      this.events.emit({
-        type: 'command.completed',
-        name: 'IntroDetection',
-        status: 'completed',
-      });
+      const result = await this.detectIntrosAndOutros(seasonId, onProgress);
+      await this.commandRepo.update(cmdId, { status: 'completed', endedOn: new Date() });
+      this.events.emit({ type: 'command.completed', name: 'IntroDetection', status: 'completed' });
       this.events.emit({
         type: 'markers.season.completed',
         mediaId,
         seasonId,
         seasonNumber,
-        introsDetected: detected,
+        introsDetected: result.introsDetected + result.outrosDetected,
       });
     } catch (err) {
       this.log.error(
         `IntroDetection failed for season #${seasonId}: ${(err as Error).message}`,
       );
-      await this.commandRepo.update(cmdId, {
-        status: 'failed',
-        endedOn: new Date(),
-      });
-      this.events.emit({
-        type: 'command.completed',
-        name: 'IntroDetection',
-        status: 'failed',
-      });
+      await this.commandRepo.update(cmdId, { status: 'failed', endedOn: new Date() });
+      this.events.emit({ type: 'command.completed', name: 'IntroDetection', status: 'failed' });
     } finally {
       this.inFlight.delete(seasonId);
     }
