@@ -317,6 +317,82 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Estimate transcode progress as a percentage (0-100) by looking at the highest segment on disk. */
+  /**
+   * Resolve an existing session: serve from cache, wait for FFmpeg, or signal
+   * that a new session is needed. Shared between transcode and remux paths.
+   *
+   * Returns the existing session if it can serve the segment, or null if the
+   * caller should create a new session (session is deleted from the map).
+   */
+  private async resolveExistingSession(
+    key: string,
+    existing: TranscodeSession,
+    requestedSegment: number,
+    qualityMatch: boolean,
+  ): Promise<TranscodeSession | null> {
+    // exitCode 0 + segment cached → serve from cache.
+    // exitCode 0 + segment missing → delete, caller restarts.
+    if (existing.process.exitCode === 0 && qualityMatch) {
+      if (await segmentNearby(existing.cachePath, requestedSegment)) {
+        existing.lastAccess = Date.now();
+        return existing;
+      }
+      this.log.log(
+        `Session [${key}]: exited but segment ${requestedSegment} not cached, restarting`,
+      );
+      this.sessions.delete(key);
+      return null;
+    }
+
+    // Crash (non-zero exit) → clean up, caller restarts.
+    if (existing.process.exitCode !== null && existing.process.exitCode !== 0) {
+      this.log.warn(
+        `Session [${key}]: FFmpeg crashed (code ${existing.process.exitCode}), restarting`,
+      );
+      this.sessions.delete(key);
+      await fsp.rm(existing.cachePath, { recursive: true, force: true });
+      return null;
+    }
+
+    // Quality/mode mismatch → handled by caller (different logic per path).
+    if (!qualityMatch) return null;
+
+    // ── Seek handling (running session, same quality) ──
+    existing.lastAccess = Date.now();
+
+    if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
+      // Close to startSegment → wait for FFmpeg to catch up.
+      if (requestedSegment >= (existing.startSegment ?? 0)) {
+        const gap = requestedSegment - (existing.startSegment ?? 0);
+        if (gap <= SEEK_WAIT_THRESHOLD) {
+          return existing;
+        }
+      }
+      // Far away → restart.
+      this.log.log(
+        `Seek: restarting [${key}] from segment ${requestedSegment} (not cached)`,
+      );
+      this.sessions.delete(key);
+      await this.killProcess(existing.process);
+      return null;
+    }
+
+    // Segment cached — check for unreachable gap behind startSegment.
+    const gap = firstMissingSegment(existing.cachePath, requestedSegment);
+    if (gap != null && gap < (existing.startSegment ?? 0)) {
+      this.log.log(
+        `Seek: segment ${requestedSegment} cached, restarting [${key}] at unreachable gap ${gap}`,
+      );
+      this.sessions.delete(key);
+      await this.killProcess(existing.process);
+      // Caller should restart at `gap` — encode it in startSegment hint.
+      existing.startSegment = gap;
+      return null;
+    }
+
+    return existing;
+  }
+
   /** Find the highest segment number on disk (fast readdir scan). */
   private async highestSegmentOnDisk(cachePath: string): Promise<number> {
     let maxSeg = -1;
@@ -491,107 +567,34 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     const existing = this.sessions.get(key);
     if (existing) {
-      // If FFmpeg exited successfully (code 0), segments are still valid on
-      // disk. Return the session so getSegmentPath can serve cached segments
-      // or return null for truly non-existent ones (end of file).
-      if (existing.process.exitCode === 0 && existing.quality === quality) {
-        existing.lastAccess = Date.now();
-        return existing;
-      }
-      // If FFmpeg crashed (non-zero exit), clean up and restart.
-      if (existing.process.exitCode !== null) {
-        this.log.warn(
-          `Session [${key}]: FFmpeg crashed (code ${existing.process.exitCode}), restarting`,
-        );
-        this.sessions.delete(key);
-        await fsp.rm(existing.cachePath, { recursive: true, force: true });
-        // Fall through to create a new session below
-      } else if (existing.quality !== quality || existing.remux) {
-        // Quality changed — kill old process. Each quality has its own cache
-        // dir so no segment collision. Old segments remain for switch-back.
+      const qualityMatch = existing.quality === quality && !existing.remux;
+      if (!qualityMatch && existing.process.exitCode === null) {
+        // Quality changed — kill old process. Each quality has its own cache dir.
         this.log.log(
           `Quality change [${key}]: ${existing.quality} → ${quality}, killing old session`,
         );
         this.sessions.delete(key);
         await this.killProcess(existing.process);
-        // Fall through to create a new session in a new quality-specific dir
       } else {
-        existing.lastAccess = Date.now();
-
-        // ── Seek handling ──
-        // Check if the segment (or its neighbour) is already on disk.
-        if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
-          // Check if FFmpeg is close to the requested segment (within ~30
-          // segments = ~90s). If so, it's a sequential request outpacing
-          // FFmpeg (download) — wait. If far away, it's a real seek → restart.
-          if (requestedSegment >= (existing.startSegment ?? 0)) {
-            const frontier = await this.highestSegmentOnDisk(existing.cachePath);
-            const gap = requestedSegment - frontier;
-            if (gap <= SEEK_WAIT_THRESHOLD) {
-              // FFmpeg is close — let getSegmentPath wait for it.
-              return existing;
-            }
-          }
-          // Far ahead or behind start → restart at requested segment.
-          this.log.log(
-            `Seek: restarting transcode [${key}] from segment ${requestedSegment} (not cached)`,
-          );
-          this.sessions.delete(key);
-          await this.killProcess(existing.process);
-          await fsp.mkdir(existing.cachePath, { recursive: true });
+        const resolved = await this.resolveExistingSession(
+          key, existing, requestedSegment, qualityMatch,
+        );
+        if (resolved) return resolved;
+        // resolved === null → session deleted, need restart.
+        // If resolveExistingSession set startSegment (unreachable gap), use that.
+        const restartAt = this.sessions.has(key) ? requestedSegment : (existing.startSegment ?? requestedSegment);
+        if (restartAt !== requestedSegment || !this.sessions.has(key)) {
+          const dir = existing.cachePath;
+          await fsp.mkdir(dir, { recursive: true });
           if (useVarStreamMap) {
             for (let i = 0; i <= ctxAudioStreams!.length; i++) {
-              await fsp.mkdir(path.join(existing.cachePath, String(i)), {
-                recursive: true,
-              });
+              await fsp.mkdir(path.join(dir, String(i)), { recursive: true });
             }
           }
           return this.startSeekSession(
-            key,
-            mediaFileId,
-            quality,
-            absolutePath,
-            existing.cachePath,
-            requestedSegment,
-            ctx,
+            key, mediaFileId, quality, absolutePath, dir, restartAt, ctx,
           );
         }
-
-        // Segment IS cached — scan ahead for the first gap so ffmpeg
-        // fills it before the player gets there.
-        // Segment is cached. Scan ahead for a gap so ffmpeg can start
-        // filling it before the player gets there. Only restart if the gap
-        // is BEHIND the current session's start (unreachable — ffmpeg only
-        // encodes forward). Gaps at or ahead of startSegment are just the
-        // encoding frontier; ffmpeg will produce them naturally.
-        const gap = firstMissingSegment(existing.cachePath, requestedSegment);
-        if (gap != null && gap < (existing.startSegment ?? 0)) {
-          this.log.log(
-            `Seek: segment ${requestedSegment} cached, restarting transcode [${key}] at unreachable gap ${gap} (session started at ${existing.startSegment})`,
-          );
-          this.sessions.delete(key);
-          await this.killProcess(existing.process);
-          await fsp.mkdir(existing.cachePath, { recursive: true });
-          if (useVarStreamMap) {
-            for (let i = 0; i <= ctxAudioStreams!.length; i++) {
-              await fsp.mkdir(path.join(existing.cachePath, String(i)), {
-                recursive: true,
-              });
-            }
-          }
-          return this.startSeekSession(
-            key,
-            mediaFileId,
-            quality,
-            absolutePath,
-            existing.cachePath,
-            gap,
-            ctx,
-          );
-        }
-        // Gap is null (everything cached) or >= startSegment (ffmpeg will
-        // reach it) — keep session, player reads from cache meanwhile.
-        return existing;
       }
     }
 
@@ -1709,56 +1712,21 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ): Promise<TranscodeSession> {
     const existing = this.sessions.get(key);
     if (existing) {
-      // If FFmpeg exited successfully, segments still valid on disk.
-      if (existing.process.exitCode === 0 && existing.remux) {
-        existing.lastAccess = Date.now();
-        return existing;
-      }
-      // If FFmpeg crashed, clean up and restart.
-      if (existing.process.exitCode !== null) {
-        this.log.warn(
-          `Session [${key}]: FFmpeg crashed (code ${existing.process.exitCode}), restarting`,
-        );
-        this.sessions.delete(key);
-        await fsp.rm(existing.cachePath, { recursive: true, force: true });
-        // Fall through to create a new session below
-      } else if (!existing.remux || existing.quality !== 'remux') {
-        // Switching from transcode to remux — kill old session
+      const qualityMatch = !!existing.remux;
+      if (!qualityMatch && existing.process.exitCode === null) {
+        // Switching from transcode to remux — kill old session.
         this.log.log(
           `Switch to remux [${key}]: killing old ${existing.quality} session`,
         );
         this.sessions.delete(key);
         await this.killAndClean(existing.process, existing.cachePath);
-        // Fall through to create a new session below
       } else {
-        existing.lastAccess = Date.now();
-
-        if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
-          if (requestedSegment >= (existing.startSegment ?? 0)) {
-            const frontier = await this.highestSegmentOnDisk(existing.cachePath);
-            if (requestedSegment - frontier <= SEEK_WAIT_THRESHOLD) {
-              return existing;
-            }
-          }
-          this.log.log(
-            `Seek: restarting remux [${key}] from segment ${requestedSegment} (not cached)`,
-          );
-          this.sessions.delete(key);
-          await this.killProcess(existing.process);
-        } else {
-          // Same gap-scan + startSegment guard as transcode path.
-          const gap = firstMissingSegment(existing.cachePath, requestedSegment);
-          if (gap != null && gap < (existing.startSegment ?? 0)) {
-            this.log.log(
-              `Seek: segment ${requestedSegment} cached, restarting remux [${key}] at unreachable gap ${gap}`,
-            );
-            this.sessions.delete(key);
-            await this.killProcess(existing.process);
-            requestedSegment = gap;
-          } else {
-            return existing;
-          }
-        }
+        const resolved = await this.resolveExistingSession(
+          key, existing, requestedSegment, qualityMatch,
+        );
+        if (resolved) return resolved;
+        // resolved === null → session deleted, restart at gap or requested segment.
+        requestedSegment = existing.startSegment ?? requestedSegment;
       }
     }
 
