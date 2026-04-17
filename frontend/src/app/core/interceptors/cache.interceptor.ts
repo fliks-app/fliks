@@ -21,6 +21,7 @@ const CACHEABLE_PREFIXES = [
   '/api/playback/continue-watching',
   '/api/playback/recommendations',
   '/api/playback/history',
+  '/api/playback/watched-ids',
   '/api/libraries/mine',
 ];
 

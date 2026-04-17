@@ -216,17 +216,15 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
       seasonNumber: number;
       mediaTitle: string;
     }[] = await this.seasonRepo.query(`
-      SELECT DISTINCT s.id, s."mediaId", s."seasonNumber", m.title AS "mediaTitle"
+      SELECT s.id, s."mediaId", s."seasonNumber", m.title AS "mediaTitle"
       FROM seasons s
       JOIN media m ON m.id = s."mediaId"
-      JOIN episodes e ON e."seasonId" = s.id
-      WHERE s."seasonNumber" > 0 AND m.type = 'series' AND e."hasFile" = true
-        AND e."markersScannedAt" IS NULL
-        AND (
-          NOT EXISTS (SELECT 1 FROM episode_markers em
-                      WHERE em."episodeId" = e.id AND em.type = 'intro')
-          OR NOT EXISTS (SELECT 1 FROM episode_markers em
-                         WHERE em."episodeId" = e.id AND em.type = 'outro')
+      WHERE s."seasonNumber" > 0 AND m.type = 'series'
+        AND EXISTS (
+          SELECT 1 FROM episodes e
+          WHERE e."seasonId" = s.id
+            AND e."hasFile" = true
+            AND e."markersScannedAt" IS NULL
         )
       ORDER BY m.title ASC, s."seasonNumber" ASC
     `);

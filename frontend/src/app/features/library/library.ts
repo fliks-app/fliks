@@ -100,8 +100,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }, { allowSignalWrites: true });
 
   ngOnInit() {
-    this.profilesService.getQualityProfiles().then((p) => this.qualityProfiles.set(p));
-
     // Subscribe to route param changes (handles initial load + sidebar nav).
     this.route.params.subscribe(async (params) => {
       const rawName = params['libraryName'] as string;
@@ -177,6 +175,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
       else next.add(id);
       return next;
     });
+    // Lazy-load quality profiles on first selection (for bulk edit panel).
+    if (!this.qualityProfiles().length) {
+      this.profilesService.getQualityProfiles().then((p) => this.qualityProfiles.set(p)).catch(() => {});
+    }
   }
 
   selectAll() {
