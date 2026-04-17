@@ -178,14 +178,16 @@ export class QualityManagerService {
 
     const wasPaused = engine.paused;
 
-    if (option.id === 'original') {
-      const best = candidates.reduce((a: any, b: any) => ((a.height ?? 0) >= (b.height ?? 0) ? a : b));
-      engine.selectVariantTrack(best, true);
-    } else {
-      const match = findVariantByProfileName(candidates, option.id)
+    const target = option.id === 'original'
+      ? candidates.reduce((a: any, b: any) => ((a.height ?? 0) >= (b.height ?? 0) ? a : b))
+      : findVariantByProfileName(candidates, option.id)
         ?? findBestVariantForHeight(candidates, option.height);
-      engine.selectVariantTrack(match, true);
-    }
+
+    // Skip if already on the target variant — avoids clearBuffer which cancels
+    // in-flight segment requests (init.mp4) and restarts the loading pipeline.
+    if (target && activeTrack && target.id === activeTrack.id) return;
+
+    engine.selectVariantTrack(target, true);
 
     // Restore pause state — clearBuffer can trigger autoplay
     if (wasPaused) engine.pause();

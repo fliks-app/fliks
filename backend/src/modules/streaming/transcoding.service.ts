@@ -341,6 +341,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         `Session [${key}]: exited but segment ${requestedSegment} not cached, restarting`,
       );
       this.sessions.delete(key);
+      existing.startSegment = requestedSegment;
       return null;
     }
 
@@ -368,12 +369,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           return existing;
         }
       }
-      // Far away → restart.
+      // Far away → restart at requested position.
       this.log.log(
         `Seek: restarting [${key}] from segment ${requestedSegment} (not cached)`,
       );
       this.sessions.delete(key);
       await this.killProcess(existing.process);
+      existing.startSegment = requestedSegment;
       return null;
     }
 
@@ -580,21 +582,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           key, existing, requestedSegment, qualityMatch,
         );
         if (resolved) return resolved;
-        // resolved === null → session deleted, need restart.
-        // If resolveExistingSession set startSegment (unreachable gap), use that.
-        const restartAt = this.sessions.has(key) ? requestedSegment : (existing.startSegment ?? requestedSegment);
-        if (restartAt !== requestedSegment || !this.sessions.has(key)) {
-          const dir = existing.cachePath;
-          await fsp.mkdir(dir, { recursive: true });
-          if (useVarStreamMap) {
-            for (let i = 0; i <= ctxAudioStreams!.length; i++) {
-              await fsp.mkdir(path.join(dir, String(i)), { recursive: true });
-            }
+        // resolved === null → session deleted. existing.startSegment has the restart target.
+        const restartAt = existing.startSegment ?? requestedSegment;
+        const dir = path.join(this.cachePath, key, quality);
+        await fsp.mkdir(dir, { recursive: true });
+        if (useVarStreamMap) {
+          for (let i = 0; i <= ctxAudioStreams!.length; i++) {
+            await fsp.mkdir(path.join(dir, String(i)), { recursive: true });
           }
-          return this.startSeekSession(
-            key, mediaFileId, quality, absolutePath, dir, restartAt, ctx,
-          );
         }
+        return this.startSeekSession(
+          key, mediaFileId, quality, absolutePath, dir, restartAt, ctx,
+        );
       }
     }
 
@@ -651,23 +650,25 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     if (this.detectedHwAccel !== 'none') {
       await session.ready;
       // Wait up to 5s for the process to potentially crash
+      const segNum = String(requestedSegment).padStart(4, '0');
+      const segExts = ['.m4s', '.ts'];
+      const segExists = async () => {
+        for (const ext of segExts) {
+          if (await fileExists(path.join(sessionDir, `seg-${segNum}${ext}`))) return true;
+          // var_stream_map: check subdir 0/
+          if (await fileExists(path.join(sessionDir, '0', `seg-${segNum}${ext}`))) return true;
+        }
+        return false;
+      };
       for (let i = 0; i < 10; i++) {
         if (session.process.exitCode !== null) break;
-        const expectedSeg = path.join(
-          sessionDir,
-          `seg-${String(requestedSegment).padStart(4, '0')}.ts`,
-        );
-        if (await fileExists(expectedSeg)) break;
+        if (await segExists()) break;
         await new Promise((r) => setTimeout(r, 500));
       }
-      const expectedSeg = path.join(
-        sessionDir,
-        `seg-${String(requestedSegment).padStart(4, '0')}.ts`,
-      );
       const crashed =
         session.process.exitCode !== null &&
-        !(await fileExists(expectedSeg)) &&
-        this.sessions.has(key); // Still registered = real crash. Deleted = intentionally killed.
+        !(await segExists()) &&
+        this.sessions.has(key);
       if (crashed) {
         this.log.warn(
           `Transcode [${key}]: HW accel (${this.detectedHwAccel}) crashed (exit=${session.process.exitCode}), falling back to CPU\n${(session.stderr ?? '').slice(-1000)}`,
@@ -738,6 +739,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     session: TranscodeSession,
     segmentName: string,
   ): Promise<string | null> {
+    // Init segments are written before the first media segment. Wait for
+    // FFmpeg to be ready so we don't race against the process starting.
+    if (segmentName.includes('init')) {
+      await session.ready;
+    }
+
     const segPath = path.join(session.cachePath, segmentName);
 
     // Quick size-stability check: if file exists and isn't growing, serve.
