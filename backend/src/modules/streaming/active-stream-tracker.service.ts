@@ -136,6 +136,17 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.fmp4SupportedCache.get(mediaFileId) ?? true;
   }
 
+  /** Whether master.m3u8 decided to use separate audio renditions (EXT-X-MEDIA). */
+  private readonly useExtXMediaCache = new Map<number, boolean>();
+
+  setUseExtXMedia(mediaFileId: number, value: boolean) {
+    this.useExtXMediaCache.set(mediaFileId, value);
+  }
+
+  getUseExtXMedia(mediaFileId: number): boolean {
+    return this.useExtXMediaCache.get(mediaFileId) ?? false;
+  }
+
   private segmentDurationCache = 3;
   private initTimeCache = 1;
 

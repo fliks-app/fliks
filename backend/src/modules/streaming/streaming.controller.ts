@@ -144,6 +144,13 @@ export class StreamingController {
   ): SessionContext {
     const user = req.user;
     const si = resolved.mediaFile.streamInfo;
+    // Ensure audio stream count is set from streamInfo if the tracker lost it
+    // (e.g. after backend restart, Shaka may replay cached manifest segments
+    // without re-fetching master.m3u8).
+    const audioCount = si?.audio?.length ?? 0;
+    if (audioCount > 0 && this.activeStreamTracker.getAudioStreamCount(mediaFileId) === 0) {
+      this.activeStreamTracker.setAudioStreamCount(mediaFileId, audioCount);
+    }
     return {
       userId: user?.id,
       username: user?.username,
@@ -518,8 +525,10 @@ export class StreamingController {
       this.activeStreamTracker.getMultiAudioMuxed(mediaFileId);
     const fmp4Supported =
       this.activeStreamTracker.getFmp4Supported(mediaFileId);
-    const userPickedAudio =
-      this.activeStreamTracker.getAudioStreamIndex(mediaFileId) != null;
+    // Only disable EXT-X-MEDIA when the user explicitly switched to a
+    // non-default audio track. Index 0 is the auto pre-selection (default).
+    const pickedIdx = this.activeStreamTracker.getAudioStreamIndex(mediaFileId);
+    const userPickedAudio = pickedIdx != null && pickedIdx > 0;
     const useExtXMedia =
       audioStreams.length > 1 &&
       !clientMuxesAudio &&
@@ -576,9 +585,14 @@ export class StreamingController {
       mediaFileId,
       audioStreams.length,
     );
+    this.activeStreamTracker.setUseExtXMedia(
+      mediaFileId,
+      useExtXMedia,
+    );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'no-store');
     res.send(playlist);
 
     // Pre-spawn ffmpeg when we know the player will start at seg-0 (fresh
@@ -718,6 +732,7 @@ export class StreamingController {
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'no-store');
     res.send(playlist);
   }
 
@@ -860,9 +875,8 @@ export class StreamingController {
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
     const basePath = `/api/stream/${mediaFileId}/${quality}`;
     const useFmp4 = this.activeStreamTracker.getFmp4Supported(mediaFileId);
-    // var_stream_map (subdirectories) only active with fMP4 + multi-audio
-    const multiAudio =
-      this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 && useFmp4;
+    // Use the master.m3u8 decision — must match to avoid init filename mismatch.
+    const multiAudio = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
 
     let playlist: string;
     if (useFmp4) {
@@ -882,6 +896,7 @@ export class StreamingController {
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'no-store');
     res.send(playlist);
   }
 
@@ -912,9 +927,7 @@ export class StreamingController {
 
     // For init.mp4: serve from existing session without triggering quality changes.
     if (segment.startsWith('init') && existing) {
-      const fmp4 = this.activeStreamTracker.getFmp4Supported(mediaFileId);
-      const ma =
-        this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 && fmp4;
+      const ma = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
       const initFile = ma ? `0/${segment}` : segment;
       const initPath = await this.transcodingService.getSegmentPath(
         existing,
@@ -939,9 +952,7 @@ export class StreamingController {
     // serve it without any DB query or session management. Completed sessions
     // (exitCode !== null) still have valid segments in cache — don't skip them.
     if (existing && existing.quality === quality) {
-      const varStreamMap =
-        this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
-        this.activeStreamTracker.getFmp4Supported(mediaFileId);
+      const varStreamMap = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
       const segName = varStreamMap ? `0/${segment}` : segment;
       const segPath = `${existing.cachePath}/${segName}`;
       if (fs.existsSync(segPath)) {
@@ -986,9 +997,7 @@ export class StreamingController {
           );
 
     // With var_stream_map (fMP4 + multi-audio), video segments are in subdirectory "0/"
-    const varStreamMap =
-      this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
-      this.activeStreamTracker.getFmp4Supported(mediaFileId);
+    const varStreamMap = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
     const segName = varStreamMap ? `0/${segment}` : segment;
 
     const segPath = await this.transcodingService.getSegmentPath(

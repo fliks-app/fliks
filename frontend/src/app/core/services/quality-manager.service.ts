@@ -183,9 +183,13 @@ export class QualityManagerService {
       : findVariantByProfileName(candidates, option.id)
         ?? findBestVariantForHeight(candidates, option.height);
 
-    // Skip if already on the target variant — avoids clearBuffer which cancels
-    // in-flight segment requests (init.mp4) and restarts the loading pipeline.
+    // Skip if already on the target variant, only one video resolution exists,
+    // or no active track yet (just loaded) — avoids clearBuffer which cancels
+    // in-flight segment requests (init.mp4).
     if (target && activeTrack && target.id === activeTrack.id) return;
+    // Deduplicate by video height — multi-audio creates N variants per resolution.
+    const uniqueHeights = new Set(candidates.map((t: any) => t.height));
+    if (uniqueHeights.size <= 1) return;
 
     engine.selectVariantTrack(target, true);
 

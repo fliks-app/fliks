@@ -676,6 +676,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         this.sessions.delete(key);
         await this.killAndClean(session.process, sessionDir);
         await fsp.mkdir(sessionDir, { recursive: true });
+        // Recreate var_stream_map subdirs (killed by killAndClean)
+        if (useVarStreamMap) {
+          for (let i = 0; i <= ctxAudioStreams!.length; i++) {
+            await fsp.mkdir(path.join(sessionDir, String(i)), { recursive: true });
+          }
+        }
         const cpuSession = this.startFfmpeg(
           key,
           mediaFileId,
