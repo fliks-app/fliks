@@ -190,7 +190,9 @@ export class ShakaEngine implements PlaybackEngine {
       ?? variants.find((v: any) => v.audioId === audioId);
 
     if (target) {
-      this.player.selectVariantTrack(target, /* clearBuffer= */ true);
+      // Don't clear buffer — with EXT-X-MEDIA, Shaka switches audio
+      // rendition without re-fetching video segments.
+      this.player.selectVariantTrack(target, /* clearBuffer= */ false);
     }
   }
 

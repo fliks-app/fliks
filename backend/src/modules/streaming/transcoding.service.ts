@@ -745,19 +745,26 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     session: TranscodeSession,
     segmentName: string,
   ): Promise<string | null> {
-    // Init segments are written before the first media segment. Wait for
-    // FFmpeg to be ready so we don't race against the process starting.
-    if (segmentName.includes('init')) {
-      await session.ready;
-    }
-
     const segPath = path.join(session.cachePath, segmentName);
 
-    // Quick size-stability check: if file exists and isn't growing, serve.
+    // Quick size-stability check: if file exists and isn't growing, serve
+    // immediately — no need to wait for session.ready (file may be from
+    // a previous FFmpeg run that was restarted by HW accel fallback).
     if (existsSync(segPath)) {
       const stable = await this.isSegmentStable(segPath);
       if (stable) return segPath;
       // File exists but still being written — fall through to watch loop.
+    }
+
+    // Init segments: wait for FFmpeg to produce at least the first media
+    // segment before watching (init is written before seg-0000).
+    if (segmentName.includes('init')) {
+      await session.ready;
+      // Re-check after ready — init should now exist.
+      if (existsSync(segPath)) {
+        const stable = await this.isSegmentStable(segPath);
+        if (stable) return segPath;
+      }
     }
 
     const dir = path.dirname(segPath);
@@ -1405,7 +1412,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // otherwise the backend keeps muxing every track and the client can't
     // actually switch (Shaka in TS-only can't demux multi-PID, ExoPlayer
     // fallback path goes through `si-*` reload).
-    const userPickedAudio = audioStreamIndex != null;
+    const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
     const useVarStreamMap =
       useFmp4 &&
       videoOnly &&
@@ -1611,7 +1618,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     args.push('-i', inputPath);
 
-    const userPickedAudio = audioStreamIndex != null;
+    const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
     if (videoOnly && !userPickedAudio) {
       // Video-only remux for fMP4 var_stream_map (audio served separately).
       args.push('-map', '0:v:0', '-c:v', 'copy', '-an');
