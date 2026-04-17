@@ -24,7 +24,7 @@ const BASE_DIR = path.join(process.cwd(), 'images', 'thumbnails');
 const FRAMES_TMP_DIR = path.join(process.cwd(), 'images', 'thumbnails-tmp');
 /** Concurrent ffmpeg `-ss` seeks per sprite. Saturates the GPU / CPU for
  *  fast extraction while leaving headroom for concurrent streams. */
-const SEEK_CONCURRENCY = 8;
+const SEEK_CONCURRENCY = 16;
 
 /**
  * Build a human-readable label for a sprite: "S01E03 — Episode Title" for a
@@ -435,22 +435,9 @@ export class ThumbnailService {
     outputPath: string,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const hw = this.transcodingService.getDetectedHwAccel();
-      const hwArgs: string[] = [];
-      if (hw === 'vaapi' || hw === 'qsv') {
-        hwArgs.push(
-          '-init_hw_device',
-          'vaapi=va:/dev/dri/renderD128',
-          '-hwaccel',
-          'vaapi',
-          '-hwaccel_device',
-          'va',
-          '-hwaccel_output_format',
-          'nv12',
-        );
-      } else if (hw === 'nvenc') {
-        hwArgs.push('-hwaccel', 'cuda', '-hwaccel_output_format', 'nv12');
-      }
+      // No HW accel for thumbnails — 240px single-frame extraction is trivial
+      // for CPU, and the VA-API/QSV init overhead (~200ms) per process dominates
+      // when extracting hundreds of frames.
       const args = [
         '-nostdin',
         '-hide_banner',
@@ -463,7 +450,6 @@ export class ThumbnailService {
         '0',
         '-probesize',
         '200000',
-        ...hwArgs,
         '-i',
         inputPath,
         '-frames:v',

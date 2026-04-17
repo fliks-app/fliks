@@ -676,50 +676,59 @@ export class SchedulerService implements OnModuleInit {
 
   private async doGenerateSprites(force: boolean): Promise<void> {
     const commandName = force ? 'GenerateSprites' : 'GenerateMissingSprites';
-    const files = await this.mediaFileRepo.find({ relations: ['media'] });
-    this.log.log(`${commandName}: processing ${files.length} files`);
+    // Only load IDs — avoid pulling full streamInfo/media into memory.
+    const fileIds: { id: number }[] = await this.mediaFileRepo.find({
+      select: ['id'],
+    });
+    this.log.log(`${commandName}: processing ${fileIds.length} files`);
 
-    // Build episode labels upfront (avoid N+1 queries).
-    const episodeLabelMap = new Map<number, string>();
-    const episodes = await this.episodeRepo.find({ relations: ['season'] });
-    for (const ep of episodes) {
-      episodeLabelMap.set(
-        ep.id,
-        buildSpriteLabel(
-          { title: ep.title ?? '' },
-          {
-            seasonNumber: ep.season.seasonNumber,
-            episodeNumber: ep.episodeNumber,
-            title: ep.title,
-          },
-        ),
-      );
+    let generated = 0;
+    for (let i = 0; i < fileIds.length; i++) {
+      this.eventsService.emit({
+        type: 'task.progress',
+        command: commandName,
+        current: i,
+        total: fileIds.length,
+        message: commandName,
+      });
+      try {
+        const file = await this.mediaFileRepo.findOne({
+          where: { id: fileIds[i].id },
+          relations: ['media'],
+        });
+        if (!file?.media) continue;
+
+        let label = file.media.title;
+        if (file.episodeId) {
+          const ep = await this.episodeRepo.findOne({
+            where: { id: file.episodeId },
+            relations: ['season'],
+          });
+          if (ep) {
+            label = buildSpriteLabel(
+              { title: ep.title ?? '' },
+              {
+                seasonNumber: ep.season.seasonNumber,
+                episodeNumber: ep.episodeNumber,
+                title: ep.title,
+              },
+            );
+          }
+        }
+
+        const result = await this.thumbnailService.generateForFile(
+          file, file.media, label, { force, skipTracking: true },
+        );
+        if (result != null) generated++;
+      } catch (e) {
+        this.log.warn(
+          `${commandName}: failed for file ${fileIds[i].id}: ${(e as Error).message}`,
+        );
+      }
     }
 
-    // Fire all at once — ThumbnailService queue handles concurrency.
-    // skipTracking=true avoids creating individual Command records.
-    const promises = files.map((file) => {
-      if (!file.media) return Promise.resolve(null);
-      const label = file.episodeId
-        ? (episodeLabelMap.get(file.episodeId) ?? file.media.title)
-        : file.media.title;
-      return this.thumbnailService
-        .generateForFile(file, file.media, label, { force, skipTracking: true })
-        .catch((e) => {
-          this.log.warn(
-            `${commandName}: failed for file ${file.id}: ${(e as Error).message}`,
-          );
-          return null;
-        });
-    });
-
-    const results = await Promise.allSettled(promises);
-    const generated = results.filter(
-      (r) => r.status === 'fulfilled' && r.value != null,
-    ).length;
-
     this.log.log(
-      `${commandName}: generated ${generated}/${files.length} sprites`,
+      `${commandName}: generated ${generated}/${fileIds.length} sprites`,
     );
   }
 
