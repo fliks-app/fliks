@@ -445,7 +445,13 @@ export class StreamingController {
       ? resolved.mediaFile.streamInfo.chapters
       : undefined;
 
-    return { ...result, durationSeconds: duration, markers, chapters };
+    return {
+      ...result,
+      durationSeconds: duration,
+      markers,
+      chapters,
+      segmentFormat: useFmp4 ? 'fmp4' : 'ts',
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -518,22 +524,16 @@ export class StreamingController {
     // Use EXT-X-MEDIA only when the client needs it (Shaka on web) AND supports fMP4.
     // Native players (ExoPlayer/AVPlayer) handle multi-audio from muxed TS.
     // Cast (TS) can't handle separate fMP4 audio renditions.
-    // When the user explicitly picked an audio track (audioStreamIndex set in
-    // the tracker), the variant only contains that one audio — no rendition
-    // group makes sense, drop EXT-X-MEDIA so the player plays the muxed audio.
+    // Always expose every rendition even when the user has picked a specific
+    // track — the picked track is marked DEFAULT=YES in the playlist so Shaka
+    // preselects it, and subsequent switches happen client-side (no reload).
     const clientMuxesAudio =
       this.activeStreamTracker.getMultiAudioMuxed(mediaFileId);
     const fmp4Supported =
       this.activeStreamTracker.getFmp4Supported(mediaFileId);
-    // Only disable EXT-X-MEDIA when the user explicitly switched to a
-    // non-default audio track. Index 0 is the auto pre-selection (default).
     const pickedIdx = this.activeStreamTracker.getAudioStreamIndex(mediaFileId);
-    const userPickedAudio = pickedIdx != null && pickedIdx > 0;
     const useExtXMedia =
-      audioStreams.length > 1 &&
-      !clientMuxesAudio &&
-      fmp4Supported &&
-      !userPickedAudio;
+      audioStreams.length > 1 && !clientMuxesAudio && fmp4Supported;
     const onlyQuality = firstQueryString(req.query, 'startQuality');
 
     // Smart remux: if the user's locked quality maps to a target height that
@@ -579,6 +579,7 @@ export class StreamingController {
       sourceBitrate || undefined,
       useExtXMedia ? audioStreams : undefined,
       effectiveOnlyQuality,
+      pickedIdx ?? 0,
     );
 
     this.activeStreamTracker.setAudioStreamCount(
@@ -970,6 +971,9 @@ export class StreamingController {
     }
 
     // Slow path: need to create/restart a session — requires DB lookup.
+    this.log.log(
+      `hlsSegment slow-path: mfid=${mediaFileId} quality=${quality} seg=${segment} segIndex=${segIndex} existing=${existing ? `q=${existing.quality},startSeg=${existing.startSegment},exit=${existing.process.exitCode}` : 'none'}`,
+    );
     const resolved = await this.streamingService.resolveFile(
       mediaFileId,
       req.user as User,

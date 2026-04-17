@@ -1365,7 +1365,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   async onSelectAudioTrack(trackId: string) {
     this.activeAudioTrackId.set(trackId);
-    this.activeAudioStreamIndex = parseAudioIndex(trackId);
+    // Only update activeAudioStreamIndex for si-* tracks (backend stream index).
+    // Shaka/engine tracks switch client-side — no backend reload needed.
+    if (trackId.startsWith('si-')) {
+      this.activeAudioStreamIndex = parseAudioIndex(trackId);
+    }
     this.resetHideTimer();
 
     // Save selection
@@ -1389,11 +1393,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    // Fallback: reload only for direct play (MP4) where the backend must
-    // re-serve with a different audio stream. In HLS (transcode/remux),
-    // audio tracks are in the manifest — the engine handles switching.
-    // In offline, no backend to reload from.
-    if (!this.isOfflinePlayback && this.playbackMode() === 'direct') {
+    // si-* tracks are the streamInfo fallback. For fMP4 HLS, the manifest
+    // always exposes every audio rendition via EXT-X-MEDIA so Shaka switches
+    // client-side — any transient si-* list upgrades to shaka-* as soon as
+    // Shaka fires trackschanged, and the user picks the real track then.
+    // For TS HLS and direct MP4 play, switching audio requires a backend
+    // reload with a new audioStreamIndex. Offline: no backend.
+    if (this.isOfflinePlayback) return;
+    if (!trackId.startsWith('si-')) return;
+    const isFmp4Hls =
+      this.playbackMode() !== 'direct' &&
+      this.playbackInfo?.segmentFormat === 'fmp4';
+    if (!isFmp4Hls) {
       await this.reloadStream();
     }
   }

@@ -462,17 +462,22 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     sourceBitrate?: number,
     audioStreams?: { language?: string; title?: string }[],
     onlyQuality?: string,
+    defaultAudioIndex = 0,
   ): string {
     const multiAudio = audioStreams && audioStreams.length > 1;
     const lines = ['#EXTM3U'];
 
     // Multi-audio: declare alternate audio renditions via EXT-X-MEDIA
     if (multiAudio) {
+      const pickedIdx =
+        defaultAudioIndex >= 0 && defaultAudioIndex < audioStreams.length
+          ? defaultAudioIndex
+          : 0;
       for (let i = 0; i < audioStreams.length; i++) {
         const a = audioStreams[i];
         const lang = a.language || 'und';
         const name = a.title || lang;
-        const isDefault = i === 0 ? 'YES' : 'NO';
+        const isDefault = i === pickedIdx ? 'YES' : 'NO';
         lines.push(
           `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${name}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
         );
@@ -542,7 +547,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     ctx?: SessionContext,
   ): Promise<TranscodeSession> {
     const key = sessionKey(mediaFileId, ctx?.userId);
-    return this.withLock(key, () =>
+    const session = await this.withLock(key, () =>
       this.doGetOrCreateSession(
         key,
         mediaFileId,
@@ -551,6 +556,19 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         requestedSegment,
         ctx,
       ),
+    );
+    // HW accel crash check runs OUTSIDE the lock so that concurrent segment
+    // requests on the same key (seek, ABR, retry) don't pile up for the 15-30s
+    // it takes a big 4K/HDR source to produce its first segment.
+    return this.verifyHwAccelOrFallback(
+      session,
+      key,
+      mediaFileId,
+      quality,
+      absolutePath,
+      session.cachePath,
+      requestedSegment,
+      ctx,
     );
   }
 
@@ -568,6 +586,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
 
     const existing = this.sessions.get(key);
+    this.log.log(
+      `doGetOrCreateSession [${key}] req=${requestedSegment} quality=${quality} existingQ=${existing?.quality} existingStartSeg=${existing?.startSegment} existingExit=${existing?.process.exitCode}`,
+    );
     if (existing) {
       const qualityMatch = existing.quality === quality && !existing.remux;
       if (!qualityMatch && existing.process.exitCode === null) {
@@ -645,71 +666,99 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     );
     this.applyContext(session, ctx);
 
-    // If HW accel crashed (non-zero exit, no segments), retry with CPU.
-    // Only fallback on actual crash — a still-running process is just slow (e.g. QSV with seek).
-    if (this.detectedHwAccel !== 'none') {
-      await session.ready;
-      // Wait up to 5s for the process to potentially crash
-      const segNum = String(requestedSegment).padStart(4, '0');
-      const segExts = ['.m4s', '.ts'];
-      const segExists = async () => {
-        for (const ext of segExts) {
-          if (await fileExists(path.join(sessionDir, `seg-${segNum}${ext}`))) return true;
-          // var_stream_map: check subdir 0/
-          if (await fileExists(path.join(sessionDir, '0', `seg-${segNum}${ext}`))) return true;
-        }
-        return false;
-      };
-      for (let i = 0; i < 10; i++) {
-        if (session.process.exitCode !== null) break;
-        if (await segExists()) break;
-        await new Promise((r) => setTimeout(r, 500));
-      }
-      const crashed =
-        session.process.exitCode !== null &&
-        !(await segExists()) &&
-        this.sessions.has(key);
-      if (crashed) {
-        this.log.warn(
-          `Transcode [${key}]: HW accel (${this.detectedHwAccel}) crashed (exit=${session.process.exitCode}), falling back to CPU\n${(session.stderr ?? '').slice(-1000)}`,
-        );
-        this.sessions.delete(key);
-        await this.killAndClean(session.process, sessionDir);
-        await fsp.mkdir(sessionDir, { recursive: true });
-        // Recreate var_stream_map subdirs (killed by killAndClean)
-        if (useVarStreamMap) {
-          for (let i = 0; i <= ctxAudioStreams!.length; i++) {
-            await fsp.mkdir(path.join(sessionDir, String(i)), { recursive: true });
-          }
-        }
-        const cpuSession = this.startFfmpeg(
-          key,
-          mediaFileId,
-          quality,
-          absolutePath,
-          profile,
-          sessionDir,
-          'none',
-          requestedSegment,
-          shouldTonemap,
-          burnIn,
-          audioIdx,
-          cropInfo,
-          isVideoOnly,
-          isMapAllAudio,
-          ctxAudioStreams,
-          ctx?.useFmp4 ?? true,
-          ctx?.encoderPreset,
-          ctx?.qsvOptions,
-          ctx?.sourceFps,
-        );
-        this.applyContext(cpuSession, ctx);
-        this.sessions.set(key, cpuSession);
-        return cpuSession;
-      }
-    }
-
     return session;
+  }
+
+  /**
+   * Verify HW accel didn't crash on spawn; fall back to CPU if it did.
+   *
+   * Runs OUTSIDE the session-creation lock — awaits session.ready + up to 5s
+   * of polling which would otherwise block every concurrent segment request
+   * on this key (seen as 10s Shaka timeouts during pre-start of big 4K/HDR
+   * sources where the first segment takes 15-30s to appear).
+   *
+   * Returns the session that should be used (may be a fresh CPU session if
+   * the HW one crashed).
+   */
+  private async verifyHwAccelOrFallback(
+    session: TranscodeSession,
+    key: string,
+    mediaFileId: number,
+    quality: string,
+    absolutePath: string,
+    sessionDir: string,
+    requestedSegment: number,
+    ctx?: SessionContext,
+  ): Promise<TranscodeSession> {
+    if (this.detectedHwAccel === 'none') return session;
+    const isVideoOnly = ctx?.videoOnly ?? false;
+    const ctxAudioStreams = ctx?.audioStreams;
+    const useVarStreamMap =
+      isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
+    const profile = PROFILES.find((p) => p.name === quality) ?? PROFILES[0];
+
+    await session.ready;
+    const segNum = String(requestedSegment).padStart(4, '0');
+    const segExts = ['.m4s', '.ts'];
+    const segExists = async () => {
+      for (const ext of segExts) {
+        if (await fileExists(path.join(sessionDir, `seg-${segNum}${ext}`))) return true;
+        if (await fileExists(path.join(sessionDir, '0', `seg-${segNum}${ext}`))) return true;
+      }
+      return false;
+    };
+    for (let i = 0; i < 10; i++) {
+      if (session.process.exitCode !== null) break;
+      if (await segExists()) break;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    const crashed =
+      session.process.exitCode !== null && !(await segExists());
+    if (!crashed) return session;
+
+    // Reacquire lock to safely swap sessions — another request may have
+    // already replaced it (e.g. via seek restart).
+    return this.withLock(key, async () => {
+      if (this.sessions.get(key) !== session) {
+        // Another path already replaced the session — use current one.
+        return this.sessions.get(key) ?? session;
+      }
+      this.log.warn(
+        `Transcode [${key}]: HW accel (${this.detectedHwAccel}) crashed (exit=${session.process.exitCode}), falling back to CPU\n${(session.stderr ?? '').slice(-1000)}`,
+      );
+      this.sessions.delete(key);
+      await this.killAndClean(session.process, sessionDir);
+      await fsp.mkdir(sessionDir, { recursive: true });
+      if (useVarStreamMap) {
+        for (let i = 0; i <= ctxAudioStreams!.length; i++) {
+          await fsp.mkdir(path.join(sessionDir, String(i)), { recursive: true });
+        }
+      }
+      const cpuSession = this.startFfmpeg(
+        key,
+        mediaFileId,
+        quality,
+        absolutePath,
+        profile,
+        sessionDir,
+        'none',
+        requestedSegment,
+        ctx?.tonemap ?? false,
+        ctx?.burnInSubtitle,
+        ctx?.audioStreamIndex,
+        ctx?.crop,
+        isVideoOnly,
+        ctx?.mapAllAudio ?? false,
+        ctxAudioStreams,
+        ctx?.useFmp4 ?? true,
+        ctx?.encoderPreset,
+        ctx?.qsvOptions,
+        ctx?.sourceFps,
+      );
+      this.applyContext(cpuSession, ctx);
+      this.sessions.set(key, cpuSession);
+      return cpuSession;
+    });
   }
 
   /**
@@ -1406,19 +1455,14 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     }
 
     // ── Audio mapping + HLS output ──
-    // var_stream_map requires fMP4. For TS clients (Cast), fall back to single-audio.
-    // An explicit `audioStreamIndex` (user picked a specific track from the UI)
-    // forces single-audio output even when multi-audio would otherwise apply —
-    // otherwise the backend keeps muxing every track and the client can't
-    // actually switch (Shaka in TS-only can't demux multi-PID, ExoPlayer
-    // fallback path goes through `si-*` reload).
+    // Always use var_stream_map for fMP4 multi-audio, even when the user has
+    // picked a specific track — otherwise switching audio would require a
+    // full backend reload. With all audio renditions exposed, Shaka switches
+    // client-side via EXT-X-MEDIA. The picked track is signalled via
+    // DEFAULT=YES in the master.m3u8 (see streaming.controller.ts).
     const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
     const useVarStreamMap =
-      useFmp4 &&
-      videoOnly &&
-      audioStreams &&
-      audioStreams.length > 1 &&
-      !userPickedAudio;
+      useFmp4 && videoOnly && audioStreams && audioStreams.length > 1;
 
     if (useVarStreamMap) {
       // Single FFmpeg process for video + all audio renditions (perfect sync).
@@ -2050,9 +2094,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   /** Simple keyed lock: serialises access per session key (like Jellyfin's AsyncKeyedLocker). */
   private async withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
     // Wait for any existing operation on this key
+    if (this.locks.has(key)) {
+      this.log.log(`withLock [${key}] WAITING for previous lock`);
+    }
     while (this.locks.has(key)) {
       await this.locks.get(key);
     }
+    this.log.log(`withLock [${key}] acquired`);
     let release!: () => void;
     const lock = new Promise<void>((r) => {
       release = r;

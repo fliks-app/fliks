@@ -375,5 +375,27 @@ export class ShakaEngine implements PlaybackEngine {
       });
       this.emit('stateChanged', { state: 'error' });
     });
+
+    // Fires when manifest is parsed / variants become available / adaptation
+    // happens. Forward as audioTracksChanged so the player can upgrade from
+    // the si-* streamInfo fallback (used when tracks aren't ready at startup)
+    // to the real shaka-* tracks as soon as Shaka has them.
+    const emitAudioTracks = () => {
+      const tracks = this.getAudioTracks();
+      if (tracks.length === 0) return;
+      const activeAudioId = this.player
+        ?.getVariantTracks()
+        ?.find((v: any) => v.active)?.audioId;
+      this.emit('audioTracksChanged', {
+        tracks: tracks.map((t) => ({
+          ...t,
+          selected: t.id === `shaka-${activeAudioId}`,
+        })) as any,
+      });
+    };
+    this.addShakaListener('manifestparsed', emitAudioTracks);
+    this.addShakaListener('trackschanged', emitAudioTracks);
+    this.addShakaListener('adaptation', emitAudioTracks);
+    this.addShakaListener('variantchanged', emitAudioTracks);
   }
 }
