@@ -676,6 +676,7 @@ export class SchedulerService implements OnModuleInit {
 
   private async doGenerateSprites(force: boolean): Promise<void> {
     const commandName = force ? 'GenerateSprites' : 'GenerateMissingSprites';
+    const BATCH = 4;
     // Only load IDs — avoid pulling full streamInfo/media into memory.
     const fileIds: { id: number }[] = await this.mediaFileRepo.find({
       select: ['id'],
@@ -683,7 +684,10 @@ export class SchedulerService implements OnModuleInit {
     this.log.log(`${commandName}: processing ${fileIds.length} files`);
 
     let generated = 0;
-    for (let i = 0; i < fileIds.length; i++) {
+    // Process in batches of BATCH — each file is queued into ThumbnailService
+    // which limits FFmpeg concurrency internally (SPRITE_CONCURRENCY).
+    for (let i = 0; i < fileIds.length; i += BATCH) {
+      const batch = fileIds.slice(i, i + BATCH);
       this.eventsService.emit({
         type: 'task.progress',
         command: commandName,
@@ -691,40 +695,46 @@ export class SchedulerService implements OnModuleInit {
         total: fileIds.length,
         message: commandName,
       });
-      try {
-        const file = await this.mediaFileRepo.findOne({
-          where: { id: fileIds[i].id },
-          relations: ['media'],
-        });
-        if (!file?.media) continue;
 
-        let label = file.media.title;
-        if (file.episodeId) {
-          const ep = await this.episodeRepo.findOne({
-            where: { id: file.episodeId },
-            relations: ['season'],
+      const promises = batch.map(async ({ id }) => {
+        try {
+          const file = await this.mediaFileRepo.findOne({
+            where: { id },
+            relations: ['media'],
           });
-          if (ep) {
-            label = buildSpriteLabel(
-              { title: ep.title ?? '' },
-              {
-                seasonNumber: ep.season.seasonNumber,
-                episodeNumber: ep.episodeNumber,
-                title: ep.title,
-              },
-            );
-          }
-        }
+          if (!file?.media) return null;
 
-        const result = await this.thumbnailService.generateForFile(
-          file, file.media, label, { force, skipTracking: true },
-        );
-        if (result != null) generated++;
-      } catch (e) {
-        this.log.warn(
-          `${commandName}: failed for file ${fileIds[i].id}: ${(e as Error).message}`,
-        );
-      }
+          let label = file.media.title;
+          if (file.episodeId) {
+            const ep = await this.episodeRepo.findOne({
+              where: { id: file.episodeId },
+              relations: ['season'],
+            });
+            if (ep) {
+              label = buildSpriteLabel(
+                { title: ep.title ?? '' },
+                {
+                  seasonNumber: ep.season.seasonNumber,
+                  episodeNumber: ep.episodeNumber,
+                  title: ep.title,
+                },
+              );
+            }
+          }
+
+          return this.thumbnailService.generateForFile(
+            file, file.media, label, { force, skipTracking: true },
+          );
+        } catch (e) {
+          this.log.warn(
+            `${commandName}: failed for file ${id}: ${(e as Error).message}`,
+          );
+          return null;
+        }
+      });
+
+      const results = await Promise.all(promises);
+      generated += results.filter((r) => r != null).length;
     }
 
     this.log.log(
