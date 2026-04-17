@@ -378,10 +378,13 @@ export class ThumbnailService {
   ): Promise<void> {
     let completed = 0;
     let failed = 0;
+    let consecutiveFails = 0;
+    let aborted = false;
     let nextIndex = 0;
 
     const runOne = async (): Promise<void> => {
       while (true) {
+        if (aborted) return;
         const idx = nextIndex++;
         if (idx >= count) return;
         const timestamp = idx * interval;
@@ -392,11 +395,22 @@ export class ThumbnailService {
         try {
           await this.extractFrameAt(inputPath, timestamp, outPath);
           completed++;
+          consecutiveFails = 0;
         } catch (err) {
           failed++;
-          this.log.warn(
-            `Sprite frame ${idx + 1}/${count} @ ${timestamp}s failed for "${label}": ${(err as Error).message}`,
-          );
+          consecutiveFails++;
+          if (consecutiveFails <= 3) {
+            this.log.warn(
+              `Sprite frame ${idx + 1}/${count} @ ${timestamp}s failed for "${label}": ${(err as Error).message}`,
+            );
+          }
+          if (consecutiveFails >= 3) {
+            aborted = true;
+            this.log.warn(
+              `Sprite aborted for "${label}": ${consecutiveFails} consecutive failures (file missing or unreadable)`,
+            );
+            return;
+          }
         }
         // Emit progress every 4 frames (keep SSE traffic light).
         if ((completed + failed) % 4 === 0 || completed + failed === count) {
@@ -435,9 +449,21 @@ export class ThumbnailService {
     outputPath: string,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      // No HW accel for thumbnails — 240px single-frame extraction is trivial
-      // for CPU, and the VA-API/QSV init overhead (~200ms) per process dominates
-      // when extracting hundreds of frames.
+      // HW accel for decode — 4K HEVC software decode can exceed the 30s
+      // kill timer. The init overhead (~200ms) is acceptable now that max
+      // concurrent processes is capped at 16 (SEEK_CONCURRENCY × SPRITE_CONCURRENCY).
+      const hw = this.transcodingService.getDetectedHwAccel();
+      const hwArgs: string[] = [];
+      if (hw === 'vaapi' || hw === 'qsv') {
+        hwArgs.push(
+          '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
+          '-hwaccel', 'vaapi',
+          '-hwaccel_device', 'va',
+          '-hwaccel_output_format', 'nv12',
+        );
+      } else if (hw === 'nvenc') {
+        hwArgs.push('-hwaccel', 'cuda', '-hwaccel_output_format', 'nv12');
+      }
       const args = [
         '-nostdin',
         '-hide_banner',
@@ -450,6 +476,7 @@ export class ThumbnailService {
         '0',
         '-probesize',
         '200000',
+        ...hwArgs,
         '-i',
         inputPath,
         '-frames:v',
