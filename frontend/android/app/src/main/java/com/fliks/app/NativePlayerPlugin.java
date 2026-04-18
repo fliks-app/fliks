@@ -538,11 +538,21 @@ public class NativePlayerPlugin extends Plugin {
             TrackGroup mediaGroup = group.getMediaTrackGroup();
             int bestIdx = -1;
             int bestDiff = Integer.MAX_VALUE;
+            int bestBitrate = -1;
             for (int i = 0; i < mediaGroup.length; i++) {
-                int h = mediaGroup.getFormat(i).height;
-                if (h <= 0) continue;
-                int diff = Math.abs(h - targetHeight);
-                if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+                var fmt = mediaGroup.getFormat(i);
+                if (fmt.height <= 0) continue;
+                int diff = Math.abs(fmt.height - targetHeight);
+                // Tie-break by bitrate so that when a remux variant and a
+                // transcode profile share the same height (source 1080p +
+                // 1080p transcode), we pick the higher-bitrate remux and
+                // avoid spinning up a redundant FFmpeg session.
+                if (diff < bestDiff
+                        || (diff == bestDiff && fmt.bitrate > bestBitrate)) {
+                    bestDiff = diff;
+                    bestBitrate = fmt.bitrate;
+                    bestIdx = i;
+                }
             }
             if (bestIdx >= 0) {
                 player.setTrackSelectionParameters(
