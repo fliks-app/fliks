@@ -362,6 +362,9 @@ export class PlaybackService implements OnModuleInit {
         ORDER BY ps."mediaId", ps."lastPlayedAt" DESC
       ),
       last_completed AS (
+        -- Highest (seasonNumber, episodeNumber) among completed episodes —
+        -- ordering by lastPlayedAt ties when the user bulk-marks a season,
+        -- which would make next_ep target an arbitrary earlier episode.
         SELECT DISTINCT ON (ps."mediaId")
                ps."mediaId", ps."episodeId",
                s."seasonNumber", e."episodeNumber"
@@ -369,7 +372,7 @@ export class PlaybackService implements OnModuleInit {
         JOIN episodes e ON e.id = ps."episodeId"
         JOIN seasons s ON s.id = e."seasonId"
         WHERE ps."userId" = $1 AND ps.completed = true AND ps."episodeId" IS NOT NULL
-        ORDER BY ps."mediaId", ps."lastPlayedAt" DESC
+        ORDER BY ps."mediaId", s."seasonNumber" DESC, e."episodeNumber" DESC
       ),
       in_progress AS (
         SELECT DISTINCT ON (ps."mediaId")
