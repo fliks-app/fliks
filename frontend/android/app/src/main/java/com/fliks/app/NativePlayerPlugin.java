@@ -57,6 +57,8 @@ public class NativePlayerPlugin extends Plugin {
     private AspectRatioFrameLayout aspectFrame;
     /** Pending subtitle track ID — applied when onTracksChanged fires */
     private String pendingSubtitleTrackId = null;
+    /** Pending video height to force. -1 = none, 0 = auto (clear override). */
+    private int pendingVideoHeight = -1;
     private TextureView textureView;
     private SubtitleView subtitleView;
     private DefaultHttpDataSource.Factory httpFactory;
@@ -250,6 +252,12 @@ public class NativePlayerPlugin extends Plugin {
                     if (pendingSubtitleTrackId != null) {
                         if (applySubtitleTrack(pendingSubtitleTrackId)) {
                             pendingSubtitleTrackId = null;
+                        }
+                    }
+                    // Apply pending video override once variants are known
+                    if (pendingVideoHeight > 0) {
+                        if (applyVideoOverrideByHeight(pendingVideoHeight)) {
+                            pendingVideoHeight = -1;
                         }
                     }
                 }
@@ -495,16 +503,57 @@ public class NativePlayerPlugin extends Plugin {
         int height = call.getInt("height", 0);
         mainHandler.post(() -> {
             if (player == null) { call.reject("Player not initialized"); return; }
-            var builder = player.getTrackSelectionParameters().buildUpon();
+
             if (width <= 0 || height <= 0) {
-                // Auto: remove resolution constraints
-                builder.setMaxVideoSize(Integer.MAX_VALUE, Integer.MAX_VALUE);
-            } else {
-                builder.setMaxVideoSize(width, height);
+                // Auto: clear manual override → ExoPlayer re-runs adaptive selection.
+                pendingVideoHeight = -1;
+                player.setTrackSelectionParameters(
+                        player.getTrackSelectionParameters().buildUpon()
+                                .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                                .build());
+                call.resolve();
+                return;
             }
-            player.setTrackSelectionParameters(builder.build());
+
+            // Manual override on the video group disables ABR for that track type.
+            // Store height for onTracksChanged if variants aren't available yet.
+            if (!applyVideoOverrideByHeight(height)) {
+                pendingVideoHeight = height;
+            } else {
+                pendingVideoHeight = -1;
+            }
             call.resolve();
         });
+    }
+
+    /**
+     * Pin the video track to the variant whose height best matches target.
+     * Returns true if an override was applied, false if no video group found yet.
+     */
+    @OptIn(markerClass = UnstableApi.class)
+    private boolean applyVideoOverrideByHeight(int targetHeight) {
+        if (player == null) return false;
+        for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
+            if (group.getType() != C.TRACK_TYPE_VIDEO) continue;
+            TrackGroup mediaGroup = group.getMediaTrackGroup();
+            int bestIdx = -1;
+            int bestDiff = Integer.MAX_VALUE;
+            for (int i = 0; i < mediaGroup.length; i++) {
+                int h = mediaGroup.getFormat(i).height;
+                if (h <= 0) continue;
+                int diff = Math.abs(h - targetHeight);
+                if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+            }
+            if (bestIdx >= 0) {
+                player.setTrackSelectionParameters(
+                        player.getTrackSelectionParameters().buildUpon()
+                                .setOverrideForType(
+                                        new TrackSelectionOverride(mediaGroup, bestIdx))
+                                .build());
+                return true;
+            }
+        }
+        return false;
     }
 
     // ── State ──

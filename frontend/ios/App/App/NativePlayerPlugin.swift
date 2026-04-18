@@ -455,12 +455,36 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             }
 
             if width == 0 && height == 0 {
+                // Auto: lift both caps so AVPlayer's ABR runs freely.
                 item.preferredMaximumResolution = .zero
-                item.preferredPeakBitRate = 100_000_000  // No limit — pick highest
+                item.preferredPeakBitRate = 0  // 0 = no limit
             } else {
+                // AVPlayer HLS has no "disable ABR" switch. Combining a tight
+                // resolution cap with a peak-bitrate ceiling just above the
+                // target profile forces AVPlayer to pick that rung and prevents
+                // upward switches. Downward switching under real congestion is
+                // still possible — Apple's ABR can't be hard-locked without
+                // rewriting the master playlist to expose a single rung.
                 item.preferredMaximumResolution = CGSize(width: width, height: height)
+                item.preferredPeakBitRate = Self.peakBitRateForHeight(height)
             }
             call.resolve()
+        }
+    }
+
+    /// Peak bitrate ceiling (bps) tuned just above the transcode profile for
+    /// the given target height. Keeps AVPlayer pinned to that rung instead of
+    /// upgrading to the next profile. Mirrors backend PROFILES in
+    /// transcoding.service.ts — update both if bitrates change.
+    private static func peakBitRateForHeight(_ height: Int) -> Double {
+        switch height {
+        case 2160...: return 40_000_000   // profile 20M → cap 40M (no upper profile)
+        case 1080..<2160: return 12_000_000  // profile 8M, next 20M
+        case 720..<1080: return 6_000_000    // profile 4M, next 8M
+        case 480..<720: return 3_000_000     // profile 2M, next 4M
+        case 360..<480: return 1_500_000     // profile 1M, next 2M
+        case 240..<360: return 750_000       // profile 500k, next 1M
+        default: return 350_000              // 144p profile 200k, next 500k
         }
     }
 
