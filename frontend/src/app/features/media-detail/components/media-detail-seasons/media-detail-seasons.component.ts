@@ -52,6 +52,12 @@ export class MediaDetailSeasonsComponent {
   readonly episodeProgress = input<Record<number, number>>({});
   readonly canGrab = input(false);
   readonly isAdmin = input(false);
+  /** Hide the action bar (season select, bulk actions). Used by the
+   *  "More from season X" block on episode detail pages. */
+  readonly hideControls = input(false);
+  /** Optional override for the horizontal-scroller title. Defaults to
+   *  the generic "Episodes" string when null. */
+  readonly sectionTitle = input<string | null>(null);
 
   readonly selectSeason = output<number>();
   readonly episodesHasFileOnlyChange = output<boolean>();

@@ -2,6 +2,7 @@
 @let selSeason = selectedSeason();
 <div class="divider my-6"></div>
 <section class="space-y-4">
+  @if (!hideControls()) {
   <div class="flex items-center gap-2 flex-wrap">
     <div class="dropdown shrink-0">
       <div tabindex="0" role="button" class="btn btn-ghost btn-circle">
@@ -101,6 +102,7 @@
       }
     }
   </div>
+  }
 
   @if (episodesHasFileOnly() && displaySeasons().length === 0) {
     <p class="text-sm text-base-content/50 py-6 text-center">
@@ -114,7 +116,7 @@
         {{ 'media_detail.episodes_filter_empty' | translate }}
       </p>
     } @else if (filteredEpisodes().length > 0) {
-      <app-horizontal-scroller [title]="'media_detail.episodes' | translate">
+      <app-horizontal-scroller [title]="sectionTitle() ?? ('media_detail.episodes' | translate)">
         @for (ep of filteredEpisodes(); track ep.id) {
           <app-media-card [aspect]="'landscape'"
             [id]="'episode-' + ep.id"

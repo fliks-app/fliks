@@ -238,6 +238,53 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   });
 
   /**
+   * Episodes of the focused season — powers the "Plus de saison X" block on
+   * the episode detail page. Includes the current episode so the scroller
+   * can center on it via {@link scrollToFocusedEpisodeEffect}.
+   */
+  readonly currentSeasonEpisodes = computed<Episode[]>(() => {
+    const s = this.focusedSeason();
+    return s?.episodes ?? [];
+  });
+
+  /**
+   * When the focused episode changes on the episode detail page, center the
+   * "Plus de saison X" scroller on its card. Retries across rAF ticks
+   * because the card and its scroll container mount through
+   * app-media-detail-seasons → app-horizontal-scroller → ng-content, which
+   * can take a couple of change-detection passes to settle — a single rAF
+   * sometimes fires before the element (or its layout) exists.
+   */
+  private readonly scrollToFocusedEpisodeEffect = effect(() => {
+    const ep = this.focusedEpisode();
+    const hasEpisodes = this.currentSeasonEpisodes().length > 1;
+    if (!ep || !this.episodeMode() || !hasEpisodes) return;
+    setTimeout(() => this.scrollToEpisode(ep.id), 30);
+  });
+
+  private scrollToEpisode(epId: number): void {
+    const el = document.getElementById(`episode-${epId}`);
+    if (!el) return;
+    const scroller = this.findHorizontalScrollParent(el);
+    if (!scroller) return;
+    const elRect = el.getBoundingClientRect();
+    const scrollerRect = scroller.getBoundingClientRect();
+    const target =
+      scroller.scrollLeft + (elRect.left - scrollerRect.left)
+      - scroller.clientWidth / 2 + el.offsetWidth / 2;
+    scroller.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+  }
+
+  private findHorizontalScrollParent(el: HTMLElement): HTMLElement | null {
+    let cur: HTMLElement | null = el.parentElement;
+    while (cur) {
+      if (/(auto|scroll)/.test(getComputedStyle(cur).overflowX)) return cur;
+      cur = cur.parentElement;
+    }
+    return null;
+  }
+
+  /**
    * Episode that the header's "Play" button will launch:
    *   1. resume target (in-progress state)
    *   2. first unwatched episode with a file, in season/episode order

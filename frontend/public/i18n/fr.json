@@ -507,6 +507,7 @@
     "mark_season_unwatched": "Marquer la saison comme non vue",
     "seasons_section": "Saisons & épisodes",
     "season": "Saison",
+    "more_from_season": "Plus de saison {{season}}",
     "col_ep": "Ep.",
     "col_title": "Titre",
     "col_airdate": "Diffusion",

@@ -48,6 +48,20 @@
           (editSubtitles)="openSubtitles()"
         />
 
+        @if (currentSeasonEpisodes().length > 1) {
+          <app-media-detail-seasons
+            [media]="m"
+            [selectedSeason]="s"
+            [activeSeasonId]="s.id"
+            [filteredEpisodes]="currentSeasonEpisodes()"
+            [watchedEpisodeIds]="watchedEpisodeIds()"
+            [episodeProgress]="episodeProgress()"
+            [hideControls]="true"
+            [sectionTitle]="'media_detail.more_from_season' | translate:{ season: s.seasonNumber }"
+            (toggleEpisodeWatched)="onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
+          />
+        }
+
         @if (cast().length) {
           <div class="divider my-6"></div>
           <ng-container *ngTemplateOutlet="castCrewBlock" />
