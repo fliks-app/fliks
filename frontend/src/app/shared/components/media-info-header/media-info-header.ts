@@ -324,12 +324,17 @@ export class MediaInfoHeaderComponent {
     if (!file?.streamInfo?.video?.[0]) return null;
     const v = file.streamInfo.video[0];
     const parts: string[] = [];
-    if (v.height) {
-      if (v.height >= 2160) parts.push('4K');
-      else if (v.height >= 1440) parts.push('1440p');
-      else if (v.height >= 1080) parts.push('1080p');
-      else if (v.height >= 720) parts.push('720p');
-      else parts.push(`${v.height}p`);
+    if (v.height || v.width) {
+      // Use width too so cinematic widescreen sources (e.g. 1920×960,
+      // 2.00:1 aspect) get the right label — their height alone sits
+      // below the 1080 bucket but they're still 1080p-class content.
+      const w = v.width ?? 0;
+      const h = v.height ?? 0;
+      if (w >= 3840 || h >= 2160) parts.push('4K');
+      else if (w >= 2560 || h >= 1440) parts.push('1440p');
+      else if (w >= 1920 || h >= 1080) parts.push('1080p');
+      else if (w >= 1280 || h >= 720) parts.push('720p');
+      else parts.push(`${h}p`);
     }
     if (v.hdrFormat) parts.push(v.hdrFormat);
     else if (v.colorTransfer === 'smpte2084') parts.push('HDR10');
