@@ -706,36 +706,37 @@ export class PlaybackService implements OnModuleInit {
     mediaFileId: number,
     episodeId?: number,
   ): Promise<PlaybackState> {
-    let state = await this.findState(userId, mediaId, episodeId);
-    if (state) {
-      state.completed = !state.completed;
-      if (state.completed) {
-        if (!state.durationSeconds && state.mediaFileId) {
+    const existing = await this.findState(userId, mediaId, episodeId);
+    const willBeCompleted = existing ? !existing.completed : true;
+
+    // Always build from relation properties — RelationId virtuals
+    // (userId/mediaId/mediaFileId) are read-only and don't persist, so inserts
+    // built from them hit NOT NULL on the FK columns.
+    const state =
+      existing ??
+      this.repo.create({
+        user: { id: userId } as User,
+        media: { id: mediaId } as Media,
+        episode: episodeId != null ? ({ id: episodeId } as Episode) : null,
+      });
+
+    state.completed = willBeCompleted;
+    state.lastPlayedAt = new Date();
+    if (mediaFileId) state.mediaFile = { id: mediaFileId } as MediaFile;
+
+    if (willBeCompleted) {
+      state.positionSeconds = 0;
+      if (!state.durationSeconds) {
+        const fileId = mediaFileId || state.mediaFileId;
+        if (fileId) {
           const file = await this.mediaFileRepo.findOne({
-            where: { id: state.mediaFileId },
+            where: { id: fileId },
           });
           state.durationSeconds = file?.streamInfo?.durationSeconds ?? 0;
         }
-        state.positionSeconds = 0;
       }
-      state.lastPlayedAt = new Date();
-      if (mediaFileId) state.mediaFileId = mediaFileId;
-    } else {
-      const file = await this.mediaFileRepo.findOne({
-        where: { id: mediaFileId },
-      });
-      const duration = file?.streamInfo?.durationSeconds ?? 0;
-      state = this.repo.create({
-        userId,
-        mediaId,
-        mediaFileId,
-        episode: episodeId != null ? ({ id: episodeId } as Episode) : null,
-        positionSeconds: 0,
-        durationSeconds: duration,
-        completed: true,
-        lastPlayedAt: new Date(),
-      });
     }
+
     return this.repo.save(state);
   }
 
