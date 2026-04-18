@@ -49,6 +49,9 @@ export class ServerConfigService {
 
   resolveUrl(path: string): string {
     if (!this.isNative || !this._serverUrl()) return path;
+    // Absolute URLs (e.g. raw TMDB images) must not be re-prefixed with the
+    // server host — would produce https://server/https://image.tmdb.org/...
+    if (/^https?:\/\//i.test(path)) return path;
     return this._serverUrl() + path;
   }
 }
