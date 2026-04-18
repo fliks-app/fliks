@@ -1136,6 +1136,35 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Toggle a single episode's watched state from the season panel card.
+   * Uses the episode's latest media file for the POST; optimistically updates
+   * the local watched set so the badge flips immediately.
+   */
+  async onToggleEpisodeWatched(mediaId: number, episode: Episode, watched: boolean) {
+    const files = filesForEpisode(this.media()?.files, episode.id);
+    const fileId = files[0]?.id;
+    if (!fileId) return;
+
+    const prev = this.watchedEpisodeIds();
+    const next = new Set(prev);
+    if (watched) next.add(episode.id);
+    else next.delete(episode.id);
+    this.watchedEpisodeIds.set(next);
+
+    if (watched) {
+      const nextProgress = { ...this.episodeProgress() };
+      delete nextProgress[episode.id];
+      this.episodeProgress.set(nextProgress);
+    }
+
+    try {
+      await this.streamingApi.toggleWatched(mediaId, fileId, episode.id);
+    } catch {
+      this.watchedEpisodeIds.set(prev);
+    }
+  }
+
   onSeriesWatchedToggled(payload: { watched: boolean }) {
     const m = this.media();
     if (!m?.seasons?.length) return;

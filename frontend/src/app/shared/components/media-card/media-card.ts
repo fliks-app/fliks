@@ -1,7 +1,7 @@
 import { Component, ChangeDetectionStrategy, input, output, computed, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { NgClass, DecimalPipe } from '@angular/common';
-import { TranslateService } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideX, LucideCircleCheck, LucideCircleX } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { Media } from '../../../core/services/api/media.service';
@@ -23,7 +23,7 @@ export type CardStatus = 'watched' | 'missing' | null;
 
 @Component({
   selector: 'app-media-card',
-  imports: [RouterLink, NgClass, DecimalPipe, ResolveUrlPipe,
+  imports: [RouterLink, NgClass, DecimalPipe, ResolveUrlPipe, TranslateModule,
     LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideX, LucideCircleCheck, LucideCircleX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-card.html',
@@ -70,11 +70,20 @@ export class MediaCardComponent {
   // State
   readonly dimmed = input(false);
   readonly dismissable = input(false);
+  /**
+   * When true, the top-right check becomes a toggle button that's always
+   * visible (filled green when `status()` is `'watched'`, outlined
+   * otherwise). Parents must handle {@link watchedToggled} to persist the
+   * change, otherwise the click does nothing.
+   */
+  readonly interactiveWatched = input(false);
 
   // Events
   readonly clicked = output<void>();
   readonly played = output<void>();
   readonly dismissed = output<void>();
+  /** Emits the desired target state (true = mark watched, false = unmark). */
+  readonly watchedToggled = output<boolean>();
 
   // Resolved template values (explicit input wins over media-derived default)
   protected readonly _img = computed(() => this.imageUrl() ?? this.media()?.posterUrl ?? null);
@@ -111,6 +120,11 @@ export class MediaCardComponent {
     const link = this._link();
     if (link) void this.router.navigate(link);
     this.clicked.emit();
+  }
+
+  protected onWatchedClick(event: Event) {
+    event.stopPropagation();
+    this.watchedToggled.emit(this.status() !== 'watched');
   }
 
   protected onPlayClick(event: Event) {

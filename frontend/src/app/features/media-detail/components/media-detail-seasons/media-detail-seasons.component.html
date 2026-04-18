@@ -127,8 +127,10 @@
             [progressPercent]="episodeProgress()[ep.id] ?? 0"
             [link]="episodeRoute(ep)"
             [playable]="ep.hasFile"
+            [interactiveWatched]="ep.hasFile"
             [dimmed]="!ep.monitored"
             (played)="playEpisode(ep)"
+            (watchedToggled)="toggleEpisodeWatched.emit({ episode: ep, watched: $event })"
           />
         }
       </app-horizontal-scroller>

@@ -59,6 +59,7 @@ export class MediaDetailSeasonsComponent {
   readonly grabSeason = output<Season>();
   readonly toggleSeasonMonitored = output<Season>();
   readonly toggleSeasonWatched = output<{ season: Season; watched: boolean }>();
+  readonly toggleEpisodeWatched = output<{ episode: Episode; watched: boolean }>();
   readonly seasonWatchedBusyId = input<number | null>(null);
 
   /** Every episode with a file in the season is in the watched set. */
