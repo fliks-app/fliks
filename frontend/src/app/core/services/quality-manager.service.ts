@@ -149,6 +149,19 @@ export class QualityManagerService {
             switchInterval: 5,              // Re-evaluate every 5s (default: 8)
             bandwidthUpgradeTarget: 0.7,    // Upgrade at 70% headroom (default: 0.85 = more conservative)
             bandwidthDowngradeTarget: 0.95, // Downgrade only when nearly saturated
+            advanced: {
+              // Require 5 MB of observed data before ABR makes decisions.
+              // FFmpeg transcode startup makes the first segment arrive 10-30s
+              // after request on 4K/HDR sources; with the default 128 KB
+              // threshold Shaka treats that single slow seg as network
+              // saturation and downgrades before playback even starts.
+              minTotalBytes: 5_000_000,
+              // Smooth the bandwidth estimator over a longer window (default
+              // slowHalfLife is ~9s). 30s means one slow segment has less
+              // weight on the overall estimate — protects against the
+              // transcode-warmup outlier dragging ABR down.
+              slowHalfLife: 30,
+            } as any,
           },
           streaming: { bufferBehind: 5 },
         });
