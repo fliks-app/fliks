@@ -9,6 +9,7 @@ import {
   OnDestroy,
   viewChild,
 } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { NgTemplateOutlet } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -101,6 +102,27 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly downloadModal = viewChild<DownloadQualityModalComponent>('downloadModal');
   /** Same SSE payload must run handlers once; `media` updates (e.g. after rescan) re-run this effect. */
   private lastHandledSseEvent: SseEvent | null = null;
+
+  /**
+   * Signal mirror of the route's paramMap. Angular reuses this component when
+   * navigating between two `series/:id/episode/:episodeId` URLs, so a plain
+   * snapshot read in ngOnInit would miss subsequent param changes.
+   */
+  private readonly routeParams = toSignal(this.route.paramMap);
+
+  /**
+   * Keep the episode-focus state in sync with the URL whenever either the
+   * loaded media or the route params change.
+   */
+  private readonly episodeFocusEffect = effect(() => {
+    const m = this.media();
+    const params = this.routeParams();
+    if (!m || !params) return;
+    const idParam = params.get('id');
+    const paramId = idParam ? Number(idParam) : NaN;
+    if (m.id !== paramId) return;
+    this.applyEpisodeFocus(m, params.get('episodeId'));
+  });
 
   /** React to SSE rescan + metadata-refresh events for this media */
   private readonly sseEffect = effect(() => {
@@ -435,30 +457,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       }
       this.media.set(m);
 
-      // Episode mode: series/:id/episode/:episodeId
-      const episodeIdParam = this.route.snapshot.paramMap.get('episodeId');
-      if (episodeIdParam) {
-        const episodeId = Number(episodeIdParam);
-        let foundSeason: Season | null = null;
-        let foundEpisode: Episode | null = null;
-        for (const s of m.seasons ?? []) {
-          const ep = s.episodes?.find(e => e.id === episodeId);
-          if (ep) { foundSeason = s; foundEpisode = ep; break; }
-        }
-        if (!foundEpisode) {
-          this.notFound.set(true);
-          this.loading.set(false);
-          return;
-        }
-        this.episodeMode.set(true);
-        this.focusedSeason.set(foundSeason);
-        this.focusedEpisode.set(foundEpisode);
-        const sn = String(foundSeason!.seasonNumber).padStart(2, '0');
-        const en = String(foundEpisode.episodeNumber).padStart(2, '0');
-        this.navbarService.enterHeroPage(`${m.title} — S${sn}:E${en} — ${foundEpisode.title ?? ''}`);
-      } else {
-        this.navbarService.enterHeroPage(m.title);
-      }
+      // Episode focus (series/:id/episode/:episodeId) is applied reactively
+      // by episodeFocusEffect as soon as `media` is set, so no imperative
+      // call is needed here.
 
       // Load cast/crew async — doesn't block page render
       this.mediaService.getCast(m.id).then((c) => this.cast.set(c)).catch(() => {});
@@ -533,6 +534,44 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /**
+   * Apply the episode-focus state (hero, navbar title) for the current
+   * episodeId URL param. Flips `notFound` if the param points at an unknown
+   * episode — template then renders the not-found view.
+   */
+  private applyEpisodeFocus(m: Media, episodeIdParam: string | null): void {
+    if (!episodeIdParam) {
+      this.episodeMode.set(false);
+      this.focusedSeason.set(null);
+      this.focusedEpisode.set(null);
+      this.navbarService.enterHeroPage(m.title);
+      return;
+    }
+    const episodeId = Number(episodeIdParam);
+    let foundSeason: Season | null = null;
+    let foundEpisode: Episode | null = null;
+    for (const s of m.seasons ?? []) {
+      const ep = s.episodes?.find((e) => e.id === episodeId);
+      if (ep) {
+        foundSeason = s;
+        foundEpisode = ep;
+        break;
+      }
+    }
+    if (!foundEpisode) {
+      this.notFound.set(true);
+      return;
+    }
+    this.episodeMode.set(true);
+    this.focusedSeason.set(foundSeason);
+    this.focusedEpisode.set(foundEpisode);
+    const sn = String(foundSeason!.seasonNumber).padStart(2, '0');
+    const en = String(foundEpisode.episodeNumber).padStart(2, '0');
+    this.navbarService.enterHeroPage(
+      `${m.title} — S${sn}:E${en} — ${foundEpisode.title ?? ''}`,
+    );
   }
 
   backSegment(): string {
