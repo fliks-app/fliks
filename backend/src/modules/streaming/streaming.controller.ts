@@ -536,49 +536,15 @@ export class StreamingController {
       audioStreams.length > 1 && !clientMuxesAudio && fmp4Supported;
     const onlyQuality = firstQueryString(req.query, 'startQuality');
 
-    // Smart remux: if the user's locked quality maps to a target height that
-    // already matches the source height (±16 px), and the source video codec
-    // is copy-compatible with the client (captured at playback-info time in
-    // `canCopyVideo`), emit the remux variant instead of a transcode variant.
-    // Saves a full video re-encode — zero GPU, instant startup.
-    let smartRemux = false;
-    if (
-      onlyQuality &&
-      onlyQuality !== 'auto' &&
-      onlyQuality !== 'original' &&
-      onlyQuality !== 'remux'
-    ) {
-      const profile = PROFILES.find((p) => p.name === onlyQuality);
-      const canCopyVideo =
-        this.activeStreamTracker.getCanCopyVideo(mediaFileId);
-      const sourceH = this.activeStreamTracker.getSourceHeight(mediaFileId);
-      const sourceW = this.activeStreamTracker.getSourceWidth(mediaFileId);
-      if (profile && canCopyVideo && sourceW > 0 && sourceH > 0) {
-        const targetW = Math.min(profile.maxWidth, sourceW);
-        const rawH = (targetW * sourceH) / sourceW;
-        const targetH = Math.floor(rawH / 16) * 16 || 16;
-        if (Math.abs(sourceH - targetH) <= 16) {
-          smartRemux = true;
-          this.log.log(
-            `Smart remux for file ${mediaFileId}: source ${sourceW}x${sourceH} ` +
-              `matches requested ${onlyQuality}, skipping transcode`,
-          );
-        }
-      }
-    }
-
-    const effectiveIncludeRemux = includeRemux || smartRemux;
-    const effectiveOnlyQuality = smartRemux ? 'remux' : onlyQuality;
-
     const playlist = this.transcodingService.generateMasterPlaylist(
       mediaFileId,
       w,
       h,
       tokenParam,
-      effectiveIncludeRemux,
+      includeRemux,
       sourceBitrate || undefined,
       useExtXMedia ? audioStreams : undefined,
-      effectiveOnlyQuality,
+      onlyQuality,
       pickedIdx ?? 0,
     );
 
@@ -601,43 +567,33 @@ export class StreamingController {
     // which would kill this pre-spawned session — wasting the work and
     // adding a kill+restart penalty.
     const startAt = parseFloat(firstQueryString(req.query, 'startAt') ?? '0');
-    if (
-      effectiveOnlyQuality &&
-      effectiveOnlyQuality !== 'auto' &&
-      startAt === 0
-    ) {
+    if (onlyQuality && onlyQuality !== 'auto' && startAt === 0) {
       const existing = this.transcodingService.getExistingSession(
         mediaFileId,
         req.user?.id,
       );
       if (!existing || existing.process.exitCode !== null) {
         const ctx = this.buildSessionContext(req, resolved, mediaFileId);
-        if (
-          effectiveOnlyQuality === 'remux' ||
-          effectiveOnlyQuality === 'original'
-        ) {
-          const copyAudio =
-            this.activeStreamTracker.getCanCopyAudio(mediaFileId);
-          void this.transcodingService
-            .getOrCreateRemuxSession(
-              mediaFileId,
-              resolved.absolutePath,
-              copyAudio,
-              0,
-              ctx,
-            )
-            .catch(() => {});
-        } else {
-          void this.transcodingService
-            .getOrCreateSession(
-              mediaFileId,
-              effectiveOnlyQuality,
-              resolved.absolutePath,
-              0,
-              ctx,
-            )
-            .catch(() => {});
+        // 'remux'/'original' are mapped to the top transcode profile in the
+        // master playlist — do the same mapping here so the pre-spawned
+        // session matches the variant the player is about to request.
+        let targetQuality = onlyQuality;
+        if (onlyQuality === 'remux' || onlyQuality === 'original') {
+          const sourceW =
+            this.activeStreamTracker.getSourceWidth(mediaFileId) || 0;
+          const top =
+            PROFILES.find((p) => p.maxWidth <= sourceW) ?? PROFILES[0];
+          targetQuality = top.name;
         }
+        void this.transcodingService
+          .getOrCreateSession(
+            mediaFileId,
+            targetQuality,
+            resolved.absolutePath,
+            0,
+            ctx,
+          )
+          .catch(() => {});
       }
     }
   }

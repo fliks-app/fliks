@@ -492,32 +492,26 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const audioAttr = multiAudio ? ',AUDIO="audio"' : '';
     const transcodeCodecs = ',CODECS="avc1.640028,mp4a.40.2"';
 
-    // When the client asks for a specific startup quality, emit ONLY that
-    // variant. It's the only reliable way to stop Shaka from probing lower
-    // variants during startup — no master = no probe. The downside is that
-    // in-playback quality changes require a stream reload with a new
-    // `onlyQuality` (same cost the native path already pays), which the
-    // player handles via `reloadStream()`.
-    const wantRemuxOnly = onlyQuality === 'remux' || onlyQuality === 'original';
-
-    if (includeRemux && (!onlyQuality || wantRemuxOnly)) {
-      const bw = sourceBitrate ?? 20_000_000; // fallback to 20 Mbps if unknown
-      // Remux keeps source video codec; declare avc1 + aac as safe default
-      // (we always transcode audio to AAC-LC; source video is typically H.264).
-      const remuxCodecs = ',CODECS="avc1.640028,mp4a.40.2"';
-      lines.push(
-        `#EXT-X-STREAM-INF:BANDWIDTH=${bw},RESOLUTION=${sourceWidth}x${sourceHeight},NAME="remux"${remuxCodecs}${audioAttr}`,
-        `/api/stream/${mediaFileId}/remux/index.m3u8${tokenParam}`,
-      );
-      if (wantRemuxOnly) return lines.join('\n');
-    }
-
+    // The HLS master never advertises the `/remux/` variant — it proved
+    // unreliable on ExoPlayer (Android), which would ABR-downgrade from the
+    // remux rung to the identical-resolution 1080p transcode mid-stream and
+    // trigger a pointless FFmpeg kill+restart. Transcode profiles cover the
+    // full resolution ladder; "remux"/"original" quality picks are mapped
+    // onto the top transcode profile.
     let profiles = this.getAvailableProfiles(sourceWidth, sourceHeight);
     if (!profiles.length) profiles.push(PROFILES[PROFILES.length - 1]); // at least 480p
 
-    if (onlyQuality && !wantRemuxOnly) {
-      const picked = profiles.find((p) => p.name === onlyQuality);
-      if (picked) profiles = [picked];
+    if (onlyQuality) {
+      if (onlyQuality === 'remux' || onlyQuality === 'original') {
+        // Pick the top profile whose maxWidth is ≤ source (matches source
+        // resolution as closely as possible without upscaling).
+        const top =
+          profiles.find((p) => p.maxWidth <= sourceWidth) ?? profiles[0];
+        profiles = [top];
+      } else {
+        const picked = profiles.find((p) => p.name === onlyQuality);
+        if (picked) profiles = [picked];
+      }
     }
 
     for (const p of profiles) {
