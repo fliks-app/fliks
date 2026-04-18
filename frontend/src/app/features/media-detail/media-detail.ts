@@ -489,16 +489,32 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         }
       }
 
-      // Series: select season from resume, then scroll to first unwatched
+      // Series: preselect the season the user is currently watching.
+      //   1. Latest in-progress episode (resumeInfo).
+      //   2. Season of the first unwatched-with-file episode — handles the
+      //      between-episodes case (last ep completed, next not started yet)
+      //      where resumeInfo is null.
       let resumeHandled = false;
-      if (m.type === 'series' && resumeInfo?.episodeId && m.seasons?.length) {
-        for (const s of m.seasons) {
-          if (s.episodes?.some((e) => e.id === resumeInfo.episodeId)) {
-            this.activeSeasonId.set(s.id);
-            this.persistActiveSeason(s.id);
-            resumeHandled = true;
-            break;
-          }
+      if (m.type === 'series' && m.seasons?.length) {
+        let targetSeasonId: number | null = null;
+        if (resumeInfo?.episodeId) {
+          targetSeasonId =
+            m.seasons.find((s) =>
+              s.episodes?.some((e) => e.id === resumeInfo.episodeId),
+            )?.id ?? null;
+        }
+        if (targetSeasonId == null) {
+          targetSeasonId =
+            m.seasons.find((s) =>
+              s.episodes?.some(
+                (e) => e.hasFile && !watchedSet.has(e.id),
+              ),
+            )?.id ?? null;
+        }
+        if (targetSeasonId != null) {
+          this.activeSeasonId.set(targetSeasonId);
+          this.persistActiveSeason(targetSeasonId);
+          resumeHandled = true;
         }
       }
 
