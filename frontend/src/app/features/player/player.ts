@@ -1096,8 +1096,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     void this.router
       .navigateByUrl('/', { skipLocationChange: true })
       .then(() =>
+        // replaceUrl so the previous episode's /watch entry is overwritten
+        // instead of stacked — otherwise closing the player leaves the old
+        // episode in history and back reopens it.
         this.router.navigate(['/watch', next.mediaFileId], {
           queryParams: { mediaId, episodeId: next.episodeId },
+          replaceUrl: true,
         }),
       );
   }
@@ -1238,20 +1242,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // (e.g. next-episode) leaves multiple /watch entries on the stack, and
     // router-reuse across same routes means history.back() only rewrites
     // the URL without exiting the player.
+    // replaceUrl drops /watch from history so hardware/browser back does not
+    // reopen the player on the way back.
     if (!this.mediaId) {
-      void this.router.navigate(['/']);
+      void this.router.navigate(['/'], { replaceUrl: true });
       return;
     }
     const kind = this.media?.type === 'series' ? 'series' : 'movies';
     if (this.episodeId && kind === 'series') {
-      void this.router.navigate([
-        '/series',
-        this.mediaId,
-        'episode',
-        this.episodeId,
-      ]);
+      void this.router.navigate(
+        ['/series', this.mediaId, 'episode', this.episodeId],
+        { replaceUrl: true },
+      );
     } else {
-      void this.router.navigate(['/' + kind, this.mediaId]);
+      void this.router.navigate(['/' + kind, this.mediaId], { replaceUrl: true });
     }
   }
 
@@ -1259,9 +1263,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.savePosition();
     const kind = this.media?.type === 'series' ? 'series' : 'movies';
     if (this.episodeId && kind === 'series') {
-      this.router.navigate(['/series', this.mediaId, 'episode', this.episodeId]);
+      this.router.navigate(
+        ['/series', this.mediaId, 'episode', this.episodeId],
+        { replaceUrl: true },
+      );
     } else {
-      this.router.navigate(['/' + kind, this.mediaId]);
+      this.router.navigate(['/' + kind, this.mediaId], { replaceUrl: true });
     }
   }
 
