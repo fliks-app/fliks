@@ -32,7 +32,7 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { StreamingApiService, MediaResumeInfo } from '../../core/services/api/streaming-api.service';
 import { MarkersApiService } from '../../core/services/api/markers-api.service';
 import { MediaInfoHeaderComponent } from '../../shared/components/media-info-header/media-info-header';
-import { SubtitleSectionComponent } from '../../shared/components/subtitle-section/subtitle-section';
+import { SubtitlesModalComponent } from '../../shared/components/subtitles-modal/subtitles-modal';
 import { MediaFileInfoComponent } from '../../shared/components/media-file-info';
 import { MediaDetailSeasonsComponent } from './components/media-detail-seasons/media-detail-seasons.component';
 import { ReleasesModalComponent } from './components/releases-modal/releases-modal.component';
@@ -69,7 +69,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
   imports: [
     TranslateModule,
     MediaInfoHeaderComponent,
-    SubtitleSectionComponent,
+    SubtitlesModalComponent,
     MediaFileInfoComponent,
     MediaDetailSeasonsComponent,
     ReleasesModalComponent,
@@ -396,7 +396,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly seasonReleasesModal = viewChild<ReleasesModalComponent>('seasonReleasesModal');
   readonly profilesModal = viewChild(MediaDetailProfilesModalComponent);
   readonly libraryModal = viewChild(MediaDetailLibraryModalComponent);
-  readonly subtitleSection = viewChild(SubtitleSectionComponent);
+  readonly subtitleSection = viewChild(SubtitlesModalComponent);
 
   readonly episodeDialogFiles = computed(() => {
     const c = this.episodeDrawerContext();
@@ -757,6 +757,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   openDownloadModal() {
     const fileId = this.episodeMode() ? this.episodeActiveFileId() : this.activeFileId();
     if (fileId) this.downloadModal()?.open(fileId);
+  }
+
+  openSubtitles() {
+    this.subtitleSection()?.show();
   }
 
   async onDownload(ev: { mediaFileId: number; quality: string }) {

@@ -45,6 +45,7 @@
           (loadReleases)="loadEpisodeReleases(m.id, s.id, ep.id)"
           (grabBest)="grabEpisodeBest(m.id, ep.id)"
           (rescanFiles)="rescanFiles()"
+          (editSubtitles)="openSubtitles()"
         />
 
         @if (cast().length || crew().length) {
@@ -52,7 +53,7 @@
           <ng-container *ngTemplateOutlet="castCrewBlock" />
         }
 
-        <app-subtitle-section
+        <app-subtitles-modal
           [mediaId]="m.id"
           [episodeId]="ep.id"
           [files]="m.files ?? []"
@@ -118,6 +119,7 @@
           (rescanFiles)="rescanFiles()"
           (detectIntros)="detectIntros(m.id)"
           (seriesWatchedToggled)="onSeriesWatchedToggled($event)"
+          (editSubtitles)="openSubtitles()"
         />
 
         @if (m.type === 'movie' && (cast().length || crew().length)) {
@@ -126,7 +128,7 @@
         }
 
         @if (m.type === 'movie') {
-          <app-subtitle-section
+          <app-subtitles-modal
             [mediaId]="m.id"
             [files]="mediaFiles()"
             [selectedFileId]="activeFileId()"

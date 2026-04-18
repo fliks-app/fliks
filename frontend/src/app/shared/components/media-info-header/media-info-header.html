@@ -166,6 +166,9 @@
             <li><a class="flex items-center gap-3" (click)="openProfiles.emit()"><svg lucideSettings class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_profiles' | translate }}</a></li>
             <li><a class="flex items-center gap-3" (click)="openLibrary.emit()"><svg lucideFolder class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_library' | translate }}</a></li>
           }
+          @if (mediaType() === 'movie' || episodeId()) {
+            <li><a class="flex items-center gap-3" (click)="editSubtitles.emit()"><svg lucideCaptions class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_subtitles' | translate }}</a></li>
+          }
           @if (isAdmin()) {
             <li><a class="flex items-center gap-3" (click)="refreshMetadata.emit()"><svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.refresh_metadata' | translate }}</a></li>
             <li><a class="flex items-center gap-3" (click)="rescanFiles.emit()"><svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.rescan_files' | translate }}</a></li>
@@ -424,6 +427,9 @@
               <li><a class="flex items-center gap-3" (click)="openProfiles.emit()"><svg lucideSettings class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_profiles' | translate }}</a></li>
               <li><a class="flex items-center gap-3" (click)="openLibrary.emit()"><svg lucideFolder class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_library' | translate }}</a></li>
             }
+            @if (mediaType() === 'movie' || episodeId()) {
+            <li><a class="flex items-center gap-3" (click)="editSubtitles.emit()"><svg lucideCaptions class="h-4 w-4 shrink-0 opacity-70"></svg>{{ 'media_detail.edit_subtitles' | translate }}</a></li>
+          }
             @if (isAdmin()) {
               <li><a class="flex items-center gap-3" (click)="refreshMetadata.emit()">
                 <svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg>

@@ -13,6 +13,7 @@ import { RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
 import {
+  LucideCaptions,
   LucideChevronLeft,
   LucideCheck,
   LucideDownload,
@@ -64,10 +65,10 @@ interface AudioTrack {
     MobileFanartHeroComponent,
     ResolveUrlPipe,
     DecimalPipe, FormsModule, RouterLink, TranslateModule,
-    LucideChevronLeft, LucideCheck, LucideDownload, LucideEllipsisVertical,
-    LucideEye, LucideEyeOff, LucideFileText, LucideFilm, LucideFolder,
-    LucidePlay, LucideRotateCcw, LucideSearch, LucideSettings,
-    LucideSkipForward, LucideTrash2,
+    LucideCaptions, LucideChevronLeft, LucideCheck, LucideDownload,
+    LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideFileText,
+    LucideFilm, LucideFolder, LucidePlay, LucideRotateCcw, LucideSearch,
+    LucideSettings, LucideSkipForward, LucideTrash2,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-info-header.html',
@@ -151,6 +152,7 @@ export class MediaInfoHeaderComponent {
   readonly grabBest = output<void>();
   readonly rescanFiles = output<void>();
   readonly detectIntros = output<void>();
+  readonly editSubtitles = output<void>();
   /** Emitted after a series-level bulk watched toggle. Parent should refresh its episode watched list. */
   readonly seriesWatchedToggled = output<{ watched: boolean }>();
 
