@@ -135,10 +135,12 @@
         </button>
       }
       @if (selectedFileId()) {
-        <button class="flex flex-col items-center gap-1 text-sm" (click)="openDownload.emit()">
-          <svg lucideDownload class="h-5 w-5"></svg>
-          {{ 'downloads.download' | translate }}
-        </button>
+        @if (mediaType() === 'movie' || episodeId()) {
+          <button class="flex flex-col items-center gap-1 text-sm" (click)="openDownload.emit()">
+            <svg lucideDownload class="h-5 w-5"></svg>
+            {{ 'downloads.download' | translate }}
+          </button>
+        }
         <button class="flex flex-col items-center gap-1 text-sm text-error" (click)="onDeleteFileClick()">
           <svg lucideTrash2 class="h-5 w-5"></svg>
           {{ 'media_detail.delete' | translate }}
@@ -397,9 +399,11 @@
           <button type="button" class="btn btn-error btn-outline btn btn-circle" (click)="onDeleteFileClick()">
             <svg lucideTrash2 class="h-4 w-4"></svg>
           </button>
-          <button type="button" class="btn btn-ghost btn btn-circle" (click)="openDownload.emit()">
-            <svg lucideDownload class="h-4 w-4"></svg>
-          </button>
+          @if (mediaType() === 'movie' || episodeId()) {
+            <button type="button" class="btn btn-ghost btn btn-circle" (click)="openDownload.emit()">
+              <svg lucideDownload class="h-4 w-4"></svg>
+            </button>
+          }
         }
         @if (!selectedFileId() && canToggleWatched()) {
           <button type="button" class="btn btn-outline btn btn-circle" [class.btn-success]="watched()" [class.btn-ghost]="!watched()" (click)="onToggleWatched()">
