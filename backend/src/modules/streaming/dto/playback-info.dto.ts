@@ -17,7 +17,7 @@ export interface TranscodeReason {
 export interface QualityOption {
   /** 'original' | '2160p' | '1080p' | '720p' | '480p' | '360p' | '240p' | '144p' */
   id: string;
-  /** Display label (e.g. "1080p", "1080p — Originale", "4K"). */
+  /** Display label (e.g. "1080p", "4K"). */
   label: string;
   /** Target height in pixels (source height for `original`). */
   height: number;
@@ -25,6 +25,8 @@ export interface QualityOption {
   totalBitrateBps: number;
   /** True when the 'original' rung maps to a DirectStream (remux) path. */
   isRemux: boolean;
+  /** True on the reduced transcode rung shown alongside `original` at source resolution. */
+  lowBandwidth?: boolean;
 }
 
 export interface PlaybackInfoResponse {

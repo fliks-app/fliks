@@ -323,7 +323,8 @@ export class StreamBuilderService {
    * - Transcode / DirectStream → iterate the device ladder filtered to source.
    *   At the source-resolution rung:
    *     - If remux is possible (`videoCopyStream`) and `sourceTotal > ladderTotal × 1.3`:
-   *       expose BOTH the transcode rung AND `original` (labelled "<res> — Originale").
+   *       expose BOTH entries, `original` first (the remux path, full quality) and
+   *       then the transcode rung flagged `lowBandwidth` so the UI can hint at it.
    *     - If remux is possible but source bitrate is near/below ladder: collapse to
    *       a single `original` entry (labelled with the resolution alone).
    *     - If remux is NOT possible (full transcode path): expose only the transcode rung.
@@ -377,13 +378,31 @@ export class StreamBuilderService {
       const total = v + a;
 
       if (isTop && videoCopyStream && !splitOriginal) {
-        // Collapse: single `original` rung at source resolution.
         qualities.push({
           id: 'original',
           label: resolutionLabel,
           height: originalHeight,
           totalBitrateBps: sourceTotal > 0 ? sourceTotal : total,
           isRemux: true,
+        });
+        continue;
+      }
+
+      if (isTop && splitOriginal) {
+        qualities.push({
+          id: 'original',
+          label: resolutionLabel,
+          height: originalHeight,
+          totalBitrateBps: sourceTotal,
+          isRemux: true,
+        });
+        qualities.push({
+          id: p.name,
+          label: displayLabel(p.name),
+          height: p.maxHeight,
+          totalBitrateBps: total,
+          isRemux: false,
+          lowBandwidth: true,
         });
         continue;
       }
@@ -395,16 +414,6 @@ export class StreamBuilderService {
         totalBitrateBps: total,
         isRemux: false,
       });
-
-      if (isTop && splitOriginal) {
-        qualities.push({
-          id: 'original',
-          label: `${resolutionLabel} — Originale`,
-          height: originalHeight,
-          totalBitrateBps: sourceTotal,
-          isRemux: true,
-        });
-      }
     }
 
     return qualities;

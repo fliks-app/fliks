@@ -3,8 +3,10 @@ import type { PlaybackEngine } from './playback-engine/playback-engine';
 
 export interface QualityOption {
   id: string;      // 'auto' | 'original' | '2160p' | '1080p' | '720p' | '480p' | ...
-  label: string;   // "Auto", "Original (4K)", "1080p", "720p", "480p"
+  label: string;   // "Auto", "1080p", "4K", ...
   height: number;  // 0 for auto, source height for original, profile height
+  /** Reduced transcode rung shown alongside `original` at source resolution. */
+  lowBandwidth?: boolean;
 }
 
 /** Persisted user choice for quality (same key across sessions). */
@@ -57,13 +59,18 @@ export class QualityManagerService {
     playMethod: string;
     videoCopyStream: boolean;
     source: { width?: number; height?: number };
-    qualities?: { id: string; label: string; height: number }[];
+    qualities?: { id: string; label: string; height: number; lowBandwidth?: boolean }[];
   }): void {
     const options: QualityOption[] = [
       { id: 'auto', label: 'Auto', height: 0 },
     ];
     for (const q of playbackInfo.qualities ?? []) {
-      options.push({ id: q.id, label: q.label, height: q.height });
+      options.push({
+        id: q.id,
+        label: q.label,
+        height: q.height,
+        lowBandwidth: q.lowBandwidth,
+      });
     }
     this.availableQualities.set(options);
   }

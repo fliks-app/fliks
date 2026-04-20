@@ -30,6 +30,7 @@ export interface CastAudioOption {
 export interface CastQualityOption {
   id: string;
   label: string;
+  lowBandwidth?: boolean;
 }
 
 interface SubtitleInfo {

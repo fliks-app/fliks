@@ -43,6 +43,7 @@ export interface PlaybackInfoResponse {
     height: number;
     totalBitrateBps: number;
     isRemux: boolean;
+    lowBandwidth?: boolean;
   }[];
   source: {
     container: string;
