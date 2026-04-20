@@ -8,6 +8,7 @@ import {
   signal,
 } from '@angular/core';
 import { CastService } from '../../../core/services/cast.service';
+import { TranslateModule } from '@ngx-translate/core';
 import {
   LucideCaptions,
   LucideCast,
@@ -39,6 +40,7 @@ export interface CastAudioOption {
 export interface CastQualityOption {
   id: string;
   label: string;
+  lowBandwidth?: boolean;
 }
 
 @Component({
@@ -47,6 +49,7 @@ export interface CastQualityOption {
     LucideCaptions, LucideCast, LucideCheck, LucideChevronLeft,
     LucideHeadphones, LucidePause, LucidePlay, LucideRotateCcw, LucideRotateCw,
     LucideSettings, LucideSquare,
+    TranslateModule,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './cast-remote.html',

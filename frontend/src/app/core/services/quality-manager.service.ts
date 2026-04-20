@@ -3,8 +3,10 @@ import type { PlaybackEngine } from './playback-engine/playback-engine';
 
 export interface QualityOption {
   id: string;      // 'auto' | 'original' | '2160p' | '1080p' | '720p' | '480p' | ...
-  label: string;   // "Auto", "Original (4K)", "1080p", "720p", "480p"
+  label: string;   // "Auto", "1080p", "4K", ...
   height: number;  // 0 for auto, source height for original, profile height
+  /** Reduced transcode rung shown alongside `original` at source resolution. */
+  lowBandwidth?: boolean;
 }
 
 /** Persisted user choice for quality (same key across sessions). */
@@ -50,48 +52,26 @@ export class QualityManagerService {
 
   /**
    * Build the quality options list from playback info.
-   * Generates: Auto + Original (if videoCopy) + transcode profiles filtered by source width.
+   * The backend sends an authoritative, device-aware list in `qualities` — we
+   * only prepend "Auto" and hand it to the UI.
    */
   buildQualityOptions(playbackInfo: {
     playMethod: string;
     videoCopyStream: boolean;
     source: { width?: number; height?: number };
+    qualities?: { id: string; label: string; height: number; lowBandwidth?: boolean }[];
   }): void {
-    const options: QualityOption[] = [];
-    const srcH = playbackInfo.source.height ?? 0;
-    const srcW = playbackInfo.source.width ?? 0;
-
-    // Auto is always first
-    options.push({ id: 'auto', label: 'Auto', height: 0 });
-
-    if (playbackInfo.playMethod === 'DirectPlay') {
-      // Only original quality
-      const resLabel = this.resolutionLabel(srcW, srcH);
-      options.push({ id: 'original', label: resLabel, height: srcH });
-    } else {
-      // Original (remux) if video can be copied
-      if (playbackInfo.videoCopyStream) {
-        const resLabel = this.resolutionLabel(srcW, srcH);
-        options.push({ id: 'original', label: resLabel, height: srcH });
-      }
-      // Transcode profiles: use width to match (stable across cinema aspect ratios)
-      const profiles = [
-        { id: '2160p', label: '4K', height: 2160, minWidth: 3800 },
-        { id: '1080p', label: '1080p', height: 1080, minWidth: 1900 },
-        { id: '720p', label: '720p', height: 720, minWidth: 1260 },
-        { id: '480p', label: '480p', height: 480, minWidth: 0 },
-        { id: '360p', label: '360p', height: 360, minWidth: 0 },
-        { id: '240p', label: '240p', height: 240, minWidth: 0 },
-        { id: '144p', label: '144p', height: 144, minWidth: 0 },
-      ];
-      const originalLabel = playbackInfo.videoCopyStream ? this.resolutionLabel(srcW, srcH) : null;
-      for (const p of profiles) {
-        if (srcW >= p.minWidth && p.label !== originalLabel) {
-          options.push(p);
-        }
-      }
+    const options: QualityOption[] = [
+      { id: 'auto', label: 'Auto', height: 0 },
+    ];
+    for (const q of playbackInfo.qualities ?? []) {
+      options.push({
+        id: q.id,
+        label: q.label,
+        height: q.height,
+        lowBandwidth: q.lowBandwidth,
+      });
     }
-
     this.availableQualities.set(options);
   }
 

@@ -30,6 +30,7 @@ export interface CastAudioOption {
 export interface CastQualityOption {
   id: string;
   label: string;
+  lowBandwidth?: boolean;
 }
 
 interface SubtitleInfo {
@@ -74,6 +75,7 @@ export class CastPlayerService {
       supportsHdr: cs.hdr ?? false,
       hdrRequiresFmp4: false,  // Cast uses TS — HDR will be tonemapped if needed
       supportsMultiAudioMuxed: false,
+      deviceType: 'desktop',
     };
   }
 

@@ -51,7 +51,8 @@
     "direct_play": "Lecture directe",
     "remux": "Remux",
     "off": "Désactivé",
-    "error": "Erreur de lecture"
+    "error": "Erreur de lecture",
+    "low_bandwidth": "faible consommation"
   },
   "sse": {
     "subtitle_synced": "Sous-titre synchronisé avec succès.",

@@ -40,6 +40,9 @@ export interface DeviceProfile {
   hdrRequiresFmp4: boolean;
   /** True when the player handles multi-audio from muxed TS (ExoPlayer). False = use EXT-X-MEDIA. */
   supportsMultiAudioMuxed: boolean;
+  /** Client device category — selects the backend bitrate ladder.
+   *  Capacitor native (iOS/Android app) → 'mobile'; web (incl. Cast sender) → 'desktop'. */
+  deviceType: 'mobile' | 'desktop';
 }
 
 @Injectable({ providedIn: 'root' })
@@ -200,6 +203,7 @@ export class BrowserDeviceProfileService {
       // Multi-audio in muxed TS doesn't work reliably (ExoPlayer can't switch PIDs).
       // Audio switching always goes through server-side reload.
       supportsMultiAudioMuxed: false,
+      deviceType: Capacitor.isNativePlatform() ? 'mobile' : 'desktop',
     };
   }
 

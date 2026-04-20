@@ -9,6 +9,26 @@ export interface TranscodeReason {
   message: string;
 }
 
+/**
+ * Server-authoritative quality option for the player UI.
+ * Built from the per-device ladder and source bitrate — frontend renders
+ * these verbatim (plus a prepended "Auto" entry).
+ */
+export interface QualityOption {
+  /** 'original' | '2160p' | '1080p' | '720p' | '480p' | '360p' | '240p' | '144p' */
+  id: string;
+  /** Display label (e.g. "1080p", "4K"). */
+  label: string;
+  /** Target height in pixels (source height for `original`). */
+  height: number;
+  /** Total bandwidth (video + audio) in bits/s for this rung. */
+  totalBitrateBps: number;
+  /** True when the 'original' rung maps to a DirectStream (remux) path. */
+  isRemux: boolean;
+  /** True on the reduced transcode rung shown alongside `original` at source resolution. */
+  lowBandwidth?: boolean;
+}
+
 export interface PlaybackInfoResponse {
   mediaFileId: number;
 
@@ -66,6 +86,9 @@ export interface PlaybackInfoResponse {
    * Même calcul que `StreamingController.hlsMaster` (ffprobe vidéo + audio ou format).
    */
   remuxMasterBandwidthBps?: number;
+
+  /** Ordered list of quality rungs to show in the player UI (excluding "Auto"). */
+  qualities?: QualityOption[];
 
   /** Source file info */
   source: {

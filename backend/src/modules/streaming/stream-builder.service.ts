@@ -1,10 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DeviceProfileDto } from './dto/device-profile.dto';
-import { PlaybackInfoResponse, TranscodeReason } from './dto/playback-info.dto';
+import {
+  PlaybackInfoResponse,
+  QualityOption,
+  TranscodeReason,
+} from './dto/playback-info.dto';
 import { ResolvedFile } from './streaming.service';
 import {
+  DeviceType,
+  ORIGINAL_SEPARATE_RATIO,
+  TranscodeProfile,
   TranscodingService,
-  PROFILES,
+  getLadderForDevice,
   parseBitrateToBps,
 } from './transcoding.service';
 
@@ -141,6 +148,9 @@ export class StreamBuilderService {
       });
     }
 
+    const deviceType: DeviceType = profile.deviceType ?? 'desktop';
+    const ladder = getLadderForDevice(deviceType);
+
     if (directPlayResult.canDirectPlay) {
       this.log.log(
         `DirectPlay for file ${resolved.mediaFile.id}: ${sourceContainer}/${sourceVideoCodec}/${sourceAudioCodec}`,
@@ -159,6 +169,12 @@ export class StreamBuilderService {
         outputContainer: sourceContainer,
         hwAccel: 'none',
         tonemapping: false,
+        qualities: this.buildQualityList(
+          source,
+          'DirectPlay',
+          true,
+          ladder,
+        ),
         source,
       };
     }
@@ -203,7 +219,7 @@ export class StreamBuilderService {
       const transcodeBitrateByQuality: NonNullable<
         PlaybackInfoResponse['transcodeBitrateByQuality']
       > = {};
-      for (const p of PROFILES) {
+      for (const p of ladder) {
         const v = parseBitrateToBps(p.videoBitrate);
         const a = parseBitrateToBps(p.audioBitrate);
         transcodeBitrateByQuality[p.name] = {
@@ -229,6 +245,12 @@ export class StreamBuilderService {
         tonemapping: false,
         remuxMasterBandwidthBps: remuxBw > 0 ? remuxBw : undefined,
         transcodeBitrateByQuality,
+        qualities: this.buildQualityList(
+          source,
+          'DirectStream',
+          true,
+          ladder,
+        ),
         source,
       };
     }
@@ -260,7 +282,7 @@ export class StreamBuilderService {
     const transcodeBitrateByQuality: NonNullable<
       PlaybackInfoResponse['transcodeBitrateByQuality']
     > = {};
-    for (const p of PROFILES) {
+    for (const p of ladder) {
       const v = parseBitrateToBps(p.videoBitrate);
       const a = parseBitrateToBps(p.audioBitrate);
       transcodeBitrateByQuality[p.name] = {
@@ -283,8 +305,118 @@ export class StreamBuilderService {
       hwAccel: effectiveHwAccel,
       tonemapping: needsTonemapping,
       transcodeBitrateByQuality,
+      qualities: this.buildQualityList(
+        source,
+        'Transcode',
+        false,
+        ladder,
+      ),
       source,
     };
+  }
+
+  /**
+   * Build the server-authoritative quality list shown in the player UI.
+   *
+   * Rules:
+   * - DirectPlay → single `original` entry at source resolution.
+   * - Transcode / DirectStream → iterate the device ladder filtered to source.
+   *   At the source-resolution rung:
+   *     - If remux is possible (`videoCopyStream`) and `sourceTotal > ladderTotal × 1.3`:
+   *       expose BOTH entries, `original` first (the remux path, full quality) and
+   *       then the transcode rung flagged `lowBandwidth` so the UI can hint at it.
+   *     - If remux is possible but source bitrate is near/below ladder: collapse to
+   *       a single `original` entry (labelled with the resolution alone).
+   *     - If remux is NOT possible (full transcode path): expose only the transcode rung.
+   *   Below source resolution: regular transcode rungs, unchanged.
+   */
+  private buildQualityList(
+    source: PlaybackInfoResponse['source'],
+    playMethod: 'DirectPlay' | 'DirectStream' | 'Transcode',
+    videoCopyStream: boolean,
+    ladder: TranscodeProfile[],
+  ): QualityOption[] {
+    const sourceW = source.width ?? 0;
+    const sourceH = source.height ?? 0;
+    const sourceTotal =
+      source.formatBitRate ??
+      (source.videoBitRate ?? 0) + (source.audioBitRate ?? 0);
+
+    const available = ladder.filter(
+      (p) => p.maxWidth <= sourceW || p.maxHeight <= sourceH,
+    );
+    if (!available.length) available.push(ladder[ladder.length - 1]);
+    // Ladder is ordered top→bottom, so available[0] is the source-resolution rung.
+    const topProfile = available[0];
+    const displayLabel = (name: string) => (name === '2160p' ? '4K' : name);
+    const resolutionLabel = displayLabel(topProfile.name);
+    const originalHeight = sourceH || topProfile.maxHeight;
+
+    if (playMethod === 'DirectPlay') {
+      return [
+        {
+          id: 'original',
+          label: resolutionLabel,
+          height: originalHeight,
+          totalBitrateBps: sourceTotal,
+          isRemux: false,
+        },
+      ];
+    }
+
+    const topTotal =
+      parseBitrateToBps(topProfile.videoBitrate) +
+      parseBitrateToBps(topProfile.audioBitrate);
+    const splitOriginal =
+      videoCopyStream && sourceTotal > topTotal * ORIGINAL_SEPARATE_RATIO;
+
+    const qualities: QualityOption[] = [];
+    for (const p of available) {
+      const isTop = p.name === topProfile.name;
+      const v = parseBitrateToBps(p.videoBitrate);
+      const a = parseBitrateToBps(p.audioBitrate);
+      const total = v + a;
+
+      if (isTop && videoCopyStream && !splitOriginal) {
+        qualities.push({
+          id: 'original',
+          label: resolutionLabel,
+          height: originalHeight,
+          totalBitrateBps: sourceTotal > 0 ? sourceTotal : total,
+          isRemux: true,
+        });
+        continue;
+      }
+
+      if (isTop && splitOriginal) {
+        qualities.push({
+          id: 'original',
+          label: resolutionLabel,
+          height: originalHeight,
+          totalBitrateBps: sourceTotal,
+          isRemux: true,
+        });
+        qualities.push({
+          id: p.name,
+          label: displayLabel(p.name),
+          height: p.maxHeight,
+          totalBitrateBps: total,
+          isRemux: false,
+          lowBandwidth: true,
+        });
+        continue;
+      }
+
+      qualities.push({
+        id: p.name,
+        label: displayLabel(p.name),
+        height: p.maxHeight,
+        totalBitrateBps: total,
+        isRemux: false,
+      });
+    }
+
+    return qualities;
   }
 
   // ---------------------------------------------------------------------------

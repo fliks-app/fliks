@@ -1198,6 +1198,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       qualities: this.availableQualities().map(q => ({
         id: q.id,
         label: q.id === 'auto' ? 'Auto' : q.label,
+        lowBandwidth: q.lowBandwidth,
       })),
       audioTracks: this.castAudioOptions(),
       activeQualityId: this.activeQualityId(),
