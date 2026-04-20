@@ -20,6 +20,7 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     private boolean immersiveMode = false;
     private boolean pipOnLeave = false;
+    private boolean lightStatusBar = false;
     private android.app.PictureInPictureParams pipParams = null;
     private BroadcastReceiver pipActionReceiver;
 
@@ -110,11 +111,25 @@ public class MainActivity extends BridgeActivity {
 
     /** Set status/nav bar icon color: light=true means dark icons (for light theme). */
     public void setLightStatusBar(boolean light) {
+        this.lightStatusBar = light;
+        applyLightStatusBar();
+    }
+
+    private void applyLightStatusBar() {
         Window window = getWindow();
         WindowInsetsControllerCompat ic =
             WindowCompat.getInsetsController(window, window.getDecorView());
-        ic.setAppearanceLightStatusBars(light);
-        ic.setAppearanceLightNavigationBars(light);
+        ic.setAppearanceLightStatusBars(this.lightStatusBar);
+        ic.setAppearanceLightNavigationBars(this.lightStatusBar);
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        // Android resets the WindowInsetsController appearance bits on orientation
+        // changes; reapply the last requested state so nav/status icons keep their
+        // theme-matching color (white on dark, dark on light).
+        getWindow().getDecorView().post(this::applyLightStatusBar);
     }
 
     @Override
