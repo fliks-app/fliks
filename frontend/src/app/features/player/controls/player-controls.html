@@ -283,7 +283,7 @@
 
 <!-- ===== Mobile bottom sheets ===== -->
 
-<app-bottom-sheet [open]="activeSheet() === 'subtitles'" (closed)="closeSheet()">
+<app-bottom-sheet [open]="activeSheet() === 'subtitles'" [showBackdrop]="false" [rightAligned]="true" (closed)="closeSheet()">
   <div class="px-4 pb-4">
     <div class="text-center text-white/60 text-xs font-medium mb-3">Sous-titres</div>
     <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="selectSubtitle.emit(null); closeSheet()">
@@ -301,7 +301,7 @@
   </div>
 </app-bottom-sheet>
 
-<app-bottom-sheet [open]="activeSheet() === 'audio'" (closed)="closeSheet()">
+<app-bottom-sheet [open]="activeSheet() === 'audio'" [showBackdrop]="false" [rightAligned]="true" (closed)="closeSheet()">
   <div class="px-4 pb-4">
     <div class="text-center text-white/60 text-xs font-medium mb-3">Piste audio</div>
     @for (track of availableAudioTracks(); track track.id) {
@@ -314,7 +314,7 @@
   </div>
 </app-bottom-sheet>
 
-<app-bottom-sheet [open]="activeSheet() === 'speed'" (closed)="closeSheet()">
+<app-bottom-sheet [open]="activeSheet() === 'speed'" [showBackdrop]="false" [rightAligned]="true" (closed)="closeSheet()">
   <div class="px-4 pb-4">
     <div class="text-center text-white/60 text-xs font-medium mb-3">Vitesse</div>
     @for (r of speedOptions; track r) {
@@ -326,7 +326,7 @@
   </div>
 </app-bottom-sheet>
 
-<app-bottom-sheet [open]="activeSheet() === 'settings'" (closed)="closeSheet()">
+<app-bottom-sheet [open]="activeSheet() === 'settings'" [showBackdrop]="false" [rightAligned]="true" (closed)="closeSheet()">
   <div class="px-4 pb-4">
     @if (settingsPanel() === 'main') {
       <div class="text-center text-white/60 text-xs font-medium mb-3">Paramètres</div>
@@ -358,7 +358,12 @@
       <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
       @for (q of availableQualities(); track q.id) {
         <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="selectQuality.emit(q.id); closeSheet()">
-          <span class="flex-1 text-left">{{ q.label }}</span>
+          <span class="flex-1 text-left">
+            {{ q.label }}
+            @if (q.lowBandwidth) {
+              <span class="text-white/50 ml-1 text-xs">({{ 'player.low_bandwidth' | translate }})</span>
+            }
+          </span>
           @if (activeQualityId() === q.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
         </button>
       }
@@ -407,7 +412,12 @@
         <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
         @for (q of availableQualities(); track q.id) {
           <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectQuality.emit(q.id); closeDropdown($event)">
-            <span class="flex-1 text-left">{{ q.label }}</span>
+            <span class="flex-1 text-left">
+              {{ q.label }}
+              @if (q.lowBandwidth) {
+                <span class="text-white/50 ml-1 text-xs">({{ 'player.low_bandwidth' | translate }})</span>
+              }
+            </span>
             @if (activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
           </button>
         }

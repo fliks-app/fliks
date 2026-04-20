@@ -82,7 +82,12 @@
             <div class="text-center text-white/70 text-xs font-medium mb-2">Qualité</div>
             @for (q of availableQualities(); track q.id) {
               <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectQuality(q)">
-                <span class="flex-1 text-left">{{ q.label }}</span>
+                <span class="flex-1 text-left">
+                  {{ q.label }}
+                  @if (q.lowBandwidth) {
+                    <span class="text-white/50 ml-1 text-xs">({{ 'player.low_bandwidth' | translate }})</span>
+                  }
+                </span>
                 @if (activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
               </button>
             }

@@ -17,14 +17,14 @@ import {
     @if (open()) {
       <!-- Backdrop -->
       <div
-        class="fixed inset-0 z-[100] bg-black/60 transition-opacity"
+        [class]="'fixed inset-0 z-[100] transition-opacity ' + (showBackdrop() ? 'bg-black/60' : '')"
         [class.opacity-0]="dismissing()"
         (click)="dismiss()"
       ></div>
       <!-- Sheet -->
       <div
         #sheet
-        class="fixed bottom-0 z-[101] bg-neutral/95 backdrop-blur-xl rounded-t-2xl shadow-2xl max-h-[70vh] overflow-y-auto portrait:left-1 portrait:right-1 landscape:left-2 landscape:right-2 landscape:rounded-2xl landscape:bottom-1"
+        [class]="'fixed bottom-0 z-[101] bg-neutral/95 backdrop-blur-xl rounded-t-2xl shadow-2xl max-h-[70vh] overflow-y-auto portrait:left-1 portrait:right-1 landscape:right-2 landscape:w-[28rem] landscape:max-w-md landscape:rounded-2xl landscape:bottom-1 ' + (rightAligned() ? 'landscape:left-auto' : 'landscape:left-2 landscape:mx-auto')"
         [class.animate-slide-up]="!dismissing()"
         [style.transform]="sheetTransform()"
         [style.transition]="dragging() ? 'none' : 'transform 0.25s ease-out'"
@@ -45,6 +45,8 @@ import {
 })
 export class BottomSheetComponent {
   readonly open = input(false);
+  readonly showBackdrop = input(true);
+  readonly rightAligned = input(false);
   readonly closed = output<void>();
 
   readonly sheet = viewChild<ElementRef<HTMLElement>>('sheet');
