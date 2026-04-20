@@ -4,7 +4,10 @@ import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
 import { CastService } from '../cast.service';
-import { DeviceProfile } from '../browser-device-profile.service';
+import {
+  BrowserDeviceProfileService,
+  DeviceProfile,
+} from '../browser-device-profile.service';
 
 export type PlayMethod = 'DirectPlay' | 'DirectStream' | 'Transcode';
 
@@ -33,6 +36,14 @@ export interface PlaybackInfoResponse {
   >;
   /** BANDWIDTH variante remux (DirectStream HLS), aligné serveur / manifeste */
   remuxMasterBandwidthBps?: number;
+  /** Server-authoritative quality list (device-aware ladder + Original rule). */
+  qualities?: {
+    id: string;
+    label: string;
+    height: number;
+    totalBitrateBps: number;
+    isRemux: boolean;
+  }[];
   source: {
     container: string;
     videoCodec: string;
@@ -142,6 +153,7 @@ export class StreamingApiService {
   private readonly auth = inject(AuthService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly castService = inject(CastService);
+  private readonly deviceProfileService = inject(BrowserDeviceProfileService);
 
   /**
    * Build authenticated HLS master playlist URL.
@@ -158,6 +170,7 @@ export class StreamingApiService {
     if (token) params.push(`token=${encodeURIComponent(token)}`);
     if (startQuality) params.push(`startQuality=${encodeURIComponent(startQuality)}`);
     if (startAt != null) params.push(`startAt=${startAt}`);
+    params.push(`device=${this.deviceProfileService.getProfile().deviceType}`);
     return params.length ? `${base}?${params.join('&')}` : base;
   }
 

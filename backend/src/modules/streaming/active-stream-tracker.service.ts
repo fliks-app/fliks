@@ -136,6 +136,18 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.fmp4SupportedCache.get(mediaFileId) ?? true;
   }
 
+  /** Client device category ('mobile' | 'desktop') captured at playback-info.
+   *  Used by hlsMaster and HLS segment endpoints to pick the right bitrate ladder. */
+  private readonly deviceTypeCache = new Map<number, 'mobile' | 'desktop'>();
+
+  setDeviceType(mediaFileId: number, value: 'mobile' | 'desktop') {
+    this.deviceTypeCache.set(mediaFileId, value);
+  }
+
+  getDeviceType(mediaFileId: number): 'mobile' | 'desktop' {
+    return this.deviceTypeCache.get(mediaFileId) ?? 'desktop';
+  }
+
   /** Whether master.m3u8 decided to use separate audio renditions (EXT-X-MEDIA). */
   private readonly useExtXMediaCache = new Map<number, boolean>();
 

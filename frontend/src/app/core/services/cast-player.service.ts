@@ -74,6 +74,7 @@ export class CastPlayerService {
       supportsHdr: cs.hdr ?? false,
       hdrRequiresFmp4: false,  // Cast uses TS — HDR will be tonemapped if needed
       supportsMultiAudioMuxed: false,
+      deviceType: 'desktop',
     };
   }
 

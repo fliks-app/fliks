@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsBoolean,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -87,4 +88,8 @@ export class DeviceProfileDto {
   @IsBoolean()
   @IsOptional()
   supportsMultiAudioMuxed?: boolean;
+
+  @IsIn(['mobile', 'desktop'])
+  @IsOptional()
+  deviceType?: 'mobile' | 'desktop';
 }

@@ -25,6 +25,12 @@ export interface TranscodeProfile {
   audioBitrate: string;
 }
 
+export type DeviceType = 'mobile' | 'desktop';
+
+/** Threshold above which source bitrate earns its own "Original" rung
+ *  alongside the transcode rung at the same resolution. */
+export const ORIGINAL_SEPARATE_RATIO = 1.3;
+
 export interface BurnInSubtitle {
   /** FFmpeg -vf filter string (e.g. "subtitles='/path/to/sub.srt'") or null for image-based */
   filter: string | null;
@@ -54,6 +60,8 @@ export interface SessionContext {
   audioStreams?: { language?: string; title?: string }[];
   /** Whether to use fMP4 segments (true) or MPEG-TS (false, for Cast) */
   useFmp4?: boolean;
+  /** Client device category — selects the per-device bitrate ladder. */
+  deviceType?: DeviceType;
   /**
    * FFmpeg encoder preset ('veryfast' | 'faster' | 'fast' | 'medium' | 'slow').
    * Applied to h264_qsv and libx264; VAAPI/NVENC ignore it (different naming).
@@ -131,7 +139,7 @@ export type HwAccelType = 'vaapi' | 'nvenc' | 'qsv' | 'none';
 // Constants
 // ---------------------------------------------------------------------------
 
-export const PROFILES: TranscodeProfile[] = [
+export const DESKTOP_PROFILES: TranscodeProfile[] = [
   {
     name: '2160p',
     maxWidth: 3840,
@@ -182,6 +190,25 @@ export const PROFILES: TranscodeProfile[] = [
     audioBitrate: '48k',
   },
 ];
+
+/** Conservative mobile ladder — same resolutions, lower target bitrates
+ *  so phones on cellular don't burn through data. Audio unchanged. */
+export const MOBILE_PROFILES: TranscodeProfile[] = [
+  { name: '2160p', maxWidth: 3840, maxHeight: 2160, videoBitrate: '8M',  audioBitrate: '192k' },
+  { name: '1080p', maxWidth: 1920, maxHeight: 1080, videoBitrate: '3M',  audioBitrate: '192k' },
+  { name: '720p',  maxWidth: 1280, maxHeight: 720,  videoBitrate: '1500k', audioBitrate: '128k' },
+  { name: '480p',  maxWidth: 854,  maxHeight: 480,  videoBitrate: '800k',  audioBitrate: '96k' },
+  { name: '360p',  maxWidth: 640,  maxHeight: 360,  videoBitrate: '500k',  audioBitrate: '64k' },
+  { name: '240p',  maxWidth: 426,  maxHeight: 240,  videoBitrate: '300k',  audioBitrate: '64k' },
+  { name: '144p',  maxWidth: 256,  maxHeight: 144,  videoBitrate: '150k',  audioBitrate: '48k' },
+];
+
+export function getLadderForDevice(deviceType: DeviceType | undefined): TranscodeProfile[] {
+  return deviceType === 'mobile' ? MOBILE_PROFILES : DESKTOP_PROFILES;
+}
+
+/** Backward-compatible alias — most callers want the desktop ladder. */
+export const PROFILES = DESKTOP_PROFILES;
 
 async function fileExists(p: string): Promise<boolean> {
   try {
@@ -439,13 +466,14 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Get available quality profiles for a given source resolution.
+   * Get available quality profiles for a given source resolution + device class.
    */
   getAvailableProfiles(
     sourceWidth: number,
     sourceHeight: number,
+    deviceType: DeviceType = 'desktop',
   ): TranscodeProfile[] {
-    return PROFILES.filter(
+    return getLadderForDevice(deviceType).filter(
       (p) => p.maxWidth <= sourceWidth || p.maxHeight <= sourceHeight,
     );
   }
@@ -463,6 +491,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     audioStreams?: { language?: string; title?: string }[],
     onlyQuality?: string,
     defaultAudioIndex = 0,
+    deviceType: DeviceType = 'desktop',
   ): string {
     const multiAudio = audioStreams && audioStreams.length > 1;
     const lines = ['#EXTM3U'];
@@ -498,8 +527,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // trigger a pointless FFmpeg kill+restart. Transcode profiles cover the
     // full resolution ladder; "remux"/"original" quality picks are mapped
     // onto the top transcode profile.
-    let profiles = this.getAvailableProfiles(sourceWidth, sourceHeight);
-    if (!profiles.length) profiles.push(PROFILES[PROFILES.length - 1]); // at least 480p
+    const ladder = getLadderForDevice(deviceType);
+    let profiles = this.getAvailableProfiles(sourceWidth, sourceHeight, deviceType);
+    if (!profiles.length) profiles.push(ladder[ladder.length - 1]); // at least 480p
 
     if (onlyQuality) {
       if (onlyQuality === 'remux' || onlyQuality === 'original') {
@@ -617,7 +647,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.evictOldestSession();
     }
 
-    const profile = PROFILES.find((p) => p.name === quality) ?? PROFILES[0];
+    const ladder = getLadderForDevice(ctx?.deviceType);
+    const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
     const sessionDir = path.join(this.cachePath, key, quality);
     await fsp.mkdir(sessionDir, { recursive: true });
 
@@ -686,7 +717,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const ctxAudioStreams = ctx?.audioStreams;
     const useVarStreamMap =
       isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
-    const profile = PROFILES.find((p) => p.name === quality) ?? PROFILES[0];
+    const ladder = getLadderForDevice(ctx?.deviceType);
+    const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
 
     await session.ready;
     const segNum = String(requestedSegment).padStart(4, '0');
@@ -1056,7 +1088,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     startSegment: number,
     ctx?: SessionContext,
   ): TranscodeSession {
-    const profile = PROFILES.find((p) => p.name === quality) ?? PROFILES[0];
+    const ladder = getLadderForDevice(ctx?.deviceType);
+    const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
     const session = this.startFfmpeg(
       sessionId,
       mediaFileId,

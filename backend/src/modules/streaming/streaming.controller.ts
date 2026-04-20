@@ -27,6 +27,7 @@ import {
   TranscodingService,
   PROFILES,
   SessionContext,
+  getLadderForDevice,
 } from './transcoding.service';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
@@ -184,6 +185,7 @@ export class StreamingController {
           ? ((si?.audio as { language?: string; title?: string }[]) ?? [])
           : undefined,
       useFmp4: this.activeStreamTracker.getFmp4Supported(mediaFileId),
+      deviceType: this.activeStreamTracker.getDeviceType(mediaFileId),
       encoderPreset: this.activeStreamTracker.getEncoderPreset(mediaFileId),
       qsvOptions: this.activeStreamTracker.getQsvOptions(),
       // Source framerate (e.g. "24", "23.976", "29.97") — used to compute an
@@ -352,6 +354,10 @@ export class StreamingController {
     this.activeStreamTracker.setMultiAudioMuxed(
       mediaFileId,
       deviceProfile.supportsMultiAudioMuxed ?? false,
+    );
+    this.activeStreamTracker.setDeviceType(
+      mediaFileId,
+      deviceProfile.deviceType ?? 'desktop',
     );
     this.activeStreamTracker.setFmp4Supported(mediaFileId, useFmp4);
     this.activeStreamTracker.setStreamingDurations(
@@ -535,6 +541,14 @@ export class StreamingController {
     const useExtXMedia =
       audioStreams.length > 1 && !clientMuxesAudio && fmp4Supported;
     const onlyQuality = firstQueryString(req.query, 'startQuality');
+    // Device type: URL param wins (stream URL is built by the frontend with
+    // the cached client profile); fall back to whatever playback-info stored.
+    const deviceParam = firstQueryString(req.query, 'device');
+    const deviceType: 'mobile' | 'desktop' =
+      deviceParam === 'mobile' || deviceParam === 'desktop'
+        ? deviceParam
+        : this.activeStreamTracker.getDeviceType(mediaFileId);
+    this.activeStreamTracker.setDeviceType(mediaFileId, deviceType);
 
     const playlist = this.transcodingService.generateMasterPlaylist(
       mediaFileId,
@@ -546,6 +560,7 @@ export class StreamingController {
       useExtXMedia ? audioStreams : undefined,
       onlyQuality,
       pickedIdx ?? 0,
+      deviceType,
     );
 
     this.activeStreamTracker.setAudioStreamCount(
@@ -581,8 +596,9 @@ export class StreamingController {
         if (onlyQuality === 'remux' || onlyQuality === 'original') {
           const sourceW =
             this.activeStreamTracker.getSourceWidth(mediaFileId) || 0;
+          const ladder = getLadderForDevice(deviceType);
           const top =
-            PROFILES.find((p) => p.maxWidth <= sourceW) ?? PROFILES[0];
+            ladder.find((p) => p.maxWidth <= sourceW) ?? ladder[0];
           targetQuality = top.name;
         }
         void this.transcodingService
