@@ -35,6 +35,7 @@ import { StreamingApiService } from '../../../core/services/api/streaming-api.se
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { PlayerSettingsService } from '../../../core/services/player-settings.service';
 import { TrackManagerService } from '../../../core/services/track-manager.service';
+import { NavbarService } from '../../../core/services/navbar.service';
 import { MobileFanartHeroComponent } from '../mobile-fanart-hero';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 
@@ -78,6 +79,7 @@ export class MediaInfoHeaderComponent {
   private readonly translate = inject(TranslateService);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly trackManager = inject(TrackManagerService);
+  readonly navbar = inject(NavbarService);
   private readonly playable = inject(PlayableMediaService);
   private readonly streamingApi = inject(StreamingApiService);
 

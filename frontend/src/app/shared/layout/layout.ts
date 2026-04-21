@@ -3,7 +3,6 @@ import {
   ChangeDetectionStrategy,
   inject,
   signal,
-  computed,
   effect,
   OnInit,
   OnDestroy,
@@ -104,8 +103,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly bottomMenuOpen = signal(false);
   readonly keyboardOpen = signal(false);
   readonly navbarHidden = signal(false);
-  private readonly scrollAtTop = signal(true);
-  readonly navbarTransparent = computed(() => this.scrollAtTop() && this.navbar.isHeroPage());
+  readonly navbarTransparent = this.navbar.navbarTransparent;
 
   // Sync Android status bar icons with navbar state
   private readonly statusBarEffect = Capacitor.isNativePlatform() ? effect(() => {
@@ -125,7 +123,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private lastScrollY = 0;
   private readonly onScroll = () => {
     const y = window.scrollY;
-    this.scrollAtTop.set(y < 20);
+    this.navbar.scrollAtTop.set(y < 20);
     if (Math.abs(y - this.lastScrollY) < 10) return;
     this.navbarHidden.set(y > this.lastScrollY && y > 56);
     this.lastScrollY = y;
