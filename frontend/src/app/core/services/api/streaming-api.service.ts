@@ -264,8 +264,17 @@ export class StreamingApiService {
 
   /**
    * Ask the backend to decide how to play this file based on client capabilities.
+   * `startQuality` / `startAt` let the backend pre-spawn ffmpeg at the right
+   * variant straight from this call (saves the master.m3u8 round-trip).
    */
-  getPlaybackInfo(mediaFileId: number, deviceProfile: DeviceProfile, burnInSubtitleId?: number, audioStreamIndex?: number): Promise<PlaybackInfoResponse> {
+  getPlaybackInfo(
+    mediaFileId: number,
+    deviceProfile: DeviceProfile,
+    burnInSubtitleId?: number,
+    audioStreamIndex?: number,
+    startQuality?: string,
+    startAt?: number,
+  ): Promise<PlaybackInfoResponse> {
     const token = this.auth.accessToken;
     let params = token ? `?token=${encodeURIComponent(token)}` : '';
     if (burnInSubtitleId) {
@@ -273,6 +282,12 @@ export class StreamingApiService {
     }
     if (audioStreamIndex != null) {
       params += (params ? '&' : '?') + `audioStreamIndex=${audioStreamIndex}`;
+    }
+    if (startQuality) {
+      params += (params ? '&' : '?') + `startQuality=${encodeURIComponent(startQuality)}`;
+    }
+    if (startAt != null) {
+      params += (params ? '&' : '?') + `startAt=${startAt}`;
     }
     return firstValueFrom(
       this.http.post<PlaybackInfoResponse>(
