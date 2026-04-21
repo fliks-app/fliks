@@ -492,6 +492,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.isOfflinePlayback = true;
       }
 
+      // Kick off playback-info in parallel with media/state load to save one
+      // serial round-trip. preselectedAudioIndex is passed as undefined since
+      // we don't have the file's audio streams yet; users with a saved audio
+      // language preference may land on the backend's default audio on first
+      // play of a file and trigger the existing audio-switch reload if they
+      // change it — same flow as switching audio mid-playback.
+      const deviceProfile = this.deviceProfileService.getProfile();
+      const playbackInfoPromise = this.isOfflinePlayback
+        ? null
+        : this.streamingApi.getPlaybackInfo(this.mediaFileId, deviceProfile, undefined, undefined);
+
       // Load media info + playback state in parallel
       // No stopSessions here — getOrCreateSession handles stale sessions naturally
       let startTime: number | undefined = resumeTime ?? undefined;
@@ -567,7 +578,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           await this.engine!.load(offlineCheck!, startTime);
         }
       } else {
-        // Pre-compute audio preference
+        // Pre-compute audio preference (for UI/state only — the backend
+        // already picked an audio during the parallel playback-info call).
         const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
         const audioStreams: { language?: string }[] = (file?.streamInfo as any)?.audio ?? [];
         const preselectedAudioIndex = this.playerSettings.resolveAudioStreamIndex(
@@ -575,11 +587,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         );
         this.activeAudioStreamIndex = preselectedAudioIndex;
 
-        // Ask the backend to decide how to play (stopSessions already called in parallel above)
-        const deviceProfile = this.deviceProfileService.getProfile();
-        this.playbackInfo = await this.streamingApi.getPlaybackInfo(
-          this.mediaFileId, deviceProfile, undefined, preselectedAudioIndex,
-        );
+        // Await playback-info (kicked off in parallel with media load above)
+        this.playbackInfo = await playbackInfoPromise!;
         const pi = this.playbackInfo;
         this.isHdrContent.set(!!pi.source?.hdrFormat);
         this.introMarker.set(pi.markers?.intro ?? null);
@@ -604,14 +613,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
         // ── Engine selection ──
         if (this.isNative && mode !== 'direct') {
+          // Start subtitle fetch in parallel with native engine creation so
+          // the network round-trip doesn't block ExoPlayer's init.
+          const nativeSubsPromise = this.trackManager.loadSubtitles(
+            this.mediaId, this.mediaFileId, this.streamingApi, this.media,
+          );
+
           await this.createNativeEngine();
 
           this.applyNativeSubtitleStyle();
 
-          // Pre-load subtitles so they're included in ExoPlayer's MediaItem (no rebuild needed)
-          const subs = await this.trackManager.loadSubtitles(
-            this.mediaId, this.mediaFileId, this.streamingApi, this.media,
-          );
+          // Await subs before building the ExoPlayer MediaItem (preloaded
+          // subs avoid a rebuild). Likely already resolved by this point.
+          const subs = await nativeSubsPromise;
           this.availableSubtitles.set(subs);
           const nonBurnInSubs = subs
             .filter((s) => !s.burnIn && s.url)
