@@ -17,6 +17,7 @@ import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { SubtitleBurnInService } from './subtitle-burn-in.service';
 import { ThumbnailService } from './thumbnail.service';
 import { RecommendationService } from './recommendation.service';
+import { StreamingSettingsCache } from './streaming-settings-cache.service';
 import { Command } from '../scheduler/entities/command.entity';
 import { AuthModule } from '../auth/auth.module';
 import { SettingsModule } from '../settings/settings.module';
@@ -50,6 +51,7 @@ import { MarkersModule } from '../markers/markers.module';
     SubtitleBurnInService,
     ThumbnailService,
     RecommendationService,
+    StreamingSettingsCache,
   ],
   exports: [
     PlaybackService,
