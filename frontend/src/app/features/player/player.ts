@@ -498,10 +498,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // language preference may land on the backend's default audio on first
       // play of a file and trigger the existing audio-switch reload if they
       // change it — same flow as switching audio mid-playback.
+      // startQuality/startAt let the backend pre-spawn ffmpeg right here
+      // (instead of waiting for master.m3u8), overlapping encoder init with
+      // the ~100–300ms gap before the player fetches the playlist.
       const deviceProfile = this.deviceProfileService.getProfile();
+      const savedQualityId = this.activeQualityId();
+      const prewarmQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
+      const prewarmStartAt = resumeTime && resumeTime > 0 ? resumeTime : 0;
       const playbackInfoPromise = this.isOfflinePlayback
         ? null
-        : this.streamingApi.getPlaybackInfo(this.mediaFileId, deviceProfile, undefined, undefined);
+        : this.streamingApi.getPlaybackInfo(
+            this.mediaFileId,
+            deviceProfile,
+            undefined,
+            undefined,
+            prewarmQuality,
+            prewarmStartAt,
+          );
 
       // Load media info + playback state in parallel
       // No stopSessions here — getOrCreateSession handles stale sessions naturally
