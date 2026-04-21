@@ -48,7 +48,7 @@ export class ShakaEngine implements PlaybackEngine {
     // Sensible streaming defaults
     this.player.configure({
       streaming: {
-        bufferingGoal: 60,
+        bufferingGoal: 20,
         rebufferingGoal: 1,
         bufferBehind: 60,
       },
