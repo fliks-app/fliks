@@ -199,10 +199,12 @@ export class StreamingController {
   }
 
   /**
-   * Pre-spawn ffmpeg for the seg-0 request. Fire-and-forget — session is
-   * reused when the player actually requests segment 0 via getOrCreateSession.
-   * Called from playback-info (earliest hook) and from master.m3u8 as
-   * a safety net for clients that skip playback-info.
+   * Pre-spawn ffmpeg for the first segment the player will request. Handles
+   * both fresh play (startAt=0) and resume (startAt>0 from URL or from the
+   * user's saved playbackState). Fire-and-forget — the session is reused
+   * when the player actually requests the segment via getOrCreateSession.
+   * Called from playback-info (earliest hook) and from master.m3u8 as a
+   * safety net for clients that skip playback-info.
    */
   private prewarmTranscodeSession(
     mediaFileId: number,
@@ -212,33 +214,61 @@ export class StreamingController {
     startAt: number,
     deviceType: 'mobile' | 'desktop',
   ) {
-    if (!startQuality || startQuality === 'auto' || startAt !== 0) return;
-    const existing = this.transcodingService.getExistingSession(
-      mediaFileId,
-      req.user?.id,
-    );
-    if (existing && existing.process.exitCode === null) return;
-    const ctx = this.buildSessionContext(req, resolved, mediaFileId);
-    // 'remux'/'original' are mapped to the top transcode profile in the
-    // master playlist — do the same mapping here so the pre-spawned
-    // session matches the variant the player is about to request.
-    let targetQuality = startQuality;
-    if (startQuality === 'remux' || startQuality === 'original') {
-      const sourceW =
-        this.activeStreamTracker.getSourceWidth(mediaFileId) || 0;
-      const ladder = getLadderForDevice(deviceType);
-      const top = ladder.find((p) => p.maxWidth <= sourceW) ?? ladder[0];
-      targetQuality = top.name;
-    }
-    void this.transcodingService
-      .getOrCreateSession(
-        mediaFileId,
-        targetQuality,
-        resolved.absolutePath,
-        0,
-        ctx,
-      )
-      .catch(() => {});
+    if (!startQuality || startQuality === 'auto') return;
+    void (async () => {
+      try {
+        // Auto-resume: when no explicit startAt, look up the user's saved
+        // position. Ignored if near start (<10s — prewarm would target
+        // seg-0 anyway) or completed. Keeps the resume path fast: ffmpeg's
+        // `-ss` seek + first-segment encode overlap with the Angular route
+        // transition and the master.m3u8 fetch.
+        let effectiveStartAt = startAt;
+        if (effectiveStartAt === 0) {
+          const userId = req.user?.id;
+          const mediaId = resolved.mediaFile.mediaId;
+          if (userId && mediaId) {
+            const state = await this.playbackService.getState(
+              userId,
+              mediaId,
+              resolved.mediaFile.episodeId ?? undefined,
+            );
+            if (state && !state.completed && state.positionSeconds > 10) {
+              effectiveStartAt = state.positionSeconds;
+            }
+          }
+        }
+        const existing = this.transcodingService.getExistingSession(
+          mediaFileId,
+          req.user?.id,
+        );
+        if (existing && existing.process.exitCode === null) return;
+        const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+        // 'remux'/'original' are mapped to the top transcode profile in the
+        // master playlist — do the same mapping here so the pre-spawned
+        // session matches the variant the player is about to request.
+        let targetQuality = startQuality;
+        if (startQuality === 'remux' || startQuality === 'original') {
+          const sourceW =
+            this.activeStreamTracker.getSourceWidth(mediaFileId) || 0;
+          const ladder = getLadderForDevice(deviceType);
+          const top = ladder.find((p) => p.maxWidth <= sourceW) ?? ladder[0];
+          targetQuality = top.name;
+        }
+        const startSegment = Math.max(
+          0,
+          Math.floor(effectiveStartAt / SEG_DURATION),
+        );
+        await this.transcodingService.getOrCreateSession(
+          mediaFileId,
+          targetQuality,
+          resolved.absolutePath,
+          startSegment,
+          ctx,
+        );
+      } catch {
+        /* prewarm is best-effort */
+      }
+    })();
   }
 
   /** Resolve file duration from streamInfo or by probing with ffprobe. */
