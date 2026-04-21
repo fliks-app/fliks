@@ -1190,6 +1190,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // Fallback to 24 fps when source fps is unknown (safe for most content).
     const fps = sourceFps && sourceFps > 0 ? sourceFps : 24;
     const gopSize = Math.max(1, Math.round(SEGMENT_DURATION * fps));
+    // Keyframes at: 0, INIT_TIME, INIT_TIME+SEG, INIT_TIME+2*SEG, ...
+    // Lets -hls_init_time actually cut segment 0 short (needs a keyframe at
+    // INIT_TIME). When INIT_TIME >= SEGMENT_DURATION, collapses to regular
+    // fixed-GOP behaviour.
+    const forceKeyframesExpr = `expr:if(eq(n_forced,0),gte(t,0),gte(t,${INIT_TIME}+(n_forced-1)*${SEGMENT_DURATION}))`;
     // Build reusable QSV extra options flag list.
     const qsvExtra: string[] = [];
     if (qsvOptions.lookahead) {
@@ -1353,6 +1358,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             String(gopSize),
             '-keyint_min',
             String(gopSize),
+            // Let -hls_init_time cut segment 0 short on HW encoders too.
+            '-force_key_frames',
+            forceKeyframesExpr,
           );
         } else {
           args.push(
@@ -1377,6 +1385,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             String(gopSize),
             '-keyint_min',
             String(gopSize),
+            // Let -hls_init_time cut segment 0 short on HW encoders too.
+            '-force_key_frames',
+            forceKeyframesExpr,
           );
         }
         break;
@@ -1395,6 +1406,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             String(gopSize),
             '-keyint_min',
             String(gopSize),
+            // Let -hls_init_time cut segment 0 short on HW encoders too.
+            '-force_key_frames',
+            forceKeyframesExpr,
           );
         } else {
           args.push(
@@ -1410,6 +1424,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             String(gopSize),
             '-keyint_min',
             String(gopSize),
+            // Let -hls_init_time cut segment 0 short on HW encoders too.
+            '-force_key_frames',
+            forceKeyframesExpr,
           );
         }
         break;
@@ -1431,6 +1448,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             String(gopSize),
             '-keyint_min',
             String(gopSize),
+            // Let -hls_init_time cut segment 0 short on HW encoders too.
+            '-force_key_frames',
+            forceKeyframesExpr,
           );
         } else {
           // Use scale_cuda to stay on GPU; force nv12 to avoid green bar with 10-bit HDR sources
@@ -1452,6 +1472,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             String(gopSize),
             '-keyint_min',
             String(gopSize),
+            // Let -hls_init_time cut segment 0 short on HW encoders too.
+            '-force_key_frames',
+            forceKeyframesExpr,
           );
         }
         break;
@@ -1471,7 +1494,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           `${cpuCropPrefix}${tonemapCpu}scale=${w}:-2:flags=lanczos,format=yuv420p${burnInFilter}`,
           // Force keyframes at segment boundaries + disable scene-change keyframes
           '-force_key_frames',
-          `expr:gte(t,n_forced*${SEGMENT_DURATION})`,
+          forceKeyframesExpr,
           '-sc_threshold:v:0',
           '0',
         );
