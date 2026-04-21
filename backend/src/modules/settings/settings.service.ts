@@ -10,6 +10,18 @@ export class SettingsService {
     private readonly repo: Repository<AppSetting>,
   ) {}
 
+  private readonly changeListeners: Array<(key: string) => void> = [];
+
+  addChangeListener(listener: (key: string) => void): void {
+    this.changeListeners.push(listener);
+  }
+
+  private notifyChange(key: string): void {
+    for (const l of this.changeListeners) {
+      try { l(key); } catch { /* listener errors must not break writes */ }
+    }
+  }
+
   async getAll(): Promise<Record<string, string | null>> {
     const rows = await this.repo.find({ order: { key: 'ASC' } });
     return Object.fromEntries(rows.map((r) => [r.key, r.value]));
@@ -27,7 +39,9 @@ export class SettingsService {
     } else {
       row = this.repo.create({ key, value });
     }
-    return this.repo.save(row);
+    const saved = await this.repo.save(row);
+    this.notifyChange(key);
+    return saved;
   }
 
   async setBulk(data: Record<string, string | null>): Promise<void> {
@@ -38,5 +52,6 @@ export class SettingsService {
 
   async delete(key: string): Promise<void> {
     await this.repo.delete({ key });
+    this.notifyChange(key);
   }
 }

@@ -16,8 +16,6 @@ import type { Request, Response } from 'express';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
-import { SettingsService } from '../settings/settings.service';
-
 const execFileAsync = promisify(execFile);
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { User } from '../users/entities/user.entity';
@@ -36,6 +34,7 @@ import { SubtitleBurnInService } from './subtitle-burn-in.service';
 import { PlaybackService } from './playback.service';
 import { MarkersService } from '../markers/markers.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
+import { StreamingSettingsCache } from './streaming-settings-cache.service';
 
 const VALID_QUALITIES = new Set([...PROFILES.map((p) => p.name), 'remux']);
 
@@ -94,48 +93,13 @@ export class StreamingController {
     private readonly activeStreamTracker: ActiveStreamTracker,
     private readonly subtitleBurnIn: SubtitleBurnInService,
     private readonly thumbnailService: ThumbnailService,
-    private readonly settingsService: SettingsService,
     private readonly playbackService: PlaybackService,
     private readonly markersService: MarkersService,
+    private readonly streamingSettingsCache: StreamingSettingsCache,
   ) {}
 
-  /** Read streaming settings from DB with defaults. */
-  private async getStreamingSettings() {
-    const [
-      format,
-      duration,
-      initTime,
-      qsvPreset,
-      qsvLookahead,
-      qsvLowPower,
-      qsvAdaptive,
-    ] = await Promise.all([
-      this.settingsService.get('streaming_segment_format'),
-      this.settingsService.get('streaming_segment_duration'),
-      this.settingsService.get('streaming_init_time'),
-      this.settingsService.get('streaming_qsv_preset'),
-      this.settingsService.get('streaming_qsv_lookahead'),
-      this.settingsService.get('streaming_qsv_low_power'),
-      this.settingsService.get('streaming_qsv_adaptive'),
-    ]);
-    return {
-      segmentFormat: (format ?? 'auto') as 'auto' | 'ts' | 'fmp4',
-      segmentDuration: parseFloat(duration ?? '3') || 3,
-      initTime: parseFloat(initTime ?? '1') || 1,
-      qsvPreset: (qsvPreset ?? 'faster') as
-        | 'veryfast'
-        | 'faster'
-        | 'fast'
-        | 'medium'
-        | 'slow'
-        | 'slower'
-        | 'veryslow',
-      // Booleans stored as 'true' / 'false' strings (SettingsService is text-only).
-      qsvLookahead: qsvLookahead === 'true',
-      qsvLowPower: qsvLowPower === 'true',
-      // Default true when absent.
-      qsvAdaptive: qsvAdaptive == null ? true : qsvAdaptive === 'true',
-    };
+  private getStreamingSettings() {
+    return this.streamingSettingsCache.get();
   }
 
   private buildSessionContext(
