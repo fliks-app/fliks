@@ -1482,6 +1482,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         args.push(
           '-c:v',
           'libx264',
+          // Cap frame-threading so segment 0 emits before a long (threads-1)-frame prebuffer.
+          '-threads:v',
+          '4',
           '-preset',
           encoderPreset,
           '-b:v',
