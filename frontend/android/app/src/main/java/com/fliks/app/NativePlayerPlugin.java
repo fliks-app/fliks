@@ -26,7 +26,9 @@ import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.exoplayer.hls.HlsMediaSource;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import java.util.ArrayList;
@@ -214,8 +216,13 @@ public class NativePlayerPlugin extends Plugin {
                     ? new DefaultDataSource.Factory(getContext(), FlixDownloadUtil.getCacheDataSourceFactory(getContext()))
                     : new DefaultDataSource.Factory(getContext(), httpFactory);
             DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory);
+            // 500ms instead of ExoPlayer's default 2500ms — short-segment LAN HLS.
+            LoadControl loadControl = new DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(2000, 5000, 500, 1000)
+                    .build();
             player = new ExoPlayer.Builder(getContext())
                     .setMediaSourceFactory(mediaSourceFactory)
+                    .setLoadControl(loadControl)
                     .setWakeMode(C.WAKE_MODE_NETWORK)
                     .build();
             if (textureView != null) player.setVideoTextureView(textureView);
