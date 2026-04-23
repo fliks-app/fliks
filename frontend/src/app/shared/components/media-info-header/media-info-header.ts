@@ -400,15 +400,6 @@ export class MediaInfoHeaderComponent {
     return this.files().find(f => f.id === id) ?? this.files()[0] ?? null;
   });
 
-  /**
-   * Whether to render the watched-toggle button. Visible as soon as there is a
-   * file to mark, or for the series root (bulk toggle across all episodes).
-   */
-  readonly canToggleWatched = computed(() => {
-    if (this.selectedFileId() != null) return true;
-    return this.mediaType() === 'series' && !this.episodeId();
-  });
-
   fileLabel(f: MediaInfoHeaderFile): string {
     if (f.label) return f.label;
     return f.quality || `#${f.id}`;

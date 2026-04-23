@@ -283,6 +283,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private isOfflinePlayback = false;
   private episodeId: number | undefined;
   private media: Media | null = null;
+  /** Bumped whenever {@link media} is (re)assigned so reactive computeds re-run. */
+  private readonly mediaLoadedTick = signal(0);
   private activeBurnInId: number | null = null;
   private activeAudioStreamIndex: number | undefined;
 
@@ -528,6 +530,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         ]);
 
         this.media = media;
+        this.mediaLoadedTick.update(v => v + 1);
         this.mediaTitle.set(media.title);
         if (media.fanartUrl) this.fanartUrl.set(this.serverConfig.resolveUrl(media.fanartUrl));
 
@@ -1050,6 +1053,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     episodeId: number;
     mediaFileId: number;
   } | null>(() => {
+    this.mediaLoadedTick();
     const m = this.media;
     const currentEpId = this.episodeId;
     if (!m || m.type !== 'series' || !currentEpId || !m.seasons?.length) return null;

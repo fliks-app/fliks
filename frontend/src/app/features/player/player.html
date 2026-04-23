@@ -51,7 +51,7 @@
     [playbackRate]="playbackRate()"
     [mediaTitle]="mediaTitle()"
     [episodeTitle]="episodeTitle()"
-    [hasNextEpisode]="false"
+    [hasNextEpisode]="nextEpisodeContext() !== null"
     [hasPrevEpisode]="false"
     [activeQualityLabel]="activeQualityId() === 'auto' ? (activeResolution() ? 'Auto (' + activeResolution() + ')' : 'Auto') : activeQualityId()"
     [isNative]="isNative"
@@ -90,6 +90,7 @@
     [showNextEpisode]="showNextEpisodeButton()"
     (skipIntro)="skipIntro()"
     (skipToNextEpisode)="goToNextEpisode()"
+    (nextEpisode)="goToNextEpisode()"
   />
   }
 

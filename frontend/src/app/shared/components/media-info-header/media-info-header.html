@@ -127,14 +127,12 @@
 
     <!-- Action icons row -->
     <div class="flex items-center justify-center gap-6 mt-4">
-      @if (!selectedFileId() && !canToggleWatched()) { <div class="flex-1"></div> }
-      @if (canToggleWatched()) {
+      @if (!selectedFileId()) { <div class="flex-1"></div> }
+      @if (selectedFileId()) {
         <button class="flex flex-col items-center gap-1 text-sm" [class.text-success]="watched()" (click)="onToggleWatched()">
           <svg lucideCheck class="h-5 w-5"></svg>
           {{ 'media_info.watched' | translate }}
         </button>
-      }
-      @if (selectedFileId()) {
         @if (mediaType() === 'movie' || episodeId()) {
           <button class="flex flex-col items-center gap-1 text-sm" (click)="openDownload.emit()">
             <svg lucideDownload class="h-5 w-5"></svg>
@@ -152,6 +150,12 @@
           {{ 'common.more' | translate }}
         </div>
         <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-max min-w-56 p-2 shadow-lg">
+          @if (mediaType() === 'series' && !episodeId()) {
+            <li><a class="flex items-center gap-3" (click)="onToggleWatched()">
+              <svg lucideCheck class="h-4 w-4 shrink-0 opacity-70" [class.text-success]="watched()"></svg>
+              {{ (watched() ? 'media_detail.mark_series_unwatched' : 'media_detail.mark_series_watched') | translate }}
+            </a></li>
+          }
           @if (canGrab()) {
             <li><a class="flex items-center gap-3" (click)="grabBest.emit()" [class.pointer-events-none]="grabBusy() !== null">
               @if (grabBusy() === 'best') { <span class="loading loading-spinner loading-xs"></span> }
@@ -394,28 +398,33 @@
               {{ 'player.play_from_start' | translate }}
             </button>
           }
-          <button type="button" class="btn btn-outline btn btn-circle" [class.btn-success]="watched()" [class.btn-ghost]="!watched()" (click)="onToggleWatched()">
-            <svg lucideCheck class="h-4 w-4"></svg>
-          </button>
-          <button type="button" class="btn btn-error btn-outline btn btn-circle" (click)="onDeleteFileClick()">
-            <svg lucideTrash2 class="h-4 w-4"></svg>
-          </button>
+          @if (mediaType() !== 'series' || episodeId()) {
+            <button type="button" class="btn btn-outline btn btn-circle" [class.btn-success]="watched()" [class.btn-ghost]="!watched()" (click)="onToggleWatched()">
+              <svg lucideCheck class="h-4 w-4"></svg>
+            </button>
+          }
+          @if (mediaType() !== 'series' || episodeId()) {
+            <button type="button" class="btn btn-error btn-outline btn btn-circle" (click)="onDeleteFileClick()">
+              <svg lucideTrash2 class="h-4 w-4"></svg>
+            </button>
+          }
           @if (mediaType() === 'movie' || episodeId()) {
             <button type="button" class="btn btn-ghost btn btn-circle" (click)="openDownload.emit()">
               <svg lucideDownload class="h-4 w-4"></svg>
             </button>
           }
         }
-        @if (!selectedFileId() && canToggleWatched()) {
-          <button type="button" class="btn btn-outline btn btn-circle" [class.btn-success]="watched()" [class.btn-ghost]="!watched()" (click)="onToggleWatched()">
-            <svg lucideCheck class="h-4 w-4"></svg>
-          </button>
-        }
         <div class="dropdown dropdown-end">
           <div tabindex="0" role="button" class="btn btn-ghost btn btn-circle">
             <svg lucideEllipsisVertical class="h-5 w-5"></svg>
           </div>
           <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-max min-w-56 p-2 shadow-lg">
+            @if (mediaType() === 'series' && !episodeId()) {
+              <li><a class="flex items-center gap-3" (click)="onToggleWatched()">
+                <svg lucideCheck class="h-4 w-4 shrink-0 opacity-70" [class.text-success]="watched()"></svg>
+                {{ (watched() ? 'media_detail.mark_series_unwatched' : 'media_detail.mark_series_watched') | translate }}
+              </a></li>
+            }
             @if (canGrab()) {
               <li><a class="flex items-center gap-3" (click)="grabBest.emit()" [class.pointer-events-none]="grabBusy() !== null">
                 @if (grabBusy() === 'best') { <span class="loading loading-spinner loading-xs"></span> }

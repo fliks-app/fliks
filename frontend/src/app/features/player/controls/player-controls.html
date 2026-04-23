@@ -173,16 +173,16 @@
         <button type="button" class="btn btn-ghost btn-md btn-circle text-white" (click)="seek.emit(currentTime() + 10)">
           <svg lucideRotateCw class="h-6 w-6"></svg>
         </button>
-        <!-- lucide:skip-forward -->
-        @if (hasNextEpisode()) {
-          <button type="button" class="btn btn-ghost btn-md btn-circle text-white" (click)="nextEpisode.emit()">
-            <svg lucideSkipForward class="h-6 w-6"></svg>
-          </button>
-        }
       </div>
 
       <!-- Right: action buttons -->
       <div class="flex items-center gap-1.5">
+        <!-- Next episode -->
+        @if (hasNextEpisode()) {
+          <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" (click)="nextEpisode.emit()">
+            <svg lucideSkipForward class="h-6 w-6"></svg>
+          </button>
+        }
         <!-- Subtitles dropdown -->
         @if (availableSubtitles().length > 0) {
         <div class="dropdown dropdown-top dropdown-end" (focusin)="onDropdownFocus()" (focusout)="onDropdownBlur()">
