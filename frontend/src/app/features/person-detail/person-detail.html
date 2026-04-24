@@ -5,10 +5,10 @@
 } @else if (detail(); as d) {
   <div class="flex flex-col gap-6">
     <!-- Back -->
-    <a routerLink="/persons" class="btn btn-sm btn-ghost gap-1 self-start">
+    <button type="button" (click)="goBack()" class="btn btn-sm btn-ghost gap-1 self-start">
       <svg lucideChevronLeft class="h-4 w-4"></svg>
       {{ 'persons.title' | translate }}
-    </a>
+    </button>
 
     <!-- Person header -->
     <div class="flex flex-col sm:flex-row gap-6 items-start">

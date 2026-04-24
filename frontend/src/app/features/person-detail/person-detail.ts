@@ -14,6 +14,7 @@ import {
   PersonsApiService,
   PersonDetail,
 } from '../../core/services/api/persons-api.service';
+import { NavbarService } from '../../core/services/navbar.service';
 import { LucideChevronLeft } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
@@ -26,6 +27,7 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 export class PersonDetailComponent implements OnInit, AfterViewInit {
   private readonly route = inject(ActivatedRoute);
   private readonly personsApi = inject(PersonsApiService);
+  private readonly navbar = inject(NavbarService);
 
   @ViewChild('bioText') bioTextRef?: ElementRef<HTMLParagraphElement>;
 
@@ -54,6 +56,10 @@ export class PersonDetailComponent implements OnInit, AfterViewInit {
 
   toggleBio() {
     this.bioExpanded.update((v) => !v);
+  }
+
+  goBack() {
+    this.navbar.goBack(['/persons']);
   }
 
   private async load(id: number) {

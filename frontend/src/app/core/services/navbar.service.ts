@@ -1,4 +1,6 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
+import { Location } from '@angular/common';
+import { NavigationEnd, Router } from '@angular/router';
 import { Capacitor } from '@capacitor/core';
 
 /**
@@ -14,16 +16,50 @@ export class NavbarService {
   readonly pageTitle = signal('');
   /** Whether the window is scrolled near the top (updated by LayoutComponent). */
   readonly scrollAtTop = signal(true);
+  /** True when at least one in-app navigation has happened since entering — used to gate back buttons. */
+  readonly canGoBack = signal(false);
 
+  private readonly router = inject(Router);
+  private readonly location = inject(Location);
   private readonly isNative = Capacitor.isNativePlatform();
   /** True while the viewport matches Tailwind's `lg` breakpoint (≥1024px). */
   private readonly isLargeScreen = signal(false);
+  private navCount = 0;
 
   constructor() {
     if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
       const mq = window.matchMedia('(min-width: 1024px)');
       this.isLargeScreen.set(mq.matches);
       mq.addEventListener('change', (e) => this.isLargeScreen.set(e.matches));
+    }
+    this.router.events.subscribe((e) => {
+      if (e instanceof NavigationEnd) {
+        this.navCount++;
+        this.canGoBack.set(this.navCount > 1 && this.router.url !== '/');
+      }
+    });
+  }
+
+  /** Reset history tracking — called when a top-level nav entry (home, library, …) is chosen. */
+  resetNavHistory() {
+    this.navCount = 0;
+    this.canGoBack.set(false);
+  }
+
+  /**
+   * Navigate back in browser history when possible; otherwise fall back to a
+   * provided route (useful for deep-link entries where there is no history).
+   * When no fallback is given and there's no history, goes to the home page.
+   */
+  goBack(fallback?: readonly (string | number)[]): void {
+    if (this.canGoBack()) {
+      this.location.back();
+      return;
+    }
+    if (fallback?.length) {
+      this.router.navigate([...fallback]);
+    } else {
+      this.router.navigate(['/']);
     }
   }
 

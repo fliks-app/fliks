@@ -411,6 +411,10 @@ export class MediaInfoHeaderComponent {
     return `${(bytes / 1_073_741_824).toFixed(2)} GB`;
   }
 
+  goBack() {
+    this.navbar.goBack(this.backRoute());
+  }
+
   async onDeleteFileClick() {
     const fileId = this.selectedFileId();
     if (!fileId) return;

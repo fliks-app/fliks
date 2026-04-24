@@ -227,10 +227,10 @@
       <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-base-100/30 to-base-100/50"></div>
     </div>
     @if (!navbar.mobileNavbarVisible()) {
-      <a [routerLink]="backRoute()" class="relative z-10 btn btn-ghost btn gap-1 mb-4 text-base-content/80 hover:text-base-content">
+      <button type="button" (click)="goBack()" class="relative z-10 btn btn-ghost btn gap-1 mb-4 text-base-content/80 hover:text-base-content">
         <svg lucideChevronLeft class="h-4 w-4"></svg>
         {{ backLabel() ?? ('media_detail.back' | translate) }}
-      </a>
+      </button>
     }
   }
 

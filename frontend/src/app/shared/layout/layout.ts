@@ -11,7 +11,6 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Title } from '@angular/platform-browser';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router, NavigationEnd } from '@angular/router';
-import { Location } from '@angular/common';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -90,13 +89,12 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly castService = inject(CastService);
   readonly navbar = inject(NavbarService);
   readonly castPlayer = inject(CastPlayerService);
-  private readonly location = inject(Location);
   private readonly title = inject(Title);
   private readonly translate = inject(TranslateService);
   private readonly destroyRef = inject(DestroyRef);
   /** Bumps when language changes so the document title effect re-reads `app.name`. */
   private readonly langTick = signal(0);
-  readonly canGoBack = signal(false);
+  readonly canGoBack = this.navbar.canGoBack;
 
   readonly themeService = inject(ThemeService);
   readonly isNative = Capacitor.isNativePlatform();
@@ -158,8 +156,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
     }
   });
 
-  private navCount = 0;
-
   ngOnInit() {
     if (navigator.onLine) {
       this.refreshCounts();
@@ -182,8 +178,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
     });
     this.router.events.subscribe(e => {
       if (e instanceof NavigationEnd) {
-        this.navCount++;
-        this.canGoBack.set(this.navCount > 1 && this.router.url !== '/');
         this.bottomMenuOpen.set(false);
         this.syncNavbarTitleFromRoute();
       }
@@ -264,7 +258,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
 
   resetNavHistory() {
-    this.navCount = 0;
+    this.navbar.resetNavHistory();
   }
 
   toggleBottomMenu() {
@@ -272,7 +266,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   }
 
   goBack() {
-    this.location.back();
+    this.navbar.goBack();
   }
 
   retryConnection() {
