@@ -33,10 +33,6 @@ const FRAMES_TMP_DIR = path.join(process.cwd(), 'images', 'thumbnails-tmp');
 /** Concurrent ffmpeg `-ss` seeks per sprite. Saturates the GPU / CPU for
  *  fast extraction while leaving headroom for concurrent streams. */
 const SEEK_CONCURRENCY = 8;
-/** Frames extracted per ffmpeg invocation. Batching amortizes the ~200ms
- *  HW-accel init overhead across many frames — the dominant cost when
- *  extracting hundreds of thumbnails from a long video. */
-const BATCH_SIZE = 32;
 
 /**
  * Build a human-readable label for a sprite: "S01E03 — Episode Title" for a
@@ -385,11 +381,10 @@ export class ThumbnailService {
   }
 
   /**
-   * Extract thumbnails in batches of up to {@link BATCH_SIZE} frames per
-   * ffmpeg invocation. Each worker decodes a contiguous window via
-   * `-ss T -t D -vf fps=1/interval`, producing many thumbnails per spawn.
-   * This amortizes ffmpeg init + HW-accel setup (~200ms each) across the
-   * batch — the dominant cost when a long video needs hundreds of frames.
+   * Extract one frame per thumbnail timestamp by spawning N parallel
+   * `ffmpeg -ss <ts>` processes. Each process only decodes the keyframe
+   * around the seek point — dramatically faster than sequentially decoding
+   * the full video for long files (2h+).
    */
   private async extractFramesBySeek(
     inputPath: string,
@@ -400,63 +395,58 @@ export class ThumbnailService {
     label: string,
     progressKey: string,
   ): Promise<void> {
-    const batchCount = Math.ceil(count / BATCH_SIZE);
     let completed = 0;
     let failed = 0;
     let aborted = false;
-    let nextBatchIdx = 0;
-    // Abort once a batch-worth of frames has failed — signals a broken file
-    // or decoder issue rather than a one-off seek failure.
-    const MAX_FAILS = BATCH_SIZE;
+    let nextIndex = 0;
+    const MAX_FAILS = 5;
 
     const runOne = async (): Promise<void> => {
       while (true) {
         if (aborted) return;
-        const batchIdx = nextBatchIdx++;
-        if (batchIdx >= batchCount) return;
-        const startIdx = batchIdx * BATCH_SIZE;
-        const framesInBatch = Math.min(BATCH_SIZE, count - startIdx);
-        const startTs = startIdx * interval;
+        const idx = nextIndex++;
+        if (idx >= count) return;
+        const timestamp = idx * interval;
+        const outPath = path.join(
+          framesDir,
+          `frame-${String(idx + 1).padStart(4, '0')}.jpg`,
+        );
         try {
-          const written = await this.extractBatch(
-            inputPath,
-            framesDir,
-            startTs,
-            interval,
-            framesInBatch,
-            startIdx + 1,
-          );
-          completed += written;
-          failed += framesInBatch - written;
+          await this.extractFrameAt(inputPath, timestamp, outPath);
+          completed++;
         } catch (err) {
-          failed += framesInBatch;
-          if (failed <= BATCH_SIZE * 2) {
+          failed++;
+          if (failed <= 3) {
             this.log.warn(
-              `Sprite batch ${batchIdx + 1}/${batchCount} @ ${startTs}s failed for "${label}": ${(err as Error).message}`,
+              `Sprite frame ${idx + 1}/${count} @ ${timestamp}s failed for "${label}": ${(err as Error).message}`,
             );
           }
+          if (failed >= MAX_FAILS) {
+            aborted = true;
+            this.log.warn(
+              `Sprite aborted for "${label}": ${failed} failures out of ${completed + failed} attempts`,
+            );
+            return;
+          }
         }
-        if (failed >= MAX_FAILS) {
-          aborted = true;
-          this.log.warn(
-            `Sprite aborted for "${label}": ${failed} frame failures out of ${completed + failed} attempts`,
-          );
-          return;
-        }
-        this.eventsService.emit({
-          type: 'task.progress',
-          command: progressKey,
-          current: Math.min(
-            Math.round(((completed + failed) / count) * totalSeconds),
+        // Emit progress every 4 frames (keep SSE traffic light).
+        if ((completed + failed) % 4 === 0 || completed + failed === count) {
+          const current = Math.min(
+            ((completed + failed) / count) * totalSeconds,
             totalSeconds,
-          ),
-          total: totalSeconds,
-          message: label,
-        });
+          );
+          this.eventsService.emit({
+            type: 'task.progress',
+            command: progressKey,
+            current: Math.round(current),
+            total: totalSeconds,
+            message: label,
+          });
+        }
       }
     };
 
-    const workers = Math.min(SEEK_CONCURRENCY, batchCount);
+    const workers = Math.min(SEEK_CONCURRENCY, count);
     await Promise.all(Array.from({ length: workers }, () => runOne()));
     if (failed > count * 0.1) {
       throw new Error(
@@ -466,25 +456,19 @@ export class ThumbnailService {
   }
 
   /**
-   * Extract a batch of consecutive thumbnails in a single ffmpeg process.
-   * `-ss` BEFORE `-i` uses fast demuxer seek (nearest prior keyframe);
-   * `-t` caps the decode window; `fps=1/interval` samples at the batch
-   * cadence; `-start_number` writes global indices so the tile step sees
-   * `frame-0001..frame-NNNN.jpg` contiguously across all batches.
-   * Returns the number of frames actually written to disk — the tile
-   * demuxer stops at the first missing index, so any gap bounds the sprite.
+   * Extract a single frame at a specific timestamp via fast keyframe seek.
+   * `-ss` BEFORE `-i` uses the demuxer seek (keyframe index) — much faster
+   * than accurate seek, with sub-second precision sufficient for thumbnails.
    */
-  private extractBatch(
+  private extractFrameAt(
     inputPath: string,
-    framesDir: string,
     seekSeconds: number,
-    interval: number,
-    framesInBatch: number,
-    startNumber: number,
-  ): Promise<number> {
+    outputPath: string,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
-      // HW accel for decode — 4K HEVC software decode is slow enough that
-      // batching without HW accel can still exceed the per-batch kill timer.
+      // HW accel for decode — 4K HEVC software decode can exceed the 30s
+      // kill timer. The init overhead (~200ms) is acceptable now that max
+      // concurrent processes is capped at 16 (SEEK_CONCURRENCY × SPRITE_CONCURRENCY).
       const hw = this.transcodingService.getDetectedHwAccel();
       const hwArgs: string[] = [];
       if (hw === 'vaapi' || hw === 'qsv') {
@@ -497,11 +481,6 @@ export class ThumbnailService {
       } else if (hw === 'nvenc') {
         hwArgs.push('-hwaccel', 'cuda', '-hwaccel_output_format', 'nv12');
       }
-      const duration = framesInBatch * interval;
-      // `-discard nokey` drops non-keyframe packets at the demuxer, so the
-      // decoder only processes I-frames — same keyframe-level behavior as
-      // the old per-frame path, just amortized over many thumbnails per
-      // ffmpeg spawn. fps filter then samples keyframes at the batch cadence.
       const args = [
         '-nostdin',
         '-hide_banner',
@@ -514,23 +493,17 @@ export class ThumbnailService {
         '0',
         '-probesize',
         '200000',
-        '-discard',
-        'nokey',
         ...hwArgs,
         '-i',
         inputPath,
-        '-t',
-        String(duration),
-        '-vf',
-        `fps=1/${interval},scale=${THUMB_WIDTH}:-1`,
         '-frames:v',
-        String(framesInBatch),
+        '1',
+        '-vf',
+        `scale=${THUMB_WIDTH}:-1`,
         '-q:v',
         '5',
-        '-start_number',
-        String(startNumber),
         '-y',
-        path.join(framesDir, 'frame-%04d.jpg'),
+        outputPath,
       ];
       const proc = spawnLowPriority('ffmpeg', args);
       let stderr = '';
@@ -538,13 +511,6 @@ export class ThumbnailService {
         if (stderr.length < 4096) stderr += chunk.toString();
       });
       let killed = false;
-      // Scale the kill timer with the source duration covered by the batch
-      // (≈1.5× realtime wall clock). Min 60s for spawn + seek overhead,
-      // max 3 min to stay well under the outer 4-min sprite timeout.
-      const killTimeoutMs = Math.min(
-        180_000,
-        Math.max(60_000, duration * 1_500),
-      );
       const killTimer = setTimeout(() => {
         killed = true;
         try {
@@ -552,32 +518,15 @@ export class ThumbnailService {
         } catch {
           /* ignore */
         }
-      }, killTimeoutMs);
-      proc.on('close', async (code) => {
+      }, 30_000);
+      proc.on('close', (code) => {
         clearTimeout(killTimer);
-        // ffmpeg may return a non-zero code after writing a partial batch
-        // (e.g. EOF mid-window). Count what actually landed on disk so the
-        // caller can treat partial success as partial success.
-        let written = 0;
-        for (let i = 0; i < framesInBatch; i++) {
-          const p = path.join(
-            framesDir,
-            `frame-${String(startNumber + i).padStart(4, '0')}.jpg`,
-          );
-          try {
-            await fsp.access(p);
-            written++;
-          } catch {
-            break;
-          }
-        }
-        if (code === 0 || written === framesInBatch) {
-          return resolve(written);
-        }
-        const reason = killed ? `timeout (${killTimeoutMs / 1000}s)` : `code ${code}`;
-        reject(new Error(
-          `ffmpeg batch exited with ${reason}: ${stderr.trim().split('\n').slice(-2).join(' ')}`,
-        ));
+        if (code === 0) return resolve();
+        const reason = killed ? 'timeout (60s)' : `code ${code}`;
+        const err = new Error(
+          `ffmpeg -ss exited with ${reason}: ${stderr.trim().split('\n').slice(-2).join(' ')}`,
+        );
+        reject(err);
       });
       proc.on('error', (err) => {
         clearTimeout(killTimer);
