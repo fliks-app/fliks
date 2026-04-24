@@ -1,4 +1,4 @@
-import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { execFile, spawn, type ChildProcess } from 'child_process';
@@ -8,7 +8,6 @@ import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { EventsService } from '../scheduler/events.service';
 import { Command } from '../scheduler/entities/command.entity';
-import { TranscodingService } from './transcoding.service';
 
 const execFileAsync = promisify(execFile);
 
@@ -87,8 +86,6 @@ export class ThumbnailService {
     private readonly eventsService: EventsService,
     @InjectRepository(Command)
     private readonly commandRepo: Repository<Command>,
-    @Inject(forwardRef(() => TranscodingService))
-    private readonly transcodingService: TranscodingService,
   ) {}
 
   /**
@@ -466,21 +463,12 @@ export class ThumbnailService {
     outputPath: string,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      // HW accel for decode — 4K HEVC software decode can exceed the 30s
-      // kill timer. The init overhead (~200ms) is acceptable now that max
-      // concurrent processes is capped at 16 (SEEK_CONCURRENCY × SPRITE_CONCURRENCY).
-      const hw = this.transcodingService.getDetectedHwAccel();
-      const hwArgs: string[] = [];
-      if (hw === 'vaapi' || hw === 'qsv') {
-        hwArgs.push(
-          '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
-          '-hwaccel', 'vaapi',
-          '-hwaccel_device', 'va',
-          '-hwaccel_output_format', 'nv12',
-        );
-      } else if (hw === 'nvenc') {
-        hwArgs.push('-hwaccel', 'cuda', '-hwaccel_output_format', 'nv12');
-      }
+      // SW decode for thumbnails: we only decode ONE I-frame per process
+      // (`-noaccurate_seek` lands on the keyframe, no B/P propagation).
+      // HW accel saved ~200ms of decode but cost ~200ms of init and — more
+      // critically — serialized at the GPU's decoder-session limit
+      // (2–8 on consumer HW), causing random init hangs under the 16
+      // concurrent processes we spawn for sprite generation.
       const args = [
         '-nostdin',
         '-hide_banner',
@@ -493,7 +481,6 @@ export class ThumbnailService {
         '0',
         '-probesize',
         '200000',
-        ...hwArgs,
         '-i',
         inputPath,
         '-frames:v',
