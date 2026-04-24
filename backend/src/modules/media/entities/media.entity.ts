@@ -85,6 +85,13 @@ export class Media extends BaseEntity {
   @RelationId((m: Media) => m.library)
   libraryId: number | null;
 
+  /**
+   * Override of the library's metadata provider for this media. When set,
+   * takes precedence over Library.preferredProvider. `null` → inherit.
+   */
+  @Column({ type: 'varchar', length: 16, nullable: true, default: null })
+  preferredProvider: string | null;
+
   @Column({ nullable: true })
   folderName: string;
 

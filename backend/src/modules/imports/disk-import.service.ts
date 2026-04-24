@@ -19,6 +19,7 @@ import { Library } from '../libraries/entities/library.entity';
 import { parseReleaseQuality } from '../media/release-quality.parser';
 import { ImportFileEntry } from './dto/confirm-disk-import.dto';
 import { MediaService } from '../media/media.service';
+import { NamingService } from '../scheduler/naming.service';
 import { SubtitleSchedulerService } from '../scheduler/subtitle-scheduler.service';
 
 const VIDEO_EXTS = new Set([
@@ -68,6 +69,7 @@ export class DiskImportService {
     private readonly mediaService: MediaService,
     @Inject(forwardRef(() => SubtitleSchedulerService))
     private readonly subtitleScheduler: SubtitleSchedulerService,
+    private readonly naming: NamingService,
   ) {}
 
   async scanFolder(folderPath: string): Promise<ScanCandidate[]> {
@@ -255,7 +257,7 @@ export class DiskImportService {
     }
 
     const { quality } = parseReleaseQuality(filename);
-    const epNums = this.parseEpisodeNumbers(filename);
+    const epNums = this.naming.parseEpisodeNumbers(filename);
     const extractedTitle = this.extractTitle(filename);
     const matched = this.matchMedia(extractedTitle, allMedia);
 
@@ -283,9 +285,16 @@ export class DiskImportService {
           this.episodeRepo.create({
             season,
             episodeNumber: epNums.episode,
+            endEpisodeNumber: epNums.episodeEnd ?? null,
             monitored: true,
           }),
         );
+      } else if (
+        epNums.episodeEnd != null &&
+        ep.endEpisodeNumber !== epNums.episodeEnd
+      ) {
+        ep.endEpisodeNumber = epNums.episodeEnd;
+        await this.episodeRepo.save(ep);
       }
       episodeId = ep.id;
       episodeTitle = ep.title ?? null;
@@ -360,11 +369,4 @@ export class DiskImportService {
     return match ?? null;
   }
 
-  private parseEpisodeNumbers(
-    filename: string,
-  ): { season: number; episode: number } | null {
-    const m = filename.match(/[Ss](\d{1,2})[Ee](\d{1,3})/);
-    if (!m) return null;
-    return { season: parseInt(m[1], 10), episode: parseInt(m[2], 10) };
-  }
 }

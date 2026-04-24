@@ -25,6 +25,7 @@ import {
 } from '../../../core/services/api/profiles.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { METADATA_PROVIDER_OPTIONS_LIBRARY } from '../../../core/constants/metadata-providers';
 
 interface DraftPath {
   id?: number; // undefined for new (unsaved) paths
@@ -102,11 +103,7 @@ export class LibrariesSettingsComponent implements OnInit {
     { value: 'error', label: 'Error' },
   ];
 
-  readonly providerOptions = [
-    { value: null, labelKey: 'settings.libraries.provider_auto' },
-    { value: 'tmdb', label: 'TMDB' },
-    { value: 'tvdb', label: 'TVDB' },
-  ];
+  readonly providerOptions = METADATA_PROVIDER_OPTIONS_LIBRARY;
   readonly cleanupOptions: { value: StalledCleanupProfileKey | null; labelKey: string }[] = [
     { value: null, labelKey: 'settings.cleanup_profiles.none' },
     { value: 'fast', labelKey: 'settings.cleanup_profiles.profile_fast' },

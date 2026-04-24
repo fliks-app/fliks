@@ -21,7 +21,7 @@
           [episodeLabel]="episodeLabel()"
           [rating]="null"
           [dateLabel]="episodeDateLabel()"
-          [runtime]="ep.runtime ?? null"
+          [runtime]="episodeDisplayRuntime()"
           [overview]="ep.overview ?? null"
           [directors]="directors()"
           [monitored]="ep.monitored"
@@ -179,6 +179,7 @@
             (toggleSeasonMonitored)="toggleSeasonMonitored($event)"
             (toggleSeasonWatched)="onToggleSeasonWatched(m.id, $event.season, $event.watched)"
             (toggleEpisodeWatched)="onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
+            (setSeasonProvider)="setSeasonProvider($event.season, $event.provider)"
           />
         }
 
@@ -252,9 +253,11 @@
       <app-media-detail-library-modal
         [libraries]="libraries()"
         [selectedLibraryId]="selectedLibraryId()"
+        [selectedProvider]="selectedProvider()"
         [saving]="libraryPatchSaving()"
         [saved]="libraryPatchSaved()"
         (selectedLibraryIdChange)="selectedLibraryId.set($event)"
+        (selectedProviderChange)="selectedProvider.set($event)"
         (save)="saveLibrary()"
       />
       <app-download-quality-modal #downloadModal (download)="onDownload($event)" />

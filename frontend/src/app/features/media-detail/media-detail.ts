@@ -44,6 +44,7 @@ import { DownloadManagerService } from '../../core/services/download-manager.ser
 import {
   filesForEpisode,
   filterSeasonEpisodesOnDisk,
+  hideShadowedEpisodes,
   seasonsVisibleWithDiskFilter,
 } from './media-detail.utils';
 import type { MediaFileRow } from './media-detail.utils';
@@ -210,9 +211,18 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return filesForEpisode(m.files, ep.id);
   });
 
-  readonly episodeActiveFileId = computed(() =>
-    this.selectedFileId() ?? this.episodeFiles()[0]?.id ?? null,
-  );
+  /**
+   * On show load we preselect `selectedFileId` to the show-level resume file
+   * (e.g. the in-progress episode). That id doesn't belong to the focused
+   * episode on E-detail pages — keep it only when it matches one of the
+   * focused episode's files, otherwise fall back to the first episode file.
+   */
+  readonly episodeActiveFileId = computed(() => {
+    const files = this.episodeFiles();
+    const current = this.selectedFileId();
+    if (current != null && files.some((f) => f.id === current)) return current;
+    return files[0]?.id ?? null;
+  });
 
   readonly episodeActiveFile = computed(() => {
     const id = this.episodeActiveFileId();
@@ -223,13 +233,48 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const ep = this.focusedEpisode();
     const s = this.focusedSeason();
     if (!ep || !s) return null;
-    return `S${String(s.seasonNumber).padStart(2, '0')}:E${String(ep.episodeNumber).padStart(2, '0')} - ${ep.title ?? ''}`;
+    const sn = String(s.seasonNumber).padStart(2, '0');
+    const start = String(ep.episodeNumber).padStart(2, '0');
+    const epPart =
+      ep.endEpisodeNumber != null && ep.endEpisodeNumber > ep.episodeNumber
+        ? `E${start}-E${String(ep.endEpisodeNumber).padStart(2, '0')}`
+        : `E${start}`;
+    return `S${sn}:${epPart} - ${ep.title ?? ''}`;
   });
 
   readonly episodeDateLabel = computed(() => {
     const ep = this.focusedEpisode();
     if (!ep?.airDate) return null;
     return new Date(ep.airDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  });
+
+  /**
+   * Runtime (minutes) to show on the episode detail page. Priority:
+   *   1. The actual file duration from ffprobe (accurate for multi-episode
+   *      files where TMDB's per-episode runtime understates reality).
+   *   2. Sum of per-episode runtimes for the range (if `endEpisodeNumber` set).
+   *   3. Plain `ep.runtime` from the provider.
+   */
+  readonly episodeDisplayRuntime = computed<number | null>(() => {
+    const ep = this.focusedEpisode();
+    if (!ep) return null;
+
+    const file = this.episodeActiveFile();
+    const fileDur = file?.streamInfo?.durationSeconds;
+    if (fileDur && fileDur > 0) return Math.round(fileDur / 60);
+
+    const end = ep.endEpisodeNumber;
+    if (end != null && end > ep.episodeNumber) {
+      const season = this.focusedSeason();
+      let total = 0;
+      for (let n = ep.episodeNumber; n <= end; n++) {
+        const e = season?.episodes?.find((x) => x.episodeNumber === n);
+        if (e?.runtime) total += e.runtime;
+      }
+      if (total > 0) return total;
+    }
+
+    return ep.runtime ?? null;
   });
 
   readonly episodeSeriesRoute = computed(() => {
@@ -244,7 +289,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
    */
   readonly currentSeasonEpisodes = computed<Episode[]>(() => {
     const s = this.focusedSeason();
-    return s?.episodes ?? [];
+    return hideShadowedEpisodes(s?.episodes ?? []);
   });
 
   /**
@@ -400,6 +445,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   readonly libraries = signal<Library[]>([]);
   readonly selectedLibraryId = signal<number | null>(null);
+  readonly selectedProvider = signal<'tmdb' | 'tvdb' | null>(null);
   readonly libraryPatchSaving = signal(false);
   readonly libraryPatchSaved = signal(false);
 
@@ -592,6 +638,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.draftQualityProfileId.set(m.qualityProfile?.id ?? null);
       this.draftLanguageProfileId.set(m.languageProfile?.id ?? null);
       this.selectedLibraryId.set(m.libraryId ?? null);
+      this.selectedProvider.set(m.preferredProvider ?? null);
     } catch {
       this.notFound.set(true);
     } finally {
@@ -651,10 +698,20 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!m) return;
     const libId = this.selectedLibraryId();
     if (libId == null) return;
+    const provider = this.selectedProvider();
+    const providerChanged = (m.preferredProvider ?? null) !== provider;
     this.libraryPatchSaving.set(true);
     this.libraryPatchSaved.set(false);
     try {
-      const updated = await this.mediaService.patchLibrary(m.id, libId);
+      let updated =
+        libId !== m.libraryId
+          ? await this.mediaService.patchLibrary(m.id, libId)
+          : m;
+      if (providerChanged) {
+        updated = await this.mediaService.update(m.id, {
+          preferredProvider: provider,
+        });
+      }
       this.media.set(updated);
       if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
       this.libraryPatchSaved.set(true);
@@ -996,6 +1053,35 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         ),
       });
       this.syncActiveSeasonForSeriesFilter();
+    } finally {
+      this.seasonBusy.set(null);
+    }
+  }
+
+  async setSeasonProvider(
+    season: Season,
+    provider: 'tmdb' | 'tvdb' | null,
+  ): Promise<void> {
+    if (!this.isAdmin()) return;
+    if ((season.preferredProvider ?? null) === provider) return;
+    this.seasonBusy.set(season.id);
+    try {
+      const updated = await this.mediaService.updateSeason(season.id, {
+        preferredProvider: provider,
+      });
+      const m = this.media();
+      if (!m?.seasons) return;
+      this.media.set({
+        ...m,
+        seasons: m.seasons.map((s) =>
+          s.id === updated.id
+            ? { ...s, preferredProvider: updated.preferredProvider }
+            : s,
+        ),
+      });
+      this.toast.success(
+        this.translate.instant('media_detail.provider_saved'),
+      );
     } finally {
       this.seasonBusy.set(null);
     }

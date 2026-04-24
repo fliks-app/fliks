@@ -46,7 +46,7 @@ export function filterSeasonEpisodesOnDisk(
   media: Media,
   onlyOnDisk: boolean,
 ): Episode[] {
-  const eps = season.episodes;
+  const eps = hideShadowedEpisodes(season.episodes);
   if (!onlyOnDisk) return eps;
   const fileEpisodeIds = new Set(
     (media.files ?? [])
@@ -54,6 +54,32 @@ export function filterSeasonEpisodesOnDisk(
       .filter((id): id is number => id != null && id > 0),
   );
   return eps.filter((e) => e.hasFile || fileEpisodeIds.has(e.id));
+}
+
+/**
+ * Drop episodes whose number is covered by another episode's range
+ * (Jellyfin-style: a single S07E25-E26.mkv → E25 row owns the range,
+ * E26 row is still created by the provider but hidden here so it
+ * doesn't show up as a separate "missing" tile).
+ */
+export function hideShadowedEpisodes(episodes: Episode[]): Episode[] {
+  const shadowed = new Set<number>();
+  for (const e of episodes) {
+    const end = e.endEpisodeNumber;
+    if (end != null && end > e.episodeNumber) {
+      for (let n = e.episodeNumber + 1; n <= end; n++) shadowed.add(n);
+    }
+  }
+  if (shadowed.size === 0) return episodes;
+  return episodes.filter((e) => !shadowed.has(e.episodeNumber));
+}
+
+/** "25" for a single episode, "25-26" when the row covers a range. */
+export function episodeBadgeLabel(ep: Episode): string {
+  const end = ep.endEpisodeNumber;
+  return end != null && end > ep.episodeNumber
+    ? `${ep.episodeNumber}-${end}`
+    : String(ep.episodeNumber);
 }
 
 /** Saisons à afficher dans les onglets : toutes, ou seulement celles avec ≥1 épisode sur disque. */

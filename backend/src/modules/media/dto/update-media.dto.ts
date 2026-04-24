@@ -7,6 +7,7 @@ import {
   IsBoolean,
   IsArray,
   IsDateString,
+  IsIn,
 } from 'class-validator';
 import { MediaType, MediaStatus } from '../../../common/enums';
 
@@ -83,4 +84,8 @@ export class UpdateMediaDto {
   @IsNumber()
   @IsOptional()
   languageProfileId?: number;
+
+  @IsOptional()
+  @IsIn(['tmdb', 'tvdb', null])
+  preferredProvider?: 'tmdb' | 'tvdb' | null;
 }

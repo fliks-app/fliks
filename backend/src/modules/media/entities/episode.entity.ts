@@ -23,6 +23,17 @@ export class Episode extends BaseEntity {
   @Column()
   episodeNumber: number;
 
+  /**
+   * Last episode number when this row represents a multi-episode file
+   * (e.g. "S07E25-E26.mkv" → episodeNumber=25, endEpisodeNumber=26).
+   * Jellyfin-style: one Episode row covers the range, metadata/watched/
+   * progress are shared. The "shadowed" episodes (26 in the example) are
+   * still created by the provider refresh but hidden by the UI so they
+   * don't show up as "missing". `null` for normal single-episode files.
+   */
+  @Column({ type: 'int', nullable: true, default: null })
+  endEpisodeNumber: number | null;
+
   @Column({ nullable: true })
   title: string;
 

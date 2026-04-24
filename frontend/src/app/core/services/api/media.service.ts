@@ -48,6 +48,8 @@ export interface MovieRelease {
 export interface Episode {
   id: number;
   episodeNumber: number;
+  /** Last episode number for multi-episode files (S07E25-E26 → 26). null/absent = single. */
+  endEpisodeNumber?: number | null;
   title: string | null;
   overview: string | null;
   airDate: string | null;
@@ -61,8 +63,11 @@ export interface Season {
   id: number;
   seasonNumber: number;
   monitored: boolean;
+  preferredProvider?: 'tmdb' | 'tvdb' | null;
   episodes: Episode[];
 }
+
+export type MetadataProvider = 'tmdb' | 'tvdb';
 
 export interface Media {
   id: number;
@@ -93,6 +98,7 @@ export interface Media {
   minimumAvailability?: 'announced' | 'inCinemas' | 'released';
   sizeOnDisk?: number;
   episodeStats?: { totalEpisodes: number; downloadedEpisodes: number };
+  preferredProvider?: 'tmdb' | 'tvdb' | null;
 }
 
 export interface MediaCastEntry {
@@ -359,8 +365,15 @@ export class MediaService {
   }
 
   updateSeasonMonitored(seasonId: number, monitored: boolean) {
+    return this.updateSeason(seasonId, { monitored });
+  }
+
+  updateSeason(
+    seasonId: number,
+    patch: { monitored?: boolean; preferredProvider?: 'tmdb' | 'tvdb' | null },
+  ) {
     return firstValueFrom(
-      this.http.patch<Season>(`/api/media/seasons/${seasonId}`, { monitored }),
+      this.http.patch<Season>(`/api/media/seasons/${seasonId}`, patch),
     );
   }
 

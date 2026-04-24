@@ -49,6 +49,13 @@ export interface MediaResumeInfo {
   episodeNumber?: number;
 }
 
+/**
+ * Under this many seconds of stored progress, we surface the item in
+ * continue-watching (so the user can jump back in) but resume from 0.
+ * Avoids "reprendre à 3s" after an accidental click.
+ */
+const RESUME_FROM_START_UNDER_SECONDS = 10;
+
 @Injectable()
 export class PlaybackService implements OnModuleInit {
   private readonly log = new Logger(PlaybackService.name);
@@ -168,17 +175,19 @@ export class PlaybackService implements OnModuleInit {
        WHERE ps."userId" = $1
          AND ps."mediaId" = $2
          AND ps.completed = false
-         AND ps."positionSeconds" > 10
+         AND ps."positionSeconds" > 0
        ORDER BY ps."lastPlayedAt" DESC
        LIMIT 1`,
       [userId, mediaId],
     );
     if (!rows.length) return null;
     const r = rows[0];
+    const storedPos = Number(r.positionSeconds);
     return {
       mediaFileId: r.mediaFileId,
       episodeId: r.episodeId,
-      positionSeconds: Number(r.positionSeconds),
+      positionSeconds:
+        storedPos < RESUME_FROM_START_UNDER_SECONDS ? 0 : storedPos,
       durationSeconds: Number(r.durationSeconds),
       seasonNumber: r.seasonNumber ?? undefined,
       episodeNumber: r.episodeNumber ?? undefined,
@@ -347,7 +356,12 @@ export class PlaybackService implements OnModuleInit {
     for (const m of movies) {
       m.mediaType = 'movie';
       m.episodeLabel = null;
+      m.positionSeconds = Number(m.positionSeconds);
       m.progressPercent = Number(m.progressPercent);
+      if (m.positionSeconds < RESUME_FROM_START_UNDER_SECONDS) {
+        m.positionSeconds = 0;
+        m.progressPercent = 0;
+      }
     }
 
     // 2. Series "next up"
@@ -435,7 +449,12 @@ export class PlaybackService implements OnModuleInit {
     );
     for (const s of seriesItems) {
       s.mediaType = 'series';
+      s.positionSeconds = Number(s.positionSeconds);
       s.progressPercent = Number(s.progressPercent);
+      if (s.positionSeconds < RESUME_FROM_START_UNDER_SECONDS) {
+        s.positionSeconds = 0;
+        s.progressPercent = 0;
+      }
     }
 
     return [...movies, ...seriesItems]

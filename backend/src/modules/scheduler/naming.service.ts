@@ -162,20 +162,29 @@ export class NamingService {
    */
   parseEpisodeNumbers(
     sourceTitle: string,
-  ): { season: number; episode: number } | null {
+  ): { season: number; episode: number; episodeEnd?: number } | null {
     // Normalize separators: dots/underscores → spaces (but keep S01E01 intact)
     const normalized = sourceTitle
       .replace(/[_]/g, ' ')
       .replace(/\.(?!\d{4})/g, ' ');
 
-    const patterns: { re: RegExp; season: number; episode: number }[] = [
+    const patterns: {
+      re: RegExp;
+      season: number;
+      episode: number;
+      /** Group index of the range-end number (only the multi-episode regex has one). */
+      episodeEnd?: number;
+    }[] = [
       // ---- Standard S01E01 patterns (Sonarr priority order) ----
 
-      // Multi-episode: S01E01-E02 / S01E01E02 / S01E01-02
+      // Multi-episode: S01E01-E02 / S01E01E02 / S01E01-02 / S01E01-E03 etc.
+      // The `*` means group 3 captures the LAST episode number in the range
+      // (JS: repeated capture groups retain the last iteration).
       {
-        re: /[Ss](\d{1,2})[Ee](\d{1,3})(?:[_\-Ee]+\d{1,3})*/,
+        re: /[Ss](\d{1,2})[Ee](\d{1,3})(?:[_\-Ee]+(\d{1,3}))*/,
         season: 1,
         episode: 2,
+        episodeEnd: 3,
       },
 
       // S01E01 standard (most common)
@@ -211,19 +220,30 @@ export class NamingService {
       { re: /[Ee](\d{2,3})(?:[^a-zA-Z\d]|$)/, season: -1, episode: 1 },
     ];
 
-    for (const { re, season: sIdx, episode: eIdx } of patterns) {
+    for (const {
+      re,
+      season: sIdx,
+      episode: eIdx,
+      episodeEnd: endIdx,
+    } of patterns) {
       const m = normalized.match(re) ?? sourceTitle.match(re);
       if (!m) continue;
       const episode = parseInt(m[eIdx], 10);
       if (!Number.isFinite(episode) || episode < 1) continue;
 
+      let episodeEnd: number | undefined;
+      if (endIdx != null && m[endIdx] != null) {
+        const parsed = parseInt(m[endIdx], 10);
+        if (Number.isFinite(parsed) && parsed > episode) episodeEnd = parsed;
+      }
+
       if (sIdx === -1) {
         // No season in regex — default to season 1
-        return { season: 1, episode };
+        return { season: 1, episode, episodeEnd };
       }
       const season = parseInt(m[sIdx], 10);
       if (!Number.isFinite(season) || season < 0) continue;
-      return { season, episode };
+      return { season, episode, episodeEnd };
     }
 
     return null;

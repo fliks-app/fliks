@@ -7,6 +7,7 @@ import {
   output,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
+import { UpperCasePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { LucideCheck, LucideEllipsisVertical, LucideX } from '@lucide/angular';
@@ -20,15 +21,17 @@ import {
 } from '../../../../core/services/api/media.service';
 import {
   displayMediaFilePath,
+  episodeBadgeLabel,
   filesForEpisode,
   filterSeasonEpisodesOnDisk,
   seasonsVisibleWithDiskFilter,
 } from '../../media-detail.utils';
+import { METADATA_PROVIDER_OPTIONS_OVERRIDE } from '../../../../core/constants/metadata-providers';
 
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, FormsModule, RouterLink, ResolveUrlPipe, HorizontalScrollerComponent, MediaCardComponent, LucideCheck, LucideEllipsisVertical, LucideX],
+  imports: [TranslateModule, FormsModule, RouterLink, ResolveUrlPipe, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, LucideCheck, LucideEllipsisVertical, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
@@ -66,7 +69,13 @@ export class MediaDetailSeasonsComponent {
   readonly toggleSeasonMonitored = output<Season>();
   readonly toggleSeasonWatched = output<{ season: Season; watched: boolean }>();
   readonly toggleEpisodeWatched = output<{ episode: Episode; watched: boolean }>();
+  readonly setSeasonProvider = output<{
+    season: Season;
+    provider: 'tmdb' | 'tvdb' | null;
+  }>();
   readonly seasonWatchedBusyId = input<number | null>(null);
+
+  readonly providerOptions = METADATA_PROVIDER_OPTIONS_OVERRIDE;
 
   /** Every episode with a file in the season is in the watched set. */
   seasonFullyWatched(season: Season | null): boolean {
@@ -98,6 +107,8 @@ export class MediaDetailSeasonsComponent {
   fileDiskPath(relativePath: string): string {
     return displayMediaFilePath(this.media().path, relativePath);
   }
+
+  episodeBadgeLabel = episodeBadgeLabel;
 
   episodeRoute(ep: Episode): string[] {
     return ['/series', String(this.media().id), 'episode', String(ep.id)];

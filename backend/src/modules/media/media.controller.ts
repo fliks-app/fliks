@@ -27,6 +27,7 @@ import { UpdateMediaProfilesDto } from './dto/update-media-profiles.dto';
 import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { PatchMonitoredDto } from './dto/patch-monitored.dto';
+import { PatchSeasonDto } from './dto/patch-season.dto';
 import { APP_QUALITIES } from '../../common/constants/app-qualities';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
@@ -360,8 +361,9 @@ export class MediaController {
     this.logger.log(`Media rescan started (API) — id=${id} title="${title}"`);
     this.eventsService.emit({ type: 'rescan.started', mediaId: id, title });
 
-    // Fire-and-forget: don't await
-    void this.mediaService.rescanFiles(id).then(
+    // Fire-and-forget: don't await. skipWarmup=true — rescan should be fast,
+    // subtitle cache will warm lazily when the user actually plays the file.
+    void this.mediaService.rescanFiles(id, { skipWarmup: true }).then(
       (result) => {
         this.eventsService.emit({
           type: 'rescan.completed',
@@ -637,11 +639,11 @@ export class MediaController {
   async patchSeason(
     @Param('seasonId', ParseIntPipe) seasonId: number,
     @CurrentUser() user: User,
-    @Body() dto: PatchMonitoredDto,
+    @Body() dto: PatchSeasonDto,
   ) {
     const mediaId = await this.mediaService.getMediaIdForSeason(seasonId);
     await this.assertMediaAccessible(mediaId, user);
-    return this.mediaService.updateSeasonMonitored(seasonId, dto.monitored);
+    return this.mediaService.updateSeason(seasonId, dto);
   }
 
   @Patch('episodes/:episodeId')

@@ -424,6 +424,13 @@ export class CompletionService {
               epTitle = episode.title ?? undefined;
               airDate = episode.airDate ?? undefined;
               episodeId = episode.id;
+              if (
+                epNums.episodeEnd != null &&
+                episode.endEpisodeNumber !== epNums.episodeEnd
+              ) {
+                episode.endEpisodeNumber = epNums.episodeEnd;
+                await this.episodeRepo.save(episode);
+              }
             }
           }
         }

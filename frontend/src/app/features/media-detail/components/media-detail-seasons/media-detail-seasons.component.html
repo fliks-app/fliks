@@ -57,6 +57,9 @@
       @if (!selSeason.monitored) {
         <span class="badge badge-ghost shrink-0">{{ 'media_detail.unmonitored' | translate }}</span>
       }
+      @if (selSeason.preferredProvider) {
+        <span class="badge badge-primary badge-sm shrink-0">{{ selSeason.preferredProvider | uppercase }}</span>
+      }
       @if (canGrab()) {
         <button
           type="button"
@@ -99,6 +102,18 @@
             {{ 'media_detail.monitor' | translate }}
           }
         </button>
+        <select
+          class="select select-bordered select-sm shrink-0"
+          [title]="'media_detail.provider_section_title' | translate"
+          [ngModel]="selSeason.preferredProvider ?? null"
+          (ngModelChange)="setSeasonProvider.emit({ season: selSeason, provider: $event })"
+        >
+          @for (opt of providerOptions; track opt.value) {
+            <option [ngValue]="opt.value">
+              {{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}
+            </option>
+          }
+        </select>
       }
     }
   </div>
@@ -124,7 +139,7 @@
             [imageBlurred]="!ep.stillUrl && !!m.posterUrl"
             [title]="ep.title ?? ('media_detail.ep_no_title' | translate)"
             [subtitle]="ep.airDate ?? '—'"
-            [topLeftBadge]="'' + ep.episodeNumber"
+            [topLeftBadge]="episodeBadgeLabel(ep)"
             [status]="watchedEpisodeIds().has(ep.id) ? 'watched' : (!ep.hasFile ? 'missing' : null)"
             [progressPercent]="episodeProgress()[ep.id] ?? 0"
             [link]="episodeRoute(ep)"

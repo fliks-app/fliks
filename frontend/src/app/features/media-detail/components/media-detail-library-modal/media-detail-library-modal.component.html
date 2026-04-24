@@ -19,6 +19,22 @@
           }
         </select>
       </label>
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'media_detail.provider_section_title' | translate }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          name="provider"
+          [ngModel]="selectedProvider()"
+          (ngModelChange)="selectedProviderChange.emit($event)"
+        >
+          @for (opt of providerOptions; track opt.value) {
+            <option [ngValue]="opt.value">
+              {{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}
+            </option>
+          }
+        </select>
+        <span class="label-text-alt opacity-60">{{ 'media_detail.provider_override_hint' | translate }}</span>
+      </label>
       @if (saved()) {
         <div role="alert" class="alert alert-success text-sm py-2">{{ 'media_detail.library_saved' | translate }}</div>
       }

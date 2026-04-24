@@ -25,6 +25,15 @@ export class Season extends BaseEntity {
   @Column({ default: true })
   monitored: boolean;
 
+  /**
+   * Override of the media/library metadata provider for this season. Matched
+   * by seasonNumber against the override provider — if TMDB and TVDB disagree
+   * on numbering (anthologies, DVD order, …), the lookup may silently return
+   * nothing and a warning is logged. `null` → inherit.
+   */
+  @Column({ type: 'varchar', length: 16, nullable: true, default: null })
+  preferredProvider: string | null;
+
   @OneToMany(() => Episode, (episode) => episode.season, { cascade: true })
   episodes: Episode[];
 }

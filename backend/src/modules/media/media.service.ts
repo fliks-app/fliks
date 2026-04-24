@@ -574,10 +574,7 @@ export class MediaService {
 
   /** Returns the parent media id for a season — used by ACL on season-scoped endpoints. */
   async getMediaIdForSeason(seasonId: number): Promise<number> {
-    const s = await this.seasonRepo.findOne({
-      where: { id: seasonId },
-      select: ['id', 'mediaId'],
-    });
+    const s = await this.seasonRepo.findOne({ where: { id: seasonId } });
     if (!s) throw new NotFoundException(`Season #${seasonId} not found`);
     return s.mediaId;
   }
@@ -971,13 +968,15 @@ export class MediaService {
   // History
   // ---------------------------------------------------------------------------
 
-  async updateSeasonMonitored(
+  async updateSeason(
     seasonId: number,
-    monitored: boolean,
+    patch: { monitored?: boolean; preferredProvider?: 'tmdb' | 'tvdb' | null },
   ): Promise<Season> {
     const season = await this.seasonRepo.findOne({ where: { id: seasonId } });
     if (!season) throw new NotFoundException(`Season #${seasonId} not found`);
-    season.monitored = monitored;
+    if (patch.monitored !== undefined) season.monitored = patch.monitored;
+    if (patch.preferredProvider !== undefined)
+      season.preferredProvider = patch.preferredProvider;
     return this.seasonRepo.save(season);
   }
 
@@ -1097,29 +1096,18 @@ export class MediaService {
     const media = await this.mediaRepo.findOne({ where: { id: mediaId } });
     if (!media) throw new NotFoundException(`Media #${mediaId} not found`);
 
-    const { provider, externalId } = await this.resolveProviderForMedia(media);
+    const { provider, externalId } = await this.resolveProviderForMedia(media, {
+      season: episode.season,
+    });
 
-    // TMDB has a single-season endpoint; other providers use full seasons fetch
-    let tmdbEp:
-      | import('../metadata-providers/interfaces/metadata-provider.interface').EpisodeDetails
-      | undefined;
-    if (provider.name === 'tmdb') {
-      const tmdbSeason = await this.tmdb.getTvSeason(
-        externalId,
-        episode.season.seasonNumber,
-      );
-      tmdbEp = tmdbSeason.episodes.find(
-        (e) => e.episodeNumber === episode.episodeNumber,
-      );
-    } else {
-      const allSeasons = await provider.getTvShowSeasons(externalId);
-      const season = allSeasons.find(
-        (s) => s.seasonNumber === episode.season.seasonNumber,
-      );
-      tmdbEp = season?.episodes.find(
-        (e) => e.episodeNumber === episode.episodeNumber,
-      );
-    }
+    const seasonData = await this.fetchSingleSeason(
+      provider,
+      externalId,
+      episode.season.seasonNumber,
+    );
+    const tmdbEp = seasonData?.episodes.find(
+      (e) => e.episodeNumber === episode.episodeNumber,
+    );
 
     if (tmdbEp) {
       const updates: Partial<Episode> = {};
@@ -1143,15 +1131,20 @@ export class MediaService {
   }
 
   private async refreshSeriesEpisodes(media: Media): Promise<void> {
-    const { provider, externalId } = await this.resolveProviderForMedia(media);
-    const tmdbSeasons = await provider.getTvShowSeasons(externalId);
+    // 1. Media-level provider enumerates all seasons and provides defaults.
+    const mediaResolve = await this.resolveProviderForMedia(media);
+    const mediaSeasons = await mediaResolve.provider.getTvShowSeasons(
+      mediaResolve.externalId,
+    );
     const dbSeasons = await this.seasonRepo.find({
       where: { media: { id: media.id } },
       relations: ['episodes'],
     });
     const dbSeasonMap = new Map(dbSeasons.map((s) => [s.seasonNumber, s]));
 
-    for (const sd of tmdbSeasons) {
+    // 2. Upsert seasons + apply media-level episode data, skipping seasons
+    //    whose override points elsewhere (handled in the second pass).
+    for (const sd of mediaSeasons) {
       let dbSeason = dbSeasonMap.get(sd.seasonNumber);
       if (!dbSeason) {
         dbSeason = await this.seasonRepo.save(
@@ -1162,47 +1155,135 @@ export class MediaService {
           }),
         );
         dbSeason.episodes = [];
+        dbSeasonMap.set(sd.seasonNumber, dbSeason);
       }
+      if (
+        dbSeason.preferredProvider &&
+        dbSeason.preferredProvider !== mediaResolve.provider.name
+      ) {
+        continue;
+      }
+      await this.applySeasonDetails(dbSeason, sd);
+    }
 
-      const dbEpMap = new Map(
-        dbSeason.episodes.map((e) => [e.episodeNumber, e]),
+    // 3. Second pass: re-fetch overridden seasons from their own provider.
+    //    Cached by (providerName, externalId) so N overrides to the same
+    //    non-TMDB provider only trigger one getTvShowSeasons call.
+    const overridden = dbSeasons.filter(
+      (s) =>
+        s.preferredProvider &&
+        s.preferredProvider !== mediaResolve.provider.name,
+    );
+    if (!overridden.length) return;
+    const cache = new Map<string, SeasonDetails[]>();
+    for (const dbSeason of overridden) {
+      let overrideResolve: {
+        provider: IMetadataProvider;
+        externalId: string;
+      };
+      try {
+        overrideResolve = await this.resolveProviderForMedia(media, {
+          season: dbSeason,
+        });
+      } catch (err) {
+        this.log.warn(
+          `refreshSeriesEpisodes: season S${dbSeason.seasonNumber} override ` +
+            `"${dbSeason.preferredProvider}" failed — ${err instanceof Error ? err.message : 'unknown error'}. ` +
+            `Falling back to media-level data.`,
+        );
+        const fallback = mediaSeasons.find(
+          (s) => s.seasonNumber === dbSeason.seasonNumber,
+        );
+        if (fallback) await this.applySeasonDetails(dbSeason, fallback);
+        continue;
+      }
+      const seasonData = await this.fetchSingleSeason(
+        overrideResolve.provider,
+        overrideResolve.externalId,
+        dbSeason.seasonNumber,
+        cache,
       );
+      if (!seasonData) {
+        this.log.warn(
+          `refreshSeriesEpisodes: season S${dbSeason.seasonNumber} override ` +
+            `"${dbSeason.preferredProvider}" returned no matching season ` +
+            `(numbering mismatch?). Falling back to media-level data.`,
+        );
+        const fallback = mediaSeasons.find(
+          (s) => s.seasonNumber === dbSeason.seasonNumber,
+        );
+        if (fallback) await this.applySeasonDetails(dbSeason, fallback);
+        continue;
+      }
+      await this.applySeasonDetails(dbSeason, seasonData);
+    }
+  }
 
-      for (const ep of sd.episodes) {
-        const existing = dbEpMap.get(ep.episodeNumber);
-        if (existing) {
-          const updates: Partial<Episode> = {};
-          if (ep.title && ep.title !== existing.title) updates.title = ep.title;
-          if (ep.overview && ep.overview !== existing.overview)
-            updates.overview = ep.overview;
-          if (ep.airDate && ep.airDate !== existing.airDate)
-            updates.airDate = ep.airDate;
-          if (ep.runtime != null && ep.runtime !== existing.runtime)
-            updates.runtime = ep.runtime;
-          if (Object.keys(updates).length > 0) {
-            await this.episodeRepo.update(existing.id, updates);
-          }
-          if (ep.stillUrl) {
-            await this.downloadEpisodeStill(existing.id, ep.stillUrl);
-          }
-        } else {
-          const inserted = await this.episodeRepo.save(
-            this.episodeRepo.create({
-              season: dbSeason,
-              episodeNumber: ep.episodeNumber,
-              title: ep.title || undefined,
-              overview: ep.overview || undefined,
-              airDate: ep.airDate || undefined,
-              runtime: ep.runtime ?? undefined,
-              monitored: true,
-            }),
-          );
-          if (ep.stillUrl) {
-            await this.downloadEpisodeStill(inserted.id, ep.stillUrl);
-          }
+  /** Upsert episodes of one DB season from provider season details. */
+  private async applySeasonDetails(
+    dbSeason: Season,
+    sd: SeasonDetails,
+  ): Promise<void> {
+    const dbEpMap = new Map(
+      (dbSeason.episodes ?? []).map((e) => [e.episodeNumber, e]),
+    );
+    for (const ep of sd.episodes) {
+      const existing = dbEpMap.get(ep.episodeNumber);
+      if (existing) {
+        const updates: Partial<Episode> = {};
+        if (ep.title && ep.title !== existing.title) updates.title = ep.title;
+        if (ep.overview && ep.overview !== existing.overview)
+          updates.overview = ep.overview;
+        if (ep.airDate && ep.airDate !== existing.airDate)
+          updates.airDate = ep.airDate;
+        if (ep.runtime != null && ep.runtime !== existing.runtime)
+          updates.runtime = ep.runtime;
+        if (Object.keys(updates).length > 0) {
+          await this.episodeRepo.update(existing.id, updates);
+        }
+        if (ep.stillUrl) {
+          await this.downloadEpisodeStill(existing.id, ep.stillUrl);
+        }
+      } else {
+        const inserted = await this.episodeRepo.save(
+          this.episodeRepo.create({
+            season: dbSeason,
+            episodeNumber: ep.episodeNumber,
+            title: ep.title || undefined,
+            overview: ep.overview || undefined,
+            airDate: ep.airDate || undefined,
+            runtime: ep.runtime ?? undefined,
+            monitored: true,
+          }),
+        );
+        if (ep.stillUrl) {
+          await this.downloadEpisodeStill(inserted.id, ep.stillUrl);
         }
       }
     }
+  }
+
+  /**
+   * Fetch one season from the given provider. Uses TMDB's fast single-season
+   * endpoint when possible; otherwise falls back to a full `getTvShowSeasons`
+   * fetch (memoized via `cache` so sibling overrides don't re-fetch it).
+   */
+  private async fetchSingleSeason(
+    provider: IMetadataProvider,
+    externalId: string,
+    seasonNumber: number,
+    cache?: Map<string, SeasonDetails[]>,
+  ): Promise<SeasonDetails | undefined> {
+    if (provider.name === 'tmdb') {
+      return this.tmdb.getTvSeason(externalId, seasonNumber);
+    }
+    const key = `${provider.name}:${externalId}`;
+    let all = cache?.get(key);
+    if (!all) {
+      all = await provider.getTvShowSeasons(externalId);
+      cache?.set(key, all);
+    }
+    return all.find((s) => s.seasonNumber === seasonNumber);
   }
 
   private applyFilters(
@@ -1319,47 +1400,63 @@ export class MediaService {
 
   /**
    * Resolve which metadata provider + external ID to use for a media.
-   * Priority: root folder preferred provider → existing IDs → fallback.
-   * Cross-references IDs between providers if needed.
+   *
+   * Priority: season override → media override → library preference → fallback.
+   *
+   * Explicit overrides (season, media) are strict: if the preferred provider
+   * is configured but its external ID can't be resolved (missing cross-ref),
+   * this throws instead of silently falling back — so a user's "use TVDB for
+   * this" choice never degrades to TMDB without them knowing. The library-
+   * level preference stays soft (logs a warning, falls back) since it's a
+   * hint across many medias rather than a per-item contract.
    */
   private async resolveProviderForMedia(
     media: Media,
+    opts?: { season?: Season },
   ): Promise<{ provider: IMetadataProvider; externalId: string }> {
     const label = `"${media.title}" (#${media.id})`;
 
-    // 1. Library preferred provider
+    // 1. Season override (strict)
+    const seasonPref = opts?.season?.preferredProvider;
+    if (seasonPref) {
+      const resolved = await this.tryPreferred(media, seasonPref, 'season');
+      if (resolved) return resolved;
+      throw new BadRequestException(
+        `Season override "${seasonPref}" cannot be resolved for ${label}: ` +
+          `no matching external ID available (check API key + cross-reference).`,
+      );
+    }
+
+    // 2. Media override (strict)
+    if (media.preferredProvider) {
+      const resolved = await this.tryPreferred(
+        media,
+        media.preferredProvider,
+        'media',
+      );
+      if (resolved) return resolved;
+      throw new BadRequestException(
+        `Media override "${media.preferredProvider}" cannot be resolved for ` +
+          `${label}: no matching external ID available.`,
+      );
+    }
+
+    // 3. Library preference (soft)
     if (media.libraryId) {
       const lib = await this.libraryRepo.findOne({
         where: { id: media.libraryId },
       });
       const pref = lib?.preferredProvider;
       if (pref) {
-        this.log.log(`resolveProvider: ${label} — library prefers ${pref}`);
-        if (await this.providerRegistry.isAvailable(pref)) {
-          const p = this.providerRegistry.get(pref)!;
-          const resolved = await this.resolveExternalIdForProvider(
-            media,
-            p,
-            pref,
-          );
-          if (resolved) {
-            this.log.log(
-              `resolveProvider: ${label} — using ${pref} with id=${resolved}`,
-            );
-            return { provider: p, externalId: resolved };
-          }
-          this.log.warn(
-            `resolveProvider: ${label} — preferred ${pref} but no matching ID found, falling back`,
-          );
-        } else {
-          this.log.warn(
-            `resolveProvider: ${label} — preferred ${pref} but not available (no API key?)`,
-          );
-        }
+        const resolved = await this.tryPreferred(media, pref, 'library');
+        if (resolved) return resolved;
+        this.log.warn(
+          `resolveProvider: ${label} — library preferred ${pref} but no matching ID found, falling back`,
+        );
       }
     }
 
-    // 2. Fallback: use whichever ID + provider is available
+    // 4. Fallback: use whichever ID + provider is available
     if (media.tmdbId && (await this.providerRegistry.isAvailable('tmdb'))) {
       this.log.log(
         `resolveProvider: ${label} — fallback to tmdb (tmdbId=${media.tmdbId})`,
@@ -1382,6 +1479,37 @@ export class MediaService {
       return { provider: this.tmdb, externalId: String(media.tmdbId) };
     }
     throw new BadRequestException('No provider ID available for this media');
+  }
+
+  /**
+   * Try to resolve a preferred provider by name. Returns null if the provider
+   * is not configured (missing API key) or if cross-referencing to its ID
+   * fails. Caller decides whether to throw (strict) or fall through (soft).
+   */
+  private async tryPreferred(
+    media: Media,
+    pref: string,
+    origin: 'season' | 'media' | 'library',
+  ): Promise<{ provider: IMetadataProvider; externalId: string } | null> {
+    const label = `"${media.title}" (#${media.id})`;
+    this.log.log(`resolveProvider: ${label} — ${origin} prefers ${pref}`);
+    if (!(await this.providerRegistry.isAvailable(pref))) {
+      this.log.warn(
+        `resolveProvider: ${label} — ${origin} preferred ${pref} but not available (no API key?)`,
+      );
+      return null;
+    }
+    const provider = this.providerRegistry.get(pref)!;
+    const externalId = await this.resolveExternalIdForProvider(
+      media,
+      provider,
+      pref,
+    );
+    if (!externalId) return null;
+    this.log.log(
+      `resolveProvider: ${label} — using ${pref} with id=${externalId} (${origin})`,
+    );
+    return { provider, externalId };
   }
 
   /**
@@ -2079,10 +2207,13 @@ export class MediaService {
 
       const filename = path.basename(absPath);
 
-      // Fix missing episodeId for series files (e.g. imported from Sonarr without seasons)
-      if (media.type === MediaType.SERIES && dbFile.episodeId == null) {
-        const epNums = this.parseEpisodeNumbers(filename);
-        if (epNums) {
+      // Series files: parse filename, either link a missing episodeId OR
+      // patch an existing link with a newly-discovered multi-episode range
+      // (e.g. "S07E11-E12.mkv" already imported as E11 gets endEpisodeNumber
+      // set retroactively).
+      if (media.type === MediaType.SERIES) {
+        const epNums = this.naming.parseEpisodeNumbers(filename);
+        if (epNums && dbFile.episodeId == null) {
           try {
             let season = await this.seasonRepo.findOne({
               where: { media: { id: media.id }, seasonNumber: epNums.season },
@@ -2110,12 +2241,19 @@ export class MediaService {
                 this.episodeRepo.create({
                   season,
                   episodeNumber: epNums.episode,
+                  endEpisodeNumber: epNums.episodeEnd ?? null,
                   monitored: true,
                 }),
               );
               this.log.log(
                 `Rescan: created episode S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')} for media #${mediaId}`,
               );
+            } else if (
+              epNums.episodeEnd != null &&
+              ep.endEpisodeNumber !== epNums.episodeEnd
+            ) {
+              ep.endEpisodeNumber = epNums.episodeEnd;
+              await this.episodeRepo.save(ep);
             }
             dbFile.episode = ep;
             try {
@@ -2135,6 +2273,18 @@ export class MediaService {
             this.log.error(
               `Rescan[media #${mediaId}]: failed to create season/episode for refresh "${normPath}"`,
               err instanceof Error ? err.stack : err,
+            );
+          }
+        } else if (epNums?.episodeEnd != null && dbFile.episodeId != null) {
+          // Already-linked file: retroactively apply the range on its Episode.
+          const linked = await this.episodeRepo.findOne({
+            where: { id: dbFile.episodeId },
+          });
+          if (linked && linked.endEpisodeNumber !== epNums.episodeEnd) {
+            linked.endEpisodeNumber = epNums.episodeEnd;
+            await this.episodeRepo.save(linked);
+            this.log.log(
+              `Rescan: set endEpisodeNumber=${epNums.episodeEnd} on S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')} for media #${mediaId}`,
             );
           }
         }
@@ -2234,7 +2384,7 @@ export class MediaService {
       // Try to match episode for series — create season/episode on the fly if missing
       let episodeId: number | undefined;
       if (media.type === MediaType.SERIES) {
-        const epNums = this.parseEpisodeNumbers(filename);
+        const epNums = this.naming.parseEpisodeNumbers(filename);
         if (epNums) {
           try {
             let season = await this.seasonRepo.findOne({
@@ -2263,12 +2413,19 @@ export class MediaService {
                 this.episodeRepo.create({
                   season,
                   episodeNumber: epNums.episode,
+                  endEpisodeNumber: epNums.episodeEnd ?? null,
                   monitored: true,
                 }),
               );
               this.log.log(
                 `Rescan: created episode S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')} for media #${mediaId}`,
               );
+            } else if (
+              epNums.episodeEnd != null &&
+              ep.endEpisodeNumber !== epNums.episodeEnd
+            ) {
+              ep.endEpisodeNumber = epNums.episodeEnd;
+              await this.episodeRepo.save(ep);
             }
             episodeId = ep.id;
           } catch (err) {
@@ -2459,14 +2616,6 @@ export class MediaService {
       }
     }
     return files;
-  }
-
-  private parseEpisodeNumbers(
-    filename: string,
-  ): { season: number; episode: number } | null {
-    const m = filename.match(/[Ss](\d{1,2})[Ee](\d{1,3})/);
-    if (!m) return null;
-    return { season: parseInt(m[1], 10), episode: parseInt(m[2], 10) };
   }
 
   /**
