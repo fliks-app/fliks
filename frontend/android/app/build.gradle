@@ -51,13 +51,10 @@ dependencies {
     implementation 'com.google.android.gms:play-services-cast-framework:22.0.0'
     implementation 'androidx.mediarouter:mediarouter:1.7.0'
     // ExoPlayer (Media3) for native HLS playback
-    // Bumped from 1.5.1 → 1.6.0: fixes a race in ProgressiveMediaPeriod
-    // when MergingMediaPeriod children prepare in parallel with continueLoading
-    // (intermittent IllegalStateException at startup with multi-sub HLS).
-    implementation 'androidx.media3:media3-exoplayer:1.6.0'
-    implementation 'androidx.media3:media3-exoplayer-hls:1.6.0'
-    implementation 'androidx.media3:media3-datasource:1.6.0'
-    implementation 'androidx.media3:media3-ui:1.6.0'
+    implementation 'androidx.media3:media3-exoplayer:1.10.0'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.10.0'
+    implementation 'androidx.media3:media3-datasource:1.10.0'
+    implementation 'androidx.media3:media3-ui:1.10.0'
 }
 
 apply from: 'capacitor.build.gradle'

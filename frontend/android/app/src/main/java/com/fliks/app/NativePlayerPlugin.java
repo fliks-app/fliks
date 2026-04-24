@@ -322,7 +322,20 @@ public class NativePlayerPlugin extends Plugin {
     @PluginMethod()
     public void seek(PluginCall call) {
         double position = call.getDouble("position", 0.0);
-        mainHandler.post(() -> { if (player != null) player.seekTo((long) (position * 1000)); call.resolve(); });
+        mainHandler.post(() -> {
+            if (player != null) {
+                // Drop stale cues before the seek: SubtitleView holds whatever was
+                // last set until onCues fires again, and the TextRenderer may take
+                // several hundred ms to emit new cues for an external VTT after
+                // seekTo — leaving the previous line visible and reading as
+                // "subtitles shifted" until the next cue lands.
+                if (subtitleView != null) {
+                    subtitleView.setCues(java.util.Collections.emptyList());
+                }
+                player.seekTo((long) (position * 1000));
+            }
+            call.resolve();
+        });
     }
 
     @PluginMethod()
