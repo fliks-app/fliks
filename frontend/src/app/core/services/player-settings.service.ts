@@ -89,11 +89,14 @@ export class PlayerSettingsService {
   readonly settings = signal<PlayerSettings>(this.load());
 
   private load(): PlayerSettings {
+    // 10-foot UI: default to large subtitles on Android TV (still overridable by the user)
+    const isTv = typeof navigator !== 'undefined' && /AndroidTV\/\d/.test(navigator.userAgent);
+    const defaults: PlayerSettings = isTv ? { ...DEFAULTS, subtitleSize: 'large' } : { ...DEFAULTS };
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
-      if (raw) return { ...DEFAULTS, ...JSON.parse(raw) };
+      if (raw) return { ...defaults, ...JSON.parse(raw) };
     } catch { /* ignore */ }
-    return { ...DEFAULTS };
+    return defaults;
   }
 
   save(settings: PlayerSettings) {
