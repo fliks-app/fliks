@@ -39,7 +39,7 @@ export class LoginComponent {
     try {
       await this.auth.login(username, password);
       this.loading.set(false);
-      void this.router.navigate(['/']);
+      void this.router.navigate(['/'], { replaceUrl: true });
     } catch (err: unknown) {
       this.loading.set(false);
       const httpErr = err as { error?: { message?: string } };
