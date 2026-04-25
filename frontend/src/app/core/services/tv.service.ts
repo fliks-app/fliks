@@ -23,7 +23,20 @@ export class TvService {
     this.isTv.set(tv);
     if (typeof document !== 'undefined') {
       document.body.classList.toggle('tv', tv);
+      document.documentElement.classList.toggle('tv-host', tv);
+      if (tv) this.forceDesktopViewport();
     }
+  }
+
+  /**
+   * Some Android TV WebViews report a CSS device-width that is below Tailwind's
+   * `lg` breakpoint (because of high DPI). That makes every page render in
+   * "mobile" layout. Forcing a fixed CSS viewport width = 1280 guarantees we hit
+   * the desktop breakpoint (lg ≥ 1024) and get the 10-foot, sidebar-pinned UI.
+   */
+  private forceDesktopViewport() {
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+    if (meta) meta.content = 'width=1280, initial-scale=1, viewport-fit=cover';
   }
 
   private detect(): boolean {

@@ -1,11 +1,14 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
+  inject,
   input,
   output,
   signal,
   viewChild,
 } from '@angular/core';
+import { TvService } from '../../../core/services/tv.service';
 import { NgTemplateOutlet } from '@angular/common';
 import { BottomSheetComponent } from '../../../shared/components/bottom-sheet';
 import { TranslateModule } from '@ngx-translate/core';
@@ -64,6 +67,17 @@ import {
   templateUrl: './player-controls.html',
 })
 export class PlayerControlsComponent {
+  private readonly tvService = inject(TvService);
+  /** True on Android TV — drives 10-foot UI choices in the template. */
+  readonly isTv = this.tvService.isTv;
+  /**
+   * On TV we want the desktop-style layout (dropdowns instead of bottom-sheets,
+   * left/right toolbars instead of stacked mobile rows) because focus + D-pad
+   * navigation is far more natural with that structure. Templates use this
+   * computed instead of `isNative()` whenever a touch-only behavior is gated.
+   */
+  readonly isMobileTouch = computed(() => this.isNative() && !this.isTv());
+
   readonly visible = input(true);
   readonly paused = input(true);
   readonly loading = input(false);

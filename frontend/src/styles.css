@@ -122,8 +122,29 @@ body.native.hero-page {
 body.tv {
   /* Slight scale-up of base text for legibility from the couch */
   font-size: 18px;
-  /* Overscan margin so content isn't clipped on TVs without configurable safe area */
-  --tv-overscan: 2.5%;
+  /* Overscan compensation — symmetric margin on all 4 sides via center scaling.
+     transform creates a containing block so position:fixed children scale with
+     us and stay inside the safe area without per-element overrides. */
+  transform: scale(0.96);
+  transform-origin: center center;
+  /* TVs don't have notches; neutralize safe-area-inset-top so the navbar and
+     its spacer don't add extra top padding (the WebView can still report a
+     status-bar height even though no status bar is visible). */
+  --tv-safe-top: 0px;
+}
+/* Player (immersive) needs the full screen — no overscan compensation */
+body.tv.immersive {
+  transform: none;
+}
+/* Neutralize the status-bar safe-area inset on TV (the WebView can still report
+   a non-zero value even though no status bar is visible, and that bleeds into
+   navbar/spacer top padding). */
+body.tv .navbar { padding-top: 4px !important; }
+body.tv [class*="drawer-content"] > div[style*="safe-area-inset-top"] { height: 4rem !important; }
+/* Backfill the area behind the scaled body so it doesn't show whatever was
+   underneath (browser default white) — match the dark base so it's invisible */
+html.tv-host {
+  background: #1d232a;
 }
 /* Disable hover styles on TV — there is no pointer */
 body.tv *:hover {
