@@ -197,7 +197,10 @@
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
     <aside class="bg-base-100 w-64 min-h-full flex flex-col" style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 )">
       <div class="p-4 border-b border-base-200">
-        <a routerLink="/" class="text-2xl font-bold">{{ 'app.name' | translate }}</a>
+        <a routerLink="/" class="flex items-center gap-2 pl-2 text-2xl font-bold">
+          <img src="fliks-mark.png" alt="" class="h-8 w-8" />
+          <span>{{ 'app.name' | translate }}</span>
+        </a>
         @if (!networkService.isOnline()) {
           <span class="badge badge-sm badge-warning ml-2">{{ 'downloads.offline' | translate }}</span>
         }
