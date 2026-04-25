@@ -185,7 +185,12 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.syncNavbarTitleFromRoute();
   }
 
-  /** Applies `data.titleKey` from the deepest activated route (skipped on hero pages). */
+  /**
+   * Applies `data.titleKey` from the deepest activated route (skipped on hero pages).
+   * Routes without `titleKey` manage their own title via NavbarService (set in ngOnInit,
+   * cleared in ngOnDestroy) — so we don't clear here, otherwise component-set titles get
+   * wiped by the NavigationEnd that fires right after their setPageTitle call.
+   */
   private syncNavbarTitleFromRoute() {
     let key: string | undefined;
     let r = this.router.routerState.snapshot.root;
@@ -194,11 +199,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
       if (r.data['titleKey']) key = r.data['titleKey'] as string;
     }
     if (this.navbar.isHeroPage()) return;
-    if (key) {
-      this.navbar.setPageTitle(this.translate.instant(key));
-    } else {
-      this.navbar.clearPageTitle();
-    }
+    if (key) this.navbar.setPageTitle(this.translate.instant(key));
   }
 
   ngOnDestroy() {
