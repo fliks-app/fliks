@@ -116,4 +116,38 @@ body.native.hero-page {
   animation: slide-up 0.25s ease-out;
 }
 
+/* ============================================================================
+   Android TV / 10-foot UI overrides — body.tv toggled by TvService
+   ============================================================================ */
+body.tv {
+  /* Slight scale-up of base text for legibility from the couch */
+  font-size: 18px;
+  /* Overscan margin so content isn't clipped on TVs without configurable safe area */
+  --tv-overscan: 2.5%;
+}
+/* Disable hover styles on TV — there is no pointer */
+body.tv *:hover {
+  background-color: revert;
+}
+/* High-contrast focus ring for D-pad navigation */
+body.tv :is(a, button, [role="button"], [tabindex]):focus-visible,
+body.tv :is(a, button, [role="button"], [tabindex]):focus {
+  outline: 3px solid var(--color-primary, #7a3ff2);
+  outline-offset: 4px;
+  z-index: 1;
+  position: relative;
+}
+/* Cards/list items — scale up on focus to give a clear "selected" affordance */
+body.tv .media-card:focus-within,
+body.tv .media-card:focus,
+body.tv [data-tv-focusable]:focus-visible,
+body.tv [data-tv-focusable]:focus {
+  transform: scale(1.06);
+  transition: transform 0.15s ease-out;
+}
+/* Touch-only UI elements should be hidden on TV */
+body.tv [data-touch-only] {
+  display: none !important;
+}
+
 

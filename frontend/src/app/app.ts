@@ -7,6 +7,8 @@ import { CastPlayerService } from './core/services/cast-player.service';
 import { SseService } from './core/services/sse.service';
 import { DownloadManagerService } from './core/services/download-manager.service';
 import { BrowserDeviceProfileService } from './core/services/browser-device-profile.service';
+import { TvService } from './core/services/tv.service';
+import { TvSpatialNavService } from './core/services/tv-spatial-nav.service';
 import { ToastContainerComponent } from './shared/components/toast-container';
 import { ConfirmationModalComponent } from './shared/components/confirmation-modal';
 
@@ -23,6 +25,10 @@ export class App implements OnInit, OnDestroy {
   /** Injected to ensure DownloadManagerService singleton is created (authEffect, nativeEffect). */
   private readonly dlManager = inject(DownloadManagerService);
   private readonly deviceProfile = inject(BrowserDeviceProfileService);
+  /** Eagerly instantiate TvService so it can detect Android TV and set the body `tv` class. */
+  private readonly tv = inject(TvService);
+  /** Eagerly instantiate to bind the global D-pad handler on TV. */
+  private readonly tvSpatialNav = inject(TvSpatialNavService);
   private backButtonListener?: { remove: () => Promise<void> };
   private resumeListener?: { remove: () => Promise<void> };
 

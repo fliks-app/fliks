@@ -24,6 +24,7 @@ import { SseService } from '../../core/services/sse.service';
 import { ThemeService } from '../../core/services/theme.service';
 import { CastService } from '../../core/services/cast.service';
 import { NavbarService } from '../../core/services/navbar.service';
+import { TvService } from '../../core/services/tv.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
 import { NetworkService } from '../../core/services/network.service';
@@ -88,6 +89,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly networkService = inject(NetworkService);
   readonly castService = inject(CastService);
   readonly navbar = inject(NavbarService);
+  readonly tv = inject(TvService);
   readonly castPlayer = inject(CastPlayerService);
   private readonly title = inject(Title);
   private readonly translate = inject(TranslateService);

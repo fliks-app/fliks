@@ -1,6 +1,7 @@
 package media.fliks.app;
 
 import android.Manifest;
+import android.app.UiModeManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -40,6 +41,16 @@ public class MainActivity extends BridgeActivity {
                     != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this,
                     new String[]{ Manifest.permission.POST_NOTIFICATIONS }, 1001);
+            }
+        }
+
+        // Tag the WebView UA when running on Android TV so the frontend can adapt its
+        // layout (focus rings, larger fonts, no touch gestures, …). The frontend reads
+        // this via the TvService and toggles a `tv` body class.
+        if (isTvDevice() && getBridge() != null && getBridge().getWebView() != null) {
+            String ua = getBridge().getWebView().getSettings().getUserAgentString();
+            if (ua != null && !ua.contains("AndroidTV")) {
+                getBridge().getWebView().getSettings().setUserAgentString(ua + " AndroidTV/1");
             }
         }
 
@@ -130,6 +141,12 @@ public class MainActivity extends BridgeActivity {
         // changes; reapply the last requested state so nav/status icons keep their
         // theme-matching color (white on dark, dark on light).
         getWindow().getDecorView().post(this::applyLightStatusBar);
+    }
+
+    /** True when the device is in television (leanback) UI mode. */
+    private boolean isTvDevice() {
+        UiModeManager m = (UiModeManager) getSystemService(Context.UI_MODE_SERVICE);
+        return m != null && m.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION;
     }
 
     @Override
