@@ -20,6 +20,7 @@ import { ProfilesService, QualityProfile } from '../../core/services/api/profile
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
+import { NavbarService } from '../../core/services/navbar.service';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideSlidersHorizontal } from '@lucide/angular';
 
@@ -39,6 +40,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly scrollMemory = inject(ScrollMemoryService);
+  private readonly navbar = inject(NavbarService);
   private readonly injector = inject(Injector);
   private readonly translate = inject(TranslateService);
 
@@ -129,6 +131,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.library.set(lib ?? null);
       if (!lib) return;
 
+      this.navbar.setPageTitle(lib.name);
+
       // Restore filters
       const scrollKey = `library-${lib.id}`;
       const qp = this.route.snapshot.queryParamMap;
@@ -151,6 +155,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.scrollMemory.deactivate();
     this.list.destroy();
+    this.navbar.clearPageTitle();
   }
 
   scrollToLetter(letter: string) {
