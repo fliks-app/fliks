@@ -32,6 +32,11 @@
               [attr.title]="navbar.heroTitle()"
               >{{ navbar.heroTitle() }}</span>
           }
+        } @else if (isNative && isHomeRoute() && navbar.mobileNavTitle()) {
+          <span class="flex items-center gap-2 pl-2 text-lg font-bold min-w-0">
+            <img src="fliks-mark.png" alt="" class="h-7 w-7 shrink-0" />
+            <span class="truncate" [attr.title]="navbar.mobileNavTitle()">{{ navbar.mobileNavTitle() }}</span>
+          </span>
         } @else if (navbar.mobileNavTitle()) {
           <span class="block min-w-0 pl-2 text-lg font-bold truncate" [attr.title]="navbar.mobileNavTitle()">{{
             navbar.mobileNavTitle()

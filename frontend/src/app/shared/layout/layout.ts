@@ -102,6 +102,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly keyboardOpen = signal(false);
   readonly navbarHidden = signal(false);
   readonly navbarTransparent = this.navbar.navbarTransparent;
+  readonly isHomeRoute = signal(this.router.url === '/' || this.router.url.startsWith('/?'));
 
   // Sync Android status bar icons with navbar state
   private readonly statusBarEffect = Capacitor.isNativePlatform() ? effect(() => {
@@ -179,6 +180,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.router.events.subscribe(e => {
       if (e instanceof NavigationEnd) {
         this.bottomMenuOpen.set(false);
+        this.isHomeRoute.set(e.urlAfterRedirects === '/' || e.urlAfterRedirects.startsWith('/?'));
         this.syncNavbarTitleFromRoute();
       }
     });
