@@ -180,4 +180,32 @@ export class SeekbarComponent {
   onProgressLeave() {
     this.hovering.set(false);
   }
+
+  /**
+   * Keyboard handler — only active while the seekbar itself has focus
+   * (D-pad behavior aligned with Jellyfin: arrows only seek when "on" the
+   * progress bar; otherwise they navigate between controls).
+   *
+   *   ←/→     ±10s
+   *   Shift+← /→  ±30s
+   *   Home/End    jump to start/end
+   *   Space/Enter let the global player handler toggle play/pause
+   */
+  onKeydown(e: KeyboardEvent) {
+    const dur = this.duration();
+    if (!dur) return;
+    let target: number | null = null;
+    const step = e.shiftKey ? 30 : 10;
+    switch (e.key) {
+      case 'ArrowLeft':  target = this.currentTime() - step; break;
+      case 'ArrowRight': target = this.currentTime() + step; break;
+      case 'Home':       target = 0; break;
+      case 'End':        target = Math.max(0, dur - 1); break;
+    }
+    if (target === null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    target = Math.max(0, Math.min(target, dur));
+    this.seek.emit(target);
+  }
 }

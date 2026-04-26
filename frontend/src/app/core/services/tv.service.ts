@@ -19,24 +19,18 @@ export class TvService {
   readonly isTv = signal(false);
 
   constructor() {
-    const tv = this.detect();
+    // Source of truth = the `tv` body class set by main.ts before bootstrap.
+    // This keeps detection consistent across services even when the heuristic
+    // evolves: change main.ts and every consumer (TvSpatialNav, CardActions, …)
+    // sees the new result.
+    const fromBootstrap =
+      typeof document !== 'undefined' && document.body.classList.contains('tv');
+    const tv = fromBootstrap || this.detect();
     this.isTv.set(tv);
     if (typeof document !== 'undefined') {
       document.body.classList.toggle('tv', tv);
       document.documentElement.classList.toggle('tv-host', tv);
-      if (tv) this.forceDesktopViewport();
     }
-  }
-
-  /**
-   * Some Android TV WebViews report a CSS device-width that is below Tailwind's
-   * `lg` breakpoint (because of high DPI). That makes every page render in
-   * "mobile" layout. Forcing a fixed CSS viewport width = 1280 guarantees we hit
-   * the desktop breakpoint (lg ≥ 1024) and get the 10-foot, sidebar-pinned UI.
-   */
-  private forceDesktopViewport() {
-    const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
-    if (meta) meta.content = 'width=1280, initial-scale=1, viewport-fit=cover';
   }
 
   private detect(): boolean {

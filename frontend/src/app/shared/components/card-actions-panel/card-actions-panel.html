@@ -1,0 +1,62 @@
+@if (service.open()) {
+  @if (isTv()) {
+    <!-- TV: anchored dropdown -->
+    <div
+      class="fixed inset-0 z-[100]"
+      (click)="onClose()"
+    ></div>
+    <div
+      #menu
+      role="menu"
+      class="fixed z-[101] bg-neutral/95 backdrop-blur-xl rounded-2xl shadow-2xl py-2 ring-1 ring-white/10"
+      [style.top.px]="position()?.top"
+      [style.left.px]="position()?.left"
+      [style.width.px]="position()?.width"
+      (keydown)="onMenuKey($event)"
+    >
+      @if (title()) {
+        <div class="px-4 pt-2 pb-1 text-white/60 text-sm font-medium truncate">{{ title() }}</div>
+      }
+      @for (a of actions(); track a; let i = $index) {
+        <button
+          type="button"
+          role="menuitem"
+          data-action
+          [disabled]="a.disabled"
+          class="w-full flex items-center gap-3 px-4 py-3 text-left text-base rounded-md mx-2 my-0.5"
+          [class.text-white]="a.tone !== 'danger'"
+          [class.text-error]="a.tone === 'danger'"
+          [class.opacity-40]="a.disabled"
+          [class.bg-white/10]="i === activeIndex()"
+          [class.hover:bg-white/10]="!a.disabled"
+          [class.focus:bg-white/15]="!a.disabled"
+          (click)="trigger(a)"
+        >
+          <span class="flex-1 truncate">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
+        </button>
+      }
+    </div>
+  } @else {
+    <!-- Mobile: bottom sheet -->
+    <app-bottom-sheet [open]="true" (closed)="onClose()">
+      <div class="px-2 pb-2">
+        @if (title()) {
+          <div class="px-4 py-2 text-white/60 text-sm font-medium truncate">{{ title() }}</div>
+        }
+        @for (a of actions(); track a) {
+          <button
+            type="button"
+            [disabled]="a.disabled"
+            class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base rounded-lg active:bg-white/10"
+            [class.text-white]="a.tone !== 'danger'"
+            [class.text-error]="a.tone === 'danger'"
+            [class.opacity-40]="a.disabled"
+            (click)="trigger(a)"
+          >
+            <span class="flex-1">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
+          </button>
+        }
+      </div>
+    </app-bottom-sheet>
+  }
+}

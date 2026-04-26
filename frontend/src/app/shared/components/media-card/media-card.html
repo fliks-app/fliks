@@ -11,6 +11,8 @@
     tabindex="0"
     role="button"
     [attr.aria-label]="_title()"
+    [appCardActions]="cardActions()"
+    [actionsTitle]="_title()"
     (click)="onCardClick()"
     (keydown.enter)="onCardClick()"
     (keydown.space)="onCardClick(); $event.preventDefault()"
@@ -125,7 +127,7 @@
   <!-- Title below -->
   <div class="pt-1.5">
     @if (_link()) {
-      <a [routerLink]="_link()" class="hover:underline">
+      <a [routerLink]="_link()" class="hover:underline" [attr.tabindex]="innerTabindex()">
         <h3 class="text-sm font-medium line-clamp-1 leading-snug">{{ _title() }}</h3>
       </a>
     } @else {
@@ -133,7 +135,7 @@
     }
     @if (_subtitle()) {
       @if (subtitleLink()) {
-        <a [routerLink]="subtitleLink()" class="hover:underline">
+        <a [routerLink]="subtitleLink()" class="hover:underline" [attr.tabindex]="innerTabindex()">
           <p class="text-xs text-base-content/50 line-clamp-1">{{ _subtitle() }}</p>
         </a>
       } @else {

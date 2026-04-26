@@ -140,8 +140,15 @@ export class PlayerControlsComponent {
   /** Settings dropdown panel navigation */
   readonly settingsPanel = signal<'main' | 'quality'>('main');
 
+  /**
+   * Which click-driven dropdown is open, or null. Replaces DaisyUI's
+   * focus-within trigger so dropdowns no longer pop open just by D-pad
+   * focusing their button — a click/Enter is required (Jellyfin-aligned).
+   */
+  readonly openDropdown = signal<'subtitles' | 'audio' | 'speed' | 'settings' | null>(null);
+
   /** True when any desktop dropdown is open — prevents play/pause on backdrop click. */
-  readonly hasOpenDropdown = signal(false);
+  readonly hasOpenDropdown = computed(() => this.openDropdown() !== null);
 
   /** Mobile bottom sheet state */
   readonly activeSheet = signal<'subtitles' | 'audio' | 'speed' | 'settings' | null>(null);
@@ -173,19 +180,17 @@ export class PlayerControlsComponent {
     return this.seekbar()?.displayTime() ?? this.currentTime();
   }
 
-  /** Close a daisyUI tabindex dropdown by blurring its trigger. */
-  closeDropdown(event: Event) {
-    const el = (event.target as HTMLElement).closest('.dropdown');
-    if (el) (el.querySelector('[tabindex]') as HTMLElement)?.blur();
-    this.settingsPanel.set('main');
-    this.hasOpenDropdown.set(false);
+  /** Toggle a click-driven dropdown. Closes any other open one. */
+  toggleDropdown(name: 'subtitles' | 'audio' | 'speed' | 'settings', event?: Event) {
+    event?.stopPropagation();
+    if (name === 'settings') this.settingsPanel.set('main');
+    this.openDropdown.set(this.openDropdown() === name ? null : name);
   }
 
-  onDropdownFocus() { this.hasOpenDropdown.set(true); }
-  onDropdownBlur() { this.hasOpenDropdown.set(false); }
-
-  /** Reset settings panel when opening the dropdown. */
-  openSettings() {
+  /** Close current dropdown after an item selection (and reset settings panel). */
+  closeDropdown(event?: Event) {
+    event?.stopPropagation();
+    this.openDropdown.set(null);
     this.settingsPanel.set('main');
   }
 }

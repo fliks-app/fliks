@@ -15,10 +15,10 @@ import { LucideChevronLeft, LucideChevronRight } from '@lucide/angular';
   imports: [LucideChevronLeft, LucideChevronRight],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <!-- Header: title + arrows -->
+    <!-- Header: title + arrows (arrows are mouse-only — hidden on touch/TV) -->
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-lg font-bold">{{ title() }}</h2>
-      <div class="flex gap-1">
+      <div class="flex gap-1 scroll-arrows">
         <button
           class="btn btn-ghost btn-sm btn-circle"
           [disabled]="atStart()"
@@ -51,6 +51,12 @@ import { LucideChevronLeft, LucideChevronRight } from '@lucide/angular';
     }
     .scrollbar-none::-webkit-scrollbar {
       display: none;
+    }
+    /* Hide the < > scroll arrows on touch / TV — they're mouse-only ergonomy.
+       Use both a body.tv selector (reliable) and a hover-media query (web touch). */
+    :host-context(body.tv) .scroll-arrows { display: none; }
+    @media (hover: none) {
+      .scroll-arrows { display: none; }
     }
   `],
 })

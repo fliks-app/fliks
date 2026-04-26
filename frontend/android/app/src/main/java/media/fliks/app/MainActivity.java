@@ -48,10 +48,24 @@ public class MainActivity extends BridgeActivity {
         // layout (focus rings, larger fonts, no touch gestures, …). The frontend reads
         // this via the TvService and toggles a `tv` body class.
         if (isTvDevice() && getBridge() != null && getBridge().getWebView() != null) {
-            String ua = getBridge().getWebView().getSettings().getUserAgentString();
+            android.webkit.WebSettings settings = getBridge().getWebView().getSettings();
+            String ua = settings.getUserAgentString();
             if (ua != null && !ua.contains("AndroidTV")) {
-                getBridge().getWebView().getSettings().setUserAgentString(ua + " AndroidTV/1");
+                settings.setUserAgentString(ua + " AndroidTV/1");
             }
+            // Required for the `<meta name="viewport" content="width=1280, …">` tag
+            // we set in main.ts to actually take effect on the WebView. Without these
+            // two, Android renders at device-width (often ~640 CSS px on TV with
+            // high DPI) and Tailwind never reaches the lg breakpoint.
+            settings.setUseWideViewPort(true);
+            settings.setLoadWithOverviewMode(true);
+            // The WebView must be focusable for D-pad key events to reach the JS
+            // KeyboardEvent listeners. By default Capacitor's WebView is focusable,
+            // but on TV some launchers strip focus on resume — re-assert it.
+            android.webkit.WebView wv = getBridge().getWebView();
+            wv.setFocusable(true);
+            wv.setFocusableInTouchMode(true);
+            wv.requestFocus();
         }
 
         Window window = getWindow();

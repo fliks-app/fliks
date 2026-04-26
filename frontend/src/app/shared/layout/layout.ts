@@ -29,6 +29,7 @@ import { CastPlayerService } from '../../core/services/cast-player.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
 import { NetworkService } from '../../core/services/network.service';
 import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
+import { CardActionsPanelComponent } from '../components/card-actions-panel/card-actions-panel';
 import { UserMenuComponent } from '../components/user-menu';
 import { LucideIconComponent } from '../components/lucide-icon';
 import {
@@ -70,6 +71,7 @@ import {
     LucideUserCog, LucideShield, LucideRepeat, LucideHistory,
     LucideEllipsisVertical, LucideUsers,
     CastOverlayComponent,
+    CardActionsPanelComponent,
     UserMenuComponent,
     LucideIconComponent,
   ],

@@ -1,4 +1,4 @@
-import { Injectable, inject, DestroyRef } from '@angular/core';
+import { Injectable, inject, DestroyRef, effect } from '@angular/core';
 import { TvService } from './tv.service';
 
 /**
@@ -21,28 +21,53 @@ export class TvSpatialNavService {
   private bound = false;
 
   constructor() {
-    if (this.tv.isTv()) this.bind();
+    // Use an effect so we react to isTv flipping later (e.g. when TvService is
+    // instantiated after us, or if detection is updated post-bootstrap).
+    effect(() => {
+      if (this.tv.isTv() && !this.bound) this.bind();
+    });
   }
 
   private bind() {
     if (this.bound || typeof window === 'undefined') return;
     this.bound = true;
     const handler = (e: KeyboardEvent) => this.onKey(e);
+    // Single listener on window (capture phase) — earlier we doubled up with
+    // document AND window which made each keypress fire the handler twice and
+    // skip every other card on horizontal nav.
     window.addEventListener('keydown', handler, { capture: true });
     this.destroyRef.onDestroy(() => window.removeEventListener('keydown', handler, { capture: true } as any));
+    // Android TV WebView often leaves the body un-focused on first paint, which
+    // means D-pad events are consumed by the native View and never reach JS.
+    // Pushing focus to the first interactive element guarantees subsequent
+    // keydowns are dispatched into our handler.
+    queueMicrotask(() => this.focusFirstIfNoFocus());
+  }
+
+  private focusFirstIfNoFocus() {
+    if (typeof document === 'undefined') return;
+    if (document.activeElement && document.activeElement !== document.body) return;
+    const all = collectFocusables();
+    all[0]?.focus({ preventScroll: true });
   }
 
   private onKey(e: KeyboardEvent) {
-    const dir = ARROW_TO_DIR[e.key];
+    // Some Android WebView builds don't report a `key` for D-pad events but
+    // still ship `keyCode` 37/38/39/40 — accept either form.
+    const dir = ARROW_TO_DIR[e.key] ?? KEYCODE_TO_DIR[e.keyCode];
     if (!dir) return;
     // Skip if focus is inside a text input — let the input handle caret movement
-    const tag = (document.activeElement as HTMLElement | null)?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement as HTMLElement | null)?.isContentEditable) {
+    const active = document.activeElement as HTMLElement | null;
+    const tag = active?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || active?.isContentEditable) {
       return;
     }
-    // Skip while the immersive player owns the keyboard (it handles ArrowLeft/Right
-    // for seek, ArrowUp/Down for volume, etc.)
-    if (document.body.classList.contains('immersive')) return;
+    // Skip on sliders (seekbar, volume) — they handle ArrowLeft/Right themselves
+    // for value adjustment. role="slider" is the canonical signal; we also accept
+    // an opt-out attribute for elements that own their own arrow handling.
+    if (active?.matches('[role="slider"], [data-tv-skip-spatial], [data-tv-skip-spatial] *')) {
+      return;
+    }
     const next = this.findNeighbor(dir);
     if (next) {
       e.preventDefault();
@@ -64,19 +89,23 @@ export class TvSpatialNavService {
     const fromCy = fromRect.top + fromRect.height / 2;
     const horizontal = dir === 'left' || dir === 'right';
 
-    // Two-pass selection: first try elements that overlap the source axis range
-    // (i.e. are visually "in line" with the current focus). Only fall back to a
-    // weighted score if nothing in the same row/column qualifies. This gives D-pad
-    // behavior matching what users expect on TV: Right always goes to the *next*
-    // element in the same row, never diagonally jumps to another row.
+    // Three-pass selection:
+    //   1. In-line: candidate's box overlaps the source's perpendicular axis
+    //      (same row for horizontal nav, same column for vertical) → pick
+    //      closest by primary distance. Matches user intent in 90% of cases.
+    //   2. Off-line in 45° cone: nothing in the same row/col, take the
+    //      closest candidate within 45° of the requested direction.
+    //   3. Anything in the half-plane: last-resort fallback so the D-pad
+    //      always finds *something* (e.g. reaching the top-left hamburger
+    //      from a center button on a hero page would otherwise be stuck).
     const inLine: { el: HTMLElement; primary: number }[] = [];
     const offLine: { el: HTMLElement; score: number }[] = [];
+    const anywhere: { el: HTMLElement; score: number }[] = [];
 
     for (const el of all) {
       if (el === active) continue;
       const r = el.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
-      // Skip elements that are visually unreachable (offscreen, pointer-events-none)
       if (getComputedStyle(el).pointerEvents === 'none') continue;
 
       const cx = r.left + r.width / 2;
@@ -84,7 +113,6 @@ export class TvSpatialNavService {
       const dx = cx - fromCx;
       const dy = cy - fromCy;
 
-      // Filter by direction (with a 4px dead-zone for sub-pixel jitter)
       switch (dir) {
         case 'left':  if (dx >= -4) continue; break;
         case 'right': if (dx <=  4) continue; break;
@@ -92,24 +120,19 @@ export class TvSpatialNavService {
         case 'down':  if (dy <=  4) continue; break;
       }
 
-      // "In line" = candidate's box overlaps the source's perpendicular axis.
-      // For horizontal nav: candidate's vertical extent overlaps source's vertical extent.
       const sameRowOrCol = horizontal
         ? (r.top < fromRect.bottom && r.bottom > fromRect.top)
         : (r.left < fromRect.right && r.right > fromRect.left);
-
       const primary = horizontal ? Math.abs(dx) : Math.abs(dy);
       const cross   = horizontal ? Math.abs(dy) : Math.abs(dx);
 
       if (sameRowOrCol) {
         inLine.push({ el, primary });
-      } else {
-        // Constrain off-line candidates to a 45° cone (cross < primary) so we
-        // don't snap to a button far in cross-axis direction
-        if (cross > primary) continue;
-        // Heavy cross-axis penalty so an off-line candidate only wins if it's
-        // closer than any in-line option (which there are none in this branch).
+      } else if (cross <= primary) {
         offLine.push({ el, score: primary * primary + 16 * cross * cross });
+      } else {
+        // Last-resort: heavy cross-axis penalty, but still considered
+        anywhere.push({ el, score: primary * primary + 64 * cross * cross });
       }
     }
 
@@ -120,6 +143,10 @@ export class TvSpatialNavService {
     if (offLine.length) {
       offLine.sort((a, b) => a.score - b.score);
       return offLine[0].el;
+    }
+    if (anywhere.length) {
+      anywhere.sort((a, b) => a.score - b.score);
+      return anywhere[0].el;
     }
     return null;
   }
@@ -132,6 +159,13 @@ const ARROW_TO_DIR: Record<string, 'left' | 'right' | 'up' | 'down' | undefined>
   ArrowDown: 'down',
 };
 
+const KEYCODE_TO_DIR: Record<number, 'left' | 'right' | 'up' | 'down' | undefined> = {
+  37: 'left',
+  38: 'up',
+  39: 'right',
+  40: 'down',
+};
+
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [data-tv-focusable]';
 
@@ -140,6 +174,16 @@ function collectFocusables(): HTMLElement[] {
   const visible = nodes.filter((el) => {
     if (el.hasAttribute('disabled')) return false;
     if (el.getAttribute('aria-hidden') === 'true') return false;
+    // offsetParent is null when the element (or any ancestor) has display:none,
+    // visibility:hidden, or is detached — covers the cases where a parent hides
+    // a focusable child via class toggling without the child itself being hidden.
+    if (el.offsetParent === null && el.tagName !== 'BODY') return false;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return false;
+    // Reject focusables that are positioned entirely off-screen — DaisyUI's
+    // drawer-toggle checkbox lives at left: -100% and would otherwise pollute
+    // spatial nav (Left key would teleport focus into it).
+    if (r.right <= 0 || r.bottom <= 0) return false;
     const style = getComputedStyle(el);
     if (style.visibility === 'hidden' || style.display === 'none') return false;
     return true;

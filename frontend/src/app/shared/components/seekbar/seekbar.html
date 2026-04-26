@@ -1,9 +1,15 @@
 <div
-  class="group relative w-full flex items-center cursor-pointer touch-none"
+  class="group relative w-full flex items-center cursor-pointer touch-none focus:outline-none"
   [class]="variant() === 'player' ? 'h-6' : 'h-5'"
+  tabindex="0"
+  role="slider"
+  [attr.aria-valuemin]="0"
+  [attr.aria-valuemax]="duration() || 0"
+  [attr.aria-valuenow]="currentTime()"
   (pointerdown)="onProgressDown($event)"
   (pointermove)="onProgressHover($event)"
   (pointerleave)="onProgressLeave()"
+  (keydown)="onKeydown($event)"
 >
   <!-- Seek tooltip -->
   @if (showTooltip() && (hovering() || dragging()) && duration()) {

@@ -1,10 +1,10 @@
-<div class="drawer min-h-screen" [class.lg:drawer-open]="!isNative || tv.isTv()">
+<div class="drawer min-h-screen" [class.lg:drawer-open]="!isNative">
   <input id="sidebar" type="checkbox" class="drawer-toggle" />
   <div class="drawer-content flex flex-col relative">
     <nav
       class="navbar fixed top-0 left-0 right-0 z-30 transition-all duration-300"
       style="padding-top: calc(env(safe-area-inset-top, 0px) + 4px)"
-      [class.lg:hidden]="!isNative || tv.isTv()"
+      [class.lg:hidden]="!isNative"
       [class.-translate-y-full]="navbarHidden()"
       [class.bg-base-100]="!navbarTransparent()"
       [class.shadow-sm]="!navbarTransparent()"
@@ -18,7 +18,7 @@
             <svg lucideChevronLeft class="h-5 w-5"></svg>
           </button>
         }
-        @if (!isNative) {
+        @if (!isNative || tv.isTv()) {
           <label for="sidebar" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate">
             <svg lucideMenu class="h-5 w-5"></svg>
           </label>
@@ -67,10 +67,10 @@
       </div>
     </nav>
     <!-- Spacer for fixed navbar on mobile (navbar height + safe area; reduced on hero pages so fanart extends under status bar) -->
-    <div [class.lg:hidden]="!isNative || tv.isTv()" [style.height]="navbar.isHeroPage() ? '0px' : 'calc(4rem + env(safe-area-inset-top, 0px))'"></div>
+    <div [class.lg:hidden]="!isNative" [style.height]="navbar.isHeroPage() ? '0px' : 'calc(4rem + env(safe-area-inset-top, 0px))'"></div>
     <!-- Desktop top-right: Cast + User -->
     <div class="hidden items-center justify-end gap-1 absolute top-3 right-4 z-50 pointer-events-none [&>*]:pointer-events-auto"
-         [class.lg:flex]="!isNative || tv.isTv()">
+         [class.lg:flex]="!isNative">
       @if (castPlayer.hasMedia()) {
         <button class="btn btn-ghost btn-sm gap-2" (click)="toggleCastOverlay()">
           <svg lucideCast class="h-5 w-5 text-info"></svg>
@@ -91,7 +91,7 @@
     <main
       class="min-w-0 flex-1 p-4 lg:p-6"
       [class.overflow-x-hidden]="!navbar.isHeroPage()"
-      [class.lg:pt-12]="!navbar.isHeroPage() && (!isNative || tv.isTv())"
+      [class.lg:pt-12]="!navbar.isHeroPage() && !isNative"
     >
       @if (!networkService.isOnline()) {
         <div class="alert alert-warning mb-4 flex items-center justify-between py-2">
@@ -101,7 +101,7 @@
       }
       <router-outlet />
     </main>
-    <!-- Bottom spacer for native bottom bar (skip on TV — no bottom bar) -->
+    <!-- Bottom spacer for native bottom bar (TV doesn't get the bottom bar) -->
     @if (isNative && !tv.isTv()) {
       <div class="h-20"></div>
     }
@@ -197,6 +197,9 @@
 
   <!-- Cast overlay (chip + card) — global, persists across navigation -->
   <app-cast-overlay />
+
+  <!-- Card actions panel (TV menu button / mobile long-press) — single instance -->
+  <app-card-actions-panel />
 
   <div class="drawer-side z-40" [class.hidden]="isNative && !tv.isTv()">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
