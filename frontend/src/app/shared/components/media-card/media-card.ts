@@ -7,6 +7,9 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { Media } from '../../../core/services/api/media.service';
 import { Capacitor } from '@capacitor/core';
 import { computeMediaBarStatus, computeMediaBarPercent } from '../../utils/media-status.util';
+import { CardActionsDirective } from '../../directives/card-actions.directive';
+import { CardAction } from '../../../core/services/card-actions.service';
+import { TvService } from '../../../core/services/tv.service';
 
 export type MediaCardAspect = 'portrait' | 'landscape';
 
@@ -24,14 +27,23 @@ export type CardStatus = 'watched' | 'missing' | null;
 @Component({
   selector: 'app-media-card',
   imports: [RouterLink, NgClass, DecimalPipe, ResolveUrlPipe, TranslateModule,
-    LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideX, LucideCircleCheck, LucideCircleX],
+    LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideX, LucideCircleCheck, LucideCircleX,
+    CardActionsDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-card.html',
 })
 export class MediaCardComponent {
   private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);
+  private readonly tv = inject(TvService);
   protected readonly isNative = Capacitor.isNativePlatform();
+  /**
+   * On TV the figure is the single focus target — child links (title, subtitle,
+   * hover overlay) are visually still navigable via the contextual actions
+   * panel but should not steal focus from D-pad navigation, so we mark them
+   * with tabindex=-1.
+   */
+  protected readonly innerTabindex = computed(() => this.tv.isTv() ? -1 : null);
 
   // Data source (auto-derives imageUrl, title, rating, link, playable, barStatus, barPercent)
   readonly media = input<Media | null>(null);
@@ -139,6 +151,42 @@ export class MediaCardComponent {
       void this.router.navigate(['/watch', file.id], { queryParams: qp });
     }
   }
+
+  /**
+   * Actions exposed via the contextual panel (TV menu button / mobile long-press).
+   * The set is derived from the same flags that drive the inline buttons so a
+   * card always advertises only what it can actually do.
+   */
+  protected readonly cardActions = computed((): CardAction[] => {
+    const actions: CardAction[] = [];
+    if (this._link()) {
+      actions.push({
+        labelKey: 'media_card.action_open',
+        run: () => this.onCardClick(),
+      });
+    }
+    if (this._playable()) {
+      actions.push({
+        labelKey: 'media_card.action_play',
+        run: () => this.onPlayClick(new Event('synthetic')),
+      });
+    }
+    if (this.interactiveWatched()) {
+      const watched = this.status() === 'watched';
+      actions.push({
+        labelKey: watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched',
+        run: () => this.watchedToggled.emit(!watched),
+      });
+    }
+    if (this.dismissable()) {
+      actions.push({
+        labelKey: 'media_card.action_remove',
+        tone: 'danger',
+        run: () => this.dismissed.emit(),
+      });
+    }
+    return actions;
+  });
 
   /** Status badge shown in the top-left corner of the poster. */
   protected readonly statusBadge = computed((): { text: string; class: string } | null => {

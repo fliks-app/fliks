@@ -2,23 +2,23 @@
 <div
   class="absolute top-0 left-0 right-0 z-40 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent transition-opacity duration-300 px-10 py-5"
   style="padding-left: max(var(--ctrl-px), env(safe-area-inset-left)); padding-right: max(var(--ctrl-px), env(safe-area-inset-right)); padding-top: max(var(--ctrl-py), env(safe-area-inset-top));"
-  [style.--ctrl-px]="isNative() ? '1rem' : '2.5rem'"
-  [style.--ctrl-py]="isNative() ? '0.75rem' : '1.25rem'"
+  [style.--ctrl-px]="isMobileTouch() ? '1rem' : '2.5rem'"
+  [style.--ctrl-py]="isMobileTouch() ? '0.75rem' : '1.25rem'"
   [class.opacity-0]="!visible()"
   [class.pointer-events-none]="!visible()"
 >
   <!-- Left: back + title -->
   <div class="flex items-center gap-2 min-w-0">
-    <button type="button" class="btn btn-ghost btn-circle text-white" [class]="isNative() ? 'btn-sm' : 'btn-md'" (click)="back.emit()">
+    <button type="button" class="btn btn-ghost btn-circle text-white" [class]="isMobileTouch() ? 'btn-sm' : 'btn-md'" (click)="back.emit()">
       <!-- lucide:chevron-left -->
-      <svg lucideChevronLeft [class]="isNative() ? 'h-6 w-6' : 'h-7 w-7'"></svg>
+      <svg lucideChevronLeft [class]="isMobileTouch() ? 'h-6 w-6' : 'h-7 w-7'"></svg>
     </button>
-    <span class="text-white font-semibold truncate" [class]="isNative() ? 'text-lg' : 'text-xl'">{{ mediaTitle() }}</span>
+    <span class="text-white font-semibold truncate" [class]="isMobileTouch() ? 'text-lg' : 'text-xl'">{{ mediaTitle() }}</span>
   </div>
 
   <!-- Right -->
   <div class="flex items-center gap-2">
-    @if (!isNative()) {
+    @if (!isMobileTouch()) {
       <input
         type="range"
         class="range range-xs w-28 opacity-70 hover:opacity-100"
@@ -40,7 +40,7 @@
     }
     <!-- lucide:picture-in-picture-2 -->
     <button type="button" class="btn btn-ghost btn-circle text-white btn-sm lg:btn-md" (click)="togglePip.emit()">
-      <svg lucidePictureInPicture2 [class]="isNative() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+      <svg lucidePictureInPicture2 [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
     </button>
     <!-- Cast -->
     @if (castAvailable()) {
@@ -58,11 +58,11 @@
 <!-- ===== CENTER OVERLAY (tap zone) ===== -->
 <div
   class="absolute inset-0 z-30 flex items-center justify-center"
-  (click)="isNative() ? tapOverlay.emit() : hasOpenDropdown() ? null : togglePlay.emit()"
-  (dblclick)="isNative() ? null : toggleFullscreen.emit()"
+  (click)="isMobileTouch() ? tapOverlay.emit() : hasOpenDropdown() ? closeDropdown($event) : togglePlay.emit()"
+  (dblclick)="isMobileTouch() ? null : toggleFullscreen.emit()"
 >
   <!-- Mobile: big center controls (rewind / play / forward) -->
-  @if (isNative() && !loading() && !buffering()) {
+  @if (isMobileTouch() && !loading() && !buffering()) {
     <div
       class="flex items-center gap-6 transition-opacity duration-200"
       [class.opacity-0]="!visible()"
@@ -91,10 +91,10 @@
 <!-- ===== BOTTOM SECTION ===== -->
 <div
   class="absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-opacity duration-300 pt-12"
-  [class]="isNative() ? 'px-4' : 'px-10 pb-4'"
+  [class]="isMobileTouch() ? 'px-4' : 'px-10 pb-4'"
   style="padding-left: max(var(--ctrl-px), env(safe-area-inset-left)); padding-right: max(var(--ctrl-px), env(safe-area-inset-right)); padding-bottom: max(var(--ctrl-pb), env(safe-area-inset-bottom));"
-  [style.--ctrl-px]="isNative() ? '1rem' : '2.5rem'"
-  [style.--ctrl-pb]="isNative() ? '0.5rem' : '1rem'"
+  [style.--ctrl-px]="isMobileTouch() ? '1rem' : '2.5rem'"
+  [style.--ctrl-pb]="isMobileTouch() ? '0.5rem' : '1rem'"
   [class.opacity-0]="!visible()"
   [class.pointer-events-none]="!visible()"
 >
@@ -104,11 +104,11 @@
       @if (episodeTitle()) {
         <div class="text-white/60 font-semibold text-lg truncate">{{ episodeTitle() }}</div>
       }
-      <div class="text-white font-bold truncate" [class]="isNative() ? 'text-lg' : 'text-4xl'">{{ mediaTitle() }}</div>
+      <div class="text-white font-bold truncate" [class]="isMobileTouch() ? 'text-lg' : 'text-4xl'">{{ mediaTitle() }}</div>
     </div>
 
     <!-- Mobile: action buttons aligned right -->
-    @if (isNative()) {
+    @if (isMobileTouch()) {
       <div class="flex items-center gap-0.5 shrink-0">
         @if (hasNextEpisode()) {
           <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" (click)="nextEpisode.emit()">
@@ -148,12 +148,12 @@
 
   <!-- Duration row -->
   <div class="flex items-center justify-between mt-0.5">
-    <span class="text-white/70 tabular-nums" [class]="isNative() ? 'text-xs' : 'text-sm'">{{ formatTime(getDisplayTime()) }}</span>
-    <span class="text-white/70 tabular-nums" [class]="isNative() ? 'text-xs' : 'text-sm'">{{ formatRemaining(getDisplayTime(), duration()) }} / {{ formatTime(duration()) }}</span>
+    <span class="text-white/70 tabular-nums" [class]="isMobileTouch() ? 'text-xs' : 'text-sm'">{{ formatTime(getDisplayTime()) }}</span>
+    <span class="text-white/70 tabular-nums" [class]="isMobileTouch() ? 'text-xs' : 'text-sm'">{{ formatRemaining(getDisplayTime(), duration()) }} / {{ formatTime(duration()) }}</span>
   </div>
 
   <!-- Desktop: buttons row BELOW duration -->
-  @if (!isNative()) {
+  @if (!isMobileTouch()) {
     <div class="flex items-center justify-between mt-2 mb-1">
       <!-- Left: playback controls -->
       <div class="flex items-center gap-1.5">
@@ -185,11 +185,11 @@
         }
         <!-- Subtitles dropdown -->
         @if (availableSubtitles().length > 0) {
-        <div class="dropdown dropdown-top dropdown-end" (focusin)="onDropdownFocus()" (focusout)="onDropdownBlur()">
-          <button tabindex="0" type="button" class="btn btn-ghost btn-md btn-circle text-white/80">
+        <div class="dropdown dropdown-top dropdown-end" [class.dropdown-open]="openDropdown() === 'subtitles'">
+          <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" (click)="toggleDropdown('subtitles', $event)">
             <svg lucideCaptions class="h-6 w-6"></svg>
           </button>
-          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[75vh] overflow-y-auto mb-2">
+          <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[75vh] overflow-y-auto mb-2">
             <div class="text-center text-white/70 text-sm font-medium mb-3">Sous-titres</div>
             <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle.emit(null); closeDropdown($event)">
               <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
@@ -208,11 +208,11 @@
         }
         <!-- Audio track dropdown (desktop) -->
         @if (availableAudioTracks().length > 1) {
-          <div class="dropdown dropdown-top dropdown-end" (focusin)="onDropdownFocus()" (focusout)="onDropdownBlur()">
-            <button tabindex="0" type="button" class="btn btn-ghost btn-md btn-circle text-white/80">
+          <div class="dropdown dropdown-top dropdown-end" [class.dropdown-open]="openDropdown() === 'audio'">
+            <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" (click)="toggleDropdown('audio', $event)">
               <svg lucideHeadphones class="h-6 w-6"></svg>
             </button>
-            <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[75vh] overflow-y-auto mb-2">
+            <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[75vh] overflow-y-auto mb-2">
               <div class="text-center text-white/70 text-sm font-medium mb-3">Piste audio</div>
               @for (track of availableAudioTracks(); track track.id) {
                 <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectAudioTrack.emit(track.id); closeDropdown($event)">
@@ -225,9 +225,9 @@
           </div>
         }
         <!-- Speed dropdown -->
-        <div class="dropdown dropdown-top dropdown-end" (focusin)="onDropdownFocus()" (focusout)="onDropdownBlur()">
-          <button tabindex="0" type="button" class="btn btn-ghost btn-md text-white/80">{{ playbackRate() }}x</button>
-          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-48 max-h-[75vh] overflow-y-auto mb-2">
+        <div class="dropdown dropdown-top dropdown-end" [class.dropdown-open]="openDropdown() === 'speed'">
+          <button type="button" class="btn btn-ghost btn-md text-white/80" (click)="toggleDropdown('speed', $event)">{{ playbackRate() }}x</button>
+          <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-48 max-h-[75vh] overflow-y-auto mb-2">
             <div class="text-center text-white/70 text-sm font-medium mb-3">Vitesse</div>
             @for (r of speedOptions; track r) {
               <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="speedChange.emit(r); closeDropdown($event)">
@@ -238,11 +238,11 @@
           </div>
         </div>
         <!-- Settings dropdown -->
-        <div class="dropdown dropdown-top dropdown-end" (focusin)="onDropdownFocus()" (focusout)="onDropdownBlur()">
-          <button tabindex="0" type="button" class="btn btn-ghost btn-md btn-circle text-white/80" (click)="openSettings()">
+        <div class="dropdown dropdown-top dropdown-end" [class.dropdown-open]="openDropdown() === 'settings'">
+          <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" (click)="toggleDropdown('settings', $event)">
             <svg lucideSettings class="h-6 w-6"></svg>
           </button>
-          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl min-w-64 max-h-[75vh] overflow-hidden mb-2">
+          <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl min-w-64 max-h-[75vh] overflow-hidden mb-2">
             <ng-container [ngTemplateOutlet]="settingsMenu"></ng-container>
           </div>
         </div>

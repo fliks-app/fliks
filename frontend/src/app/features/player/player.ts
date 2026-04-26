@@ -1516,6 +1516,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
     if (!this.engine) return;
 
+    // ArrowLeft/Right are claimed by the seekbar when it owns focus, and used
+    // for D-pad navigation between controls otherwise. Skip them here unless
+    // no control has focus (in which case keep the legacy "background" seek).
+    const active = document.activeElement as HTMLElement | null;
+    const arrowSeekAllowed = !active || active === document.body;
+
     switch (e.key) {
       case ' ':
       case 'k':
@@ -1523,10 +1529,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.onTogglePlay();
         break;
       case 'ArrowLeft':
+        if (!arrowSeekAllowed) break;
         e.preventDefault();
         this.onSeek(this.engine.currentTime - 10);
         break;
       case 'ArrowRight':
+        if (!arrowSeekAllowed) break;
         e.preventDefault();
         this.onSeek(this.engine.currentTime + 10);
         break;

@@ -18,7 +18,7 @@
             <svg lucideChevronLeft class="h-5 w-5"></svg>
           </button>
         }
-        @if (!isNative) {
+        @if (!isNative || tv.isTv()) {
           <label for="sidebar" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate">
             <svg lucideMenu class="h-5 w-5"></svg>
           </label>
@@ -101,12 +101,12 @@
       }
       <router-outlet />
     </main>
-    <!-- Bottom spacer for native bottom bar -->
-    @if (isNative) {
+    <!-- Bottom spacer for native bottom bar (TV doesn't get the bottom bar) -->
+    @if (isNative && !tv.isTv()) {
       <div class="h-20"></div>
     }
-    <!-- Native bottom navigation bar -->
-    @if (isNative && !keyboardOpen()) {
+    <!-- Native bottom navigation bar (touch-only — hidden on TV) -->
+    @if (isNative && !tv.isTv() && !keyboardOpen()) {
       <nav class="fixed bottom-0 left-0 right-0 z-40 bg-base-100 border-t border-base-200"
            style="padding-bottom: env(safe-area-inset-bottom, 0px)">
         <div class="flex items-center justify-between h-16 px-6 relative">
@@ -198,7 +198,10 @@
   <!-- Cast overlay (chip + card) — global, persists across navigation -->
   <app-cast-overlay />
 
-  <div class="drawer-side z-40" [class.hidden]="isNative">
+  <!-- Card actions panel (TV menu button / mobile long-press) — single instance -->
+  <app-card-actions-panel />
+
+  <div class="drawer-side z-40" [class.hidden]="isNative && !tv.isTv()">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
     <aside class="bg-base-100 w-64 min-h-full flex flex-col" style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 )">
       <div class="p-4 border-b border-base-200">

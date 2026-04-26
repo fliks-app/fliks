@@ -1508,7 +1508,10 @@
     "mark_watched": "Marquer comme vu",
     "mark_unwatched": "Marquer comme non vu",
     "fully_watched": "Entièrement vu",
-    "not_fully_watched": "Pas entièrement vu"
+    "not_fully_watched": "Pas entièrement vu",
+    "action_open": "Ouvrir",
+    "action_play": "Lire",
+    "action_remove": "Retirer"
   },
   "legend": {
     "downloaded_monitored": "Téléchargé (suivi)",
