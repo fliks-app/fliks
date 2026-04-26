@@ -1,4 +1,4 @@
-package com.fliks.app;
+package media.fliks.app;
 
 import android.Manifest;
 import android.content.BroadcastReceiver;

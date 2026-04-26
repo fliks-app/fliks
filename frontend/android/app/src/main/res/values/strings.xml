@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">Fliks</string>
     <string name="title_activity_main">Fliks</string>
-    <string name="package_name">com.fliks.app</string>
-    <string name="custom_url_scheme">com.fliks.app</string>
+    <string name="package_name">media.fliks.app</string>
+    <string name="custom_url_scheme">media.fliks.app</string>
 </resources>

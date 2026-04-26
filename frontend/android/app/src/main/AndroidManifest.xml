@@ -29,7 +29,7 @@
         <!-- Cast Framework OptionsProvider -->
         <meta-data
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
-            android:value="com.fliks.app.CastOptionsProvider" />
+            android:value="media.fliks.app.CastOptionsProvider" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

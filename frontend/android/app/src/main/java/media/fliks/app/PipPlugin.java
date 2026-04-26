@@ -1,4 +1,4 @@
-package com.fliks.app;
+package media.fliks.app;
 
 import android.app.PendingIntent;
 import android.app.PictureInPictureParams;
@@ -24,7 +24,7 @@ import java.util.List;
  */
 @CapacitorPlugin(name = "Pip")
 public class PipPlugin extends Plugin {
-    static final String ACTION_TOGGLE_PLAYBACK = "com.fliks.app.PIP_TOGGLE_PLAYBACK";
+    static final String ACTION_TOGGLE_PLAYBACK = "media.fliks.app.PIP_TOGGLE_PLAYBACK";
     private boolean autoEnterEnabled = false;
     private boolean isPlaying = false;
 

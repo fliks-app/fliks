@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.fliks.app',
+  appId: 'media.fliks.app',
   appName: 'Fliks',
   webDir: 'dist/frontend/browser',
   server: {
