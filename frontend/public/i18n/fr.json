@@ -299,7 +299,52 @@
     "username": "Nom d'utilisateur",
     "password": "Mot de passe",
     "submit": "Se connecter",
-    "error": "Erreur de connexion"
+    "error": "Erreur de connexion",
+    "back_to_picker": "Choisir un autre utilisateur"
+  },
+  "select_user": {
+    "title": "Qui regarde ?",
+    "use_password": "Mot de passe",
+    "use_quick_connect": "Connexion rapide",
+    "other_user": "Saisir un autre utilisateur",
+    "change_server": "Changer de serveur",
+    "load_error": "Impossible de charger la liste des utilisateurs."
+  },
+  "quick_connect": {
+    "starting": "Préparation de la demande…",
+    "waiting_title": "En attente de validation",
+    "waiting_subtitle": "Ouvrez Fliks sur votre téléphone et acceptez la demande sur la page « Demandes de connexion ».",
+    "device_name": "Cet appareil : {{name}}",
+    "expires_in": "Expire dans {{minutes}} min",
+    "denied": "La demande a été refusée.",
+    "expired": "La demande a expiré.",
+    "error": "Une erreur est survenue.",
+    "retry": "Réessayer",
+    "cancel": "Annuler"
+  },
+  "pending_requests": {
+    "title": "Demandes de connexion",
+    "menu_entry": "Demandes de connexion",
+    "empty": "Aucune demande en attente.",
+    "approve": "Approuver",
+    "deny": "Refuser",
+    "approved_toast": "Connexion acceptée",
+    "denied_toast": "Demande refusée.",
+    "load_error": "Impossible de charger les demandes en attente.",
+    "action_error": "L'action n'a pas pu aboutir."
+  },
+  "server_history": {
+    "section_title": "Serveurs récents",
+    "actions": "Actions",
+    "rename": "Renommer",
+    "rename_prompt": "Nom du serveur",
+    "forget": "Oublier",
+    "relative": {
+      "just_now": "à l'instant",
+      "minutes": "il y a {{n}} min",
+      "hours": "il y a {{n}} h",
+      "days": "il y a {{n}} j"
+    }
   },
   "search": {
     "title": "Recherche",

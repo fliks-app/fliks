@@ -21,6 +21,28 @@ interface LoginResponse {
   accessToken?: string;
 }
 
+/** Lightweight user fields exposed by GET /auth/users-public for the picker. */
+export interface PublicUserSummary {
+  id: number;
+  username: string;
+  avatar: string | null;
+}
+
+export type PairingStatus = 'pending' | 'approved' | 'denied' | 'expired';
+
+export interface PairingStatusResponse {
+  status: PairingStatus;
+  accessToken?: string;
+}
+
+export interface PendingRequest {
+  pairingId: string;
+  deviceId: string;
+  deviceName: string;
+  requestedAt: string;
+  expiresAt: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
@@ -79,7 +101,76 @@ export class AuthService {
       this._accessToken = res.accessToken;
       await this.saveToken(res.accessToken);
     }
+    // Bump the active server in the known-servers list so it surfaces first
+    // in /setup next time. Keeps the last username for pre-fill on return.
+    const activeUrl = this.serverConfig.serverUrl();
+    if (activeUrl) {
+      await this.serverConfig.addOrTouchKnownServer(activeUrl, { username: res.user.username });
+    }
     return res;
+  }
+
+  /** Pre-login user picker — see PublicUserSummary. */
+  listUsersPublic(): Promise<PublicUserSummary[]> {
+    return firstValueFrom(this.http.get<PublicUserSummary[]>('/api/auth/users-public'));
+  }
+
+  // ── Pairing (quick connect) ──
+
+  pairingRequest(
+    userId: number,
+    deviceId: string,
+    deviceName: string,
+  ): Promise<{ pairingId: string; expiresIn: number }> {
+    return firstValueFrom(
+      this.http.post<{ pairingId: string; expiresIn: number }>(
+        '/api/auth/pairing/request',
+        { userId, deviceName },
+        { headers: { 'X-Device-Id': deviceId } },
+      ),
+    );
+  }
+
+  pairingStatus(pairingId: string, deviceId: string): Promise<PairingStatusResponse> {
+    return firstValueFrom(
+      this.http.get<PairingStatusResponse>('/api/auth/pairing/status', {
+        params: { pairingId },
+        headers: { 'X-Device-Id': deviceId },
+      }),
+    );
+  }
+
+  pairingPending(): Promise<PendingRequest[]> {
+    return firstValueFrom(this.http.get<PendingRequest[]>('/api/auth/pairing/pending'));
+  }
+
+  pairingApprove(pairingId: string): Promise<void> {
+    return firstValueFrom(
+      this.http.post<void>(`/api/auth/pairing/${pairingId}/approve`, {}),
+    );
+  }
+
+  pairingDeny(pairingId: string): Promise<void> {
+    return firstValueFrom(
+      this.http.post<void>(`/api/auth/pairing/${pairingId}/deny`, {}),
+    );
+  }
+
+  /**
+   * Adopt a token issued through the pairing flow. Mirrors the post-success
+   * branch of `login()` so the storage / `/auth/me` hydrate path is identical.
+   */
+  async loginWithToken(accessToken: string): Promise<void> {
+    if (this.serverConfig.isNative) {
+      this._accessToken = accessToken;
+      await this.saveToken(accessToken);
+    }
+    const user = await firstValueFrom(this.http.get<User>('/api/auth/me'));
+    this._user.set(user);
+    const activeUrl = this.serverConfig.serverUrl();
+    if (activeUrl) {
+      await this.serverConfig.addOrTouchKnownServer(activeUrl, { username: user.username });
+    }
   }
 
   register(username: string, password: string, email?: string) {
@@ -197,7 +288,9 @@ export class AuthService {
       this._user.set(null);
       this._accessToken = null;
       await this.removeToken();
-      void this.router.navigate(['/login']);
+      // Land on the user picker, same as a fresh visit. The password form
+      // is one tap away via the picker → user → 'Mot de passe'.
+      void this.router.navigate(['/select-user']);
     }
   }
 

@@ -8,6 +8,8 @@ export const authGuard: CanActivateFn = () => {
   const router = inject(Router);
 
   return auth.ensureAuthenticated().pipe(
-    map((ok) => (ok ? true : router.createUrlTree(['/login']))),
+    // Default landing for unauthenticated users is the user picker; the
+    // password form lives behind it (or via /login direct deep link).
+    map((ok) => (ok ? true : router.createUrlTree(['/select-user']))),
   );
 };

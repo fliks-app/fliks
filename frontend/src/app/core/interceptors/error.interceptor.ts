@@ -10,9 +10,11 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
-      // Show toasts for client errors (400-499 except 408) + 500
-      // Skip: i18n, network errors, gateway errors, timeouts, offline
-      const showToast = (err.status >= 400 && err.status < 500 && err.status !== 408) || err.status === 500;
+      // Show toasts for client errors (400-499 except 408) + 500.
+      // Skip: i18n, network errors, gateway errors, timeouts, offline, and
+      // 401 — the auth guard handles unauth state by redirecting to the user
+      // picker; toasting the 401 just adds noise on top of that flow.
+      const showToast = (err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 401) || err.status === 500;
       if (!showToast || req.url.includes('/i18n/')) {
         return throwError(() => err);
       }

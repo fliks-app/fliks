@@ -11,11 +11,16 @@ import { PoliciesGuard } from './casl/policies.guard';
 import { User } from '../users/entities/user.entity';
 import { Role } from '../roles/entities/role.entity';
 import { SettingsModule } from '../settings/settings.module';
+import { EventsModule } from '../scheduler/events.module';
+import { PairingRequest } from './pairing/entities/pairing-request.entity';
+import { PairingService } from './pairing/pairing.service';
+import { PairingController } from './pairing/pairing.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Role]),
+    TypeOrmModule.forFeature([User, Role, PairingRequest]),
     forwardRef(() => SettingsModule),
+    EventsModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -28,8 +33,8 @@ import { SettingsModule } from '../settings/settings.module';
       }),
     }),
   ],
-  controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, CaslAbilityFactory, PoliciesGuard],
+  controllers: [AuthController, PairingController],
+  providers: [AuthService, JwtStrategy, CaslAbilityFactory, PoliciesGuard, PairingService],
   exports: [AuthService, CaslAbilityFactory, PoliciesGuard, JwtModule],
 })
 export class AuthModule {}

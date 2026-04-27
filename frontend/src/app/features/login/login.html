@@ -18,6 +18,7 @@
             class="input input-bordered w-full"
             formControlName="username"
             autocomplete="username"
+            [readOnly]="usernameLocked"
           />
         </fieldset>
 
@@ -46,8 +47,12 @@
         </div>
       </form>
 
+      <button class="btn btn-ghost btn-sm w-full mt-2" (click)="goToSelectUser()">
+        {{ 'login.back_to_picker' | translate }}
+      </button>
+
       @if (isNative) {
-        <button class="btn btn-ghost btn-sm w-full mt-2" (click)="changeServer()">
+        <button class="btn btn-ghost btn-sm w-full" (click)="changeServer()">
           {{ 'nav.change_server' | translate }}
         </button>
       }
