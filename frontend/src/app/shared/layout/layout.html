@@ -108,43 +108,43 @@
     @if (isNative && !tv.isTv()) {
       <div class="h-20"></div>
     }
-    <!-- Native bottom navigation bar (touch-only — hidden on TV) -->
+    <!-- Native bottom navigation bar (touch-only — hidden on TV).
+         Uses DaisyUI's `.dock` component: each child caps at max-width: 8rem,
+         so on tablets the items cluster naturally instead of stretching. The
+         dock handles its own fixed positioning and safe-area-inset-bottom. -->
     @if (isNative && !tv.isTv() && !keyboardOpen()) {
-      <nav class="fixed bottom-0 left-0 right-0 z-40 bg-base-100 border-t border-base-200"
-           style="padding-bottom: env(safe-area-inset-bottom, 0px)">
-        <!-- Cap inner width so on tablets the icons cluster instead of stretching
-             across the full screen. Fixed bar still spans 100% for the bg/border. -->
-        <div class="flex items-center justify-between h-16 px-6 max-w-md mx-auto relative">
-          <a routerLink="/" routerLinkActive="text-primary" [routerLinkActiveOptions]="{ exact: true }"
-             (click)="resetNavHistory()" class="flex flex-col items-center gap-0.5 text-[10px]">
-            <svg lucideHome class="h-5 w-5"></svg>
-            <span class="truncate">{{ 'nav.home' | translate }}</span>
-          </a>
-          <a routerLink="/search" routerLinkActive="text-primary" [routerLinkActiveOptions]="{ exact: false }"
-             (click)="resetNavHistory()" class="flex flex-col items-center gap-0.5 text-[10px]">
-            <svg lucideSearch class="h-5 w-5"></svg>
-            <span class="truncate">{{ 'search.title' | translate }}</span>
-          </a>
-          <a routerLink="/downloads" routerLinkActive="text-primary" [routerLinkActiveOptions]="{ exact: false }"
-             (click)="resetNavHistory()" class="flex flex-col items-center gap-0.5 text-[10px]">
-            <svg lucideDownload class="h-5 w-5"></svg>
-            <span class="truncate">{{ 'downloads.title' | translate }}</span>
-          </a>
-          <a routerLink="/history" routerLinkActive="text-primary" [routerLinkActiveOptions]="{ exact: false }"
-             (click)="resetNavHistory()" class="flex flex-col items-center gap-0.5 text-[10px]">
-            <svg lucideHistory class="h-5 w-5"></svg>
-            <span class="truncate">{{ 'nav.history' | translate }}</span>
-          </a>
-          <button (click)="toggleBottomMenu()" class="flex flex-col items-center gap-0.5 text-[10px]"
-                  [class.text-primary]="bottomMenuOpen()">
-            <svg lucideEllipsisVertical class="h-5 w-5"></svg>
-            <span class="truncate">{{ 'nav.more' | translate }}</span>
-          </button>
-        </div>
-        <!-- More menu dropdown (opens upward) -->
+      <div class="dock z-40">
+        <a routerLink="/" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: true }"
+           (click)="resetNavHistory()">
+          <svg lucideHome class="h-5 w-5"></svg>
+          <span class="dock-label">{{ 'nav.home' | translate }}</span>
+        </a>
+        <a routerLink="/search" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: false }"
+           (click)="resetNavHistory()">
+          <svg lucideSearch class="h-5 w-5"></svg>
+          <span class="dock-label">{{ 'search.title' | translate }}</span>
+        </a>
+        <a routerLink="/downloads" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: false }"
+           (click)="resetNavHistory()">
+          <svg lucideDownload class="h-5 w-5"></svg>
+          <span class="dock-label">{{ 'downloads.title' | translate }}</span>
+        </a>
+        <a routerLink="/history" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: false }"
+           (click)="resetNavHistory()">
+          <svg lucideHistory class="h-5 w-5"></svg>
+          <span class="dock-label">{{ 'nav.history' | translate }}</span>
+        </a>
+        <button (click)="toggleBottomMenu()" [class.dock-active]="bottomMenuOpen()">
+          <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+          <span class="dock-label">{{ 'nav.more' | translate }}</span>
+        </button>
+      </div>
+        <!-- More menu dropdown (opens upward, positioned relative to viewport
+             since the .dock is no longer the parent stacking context). -->
         @if (bottomMenuOpen()) {
           <div class="fixed inset-0 z-40" (click)="bottomMenuOpen.set(false)"></div>
-          <div class="absolute bottom-full right-2 mb-2 bg-base-100 rounded-box shadow-xl border border-base-200 min-w-48 z-50">
+          <div class="fixed bottom-20 right-2 mb-2 bg-base-100 rounded-box shadow-xl border border-base-200 min-w-48 z-50"
+               style="bottom: calc(4rem + env(safe-area-inset-bottom, 0px) + 0.5rem)">
             <ul class="menu p-2 gap-0.5">
               @for (lib of libraries(); track lib.id) {
                 <li>
@@ -196,7 +196,6 @@
             </ul>
           </div>
         }
-      </nav>
     }
   </div>
 
