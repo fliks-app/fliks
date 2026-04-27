@@ -304,7 +304,7 @@
   "select_user": {
     "title": "Qui regarde ?",
     "use_password": "Mot de passe",
-    "use_phone": "Connexion via téléphone",
+    "use_phone": "Connexion rapide",
     "other_user": "Saisir un autre utilisateur",
     "change_server": "Changer de serveur",
     "load_error": "Impossible de charger la liste des utilisateurs."
