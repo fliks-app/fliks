@@ -1,8 +1,8 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
   OnInit,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -10,6 +10,7 @@ import { Router } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService, PendingRequest } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
+import { SseService } from '../../core/services/sse.service';
 import { LucideAngularModule, LucideMonitor, LucideTablet, LucideSmartphone, LucideTv } from '@lucide/angular';
 
 @Component({
@@ -30,13 +31,29 @@ export class PendingRequestsComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);
-  private readonly destroyRef = inject(DestroyRef);
+  private readonly sse = inject(SseService);
 
   readonly requests = signal<PendingRequest[]>([]);
   readonly loading = signal(true);
   readonly error = signal('');
   /** pairingId currently being approved/denied — disables its buttons. */
   readonly busy = signal<string | null>(null);
+
+  /**
+   * Live updates: when the SSE stream delivers a `pairing.requested` event
+   * targeting the current user, refresh the list. Filtering is client-side —
+   * the SSE channel is not per-user, but ignoring foreign events is enough
+   * for this case (the row would 403 on approve anyway).
+   */
+  private readonly sseEffect = effect(() => {
+    const ev = this.sse.lastEvent();
+    if (!ev || ev.type !== 'pairing.requested') return;
+    const me = this.auth.user();
+    if (!me) return;
+    if (ev['userId'] === me.id) {
+      void this.refresh();
+    }
+  });
 
   ngOnInit(): void {
     void this.refresh();
