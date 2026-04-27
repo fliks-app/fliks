@@ -10,6 +10,7 @@ import { computeMediaBarStatus, computeMediaBarPercent } from '../../utils/media
 import { CardActionsDirective } from '../../directives/card-actions.directive';
 import { CardAction } from '../../../core/services/card-actions.service';
 import { TvService } from '../../../core/services/tv.service';
+import { DeviceService } from '../../../core/services/device.service';
 
 export type MediaCardAspect = 'portrait' | 'landscape';
 
@@ -36,7 +37,10 @@ export class MediaCardComponent {
   private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);
   private readonly tv = inject(TvService);
+  protected readonly device = inject(DeviceService);
   protected readonly isNative = Capacitor.isNativePlatform();
+  /** Hover overlay (play button) only makes sense on a real pointer device. */
+  protected readonly showHoverOverlay = computed(() => this.device.input() === 'mouse');
   /**
    * On TV the figure is the single focus target — child links (title, subtitle,
    * hover overlay) are visually still navigable via the contextual actions

@@ -6,7 +6,7 @@
   [class.native-player]="!!nativeEngine"
   [class.hdr-bright]="hdrBrightnessActive()"
   [class.hidden]="castService.isConnected()"
-  (mousemove)="isNative ? null : showControls()"
+  (mousemove)="device.isTouch() || isNative ? null : showControls()"
 >
   <!-- Fanart backdrop until video renders its first frame (hidden when native player is active) -->
   @if (!videoStarted() && !nativeEngine) {

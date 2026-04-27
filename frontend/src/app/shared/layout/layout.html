@@ -1,10 +1,10 @@
-<div class="drawer min-h-screen" [class.lg:drawer-open]="!isNative">
+<div class="drawer min-h-screen" [class.lg:drawer-open]="device.isDesktop() || device.isTv()">
   <input id="sidebar" type="checkbox" class="drawer-toggle" />
   <div class="drawer-content flex flex-col relative">
     <nav
       class="navbar fixed top-0 left-0 right-0 z-30 transition-all duration-300"
       style="padding-top: calc(env(safe-area-inset-top, 0px) + 4px)"
-      [class.lg:hidden]="!isNative"
+      [class.lg:hidden]="device.isDesktop() || device.isTv()"
       [class.-translate-y-full]="navbarHidden()"
       [class.bg-base-100]="!navbarTransparent()"
       [class.shadow-sm]="!navbarTransparent()"
@@ -18,7 +18,10 @@
             <svg lucideChevronLeft class="h-5 w-5"></svg>
           </button>
         }
-        @if (!isNative || tv.isTv()) {
+        @if (!isNative || tv.isTv() || device.isTablet()) {
+          <!-- Hamburger appears wherever the drawer can be opened — that means
+               every form-factor except the native phone (which uses the bottom
+               navbar for primary navigation). -->
           <label for="sidebar" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate">
             <svg lucideMenu class="h-5 w-5"></svg>
           </label>
@@ -67,10 +70,10 @@
       </div>
     </nav>
     <!-- Spacer for fixed navbar on mobile (navbar height + safe area; reduced on hero pages so fanart extends under status bar) -->
-    <div [class.lg:hidden]="!isNative" [style.height]="navbar.isHeroPage() ? '0px' : 'calc(4rem + env(safe-area-inset-top, 0px))'"></div>
+    <div [class.lg:hidden]="device.isDesktop() || device.isTv()" [style.height]="navbar.isHeroPage() ? '0px' : 'calc(4rem + env(safe-area-inset-top, 0px))'"></div>
     <!-- Desktop top-right: Cast + User -->
     <div class="hidden items-center justify-end gap-1 absolute top-3 right-4 z-50 pointer-events-none [&>*]:pointer-events-auto"
-         [class.lg:flex]="!isNative">
+         [class.lg:flex]="device.isDesktop() || device.isTv()">
       @if (castPlayer.hasMedia()) {
         <button class="btn btn-ghost btn-sm gap-2" (click)="toggleCastOverlay()">
           <svg lucideCast class="h-5 w-5 text-info"></svg>
@@ -201,7 +204,7 @@
   <!-- Card actions panel (TV menu button / mobile long-press) — single instance -->
   <app-card-actions-panel />
 
-  <div class="drawer-side z-40" [class.hidden]="isNative && !tv.isTv()">
+  <div class="drawer-side z-40" [class.hidden]="isNative && device.isPhone()">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
     <aside class="bg-base-100 w-64 min-h-full flex flex-col" style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 )">
       <div class="p-4 border-b border-base-200">
