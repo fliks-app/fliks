@@ -299,7 +299,8 @@
     "username": "Nom d'utilisateur",
     "password": "Mot de passe",
     "submit": "Se connecter",
-    "error": "Erreur de connexion"
+    "error": "Erreur de connexion",
+    "back_to_picker": "Choisir un autre utilisateur"
   },
   "select_user": {
     "title": "Qui regarde ?",

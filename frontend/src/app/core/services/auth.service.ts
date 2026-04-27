@@ -288,7 +288,9 @@ export class AuthService {
       this._user.set(null);
       this._accessToken = null;
       await this.removeToken();
-      void this.router.navigate(['/login']);
+      // Land on the user picker, same as a fresh visit. The password form
+      // is one tap away via the picker → user → 'Mot de passe'.
+      void this.router.navigate(['/select-user']);
     }
   }
 

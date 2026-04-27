@@ -70,4 +70,8 @@ export class LoginComponent {
     await this.serverConfig.clear();
     void this.router.navigate(['/setup']);
   }
+
+  goToSelectUser() {
+    void this.router.navigate(['/select-user']);
+  }
 }
