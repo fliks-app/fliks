@@ -110,6 +110,16 @@ export class MediaCardComponent {
     const m = this.media();
     return m ? ['/' + (m.type === 'movie' ? 'movies' : 'series'), '' + m.id] : null;
   });
+  /**
+   * Hand the full Media to the detail page via router state so it can render
+   * immediately with the same poster/title/year the card already shows,
+   * instead of mounting on a blocking spinner. The detail page also re-fetches
+   * in background to refresh fields the card doesn't carry.
+   */
+  protected readonly _navState = computed(() => {
+    const m = this.media();
+    return m ? { media: m } : undefined;
+  });
   protected readonly _playable = computed(() => {
     if (this.playable()) return true;
     const m = this.media();
@@ -134,7 +144,7 @@ export class MediaCardComponent {
 
   protected onCardClick() {
     const link = this._link();
-    if (link) void this.router.navigate(link);
+    if (link) void this.router.navigate(link, { state: this._navState() });
     this.clicked.emit();
   }
 
