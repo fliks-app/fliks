@@ -28,12 +28,6 @@ export const routes: Routes = [
       import('./features/quick-connect/quick-connect-wait').then((m) => m.QuickConnectWaitComponent),
   },
   {
-    path: 'pending-requests',
-    canActivate: [serverConfigGuard, authGuard],
-    loadComponent: () =>
-      import('./features/pending-requests/pending-requests').then((m) => m.PendingRequestsComponent),
-  },
-  {
     path: 'watch/:mediaFileId',
     canActivate: [serverConfigGuard, authGuard],
     loadComponent: () =>
@@ -196,6 +190,14 @@ export const routes: Routes = [
             (m) => m.WatchHistoryComponent,
           ),
         data: { titleKey: 'history.title' },
+      },
+      {
+        path: 'pending-requests',
+        loadComponent: () =>
+          import('./features/pending-requests/pending-requests').then(
+            (m) => m.PendingRequestsComponent,
+          ),
+        data: { titleKey: 'pending_requests.title' },
       },
     ],
   },
