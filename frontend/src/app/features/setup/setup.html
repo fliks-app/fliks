@@ -1,10 +1,46 @@
 <div class="min-h-screen flex items-center justify-center bg-base-200 p-4">
-  <div class="card bg-base-100 shadow-xl w-full max-w-md">
+  <div class="card bg-base-100 shadow-xl w-full max-w-md" (click)="closeMenu()">
     <div class="card-body gap-6">
       <div class="text-center">
         <h1 class="text-2xl font-bold">Fliks</h1>
         <p class="text-base-content/60 mt-1">{{ 'setup.subtitle' | translate }}</p>
       </div>
+
+      @if (knownServers().length > 0) {
+        <section class="flex flex-col gap-2">
+          <div class="text-xs font-semibold uppercase tracking-wider text-base-content/60">
+            {{ 'server_history.section_title' | translate }}
+          </div>
+          @for (server of knownServers(); track server.url) {
+            <div class="flex items-center gap-2 rounded-lg border border-base-200 px-3 py-2 hover:bg-base-200/60">
+              <button
+                type="button"
+                class="flex-1 min-w-0 text-left"
+                (click)="useKnown(server)"
+              >
+                <div class="font-medium truncate">
+                  {{ server.name ?? server.url }}
+                </div>
+                <div class="text-xs text-base-content/60 truncate">
+                  @if (server.lastUsername) {
+                    {{ server.lastUsername }} · {{ formatRelative(server.lastUsedAt) }}
+                  } @else {
+                    {{ formatRelative(server.lastUsedAt) }}
+                  }
+                </div>
+              </button>
+              <div class="dropdown dropdown-end" [class.dropdown-open]="openMenuFor() === server.url">
+                <button type="button" class="btn btn-ghost btn-sm btn-square" (click)="toggleMenu(server.url, $event)" [attr.aria-label]="'server_history.actions' | translate">⋯</button>
+                <ul class="dropdown-content menu bg-base-100 rounded-box shadow z-10 w-48 p-2">
+                  <li><button type="button" (click)="rename(server, $event)">{{ 'server_history.rename' | translate }}</button></li>
+                  <li><button type="button" (click)="forget(server, $event)" class="text-error">{{ 'server_history.forget' | translate }}</button></li>
+                </ul>
+              </div>
+            </div>
+          }
+          <div class="divider my-1"></div>
+        </section>
+      }
 
       <label class="form-control w-full">
         <span class="label-text">{{ 'setup.server_url' | translate }}</span>

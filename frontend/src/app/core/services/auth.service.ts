@@ -79,6 +79,12 @@ export class AuthService {
       this._accessToken = res.accessToken;
       await this.saveToken(res.accessToken);
     }
+    // Bump the active server in the known-servers list so it surfaces first
+    // in /setup next time. Keeps the last username for pre-fill on return.
+    const activeUrl = this.serverConfig.serverUrl();
+    if (activeUrl) {
+      await this.serverConfig.addOrTouchKnownServer(activeUrl, { username: res.user.username });
+    }
     return res;
   }
 
