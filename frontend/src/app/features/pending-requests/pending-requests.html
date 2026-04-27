@@ -1,5 +1,6 @@
 <div class="max-w-2xl mx-auto flex flex-col gap-4">
-  <div class="flex items-center justify-end">
+  <div class="flex items-center justify-between">
+    <h1 class="sr-only lg:not-sr-only text-xl font-bold">{{ 'pending_requests.title' | translate }}</h1>
     <button type="button" class="btn btn-ghost btn-sm" (click)="refresh()" [disabled]="loading()">
       {{ 'common.refresh' | translate }}
     </button>
