@@ -99,7 +99,17 @@ export type SseEvent =
       updated: number;
       skipped: number;
     }
-  | { type: 'seerr.import.failed'; error: string };
+  | { type: 'seerr.import.failed'; error: string }
+  | {
+      // Quick-connect pairing: emitted when a TV opens a request targeting this
+      // user. Phones currently on the pending-requests page refresh on receipt
+      // (filtered client-side on userId).
+      type: 'pairing.requested';
+      userId: number;
+      pairingId: string;
+      deviceName: string;
+      deviceId: string;
+    };
 
 @Injectable()
 export class EventsService {
