@@ -15,6 +15,7 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
           [src]="fanartUrl()! | resolveUrl"
           [alt]="imageAlt()"
           class="w-full min-h-[230px] h-[38svh] max-h-[53svh] landscape:min-h-0 landscape:h-auto landscape:max-h-[47vh] landscape:aspect-video object-cover object-[50%_25%]"
+          [style.view-transition-name]="mediaId() ? 'media-fanart-' + mediaId() : null"
         />
         <div class="pointer-events-none absolute inset-0 bg-linear-to-t from-base-100 via-transparent to-black/20"></div>
       } @else {
@@ -29,4 +30,6 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 export class MobileFanartHeroComponent {
   readonly fanartUrl = input<string | null | undefined>(null);
   readonly imageAlt = input('');
+  /** Media id, used to name the view-transition matching landscape cards. */
+  readonly mediaId = input<number | null>(null);
 }
