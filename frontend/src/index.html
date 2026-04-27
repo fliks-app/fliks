@@ -11,10 +11,25 @@
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1d232a">
-  <!-- Inline base background to kill the white flash between WebView load and
-       Angular's CSS bundle (most visible on Android TV after the splash). The
-       theme bg is reapplied by daisyUI once styles.css is parsed. -->
-  <style>html, body { background: #1d232a; margin: 0; }</style>
+  <!-- Pre-paint theme + background. Without this the WebView shows a default
+       white frame between Capacitor splash and Angular's CSS bundle parsing,
+       and would flash again if the user is on the light theme but we hardcoded
+       a dark bg. We mirror ThemeService.getInitialTheme() inline (persisted
+       'fliks-theme' → matchMedia fallback) so data-theme and the bg are set
+       on the very first paint. daisyUI overrides them once styles.css parses. -->
+  <style>html, body { margin: 0; }</style>
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem('fliks-theme');
+        var theme = (stored === 'dark' || stored === 'light')
+          ? stored
+          : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.style.background = theme === 'dark' ? '#1d232a' : '#ffffff';
+      } catch (_) { /* localStorage may be unavailable — fall back to the static data-theme */ }
+    })();
+  </script>
   <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1" async></script>
 </head>
 <body>
