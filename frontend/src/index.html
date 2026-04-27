@@ -1,5 +1,11 @@
 <!doctype html>
-<html lang="fr" data-theme="dark">
+<!-- data-theme is set by ThemeService at bootstrap (signal effect) and synced
+     to localStorage. We deliberately don't hardcode it here: a static
+     data-theme="dark" would make the inline <style> below paint navy until
+     Angular runs, causing a navy → white flash on light-theme users. The
+     WebView's own background colour (painted from MainActivity, theme-aware)
+     covers the gap until ThemeService applies. -->
+<html lang="fr">
 <head>
   <meta charset="utf-8">
   <title>Fliks</title>
