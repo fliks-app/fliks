@@ -112,7 +112,9 @@
     @if (isNative && !tv.isTv() && !keyboardOpen()) {
       <nav class="fixed bottom-0 left-0 right-0 z-40 bg-base-100 border-t border-base-200"
            style="padding-bottom: env(safe-area-inset-bottom, 0px)">
-        <div class="flex items-center justify-between h-16 px-6 relative">
+        <!-- Cap inner width so on tablets the icons cluster instead of stretching
+             across the full screen. Fixed bar still spans 100% for the bg/border. -->
+        <div class="flex items-center justify-between h-16 px-6 max-w-md mx-auto relative">
           <a routerLink="/" routerLinkActive="text-primary" [routerLinkActiveOptions]="{ exact: true }"
              (click)="resetNavHistory()" class="flex flex-col items-center gap-0.5 text-[10px]">
             <svg lucideHome class="h-5 w-5"></svg>
