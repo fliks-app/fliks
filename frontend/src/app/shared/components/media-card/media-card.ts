@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, input, output, computed, inject } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ElementRef, input, output, computed, inject, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { NgClass, DecimalPipe } from '@angular/common';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -121,32 +121,40 @@ export class MediaCardComponent {
     return m ? { media: m } : undefined;
   });
   /**
-   * View-transition name for the poster image. Matches the same name used by
-   * `app-media-info-header` on the detail page so the browser morphs the
-   * card's poster into the hero on navigation.
-   *
-   * Resolution order:
-   *  1. `[media]` input → use its id directly.
-   *  2. `[link]` input (e.g. ['/movies', '123']) → extract the id from the last
-   *     segment. Covers cards that don't carry a Media object (continue-watching,
-   *     calendar, recently-requested, …) but do route to a detail page.
-   *  3. otherwise → null (browser falls back to a default page cross-fade).
-   *
-   * Caveat: when the same media appears in two card slots on a page (e.g.
-   * "continue watching" + "recommendations"), the duplicate name conflicts
-   * and the browser silently skips the morph. The page still cross-fades.
+   * `<img>` ref so we can stamp the view-transition-name imperatively just
+   * before navigating. We DON'T set it declaratively — when the same media
+   * appears in two cards on the same page (continue-watching + recently-added,
+   * etc.) the duplicate name aborts the whole transition. Stamping at click
+   * time means only the clicked card carries the name during the snapshot.
    */
-  protected readonly _vtPosterName = computed(() => {
+  private readonly imgRef = viewChild<ElementRef<HTMLImageElement>>('cardImg');
+
+  /** Resolved id from [media] or the tail of [link]. */
+  private resolveMediaId(): number | null {
     const m = this.media();
-    if (m) return `media-poster-${m.id}`;
+    if (m) return m.id;
     const link = this.link();
     if (link && link.length >= 2) {
       const last = link[link.length - 1];
       const id = typeof last === 'number' ? last : Number(last);
-      if (Number.isFinite(id) && id > 0) return `media-poster-${id}`;
+      if (Number.isFinite(id) && id > 0) return id;
     }
     return null;
-  });
+  }
+
+  /**
+   * Stamp `view-transition-name: media-poster-<id>` on this card's <img> just
+   * before navigating. The browser snapshots the document on the next tick
+   * and pairs it with the matching name on the destination's poster.
+   * Wired to every click path that leads to the detail page.
+   */
+  protected flagPosterForTransition() {
+    const id = this.resolveMediaId();
+    const img = this.imgRef()?.nativeElement;
+    if (id != null && img) {
+      img.style.viewTransitionName = `media-poster-${id}`;
+    }
+  }
   protected readonly _playable = computed(() => {
     if (this.playable()) return true;
     const m = this.media();
@@ -170,6 +178,7 @@ export class MediaCardComponent {
   });
 
   protected onCardClick() {
+    this.flagPosterForTransition();
     const link = this._link();
     if (link) void this.router.navigate(link, { state: this._navState() });
     this.clicked.emit();

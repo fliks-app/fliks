@@ -19,13 +19,13 @@
   >
     @if (_img()) {
       <img
+        #cardImg
         [src]="_img()! | resolveUrl"
         [alt]="_title()"
         class="w-full h-full object-cover"
         [class.opacity-35]="imageBlurred()"
         [class.scale-105]="imageBlurred()"
         loading="lazy"
-        [style.view-transition-name]="_vtPosterName()"
       />
     } @else {
       <div class="flex items-center justify-center w-full h-full text-base-content/20">
@@ -107,7 +107,7 @@
     @if (showHoverOverlay()) {
       <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none group-hover:pointer-events-auto">
         @if (_link()) {
-          <a [routerLink]="_link()" [state]="_navState()" class="absolute inset-0 z-0" [attr.aria-label]="_title()" (click)="$event.stopPropagation()"></a>
+          <a [routerLink]="_link()" [state]="_navState()" class="absolute inset-0 z-0" [attr.aria-label]="_title()" (click)="flagPosterForTransition(); $event.stopPropagation()"></a>
         }
         @if (_playable() || aspect() === 'landscape') {
           <button type="button" class="relative z-10 w-12 h-12 rounded-full bg-black/50 flex items-center justify-center text-white cursor-pointer" (click)="onPlayClick($event)">
@@ -128,7 +128,7 @@
   <!-- Title below -->
   <div class="pt-1.5">
     @if (_link()) {
-      <a [routerLink]="_link()" [state]="_navState()" class="hover:underline" [attr.tabindex]="innerTabindex()">
+      <a [routerLink]="_link()" [state]="_navState()" class="hover:underline" [attr.tabindex]="innerTabindex()" (click)="flagPosterForTransition()">
         <h3 class="text-sm font-medium line-clamp-1 leading-snug">{{ _title() }}</h3>
       </a>
     } @else {
