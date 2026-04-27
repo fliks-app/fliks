@@ -150,4 +150,28 @@ export class AuthService {
     const payload: JwtPayload = { sub: user.id, username: user.username };
     return this.jwtService.sign(payload, { expiresIn: '4h' });
   }
+
+  /**
+   * Issue a JWT for an existing user — used by the pairing flow when the user
+   * has been authenticated through a different channel (approval from another
+   * device) instead of a password.
+   */
+  signTokenFor(user: User): string {
+    const payload: JwtPayload = { sub: user.id, username: user.username };
+    return this.jwtService.sign(payload);
+  }
+
+  /**
+   * Lightweight user list for the pre-login user picker. Mirrors what
+   * Plex/Jellyfin expose by default — id, username, avatar — and never any
+   * sensitive field. Caller is unauthenticated.
+   */
+  async publicUserList(): Promise<{ id: number; username: string; avatar: string | null }[]> {
+    const users = await this.userRepo.find({
+      where: { enabled: true },
+      select: ['id', 'username', 'avatar'],
+      order: { username: 'ASC' },
+    });
+    return users.map((u) => ({ id: u.id, username: u.username, avatar: u.avatar ?? null }));
+  }
 }

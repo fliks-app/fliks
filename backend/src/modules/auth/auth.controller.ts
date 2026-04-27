@@ -102,6 +102,15 @@ export class AuthController {
   }
 
   /**
+   * Public user list for the pre-login picker. Same exposure model as
+   * Plex/Jellyfin — only id/username/avatar, never email/role/lastLogin.
+   */
+  @Get('users-public')
+  publicUsers() {
+    return this.authService.publicUserList();
+  }
+
+  /**
    * JWT Cast (4h) + base d’URL des flux (EXTERNAL_URL / Host).
    * À appeler juste avant loadMedia côté client pour limiter l’écart avec les requêtes du receiver.
    */
