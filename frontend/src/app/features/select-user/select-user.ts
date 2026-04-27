@@ -10,13 +10,12 @@ import { Capacitor } from '@capacitor/core';
 import { AuthService, PublicUserSummary } from '../../core/services/auth.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { initialsAvatar } from '../../core/utils/initials-avatar';
-import { LucideAngularModule, LucideMonitorSmartphone, LucideKeyRound, LucideUserRoundPen } from '@lucide/angular';
+import { LucideMonitorSmartphone, LucideKeyRound, LucideUserRoundPen } from '@lucide/angular';
 
 @Component({
   selector: 'app-select-user',
   imports: [
     TranslateModule,
-    LucideAngularModule,
     LucideMonitorSmartphone,
     LucideKeyRound,
     LucideUserRoundPen,
