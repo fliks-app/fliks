@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Theme-aware splash background. The bottom layer paints `?attr/splashBackground`
+  (set per-theme in styles.xml: dark = navy, light = white). The top layer
+  centers the Fliks logo (transparent PNG copied from logos/fliks-mark.png).
+
+  MainActivity reads the persisted Fliks theme from CapacitorStorage SharedPrefs
+  and calls setTheme() before super.onCreate() so the activity picks the right
+  variant on cold start — including subsequent launches after the user toggled
+  the in-app theme.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <color android:color="?attr/splashBackground" />
+    </item>
+    <item android:gravity="center">
+        <bitmap
+            android:src="@drawable/fliks_logo"
+            android:gravity="center"
+            android:tileMode="disabled" />
+    </item>
+</layer-list>
