@@ -11,7 +11,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService, PendingRequest } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
 import { SseService } from '../../core/services/sse.service';
-import { LucideMonitor, LucideTablet, LucideSmartphone, LucideTv } from '@lucide/angular';
+import { LucideMonitor, LucideTablet, LucideSmartphone, LucideTv, LucideMonitorSmartphone } from '@lucide/angular';
 
 @Component({
   selector: 'app-pending-requests',
@@ -21,6 +21,7 @@ import { LucideMonitor, LucideTablet, LucideSmartphone, LucideTv } from '@lucide
     LucideTablet,
     LucideSmartphone,
     LucideTv,
+    LucideMonitorSmartphone,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './pending-requests.html',
