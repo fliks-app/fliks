@@ -23,6 +23,7 @@ public class MainActivity extends BridgeActivity {
     private boolean immersiveMode = false;
     private boolean pipOnLeave = false;
     private boolean lightStatusBar = false;
+    private boolean isLightTheme = false;
     private android.app.PictureInPictureParams pipParams = null;
     private BroadcastReceiver pipActionReceiver;
 
@@ -42,6 +43,11 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DownloadNotificationPlugin.class);
         registerPlugin(NativePlayerPlugin.class);
         super.onCreate(savedInstanceState);
+
+        // Paint the WebView's own background to match the active theme — the
+        // default white leaks through as a flash between the native splash and
+        // the first Angular paint, even with an inline <style> in index.html.
+        applyWebViewBackground();
 
         // Request notification permission (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -182,7 +188,8 @@ public class MainActivity extends BridgeActivity {
             String theme = raw == null ? null : raw.replaceAll("^\"|\"$", "");
             android.util.Log.d("FliksSplash",
                 "applyThemedSplash: raw=" + raw + " normalized=" + theme + " keys=" + prefs.getAll().keySet());
-            if ("light".equals(theme)) {
+            isLightTheme = "light".equals(theme);
+            if (isLightTheme) {
                 setTheme(R.style.AppTheme_NoActionBarLaunch_Light);
             } else {
                 setTheme(R.style.AppTheme_NoActionBarLaunch_Dark);
@@ -190,6 +197,23 @@ public class MainActivity extends BridgeActivity {
         } catch (Exception e) {
             android.util.Log.w("FliksSplash", "applyThemedSplash failed", e);
             // Any failure → fall back to the default theme already set in the manifest.
+        }
+    }
+
+    /**
+     * Paint the WebView's own background to match the active theme. The Android
+     * WebView defaults to white, which leaks through as a flash between the
+     * native splash and the moment Angular's CSS bundle paints the body — even
+     * when an inline <style> in index.html sets the html bg, the WebView's
+     * own background is painted FIRST. Setting it here removes the flash.
+     */
+    private void applyWebViewBackground() {
+        try {
+            if (getBridge() == null || getBridge().getWebView() == null) return;
+            int color = isLightTheme ? Color.WHITE : Color.parseColor("#1d232a");
+            getBridge().getWebView().setBackgroundColor(color);
+        } catch (Exception ignored) {
+            /* nothing to fall back to — accept the default white */
         }
     }
 
