@@ -14,6 +14,7 @@ import {
   LucideSun,
   LucideMoon,
   LucideServer,
+  LucideMonitorSmartphone,
 } from '@lucide/angular';
 
 @Component({
@@ -21,7 +22,7 @@ import {
   imports: [
     RouterLink, TranslateModule,
     LucideUser, LucideSettings, LucideShield, LucideRepeat, LucideLogOut,
-    LucideSun, LucideMoon, LucideServer,
+    LucideSun, LucideMoon, LucideServer, LucideMonitorSmartphone,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -56,6 +57,7 @@ import {
           @if (auth.canAccessSettings()) {
             <li><a routerLink="/admin" class="flex items-center gap-3 w-full"><svg lucideShield class="h-4 w-4 opacity-60"></svg>{{ 'nav.administration' | translate }}</a></li>
           }
+          <li><a routerLink="/pending-requests" class="flex items-center gap-3 w-full"><svg lucideMonitorSmartphone class="h-4 w-4 opacity-60"></svg>{{ 'pending_requests.menu_entry' | translate }}</a></li>
           <li><a (click)="switchUser()" class="flex items-center gap-3 w-full"><svg lucideRepeat class="h-4 w-4 opacity-60"></svg>{{ 'nav.switch_user' | translate }}</a></li>
           @if (isNative) {
             <li><a (click)="changeServer()" class="flex items-center gap-3 w-full"><svg lucideServer class="h-4 w-4 opacity-60"></svg>{{ 'nav.change_server' | translate }}</a></li>

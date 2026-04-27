@@ -28,6 +28,21 @@ export interface PublicUserSummary {
   avatar: string | null;
 }
 
+export type PairingStatus = 'pending' | 'approved' | 'denied' | 'expired';
+
+export interface PairingStatusResponse {
+  status: PairingStatus;
+  accessToken?: string;
+}
+
+export interface PendingRequest {
+  pairingId: string;
+  deviceId: string;
+  deviceName: string;
+  requestedAt: string;
+  expiresAt: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
@@ -98,6 +113,64 @@ export class AuthService {
   /** Pre-login user picker — see PublicUserSummary. */
   listUsersPublic(): Promise<PublicUserSummary[]> {
     return firstValueFrom(this.http.get<PublicUserSummary[]>('/api/auth/users-public'));
+  }
+
+  // ── Pairing (quick connect) ──
+
+  pairingRequest(
+    userId: number,
+    deviceId: string,
+    deviceName: string,
+  ): Promise<{ pairingId: string; expiresIn: number }> {
+    return firstValueFrom(
+      this.http.post<{ pairingId: string; expiresIn: number }>(
+        '/api/auth/pairing/request',
+        { userId, deviceName },
+        { headers: { 'X-Device-Id': deviceId } },
+      ),
+    );
+  }
+
+  pairingStatus(pairingId: string, deviceId: string): Promise<PairingStatusResponse> {
+    return firstValueFrom(
+      this.http.get<PairingStatusResponse>('/api/auth/pairing/status', {
+        params: { pairingId },
+        headers: { 'X-Device-Id': deviceId },
+      }),
+    );
+  }
+
+  pairingPending(): Promise<PendingRequest[]> {
+    return firstValueFrom(this.http.get<PendingRequest[]>('/api/auth/pairing/pending'));
+  }
+
+  pairingApprove(pairingId: string): Promise<void> {
+    return firstValueFrom(
+      this.http.post<void>(`/api/auth/pairing/${pairingId}/approve`, {}),
+    );
+  }
+
+  pairingDeny(pairingId: string): Promise<void> {
+    return firstValueFrom(
+      this.http.post<void>(`/api/auth/pairing/${pairingId}/deny`, {}),
+    );
+  }
+
+  /**
+   * Adopt a token issued through the pairing flow. Mirrors the post-success
+   * branch of `login()` so the storage / `/auth/me` hydrate path is identical.
+   */
+  async loginWithToken(accessToken: string): Promise<void> {
+    if (this.serverConfig.isNative) {
+      this._accessToken = accessToken;
+      await this.saveToken(accessToken);
+    }
+    const user = await firstValueFrom(this.http.get<User>('/api/auth/me'));
+    this._user.set(user);
+    const activeUrl = this.serverConfig.serverUrl();
+    if (activeUrl) {
+      await this.serverConfig.addOrTouchKnownServer(activeUrl, { username: user.username });
+    }
   }
 
   register(username: string, password: string, email?: string) {
