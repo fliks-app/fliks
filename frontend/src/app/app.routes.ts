@@ -10,10 +10,28 @@ export const routes: Routes = [
       import('./features/setup/setup').then((m) => m.SetupComponent),
   },
   {
+    path: 'select-user',
+    canActivate: [serverConfigGuard],
+    loadComponent: () =>
+      import('./features/select-user/select-user').then((m) => m.SelectUserComponent),
+  },
+  {
     path: 'login',
     canActivate: [serverConfigGuard],
     loadComponent: () =>
       import('./features/login/login').then((m) => m.LoginComponent),
+  },
+  {
+    path: 'quick-connect/:userId',
+    canActivate: [serverConfigGuard],
+    loadComponent: () =>
+      import('./features/quick-connect/quick-connect-wait').then((m) => m.QuickConnectWaitComponent),
+  },
+  {
+    path: 'pending-requests',
+    canActivate: [serverConfigGuard, authGuard],
+    loadComponent: () =>
+      import('./features/pending-requests/pending-requests').then((m) => m.PendingRequestsComponent),
   },
   {
     path: 'watch/:mediaFileId',

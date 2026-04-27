@@ -21,6 +21,13 @@ interface LoginResponse {
   accessToken?: string;
 }
 
+/** Lightweight user fields exposed by GET /auth/users-public for the picker. */
+export interface PublicUserSummary {
+  id: number;
+  username: string;
+  avatar: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
@@ -86,6 +93,11 @@ export class AuthService {
       await this.serverConfig.addOrTouchKnownServer(activeUrl, { username: res.user.username });
     }
     return res;
+  }
+
+  /** Pre-login user picker — see PublicUserSummary. */
+  listUsersPublic(): Promise<PublicUserSummary[]> {
+    return firstValueFrom(this.http.get<PublicUserSummary[]>('/api/auth/users-public'));
   }
 
   register(username: string, password: string, email?: string) {

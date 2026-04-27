@@ -1,6 +1,6 @@
 import { Component, ChangeDetectionStrategy, signal, inject } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Capacitor } from '@capacitor/core';
 import { AuthService } from '../../core/services/auth.service';
@@ -18,14 +18,27 @@ export class LoginComponent {
   private readonly fb = inject(FormBuilder);
   private readonly translate = inject(TranslateService);
   private readonly serverConfig = inject(ServerConfigService);
+  private readonly route = inject(ActivatedRoute);
 
   readonly isNative = Capacitor.isNativePlatform();
 
   readonly error = signal('');
   readonly loading = signal(false);
 
+  /**
+   * Username arrives via `?username=` from the user picker. When set we lock
+   * the field — the user already chose this account; let them just enter the
+   * password. Without it, fall back to the last username on the active server
+   * (server history feature) for one-tap return.
+   */
+  private readonly presetUsername = this.route.snapshot.queryParamMap.get('username');
+  readonly usernameLocked = !!this.presetUsername;
+
   readonly form = this.fb.nonNullable.group({
-    username: ['', Validators.required],
+    username: [
+      this.presetUsername ?? this.serverConfig.lastUsernameForActiveServer() ?? '',
+      Validators.required,
+    ],
     password: ['', Validators.required],
   });
 
