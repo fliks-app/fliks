@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal, OnInit, OnDestroy, Injector } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
@@ -8,6 +8,7 @@ import { LibrariesApiService, LibrarySummary } from '../../core/services/api/lib
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
+import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { LucideIconComponent } from '../../shared/components/lucide-icon';
@@ -55,7 +56,7 @@ import { LucideIconComponent } from '../../shared/components/lucide-icon';
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home.html',
 })
-export class HomeComponent implements OnInit {
+export class HomeComponent implements OnInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly confirmation = inject(ConfirmationService);
@@ -63,6 +64,10 @@ export class HomeComponent implements OnInit {
   private readonly castService = inject(CastService);
   private readonly castPlayer = inject(CastPlayerService);
   private readonly librariesApi = inject(LibrariesApiService);
+  private readonly scrollMemory = inject(ScrollMemoryService);
+  private readonly injector = inject(Injector);
+
+  private static readonly SCROLL_KEY = 'home';
 
   readonly loading = signal(true);
   readonly libraries = signal<LibrarySummary[]>([]);
@@ -87,6 +92,8 @@ export class HomeComponent implements OnInit {
   }
 
   async ngOnInit() {
+    // Track scroll for back-navigation restore. Same pattern as /libraries.
+    this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
     // Load non-filterable sections once
     try {
       const [libs, cw, recs] = await Promise.all([
@@ -101,6 +108,12 @@ export class HomeComponent implements OnInit {
     // Load filterable sections (recent + coming soon)
     await this.loadFilteredSections();
     this.loading.set(false);
+    // Restore scroll once everything is in the DOM.
+    this.scrollMemory.restore(HomeComponent.SCROLL_KEY, this.injector);
+  }
+
+  ngOnDestroy() {
+    this.scrollMemory.deactivate();
   }
 
   async toggleOnlyMyRequests() {
