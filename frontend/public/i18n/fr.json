@@ -327,7 +327,7 @@
     "empty": "Aucune demande en attente.",
     "approve": "Approuver",
     "deny": "Refuser",
-    "approved_toast": "Appareil connecté.",
+    "approved_toast": "Connexion acceptée",
     "denied_toast": "Demande refusée.",
     "load_error": "Impossible de charger les demandes en attente.",
     "action_error": "L'action n'a pas pu aboutir."
