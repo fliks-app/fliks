@@ -120,6 +120,20 @@ export class MediaCardComponent {
     const m = this.media();
     return m ? { media: m } : undefined;
   });
+  /**
+   * View-transition name for the poster image. Matches the same name used by
+   * `app-media-info-header` on the detail page, so the browser morphs the
+   * card's poster into the hero on navigation. Only set when a media id is
+   * available — Tailwind/CSS handles the no-name case as a default fade.
+   *
+   * Caveat: when the same media appears in two card slots on a page (e.g.
+   * "continue watching" + "recommendations"), the duplicate name conflicts
+   * and the browser silently skips the morph. The page still cross-fades.
+   */
+  protected readonly _vtPosterName = computed(() => {
+    const m = this.media();
+    return m ? `media-poster-${m.id}` : null;
+  });
   protected readonly _playable = computed(() => {
     if (this.playable()) return true;
     const m = this.media();

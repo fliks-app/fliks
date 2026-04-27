@@ -25,6 +25,7 @@
         [class.opacity-35]="imageBlurred()"
         [class.scale-105]="imageBlurred()"
         loading="lazy"
+        [style.view-transition-name]="_vtPosterName()"
       />
     } @else {
       <div class="flex items-center justify-center w-full h-full text-base-content/20">
