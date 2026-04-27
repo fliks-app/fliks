@@ -77,7 +77,11 @@ export class TvSpatialNavService {
 
   private findNeighbor(dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null {
     const active = document.activeElement as HTMLElement | null;
-    const all = collectFocusables();
+    // Focus trap: while a player dropdown is open, restrict navigation to its
+    // contents so D-pad Up/Down stays in the list and Right/Left can't escape
+    // the modal. Without this the panel stays visible but focus wanders off.
+    const openModal = document.querySelector<HTMLElement>('.dropdown-open .dropdown-content');
+    const all = openModal ? collectFocusables(openModal) : collectFocusables();
     if (!all.length) return null;
 
     if (!active || active === document.body) {
@@ -169,8 +173,8 @@ const KEYCODE_TO_DIR: Record<number, 'left' | 'right' | 'up' | 'down' | undefine
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [data-tv-focusable]';
 
-function collectFocusables(): HTMLElement[] {
-  const nodes = Array.from(document.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+function collectFocusables(root: ParentNode = document): HTMLElement[] {
+  const nodes = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
   const visible = nodes.filter((el) => {
     if (el.hasAttribute('disabled')) return false;
     if (el.getAttribute('aria-hidden') === 'true') return false;

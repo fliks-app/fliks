@@ -40,6 +40,7 @@ import { CastEngine } from '../../core/services/playback-engine/cast-engine';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { TrackManagerService, SubtitleOption } from '../../core/services/track-manager.service';
 import { QualityManagerService, findVariantByProfileName, findBestVariantForHeight } from '../../core/services/quality-manager.service';
+import { DeviceService } from '../../core/services/device.service';
 
 interface ImmersivePlugin {
   enter(options?: { displayBehindNotch?: boolean }): Promise<void>;
@@ -122,6 +123,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly state = inject(PlayerStateService);
   private readonly trackManager = inject(TrackManagerService);
   private readonly qualityManager = inject(QualityManagerService);
+  readonly device = inject(DeviceService);
 
   private readonly videoEl = viewChild<ElementRef<HTMLVideoElement>>('videoElement');
   private readonly containerEl = viewChild<ElementRef<HTMLDivElement>>('playerContainer');
@@ -959,9 +961,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private resetHideTimer() {
     if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
     if (this.seekDragging) return; // don't start hide timer during drag
+    // 5 s on TV: focus is visual only, give the user time to read the labels.
+    const delay = this.device.isTv() ? 5000 : 3000;
     this.controlsTimeout = setTimeout(() => {
       if (!this.paused() && !this.isDropdownOpen() && !this.seekDragging) this.controlsVisible.set(false);
-    }, 3000);
+    }, delay);
   }
 
   private isDropdownOpen(): boolean {

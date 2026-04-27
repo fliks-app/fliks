@@ -102,8 +102,8 @@
       </div>
     }
 
-    <!-- Hover overlay (desktop only) -->
-    @if (!isNative) {
+    <!-- Hover overlay (mouse-driven devices only — touch & D-pad use other affordances) -->
+    @if (showHoverOverlay()) {
       <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none group-hover:pointer-events-auto">
         @if (_link()) {
           <a [routerLink]="_link()" class="absolute inset-0 z-0" [attr.aria-label]="_title()" (click)="$event.stopPropagation()"></a>

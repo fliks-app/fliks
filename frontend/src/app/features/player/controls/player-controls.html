@@ -1,3 +1,9 @@
+<!-- Click-out backdrop: closes the open dropdown when tapping anywhere outside.
+     z-39 sits below the dropdown-content (z-50 in DaisyUI) and the controls bars
+     (z-40) but above the video, so the click reaches it before the page below. -->
+@if (openDropdown()) {
+  <div class="fixed inset-0 z-30" (click)="closeDropdown($event)"></div>
+}
 <!-- ===== TOP BAR ===== -->
 <div
   class="absolute top-0 left-0 right-0 z-40 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent transition-opacity duration-300 px-10 py-5"

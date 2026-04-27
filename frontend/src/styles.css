@@ -182,4 +182,19 @@ body.tv [data-touch-only] {
   display: none !important;
 }
 
+/* TV: dropdowns are signal-controlled (`.dropdown-open`). Neutralise any
+   `:focus-within` fallback that DaisyUI might re-introduce — D-pad focus alone
+   should never auto-open a dropdown. */
+body.tv .dropdown:not(.dropdown-open) > .dropdown-content {
+  display: none !important;
+}
+
+/* ============================================================================
+   Tablet form-factor — body.tablet toggled by DeviceService
+   ============================================================================ */
+body.tablet [data-touch-only] {
+  /* Touch-only affordances stay visible on tablet (it's a touch device). */
+  display: revert;
+}
+
 

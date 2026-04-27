@@ -1,6 +1,10 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
+  HostListener,
+  Injector,
+  afterNextRender,
   computed,
   inject,
   input,
@@ -8,7 +12,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { TvService } from '../../../core/services/tv.service';
+import { DeviceService } from '../../../core/services/device.service';
 import { NgTemplateOutlet } from '@angular/common';
 import { BottomSheetComponent } from '../../../shared/components/bottom-sheet';
 import { TranslateModule } from '@ngx-translate/core';
@@ -67,16 +71,24 @@ import {
   templateUrl: './player-controls.html',
 })
 export class PlayerControlsComponent {
-  private readonly tvService = inject(TvService);
+  private readonly device = inject(DeviceService);
   /** True on Android TV — drives 10-foot UI choices in the template. */
-  readonly isTv = this.tvService.isTv;
+  readonly isTv = this.device.isTv;
   /**
-   * On TV we want the desktop-style layout (dropdowns instead of bottom-sheets,
-   * left/right toolbars instead of stacked mobile rows) because focus + D-pad
-   * navigation is far more natural with that structure. Templates use this
-   * computed instead of `isNative()` whenever a touch-only behavior is gated.
+   * Player layout selection. Splits the three concerns the template branches on:
+   * - 'tv' → desktop-style toolbar with dropdowns (D-pad-friendly).
+   * - 'mobile' → big center play/seek buttons + bottom sheets (touch).
+   * - 'desktop' → desktop-style toolbar with dropdowns (mouse + keyboard).
+   * Tablets land on 'mobile' so taps reach the controls — the previous
+   * `isNative && !isTv` rule excluded tablets that were mis-classified as TV.
    */
-  readonly isMobileTouch = computed(() => this.isNative() && !this.isTv());
+  readonly playerLayout = computed<'desktop' | 'mobile' | 'tv'>(() => {
+    if (this.device.isTv()) return 'tv';
+    if (this.device.isTouch()) return 'mobile';
+    return 'desktop';
+  });
+  /** True when the touch-optimised mobile layout should render. */
+  readonly isMobileTouch = computed(() => this.playerLayout() === 'mobile');
 
   readonly visible = input(true);
   readonly paused = input(true);
@@ -154,6 +166,9 @@ export class PlayerControlsComponent {
   readonly activeSheet = signal<'subtitles' | 'audio' | 'speed' | 'settings' | null>(null);
 
   readonly seekbar = viewChild(SeekbarComponent);
+  readonly hostEl: ElementRef<HTMLElement> = inject(ElementRef);
+  private readonly injector = inject(Injector);
+  private dropdownTrigger: HTMLElement | null = null;
 
   openSheet(sheet: 'subtitles' | 'audio' | 'speed' | 'settings') {
     if (sheet === 'settings') this.settingsPanel.set('main');
@@ -162,6 +177,22 @@ export class PlayerControlsComponent {
 
   closeSheet() {
     this.activeSheet.set(null);
+  }
+
+  /**
+   * Close the open dropdown when Escape (web) or KEYCODE_BACK (Android remote)
+   * fires. We intercept in capture phase so the OS Back button doesn't navigate
+   * the player away while a panel is still open.
+   */
+  @HostListener('window:keydown', ['$event'])
+  onWindowKey(e: KeyboardEvent) {
+    if (!this.openDropdown()) return;
+    const isBack = e.key === 'Escape' || e.key === 'GoBack' || e.key === 'BrowserBack' || e.keyCode === 4 || e.keyCode === 27;
+    if (!isBack) return;
+    e.preventDefault();
+    e.stopPropagation();
+    this.closeDropdown();
+    this.dropdownTrigger?.focus({ preventScroll: true });
   }
 
   readonly formatTime = formatTime;
@@ -184,7 +215,15 @@ export class PlayerControlsComponent {
   toggleDropdown(name: 'subtitles' | 'audio' | 'speed' | 'settings', event?: Event) {
     event?.stopPropagation();
     if (name === 'settings') this.settingsPanel.set('main');
-    this.openDropdown.set(this.openDropdown() === name ? null : name);
+    const next = this.openDropdown() === name ? null : name;
+    this.openDropdown.set(next);
+    if (next) {
+      // Remember the trigger so Back/Escape can refocus it after closing.
+      this.dropdownTrigger = (event?.currentTarget as HTMLElement) ?? null;
+      // On TV, push focus into the panel so the D-pad lands on the first item
+      // instead of having to traverse out of the trigger via spatial nav.
+      if (this.isTv()) this.focusFirstDropdownItem();
+    }
   }
 
   /** Close current dropdown after an item selection (and reset settings panel). */
@@ -192,5 +231,16 @@ export class PlayerControlsComponent {
     event?.stopPropagation();
     this.openDropdown.set(null);
     this.settingsPanel.set('main');
+  }
+
+  private focusFirstDropdownItem() {
+    afterNextRender(
+      () => {
+        const panel = this.hostEl.nativeElement.querySelector<HTMLElement>('.dropdown-open .dropdown-content');
+        const first = panel?.querySelector<HTMLElement>('button, a, [tabindex]:not([tabindex="-1"])');
+        first?.focus({ preventScroll: true });
+      },
+      { injector: this.injector },
+    );
   }
 }
