@@ -1,7 +1,9 @@
 import { Component, ChangeDetectionStrategy, inject, OnInit, OnDestroy } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
+import { filter, take } from 'rxjs';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
+import { SplashScreen } from '@capacitor/splash-screen';
 import { AuthService } from './core/services/auth.service';
 import { CastPlayerService } from './core/services/cast-player.service';
 import { SseService } from './core/services/sse.service';
@@ -29,6 +31,7 @@ export class App implements OnInit, OnDestroy {
   private readonly tv = inject(TvService);
   /** Eagerly instantiate to bind the global D-pad handler on TV. */
   private readonly tvSpatialNav = inject(TvSpatialNavService);
+  private readonly router = inject(Router);
   private backButtonListener?: { remove: () => Promise<void> };
   private resumeListener?: { remove: () => Promise<void> };
 
@@ -39,6 +42,21 @@ export class App implements OnInit, OnDestroy {
 
     if (Capacitor.isNativePlatform()) {
       document.body.classList.add('native');
+
+      // Hide the native splash on the first NavigationEnd. The splash sits in
+      // launchAutoHide:false mode so the WebView's loading state is fully
+      // covered — we dismiss it once Angular has rendered actual content.
+      this.router.events.pipe(
+        filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+        take(1),
+      ).subscribe(() => {
+        // Defer one frame so the rendered template has actually painted before
+        // the splash fades out — otherwise the user briefly sees a blank app.
+        requestAnimationFrame(() => {
+          void SplashScreen.hide({ fadeOutDuration: 200 });
+        });
+      });
+
       CapApp.addListener('backButton', ({ canGoBack }) => {
         // Close Cast overlay first if open
         if (this.castPlayer.expanded()) {

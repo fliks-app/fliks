@@ -21,7 +21,6 @@ import { DownloadClientsApiService } from '../../core/services/api/download-clie
 import { RequestsService } from '../../core/services/api/requests.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SseService } from '../../core/services/sse.service';
-import { ThemeService } from '../../core/services/theme.service';
 import { CastService } from '../../core/services/cast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
@@ -102,7 +101,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly langTick = signal(0);
   readonly canGoBack = this.navbar.canGoBack;
 
-  readonly themeService = inject(ThemeService);
   readonly isNative = Capacitor.isNativePlatform();
   readonly bottomMenuOpen = signal(false);
   readonly keyboardOpen = signal(false);
@@ -110,13 +108,16 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly navbarTransparent = this.navbar.navbarTransparent;
   readonly isHomeRoute = signal(this.router.url === '/' || this.router.url.startsWith('/?'));
 
-  // Sync Android status bar icons with navbar state
+  // Sync Android status bar icons with navbar state. App is dark-only, so the
+  // bar gets dark icons (light=true) only when the navbar is fully visible
+  // (non-transparent) and would otherwise blend with white text on its own
+  // dark bg — which is never the case here, hence always light=false.
   private readonly statusBarEffect = Capacitor.isNativePlatform() ? effect(() => {
-    const transparent = this.navbarTransparent();
-    const theme = this.themeService.theme();
-    const light = !transparent && theme === 'light';
+    // Read the signal so the effect re-runs when transparency flips, in case
+    // future code wants to react to it.
+    void this.navbarTransparent();
     const Immersive = registerPlugin<any>('Immersive');
-    Immersive.setLightStatusBar({ light }).catch(() => {});
+    Immersive.setLightStatusBar({ light: false }).catch(() => {});
   }) : null;
 
   private readonly documentTitleEffect = effect(() => {

@@ -11,31 +11,13 @@
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1d232a">
-  <!-- Pre-paint theme bridge. Without this the WebView shows white between
-       Capacitor splash and Angular's CSS bundle parsing. We mirror
-       ThemeService.getInitialTheme() inline (persisted 'fliks-theme' →
-       matchMedia fallback) so data-theme is set on the very first paint, then
-       a zero-specificity rule via :where() paints the matching background.
-       daisyUI's :root { background: var(--root-bg) } has higher specificity
-       and overrides cleanly once styles.css is parsed AND every time the user
-       toggles the theme — using an inline element style instead would freeze
-       the bg at the initial theme and break the toggle. -->
+  <!-- Pre-paint navy bg — kills the WebView default-white flash before
+       styles.css parses. :where() has zero specificity so daisyUI overrides
+       cleanly once it loads. App is dark-only. -->
   <style>
     html, body { margin: 0; }
-    :where(html[data-theme="dark"])  { background-color: #1d232a; }
-    :where(html[data-theme="light"]) { background-color: #ffffff; }
+    :where(html) { background-color: #1d232a; }
   </style>
-  <script>
-    (function () {
-      try {
-        var stored = localStorage.getItem('fliks-theme');
-        var theme = (stored === 'dark' || stored === 'light')
-          ? stored
-          : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-        document.documentElement.setAttribute('data-theme', theme);
-      } catch (_) { /* localStorage may be unavailable — fall back to the static data-theme */ }
-    })();
-  </script>
   <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1" async></script>
 </head>
 <body>
