@@ -104,15 +104,15 @@
       }
       <router-outlet />
     </main>
-    <!-- Bottom spacer for native bottom bar (TV doesn't get the bottom bar) -->
-    @if (isNative && !tv.isTv()) {
+    <!-- Bottom spacer for native bottom bar — phones only. Tablets and TV
+         navigate via the drawer/sidebar; phones use the dock as the primary
+         nav surface so they need the spacer to avoid content under the bar. -->
+    @if (isNative && device.isPhone()) {
       <div class="h-20"></div>
     }
-    <!-- Native bottom navigation bar (touch-only — hidden on TV).
-         Uses DaisyUI's `.dock` component: each child caps at max-width: 8rem,
-         so on tablets the items cluster naturally instead of stretching. The
-         dock handles its own fixed positioning and safe-area-inset-bottom. -->
-    @if (isNative && !tv.isTv() && !keyboardOpen()) {
+    <!-- Native bottom navigation bar — phones only.
+         Tablets and TV use the drawer/sidebar instead. -->
+    @if (isNative && device.isPhone() && !keyboardOpen()) {
       <div class="dock z-40">
         <a routerLink="/" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: true }"
            (click)="resetNavHistory()">
