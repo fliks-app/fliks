@@ -122,9 +122,15 @@ export class MediaCardComponent {
   });
   /**
    * View-transition name for the poster image. Matches the same name used by
-   * `app-media-info-header` on the detail page, so the browser morphs the
-   * card's poster into the hero on navigation. Only set when a media id is
-   * available — Tailwind/CSS handles the no-name case as a default fade.
+   * `app-media-info-header` on the detail page so the browser morphs the
+   * card's poster into the hero on navigation.
+   *
+   * Resolution order:
+   *  1. `[media]` input → use its id directly.
+   *  2. `[link]` input (e.g. ['/movies', '123']) → extract the id from the last
+   *     segment. Covers cards that don't carry a Media object (continue-watching,
+   *     calendar, recently-requested, …) but do route to a detail page.
+   *  3. otherwise → null (browser falls back to a default page cross-fade).
    *
    * Caveat: when the same media appears in two card slots on a page (e.g.
    * "continue watching" + "recommendations"), the duplicate name conflicts
@@ -132,7 +138,14 @@ export class MediaCardComponent {
    */
   protected readonly _vtPosterName = computed(() => {
     const m = this.media();
-    return m ? `media-poster-${m.id}` : null;
+    if (m) return `media-poster-${m.id}`;
+    const link = this.link();
+    if (link && link.length >= 2) {
+      const last = link[link.length - 1];
+      const id = typeof last === 'number' ? last : Number(last);
+      if (Number.isFinite(id) && id > 0) return `media-poster-${id}`;
+    }
+    return null;
   });
   protected readonly _playable = computed(() => {
     if (this.playable()) return true;
