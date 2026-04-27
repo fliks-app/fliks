@@ -121,10 +121,12 @@ export class MediaCardComponent {
     return m ? { media: m } : undefined;
   });
   /**
-   * View-transition name for the poster image. Matches the same name used by
-   * `app-media-info-header` on the detail page, so the browser morphs the
-   * card's poster into the hero on navigation. Only set when a media id is
-   * available — Tailwind/CSS handles the no-name case as a default fade.
+   * View-transition name for the card image. The detail page hero matches one
+   * of two names per aspect:
+   *   - portrait card → 'media-poster-<id>'  (matches the small detail poster)
+   *   - landscape card → 'media-fanart-<id>' (matches the wide fanart hero)
+   * Picking by aspect avoids morphing a 16:9 fanart card into a 2:3 portrait —
+   * the shape change made the recommendation-row cards look broken before.
    *
    * Caveat: when the same media appears in two card slots on a page (e.g.
    * "continue watching" + "recommendations"), the duplicate name conflicts
@@ -132,7 +134,8 @@ export class MediaCardComponent {
    */
   protected readonly _vtPosterName = computed(() => {
     const m = this.media();
-    return m ? `media-poster-${m.id}` : null;
+    if (!m) return null;
+    return this.aspect() === 'landscape' ? `media-fanart-${m.id}` : `media-poster-${m.id}`;
   });
   protected readonly _playable = computed(() => {
     if (this.playable()) return true;

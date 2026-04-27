@@ -1,6 +1,6 @@
 <!-- ===== MOBILE layout ===== -->
 <div class="lg:hidden">
-  <app-mobile-fanart-hero [fanartUrl]="fanartUrl()" />
+  <app-mobile-fanart-hero [fanartUrl]="fanartUrl()" [mediaId]="mediaId()" />
 
   <div class="-mt-16 relative z-10">
     <!-- Title -->
@@ -222,7 +222,12 @@
 <div class="hidden lg:block relative">
   @if (fanartUrl()) {
     <div class="absolute inset-0 -mx-6 -mt-6 overflow-hidden">
-      <img [src]="fanartUrl()! | resolveUrl" alt="" class="w-full h-full object-cover object-[50%_25%]" />
+      <img
+        [src]="fanartUrl()! | resolveUrl"
+        alt=""
+        class="w-full h-full object-cover object-[50%_25%]"
+        [style.view-transition-name]="'media-fanart-' + mediaId()"
+      />
       <div class="absolute inset-0 bg-base-100/80"></div>
       <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-base-100/30 to-base-100/50"></div>
     </div>
