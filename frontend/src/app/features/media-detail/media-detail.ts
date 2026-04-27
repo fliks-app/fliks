@@ -515,6 +515,17 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Card → detail handoff: when the user clicks a media card, we ship the
+    // already-loaded Media via router state so the detail page can render
+    // immediately with the same poster/title/year. The full fetch below still
+    // runs in the background to refresh fields the card doesn't carry
+    // (cast/crew/files/seasons). Spinner only stays for cold deep-links.
+    const passed = (history.state as { media?: Media })?.media;
+    if (passed && passed.id === id && passed.type === kind) {
+      this.media.set(passed);
+      this.loading.set(false);
+    }
+
     const loadProfiles = async () => {
       if (!this.auth.hasPermission('media.edit')) return;
       this.profilesOptionsLoading.set(true);
