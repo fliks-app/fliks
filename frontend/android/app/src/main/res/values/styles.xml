@@ -16,24 +16,12 @@
     </style>
 
 
-    <!-- Base launch theme. The drawable reads ?attr/splashBackground from the
-         active variant (Dark or Light below). Default = Dark to match the
-         legacy behaviour for users who haven't picked a theme yet.
-
-         We set both android:background (legacy) and android:windowBackground
-         (modern, what the OS actually paints for the splash window) so the
-         theme is robust across Android versions. -->
+    <!-- Launch theme: dark splash with the centered Fliks logo. App is
+         dark-only. The splashBackground attr is kept for future flexibility
+         and read by drawable/splash_themed.xml. -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash_themed</item>
         <item name="android:windowBackground">@drawable/splash_themed</item>
         <item name="splashBackground">@color/splash_bg_dark</item>
-    </style>
-
-    <style name="AppTheme.NoActionBarLaunch.Dark">
-        <item name="splashBackground">@color/splash_bg_dark</item>
-    </style>
-
-    <style name="AppTheme.NoActionBarLaunch.Light">
-        <item name="splashBackground">@color/splash_bg_light</item>
     </style>
 </resources>

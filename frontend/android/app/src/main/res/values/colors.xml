@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Splash backgrounds — match the daisyUI base-100 of each theme. -->
+    <!-- Splash background — matches the daisyUI dark base. App is dark-only. -->
     <color name="splash_bg_dark">#1d232a</color>
-    <color name="splash_bg_light">#ffffff</color>
 </resources>

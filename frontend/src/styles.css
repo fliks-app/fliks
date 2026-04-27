@@ -133,11 +133,9 @@ body.tv.immersive {
   transform: none;
 }
 /* Backfill the area revealed by body.tv's transform: scale(0.96) so it doesn't
-   show whatever was underneath (browser default white). Use daisyUI's base-100
-   so the backfill follows the active theme — was hardcoded navy when only
-   dark was supported on TV, which caused a navy flash in light mode. */
+   show whatever was underneath (browser default white). App is dark-only. */
 html.tv-host {
-  background: var(--color-base-100);
+  background: #1d232a;
 }
 /* Disable hover styles on TV — there is no pointer */
 body.tv *:hover {

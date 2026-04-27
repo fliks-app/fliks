@@ -6,7 +6,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
@@ -23,19 +22,11 @@ public class MainActivity extends BridgeActivity {
     private boolean immersiveMode = false;
     private boolean pipOnLeave = false;
     private boolean lightStatusBar = false;
-    private boolean isLightTheme = false;
     private android.app.PictureInPictureParams pipParams = null;
     private BroadcastReceiver pipActionReceiver;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // Splash theme variant is locked when super.onCreate() inflates the
-        // window — must be picked BEFORE that call. We read the persisted
-        // Fliks theme from CapacitorStorage (the SharedPreferences file
-        // @capacitor/preferences writes to from the JS side) and pick the Light
-        // variant when the user is on the light theme; default = Dark.
-        applyThemedSplash();
-
         registerPlugin(ImmersivePlugin.class);
         registerPlugin(PipPlugin.class);
         registerPlugin(HdrPlugin.class);
@@ -43,11 +34,6 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DownloadNotificationPlugin.class);
         registerPlugin(NativePlayerPlugin.class);
         super.onCreate(savedInstanceState);
-
-        // Paint the WebView's own background to match the active theme — the
-        // default white leaks through as a flash between the native splash and
-        // the first Angular paint, even with an inline <style> in index.html.
-        applyWebViewBackground();
 
         // Request notification permission (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -169,52 +155,6 @@ public class MainActivity extends BridgeActivity {
         // changes; reapply the last requested state so nav/status icons keep their
         // theme-matching color (white on dark, dark on light).
         getWindow().getDecorView().post(this::applyLightStatusBar);
-    }
-
-    /**
-     * Pick the splash theme variant that matches the user's persisted Fliks
-     * theme. The JS side mirrors the toggle into Capacitor Preferences
-     * (SharedPreferences file "CapacitorStorage", key "fliks-theme"), so by
-     * the second cold start after a toggle the splash already matches.
-     *
-     * The very first launch — no preference yet — falls through to Dark.
-     */
-    private void applyThemedSplash() {
-        try {
-            SharedPreferences prefs = getSharedPreferences("CapacitorStorage", MODE_PRIVATE);
-            String raw = prefs.getString("fliks-theme", null);
-            // @capacitor/preferences may serialize string values as raw or as
-            // JSON-quoted strings depending on the version — normalize.
-            String theme = raw == null ? null : raw.replaceAll("^\"|\"$", "");
-            android.util.Log.d("FliksSplash",
-                "applyThemedSplash: raw=" + raw + " normalized=" + theme + " keys=" + prefs.getAll().keySet());
-            isLightTheme = "light".equals(theme);
-            if (isLightTheme) {
-                setTheme(R.style.AppTheme_NoActionBarLaunch_Light);
-            } else {
-                setTheme(R.style.AppTheme_NoActionBarLaunch_Dark);
-            }
-        } catch (Exception e) {
-            android.util.Log.w("FliksSplash", "applyThemedSplash failed", e);
-            // Any failure → fall back to the default theme already set in the manifest.
-        }
-    }
-
-    /**
-     * Paint the WebView's own background to match the active theme. The Android
-     * WebView defaults to white, which leaks through as a flash between the
-     * native splash and the moment Angular's CSS bundle paints the body — even
-     * when an inline <style> in index.html sets the html bg, the WebView's
-     * own background is painted FIRST. Setting it here removes the flash.
-     */
-    private void applyWebViewBackground() {
-        try {
-            if (getBridge() == null || getBridge().getWebView() == null) return;
-            int color = isLightTheme ? Color.WHITE : Color.parseColor("#1d232a");
-            getBridge().getWebView().setBackgroundColor(color);
-        } catch (Exception ignored) {
-            /* nothing to fall back to — accept the default white */
-        }
     }
 
     /** True when the device is in television (leanback) UI mode. */
