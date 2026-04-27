@@ -132,8 +132,8 @@ body.tv {
 body.tv.immersive {
   transform: none;
 }
-/* Backfill the area behind the scaled body so it doesn't show whatever was
-   underneath (browser default white) — match the dark base so it's invisible */
+/* Backfill the area revealed by body.tv's transform: scale(0.96) so it doesn't
+   show whatever was underneath (browser default white). App is dark-only. */
 html.tv-host {
   background: #1d232a;
 }

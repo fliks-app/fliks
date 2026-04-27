@@ -1,6 +1,5 @@
 import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { ThemeService } from '../../core/services/theme.service';
 import { TranslateModule } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
@@ -11,8 +10,6 @@ import {
   LucideShield,
   LucideRepeat,
   LucideLogOut,
-  LucideSun,
-  LucideMoon,
   LucideServer,
   LucideMonitorSmartphone,
 } from '@lucide/angular';
@@ -22,7 +19,7 @@ import {
   imports: [
     RouterLink, TranslateModule,
     LucideUser, LucideSettings, LucideShield, LucideRepeat, LucideLogOut,
-    LucideSun, LucideMoon, LucideServer, LucideMonitorSmartphone,
+    LucideServer, LucideMonitorSmartphone,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -41,13 +38,6 @@ import {
               <p class="font-semibold truncate">{{ user.username }}</p>
               <p class="text-xs text-base-content/50">{{ user.role }}</p>
             </a>
-            <button type="button" class="btn btn-ghost btn-sm btn-circle shrink-0" (click)="themeService.toggle(); $event.stopPropagation()">
-              @if (themeService.theme() === 'dark') {
-                <svg lucideSun class="h-4 w-4"></svg>
-              } @else {
-                <svg lucideMoon class="h-4 w-4"></svg>
-              }
-            </button>
           </div>
         }
         <!-- Menu items -->
@@ -72,7 +62,6 @@ export class UserMenuComponent {
   readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly serverConfig = inject(ServerConfigService);
-  readonly themeService = inject(ThemeService);
   readonly isNative = Capacitor.isNativePlatform();
 
   switchUser() {

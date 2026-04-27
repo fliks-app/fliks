@@ -11,6 +11,13 @@
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1d232a">
+  <!-- Pre-paint navy bg — kills the WebView default-white flash before
+       styles.css parses. :where() has zero specificity so daisyUI overrides
+       cleanly once it loads. App is dark-only. -->
+  <style>
+    html, body { margin: 0; }
+    :where(html) { background-color: #1d232a; }
+  </style>
   <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1" async></script>
 </head>
 <body>
