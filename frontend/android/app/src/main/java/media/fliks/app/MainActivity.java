@@ -180,12 +180,15 @@ public class MainActivity extends BridgeActivity {
             // @capacitor/preferences may serialize string values as raw or as
             // JSON-quoted strings depending on the version — normalize.
             String theme = raw == null ? null : raw.replaceAll("^\"|\"$", "");
+            android.util.Log.d("FliksSplash",
+                "applyThemedSplash: raw=" + raw + " normalized=" + theme + " keys=" + prefs.getAll().keySet());
             if ("light".equals(theme)) {
                 setTheme(R.style.AppTheme_NoActionBarLaunch_Light);
             } else {
                 setTheme(R.style.AppTheme_NoActionBarLaunch_Dark);
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            android.util.Log.w("FliksSplash", "applyThemedSplash failed", e);
             // Any failure → fall back to the default theme already set in the manifest.
         }
     }

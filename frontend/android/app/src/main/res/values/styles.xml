@@ -18,9 +18,14 @@
 
     <!-- Base launch theme. The drawable reads ?attr/splashBackground from the
          active variant (Dark or Light below). Default = Dark to match the
-         legacy behaviour for users who haven't picked a theme yet. -->
+         legacy behaviour for users who haven't picked a theme yet.
+
+         We set both android:background (legacy) and android:windowBackground
+         (modern, what the OS actually paints for the splash window) so the
+         theme is robust across Android versions. -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash_themed</item>
+        <item name="android:windowBackground">@drawable/splash_themed</item>
         <item name="splashBackground">@color/splash_bg_dark</item>
     </style>
 
