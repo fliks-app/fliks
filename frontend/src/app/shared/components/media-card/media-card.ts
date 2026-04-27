@@ -111,14 +111,33 @@ export class MediaCardComponent {
     return m ? ['/' + (m.type === 'movie' ? 'movies' : 'series'), '' + m.id] : null;
   });
   /**
-   * Hand the full Media to the detail page via router state so it can render
-   * immediately with the same poster/title/year the card already shows,
-   * instead of mounting on a blocking spinner. The detail page also re-fetches
-   * in background to refresh fields the card doesn't carry.
+   * Hand the full Media (or a stub) to the detail page via router state so it
+   * can render immediately instead of mounting on a blocking spinner.
+   *
+   * Cards built with `[imageUrl]` + `[link]` (recommendations, coming-soon,
+   * continue-watching, …) don't have a full Media. Without a state handoff
+   * the detail page sat on its spinner until the API responded — and during
+   * the spinner phase the destination poster <img> wasn't rendered yet, so
+   * the view-transition had nothing to pair with: no morph.
+   *
+   * We build a partial stub from `[link]` + `[imageUrl]` + `[title]` good
+   * enough for the header to render. The detail page's background fetch
+   * replaces it with the full Media a moment later.
    */
   protected readonly _navState = computed(() => {
     const m = this.media();
-    return m ? { media: m } : undefined;
+    if (m) return { media: m };
+    const id = this.resolveMediaId();
+    const link = this.link();
+    if (id == null || !link) return undefined;
+    const type: 'movie' | 'series' = link[0] === '/series' ? 'series' : 'movie';
+    const stub = {
+      id,
+      type,
+      title: this._title(),
+      posterUrl: this.imageUrl() ?? null,
+    } as unknown as Media;
+    return { media: stub };
   });
   /**
    * `<img>` ref so we can stamp the view-transition-name imperatively just
