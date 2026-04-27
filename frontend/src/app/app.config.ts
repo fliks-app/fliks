@@ -22,7 +22,11 @@ export const appConfig: ApplicationConfig = {
     provideZonelessChangeDetection(),
     provideRouter(routes, withInMemoryScrolling({ scrollPositionRestoration: 'top' })),
     provideHttpClient(
-      withInterceptors([serverUrlInterceptor, credentialsInterceptor, cacheInterceptor, errorInterceptor]),
+      // cacheInterceptor must run BEFORE serverUrlInterceptor: the cache keys on
+      // logical paths (/api/...). Once serverUrl rewrites them to absolute URLs
+      // (native), every startsWith('/api/...') check inside the cache misses,
+      // so on native nothing was cached and invalidation never fired.
+      withInterceptors([cacheInterceptor, serverUrlInterceptor, credentialsInterceptor, errorInterceptor]),
     ),
     provideTranslateService({
       loader: {
