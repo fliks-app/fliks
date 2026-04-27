@@ -37,7 +37,11 @@ export class LoginComponent {
 
     const { username, password } = this.form.getRawValue();
     try {
-      await this.auth.login(username, password);
+      // Trim only the username — a password can legitimately contain leading/
+      // trailing whitespace and we shouldn't quietly mutate it (Plex/Jellyfin
+      // do the same). Whitespace around usernames is almost always a copy-paste
+      // artefact that breaks auth.
+      await this.auth.login(username.trim(), password);
       this.loading.set(false);
       void this.router.navigate(['/'], { replaceUrl: true });
     } catch (err: unknown) {
