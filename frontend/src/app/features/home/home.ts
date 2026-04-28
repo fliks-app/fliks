@@ -159,6 +159,29 @@ export class HomeComponent implements OnInit, OnDestroy {
     } catch { /* ignore */ }
   }
 
+  /**
+   * Recommendation cards expose a Lire action even though the lean DTO
+   * doesn't carry file ids — we fetch the full media on demand and route
+   * to the first playable file. If nothing is playable (e.g. a "to add"
+   * suggestion not yet downloaded) we fall back to the detail page.
+   */
+  async playRecommendation(rec: RecommendationItem) {
+    try {
+      const media = await this.mediaService.getOne(rec.media.id);
+      const file = media.files?.[0];
+      if (!file) {
+        const segment = media.type === 'series' ? 'series' : 'movies';
+        void this.router.navigate(['/' + segment, media.id]);
+        return;
+      }
+      const qp: Record<string, number> = { mediaId: media.id };
+      if (file.episodeId) qp['episodeId'] = file.episodeId;
+      void this.router.navigate(['/watch', file.id], { queryParams: qp });
+    } catch {
+      /* error handled by global interceptor */
+    }
+  }
+
   async playContinueWatching(item: ContinueWatchingItem) {
     if (this.castService.isConnected()) {
       await this.castPlayer.quickStart({

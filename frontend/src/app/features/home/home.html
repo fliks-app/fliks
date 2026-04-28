@@ -49,6 +49,8 @@
             [title]="rec.media.title"
             [subtitle]="'' + (rec.media.year ?? '')"
             [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
+            [playable]="true"
+            (played)="playRecommendation(rec)"
           />
         }
       </app-horizontal-scroller>

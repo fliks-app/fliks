@@ -10,8 +10,11 @@ export interface CardAction {
   labelKey?: string;
   /** Pre-translated label (used when no `labelKey` is provided). */
   label?: string;
-  /** Lucide icon component (any of the @lucide/angular exports). */
-  icon?: unknown;
+  /**
+   * Lucide icon name for the leading glyph. Resolved by the panel component
+   * against a curated whitelist. Unknown names render no icon.
+   */
+  icon?: 'play' | 'external-link' | 'eye' | 'eye-off' | 'trash-2';
   /** Optional tone applied to label + icon. */
   tone?: 'default' | 'danger';
   /** Action invoked when the user activates this row. */
