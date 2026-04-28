@@ -108,7 +108,10 @@ export class AuthService {
     return {
       ...rest,
       permissions: user.permissions,
-      role: userRole?.name ?? null,
+      // Fallback to "Admin" when the user has no custom role but the isAdmin
+      // flag is set — otherwise the dropdown / users list would show an empty
+      // role line for the original superuser.
+      role: userRole?.name ?? (user.isAdmin ? 'Admin' : null),
       // Not hydrated here — callers that need libraryIds should use
       // UsersService.findOne(). Auth payloads don't carry ACL.
       libraryIds: [],
