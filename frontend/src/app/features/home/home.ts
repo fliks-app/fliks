@@ -160,6 +160,25 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Persist a "remove from recommendations" gesture. The local list is
+   * updated optimistically so the card disappears immediately; a failed
+   * request restores it via a fresh fetch.
+   */
+  async dismissRecommendation(rec: RecommendationItem) {
+    const id = rec.media.id;
+    this.recommendations.update((list) => list.filter((r) => r.media.id !== id));
+    try {
+      await this.streamingApi.dismissRecommendation(id);
+    } catch {
+      // Restore the row by refetching — the global error toast already fired.
+      this.streamingApi
+        .getRecommendations()
+        .then((list) => this.recommendations.set(list))
+        .catch(() => {});
+    }
+  }
+
+  /**
    * Recommendation cards expose a Lire action even though the lean DTO
    * doesn't carry file ids — we fetch the full media on demand and route
    * to the first playable file. If nothing is playable (e.g. a "to add"

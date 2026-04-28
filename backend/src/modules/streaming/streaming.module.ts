@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PlaybackState } from './entities/playback-state.entity';
+import { RecommendationDismissal } from './entities/recommendation-dismissal.entity';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
@@ -28,6 +29,7 @@ import { MarkersModule } from '../markers/markers.module';
   imports: [
     TypeOrmModule.forFeature([
       PlaybackState,
+      RecommendationDismissal,
       Media,
       MediaFile,
       SubtitleFile,

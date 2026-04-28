@@ -44,6 +44,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Media } from '../media/entities/media.entity';
 import { PlaybackState } from './entities/playback-state.entity';
+import { RecommendationDismissal } from './entities/recommendation-dismissal.entity';
 
 export interface RecommendationItem {
   media: {
@@ -65,7 +66,22 @@ export class RecommendationService {
     private readonly playbackRepo: Repository<PlaybackState>,
     @InjectRepository(Media)
     private readonly mediaRepo: Repository<Media>,
+    @InjectRepository(RecommendationDismissal)
+    private readonly dismissalRepo: Repository<RecommendationDismissal>,
   ) {}
+
+  /**
+   * Persist a user-explicit "don't recommend this again" gesture. Idempotent
+   * — duplicate calls collapse on the unique (userId, mediaId) index.
+   */
+  async dismiss(userId: number, mediaId: number): Promise<void> {
+    await this.dismissalRepo
+      .createQueryBuilder()
+      .insert()
+      .values({ userId, mediaId })
+      .orIgnore()
+      .execute();
+  }
 
   async getRecommendations(
     userId: number,
@@ -105,14 +121,20 @@ export class RecommendationService {
       }
     }
 
-    // 3. Load all unwatched media
-    const watchedIds = new Set(recentMedia.map((r) => r.media.id));
+    // 3. Load all unwatched + non-dismissed media
+    const excludedIds = new Set(recentMedia.map((r) => r.media.id));
     const allStates: { mediaId: number }[] = await this.playbackRepo
       .createQueryBuilder('ps')
       .select('DISTINCT ps."mediaId"', 'mediaId')
       .where('ps."userId" = :userId', { userId })
       .getRawMany();
-    for (const row of allStates) watchedIds.add(row.mediaId);
+    for (const row of allStates) excludedIds.add(row.mediaId);
+    const dismissed = await this.dismissalRepo
+      .createQueryBuilder('d')
+      .select('d."mediaId"', 'mediaId')
+      .where('d."userId" = :userId', { userId })
+      .getRawMany<{ mediaId: number }>();
+    for (const row of dismissed) excludedIds.add(row.mediaId);
 
     const qb = this.mediaRepo
       .createQueryBuilder('m')
@@ -127,9 +149,9 @@ export class RecommendationService {
       .where('m.genres IS NOT NULL')
       .andWhere("m.genres != '[]'::jsonb");
 
-    if (watchedIds.size > 0) {
-      qb.andWhere('m.id NOT IN (:...watchedIds)', {
-        watchedIds: [...watchedIds],
+    if (excludedIds.size > 0) {
+      qb.andWhere('m.id NOT IN (:...excludedIds)', {
+        excludedIds: [...excludedIds],
       });
     }
 
