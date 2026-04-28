@@ -23,6 +23,7 @@
             <th>{{ 'settings.users.col_username' | translate }}</th>
             <th>{{ 'settings.users.col_role' | translate }}</th>
             <th>{{ 'settings.users.col_status' | translate }}</th>
+            <th>{{ 'settings.users.col_last_login' | translate }}</th>
           </tr>
         </thead>
         <tbody>
@@ -42,6 +43,13 @@
                   <span class="badge badge-success badge-sm">{{ 'common.active' | translate }}</span>
                 } @else {
                   <span class="badge badge-ghost badge-sm">{{ 'common.disabled' | translate }}</span>
+                }
+              </td>
+              <td class="text-base-content/70 text-sm">
+                @if (user.lastLogin) {
+                  {{ formatLastLogin(user.lastLogin) }}
+                } @else {
+                  <span class="text-base-content/40">—</span>
                 }
               </td>
             </tr>

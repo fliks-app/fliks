@@ -11,6 +11,7 @@ export interface UserRow {
   enabled: boolean;
   requirePasswordChange: boolean;
   createdAt: string;
+  lastLogin: string | null;
   libraryIds: number[];
 }
 
