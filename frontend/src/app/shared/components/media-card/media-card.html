@@ -22,7 +22,9 @@
         #cardImg
         [src]="_img()! | resolveUrl"
         [alt]="_title()"
-        class="w-full h-full object-cover"
+        class="w-full h-full object-cover select-none"
+        style="-webkit-user-drag: none; user-drag: none;"
+        draggable="false"
         [class.opacity-35]="imageBlurred()"
         [class.scale-105]="imageBlurred()"
         loading="lazy"
