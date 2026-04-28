@@ -249,7 +249,7 @@ export class MediaCardComponent {
     }
     if (this.dismissable()) {
       actions.push({
-        labelKey: 'media_card.action_remove',
+        labelKey: 'media_card.remove_from_list',
         tone: 'danger',
         run: () => this.dismissed.emit(),
       });
