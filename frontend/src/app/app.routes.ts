@@ -280,6 +280,7 @@ export const routes: Routes = [
         children: [
           { path: '', loadComponent: () => import('./features/settings/users/user-detail/user-general').then((m) => m.UserGeneralComponent) },
           { path: 'requests', loadComponent: () => import('./features/settings/users/user-detail/user-requests').then((m) => m.UserRequestsComponent) },
+          { path: 'stats', loadComponent: () => import('./features/settings/users/user-detail/user-stats').then((m) => m.UserStatsComponent) },
         ],
       },
       {

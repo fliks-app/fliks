@@ -34,12 +34,45 @@ export interface UpdateUserBody {
   libraryIds?: number[];
 }
 
+/** Aggregated stats payload for the admin user-detail Statistics tab. */
+export interface UserStats {
+  playback: {
+    totalWatchTimeSeconds: number;
+    moviesWatched: number;
+    seriesStarted: number;
+    episodesWatched: number;
+    lastPlayedAt: string | null;
+  };
+  requests: {
+    pending: number;
+    approved: number;
+    declined: number;
+    quotaPeriodDays: number;
+    movieQuotaLimit: number;
+    seriesQuotaLimit: number;
+    moviesInPeriod: number;
+    seriesInPeriod: number;
+  };
+  activity: {
+    lastActiveAt: string | null;
+    memberSince: string;
+  };
+  devices: {
+    count: number;
+    items: { deviceId: string; deviceName: string; pairedAt: string }[];
+  };
+}
+
 @Injectable({ providedIn: 'root' })
 export class UsersApiService {
   private readonly http = inject(HttpClient);
 
   list() {
     return firstValueFrom(this.http.get<UserRow[]>('/api/users'));
+  }
+
+  getStats(id: number) {
+    return firstValueFrom(this.http.get<UserStats>(`/api/users/${id}/stats`));
   }
 
   create(body: CreateUserBody) {
