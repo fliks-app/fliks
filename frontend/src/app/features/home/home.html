@@ -50,7 +50,9 @@
             [subtitle]="'' + (rec.media.year ?? '')"
             [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
             [playable]="true"
+            [dismissable]="true"
             (played)="playRecommendation(rec)"
+            (dismissed)="dismissRecommendation(rec)"
           />
         }
       </app-horizontal-scroller>

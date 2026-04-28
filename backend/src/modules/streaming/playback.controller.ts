@@ -10,6 +10,7 @@ import {
   Req,
   UseGuards,
   ParseIntPipe,
+  HttpCode,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
@@ -32,6 +33,17 @@ export class PlaybackController {
     const user = req.user as User;
     const libraryIds = await this.libraries.getAccessibleLibraryIds(user);
     return this.recommendationService.getRecommendations(user.id, libraryIds);
+  }
+
+  /** Persist a "remove from recommendations" gesture. Idempotent. */
+  @Post('recommendations/:mediaId/dismiss')
+  @HttpCode(204)
+  dismissRecommendation(
+    @Req() req: Request,
+    @Param('mediaId', ParseIntPipe) mediaId: number,
+  ) {
+    const user = req.user as User;
+    return this.recommendationService.dismiss(user.id, mediaId);
   }
 
   @Get('watched-ids')

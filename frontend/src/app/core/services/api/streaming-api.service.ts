@@ -365,6 +365,13 @@ export class StreamingApiService {
     );
   }
 
+  /** Persist a "remove from recommendations" gesture. Idempotent. */
+  dismissRecommendation(mediaId: number) {
+    return firstValueFrom(
+      this.http.post<void>(`/api/playback/recommendations/${mediaId}/dismiss`, {}),
+    );
+  }
+
   getHistory(page = 1, limit = 25) {
     return firstValueFrom(
       this.http.get<{ data: WatchHistoryItem[]; total: number }>('/api/playback/history', {
