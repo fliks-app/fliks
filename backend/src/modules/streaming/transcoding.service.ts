@@ -136,7 +136,7 @@ function audioSessionKey(
 /** Build early-segment session key: short-lived parallel ffmpeg producing
  *  seg-0..seg-1 while the main prewarm session encodes from seg-K (resume). */
 function earlySessionKey(mediaFileId: number, userId?: number): string {
-  return `${sessionKey(mediaFileId, userId)}:early`;
+  return `${sessionKey(mediaFileId, userId)}-early`;
 }
 
 export type HwAccelType = 'vaapi' | 'nvenc' | 'qsv' | 'none';
