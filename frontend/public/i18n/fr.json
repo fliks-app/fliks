@@ -304,6 +304,15 @@
     "error": "Erreur de connexion",
     "back_to_picker": "Choisir un autre utilisateur"
   },
+  "forced_password_change": {
+    "title": "Nouveau mot de passe requis",
+    "subtitle": "L'administrateur a demandé que vous définissiez un nouveau mot de passe avant de continuer.",
+    "new_password": "Nouveau mot de passe",
+    "confirm": "Confirmer le mot de passe",
+    "mismatch": "Les mots de passe ne correspondent pas.",
+    "submit": "Enregistrer",
+    "error": "Impossible de mettre à jour le mot de passe."
+  },
   "select_user": {
     "title": "Qui regarde ?",
     "use_password": "Mot de passe",
@@ -1311,6 +1320,9 @@
       "tab_general": "Général",
       "tab_requests": "Demandes",
       "field_is_admin": "Super-admin (accès total)",
+      "field_require_password_change": "Forcer le changement de mot de passe à la prochaine connexion",
+      "library_access": "Accès aux bibliothèques",
+      "library_access_empty": "Aucune bibliothèque configurée.",
       "stat_total_requests": "Demandes totales",
       "stat_pending": "En attente",
       "stat_approved": "Approuvées",

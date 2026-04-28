@@ -14,6 +14,8 @@ export interface User {
   isAdmin: boolean;
   permissions: string[];
   avatar: string | null;
+  /** Admin-set: when true the route guard pins the user on /forced-password-change. */
+  requirePasswordChange: boolean;
 }
 
 interface LoginResponse {
@@ -190,6 +192,21 @@ export class AuthService {
       this._user.set(user);
     } catch {
       this._user.set(null);
+    }
+  }
+
+  /**
+   * Force a re-fetch of /auth/me even when a user is already cached. Used
+   * after server-side state changes that affect fields the frontend reacts
+   * to — currently the requirePasswordChange flag, cleared by the backend
+   * when the user changes their own password.
+   */
+  async refreshUser(): Promise<void> {
+    try {
+      const user = await firstValueFrom(this.http.get<User>('/api/auth/me'));
+      this._user.set(user);
+    } catch {
+      // Keep the previous user — refresh is best-effort.
     }
   }
 

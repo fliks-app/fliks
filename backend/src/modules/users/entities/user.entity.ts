@@ -43,6 +43,14 @@ export class User extends BaseEntity {
   @Column({ default: true })
   enabled: boolean;
 
+  /**
+   * Admin-set flag that forces the user to set a new password on their next
+   * action. Cleared automatically when the user changes their own password
+   * (UsersService.update). synchronize:true picks up the column on restart.
+   */
+  @Column({ default: false })
+  requirePasswordChange: boolean;
+
   @Column({ type: 'int', default: 0 })
   movieQuotaLimit: number;
 

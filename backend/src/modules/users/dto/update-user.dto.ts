@@ -37,6 +37,11 @@ export class UpdateUserDto {
   @IsOptional()
   enabled?: boolean;
 
+  /** Admin-only: forces the user to set a new password before reaching the app. */
+  @IsBoolean()
+  @IsOptional()
+  requirePasswordChange?: boolean;
+
   @IsNumber()
   @Min(0)
   @IsOptional()

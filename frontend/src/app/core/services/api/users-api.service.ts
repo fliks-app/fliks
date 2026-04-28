@@ -9,6 +9,7 @@ export interface UserRow {
   role: string | null;
   isAdmin: boolean;
   enabled: boolean;
+  requirePasswordChange: boolean;
   createdAt: string;
   libraryIds: number[];
 }
@@ -28,6 +29,7 @@ export interface UpdateUserBody {
   roleId?: number;
   isAdmin?: boolean;
   enabled?: boolean;
+  requirePasswordChange?: boolean;
   libraryIds?: number[];
 }
 
