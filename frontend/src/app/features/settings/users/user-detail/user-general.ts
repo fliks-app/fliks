@@ -35,6 +35,7 @@ export class UserGeneralComponent implements OnInit {
   readonly formRoleId = signal<number | null>(null);
   readonly formIsAdmin = signal(false);
   readonly formEnabled = signal(true);
+  readonly formRequirePasswordChange = signal(false);
 
   ngOnInit() {
     const user = this.state.user();
@@ -43,6 +44,7 @@ export class UserGeneralComponent implements OnInit {
       this.formRoleId.set(user.roleId);
       this.formIsAdmin.set(user.isAdmin ?? false);
       this.formEnabled.set(user.enabled);
+      this.formRequirePasswordChange.set(user.requirePasswordChange ?? false);
     }
   }
 
@@ -55,6 +57,7 @@ export class UserGeneralComponent implements OnInit {
       roleId: this.formRoleId() ?? undefined,
       isAdmin: this.formIsAdmin(),
       enabled: this.formEnabled(),
+      requirePasswordChange: this.formRequirePasswordChange(),
     };
     if (this.formPassword()) body.password = this.formPassword();
     try {

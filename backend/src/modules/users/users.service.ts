@@ -188,6 +188,11 @@ export class UsersService implements OnModuleInit {
     if (dto.email !== undefined) target.email = dto.email;
     if (dto.password !== undefined) {
       target.passwordHash = await bcrypt.hash(dto.password, 12);
+      // The user changing their own password clears the forced-change flag —
+      // that's how they get out of the gated state. An admin updating someone
+      // else's password leaves the flag as-is (the admin must clear it
+      // explicitly via the toggle below).
+      if (isSelf) target.requirePasswordChange = false;
     }
 
     // Manager-only fields
@@ -201,10 +206,14 @@ export class UsersService implements OnModuleInit {
       }
       if (dto.isAdmin !== undefined) target.isAdmin = dto.isAdmin;
       if (dto.enabled !== undefined) target.enabled = dto.enabled;
+      if (dto.requirePasswordChange !== undefined) {
+        target.requirePasswordChange = dto.requirePasswordChange;
+      }
     } else if (
       dto.roleId !== undefined ||
       dto.enabled !== undefined ||
-      dto.isAdmin !== undefined
+      dto.isAdmin !== undefined ||
+      dto.requirePasswordChange !== undefined
     ) {
       throw new ForbiddenException(
         'Only users with users.manage permission can change role or enabled status',

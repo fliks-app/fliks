@@ -14,6 +14,8 @@ export interface User {
   isAdmin: boolean;
   permissions: string[];
   avatar: string | null;
+  /** Admin-set: when true the route guard pins the user on /forced-password-change. */
+  requirePasswordChange: boolean;
 }
 
 interface LoginResponse {

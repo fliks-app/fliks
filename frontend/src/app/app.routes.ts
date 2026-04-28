@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard';
 import { serverConfigGuard } from './core/guards/server-config.guard';
+import { passwordChangeGuard } from './core/guards/password-change.guard';
 
 export const routes: Routes = [
   {
@@ -28,8 +29,18 @@ export const routes: Routes = [
       import('./features/quick-connect/quick-connect-wait').then((m) => m.QuickConnectWaitComponent),
   },
   {
-    path: 'watch/:mediaFileId',
+    path: 'forced-password-change',
+    // Auth required (we need a logged-in user) but no passwordChangeGuard —
+    // this is the page the guard redirects TO.
     canActivate: [serverConfigGuard, authGuard],
+    loadComponent: () =>
+      import('./features/forced-password-change/forced-password-change').then(
+        (m) => m.ForcedPasswordChangeComponent,
+      ),
+  },
+  {
+    path: 'watch/:mediaFileId',
+    canActivate: [serverConfigGuard, authGuard, passwordChangeGuard],
     loadComponent: () =>
       import('./features/player/player').then((m) => m.PlayerComponent),
   },
@@ -37,7 +48,7 @@ export const routes: Routes = [
     path: '',
     loadComponent: () =>
       import('./shared/layout/layout').then((m) => m.LayoutComponent),
-    canActivate: [serverConfigGuard, authGuard],
+    canActivate: [serverConfigGuard, authGuard, passwordChangeGuard],
     children: [
       {
         path: '',
@@ -206,7 +217,7 @@ export const routes: Routes = [
     path: 'account',
     loadComponent: () =>
       import('./features/account/account-shell').then((m) => m.AccountShellComponent),
-    canActivate: [serverConfigGuard, authGuard],
+    canActivate: [serverConfigGuard, authGuard, passwordChangeGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'password' },
       {
@@ -221,7 +232,7 @@ export const routes: Routes = [
     path: 'app-settings',
     loadComponent: () =>
       import('./features/app-settings/app-settings-shell').then((m) => m.AppSettingsShellComponent),
-    canActivate: [serverConfigGuard, authGuard],
+    canActivate: [serverConfigGuard, authGuard, passwordChangeGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'player' },
       {
@@ -259,7 +270,7 @@ export const routes: Routes = [
     path: 'admin',
     loadComponent: () =>
       import('./features/admin/admin-shell').then((m) => m.AdminShellComponent),
-    canActivate: [serverConfigGuard, authGuard, adminGuard],
+    canActivate: [serverConfigGuard, authGuard, passwordChangeGuard, adminGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'statistics' },
       { path: 'statistics', loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.DashboardComponent) },
