@@ -550,7 +550,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const deviceProfile = this.deviceProfileService.getProfile();
       const savedQualityId = this.activeQualityId();
       const prewarmQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-      const prewarmStartAt = resumeTime && resumeTime > 0 ? resumeTime : 0;
+      const prewarmStartAt = resumeTime;
       const tPlaybackInfo = performance.now();
       const playbackInfoPromise = this.isOfflinePlayback
         ? null

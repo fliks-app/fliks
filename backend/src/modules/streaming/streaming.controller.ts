@@ -182,85 +182,70 @@ export class StreamingController {
    * Called from playback-info (earliest hook) and from master.m3u8 as a
    * safety net for clients that skip playback-info.
    */
-  private prewarmTranscodeSession(
+  private async prewarmTranscodeSession(
     mediaFileId: number,
     resolved: ResolvedFile,
     req: Request,
     startQuality: string | undefined,
-    startAt: number,
+    startAt: number | undefined,
     deviceType: 'mobile' | 'desktop',
-  ) {
+  ): Promise<void> {
     if (!startQuality || startQuality === 'auto') return;
-    void (async () => {
-      try {
-        // Auto-resume: when no explicit startAt, look up the user's saved
-        // position. Ignored if near start (<10s — prewarm would target
-        // seg-0 anyway) or completed. Keeps the resume path fast: ffmpeg's
-        // `-ss` seek + first-segment encode overlap with the Angular route
-        // transition and the master.m3u8 fetch.
-        let effectiveStartAt = startAt;
-        if (effectiveStartAt === 0) {
-          const userId = req.user?.id;
-          const mediaId = resolved.mediaFile.mediaId;
-          if (userId && mediaId) {
-            const state = await this.playbackService.getState(
-              userId,
-              mediaId,
-              resolved.mediaFile.episodeId ?? undefined,
-            );
-            if (state && !state.completed && state.positionSeconds > 10) {
-              effectiveStartAt = state.positionSeconds;
-            }
+    try {
+      // Auto-resume only when the caller did NOT supply a startAt query
+      // param (fresh open). An explicit `startAt=0` means the user clicked
+      // "restart from beginning" and must override the saved position.
+      let effectiveStartAt = startAt;
+      if (effectiveStartAt === undefined) {
+        const userId = req.user?.id;
+        const mediaId = resolved.mediaFile.mediaId;
+        if (userId && mediaId) {
+          const state = await this.playbackService.getState(
+            userId,
+            mediaId,
+            resolved.mediaFile.episodeId ?? undefined,
+          );
+          if (state && !state.completed && state.positionSeconds > 10) {
+            effectiveStartAt = state.positionSeconds;
           }
         }
-        const existing = this.transcodingService.getExistingSession(
-          mediaFileId,
-          req.user?.id,
-        );
-        if (existing && existing.process.exitCode === null) return;
-        const ctx = this.buildSessionContext(req, resolved, mediaFileId);
-        // 'remux'/'original' are mapped to the top transcode profile in the
-        // master playlist — do the same mapping here so the pre-spawned
-        // session matches the variant the player is about to request.
-        let targetQuality = startQuality;
-        if (startQuality === 'remux' || startQuality === 'original') {
-          const sourceW =
-            this.activeStreamTracker.getSourceWidth(mediaFileId) || 0;
-          const ladder = getLadderForDevice(deviceType);
-          const top = ladder.find((p) => p.maxWidth <= sourceW) ?? ladder[0];
-          targetQuality = top.name;
-        }
-        const startSegment = Math.max(
-          0,
-          Math.floor(effectiveStartAt / SEG_DURATION),
-        );
-        // For mid-file resume, fire a parallel short-lived ffmpeg dedicated
-        // to seg-0 (Shaka always probes it at startup, even on load-with-
-        // startTime). Without this companion, the seg-0 fetch would force a
-        // kill+restart of the main prewarm — wasting 5+s of 4K HEVC encode.
-        const earlyPromise =
-          startSegment > 0
-            ? this.transcodingService
-                .getOrCreateEarlySession(
-                  mediaFileId,
-                  targetQuality,
-                  resolved.absolutePath,
-                  ctx,
-                )
-                .catch(() => {})
-            : null;
-        await this.transcodingService.getOrCreateSession(
-          mediaFileId,
-          targetQuality,
-          resolved.absolutePath,
-          startSegment,
-          ctx,
-        );
-        if (earlyPromise) await earlyPromise;
-      } catch {
-        /* prewarm is best-effort */
+        effectiveStartAt = effectiveStartAt ?? 0;
       }
-    })();
+      const existing = this.transcodingService.getExistingSession(
+        mediaFileId,
+        req.user?.id,
+      );
+      if (existing && existing.process.exitCode === null) return;
+      const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+      // 'remux'/'original' are mapped to the top transcode profile in the
+      // master playlist — do the same mapping here so the pre-spawned
+      // session matches the variant the player is about to request.
+      let targetQuality = startQuality;
+      if (startQuality === 'remux' || startQuality === 'original') {
+        const sourceW =
+          this.activeStreamTracker.getSourceWidth(mediaFileId) || 0;
+        const ladder = getLadderForDevice(deviceType);
+        const top = ladder.find((p) => p.maxWidth <= sourceW) ?? ladder[0];
+        targetQuality = top.name;
+      }
+      const startSegment = Math.max(
+        0,
+        Math.floor(effectiveStartAt / SEG_DURATION),
+      );
+      // skipVerify: don't poll for first segment here. We only need the
+      // session in the sessions map so a racing hlsSegment doesn't spawn
+      // its own concurrent main at start_number=0.
+      await this.transcodingService.getOrCreateSession(
+        mediaFileId,
+        targetQuality,
+        resolved.absolutePath,
+        startSegment,
+        ctx,
+        /* skipVerify */ true,
+      );
+    } catch {
+      /* prewarm is best-effort */
+    }
   }
 
   /** Resolve file duration from streamInfo or by probing with ffprobe. */
@@ -469,10 +454,14 @@ export class StreamingController {
     // (or streaming) when requested. No-op for DirectPlay or auto quality.
     if (result.playMethod !== 'DirectPlay') {
       const startQuality = firstQueryString(req.query, 'startQuality');
-      const startAt = parseFloat(
-        firstQueryString(req.query, 'startAt') ?? '0',
-      );
-      this.prewarmTranscodeSession(
+      const startAtRaw = firstQueryString(req.query, 'startAt');
+      const startAt =
+        startAtRaw != null ? parseFloat(startAtRaw) : undefined;
+      // Await prewarm before responding so the session is registered in the
+      // map when the frontend's subsequent master.m3u8/seg-0 requests
+      // arrive — prevents a race where hlsSegment would spawn a duplicate
+      // main at start_number=0 and force a kill+restart.
+      await this.prewarmTranscodeSession(
         mediaFileId,
         resolved,
         req,
@@ -673,8 +662,10 @@ export class StreamingController {
     // Pre-spawn ffmpeg when we know the player will start at seg-0 (fresh
     // play, not resume). Usually a no-op when playback-info already
     // pre-warmed the session; acts as a safety net otherwise.
-    const startAt = parseFloat(firstQueryString(req.query, 'startAt') ?? '0');
-    this.prewarmTranscodeSession(
+    const startAtRaw = firstQueryString(req.query, 'startAt');
+    const startAt =
+      startAtRaw != null ? parseFloat(startAtRaw) : undefined;
+    void this.prewarmTranscodeSession(
       mediaFileId,
       resolved,
       req,
@@ -983,6 +974,11 @@ export class StreamingController {
     if (!VIDEO_SEG_RE.test(segment)) {
       throw new BadRequestException(`Invalid segment name: ${segment}`);
     }
+    if (segment.startsWith('init') || segment === 'seg-0000.m4s' || segment === 'seg-0000.ts') {
+      this.log.log(
+        `[request] ${segment} mfid=${mediaFileId} quality=${quality}`,
+      );
+    }
 
     // Fast path: if a session already exists, skip the DB query — we only
     // need resolveFile for absolutePath + context when creating a NEW session.
@@ -1069,53 +1065,6 @@ export class StreamingController {
     );
 
     const ctx = this.buildSessionContext(req, resolved, mediaFileId);
-
-    // Resume mid-file: when Shaka probes seg-0 (or any segment before the
-    // main prewarm's startSegment K) at startup, route to the short-lived
-    // early companion session instead of killing+restarting the main at 0.
-    // The two ffmpeg processes run in parallel for ~5s, after which the
-    // early session exits and the main keeps producing forward from K.
-    const isEarlyProbe =
-      quality !== 'remux' &&
-      existing != null &&
-      existing.quality === quality &&
-      existing.startSegment != null &&
-      existing.startSegment > 0 &&
-      segIndex < existing.startSegment;
-    if (isEarlyProbe) {
-      const earlySession =
-        await this.transcodingService.getOrCreateEarlySession(
-          mediaFileId,
-          quality,
-          resolved.absolutePath,
-          ctx,
-        );
-      const varStreamMap =
-        this.activeStreamTracker.getUseExtXMedia(mediaFileId);
-      const segName = varStreamMap ? `0/${segment}` : segment;
-      const segPath = await this.transcodingService.getSegmentPath(
-        earlySession,
-        segName,
-      );
-      if (segPath) {
-        res.setHeader('Content-Type', 'video/mp4');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        const stream = fs.createReadStream(segPath);
-        stream.on('error', () => {
-          if (!res.headersSent) res.status(404).end();
-        });
-        stream.pipe(res);
-        this.timing(
-          `segment[${segIndex}]`,
-          mediaFileId,
-          t0,
-          `path=early quality=${quality}`,
-        );
-        return;
-      }
-      // Early session failed to produce the segment — fall through to the
-      // standard restart path below.
-    }
 
     // For remux sessions, copy audio only when the source codec is compatible
     // (captured at playback-info); otherwise transcode audio to AAC.

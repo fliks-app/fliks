@@ -584,6 +584,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     absolutePath: string,
     requestedSegment = 0,
     ctx?: SessionContext,
+    skipVerify = false,
   ): Promise<TranscodeSession> {
     const key = sessionKey(mediaFileId, ctx?.userId);
     const session = await this.withLock(key, () =>
@@ -596,6 +597,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         ctx,
       ),
     );
+    if (skipVerify) return session;
     // HW accel crash check runs OUTSIDE the lock so that concurrent segment
     // requests on the same key (seek, ABR, retry) don't pile up for the 15-30s
     // it takes a big 4K/HDR source to produce its first segment.
@@ -665,7 +667,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const ladder = getLadderForDevice(ctx?.deviceType);
     const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
     const sessionDir = path.join(this.cachePath, key, quality);
+    const dirExisted = existsSync(sessionDir);
     await fsp.mkdir(sessionDir, { recursive: true });
+    this.log.log(
+      `[disk] mkdir ${sessionDir} (existed=${dirExisted}) for ${key}`,
+    );
 
     const shouldTonemap = ctx?.tonemap ?? false;
     const burnIn = ctx?.burnInSubtitle;
@@ -845,7 +851,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       const ladder = getLadderForDevice(ctx?.deviceType);
       const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
       const sessionDir = path.join(this.cachePath, id, quality);
+      const dirExisted = existsSync(sessionDir);
       await fsp.mkdir(sessionDir, { recursive: true });
+      this.log.log(
+        `[disk] mkdir ${sessionDir} (existed=${dirExisted}) for ${id}`,
+      );
 
       const isVideoOnly = ctx?.videoOnly ?? false;
       const ctxAudioStreams = ctx?.audioStreams;
@@ -1073,6 +1083,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         resolved = true;
         readyWatcher?.close();
         clearInterval(pollTimer);
+        this.log.log(`[disk] first-seg-written ${firstSeg}`);
         this.log.log(
           `[timing] ffmpeg-ready id=${id} mfid=${mediaFileId} startSeg=${startSegment} took=${Date.now() - spawnTs}ms`,
         );
@@ -1107,12 +1118,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     proc.on('close', (code) => {
       clearInterval(pollTimer);
       readyWatcher?.close();
+      const firstSegProduced = resolved;
       if (!resolved) {
         resolved = true;
         readyResolve();
       }
       if (code && code !== 0 && code !== 255) {
-        this.log.error(`FFmpeg [${id}] exited ${code}:\n${stderr.slice(-500)}`);
+        this.log.error(`FFmpeg [${id}] exited ${code}:\n${stderr.slice(-2000)}`);
+      } else if (!firstSegProduced) {
+        this.log.warn(
+          `FFmpeg [${id}] exited code=${code} WITHOUT producing first segment ${firstSegName}\nstderr:\n${stderr.slice(-2000)}`,
+        );
       }
     });
 
@@ -1246,14 +1262,20 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     if (session) {
       this.log.log(`Kill session [${key}] (quality: ${session.quality})`);
       this.sessions.delete(key);
-      promises.push(this.killAndClean(session.process, session.cachePath));
+      promises.push(
+        this.killAndClean(session.process, session.cachePath, session.id),
+      );
     }
     // Kill the early-segment companion session (resume seg-0 oneshot).
     const earlySession = this.sessions.get(earlyKey);
     if (earlySession) {
       this.sessions.delete(earlyKey);
       promises.push(
-        this.killAndClean(earlySession.process, earlySession.cachePath),
+        this.killAndClean(
+          earlySession.process,
+          earlySession.cachePath,
+          earlySession.id,
+        ),
       );
     }
     // Also kill associated audio sessions
@@ -1261,15 +1283,32 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     for (const [id, s] of this.sessions) {
       if (id.startsWith(audioPrefix)) {
         this.sessions.delete(id);
-        promises.push(this.killAndClean(s.process, s.cachePath));
+        promises.push(this.killAndClean(s.process, s.cachePath, s.id));
       }
     }
     await Promise.all(promises);
-    // Clean up parent dirs (stream/key/ and stream/key:early/) if now empty.
+    // Clean up parent dirs only when no replacement session has registered
+    // for the same key (close+replay race protection).
     const parentDir = path.join(this.cachePath, key);
-    fsp.rm(parentDir, { recursive: true, force: true }).catch(() => {});
+    if (!this.sessions.has(key)) {
+      const existed = existsSync(parentDir);
+      this.log.log(`[disk] rm parent ${parentDir} (existed=${existed})`);
+      fsp.rm(parentDir, { recursive: true, force: true }).catch(() => {});
+    } else {
+      this.log.log(
+        `[disk] skip rm parent ${parentDir} — session ${key} replaced`,
+      );
+    }
     const earlyParentDir = path.join(this.cachePath, earlyKey);
-    fsp.rm(earlyParentDir, { recursive: true, force: true }).catch(() => {});
+    if (!this.sessions.has(earlyKey)) {
+      const existed = existsSync(earlyParentDir);
+      this.log.log(`[disk] rm parent ${earlyParentDir} (existed=${existed})`);
+      fsp.rm(earlyParentDir, { recursive: true, force: true }).catch(() => {});
+    } else {
+      this.log.log(
+        `[disk] skip rm parent ${earlyParentDir} — session ${earlyKey} replaced`,
+      );
+    }
   }
 
   /** Kill a session by its map key (used by admin dashboard). */
@@ -1512,7 +1551,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-bufsize',
             String(bitrateNum * 4),
             '-vf',
-            `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
+            `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
             '-g',
             String(gopSize),
             '-keyint_min',
@@ -2253,12 +2292,30 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** Graceful SIGTERM, wait for the process to exit, then rm the directory. */
+  /** SIGKILL the process (instant), wait for exit, then rm the directory.
+   *  Uses SIGKILL rather than SIGTERM grace because the 5s grace window of
+   *  the old ffmpeg overlaps with a new ffmpeg spawn on the same HW
+   *  (VAAPI/QSV), causing the new session's encoder init to hang. The
+   *  trailer/flush bytes the old process would have written are wasted —
+   *  HLS segments are independent and the next session writes fresh.
+   *
+   *  Skips the rm when a replacement session is already registered with the
+   *  same id — avoids wiping a freshly-spawned session's cache dir during a
+   *  quick close+replay cycle (stopSessions ↔ playback-info race). */
   private async killAndClean(
     proc: ChildProcess,
     dirPath: string,
+    sessionId?: string,
   ): Promise<void> {
-    await this.killProcess(proc, true);
+    await this.killProcess(proc, false);
+    if (sessionId && this.sessions.has(sessionId)) {
+      this.log.log(
+        `[disk] skip rm ${dirPath} — session ${sessionId} replaced`,
+      );
+      return;
+    }
+    const existed = existsSync(dirPath);
+    this.log.log(`[disk] rm ${dirPath} (existed=${existed})`);
     await fsp.rm(dirPath, { recursive: true, force: true });
   }
 
