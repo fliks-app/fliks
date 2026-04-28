@@ -58,6 +58,14 @@
       >
         {{ 'settings.user_detail.tab_requests' | translate }}
       </a>
+      <a
+        role="tab"
+        class="tab"
+        [routerLink]="['/admin/users', state.userId(), 'stats']"
+        routerLinkActive="tab-active"
+      >
+        {{ 'settings.user_detail.stats.tab' | translate }}
+      </a>
     </div>
 
     <!-- Tab content -->

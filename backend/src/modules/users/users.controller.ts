@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
+import { UsersStatsService } from './users-stats.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
@@ -22,7 +23,10 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 @Controller('users')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly usersStatsService: UsersStatsService,
+  ) {}
 
   /** Admin: list all users */
   @Get()
@@ -43,6 +47,13 @@ export class UsersController {
   @CheckPolicies((ability) => ability.can(Action.Read, User))
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.findOne(id);
+  }
+
+  /** Admin: aggregated activity stats for the user-detail Statistics tab. */
+  @Get(':id/stats')
+  @CheckPolicies((ability) => ability.can(Action.Manage, User))
+  getStats(@Param('id', ParseIntPipe) id: number) {
+    return this.usersStatsService.getUserStats(id);
   }
 
   /** Admin or self */
