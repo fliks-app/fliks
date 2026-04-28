@@ -1052,6 +1052,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.createDeferred();
 
     this.log.log(`FFmpeg start [${id}]: ffmpeg ${args.join(' ')}`);
+    const spawnTs = Date.now();
 
     const proc = spawn('ffmpeg', args, {
       stdio: ['ignore', 'ignore', 'pipe'],
@@ -1072,6 +1073,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         resolved = true;
         readyWatcher?.close();
         clearInterval(pollTimer);
+        this.log.log(
+          `[timing] ffmpeg-ready id=${id} mfid=${mediaFileId} startSeg=${startSegment} took=${Date.now() - spawnTs}ms`,
+        );
         readyResolve();
       }
     };

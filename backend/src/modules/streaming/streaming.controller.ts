@@ -102,6 +102,18 @@ export class StreamingController {
     return this.streamingSettingsCache.get();
   }
 
+  /**
+   * Single-line `[timing]` log for playback-startup diagnostic. Grep
+   * `[timing]` to reconstruct the cold-start path (playback-info → master →
+   * variant → init.mp4 → seg-0 → seg-K). `mfid` correlates entries from
+   * concurrent users.
+   */
+  private timing(name: string, mfid: number, t0: number, extra = '') {
+    this.log.log(
+      `[timing] ${name} mfid=${mfid} took=${Date.now() - t0}ms${extra ? ' ' + extra : ''}`,
+    );
+  }
+
   private buildSessionContext(
     req: Request,
     resolved: ResolvedFile,
@@ -348,6 +360,7 @@ export class StreamingController {
     @Body() deviceProfile: DeviceProfileDto,
     @Req() req: Request,
   ) {
+    const t0 = Date.now();
     const resolved = await this.streamingService.resolveFile(
       mediaFileId,
       req.user as User,
@@ -523,6 +536,12 @@ export class StreamingController {
       ? resolved.mediaFile.streamInfo.chapters
       : undefined;
 
+    this.timing(
+      'playback-info',
+      mediaFileId,
+      t0,
+      `playMethod=${result.playMethod} hwAccel=${result.hwAccel}`,
+    );
     return {
       ...result,
       durationSeconds: duration,
@@ -581,6 +600,7 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    const t0 = Date.now();
     const resolved = await this.streamingService.resolveFile(
       mediaFileId,
       req.user as User,
@@ -648,6 +668,7 @@ export class StreamingController {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Cache-Control', 'no-store');
     res.send(playlist);
+    this.timing('master.m3u8', mediaFileId, t0);
 
     // Pre-spawn ffmpeg when we know the player will start at seg-0 (fresh
     // play, not resume). Usually a no-op when playback-info already
@@ -856,6 +877,7 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    const t0 = Date.now();
     if (!VALID_QUALITIES.has(quality)) {
       throw new BadRequestException(`Invalid quality: ${quality}`);
     }
@@ -941,6 +963,7 @@ export class StreamingController {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Cache-Control', 'no-store');
     res.send(playlist);
+    this.timing('variant.m3u8', mediaFileId, t0, `quality=${quality}`);
   }
 
   /** HLS segment — serves a transcoded .ts/.m4s segment or fMP4 init. */
@@ -952,6 +975,7 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    const t0 = Date.now();
     if (!VALID_QUALITIES.has(quality)) {
       throw new BadRequestException(`Invalid quality: ${quality}`);
     }
@@ -984,6 +1008,7 @@ export class StreamingController {
           if (!res.headersSent) res.status(404).end();
         });
         initStream.pipe(res);
+        this.timing(`segment[init]`, mediaFileId, t0, `path=main`);
         return;
       }
     }
@@ -1007,6 +1032,12 @@ export class StreamingController {
           if (!res.headersSent) res.status(404).end();
         });
         stream.pipe(res);
+        this.timing(
+          `segment[${segIndex}]`,
+          mediaFileId,
+          t0,
+          `path=cache-hit quality=${quality}`,
+        );
         return;
       }
       // Segment not on disk — fall through to full resolve + getOrCreateSession.
@@ -1055,6 +1086,12 @@ export class StreamingController {
           if (!res.headersSent) res.status(404).end();
         });
         stream.pipe(res);
+        this.timing(
+          `segment[${segIndex}]`,
+          mediaFileId,
+          t0,
+          `path=early quality=${quality}`,
+        );
         return;
       }
       // Early session failed to produce the segment — fall through to the
@@ -1104,6 +1141,12 @@ export class StreamingController {
       if (!res.headersSent) res.status(404).end();
     });
     stream.pipe(res);
+    this.timing(
+      segment.startsWith('init') ? 'segment[init]' : `segment[${segIndex}]`,
+      mediaFileId,
+      t0,
+      `path=main quality=${quality} startSeg=${session.startSegment ?? 0}`,
+    );
   }
 
   // ---------------------------------------------------------------------------

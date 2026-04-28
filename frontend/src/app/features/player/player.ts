@@ -318,6 +318,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly fanartUrl = signal<string | null>(null);
   private playbackInfo: PlaybackInfoResponse | null = null;
 
+  /** performance.now() at ngAfterViewInit — anchor for `[timing]` logs. */
+  private playbackStartTs = 0;
+  /** Single-line `[timing]` log relative to {@link playbackStartTs}. */
+  private logTiming(name: string, took: number) {
+    const since = Math.round(performance.now() - this.playbackStartTs);
+    // eslint-disable-next-line no-console
+    console.log(
+      `[timing] ${name} mfid=${this.mediaFileId} took=${Math.round(took)}ms since-start=${since}ms`,
+    );
+  }
+
   readonly playerStats = computed<PlayerStats | null>(() => {
     if (!this.statsVisible()) return null;
 
@@ -504,6 +515,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.episodeId = qp['episodeId'] ? +qp['episodeId'] : undefined;
     const resumeTime = 't' in qp ? +qp['t'] : undefined;
 
+    // Cold-start timing baseline. `logTiming` below logs each step relative
+    // to this anchor (since-start) AND reports its own duration. Pair with
+    // the backend `[timing]` lines (mfid=<id>) to reconstruct the
+    // playback-startup waterfall.
+    this.playbackStartTs = performance.now();
+    const time = (name: string, took: number) =>
+      this.logTiming(name, took);
+
     // Subtitle loading promise — started early for Shaka path, resolved later
     let subsPromise: Promise<any[]> | null = null;
 
@@ -532,16 +551,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const savedQualityId = this.activeQualityId();
       const prewarmQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
       const prewarmStartAt = resumeTime && resumeTime > 0 ? resumeTime : 0;
+      const tPlaybackInfo = performance.now();
       const playbackInfoPromise = this.isOfflinePlayback
         ? null
-        : this.streamingApi.getPlaybackInfo(
-            this.mediaFileId,
-            deviceProfile,
-            undefined,
-            undefined,
-            prewarmQuality,
-            prewarmStartAt,
-          );
+        : this.streamingApi
+            .getPlaybackInfo(
+              this.mediaFileId,
+              deviceProfile,
+              undefined,
+              undefined,
+              prewarmQuality,
+              prewarmStartAt,
+            )
+            .then((r) => {
+              time('playback-info', performance.now() - tPlaybackInfo);
+              return r;
+            });
 
       // Load media info + playback state in parallel
       // No stopSessions here — getOrCreateSession handles stale sessions naturally
@@ -758,7 +783,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             // protect the session from Shaka's startup bandwidth probe.
             const startQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
             const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId, startQuality, startTime);
+            const tLoad = performance.now();
             await this.engine!.load(hlsUrl, startTime);
+            time('engine.load', performance.now() - tLoad);
           }
 
 
@@ -895,7 +922,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.state.bindEngine(engine);
 
     // videoStarted tracking (first frame rendered)
-    video.addEventListener('playing', () => this.state.videoStarted.set(true), { once: true });
+    video.addEventListener(
+      'playing',
+      () => {
+        this.state.videoStarted.set(true);
+        // Time-to-first-frame: the headline cold-start KPI.
+        this.logTiming('first-playing', 0);
+      },
+      { once: true },
+    );
     // Volume sync for template
     video.addEventListener('volumechange', () => {
       this.state.volume.set(video.muted ? 0 : video.volume);
