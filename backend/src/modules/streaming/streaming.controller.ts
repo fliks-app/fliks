@@ -222,6 +222,21 @@ export class StreamingController {
           0,
           Math.floor(effectiveStartAt / SEG_DURATION),
         );
+        // For mid-file resume, fire a parallel short-lived ffmpeg dedicated
+        // to seg-0 (Shaka always probes it at startup, even on load-with-
+        // startTime). Without this companion, the seg-0 fetch would force a
+        // kill+restart of the main prewarm — wasting 5+s of 4K HEVC encode.
+        const earlyPromise =
+          startSegment > 0
+            ? this.transcodingService
+                .getOrCreateEarlySession(
+                  mediaFileId,
+                  targetQuality,
+                  resolved.absolutePath,
+                  ctx,
+                )
+                .catch(() => {})
+            : null;
         await this.transcodingService.getOrCreateSession(
           mediaFileId,
           targetQuality,
@@ -229,6 +244,7 @@ export class StreamingController {
           startSegment,
           ctx,
         );
+        if (earlyPromise) await earlyPromise;
       } catch {
         /* prewarm is best-effort */
       }
@@ -768,7 +784,28 @@ export class StreamingController {
 
     let segPath: string | null = null;
 
-    if (videoSession) {
+    // Resume mid-file: when the requested audio segment is below the main
+    // prewarm's startSegment, serve from the early companion session (which
+    // covers seg-0..seg-1). Avoids a 60s wait on the main session that will
+    // never produce these early segments.
+    const earlySession = this.transcodingService.getExistingEarlySession(
+      mediaFileId,
+      user?.id,
+    );
+    const useEarly =
+      videoSession != null &&
+      earlySession != null &&
+      videoSession.startSegment != null &&
+      videoSession.startSegment > 0 &&
+      segIndex < videoSession.startSegment &&
+      earlySession.quality === videoSession.quality;
+    if (useEarly) {
+      const varStreamPath = `${audioIndex + 1}/${segment}`;
+      segPath = await this.transcodingService.getSegmentPath(
+        earlySession!,
+        varStreamPath,
+      );
+    } else if (videoSession) {
       const varStreamPath = `${audioIndex + 1}/${segment}`;
       segPath = await this.transcodingService.getSegmentPath(
         videoSession,
@@ -982,6 +1019,48 @@ export class StreamingController {
     );
 
     const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+
+    // Resume mid-file: when Shaka probes seg-0 (or any segment before the
+    // main prewarm's startSegment K) at startup, route to the short-lived
+    // early companion session instead of killing+restarting the main at 0.
+    // The two ffmpeg processes run in parallel for ~5s, after which the
+    // early session exits and the main keeps producing forward from K.
+    const isEarlyProbe =
+      quality !== 'remux' &&
+      existing != null &&
+      existing.quality === quality &&
+      existing.startSegment != null &&
+      existing.startSegment > 0 &&
+      segIndex < existing.startSegment;
+    if (isEarlyProbe) {
+      const earlySession =
+        await this.transcodingService.getOrCreateEarlySession(
+          mediaFileId,
+          quality,
+          resolved.absolutePath,
+          ctx,
+        );
+      const varStreamMap =
+        this.activeStreamTracker.getUseExtXMedia(mediaFileId);
+      const segName = varStreamMap ? `0/${segment}` : segment;
+      const segPath = await this.transcodingService.getSegmentPath(
+        earlySession,
+        segName,
+      );
+      if (segPath) {
+        res.setHeader('Content-Type', 'video/mp4');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        const stream = fs.createReadStream(segPath);
+        stream.on('error', () => {
+          if (!res.headersSent) res.status(404).end();
+        });
+        stream.pipe(res);
+        return;
+      }
+      // Early session failed to produce the segment — fall through to the
+      // standard restart path below.
+    }
+
     // For remux sessions, copy audio only when the source codec is compatible
     // (captured at playback-info); otherwise transcode audio to AAC.
     const copyAudio = this.activeStreamTracker.getCanCopyAudio(mediaFileId);

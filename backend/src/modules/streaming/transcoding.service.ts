@@ -133,6 +133,12 @@ function audioSessionKey(
   return `${sessionKey(mediaFileId, userId)}-a${audioIndex}`;
 }
 
+/** Build early-segment session key: short-lived parallel ffmpeg producing
+ *  seg-0..seg-1 while the main prewarm session encodes from seg-K (resume). */
+function earlySessionKey(mediaFileId: number, userId?: number): string {
+  return `${sessionKey(mediaFileId, userId)}:early`;
+}
+
 export type HwAccelType = 'vaapi' | 'nvenc' | 'qsv' | 'none';
 
 // ---------------------------------------------------------------------------
@@ -315,6 +321,15 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ): TranscodeSession | undefined {
     const key = sessionKey(mediaFileId, userId);
     return this.sessions.get(key);
+  }
+
+  /** Get the short-lived early-segment companion session (if any). Lives in
+   *  parallel to the main session during a mid-file resume. */
+  getExistingEarlySession(
+    mediaFileId: number,
+    userId?: number,
+  ): TranscodeSession | undefined {
+    return this.sessions.get(earlySessionKey(mediaFileId, userId));
   }
 
   async onModuleDestroy() {
@@ -785,6 +800,108 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Spawn a short-lived ffmpeg in parallel to the main prewarm session,
+   * producing only seg-0 (and seg-1 as a small buffer) of the requested
+   * quality. Used on resume mid-file: Shaka always fetches seg-0 at startup
+   * even when load(url, startTime>0) is called, and routing that fetch to
+   * the main session would force a kill+restart from K back to 0 — wiping
+   * out the prewarm work and adding a second 4K cold-start.
+   *
+   * Bounded by `-t 4` (input-side limit) so ffmpeg exits ~5s after spawn
+   * once it has flushed seg-0 (1s, INIT_TIME) + seg-1 (3s) plus the trailer.
+   * Same encoder profile + audio layout as the main session so segments and
+   * init.mp4 are decode-compatible (Shaka can mix-and-match across the two
+   * sessions seamlessly).
+   *
+   * Idempotent: a second call with the same (mediaFileId, userId, quality)
+   * returns the existing session (running or cleanly exited). Quality
+   * mismatch reuses the slot after killing the stale process.
+   */
+  async getOrCreateEarlySession(
+    mediaFileId: number,
+    quality: string,
+    absolutePath: string,
+    ctx?: SessionContext,
+  ): Promise<TranscodeSession> {
+    const id = earlySessionKey(mediaFileId, ctx?.userId);
+    return this.withLock(id, async () => {
+      const existing = this.sessions.get(id);
+      if (existing) {
+        const qualityMatch = existing.quality === quality;
+        if (qualityMatch && existing.process.exitCode === null) {
+          existing.lastAccess = Date.now();
+          return existing;
+        }
+        if (qualityMatch && existing.process.exitCode === 0) {
+          // ffmpeg finished cleanly — segments still on disk, reuse.
+          existing.lastAccess = Date.now();
+          return existing;
+        }
+        // Crashed or quality changed — wipe and respawn.
+        this.sessions.delete(id);
+        await this.killAndClean(existing.process, existing.cachePath);
+      }
+
+      const ladder = getLadderForDevice(ctx?.deviceType);
+      const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
+      const sessionDir = path.join(this.cachePath, id, quality);
+      await fsp.mkdir(sessionDir, { recursive: true });
+
+      const isVideoOnly = ctx?.videoOnly ?? false;
+      const ctxAudioStreams = ctx?.audioStreams;
+      const useVarStreamMap =
+        isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
+      if (useVarStreamMap) {
+        for (let i = 0; i <= ctxAudioStreams.length; i++) {
+          await fsp.mkdir(path.join(sessionDir, String(i)), { recursive: true });
+        }
+      }
+
+      const args = this.buildFfmpegArgs(
+        absolutePath,
+        profile,
+        sessionDir,
+        this.detectedHwAccel,
+        /* startSegment */ 0,
+        ctx?.tonemap ?? false,
+        ctx?.burnInSubtitle,
+        ctx?.audioStreamIndex,
+        ctx?.crop,
+        isVideoOnly,
+        ctx?.mapAllAudio ?? false,
+        ctxAudioStreams,
+        ctx?.useFmp4 ?? true,
+        ctx?.encoderPreset,
+        ctx?.qsvOptions,
+        ctx?.sourceFps,
+        ctx?.trustedStreamInfo,
+      );
+      // Bound the input read to 4s — enough for seg-0 (1s) + seg-1 (3s).
+      // Insert as an INPUT option (before -i) so demuxer stops reading after
+      // 4s of source, ffmpeg flushes the trailer and exits cleanly.
+      const inputIdx = args.indexOf('-i');
+      if (inputIdx >= 0) args.splice(inputIdx, 0, '-t', '4');
+
+      const usesVarStreamMap =
+        isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
+      const useFmp4 = ctx?.useFmp4 ?? true;
+      const session = this.spawnFfmpegSession({
+        id,
+        mediaFileId,
+        quality,
+        args,
+        sessionDir,
+        startSegment: 0,
+        segExt: useFmp4 ? '.m4s' : '.ts',
+        segSubDir: usesVarStreamMap ? '0' : undefined,
+        extra: { actualHwAccel: this.detectedHwAccel },
+      });
+      this.applyContext(session, ctx);
+      return session;
+    });
+  }
+
+  /**
    * Get the index.m3u8 playlist for a session.
    * Waits until FFmpeg has started writing segments.
    */
@@ -1119,12 +1236,21 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
   async killSession(mediaFileId: number, userId?: number) {
     const key = sessionKey(mediaFileId, userId);
+    const earlyKey = earlySessionKey(mediaFileId, userId);
     const promises: Promise<void>[] = [];
     const session = this.sessions.get(key);
     if (session) {
       this.log.log(`Kill session [${key}] (quality: ${session.quality})`);
       this.sessions.delete(key);
       promises.push(this.killAndClean(session.process, session.cachePath));
+    }
+    // Kill the early-segment companion session (resume seg-0 oneshot).
+    const earlySession = this.sessions.get(earlyKey);
+    if (earlySession) {
+      this.sessions.delete(earlyKey);
+      promises.push(
+        this.killAndClean(earlySession.process, earlySession.cachePath),
+      );
     }
     // Also kill associated audio sessions
     const audioPrefix = `${key}-a`;
@@ -1135,9 +1261,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
     await Promise.all(promises);
-    // Clean up parent dir (stream/key/) if now empty.
+    // Clean up parent dirs (stream/key/ and stream/key:early/) if now empty.
     const parentDir = path.join(this.cachePath, key);
     fsp.rm(parentDir, { recursive: true, force: true }).catch(() => {});
+    const earlyParentDir = path.join(this.cachePath, earlyKey);
+    fsp.rm(earlyParentDir, { recursive: true, force: true }).catch(() => {});
   }
 
   /** Kill a session by its map key (used by admin dashboard). */
