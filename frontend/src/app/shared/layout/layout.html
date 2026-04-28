@@ -1,10 +1,13 @@
-<div class="drawer min-h-screen" [class.lg:drawer-open]="device.isDesktop() || device.isTv()">
+<div class="drawer min-h-screen"
+     [class.lg:drawer-open]="device.isDesktop() || device.isTv()"
+     [class.md:drawer-open]="device.isTablet() && navbar.sidebarPinned()">
   <input id="sidebar" type="checkbox" class="drawer-toggle" />
   <div class="drawer-content flex flex-col relative">
     <nav
       class="navbar fixed top-0 left-0 right-0 z-30 transition-all duration-300"
       style="padding-top: calc(env(safe-area-inset-top, 0px) + 4px)"
       [class.lg:hidden]="device.isDesktop() || device.isTv()"
+      [class.md:hidden]="device.isTablet() && navbar.sidebarPinned()"
       [class.-translate-y-full]="navbarHidden()"
       [class.bg-base-100]="!navbarTransparent()"
       [class.shadow-sm]="!navbarTransparent()"
@@ -70,10 +73,15 @@
       </div>
     </nav>
     <!-- Spacer for fixed navbar on mobile (navbar height + safe area; reduced on hero pages so fanart extends under status bar) -->
-    <div [class.lg:hidden]="device.isDesktop() || device.isTv()" [style.height]="navbar.isHeroPage() ? '0px' : 'calc(4rem + env(safe-area-inset-top, 0px))'"></div>
+    <div
+      [class.lg:hidden]="device.isDesktop() || device.isTv()"
+      [class.md:hidden]="device.isTablet() && navbar.sidebarPinned()"
+      [style.height]="navbar.isHeroPage() ? '0px' : 'calc(4rem + env(safe-area-inset-top, 0px))'"
+    ></div>
     <!-- Desktop top-right: Cast + User -->
     <div class="hidden items-center justify-end gap-1 absolute top-3 right-4 z-50 pointer-events-none [&>*]:pointer-events-auto"
-         [class.lg:flex]="device.isDesktop() || device.isTv()">
+         [class.lg:flex]="device.isDesktop() || device.isTv()"
+         [class.md:flex]="device.isTablet() && navbar.sidebarPinned()">
       @if (castPlayer.hasMedia()) {
         <button class="btn btn-ghost btn-sm gap-2" (click)="toggleCastOverlay()">
           <svg lucideCast class="h-5 w-5 text-info"></svg>
@@ -208,13 +216,26 @@
   <div class="drawer-side z-40" [class.hidden]="isNative && device.isPhone()">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
     <aside class="bg-base-100 w-64 min-h-full flex flex-col" style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 )">
-      <div class="p-4 border-b border-base-200">
-        <a routerLink="/" class="flex items-center gap-2 pl-2 text-2xl font-bold">
-          <img src="fliks-mark.png" alt="" class="h-8 w-8" />
-          <span>{{ 'app.name' | translate }}</span>
+      <div class="p-4 border-b border-base-200 flex items-center gap-2">
+        <a routerLink="/" class="flex items-center gap-2 pl-2 text-2xl font-bold flex-1 min-w-0">
+          <img src="fliks-mark.png" alt="" class="h-8 w-8 shrink-0" />
+          <span class="truncate">{{ 'app.name' | translate }}</span>
         </a>
         @if (!networkService.isOnline()) {
-          <span class="badge badge-sm badge-warning ml-2">{{ 'downloads.offline' | translate }}</span>
+          <span class="badge badge-sm badge-warning">{{ 'downloads.offline' | translate }}</span>
+        }
+        @if (device.isTablet()) {
+          <!-- Pin/unpin sidebar — tablet only. Desktop is always pinned, phones
+               never have this sidebar. Toggle persists via NavbarService. -->
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm btn-square"
+            [class.text-primary]="navbar.sidebarPinned()"
+            (click)="navbar.toggleSidebarPinned()"
+            [attr.aria-label]="(navbar.sidebarPinned() ? 'nav.unpin_sidebar' : 'nav.pin_sidebar') | translate"
+          >
+            <svg lucidePin class="h-4 w-4"></svg>
+          </button>
         }
       </div>
 

@@ -127,6 +127,8 @@
     "settings": "Paramètres",
     "open_menu": "Ouvrir le menu",
     "close_menu": "Fermer le menu",
+    "pin_sidebar": "Épingler la barre latérale",
+    "unpin_sidebar": "Détacher la barre latérale",
     "logout": "Se déconnecter",
     "switch_user": "Changer d'utilisateur",
     "administration": "Administration",
