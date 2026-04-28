@@ -18,6 +18,13 @@ export class NavbarService {
   readonly scrollAtTop = signal(true);
   /** True when at least one in-app navigation has happened since entering — used to gate back buttons. */
   readonly canGoBack = signal(false);
+  /**
+   * User preference: whether the sidebar should stay pinned at lg breakpoint
+   * even on form-factors that default to a drawer (tablet). Persisted in
+   * localStorage. Desktop and TV are always pinned regardless of this flag;
+   * phones never have a sidebar.
+   */
+  readonly sidebarPinned = signal(localStorage.getItem('fliks.sidebarPinned') === 'true');
 
   private readonly router = inject(Router);
   private readonly location = inject(Location);
@@ -88,6 +95,12 @@ export class NavbarService {
     document.body.classList.remove('hero-page');
     this.isHeroPage.set(false);
     this.heroTitle.set('');
+  }
+
+  toggleSidebarPinned() {
+    const next = !this.sidebarPinned();
+    this.sidebarPinned.set(next);
+    localStorage.setItem('fliks.sidebarPinned', String(next));
   }
 
   /** Sets the in-layout page title (ignored while on a hero page). */
