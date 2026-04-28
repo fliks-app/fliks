@@ -18,6 +18,7 @@
     class="player-video"
     playsinline
     [class.opacity-0]="!videoStarted()"
+    [class.controls-visible]="controlsVisible()"
     [style.object-fit]="fillScreen() ? 'cover' : 'contain'"
   ></video>
 

@@ -100,6 +100,18 @@ import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats
     .player-container.hdr-bright > .loading-overlay {
       opacity: 0.5;
     }
+    /* Lift native subtitles 5% when controls are visible so they don't sit
+       under the bottom controls bar. We toggle the class directly on the
+       <video> — toggling on an ancestor isn't always enough to trigger a
+       style recalc on UA-shadow pseudo-elements in Chromium. WebKit pseudo
+       covers Chromium + Safari + WKWebView, which is what we target. */
+    .player-video::-webkit-media-text-track-display {
+      transition: transform 200ms ease;
+      transform: translateY(0);
+    }
+    .player-video.controls-visible::-webkit-media-text-track-display {
+      transform: translateY(-5vh);
+    }
   `],
 })
 export class PlayerComponent implements AfterViewInit, OnDestroy {
@@ -277,6 +289,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const active = this.hdrBrightnessActive();
     if (!this.isNative) return;
     NativePlayer.setBrightness({ brightness: active ? 1.0 : -1 }).catch(() => {});
+  });
+
+  /** Re-apply native subtitle style on controls show/hide so the bottom-margin
+      bump kicks in. Browser playback uses CSS instead — see styles below. */
+  private readonly subtitleControlsMarginEffect = effect(() => {
+    this.controlsVisible();
+    if (this.isNativeEngine() && this.engine) {
+      this.applyNativeSubtitleStyle();
+    }
   });
 
   // Media info
@@ -1346,15 +1367,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.availableSubtitles.set(subs);
   }
 
-  /** Apply user's subtitle style settings to native engine. */
+  /**
+   * Apply user's subtitle style settings to native engine. When the player
+   * controls are visible, bumps the bottom margin by 5% so cues don't sit
+   * under the controls bar — the WebKit `::cue` shift used in browser mode
+   * doesn't apply on ExoPlayer/AVPlayer.
+   */
   private applyNativeSubtitleStyle() {
     const s = this.playerSettings.get();
+    const extraMargin = this.controlsVisible() ? 5 : 0;
     (this.engine as NativeEngine).setSubtitleStyle({
       size: s.subtitleSize,
       color: s.subtitleColor,
       shadow: s.subtitleShadow,
       background: s.subtitleBackground,
-      bottomMargin: s.subtitleBottomMargin,
+      bottomMargin: s.subtitleBottomMargin + extraMargin,
     });
   }
 
