@@ -100,6 +100,26 @@ export class UsersSettingsComponent implements OnInit {
     this.editorDialog()?.nativeElement.close();
   }
 
+  /**
+   * Render `lastLogin` as a relative time string for the table. Uses the
+   * Intl.RelativeTimeFormat API so the locale follows the active translate
+   * lang automatically.
+   */
+  formatLastLogin(iso: string): string {
+    const diffMs = Date.now() - new Date(iso).getTime();
+    const minutes = Math.round(diffMs / 60000);
+    const fmt = new Intl.RelativeTimeFormat(this.translate.currentLang ?? 'fr', { numeric: 'auto' });
+    if (minutes < 1) return fmt.format(0, 'minute');
+    if (minutes < 60) return fmt.format(-minutes, 'minute');
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return fmt.format(-hours, 'hour');
+    const days = Math.round(hours / 24);
+    if (days < 30) return fmt.format(-days, 'day');
+    const months = Math.round(days / 30);
+    if (months < 12) return fmt.format(-months, 'month');
+    return fmt.format(-Math.round(months / 12), 'year');
+  }
+
   /** Modal is create-only — edits go through the dedicated /admin/users/:id page. */
   async save() {
     this.saving.set(true);

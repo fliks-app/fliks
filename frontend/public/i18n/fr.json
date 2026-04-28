@@ -1292,6 +1292,7 @@
       "col_username": "Nom d'utilisateur",
       "col_role": "Rôle",
       "col_status": "Statut",
+      "col_last_login": "Dernière connexion",
       "actions": "Actions",
       "you": "vous",
       "add": "Ajouter un utilisateur",
