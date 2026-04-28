@@ -1598,7 +1598,8 @@
     "not_fully_watched": "Pas entièrement vu",
     "action_open": "Ouvrir",
     "action_play": "Lire",
-    "remove_from_list": "Retirer de cette liste"
+    "remove_from_list": "Retirer de cette liste",
+    "actions": "Actions"
   },
   "legend": {
     "downloaded_monitored": "Téléchargé (suivi)",

@@ -125,6 +125,18 @@
         <div class="h-full bg-primary" [style.width.%]="progressPercent()"></div>
       </div>
     }
+
+    <!-- Actions button (desktop) — opens the same panel as TV menu / mobile long-press -->
+    @if (showHoverOverlay() && cardActions().length) {
+      <button
+        type="button"
+        class="absolute top-2 right-2 z-20 btn btn-circle btn-sm border-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/65"
+        (click)="openActions($event)"
+        [attr.aria-label]="'media_card.actions' | translate"
+      >
+        <svg lucideEllipsisVertical class="h-4 w-4" [strokeWidth]="2"></svg>
+      </button>
+    }
   </figure>
 
   <!-- Title below -->
@@ -147,15 +159,4 @@
     }
   </div>
 
-  <!-- Dismiss button -->
-  @if (dismissable()) {
-    <button
-      type="button"
-      class="absolute top-2 right-2 z-10 btn btn-circle btn-sm border-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/65"
-      (click)="dismissed.emit(); $event.stopPropagation()"
-      aria-label="Remove"
-    >
-      <svg lucideX class="h-4 w-4" [strokeWidth]="2"></svg>
-    </button>
-  }
 </div>

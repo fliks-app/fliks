@@ -2,13 +2,13 @@ import { Component, ChangeDetectionStrategy, ElementRef, input, output, computed
 import { Router, RouterLink } from '@angular/router';
 import { NgClass, DecimalPipe } from '@angular/common';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideX, LucideCircleCheck, LucideCircleX } from '@lucide/angular';
+import { LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleCheck, LucideCircleX } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { Media } from '../../../core/services/api/media.service';
 import { Capacitor } from '@capacitor/core';
 import { computeMediaBarStatus, computeMediaBarPercent } from '../../utils/media-status.util';
 import { CardActionsDirective } from '../../directives/card-actions.directive';
-import { CardAction } from '../../../core/services/card-actions.service';
+import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
 import { TvService } from '../../../core/services/tv.service';
 import { DeviceService } from '../../../core/services/device.service';
 
@@ -28,7 +28,7 @@ export type CardStatus = 'watched' | 'missing' | null;
 @Component({
   selector: 'app-media-card',
   imports: [RouterLink, NgClass, DecimalPipe, ResolveUrlPipe, TranslateModule,
-    LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideX, LucideCircleCheck, LucideCircleX,
+    LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleCheck, LucideCircleX,
     CardActionsDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-card.html',
@@ -37,6 +37,7 @@ export class MediaCardComponent {
   private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);
   private readonly tv = inject(TvService);
+  private readonly cardActionsService = inject(CardActionsService);
   protected readonly device = inject(DeviceService);
   protected readonly isNative = Capacitor.isNativePlatform();
   /** Hover overlay (play button) only makes sense on a real pointer device. */
@@ -156,6 +157,26 @@ export class MediaCardComponent {
    */
   private readonly imgRef = viewChild<ElementRef<HTMLImageElement>>('cardImg');
 
+  /**
+   * Desktop affordance — opens the same contextual panel that TV's menu key
+   * and mobile's long-press use. The button itself is the anchor with
+   * placement 'button' so the dropdown drops right under the ⋯ glyph and
+   * overlays the card body, instead of stacking below the whole figure.
+   */
+  protected openActions(event: Event) {
+    event.stopPropagation();
+    event.preventDefault();
+    const button = event.currentTarget as HTMLElement | null;
+    if (!button) return;
+    this.cardActionsService.register({
+      actions: this.cardActions(),
+      anchor: button,
+      title: this._title(),
+      placement: 'button',
+    });
+    this.cardActionsService.show();
+  }
+
   /** Resolved id from [media] or the tail of [link]. */
   private resolveMediaId(): number | null {
     const m = this.media();
@@ -206,8 +227,14 @@ export class MediaCardComponent {
 
   protected onCardClick() {
     this.flagPosterForTransition();
-    const link = this._link();
-    if (link) void this.router.navigate(link, { state: this._navState() });
+    // When the parent owns the click ('play' intent), don't navigate to the
+    // detail link here — the parent's (clicked) handler routes to /watch
+    // directly. Otherwise we'd land on /detail for one frame before the
+    // parent's navigate kicked in.
+    if (this.clickIntent() !== 'play') {
+      const link = this._link();
+      if (link) void this.router.navigate(link, { state: this._navState() });
+    }
     this.clicked.emit();
   }
 
@@ -272,7 +299,7 @@ export class MediaCardComponent {
       actions.push({
         labelKey: 'media_card.action_open',
         icon: 'external-link',
-        run: () => (isPlayIntent ? this.openDetail() : this.onCardClick()),
+        run: () => this.openDetail(),
       });
     }
     if (this.interactiveWatched()) {

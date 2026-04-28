@@ -39,6 +39,16 @@ export interface CardAction {
  * mobile. The same registry powers both presentations so each card declares
  * its actions once and the platform picks the right surface.
  */
+/**
+ * How the anchored dropdown is positioned relative to its anchor:
+ *   • `card` — dropdown drops centered below the anchor (TV menu key, etc.).
+ *     Typically used when the anchor is the whole card figure.
+ *   • `button` — dropdown's right edge aligns with the anchor's right edge,
+ *     drops just below it. Used by the desktop `⋯` button so the menu appears
+ *     under the button and overlays the card body.
+ */
+export type CardActionsPlacement = 'card' | 'button';
+
 @Injectable({ providedIn: 'root' })
 export class CardActionsService {
   private readonly tv = inject(TvService);
@@ -47,6 +57,8 @@ export class CardActionsService {
   readonly actions = signal<CardAction[] | null>(null);
   /** DOM anchor used by the panel for positioning. */
   readonly anchor = signal<HTMLElement | null>(null);
+  /** Placement strategy for the dropdown relative to its anchor. */
+  readonly placement = signal<CardActionsPlacement>('card');
   /** Title shown at the top of the panel (typically the card title). */
   readonly title = signal<string>('');
   /** Whether the panel is currently open. */
@@ -62,10 +74,16 @@ export class CardActionsService {
     }
   }
 
-  register(payload: { actions: CardAction[]; anchor: HTMLElement; title?: string }) {
+  register(payload: {
+    actions: CardAction[];
+    anchor: HTMLElement;
+    title?: string;
+    placement?: CardActionsPlacement;
+  }) {
     this.actions.set(payload.actions);
     this.anchor.set(payload.anchor);
     this.title.set(payload.title ?? '');
+    this.placement.set(payload.placement ?? 'card');
   }
 
   /**

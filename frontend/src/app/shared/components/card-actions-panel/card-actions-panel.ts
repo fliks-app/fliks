@@ -18,6 +18,7 @@ import {
 } from '@lucide/angular';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
 import { TvService } from '../../../core/services/tv.service';
+import { DeviceService } from '../../../core/services/device.service';
 import { BottomSheetComponent } from '../bottom-sheet';
 
 /**
@@ -46,28 +47,45 @@ import { BottomSheetComponent } from '../bottom-sheet';
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './card-actions-panel.html',
+  styles: [`
+    .card-actions-menu {
+      transform-origin: top center;
+      animation: card-actions-pop 140ms cubic-bezier(0.2, 0, 0.13, 1.5);
+    }
+    @keyframes card-actions-pop {
+      from { opacity: 0; transform: scale(0.94) translateY(-4px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+  `],
 })
 export class CardActionsPanelComponent {
   readonly service = inject(CardActionsService);
   readonly tv = inject(TvService);
+  private readonly device = inject(DeviceService);
 
   readonly menu = viewChild<ElementRef<HTMLElement>>('menu');
 
-  /** Computed style for the TV anchored dropdown — re-read on each open. */
+  /** Computed style for the anchored dropdown — re-read on each open. */
   readonly position = signal<{ top: number; left: number; width: number } | null>(null);
-  /** Index of the currently highlighted action (for D-pad keyboard nav). */
+  /** Index of the currently highlighted action (for keyboard nav). */
   readonly activeIndex = signal(0);
 
   readonly actions = computed(() => this.service.actions() ?? []);
   readonly title = this.service.title;
   readonly isTv = this.tv.isTv;
+  /**
+   * Use the anchored dropdown for TV (D-pad menu) and any non-touch surface
+   * (i.e. desktop with a mouse). Touch surfaces (mobile, tablet, native phone)
+   * keep the bottom sheet — easier to tap and matches platform conventions.
+   */
+  readonly useDropdown = computed(() => this.isTv() || !this.device.isTouch());
 
   constructor() {
     // Recompute position and reset highlight when the panel opens.
     effect(() => {
       if (!this.service.open()) return;
       this.activeIndex.set(0);
-      if (this.isTv()) {
+      if (this.useDropdown()) {
         queueMicrotask(() => {
           this.computePosition();
           this.menu()?.nativeElement.querySelector<HTMLButtonElement>('button')?.focus();
@@ -87,9 +105,13 @@ export class CardActionsPanelComponent {
     queueMicrotask(() => action.run());
   }
 
-  /** Keyboard handler for the TV dropdown — Up/Down move highlight, Enter activates. */
+  /**
+   * Keyboard handler for the anchored dropdown — Up/Down move highlight,
+   * Escape closes. Bound on TV and desktop alike (the bottom sheet on touch
+   * surfaces uses tap-to-dismiss instead).
+   */
   onMenuKey(e: KeyboardEvent) {
-    if (!this.isTv()) return;
+    if (!this.useDropdown()) return;
     const list = this.actions();
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -103,6 +125,10 @@ export class CardActionsPanelComponent {
       const prev = (this.activeIndex() - 1 + list.length) % list.length;
       this.activeIndex.set(prev);
       this.focusActionAt(prev);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      this.onClose();
     }
   }
 
@@ -115,12 +141,22 @@ export class CardActionsPanelComponent {
     const anchor = this.service.anchor();
     if (!anchor) return;
     const r = anchor.getBoundingClientRect();
-    const margin = 12;
-    const width = Math.min(280, Math.max(220, r.width));
-    // Default below the card; flip above when there isn't enough room.
+    const placement = this.service.placement();
+    const margin = placement === 'button' ? 4 : 12;
     const fitsBelow = r.bottom + 320 < window.innerHeight;
     const top = fitsBelow ? r.bottom + margin : r.top - 320 - margin;
-    let left = r.left + (r.width - width) / 2;
+    let width: number;
+    let left: number;
+    if (placement === 'button') {
+      // Compact dropdown anchored to the button's right edge — overlays the
+      // card body below the ⋯ trigger.
+      width = 220;
+      left = r.right - width;
+    } else {
+      // Default: centered under the card figure.
+      width = Math.min(280, Math.max(220, r.width));
+      left = r.left + (r.width - width) / 2;
+    }
     left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
     this.position.set({ top, left, width });
   }
