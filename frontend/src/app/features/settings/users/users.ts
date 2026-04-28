@@ -15,12 +15,10 @@ import {
   UsersApiService,
   UserRow,
   CreateUserBody,
-  UpdateUserBody,
 } from '../../../core/services/api/users-api.service';
 import { RolesApiService, RoleRow } from '../../../core/services/api/roles-api.service';
 import { LibrariesApiService, Library } from '../../../core/services/api/libraries-api.service';
 import { AuthService } from '../../../core/services/auth.service';
-import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
@@ -35,7 +33,6 @@ export class UsersSettingsComponent implements OnInit {
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly translate = inject(TranslateService);
   readonly auth = inject(AuthService);
-  private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
@@ -45,10 +42,7 @@ export class UsersSettingsComponent implements OnInit {
   readonly loading = signal(true);
   readonly listError = signal('');
 
-  readonly isCreating = signal(false);
   readonly saving = signal(false);
-
-  readonly editingUser = signal<UserRow | null>(null);
 
   readonly formUsername = signal('');
   readonly formPassword = signal('');
@@ -89,8 +83,6 @@ export class UsersSettingsComponent implements OnInit {
   }
 
   openCreate() {
-    this.isCreating.set(true);
-    this.editingUser.set(null);
     this.formUsername.set('');
     this.formPassword.set('');
     this.formEmail.set('');
@@ -104,48 +96,23 @@ export class UsersSettingsComponent implements OnInit {
     this.editorDialog()?.nativeElement.showModal();
   }
 
-  openEdit(user: UserRow) {
-    this.isCreating.set(false);
-    this.editingUser.set(user);
-    this.formUsername.set(user.username);
-    this.formPassword.set('');
-    this.formEmail.set('');
-    this.formRoleId.set(user.roleId);
-    this.formEnabled.set(user.enabled);
-    this.formLibraryIds.set(new Set(user.libraryIds ?? []));
-    this.editorDialog()?.nativeElement.showModal();
-  }
-
   closeEditor() {
     this.editorDialog()?.nativeElement.close();
   }
 
+  /** Modal is create-only — edits go through the dedicated /admin/users/:id page. */
   async save() {
     this.saving.set(true);
     try {
-      const libraryIds = [...this.formLibraryIds()];
-      if (this.isCreating()) {
-        const body: CreateUserBody = {
-          username: this.formUsername().trim(),
-          password: this.formPassword(),
-          roleId: this.formRoleId() ?? undefined,
-          enabled: this.formEnabled(),
-          libraryIds,
-        };
-        if (this.formEmail().trim()) body.email = this.formEmail().trim();
-        await this.api.create(body);
-      } else {
-        const user = this.editingUser();
-        if (!user) return;
-        const body: UpdateUserBody = {
-          username: this.formUsername().trim() || undefined,
-          roleId: this.formRoleId() ?? undefined,
-          enabled: this.formEnabled(),
-          libraryIds,
-        };
-        if (this.formPassword()) body.password = this.formPassword();
-        await this.api.update(user.id, body);
-      }
+      const body: CreateUserBody = {
+        username: this.formUsername().trim(),
+        password: this.formPassword(),
+        roleId: this.formRoleId() ?? undefined,
+        enabled: this.formEnabled(),
+        libraryIds: [...this.formLibraryIds()],
+      };
+      if (this.formEmail().trim()) body.email = this.formEmail().trim();
+      await this.api.create(body);
       this.closeEditor();
       this.toast.success(this.translate.instant('settings.users.save_success'));
       await this.reloadAll();
@@ -156,14 +123,4 @@ export class UsersSettingsComponent implements OnInit {
     }
   }
 
-  async deleteUser(user: UserRow) {
-    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('settings.users.confirm_delete', { name: user.username }), variant: 'danger' })) return;
-    try {
-      await this.api.remove(user.id);
-      await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Error', variant: 'danger' });
-    }
-  }
 }

@@ -23,7 +23,6 @@
             <th>{{ 'settings.users.col_username' | translate }}</th>
             <th>{{ 'settings.users.col_role' | translate }}</th>
             <th>{{ 'settings.users.col_status' | translate }}</th>
-            <th class="text-end w-48">{{ 'settings.users.actions' | translate }}</th>
           </tr>
         </thead>
         <tbody>
@@ -45,16 +44,6 @@
                   <span class="badge badge-ghost badge-sm">{{ 'common.disabled' | translate }}</span>
                 }
               </td>
-              <td class="text-end">
-                <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(user)">
-                  {{ 'settings.users.edit' | translate }}
-                </button>
-                @if (auth.user()?.id !== user.id) {
-                  <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteUser(user)">
-                    {{ 'settings.users.delete' | translate }}
-                  </button>
-                }
-              </td>
             </tr>
           }
         </tbody>
@@ -66,7 +55,7 @@
 <dialog #editorDialog class="modal">
     <div class="modal-box max-w-md max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
       <div class="px-5 sm:px-6 pt-4 pb-3 border-b border-base-200 flex justify-between items-center shrink-0 bg-base-100">
-        <h2 class="text-lg font-bold">{{ (isCreating() ? 'settings.users.editor_create' : 'settings.users.editor_edit') | translate }}</h2>
+        <h2 class="text-lg font-bold">{{ 'settings.users.editor_create' | translate }}</h2>
         <button
           type="button"
           class="btn btn-sm btn-ghost btn-circle"
@@ -100,7 +89,7 @@
         </label>
 
         <label class="form-control w-full">
-          <span class="label-text">{{ (isCreating() ? 'settings.users.field_password' : 'settings.users.field_new_password') | translate }}</span>
+          <span class="label-text">{{ 'settings.users.field_password' | translate }}</span>
           <input
             type="password"
             class="input input-bordered input-sm w-full"
@@ -108,11 +97,6 @@
             (ngModelChange)="formPassword.set($event)"
             placeholder="••••••••"
           />
-          @if (!isCreating()) {
-            <div class="label">
-              <span class="label-text-alt text-base-content/50">{{ 'settings.users.password_hint' | translate }}</span>
-            </div>
-          }
         </label>
 
         <label class="form-control w-full">
