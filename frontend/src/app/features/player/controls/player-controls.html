@@ -132,6 +132,13 @@
           </button>
         }
         <button type="button" class="btn btn-ghost btn-sm text-white/80 text-sm" (click)="openSheet('speed')">{{ playbackRate() }}x</button>
+        <!-- Fullscreen — web only. Native apps are already fullscreen via the
+             Immersive plugin, so the toggle is irrelevant there. -->
+        @if (!isNative()) {
+          <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" (click)="toggleFullscreen.emit()">
+            <svg lucideMaximize class="h-5 w-5"></svg>
+          </button>
+        }
         <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" (click)="openSheet('settings')">
           <svg lucideSettings class="h-5 w-5"></svg>
         </button>
