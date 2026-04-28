@@ -992,24 +992,43 @@ export class StreamingController {
       req.user?.id,
     );
 
-    // For init.mp4: serve from existing session without triggering quality changes.
+    // For init.mp4: serve from the early session when it exists with matching
+    // quality. Its init bytes are byte-identical to main's (same encoder
+    // profile, dimensions, codec config) and ready ~1.5s sooner because it
+    // has no `-ss` seek and is bounded by `-t 4`. Without this, init.mp4
+    // would block on the main session's HDR-tonemap+seek cold-start
+    // (~3s on 4K HDR), gating Shaka's first-frame render on the slowest
+    // path even though seg-0 was already served from early.
     if (segment.startsWith('init') && existing) {
       const ma = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
       const initFile = ma ? `0/${segment}` : segment;
-      const initPath = await this.transcodingService.getSegmentPath(
-        existing,
-        initFile,
+      const earlySession = this.transcodingService.getExistingEarlySession(
+        mediaFileId,
+        req.user?.id,
       );
-      if (initPath) {
-        res.setHeader('Content-Type', 'video/mp4');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        const initStream = fs.createReadStream(initPath);
-        initStream.on('error', () => {
-          if (!res.headersSent) res.status(404).end();
-        });
-        initStream.pipe(res);
-        this.timing(`segment[init]`, mediaFileId, t0, `path=main`);
-        return;
+      const sources =
+        earlySession && earlySession.quality === existing.quality
+          ? [
+              { session: earlySession, label: 'early' as const },
+              { session: existing, label: 'main-fallback' as const },
+            ]
+          : [{ session: existing, label: 'main' as const }];
+      for (const { session: src, label } of sources) {
+        const initPath = await this.transcodingService.getSegmentPath(
+          src,
+          initFile,
+        );
+        if (initPath) {
+          res.setHeader('Content-Type', 'video/mp4');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          const initStream = fs.createReadStream(initPath);
+          initStream.on('error', () => {
+            if (!res.headersSent) res.status(404).end();
+          });
+          initStream.pipe(res);
+          this.timing('segment[init]', mediaFileId, t0, `path=${label}`);
+          return;
+        }
       }
     }
 
