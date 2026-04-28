@@ -225,6 +225,13 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/account/account').then((m) => m.AccountComponent),
       },
+      {
+        path: 'recommendations',
+        loadComponent: () =>
+          import('./features/account/recommendations').then(
+            (m) => m.AccountRecommendationsComponent,
+          ),
+      },
     ],
   },
   // App settings — own layout with sidebar

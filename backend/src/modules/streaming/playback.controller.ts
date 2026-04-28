@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PlaybackService } from './playback.service';
 import { RecommendationService } from './recommendation.service';
 import { User } from '../users/entities/user.entity';
@@ -44,6 +45,18 @@ export class PlaybackController {
   ) {
     const user = req.user as User;
     return this.recommendationService.dismiss(user.id, mediaId);
+  }
+
+  /** How many recommendations the calling user has dismissed so far. */
+  @Get('recommendations/dismissed/count')
+  async dismissalsCount(@CurrentUser() user: User) {
+    return { count: await this.recommendationService.countDismissals(user.id) };
+  }
+
+  /** Drop every dismissal for the calling user. */
+  @Delete('recommendations/dismissed')
+  resetDismissals(@CurrentUser() user: User) {
+    return this.recommendationService.resetDismissals(user.id);
   }
 
   @Get('watched-ids')

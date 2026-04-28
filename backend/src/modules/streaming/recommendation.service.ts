@@ -83,6 +83,21 @@ export class RecommendationService {
       .execute();
   }
 
+  /**
+   * Drop every dismissal for the user — clean slate, all previously hidden
+   * recommendations become eligible again. Returns the number of rows
+   * removed so the UI can confirm the action.
+   */
+  async resetDismissals(userId: number): Promise<{ removed: number }> {
+    const result = await this.dismissalRepo.delete({ userId });
+    return { removed: result.affected ?? 0 };
+  }
+
+  /** Number of currently dismissed recommendations for the user. */
+  async countDismissals(userId: number): Promise<number> {
+    return this.dismissalRepo.count({ where: { userId } });
+  }
+
   async getRecommendations(
     userId: number,
     accessibleLibraryIds?: number[] | null,

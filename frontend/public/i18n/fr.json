@@ -89,7 +89,17 @@
   "account_settings": {
     "title": "Paramètres du compte",
     "nav": {
-      "password": "Mot de passe"
+      "password": "Mot de passe",
+      "recommendations": "Recommandations"
+    },
+    "recommendations": {
+      "reset_title": "Réinitialiser les recommandations masquées",
+      "description": "Les titres que vous avez retirés de la liste des recommandations restent masqués jusqu'à ce que vous les réinitialisiez ici.",
+      "dismissed_count": "Recommandations masquées :",
+      "reset": "Tout réinitialiser",
+      "confirm_title": "Réinitialiser les recommandations ?",
+      "confirm_body": "{{n}} recommandation(s) masquée(s) redeviendront éligibles. Continuer ?",
+      "reset_success": "{{n}} recommandation(s) restaurée(s)."
     }
   },
   "app_settings": {

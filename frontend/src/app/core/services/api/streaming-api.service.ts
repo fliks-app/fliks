@@ -372,6 +372,19 @@ export class StreamingApiService {
     );
   }
 
+  countDismissedRecommendations() {
+    return firstValueFrom(
+      this.http.get<{ count: number }>('/api/playback/recommendations/dismissed/count'),
+    );
+  }
+
+  /** Wipes every dismissal for the current user. Returns the number removed. */
+  resetDismissedRecommendations() {
+    return firstValueFrom(
+      this.http.delete<{ removed: number }>('/api/playback/recommendations/dismissed'),
+    );
+  }
+
   getHistory(page = 1, limit = 25) {
     return firstValueFrom(
       this.http.get<{ data: WatchHistoryItem[]; total: number }>('/api/playback/history', {

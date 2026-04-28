@@ -1,0 +1,38 @@
+<div class="flex flex-col gap-6">
+  <h1 class="text-2xl font-bold">{{ 'account_settings.nav.recommendations' | translate }}</h1>
+  <div class="card bg-base-100 border border-base-200">
+    <div class="card-body gap-4">
+      <h2 class="card-title text-base">{{ 'account_settings.recommendations.reset_title' | translate }}</h2>
+      <p class="text-sm text-base-content/70">
+        {{ 'account_settings.recommendations.description' | translate }}
+      </p>
+
+      <div class="flex items-center gap-3">
+        <span class="text-sm text-base-content/60">
+          {{ 'account_settings.recommendations.dismissed_count' | translate }}
+        </span>
+        @if (count() === null) {
+          <span class="loading loading-spinner loading-xs"></span>
+        } @else {
+          <span class="badge badge-neutral">{{ count() }}</span>
+        }
+      </div>
+
+      <div class="card-actions justify-end">
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          (click)="reset()"
+          [disabled]="resetting() || !(count() ?? 0)"
+        >
+          @if (resetting()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          } @else {
+            <svg lucideRotateCcw class="h-4 w-4"></svg>
+          }
+          {{ 'account_settings.recommendations.reset' | translate }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
