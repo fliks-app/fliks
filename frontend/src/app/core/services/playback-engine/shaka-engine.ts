@@ -54,7 +54,8 @@ export class ShakaEngine implements PlaybackEngine {
     if (video.parentElement) {
       this.player.setVideoContainer(video.parentElement);
       this.player.configure({
-        textDisplayFactory: () => new shaka.text.UITextDisplayer(this.player as any),
+        textDisplayFactory: (player: shaka.Player) =>
+          new shaka.text.UITextDisplayer(player),
       } as any);
     }
 
