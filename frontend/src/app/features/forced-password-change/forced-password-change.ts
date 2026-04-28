@@ -46,10 +46,11 @@ export class ForcedPasswordChangeComponent {
     this.error.set('');
     try {
       await this.api.update(user.id, { password: this.form.getRawValue().password });
-      // Refetch /auth/me so the local user signal picks up the cleared
+      // Force-refresh /auth/me so the local user signal picks up the cleared
       // requirePasswordChange flag (backend resets it on self password change).
-      // The guard then lets the next navigation through.
-      await this.auth.hydrateFromServer();
+      // hydrateFromServer early-returns when a user is already cached, so we
+      // can't reuse it here — refreshUser bypasses the cache.
+      await this.auth.refreshUser();
       void this.router.navigate(['/'], { replaceUrl: true });
     } catch {
       this.error.set(this.translate.instant('forced_password_change.error'));

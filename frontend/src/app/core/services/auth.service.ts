@@ -195,6 +195,21 @@ export class AuthService {
     }
   }
 
+  /**
+   * Force a re-fetch of /auth/me even when a user is already cached. Used
+   * after server-side state changes that affect fields the frontend reacts
+   * to — currently the requirePasswordChange flag, cleared by the backend
+   * when the user changes their own password.
+   */
+  async refreshUser(): Promise<void> {
+    try {
+      const user = await firstValueFrom(this.http.get<User>('/api/auth/me'));
+      this._user.set(user);
+    } catch {
+      // Keep the previous user — refresh is best-effort.
+    }
+  }
+
   /** Pour le garde de route : vérifie le cookie/token et charge l'utilisateur si besoin. */
   ensureAuthenticated(): Observable<boolean> {
     if (this._user()) return of(true);
