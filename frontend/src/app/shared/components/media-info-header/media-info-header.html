@@ -238,8 +238,13 @@
     class="flex gap-10 relative z-10"
     [style.padding-top]="navbar.mobileNavbarVisible() && navbar.isHeroPage() ? 'calc(env(safe-area-inset-top, 0px) + 2rem)' : null"
   >
-    <!-- Poster / Still (desktop only) -->
-    <div class="shrink-0" [class.w-[280px]]="posterMode() === 'poster'" [class.w-[20%]]="posterMode() === 'still'">
+    <!-- Poster / Still (desktop only). Smaller poster on the lg-to-xl range
+         (sidebar pinned + tablet/desktop window) so the content next to it
+         keeps room to breathe; full 280 px from xl up. -->
+    <div class="shrink-0"
+         [class.w-[200px]]="posterMode() === 'poster'"
+         [class.xl:w-[280px]]="posterMode() === 'poster'"
+         [class.w-[20%]]="posterMode() === 'still'">
       @if (posterUrl()) {
         <img
           [src]="posterUrl()! | resolveUrl" [alt]="title()"
