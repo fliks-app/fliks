@@ -64,7 +64,7 @@ export function normalizeLang(code: string | undefined): string {
 // ── Subtitle appearance maps ──
 
 export const SUBTITLE_SIZE_MAP: Record<string, string> = {
-  small: '0.7em', normal: '0.9em', large: '1.2em', xlarge: '1.5em',
+  small: '2.2vh', normal: '3vh', large: '3.5vh', xlarge: '4.5vh',
 };
 
 export const SUBTITLE_COLOR_MAP: Record<string, string> = {

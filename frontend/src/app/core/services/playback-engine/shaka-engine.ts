@@ -43,6 +43,21 @@ export class ShakaEngine implements PlaybackEngine {
     this.video = video;
 
     this.player = new shaka.Player();
+
+    // Switch to UITextDisplayer (DOM-based) before attach so the player
+    // never instantiates the default NativeTextDisplayer. UITextDisplayer
+    // renders every line of a multi-line cue as a `.shaka-text-wrapper`
+    // flex child of `.shaka-text-container`, so font-size / line-height /
+    // inter-line spacing become real CSS properties we can override —
+    // unlike native VTTCue rendering, where Shaka flattens nested cues
+    // into separate VTTCues whose stacking the browser controls.
+    if (video.parentElement) {
+      this.player.setVideoContainer(video.parentElement);
+      this.player.configure({
+        textDisplayFactory: () => new shaka.text.UITextDisplayer(this.player as any),
+      } as any);
+    }
+
     await this.player.attach(video);
 
     // Sensible streaming defaults

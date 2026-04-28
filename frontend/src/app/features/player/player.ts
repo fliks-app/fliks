@@ -100,17 +100,19 @@ import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats
     .player-container.hdr-bright > .loading-overlay {
       opacity: 0.5;
     }
-    /* Lift native subtitles 5% when controls are visible so they don't sit
-       under the bottom controls bar. We toggle the class directly on the
-       <video> — toggling on an ancestor isn't always enough to trigger a
-       style recalc on UA-shadow pseudo-elements in Chromium. WebKit pseudo
-       covers Chromium + Safari + WKWebView, which is what we target. */
+    /* Lift native subtitles by the user's configured bottom margin
+       (--cue-bottom-margin, set per-video by applySubtitleStyle), and bump
+       another 5vh when the controls bar is visible so cues clear it. We
+       toggle the class directly on the <video> — toggling on an ancestor
+       isn't always enough to trigger a style recalc on UA-shadow
+       pseudo-elements in Chromium. WebKit pseudo covers Chromium + Safari
+       + WKWebView, which is what we target. */
     .player-video::-webkit-media-text-track-display {
       transition: transform 200ms ease;
-      transform: translateY(0);
+      transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh)));
     }
     .player-video.controls-visible::-webkit-media-text-track-display {
-      transform: translateY(-5vh);
+      transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh) - 10vh));
     }
   `],
 })
@@ -1794,23 +1796,47 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  /** Inject dynamic video::cue CSS based on subtitle appearance settings. */
+  /** Push subtitle appearance to both rendering paths:
+      - UITextDisplayer (DOM): CSS variables on .player-container, consumed
+        by the .shaka-text-wrapper / .shaka-text-container rules in
+        styles.css.
+      - NativeTextDisplayer (fallback / WebKit fullscreen): a global
+        <style> that targets video::cue. */
   private applySubtitleStyle() {
     const s = this.playerSettings.get();
-    const fontSize = SUBTITLE_SIZE_MAP[s.subtitleSize] ?? '0.9em';
+    const fontSize = SUBTITLE_SIZE_MAP[s.subtitleSize] ?? '0.7em';
     const color = SUBTITLE_COLOR_MAP[s.subtitleColor] ?? '#ffffff';
     const shadow = SUBTITLE_SHADOW_MAP[s.subtitleShadow] ?? 'none';
     const bg = SUBTITLE_BG_MAP[s.subtitleBackground] ?? 'transparent';
 
+    // CSS variables for UITextDisplayer path + the WebKit cue-display
+    // bottom-margin lift (set on the player container so the variable
+    // reaches both the <video> shadow pseudo and the .shaka-text-container
+    // sibling).
+    const container = this.containerEl()?.nativeElement;
+    if (container) {
+      container.style.setProperty('--cue-font-size', fontSize);
+      container.style.setProperty('--cue-color', color);
+      container.style.setProperty('--cue-bg', bg);
+      container.style.setProperty('--cue-shadow', shadow);
+      container.style.setProperty('--cue-bottom-margin', `${s.subtitleBottomMargin}vh`);
+    }
+    const video = this.videoEl()?.nativeElement;
+    if (video) {
+      video.style.setProperty('--cue-bottom-margin', `${s.subtitleBottomMargin}vh`);
+    }
+
+    // Native VTTCue path: keep the global <style> as a fallback for cases
+    // where Shaka falls back to NativeTextDisplayer (e.g. WebKit
+    // fullscreen) and for non-Shaka native engines.
     const css = `video::cue {
   font-size: ${fontSize} !important;
   color: ${color} !important;
   background: ${bg} !important;
   background-color: ${bg} !important;
   text-shadow: ${shadow};
-  line-height: 1.4;
+  line-height: 1.2 !important;
 }`;
-
     if (!this.subtitleStyleEl) {
       this.subtitleStyleEl = document.createElement('style');
       document.head.appendChild(this.subtitleStyleEl);
