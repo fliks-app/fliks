@@ -249,41 +249,44 @@ export class MediaCardComponent {
   protected readonly cardActions = computed((): CardAction[] => {
     const actions: CardAction[] = [];
     const isPlayIntent = this.clickIntent() === 'play';
-    if (this._link()) {
-      // Primary action — what a regular tap on the card does. Continue
-      // Watching plays via (clicked); other rows open the detail page.
-      actions.push({
-        labelKey: isPlayIntent ? 'media_card.action_play' : 'media_card.action_open',
-        run: () => this.onCardClick(),
-      });
-      // Play-intent cards still expose an explicit "Ouvrir" so the user can
-      // reach the detail page from the menu (the regular tap won't get them
-      // there — it plays).
-      if (isPlayIntent) {
-        actions.push({
-          labelKey: 'media_card.action_open',
-          run: () => this.openDetail(),
-        });
-      }
-    }
-    // Skip the explicit Play action when the card click already plays —
-    // would otherwise show two "Lire" entries side by side.
-    if (this._playable() && !isPlayIntent) {
+    const hasLink = !!this._link();
+
+    // Order is uniform across every row: Play first when available, then
+    // Open detail. Continue Watching's tap-plays behaviour collapses Play
+    // onto onCardClick; other rows route Play through onPlayClick.
+    if (isPlayIntent && hasLink) {
       actions.push({
         labelKey: 'media_card.action_play',
+        icon: 'play',
+        run: () => this.onCardClick(),
+      });
+    } else if (!isPlayIntent && this._playable()) {
+      actions.push({
+        labelKey: 'media_card.action_play',
+        icon: 'play',
         run: () => this.onPlayClick(new Event('synthetic')),
+      });
+    }
+
+    if (hasLink) {
+      actions.push({
+        labelKey: 'media_card.action_open',
+        icon: 'external-link',
+        run: () => (isPlayIntent ? this.openDetail() : this.onCardClick()),
       });
     }
     if (this.interactiveWatched()) {
       const watched = this.status() === 'watched';
       actions.push({
         labelKey: watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched',
+        icon: watched ? 'eye-off' : 'eye',
         run: () => this.watchedToggled.emit(!watched),
       });
     }
     if (this.dismissable()) {
       actions.push({
         labelKey: 'media_card.remove_from_list',
+        icon: 'trash-2',
         tone: 'danger',
         run: () => this.dismissed.emit(),
       });

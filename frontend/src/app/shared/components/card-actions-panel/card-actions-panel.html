@@ -32,6 +32,13 @@
           [class.focus:bg-white/15]="!a.disabled"
           (click)="trigger(a)"
         >
+          @switch (a.icon) {
+            @case ('play') { <svg lucidePlay class="h-5 w-5 shrink-0 opacity-80"></svg> }
+            @case ('external-link') { <svg lucideExternalLink class="h-5 w-5 shrink-0 opacity-80"></svg> }
+            @case ('eye') { <svg lucideEye class="h-5 w-5 shrink-0 opacity-80"></svg> }
+            @case ('eye-off') { <svg lucideEyeOff class="h-5 w-5 shrink-0 opacity-80"></svg> }
+            @case ('trash-2') { <svg lucideTrash2 class="h-5 w-5 shrink-0 opacity-80"></svg> }
+          }
           <span class="flex-1 truncate">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
         </button>
       }
@@ -53,6 +60,13 @@
             [class.opacity-40]="a.disabled"
             (click)="trigger(a)"
           >
+            @switch (a.icon) {
+              @case ('play') { <svg lucidePlay class="h-5 w-5 shrink-0 opacity-80"></svg> }
+              @case ('external-link') { <svg lucideExternalLink class="h-5 w-5 shrink-0 opacity-80"></svg> }
+              @case ('eye') { <svg lucideEye class="h-5 w-5 shrink-0 opacity-80"></svg> }
+              @case ('eye-off') { <svg lucideEyeOff class="h-5 w-5 shrink-0 opacity-80"></svg> }
+              @case ('trash-2') { <svg lucideTrash2 class="h-5 w-5 shrink-0 opacity-80"></svg> }
+            }
             <span class="flex-1">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
           </button>
         }

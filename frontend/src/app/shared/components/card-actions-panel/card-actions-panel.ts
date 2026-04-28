@@ -9,6 +9,13 @@ import {
   viewChild,
 } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
+import {
+  LucidePlay,
+  LucideExternalLink,
+  LucideEye,
+  LucideEyeOff,
+  LucideTrash2,
+} from '@lucide/angular';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
 import { TvService } from '../../../core/services/tv.service';
 import { BottomSheetComponent } from '../bottom-sheet';
@@ -28,7 +35,15 @@ import { BottomSheetComponent } from '../bottom-sheet';
 @Component({
   selector: 'app-card-actions-panel',
   standalone: true,
-  imports: [TranslateModule, BottomSheetComponent],
+  imports: [
+    TranslateModule,
+    BottomSheetComponent,
+    LucidePlay,
+    LucideExternalLink,
+    LucideEye,
+    LucideEyeOff,
+    LucideTrash2,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './card-actions-panel.html',
 })
