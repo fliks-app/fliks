@@ -1321,6 +1321,8 @@
       "tab_requests": "Demandes",
       "field_is_admin": "Super-admin (accès total)",
       "field_require_password_change": "Forcer le changement de mot de passe à la prochaine connexion",
+      "library_access": "Accès aux bibliothèques",
+      "library_access_empty": "Aucune bibliothèque configurée.",
       "stat_total_requests": "Demandes totales",
       "stat_pending": "En attente",
       "stat_approved": "Approuvées",
