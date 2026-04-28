@@ -74,38 +74,14 @@
             </div>
           </li>
         </ul>
-
-        <div class="pt-2 border-t border-base-200 flex flex-col gap-2">
-          <div class="text-xs text-base-content/60">
-            {{ 'settings.user_detail.stats.requests_quota_period' | translate: { days: s.requests.quotaPeriodDays } }}
-          </div>
-          @if (hasUnlimitedQuotas()) {
-            <div class="text-sm text-base-content/70">
-              {{ 'settings.user_detail.stats.requests_quota_unlimited' | translate }}
-            </div>
-          } @else {
-            @for (row of quotaRows(); track row.label) {
-              <div class="flex items-center gap-2">
-                <span class="text-sm w-16 shrink-0">{{ row.label }}</span>
-                <progress
-                  class="progress flex-1"
-                  [class]="row.variant"
-                  [value]="row.used"
-                  [max]="row.limit"
-                ></progress>
-                <span class="text-sm tabular-nums shrink-0">{{ row.used }}/{{ row.limit }}</span>
-              </div>
-            }
-          }
-        </div>
       </div>
     </div>
 
     <!-- Activité -->
-    <div class="card bg-base-100 border border-base-200">
+    <div class="card bg-base-100 border border-base-200 lg:col-span-2">
       <div class="card-body gap-3">
         <h3 class="card-title text-base">{{ 'settings.user_detail.stats.activity_title' | translate }}</h3>
-        <ul class="flex flex-col gap-2">
+        <ul class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <li class="flex items-center gap-3">
             <svg lucideZap class="h-5 w-5 text-base-content/60 shrink-0"></svg>
             <div class="flex-1 min-w-0">
@@ -121,36 +97,6 @@
             </div>
           </li>
         </ul>
-      </div>
-    </div>
-
-    <!-- Appareils -->
-    <div class="card bg-base-100 border border-base-200">
-      <div class="card-body gap-3">
-        <h3 class="card-title text-base flex items-center gap-2">
-          <svg lucideMonitorSmartphone class="h-5 w-5"></svg>
-          {{ 'settings.user_detail.stats.devices_title' | translate }}
-          <span class="badge badge-sm badge-ghost">{{ s.devices.count }}</span>
-        </h3>
-        @if (s.devices.count === 0) {
-          <p class="text-sm text-base-content/50">{{ 'settings.user_detail.stats.devices_empty' | translate }}</p>
-        } @else {
-          <ul class="flex flex-col gap-2">
-            @for (d of visibleDevices(); track d.deviceId) {
-              <li class="flex flex-col">
-                <span class="font-medium truncate">{{ d.deviceName }}</span>
-                <span class="text-xs text-base-content/60">
-                  {{ 'settings.user_detail.stats.devices_paired' | translate: { when: formatRelative(d.pairedAt) } }}
-                </span>
-              </li>
-            }
-          </ul>
-          @if (hiddenDevicesCount() > 0) {
-            <p class="text-xs text-base-content/50">
-              {{ 'settings.user_detail.stats.devices_more' | translate: { n: hiddenDevicesCount() } }}
-            </p>
-          }
-        }
       </div>
     </div>
 

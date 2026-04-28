@@ -10,7 +10,6 @@ import { UsersController } from './users.controller';
 import { AuthModule } from '../auth/auth.module';
 import { PlaybackState } from '../streaming/entities/playback-state.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
-import { PairingRequest } from '../auth/pairing/entities/pairing-request.entity';
 
 @Module({
   imports: [
@@ -23,7 +22,6 @@ import { PairingRequest } from '../auth/pairing/entities/pairing-request.entity'
       // their own modules, we just consume them here for aggregation.
       PlaybackState,
       FliksRequest,
-      PairingRequest,
     ]),
     AuthModule,
   ],

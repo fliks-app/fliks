@@ -47,19 +47,10 @@ export interface UserStats {
     pending: number;
     approved: number;
     declined: number;
-    quotaPeriodDays: number;
-    movieQuotaLimit: number;
-    seriesQuotaLimit: number;
-    moviesInPeriod: number;
-    seriesInPeriod: number;
   };
   activity: {
     lastActiveAt: string | null;
     memberSince: string;
-  };
-  devices: {
-    count: number;
-    items: { deviceId: string; deviceName: string; pairedAt: string }[];
   };
 }
 

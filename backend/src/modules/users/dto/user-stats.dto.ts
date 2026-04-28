@@ -1,7 +1,9 @@
 /**
  * Aggregated stats payload for the admin user-detail "Statistics" tab.
- * Composed in UsersStatsService from PlaybackState, FliksRequest and
- * PairingRequest queries (all per-userId, indexed).
+ * Composed in UsersStatsService from PlaybackState and FliksRequest queries
+ * (per-userId, indexed). No "active devices" card — the pairing system is
+ * an ephemeral handshake (rows TTL'd at 20 min), not a session registry,
+ * so it can't surface a meaningful device list.
  */
 export interface UserStatsDto {
   playback: {
@@ -17,18 +19,9 @@ export interface UserStatsDto {
     pending: number;
     approved: number;
     declined: number;
-    quotaPeriodDays: number;
-    movieQuotaLimit: number;
-    seriesQuotaLimit: number;
-    moviesInPeriod: number;
-    seriesInPeriod: number;
   };
   activity: {
     lastActiveAt: string | null;
     memberSince: string;
-  };
-  devices: {
-    count: number;
-    items: { deviceId: string; deviceName: string; pairedAt: string }[];
   };
 }

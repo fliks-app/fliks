@@ -4,13 +4,9 @@ import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { PlaybackState } from '../streaming/entities/playback-state.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
-import { PairingRequest } from '../auth/pairing/entities/pairing-request.entity';
 import { MediaType } from '../../common/enums';
 import { RequestStatus } from '../../common/enums/request-status.enum';
 import { UserStatsDto } from './dto/user-stats.dto';
-
-const QUOTA_REQUEST_STATUSES = [RequestStatus.PENDING, RequestStatus.APPROVED];
-const MAX_DEVICES_RETURNED = 10;
 
 /**
  * Aggregates per-user activity for the admin user-detail Statistics tab.
@@ -26,40 +22,24 @@ export class UsersStatsService {
     private readonly playbackRepo: Repository<PlaybackState>,
     @InjectRepository(FliksRequest)
     private readonly requestRepo: Repository<FliksRequest>,
-    @InjectRepository(PairingRequest)
-    private readonly pairingRepo: Repository<PairingRequest>,
   ) {}
 
   async getUserStats(userId: number): Promise<UserStatsDto> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException(`User #${userId} not found`);
 
-    const since = new Date(Date.now() - user.quotaPeriodDays * 86400000);
-
-    const [playback, requestsByStatus, requestsInPeriod, devices] = await Promise.all([
+    const [playback, requestsByStatus] = await Promise.all([
       this.aggregatePlayback(userId),
       this.countRequestsByStatus(userId),
-      this.countRequestsInPeriod(userId, since),
-      this.listApprovedDevices(userId),
     ]);
 
     return {
       playback,
-      requests: {
-        pending: requestsByStatus.pending,
-        approved: requestsByStatus.approved,
-        declined: requestsByStatus.declined,
-        quotaPeriodDays: user.quotaPeriodDays,
-        movieQuotaLimit: user.movieQuotaLimit,
-        seriesQuotaLimit: user.seriesQuotaLimit,
-        moviesInPeriod: requestsInPeriod.movies,
-        seriesInPeriod: requestsInPeriod.series,
-      },
+      requests: requestsByStatus,
       activity: {
         lastActiveAt: user.lastLogin?.toISOString() ?? null,
         memberSince: user.createdAt.toISOString(),
       },
-      devices,
     };
   }
 
@@ -125,55 +105,4 @@ export class UsersStatsService {
     };
   }
 
-  private async countRequestsInPeriod(
-    userId: number,
-    since: Date,
-  ): Promise<{ movies: number; series: number }> {
-    const rows = await this.requestRepo
-      .createQueryBuilder('r')
-      .select('r."mediaType"', 'mediaType')
-      .addSelect('COUNT(*)', 'count')
-      .where('r."userId" = :userId', { userId })
-      .andWhere('r."createdAt" >= :since', { since })
-      .andWhere('r.status IN (:...statuses)', { statuses: QUOTA_REQUEST_STATUSES })
-      .groupBy('r."mediaType"')
-      .getRawMany<{ mediaType: MediaType; count: string }>();
-    const byType = new Map(rows.map((r) => [r.mediaType, Number(r.count)]));
-    return {
-      movies: byType.get(MediaType.MOVIE) ?? 0,
-      series: byType.get(MediaType.SERIES) ?? 0,
-    };
-  }
-
-  private async listApprovedDevices(userId: number): Promise<UserStatsDto['devices']> {
-    // Only include the most recent approval per (deviceId): a device that
-    // was paired multiple times (e.g. unpaired and re-paired) shows once.
-    const rows = await this.pairingRepo
-      .createQueryBuilder('p')
-      .select('p."deviceId"', 'deviceId')
-      .addSelect('MAX(p."deviceName")', 'deviceName')
-      .addSelect('MAX(p."createdAt")', 'pairedAt')
-      .where('p."userId" = :userId', { userId })
-      .andWhere('p.status = :status', { status: 'approved' })
-      .groupBy('p."deviceId"')
-      .orderBy('MAX(p."createdAt")', 'DESC')
-      .limit(MAX_DEVICES_RETURNED)
-      .getRawMany<{ deviceId: string; deviceName: string; pairedAt: string }>();
-
-    const totalRow = await this.pairingRepo
-      .createQueryBuilder('p')
-      .select('COUNT(DISTINCT p."deviceId")', 'count')
-      .where('p."userId" = :userId', { userId })
-      .andWhere('p.status = :status', { status: 'approved' })
-      .getRawOne<{ count: string }>();
-
-    return {
-      count: Number(totalRow?.count ?? 0),
-      items: rows.map((r) => ({
-        deviceId: r.deviceId,
-        deviceName: r.deviceName,
-        pairedAt: r.pairedAt,
-      })),
-    };
-  }
 }
