@@ -211,6 +211,18 @@ export class MediaCardComponent {
     this.clicked.emit();
   }
 
+  /**
+   * Navigate to the detail link WITHOUT emitting `clicked`. Used by the
+   * explicit "Ouvrir" menu action on cards whose normal click is intercepted
+   * by the parent (Continue Watching plays directly via (clicked)).
+   */
+  protected openDetail() {
+    const link = this._link();
+    if (!link) return;
+    this.flagPosterForTransition();
+    void this.router.navigate(link, { state: this._navState() });
+  }
+
   protected onWatchedClick(event: Event) {
     event.stopPropagation();
     this.watchedToggled.emit(this.status() !== 'watched');
@@ -238,12 +250,21 @@ export class MediaCardComponent {
     const actions: CardAction[] = [];
     const isPlayIntent = this.clickIntent() === 'play';
     if (this._link()) {
+      // Primary action — what a regular tap on the card does. Continue
+      // Watching plays via (clicked); other rows open the detail page.
       actions.push({
-        // Label tracks what onCardClick will actually trigger after the
-        // parent's (clicked) handler runs (Continue Watching plays directly).
         labelKey: isPlayIntent ? 'media_card.action_play' : 'media_card.action_open',
         run: () => this.onCardClick(),
       });
+      // Play-intent cards still expose an explicit "Ouvrir" so the user can
+      // reach the detail page from the menu (the regular tap won't get them
+      // there — it plays).
+      if (isPlayIntent) {
+        actions.push({
+          labelKey: 'media_card.action_open',
+          run: () => this.openDetail(),
+        });
+      }
     }
     // Skip the explicit Play action when the card click already plays —
     // would otherwise show two "Lire" entries side by side.
