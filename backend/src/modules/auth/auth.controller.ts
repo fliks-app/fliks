@@ -51,7 +51,11 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(JwtOrApiKeyGuard)
-  getProfile(@CurrentUser() user: User) {
+  async getProfile(@CurrentUser() user: User) {
+    // Bump the user's lastLogin column so the admin user list reflects "last
+    // active" rather than just "last login". Throttled inside touchActivity()
+    // so frequent /auth/me polls don't hammer the DB.
+    await this.authService.touchActivity(user);
     return this.authService.safeUser(user);
   }
 

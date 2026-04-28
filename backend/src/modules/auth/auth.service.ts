@@ -145,6 +145,18 @@ export class AuthService {
     return { accessToken, user: this.safeUser(user) };
   }
 
+  /**
+   * Bump `User.lastLogin` to record activity. Called from GET /auth/me so the
+   * value tracks "last active" rather than literal login. Throttled to one
+   * write per minute per user to avoid hammering the DB on rapid polls.
+   */
+  async touchActivity(user: User): Promise<void> {
+    const now = Date.now();
+    const last = user.lastLogin ? user.lastLogin.getTime() : 0;
+    if (now - last < 60_000) return; // throttle: skip if updated within the last minute
+    await this.userRepo.update(user.id, { lastLogin: new Date(now) });
+  }
+
   /** Generate a JWT for Chromecast (4h — long enough for extended cuts) */
   generateCastToken(user: User): string {
     const payload: JwtPayload = { sub: user.id, username: user.username };
