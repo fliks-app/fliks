@@ -31,6 +31,7 @@
             [link]="['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId]"
             [subtitleLink]="item.episodeId ? ['/series', '' + item.mediaId, 'episode', '' + item.episodeId] : null"
             [dismissable]="true"
+            [clickIntent]="'play'"
             (clicked)="playContinueWatching(item)"
             (dismissed)="removeContinueWatching(item)"
           />

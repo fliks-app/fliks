@@ -87,6 +87,14 @@ export class MediaCardComponent {
   readonly dimmed = input(false);
   readonly dismissable = input(false);
   /**
+   * What clicking the card actually does. Default 'open' (navigate to detail
+   * via the configured link). 'play' is for sections like "Continue Watching"
+   * where the parent intercepts (clicked) to launch the player directly. The
+   * contextual panel uses this to show the right verb ('Lire' vs 'Ouvrir')
+   * and skip the duplicate explicit Play action.
+   */
+  readonly clickIntent = input<'open' | 'play'>('open');
+  /**
    * When true, the top-right check becomes a toggle button that's always
    * visible (filled green when `status()` is `'watched'`, outlined
    * otherwise). Parents must handle {@link watchedToggled} to persist the
@@ -228,13 +236,18 @@ export class MediaCardComponent {
    */
   protected readonly cardActions = computed((): CardAction[] => {
     const actions: CardAction[] = [];
+    const isPlayIntent = this.clickIntent() === 'play';
     if (this._link()) {
       actions.push({
-        labelKey: 'media_card.action_open',
+        // Label tracks what onCardClick will actually trigger after the
+        // parent's (clicked) handler runs (Continue Watching plays directly).
+        labelKey: isPlayIntent ? 'media_card.action_play' : 'media_card.action_open',
         run: () => this.onCardClick(),
       });
     }
-    if (this._playable()) {
+    // Skip the explicit Play action when the card click already plays —
+    // would otherwise show two "Lire" entries side by side.
+    if (this._playable() && !isPlayIntent) {
       actions.push({
         labelKey: 'media_card.action_play',
         run: () => this.onPlayClick(new Event('synthetic')),
