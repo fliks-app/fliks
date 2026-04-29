@@ -26,7 +26,7 @@ import {
   PROFILES,
   SessionContext,
   getLadderForDevice,
-} from './transcoding.service';
+} from './transcoding';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';

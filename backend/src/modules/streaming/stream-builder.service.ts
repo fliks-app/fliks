@@ -13,7 +13,7 @@ import {
   TranscodingService,
   getLadderForDevice,
   parseBitrateToBps,
-} from './transcoding.service';
+} from './transcoding';
 
 /**
  * Decides how a media file should be played: DirectPlay, DirectStream (remux), or Transcode.
@@ -265,7 +265,7 @@ export class StreamBuilderService {
         message: `HDR → SDR (tone mapping ${source.hdrFormat})`,
       });
     }
-    // Compute effective HW accel (same logic as transcoding.service.ts buildFfmpegArgs):
+    // Compute effective HW accel (same logic as transcoding/ffmpeg-args.ts buildFfmpegArgs):
     // - Burn-in forces CPU
     // - QSV + crop falls back to VAAPI (fixed-size pool constraint)
     let effectiveHwAccel = this.transcodingService.getDetectedHwAccel();

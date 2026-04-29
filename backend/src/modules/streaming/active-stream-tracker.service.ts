@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import type { BurnInSubtitle } from './transcoding.service';
+import type { BurnInSubtitle } from './transcoding';
 
 export interface DirectPlaySession {
   userId: number;

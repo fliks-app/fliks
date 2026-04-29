@@ -28,7 +28,7 @@ import { BackupService } from './backup.service';
 import { LogBufferService } from './log-buffer.service';
 import { EventsService } from './events.service';
 import { Observable } from 'rxjs';
-import { TranscodingService } from '../streaming/transcoding.service';
+import { TranscodingService } from '../streaming/transcoding';
 import { ActiveStreamTracker } from '../streaming/active-stream-tracker.service';
 import { PlaybackService } from '../streaming/playback.service';
 import { MediaFile } from '../media/entities/media-file.entity';

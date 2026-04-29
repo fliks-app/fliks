@@ -11,7 +11,7 @@ import { StreamingController } from './streaming.controller';
 import { PlaybackController } from './playback.controller';
 import { StreamingService } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
-import { TranscodingService } from './transcoding.service';
+import { TranscodingService } from './transcoding';
 import { StreamBuilderService } from './stream-builder.service';
 import { PlaybackService } from './playback.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
