@@ -85,9 +85,18 @@ public class NativePlayerPlugin extends Plugin {
             wrapper = new FrameLayout(getContext());
             wrapper.setBackgroundColor(Color.BLACK);
 
-            // AspectRatioFrameLayout maintains video aspect ratio
+            // AspectRatioFrameLayout maintains video aspect ratio.
+            // alpha=0 until ExoPlayer reports first frame rendered — without it
+            // the very first decoded frame paints to TextureView at MATCH_PARENT
+            // (full screen, ignoring video aspect) for one frame, before
+            // onVideoSizeChanged fires. That single-frame flash is what users
+            // see on portrait Android as a "stretched first frame".
+            // alpha (vs setVisibility INVISIBLE) keeps the TextureView's Surface
+            // alive — INVISIBLE can interfere with the surface lifecycle and
+            // prevent onRenderedFirstFrame from ever firing.
             aspectFrame = new AspectRatioFrameLayout(getContext());
             aspectFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
+            aspectFrame.setAlpha(0f);
 
             textureView = new TextureView(getContext());
             aspectFrame.addView(textureView, new FrameLayout.LayoutParams(
@@ -143,6 +152,11 @@ public class NativePlayerPlugin extends Plugin {
                 aspectFrame = null;
                 textureView = null;
             }
+            // Restore an opaque WebView so the gap between unmounting the
+            // player route and the next route's first paint doesn't flash
+            // the activity windowBackground (Light theme = white).
+            android.webkit.WebView webView = getBridge().getWebView();
+            if (webView != null) webView.setBackgroundColor(Color.BLACK);
             subtitleConfigs.clear();
             // Allow screen to sleep again
             getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -174,6 +188,10 @@ public class NativePlayerPlugin extends Plugin {
 
         mainHandler.post(() -> {
             if (player != null) player.release();
+            // Hide again for the new media — waits for the next first-frame
+            // callback so the previous video's last frame doesn't sit on the
+            // surface during the new media's loading phase either.
+            if (aspectFrame != null) aspectFrame.setAlpha(0f);
 
             // HTTP data source with auth headers
             Map<String, String> headerMap = new HashMap<>();
@@ -274,6 +292,11 @@ public class NativePlayerPlugin extends Plugin {
                         aspectFrame.setAspectRatio(
                                 videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height);
                     }
+                }
+
+                @Override public void onRenderedFirstFrame() {
+                    if (aspectFrame != null) aspectFrame.setAlpha(1f);
+                    emitFirstFrame();
                 }
 
                 @Override public void onCues(@NonNull androidx.media3.common.text.CueGroup cueGroup) {
@@ -702,6 +725,11 @@ public class NativePlayerPlugin extends Plugin {
         String safe = message != null ? message.replace("'", "\\'") : "Unknown error";
         getBridge().getWebView().evaluateJavascript(
                 "window.dispatchEvent(new CustomEvent('nativePlayerError',{detail:{code:" + code + ",message:'" + safe + "'}}));", null);
+    }
+
+    private void emitFirstFrame() {
+        getBridge().getWebView().evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('nativePlayerFirstFrame'));", null);
     }
 
     private void emitTracksChanged() {

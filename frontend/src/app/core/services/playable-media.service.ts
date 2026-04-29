@@ -43,7 +43,14 @@ export class PlayableMediaService {
       const qp: any = { mediaId: ctx.mediaId };
       if (ctx.episodeId) qp.episodeId = ctx.episodeId;
       if (fromStart) qp.t = 0;
-      this.router.navigate(['/watch', ctx.fileId], { queryParams: qp });
+      // Pass fanartUrl via router state so the player can paint the
+      // backdrop on its first tick — without it the fanart only appears
+      // after the media API call returns AND the image finishes
+      // downloading (~1s+ on cold network), leaving a long black phase.
+      this.router.navigate(['/watch', ctx.fileId], {
+        queryParams: qp,
+        state: { fanartUrl: ctx.fanartUrl ?? null },
+      });
     }
   }
 

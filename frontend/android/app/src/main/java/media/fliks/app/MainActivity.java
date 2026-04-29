@@ -69,6 +69,11 @@ public class MainActivity extends BridgeActivity {
         }
 
         Window window = getWindow();
+        // Force the activity windowBackground to black so any moment where
+        // the WebView is transparent (during native player playback, or
+        // between routes when content briefly has transparent body bg)
+        // doesn't flash the AppCompat.Light default white through the gap.
+        window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.BLACK));
         // Transparent system bars — CSS env(safe-area-inset-*) handles the offset
         window.setStatusBarColor(Color.TRANSPARENT);
         window.setNavigationBarColor(Color.TRANSPARENT);

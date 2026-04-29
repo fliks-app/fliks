@@ -509,6 +509,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       screen.orientation?.addEventListener('change', this.onOrientationChange);
     }
 
+    // Eager fanart from router state — set BEFORE any await so the backdrop
+    // renders on the first tick of the loading phase instead of popping in
+    // only after the media API + image download (~1s+ later). The image is
+    // already in the browser cache from the source tile/header.
+    const navState = (this.router.getCurrentNavigation()?.extras?.state ?? history.state) as { fanartUrl?: string | null } | null;
+    if (navState?.fanartUrl) {
+      this.fanartUrl.set(this.serverConfig.resolveUrl(navState.fanartUrl));
+    }
+
     const qp = this.route.snapshot.queryParams;
     this.mediaFileId = +this.route.snapshot.params['mediaFileId'];
     this.mediaId = qp['mediaId'] ? +qp['mediaId'] : 0;
@@ -921,16 +930,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.isNativeEngine.set(false);
     this.state.bindEngine(engine);
 
-    // videoStarted tracking (first frame rendered)
-    video.addEventListener(
-      'playing',
-      () => {
-        this.state.videoStarted.set(true);
-        // Time-to-first-frame: the headline cold-start KPI.
-        this.logTiming('first-playing', 0);
-      },
-      { once: true },
-    );
+    // videoStarted is flipped on the engine 'firstFrame' event — emitted
+    // once a frame has actually been presented to the compositor (Shaka:
+    // requestVideoFrameCallback ; native: ExoPlayer onRenderedFirstFrame).
+    // The DOM 'playing' event can precede first paint by a tick or two,
+    // which would hide the fanart backdrop before the video shows.
+    engine.on('firstFrame', () => {
+      this.state.videoStarted.set(true);
+      this.logTiming('first-playing', 0);
+    });
     // Volume sync for template
     video.addEventListener('volumechange', () => {
       this.state.volume.set(video.muted ? 0 : video.volume);
@@ -958,6 +966,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.engine = engine;
     this.isNativeEngine.set(true);
     this.state.bindEngine(engine);
+
+    // videoStarted flips on the engine 'firstFrame' event (forwarded from
+    // ExoPlayer.Listener.onRenderedFirstFrame via the native plugin), so
+    // the spinner+fanart stay until the surface is actually painting. No
+    // separate stateChanged 'playing' hook needed — that fires on
+    // STATE_READY which can precede the first frame on cold starts.
+    engine.on('firstFrame', () => {
+      this.state.videoStarted.set(true);
+    });
 
     // Listen for audio tracks from native engine.
     // ExoPlayer may emit this multiple times (e.g. rendition switch) —

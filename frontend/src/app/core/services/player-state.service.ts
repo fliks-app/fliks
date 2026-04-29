@@ -32,7 +32,11 @@ export class PlayerStateService {
       this.paused.set(e.state === 'paused' || e.state === 'idle');
       this.buffering.set(e.state === 'buffering');
       if (e.state === 'error') this.error.set('Playback error');
-      if (e.state === 'playing') this.videoStarted.set(true);
+      // videoStarted is intentionally NOT flipped here — Shaka emits 'playing'
+      // on DOM 'play' (= play() called), well before the first frame is
+      // actually painted. PlayerComponent owns the flip per engine: rvfc on
+      // the local <video> for Shaka, stateChanged 'playing' for native (where
+      // ExoPlayer's surface is already painting by then).
     });
 
     engine.on('timeUpdate', (e) => {

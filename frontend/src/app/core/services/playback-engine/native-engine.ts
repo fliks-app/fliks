@@ -344,6 +344,10 @@ export class NativeEngine implements PlaybackEngine {
       this._audioTracks = d.audioTracks ?? [];
       this.emit('audioTracksChanged', { tracks: this._audioTracks });
     });
+
+    bind('nativePlayerFirstFrame', () => {
+      this.emit('firstFrame', undefined);
+    });
   }
 
   private unbindWindowEvents(): void {

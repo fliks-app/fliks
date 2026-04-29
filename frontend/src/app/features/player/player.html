@@ -8,8 +8,11 @@
   [class.hidden]="castService.isConnected()"
   (mousemove)="device.isTouch() || isNative ? null : showControls()"
 >
-  <!-- Fanart backdrop until video renders its first frame (hidden when native player is active) -->
-  @if (!videoStarted() && !nativeEngine) {
+  <!-- Fanart backdrop until video renders its first frame. Rendered for
+       both web (Shaka) and native (ExoPlayer) — on native the WebView is
+       transparent so the fanart in HTML covers the ExoPlayer surface
+       behind it during the loading phase. -->
+  @if (!videoStarted()) {
     <div class="absolute inset-0 z-1" [style.background-image]="fanartUrl() ? 'url(' + fanartUrl() + ')' : 'none'" style="background-size: cover; background-position: center; background-color: #000"></div>
   }
 

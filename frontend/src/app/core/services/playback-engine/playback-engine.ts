@@ -48,6 +48,10 @@ export type EngineEventMap = {
   error: { code: number; message: string };
   audioTracksChanged: { tracks: AudioTrack[] };
   ended: void;
+  /** Fires when the first video frame is presented to the screen.
+   *  Distinct from `stateChanged: 'playing'` which fires on play() (the
+   *  user-facing first frame is what matters for the loading veil). */
+  firstFrame: void;
 };
 
 export type EngineEvent = keyof EngineEventMap;

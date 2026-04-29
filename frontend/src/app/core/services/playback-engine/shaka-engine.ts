@@ -30,6 +30,10 @@ export class ShakaEngine implements PlaybackEngine {
   private videoListeners: Array<{ event: string; handler: EventListener }> = [];
   private shakaListeners: Array<{ event: string; handler: EventListener }> = [];
 
+  /** Tracks whether 'firstFrame' has been emitted for this load — fires
+   *  once per session, gated on requestVideoFrameCallback. */
+  private firstFrameEmitted = false;
+
   // ─── Lifecycle ──────────────────────────────────────────────────────
 
   async init(container: HTMLElement): Promise<void> {
@@ -103,6 +107,7 @@ export class ShakaEngine implements PlaybackEngine {
 
   async load(url: string, startTime?: number, mimeType?: string, _headers?: Record<string, string>): Promise<void> {
     if (!this.player) throw new Error('ShakaEngine not initialised');
+    this.firstFrameEmitted = false;
     await this.player.load(url, startTime, mimeType);
   }
 
@@ -354,6 +359,20 @@ export class ShakaEngine implements PlaybackEngine {
 
     this.addVideoListener('playing', () => {
       this.emit('stateChanged', { state: 'playing' });
+      // Emit firstFrame ONCE, gated on requestVideoFrameCallback so it
+      // fires only after a frame has actually been presented to the
+      // compositor (the DOM 'playing' event can precede the first paint).
+      if (!this.firstFrameEmitted) {
+        const rvfc = (video as any).requestVideoFrameCallback;
+        const fire = () => {
+          if (!this.firstFrameEmitted) {
+            this.firstFrameEmitted = true;
+            this.emit('firstFrame', undefined as any);
+          }
+        };
+        if (typeof rvfc === 'function') rvfc.call(video, fire);
+        else fire();
+      }
     });
 
     this.addVideoListener('canplay', () => {

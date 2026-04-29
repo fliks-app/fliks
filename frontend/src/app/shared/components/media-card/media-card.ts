@@ -264,7 +264,11 @@ export class MediaCardComponent {
       const file = m.files[0];
       const qp: Record<string, number> = { mediaId: m.id };
       if (file.episodeId) qp['episodeId'] = file.episodeId;
-      void this.router.navigate(['/watch', file.id], { queryParams: qp });
+      const fanartUrl = (m as any).fanartUrl ?? this._img() ?? null;
+      void this.router.navigate(['/watch', file.id], {
+        queryParams: qp,
+        state: { fanartUrl },
+      });
     }
   }
 
