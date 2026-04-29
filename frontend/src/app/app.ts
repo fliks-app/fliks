@@ -63,6 +63,14 @@ export class App implements OnInit, OnDestroy {
           this.castPlayer.expanded.set(false);
           return;
         }
+        // On /watch, defer to the player's own back handler so the hardware
+        // back / gesture matches the in-UI back arrow (replaceUrl to the
+        // media detail page rather than history.back which can land on the
+        // tile the user came from — different from the arrow's behaviour).
+        if (this.router.url.startsWith('/watch')) {
+          window.dispatchEvent(new CustomEvent('app:playerBack'));
+          return;
+        }
         if (canGoBack) {
           window.history.back();
         } else {

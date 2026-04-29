@@ -25,6 +25,7 @@ import { NetworkService } from '../../core/services/network.service';
 import { DownloadCacheService } from '../../core/services/download-cache.service';
 import { CastPlayerService, CastAudioOption } from '../../core/services/cast-player.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
+import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 import { parseAudioIndex, SpriteMetadata } from '../../core/utils/player.utils';
 import {
   PlayerSettingsService, normalizeLang,
@@ -132,6 +133,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly castPlayerService = inject(CastPlayerService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly playerSettings = inject(PlayerSettingsService);
+  private readonly navHistory = inject(NavigationHistoryService);
 
   // New extracted services
   private readonly state = inject(PlayerStateService);
@@ -889,6 +891,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       window.addEventListener('pipAction', this.onPipAction as EventListener);
       Pip.setAutoEnter({ enabled: true }).catch(() => {});
     }
+    // Hardware back / gesture back: app.ts dispatches 'app:playerBack' when
+    // the user is on /watch so it routes through the same onBack() as the
+    // back arrow (replaceUrl to media detail rather than history.back).
+    window.addEventListener('app:playerBack', this.onPlayerBackEvent);
   }
 
   ngOnDestroy() {
@@ -910,6 +916,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.statsInterval) clearInterval(this.statsInterval);
     document.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('beforeunload', this.onBeforeUnload);
+    window.removeEventListener('app:playerBack', this.onPlayerBackEvent);
     if (this.isNative) {
       screen.orientation?.removeEventListener('change', this.onOrientationChange);
       Immersive.exit().catch(() => {});
@@ -1355,19 +1362,31 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // the URL without exiting the player.
     // replaceUrl drops /watch from history so hardware/browser back does not
     // reopen the player on the way back.
+    let target: string;
     if (!this.mediaId) {
+      target = '/';
+    } else {
+      const kind = this.media?.type === 'series' ? 'series' : 'movies';
+      target =
+        this.episodeId && kind === 'series'
+          ? `/series/${this.mediaId}/episode/${this.episodeId}`
+          : `/${kind}/${this.mediaId}`;
+    }
+    // If the previous URL is already the target, just pop /watch off the
+    // browser stack — replaceUrl would otherwise stack a duplicate
+    // consecutive entry, forcing the user to click back twice on the detail
+    // page (the first back lands on the duplicate, same URL → router-reuse,
+    // no visible change).
+    const prev = this.navHistory.previousUrl;
+    if (prev && prev.split('?')[0] === target) {
+      history.back();
+      return;
+    }
+    if (target === '/') {
       void this.router.navigate(['/'], { replaceUrl: true });
       return;
     }
-    const kind = this.media?.type === 'series' ? 'series' : 'movies';
-    if (this.episodeId && kind === 'series') {
-      void this.router.navigate(
-        ['/series', this.mediaId, 'episode', this.episodeId],
-        { replaceUrl: true },
-      );
-    } else {
-      void this.router.navigate(['/' + kind, this.mediaId], { replaceUrl: true });
-    }
+    void this.router.navigateByUrl(target, { replaceUrl: true });
   }
 
   onOpenMedia() {
@@ -1669,6 +1688,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private onBeforeUnload = () => {
     this.fireAndForgetStopSessions();
+  };
+
+  private onPlayerBackEvent = () => {
+    this.onBack();
   };
 
   private onPipModeChanged = (e: Event) => {
