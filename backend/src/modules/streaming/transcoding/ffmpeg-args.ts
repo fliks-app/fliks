@@ -8,14 +8,6 @@ import type {
   TranscodeProfile,
 } from './types';
 
-/** Inverse of parseBitrateToBps — formats an integer bps as the FFmpeg-style
- *  rate string (e.g. 2_000_000 → "2M", 500_000 → "500k"). */
-function bpsToFfmpegRate(bps: number): string {
-  if (bps >= 1_000_000 && bps % 1_000_000 === 0) return `${bps / 1_000_000}M`;
-  if (bps % 1_000 === 0) return `${bps / 1_000}k`;
-  return String(bps);
-}
-
 export interface BuildFfmpegArgsOptions {
   inputPath: string;
   profile: TranscodeProfile;
@@ -104,37 +96,18 @@ export function buildFfmpegArgs(
     args.push('-analyzeduration', '1000000', '-probesize', '1000000');
   }
 
-  // Seek to start position if needed.
-  // -noaccurate_seek: snap to the keyframe at-or-before seekSeconds and skip
-  // the decode-forward pass ffmpeg does by default with -ss. Saves ~1-2s of
-  // cold-start on HEVC HDR sources where the GOP is 2s. The fmp4's tfdt
-  // carries the actual PTS so Shaka / ExoPlayer / AVPlayer all seek to the
-  // user's exact requested time within the buffered range — the 0-2s of
-  // pre-seek frames are simply ignored. -copyts keeps PTS in source time so
-  // separate WebVTT subtitles align via PTS and stay in sync.
+  // Seek to start position if needed
   if (startSegment > 0) {
     const seekSeconds = startSegment * SEGMENT_DURATION;
-    args.push('-ss', String(seekSeconds), '-noaccurate_seek');
+    args.push('-ss', String(seekSeconds));
+    // -copyts preserves original timestamps so HLS segment timestamps match
+    // the source file timeline (required for subtitle sync)
     args.push('-copyts', '-avoid_negative_ts', 'make_zero');
   }
 
   // parseBitrateToBps handles both "8M" and "200k" correctly. Using parseInt()*1e6
   // would give 200 Mbps for "200k" (it drops the suffix and multiplies as if M).
-  const profileBitrateNum = parseBitrateToBps(profile.videoBitrate);
-
-  // Early-session bitrate: divide the main target by 4 with a 500k floor so
-  // the rate controller's buffer fills faster (first IDR shipped ~150-300ms
-  // sooner). The ~1s of throwaway frames don't need full quality. Capped to
-  // the main bitrate so low ladder rungs (240p/144p) aren't bumped UP. Init
-  // SPS/PPS stay byte-equal across early/main thanks to the explicit
-  // -profile:v high lock added below.
-  const bitrateNum = early
-    ? Math.min(
-        profileBitrateNum,
-        Math.max(500_000, Math.round(profileBitrateNum * 0.25)),
-      )
-    : profileBitrateNum;
-  const videoBitrateStr = early ? bpsToFfmpegRate(bitrateNum) : profile.videoBitrate;
+  const bitrateNum = parseBitrateToBps(profile.videoBitrate);
 
   // Force pipeline adjustments when HW accel can't handle required filters:
   // - Subtitle burn-in is always CPU-only
@@ -163,7 +136,7 @@ export function buildFfmpegArgs(
   );
   const qsvBufsize = early ? bitrateNum : bitrateNum * 4;
   // libx264 -bufsize is expressed in Mbits. Stock = 2x bitrate, early = 1x.
-  const libx264BufsizeMb = `${Math.max(1, Math.round(bitrateNum / 1_000_000) * (early ? 1 : 2))}M`;
+  const libx264BufsizeMb = `${Math.max(1, parseInt(profile.videoBitrate) * (early ? 1 : 2))}M`;
 
   // tonemap_vaapi keeps the pipeline inside VAAPI (1 device transition, no
   // OpenCL kernel compile) — saves ~300-500ms cold-start on HDR. Quality is
@@ -250,7 +223,6 @@ export function buildFfmpegArgs(
         // VAAPI decode → VAAPI scale → VAAPI tonemap → QSV encode (no OpenCL hop)
         args.push(
           '-c:v', 'h264_qsv',
-          '-profile:v', 'high',
           '-preset', earlyPreset,
           ...qsvExtra,
           '-mbbrc', '1',
@@ -268,7 +240,6 @@ export function buildFfmpegArgs(
         // VAAPI decode → VAAPI scale → OpenCL tonemap → map to QSV → QSV encode
         args.push(
           '-c:v', 'h264_qsv',
-          '-profile:v', 'high',
           '-preset', earlyPreset,
           ...qsvExtra,
           '-mbbrc', '1',
@@ -285,7 +256,6 @@ export function buildFfmpegArgs(
       } else {
         args.push(
           '-c:v', 'h264_qsv',
-          '-profile:v', 'high',
           '-preset', earlyPreset,
           ...qsvExtra,
           '-mbbrc', '1',
@@ -306,9 +276,8 @@ export function buildFfmpegArgs(
         // VAAPI decode → VAAPI scale → VAAPI tonemap → VAAPI encode (single device)
         args.push(
           '-c:v', 'h264_vaapi',
-          '-profile:v', 'high',
-          '-b:v', videoBitrateStr,
-          '-maxrate', videoBitrateStr,
+          '-b:v', profile.videoBitrate,
+          '-maxrate', profile.videoBitrate,
           '-vf',
           `${hwCropPrefix}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${tonemapVaapi}`,
           '-g', String(gopSize),
@@ -318,9 +287,8 @@ export function buildFfmpegArgs(
       } else if (tonemapOpencl) {
         args.push(
           '-c:v', 'h264_vaapi',
-          '-profile:v', 'high',
-          '-b:v', videoBitrateStr,
-          '-maxrate', videoBitrateStr,
+          '-b:v', profile.videoBitrate,
+          '-maxrate', profile.videoBitrate,
           '-vf',
           `${hwCropPrefix}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
           '-g', String(gopSize),
@@ -330,9 +298,8 @@ export function buildFfmpegArgs(
       } else {
         args.push(
           '-c:v', 'h264_vaapi',
-          '-profile:v', 'high',
-          '-b:v', videoBitrateStr,
-          '-maxrate', videoBitrateStr,
+          '-b:v', profile.videoBitrate,
+          '-maxrate', profile.videoBitrate,
           '-vf',
           `${hwCropPrefix}scale_vaapi=w=${w}:h=-16:format=nv12`,
           '-g', String(gopSize),
@@ -346,10 +313,9 @@ export function buildFfmpegArgs(
         // No native GPU tone mapping — download from GPU, tonemap on CPU, encode with NVENC
         args.push(
           '-c:v', 'h264_nvenc',
-          '-profile:v', 'high',
           '-preset', earlyNvencPreset,
-          '-b:v', videoBitrateStr,
-          '-maxrate', videoBitrateStr,
+          '-b:v', profile.videoBitrate,
+          '-maxrate', profile.videoBitrate,
           '-vf',
           `hwdownload,format=p010le,${cpuCropPrefix}${tonemapCpu}scale=${w}:-2`,
           '-g', String(gopSize),
@@ -362,10 +328,9 @@ export function buildFfmpegArgs(
           : '';
         args.push(
           '-c:v', 'h264_nvenc',
-          '-profile:v', 'high',
           '-preset', earlyNvencPreset,
-          '-b:v', videoBitrateStr,
-          '-maxrate', videoBitrateStr,
+          '-b:v', profile.videoBitrate,
+          '-maxrate', profile.videoBitrate,
           '-vf',
           `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=nv12`,
           '-g', String(gopSize),
@@ -377,13 +342,12 @@ export function buildFfmpegArgs(
     default:
       args.push(
         '-c:v', 'libx264',
-        '-profile:v', 'high',
         // Cap frame-threading so segment 0 emits before a long (threads-1)-frame prebuffer.
         '-threads:v', '4',
         '-preset', earlyPreset,
         ...(early ? ['-tune', 'zerolatency'] : []),
-        '-b:v', videoBitrateStr,
-        '-maxrate', videoBitrateStr,
+        '-b:v', profile.videoBitrate,
+        '-maxrate', profile.videoBitrate,
         '-bufsize', libx264BufsizeMb,
         '-vf',
         `${cpuCropPrefix}${tonemapCpu}scale=${w}:-2:flags=lanczos,format=yuv420p${burnInFilter}`,
@@ -514,11 +478,7 @@ export function buildAudioOnlyFfmpegArgs(
   }
 
   if (startSegment > 0) {
-    args.push(
-      '-ss',
-      String(startSegment * SEGMENT_DURATION),
-      '-noaccurate_seek',
-    );
+    args.push('-ss', String(startSegment * SEGMENT_DURATION));
     args.push('-copyts', '-avoid_negative_ts', 'make_zero');
   }
 
@@ -574,11 +534,7 @@ export function buildRemuxArgs(
   }
 
   if (startSegment > 0) {
-    args.push(
-      '-ss',
-      String(startSegment * SEGMENT_DURATION),
-      '-noaccurate_seek',
-    );
+    args.push('-ss', String(startSegment * SEGMENT_DURATION));
     args.push('-copyts', '-avoid_negative_ts', 'make_zero');
   }
 
