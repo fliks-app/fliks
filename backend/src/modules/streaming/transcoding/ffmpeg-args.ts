@@ -26,6 +26,11 @@ export interface BuildFfmpegArgsOptions {
   qsvOptions?: { lookahead: boolean; lowPower: boolean; adaptive: boolean };
   sourceFps?: number;
   trustedStreamInfo?: boolean;
+  /** Short-lived parallel session producing only seg-0/seg-1 during a
+   *  mid-file resume. Trades visual quality on the discarded warm-up frames
+   *  for ramp-up speed: fastest encoder preset + reduced rate-control
+   *  buffer so the first frame ships sooner. */
+  early?: boolean;
 }
 
 export function buildFfmpegArgs(
@@ -50,6 +55,7 @@ export function buildFfmpegArgs(
     qsvOptions = { lookahead: false, lowPower: false, adaptive: true },
     sourceFps,
     trustedStreamInfo = false,
+    early = false,
   } = opts;
 
   const SEGMENT_DURATION = getSegmentDuration();
@@ -111,6 +117,26 @@ export function buildFfmpegArgs(
     : hwAccel === 'qsv' && crop
       ? 'vaapi'
       : hwAccel;
+
+  // Early sessions live ~1s before Shaka jumps to the main session — visual
+  // quality on those warm-up frames is throwaway, so bias every knob towards
+  // ramp-up speed. Per-encoder mapping since 'ultrafast' is libx264-only,
+  // QSV stops at 'veryfast', NVENC uses p1..p7, VAAPI ignores -preset.
+  const earlyPreset = early
+    ? effectiveHwAccel === 'qsv'
+      ? 'veryfast'
+      : 'ultrafast'
+    : encoderPreset;
+  const earlyNvencPreset = early ? 'p1' : 'p4';
+  // QSV rate-control: stock = 2x init / 4x bufsize. Early = 0.5x / 1x so the
+  // encoder doesn't hold back frames waiting for the buffer to pre-fill.
+  const qsvRcInitOccupancy = Math.max(
+    1,
+    early ? Math.round(bitrateNum * 0.5) : bitrateNum * 2,
+  );
+  const qsvBufsize = early ? bitrateNum : bitrateNum * 4;
+  // libx264 -bufsize is expressed in Mbits. Stock = 2x bitrate, early = 1x.
+  const libx264BufsizeMb = `${Math.max(1, parseInt(profile.videoBitrate) * (early ? 1 : 2))}M`;
 
   // Hardware acceleration input decoding
   if (effectiveHwAccel === 'qsv') {
@@ -184,13 +210,13 @@ export function buildFfmpegArgs(
         // VAAPI decode → VAAPI scale → OpenCL tonemap → map to QSV → QSV encode
         args.push(
           '-c:v', 'h264_qsv',
-          '-preset', encoderPreset,
+          '-preset', earlyPreset,
           ...qsvExtra,
           '-mbbrc', '1',
           '-b:v', String(bitrateNum),
           '-maxrate', String(bitrateNum + 1),
-          '-rc_init_occupancy', String(bitrateNum * 2),
-          '-bufsize', String(bitrateNum * 4),
+          '-rc_init_occupancy', String(qsvRcInitOccupancy),
+          '-bufsize', String(qsvBufsize),
           '-vf',
           `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
           '-g', String(gopSize),
@@ -200,13 +226,13 @@ export function buildFfmpegArgs(
       } else {
         args.push(
           '-c:v', 'h264_qsv',
-          '-preset', encoderPreset,
+          '-preset', earlyPreset,
           ...qsvExtra,
           '-mbbrc', '1',
           '-b:v', String(bitrateNum),
           '-maxrate', String(bitrateNum + 1),
-          '-rc_init_occupancy', String(bitrateNum * 2),
-          '-bufsize', String(bitrateNum * 4),
+          '-rc_init_occupancy', String(qsvRcInitOccupancy),
+          '-bufsize', String(qsvBufsize),
           '-vf',
           `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
           '-g', String(gopSize),
@@ -245,7 +271,7 @@ export function buildFfmpegArgs(
         // No native GPU tone mapping — download from GPU, tonemap on CPU, encode with NVENC
         args.push(
           '-c:v', 'h264_nvenc',
-          '-preset', 'p4',
+          '-preset', earlyNvencPreset,
           '-b:v', profile.videoBitrate,
           '-maxrate', profile.videoBitrate,
           '-vf',
@@ -260,7 +286,7 @@ export function buildFfmpegArgs(
           : '';
         args.push(
           '-c:v', 'h264_nvenc',
-          '-preset', 'p4',
+          '-preset', earlyNvencPreset,
           '-b:v', profile.videoBitrate,
           '-maxrate', profile.videoBitrate,
           '-vf',
@@ -276,10 +302,11 @@ export function buildFfmpegArgs(
         '-c:v', 'libx264',
         // Cap frame-threading so segment 0 emits before a long (threads-1)-frame prebuffer.
         '-threads:v', '4',
-        '-preset', encoderPreset,
+        '-preset', earlyPreset,
+        ...(early ? ['-tune', 'zerolatency'] : []),
         '-b:v', profile.videoBitrate,
         '-maxrate', profile.videoBitrate,
-        '-bufsize', `${parseInt(profile.videoBitrate) * 2}M`,
+        '-bufsize', libx264BufsizeMb,
         '-vf',
         `${cpuCropPrefix}${tonemapCpu}scale=${w}:-2:flags=lanczos,format=yuv420p${burnInFilter}`,
         '-force_key_frames', forceKeyframesExpr,

@@ -505,6 +505,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           qsvOptions: ctx?.qsvOptions,
           sourceFps: ctx?.sourceFps,
           trustedStreamInfo: ctx?.trustedStreamInfo,
+          early: true,
         },
         this.log,
       );
