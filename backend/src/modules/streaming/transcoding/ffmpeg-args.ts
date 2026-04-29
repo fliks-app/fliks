@@ -104,12 +104,17 @@ export function buildFfmpegArgs(
     args.push('-analyzeduration', '1000000', '-probesize', '1000000');
   }
 
-  // Seek to start position if needed
+  // Seek to start position if needed.
+  // -noaccurate_seek: snap to the keyframe at-or-before seekSeconds and skip
+  // the decode-forward pass ffmpeg does by default with -ss. Saves ~1-2s of
+  // cold-start on HEVC HDR sources where the GOP is 2s. The fmp4's tfdt
+  // carries the actual PTS so Shaka / ExoPlayer / AVPlayer all seek to the
+  // user's exact requested time within the buffered range — the 0-2s of
+  // pre-seek frames are simply ignored. -copyts keeps PTS in source time so
+  // separate WebVTT subtitles align via PTS and stay in sync.
   if (startSegment > 0) {
     const seekSeconds = startSegment * SEGMENT_DURATION;
-    args.push('-ss', String(seekSeconds));
-    // -copyts preserves original timestamps so HLS segment timestamps match
-    // the source file timeline (required for subtitle sync)
+    args.push('-ss', String(seekSeconds), '-noaccurate_seek');
     args.push('-copyts', '-avoid_negative_ts', 'make_zero');
   }
 
@@ -509,7 +514,11 @@ export function buildAudioOnlyFfmpegArgs(
   }
 
   if (startSegment > 0) {
-    args.push('-ss', String(startSegment * SEGMENT_DURATION));
+    args.push(
+      '-ss',
+      String(startSegment * SEGMENT_DURATION),
+      '-noaccurate_seek',
+    );
     args.push('-copyts', '-avoid_negative_ts', 'make_zero');
   }
 
@@ -565,7 +574,11 @@ export function buildRemuxArgs(
   }
 
   if (startSegment > 0) {
-    args.push('-ss', String(startSegment * SEGMENT_DURATION));
+    args.push(
+      '-ss',
+      String(startSegment * SEGMENT_DURATION),
+      '-noaccurate_seek',
+    );
     args.push('-copyts', '-avoid_negative_ts', 'make_zero');
   }
 
