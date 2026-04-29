@@ -232,6 +232,21 @@ export class StreamingController {
         0,
         Math.floor(effectiveStartAt / SEG_DURATION),
       );
+
+      // Spawn early en PARALLÈLE de main (fire-and-forget). hlsSegment
+      // routera vers cette session pour seg-0 via isEarlyProbe pendant
+      // que main encode forward depuis seg-K.
+      if (startSegment > 0) {
+        void this.transcodingService
+          .getOrCreateEarlySession(
+            mediaFileId,
+            targetQuality,
+            resolved.absolutePath,
+            ctx,
+          )
+          .catch((err) => this.log.warn(`[early] spawn failed: ${err}`));
+      }
+
       // skipVerify: don't poll for first segment here. We only need the
       // session in the sessions map so a racing hlsSegment doesn't spawn
       // its own concurrent main at start_number=0.
@@ -1065,6 +1080,55 @@ export class StreamingController {
     );
 
     const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+
+    // Early probe routing: when Shaka requests a segment before the main
+    // session's startSegment (typical Shaka VOD behavior on resume), route
+    // to the early companion if it exists. 10s timeout safety net : si
+    // early hang (régression du fix Phase 2), fall through au slow path
+    // standard rather than blocking 60s.
+    const isEarlyProbe =
+      quality !== 'remux' &&
+      existing != null &&
+      existing.quality === quality &&
+      existing.startSegment != null &&
+      existing.startSegment > 0 &&
+      segIndex < existing.startSegment;
+    if (isEarlyProbe) {
+      const earlySession = this.transcodingService.getExistingEarlySession(
+        mediaFileId,
+        req.user?.id,
+      );
+      if (earlySession && earlySession.quality === quality) {
+        const varStreamMap =
+          this.activeStreamTracker.getUseExtXMedia(mediaFileId);
+        const segName = varStreamMap ? `0/${segment}` : segment;
+        const segPath = await this.transcodingService.getSegmentPath(
+          earlySession,
+          segName,
+          10_000,
+        );
+        if (segPath) {
+          res.setHeader('Content-Type', 'video/mp4');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          const stream = fs.createReadStream(segPath);
+          stream.on('error', () => {
+            if (!res.headersSent) res.status(404).end();
+          });
+          stream.pipe(res);
+          this.timing(
+            `segment[${segIndex}]`,
+            mediaFileId,
+            t0,
+            `path=early quality=${quality}`,
+          );
+          return;
+        }
+        // Early failed/timeout — log and fall through to slow path
+        this.log.error(
+          `[early] no seg-${segIndex} after 10s for mfid=${mediaFileId} — fallback`,
+        );
+      }
+    }
 
     // For remux sessions, copy audio only when the source codec is compatible
     // (captured at playback-info); otherwise transcode audio to AAC.

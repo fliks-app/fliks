@@ -117,6 +117,10 @@ export interface TranscodeSession {
    *  whether a cache gap is ahead of (reachable) or behind (unreachable)
    *  the current encoding position. */
   startSegment?: number;
+  /** Marks the session as killed intentionally (seek restart, quality
+   *  change, etc.) so the close handler doesn't log a spurious "exited
+   *  WITHOUT producing first segment" warning. */
+  intentionallyKilled?: boolean;
 }
 
 /** Build the session map key: one transcode per user per file (like Jellyfin/Plex). */
@@ -332,6 +336,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return this.sessions.get(earlySessionKey(mediaFileId, userId));
   }
 
+
   async onModuleDestroy() {
     if (this.cleanupTimer) clearInterval(this.cleanupTimer);
     for (const session of this.sessions.values()) {
@@ -416,6 +421,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         `Seek: restarting [${key}] from segment ${requestedSegment} (not cached)`,
       );
       this.sessions.delete(key);
+      existing.intentionallyKilled = true;
       await this.killProcess(existing.process);
       existing.startSegment = requestedSegment;
       return null;
@@ -428,6 +434,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         `Seek: segment ${requestedSegment} cached, restarting [${key}] at unreachable gap ${gap}`,
       );
       this.sessions.delete(key);
+      existing.intentionallyKilled = true;
       await this.killProcess(existing.process);
       // Caller should restart at `gap` — encode it in startSegment hint.
       existing.startSegment = gap;
@@ -635,6 +642,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           `Quality change [${key}]: ${existing.quality} → ${quality}, killing old session`,
         );
         this.sessions.delete(key);
+        existing.intentionallyKilled = true;
         await this.killProcess(existing.process);
       } else {
         const resolved = await this.resolveExistingSession(
@@ -886,9 +894,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         ctx?.sourceFps,
         ctx?.trustedStreamInfo,
       );
-      // Bound the input read to 4s — enough for seg-0 (1s) + seg-1 (3s).
-      // Insert as an INPUT option (before -i) so demuxer stops reading after
-      // 4s of source, ffmpeg flushes the trailer and exits cleanly.
+      // Bound input read to 4s — enough for seg-0 + seg-1, then ffmpeg
+      // exits cleanly. Insert as INPUT option (before -i).
       const inputIdx = args.indexOf('-i');
       if (inputIdx >= 0) args.splice(inputIdx, 0, '-t', '4');
 
@@ -943,6 +950,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   async getSegmentPath(
     session: TranscodeSession,
     segmentName: string,
+    timeoutMs = 60_000,
   ): Promise<string | null> {
     const segPath = path.join(session.cachePath, segmentName);
 
@@ -1009,7 +1017,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         }
       }, 500);
 
-      timeout = setTimeout(() => finish(null), 60_000);
+      timeout = setTimeout(() => finish(null), timeoutMs);
     });
   }
 
@@ -1125,7 +1133,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
       if (code && code !== 0 && code !== 255) {
         this.log.error(`FFmpeg [${id}] exited ${code}:\n${stderr.slice(-2000)}`);
-      } else if (!firstSegProduced) {
+      } else if (!firstSegProduced && !session.intentionallyKilled) {
         this.log.warn(
           `FFmpeg [${id}] exited code=${code} WITHOUT producing first segment ${firstSegName}\nstderr:\n${stderr.slice(-2000)}`,
         );
@@ -1441,6 +1449,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         'vaapi',
         '-hwaccel_device',
         'va',
+        '-extra_hw_frames',
+        '32',
         '-noautorotate',
       );
     } else if (effectiveHwAccel === 'vaapi') {
@@ -1460,6 +1470,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         'vaapi',
         '-hwaccel_device',
         'va',
+        '-extra_hw_frames',
+        '32',
         '-noautorotate',
       );
     } else if (effectiveHwAccel === 'nvenc') {
@@ -1551,7 +1563,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             '-bufsize',
             String(bitrateNum * 4),
             '-vf',
-            `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
+            `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
             '-g',
             String(gopSize),
             '-keyint_min',
@@ -1745,6 +1757,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             args.push(`-metadata:s:a:${i}`, `language=${lang}`);
           }
         }
+      } else {
+        // Default: explicitly map only video + first audio. Skips ffmpeg's
+        // auto-pick of a subtitle stream — mandatory on sources with many
+        // subtitle tracks (some HEVC MKVs have 28+) where the parallel
+        // subrip→webvtt pipeline starves the VAAPI HEVC decoder buffer
+        // pool, making the early session loop on "thread_get_buffer() failed".
+        args.push('-map', '0:v:0', '-map', '0:a:0');
       }
       args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
 
@@ -2100,6 +2119,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             `Seek: restarting audio session [${key}] from segment ${requestedSegment} (not cached)`,
           );
           this.sessions.delete(key);
+          existing.intentionallyKilled = true;
           await this.killProcess(existing.process);
         } else {
           const gap = firstMissingSegment(existing.cachePath, requestedSegment);
@@ -2108,6 +2128,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
               `Seek: segment ${requestedSegment} cached, restarting audio [${key}] at unreachable gap ${gap}`,
             );
             this.sessions.delete(key);
+            existing.intentionallyKilled = true;
             await this.killProcess(existing.process);
             requestedSegment = gap;
           } else {
