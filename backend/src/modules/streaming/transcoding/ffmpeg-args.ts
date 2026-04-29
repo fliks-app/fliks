@@ -138,6 +138,15 @@ export function buildFfmpegArgs(
   // libx264 -bufsize is expressed in Mbits. Stock = 2x bitrate, early = 1x.
   const libx264BufsizeMb = `${Math.max(1, parseInt(profile.videoBitrate) * (early ? 1 : 2))}M`;
 
+  // tonemap_vaapi keeps the pipeline inside VAAPI (1 device transition, no
+  // OpenCL kernel compile) — saves ~300-500ms cold-start on HDR. Quality is
+  // slightly worse than tonemap_opencl/reinhard, but the early session's
+  // output is jumped past by Shaka after ~1s, so the user never sees those
+  // frames in steady-state. Restricted to early on HW paths that have a
+  // VAAPI decoder (qsv on Linux derives from vaapi, so it qualifies too).
+  const useVaapiTonemap =
+    early && tonemap && (effectiveHwAccel === 'qsv' || effectiveHwAccel === 'vaapi');
+
   // Hardware acceleration input decoding
   if (effectiveHwAccel === 'qsv') {
     // Jellyfin approach on Linux: decode with VAAPI (native), scale with VAAPI,
@@ -146,7 +155,7 @@ export function buildFfmpegArgs(
       '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
       '-init_hw_device', 'qsv=qs@va',
     );
-    if (tonemap) {
+    if (tonemap && !useVaapiTonemap) {
       args.push('-init_hw_device', 'opencl=ocl:0.0', '-filter_hw_device', 'ocl');
     }
     args.push(
@@ -158,7 +167,7 @@ export function buildFfmpegArgs(
     );
   } else if (effectiveHwAccel === 'vaapi') {
     args.push('-init_hw_device', 'vaapi=va:/dev/dri/renderD128');
-    if (tonemap) {
+    if (tonemap && !useVaapiTonemap) {
       args.push('-init_hw_device', 'opencl=ocl:0.0', '-filter_hw_device', 'ocl');
     }
     args.push(
@@ -191,8 +200,12 @@ export function buildFfmpegArgs(
   const cpuCropPrefix = cropStr ? `${cropStr},` : '';
   const burnInFilter = burnIn?.filter ? `,${burnIn.filter}` : '';
   const tonemapOpencl =
-    tonemap && !burnIn?.filter
+    tonemap && !useVaapiTonemap && !burnIn?.filter
       ? ',hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0'
+      : '';
+  const tonemapVaapi =
+    useVaapiTonemap && !burnIn?.filter
+      ? ',tonemap_vaapi=format=nv12:t=bt709:p=bt709:m=bt709'
       : '';
   const tonemapCpu = tonemap
     ? `zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,`
@@ -206,7 +219,24 @@ export function buildFfmpegArgs(
   switch (effectiveHwAccel) {
     case 'qsv':
       // Note: QSV + crop is forced to CPU via effectiveHwAccel (fixed-size pool constraint)
-      if (tonemapOpencl) {
+      if (tonemapVaapi) {
+        // VAAPI decode → VAAPI scale → VAAPI tonemap → QSV encode (no OpenCL hop)
+        args.push(
+          '-c:v', 'h264_qsv',
+          '-preset', earlyPreset,
+          ...qsvExtra,
+          '-mbbrc', '1',
+          '-b:v', String(bitrateNum),
+          '-maxrate', String(bitrateNum + 1),
+          '-rc_init_occupancy', String(qsvRcInitOccupancy),
+          '-bufsize', String(qsvBufsize),
+          '-vf',
+          `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${tonemapVaapi},hwmap=derive_device=qsv,format=qsv`,
+          '-g', String(gopSize),
+          '-keyint_min', String(gopSize),
+          '-force_key_frames', forceKeyframesExpr,
+        );
+      } else if (tonemapOpencl) {
         // VAAPI decode → VAAPI scale → OpenCL tonemap → map to QSV → QSV encode
         args.push(
           '-c:v', 'h264_qsv',
@@ -242,7 +272,19 @@ export function buildFfmpegArgs(
       }
       break;
     case 'vaapi':
-      if (tonemapOpencl) {
+      if (tonemapVaapi) {
+        // VAAPI decode → VAAPI scale → VAAPI tonemap → VAAPI encode (single device)
+        args.push(
+          '-c:v', 'h264_vaapi',
+          '-b:v', profile.videoBitrate,
+          '-maxrate', profile.videoBitrate,
+          '-vf',
+          `${hwCropPrefix}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${tonemapVaapi}`,
+          '-g', String(gopSize),
+          '-keyint_min', String(gopSize),
+          '-force_key_frames', forceKeyframesExpr,
+        );
+      } else if (tonemapOpencl) {
         args.push(
           '-c:v', 'h264_vaapi',
           '-b:v', profile.videoBitrate,
