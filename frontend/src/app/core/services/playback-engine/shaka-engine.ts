@@ -65,10 +65,16 @@ export class ShakaEngine implements PlaybackEngine {
 
     await this.player.attach(video);
 
-    // Sensible streaming defaults
+    // Streaming defaults — bufferingGoal lowered to 8s so Shaka stops
+    // pulling further segments once seg-K (6s) + ~2s of seg-K+1 are
+    // buffered. Doesn't directly drive time-to-first-play (that's gated
+    // by rebufferingGoal + first-frame decode), but reduces the
+    // cold-start backend pressure: with goal=20 Shaka would request
+    // seg-K+1, K+2, K+3 in parallel before playing, queueing 3-4
+    // ffmpeg-bound HTTP requests on the same backend session.
     this.player.configure({
       streaming: {
-        bufferingGoal: 20,
+        bufferingGoal: 8,
         rebufferingGoal: 1,
         bufferBehind: 60,
       },
