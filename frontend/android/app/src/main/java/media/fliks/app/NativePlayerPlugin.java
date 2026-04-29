@@ -111,6 +111,13 @@ public class NativePlayerPlugin extends Plugin {
             // Z-order: 0=wrapper (video) → 1=subtitleView → 2+=WebView (controls)
             android.webkit.WebView webView = getBridge().getWebView();
             ViewGroup webViewParent = (ViewGroup) webView.getParent();
+            // Black on the parent ViewGroup covers the single-frame gap on
+            // player close: between removeView(wrapper) and the WebView
+            // re-rendering as opaque, the layout briefly shows whatever is
+            // behind webViewParent (the activity windowBackground, which on
+            // some Capacitor / device combos defaults to white despite the
+            // theme). BLACK here removes that window from ever showing.
+            webViewParent.setBackgroundColor(Color.BLACK);
 
             webViewParent.addView(wrapper, 0, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -135,6 +142,14 @@ public class NativePlayerPlugin extends Plugin {
     @PluginMethod()
     public void destroy(PluginCall call) {
         mainHandler.post(() -> {
+            // Restore an opaque BLACK WebView FIRST, before removing the
+            // wrapper — between removeView(wrapper) and the next compositing
+            // pass the WebView would otherwise still be TRANSPARENT, exposing
+            // the activity windowBackground (Light theme = white) for one
+            // frame. Setting BLACK before the removeView calls means the
+            // very next composited frame already has BLACK in place.
+            android.webkit.WebView webView = getBridge().getWebView();
+            if (webView != null) webView.setBackgroundColor(Color.BLACK);
             stopPositionUpdates();
             if (player != null) {
                 player.release();
@@ -152,11 +167,6 @@ public class NativePlayerPlugin extends Plugin {
                 aspectFrame = null;
                 textureView = null;
             }
-            // Restore an opaque WebView so the gap between unmounting the
-            // player route and the next route's first paint doesn't flash
-            // the activity windowBackground (Light theme = white).
-            android.webkit.WebView webView = getBridge().getWebView();
-            if (webView != null) webView.setBackgroundColor(Color.BLACK);
             subtitleConfigs.clear();
             // Allow screen to sleep again
             getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
