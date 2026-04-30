@@ -236,7 +236,7 @@
 
   <div
     class="flex gap-10 relative z-10"
-    [style.padding-top]="navbar.mobileNavbarVisible() && navbar.isHeroPage() ? 'calc(env(safe-area-inset-top, 0px) + 2rem)' : null"
+    [style.padding-top]="!navbar.isHeroPage() || navbar.effectiveSidebarPinned() ? null : navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 2rem)' : null"
   >
     <!-- Poster / Still (desktop only). Smaller poster on the lg-to-xl range
          (sidebar pinned + tablet/desktop window) so the content next to it
