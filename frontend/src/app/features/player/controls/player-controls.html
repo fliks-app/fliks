@@ -204,13 +204,21 @@
           </button>
           <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[75vh] overflow-y-auto mb-2">
             <div class="text-center text-white/70 text-sm font-medium mb-3">Sous-titres</div>
-            <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle.emit(null)">
+            <button
+              class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
+              [disabled]="!activeSubtitleId()"
+              (click)="selectSubtitle.emit(null)"
+            >
               <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
               <span class="flex-1 text-left">Désactivé</span>
               @if (!activeSubtitleId()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
             </button>
             @for (sub of availableSubtitles(); track sub.id) {
-              <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle.emit(sub.id)">
+              <button
+                class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
+                [disabled]="activeSubtitleId() === sub.id"
+                (click)="selectSubtitle.emit(sub.id)"
+              >
                 <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
                 <span class="flex-1 text-left">{{ sub.label }}@if (sub.burnIn) { <span class="text-warning/70 text-[10px] ml-1">gravé</span> }</span>
                 @if (activeSubtitleId() === sub.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
@@ -228,7 +236,11 @@
             <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[75vh] overflow-y-auto mb-2">
               <div class="text-center text-white/70 text-sm font-medium mb-3">Piste audio</div>
               @for (track of availableAudioTracks(); track track.id) {
-                <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectAudioTrack.emit(track.id)">
+                <button
+                  class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
+                  [disabled]="activeAudioTrackId() === track.id"
+                  (click)="selectAudioTrack.emit(track.id)"
+                >
                   <svg lucideHeadphones class="h-5 w-5 text-white/50 shrink-0"></svg>
                   <span class="flex-1 text-left">{{ track.label }}</span>
                   @if (activeAudioTrackId() === track.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
@@ -424,7 +436,11 @@
         </button>
         <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
         @for (q of availableQualities(); track q.id) {
-          <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectQuality.emit(q.id)">
+          <button
+            class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
+            [disabled]="activeQualityId() === q.id"
+            (click)="selectQuality.emit(q.id)"
+          >
             <span class="flex-1 text-left">
               {{ q.label }}
               @if (q.lowBandwidth) {
