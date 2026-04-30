@@ -226,7 +226,10 @@ export class PlayerControlsComponent {
     }
   }
 
-  /** Close current dropdown after an item selection (and reset settings panel). */
+  /** Close current dropdown (called from the click-out backdrop or by Escape).
+   *  Item-selection handlers in dropdowns deliberately do NOT call this — the
+   *  user can change a setting (subtitle / audio / speed / quality) and then
+   *  dismiss the menu themselves with a click outside. */
   closeDropdown(event?: Event) {
     event?.stopPropagation();
     this.openDropdown.set(null);
