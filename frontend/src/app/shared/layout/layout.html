@@ -1,12 +1,12 @@
 <div class="drawer min-h-screen"
-     [class.lg:drawer-open]="device.isDesktop() || device.isTv()"
+     [class.lg:drawer-open]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
      [class.md:drawer-open]="device.isTablet() && navbar.effectiveSidebarPinned()">
   <input id="sidebar" type="checkbox" class="drawer-toggle" />
   <div class="drawer-content flex flex-col relative">
     <nav
       class="navbar fixed top-0 left-0 right-0 z-30 transition-all duration-300"
       style="padding-top: calc(env(safe-area-inset-top, 0px) + 4px)"
-      [class.lg:hidden]="device.isDesktop() || device.isTv()"
+      [class.lg:hidden]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
       [class.md:hidden]="device.isTablet() && navbar.effectiveSidebarPinned()"
       [class.-translate-y-full]="navbarHidden()"
       [class.bg-base-100]="!navbarTransparent()"
@@ -74,14 +74,14 @@
     </nav>
     <!-- Spacer for fixed navbar on mobile (navbar height + safe area; reduced on hero pages so fanart extends under status bar) -->
     <div
-      [class.lg:hidden]="device.isDesktop() || device.isTv()"
+      [class.lg:hidden]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
       [class.md:hidden]="device.isTablet() && navbar.effectiveSidebarPinned()"
       [style.height]="navbar.isHeroPage() ? '0px' : 'calc(3rem + env(safe-area-inset-top, 0px))'"
     ></div>
     <!-- Desktop top-right: Cast + User -->
     <div class="hidden items-center justify-end gap-1 absolute right-4 z-50 pointer-events-none [&>*]:pointer-events-auto"
          style="top: calc(0.75rem + env(safe-area-inset-top, 0px))"
-         [class.lg:flex]="device.isDesktop() || device.isTv()"
+         [class.lg:flex]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
          [class.md:flex]="device.isTablet() && navbar.effectiveSidebarPinned()">
       @if (castPlayer.hasMedia()) {
         <button class="btn btn-ghost btn-sm gap-2" (click)="toggleCastOverlay()">
@@ -240,11 +240,11 @@
         @if (!networkService.isOnline()) {
           <span class="badge badge-sm badge-warning">{{ 'downloads.offline' | translate }}</span>
         }
-        @if (device.isTablet()) {
-          <!-- Pin/unpin sidebar — tablet only, and only at lg+ widths where the
-               pin actually has an effect (it's auto-disabled on narrower
-               viewports via effectiveSidebarPinned). Desktop is always
-               pinned, phones never have this sidebar. -->
+        @if (device.isTablet() || device.isTv()) {
+          <!-- Pin/unpin sidebar — tablet & TV (lg+ widths where the pin
+               actually has an effect; auto-disabled on narrower viewports
+               via effectiveSidebarPinned). Desktop is always pinned,
+               phones never have this sidebar. -->
           <button
             type="button"
             class="btn btn-ghost btn-sm btn-square hidden lg:inline-flex"

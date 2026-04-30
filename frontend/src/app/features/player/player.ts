@@ -689,7 +689,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const mode = this.playbackMode();
 
         // ── Engine selection ──
-        if (this.isNative && mode !== 'direct') {
+        // Native (Capacitor) always goes through the platform player —
+        // ExoPlayer on Android (incl. TV), AVPlayer on iOS. They beat the
+        // WebView's HTMLMediaElement on every axis we care about: HW
+        // decoding, HEVC/AV1 support, HDR, Atmos passthrough, lower latency.
+        // Web (browser) keeps the Shaka path.
+        if (this.isNative) {
           // Start subtitle fetch in parallel with native engine creation so
           // the network round-trip doesn't block ExoPlayer's init.
           const nativeSubsPromise = this.trackManager.loadSubtitles(
@@ -709,26 +714,33 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             .map((s) => ({ url: s.url, language: s.language, label: s.label }));
           (this.engine as NativeEngine).setPreloadedSubtitles(nonBurnInSubs);
 
-          // Set initial quality constraint BEFORE load to prevent ExoPlayer from
-          // picking 4K on a phone (slow transcode → A/V desync).
-          const savedQualityId = this.activeQualityId();
-          if (savedQualityId !== 'auto') {
-            const PROFILE_WIDTHS: Record<string, number> = {
-              '2160p': 3840, '1080p': 1920, '720p': 1280, '480p': 854,
-              '360p': 640, '240p': 426, '144p': 256,
-            };
-            const w = PROFILE_WIDTHS[savedQualityId] ?? 1920;
-            const h = this.qualityManager.availableQualities()
-              .find(q => q.id === savedQualityId)?.height ?? 1080;
-            (this.engine as NativeEngine).selectVariantTrack({ width: w, height: h });
-          }
-          // Auto: no constraint — ExoPlayer picks based on network/device
-
           const token = this.authService.accessToken;
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-          const nativeStartQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-          const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId, nativeStartQuality, startTime);
-          await this.engine!.load(hlsUrl, startTime, undefined, headers);
+
+          if (mode === 'direct') {
+            // Progressive MP4 — Media3 detects the container, no quality
+            // ladder to constrain (DirectPlay = single source variant).
+            const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
+            await this.engine!.load(streamUrl, startTime, 'video/mp4', headers);
+          } else {
+            // HLS transcode/remux — apply quality constraint before load to
+            // stop ExoPlayer from picking 4K on a phone (slow transcode →
+            // A/V desync). Auto: no constraint, ExoPlayer picks adaptively.
+            const savedQualityId = this.activeQualityId();
+            if (savedQualityId !== 'auto') {
+              const PROFILE_WIDTHS: Record<string, number> = {
+                '2160p': 3840, '1080p': 1920, '720p': 1280, '480p': 854,
+                '360p': 640, '240p': 426, '144p': 256,
+              };
+              const w = PROFILE_WIDTHS[savedQualityId] ?? 1920;
+              const h = this.qualityManager.availableQualities()
+                .find(q => q.id === savedQualityId)?.height ?? 1080;
+              (this.engine as NativeEngine).selectVariantTrack({ width: w, height: h });
+            }
+            const nativeStartQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
+            const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId, nativeStartQuality, startTime);
+            await this.engine!.load(hlsUrl, startTime, undefined, headers);
+          }
         } else {
           await this.createShakaEngine();
 

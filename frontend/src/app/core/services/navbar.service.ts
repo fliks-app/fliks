@@ -1,5 +1,4 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Location } from '@angular/common';
 import { NavigationEnd, Router } from '@angular/router';
 import { Capacitor } from '@capacitor/core';
 import { DeviceService } from './device.service';
@@ -36,8 +35,13 @@ export class NavbarService {
   );
 
   private readonly router = inject(Router);
-  private readonly location = inject(Location);
   private readonly device = inject(DeviceService);
+  /** Stack of in-app URLs we've visited (most recent last, current excluded). */
+  private readonly history: string[] = [];
+  /** Set while goBack() is navigating, so the NavigationEnd it triggers is
+   *  treated as a "pop" (don't push the URL we're leaving back onto the
+   *  stack — that would create a forward/back loop). */
+  private isPoppingBack = false;
   /** Capacitor native platform — exposed so templates can branch on it. */
   readonly isNativePlatform = Capacitor.isNativePlatform();
   private get isNative() { return this.isNativePlatform; }
@@ -51,10 +55,23 @@ export class NavbarService {
       this.isLargeScreen.set(mq.matches);
       mq.addEventListener('change', (e) => this.isLargeScreen.set(e.matches));
     }
+    let lastUrl = this.router.url;
     this.router.events.subscribe((e) => {
       if (e instanceof NavigationEnd) {
         this.navCount++;
-        this.canGoBack.set(this.navCount > 1 && this.router.url !== '/');
+        // Track the previous URL on every NavigationEnd. We can't trust
+        // `window.history.back()` on Capacitor's Android WebView (SPA
+        // pushState entries aren't reliably popped), so goBack() navigates
+        // explicitly to the URL we recorded here. Skip the push when this
+        // navigation IS a back-pop, otherwise back→back would just toggle
+        // between two URLs forever.
+        if (this.isPoppingBack) {
+          this.isPoppingBack = false;
+        } else if (lastUrl && lastUrl !== e.urlAfterRedirects) {
+          this.history.push(lastUrl);
+        }
+        lastUrl = e.urlAfterRedirects;
+        this.canGoBack.set(this.history.length > 0 && this.router.url !== '/');
       }
     });
   }
@@ -62,6 +79,7 @@ export class NavbarService {
   /** Reset history tracking — called when a top-level nav entry (home, library, …) is chosen. */
   resetNavHistory() {
     this.navCount = 0;
+    this.history.length = 0;
     this.canGoBack.set(false);
   }
 
@@ -71,8 +89,10 @@ export class NavbarService {
    * When no fallback is given and there's no history, goes to the home page.
    */
   goBack(fallback?: readonly (string | number)[]): void {
-    if (this.canGoBack()) {
-      this.location.back();
+    const prev = this.history.pop();
+    if (prev) {
+      this.isPoppingBack = true;
+      void this.router.navigateByUrl(prev);
       return;
     }
     if (fallback?.length) {
@@ -88,11 +108,17 @@ export class NavbarService {
    *  signal (e.g. media-info-header's back button) would otherwise leave the
    *  user without a back affordance and without the hero-page top padding. */
   readonly mobileNavbarVisible = computed(() => {
-    // Mirror the layout's actual navbar visibility, not just the form-factor.
-    // - .lg:hidden hides it on desktop/TV at lg+
-    // - .md:hidden hides it on tablet with effective pin (lg+ only)
-    if (this.isLargeScreen() && (this.device.isDesktop() || this.device.isTv())) return false;
-    if (this.device.isTablet() && this.effectiveSidebarPinned()) return false;
+    // Mirror the layout's actual navbar visibility, not just the form-factor:
+    // - desktop is always pinned → navbar hidden at lg+
+    // - tablet & TV are user-pinnable → navbar hidden only when the user
+    //   pinned the sidebar (effectiveSidebarPinned, gated on lg+)
+    if (this.isLargeScreen() && this.device.isDesktop()) return false;
+    if (
+      (this.device.isTablet() || this.device.isTv()) &&
+      this.effectiveSidebarPinned()
+    ) {
+      return false;
+    }
     return true;
   });
 

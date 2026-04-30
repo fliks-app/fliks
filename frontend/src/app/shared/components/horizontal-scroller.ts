@@ -1,6 +1,7 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  inject,
   input,
   signal,
   viewChild,
@@ -9,6 +10,7 @@ import {
   OnDestroy,
 } from '@angular/core';
 import { LucideChevronLeft, LucideChevronRight } from '@lucide/angular';
+import { TvService } from '../../core/services/tv.service';
 
 @Component({
   selector: 'app-horizontal-scroller',
@@ -35,10 +37,15 @@ import { LucideChevronLeft, LucideChevronRight } from '@lucide/angular';
         </button>
       </div>
     </div>
-    <!-- Scrollable content (no visible scrollbar) -->
+    <!-- Scrollable content (no visible scrollbar). On TV the scroller gets
+         vertical padding (and a matching negative margin so neighbours don't
+         shift) to make room for the focus ring + media-card scale-up — both
+         extend past the row and would otherwise be clipped by overflow-y. -->
     <div
       #scroller
       class="flex gap-3 overflow-x-auto scrollbar-none"
+      [class.py-3]="tv.isTv()"
+      [class.-my-3]="tv.isTv()"
       (scroll)="updateArrows()"
     >
       <ng-content />
@@ -61,6 +68,7 @@ import { LucideChevronLeft, LucideChevronRight } from '@lucide/angular';
   `],
 })
 export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
+  protected readonly tv = inject(TvService);
   readonly title = input('');
   readonly atStart = signal(true);
   readonly atEnd = signal(false);

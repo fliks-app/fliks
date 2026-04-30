@@ -69,8 +69,13 @@ export class TvSpatialNavService {
       return;
     }
     const next = this.findNeighbor(dir);
+    // Always preventDefault on D-pad keys: the browser's default ArrowDown is
+    // to scroll the page, which would push the focused card out of the
+    // viewport while keeping focus on it (focus ring vanishes from view, the
+    // user thinks the cursor disappeared). Whether or not we find a
+    // neighbour, swallow the key so spatial nav fully owns D-pad behaviour.
+    e.preventDefault();
     if (next) {
-      e.preventDefault();
       next.focus({ preventScroll: false });
     }
   }
@@ -93,6 +98,15 @@ export class TvSpatialNavService {
     const fromCy = fromRect.top + fromRect.height / 2;
     const horizontal = dir === 'left' || dir === 'right';
 
+    // Scope horizontal nav to the active horizontal scroller (if any). Without
+    // this, pressing Right on the last card of a row would fall through to
+    // the `anywhere` fallback and land on a card from another row or a button
+    // elsewhere. Inside a scroller, Left/Right should stay among siblings;
+    // boundaries (first/last card) just block.
+    const activeScroller = horizontal
+      ? active.closest<HTMLElement>('.flex.overflow-x-auto, [data-scroller]')
+      : null;
+
     // Three-pass selection:
     //   1. In-line: candidate's box overlaps the source's perpendicular axis
     //      (same row for horizontal nav, same column for vertical) → pick
@@ -108,6 +122,11 @@ export class TvSpatialNavService {
 
     for (const el of all) {
       if (el === active) continue;
+      // Horizontal nav inside a scroller: candidates must be siblings in the
+      // same scroller. At the last/first card the loop yields no candidates
+      // and findNeighbor returns null — D-pad Right at end-of-row blocks
+      // (no jump to a button on another row), matching TV remote convention.
+      if (activeScroller && !activeScroller.contains(el)) continue;
       const r = el.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
       if (getComputedStyle(el).pointerEvents === 'none') continue;
@@ -178,6 +197,11 @@ function collectFocusables(root: ParentNode = document): HTMLElement[] {
   const visible = nodes.filter((el) => {
     if (el.hasAttribute('disabled')) return false;
     if (el.getAttribute('aria-hidden') === 'true') return false;
+    // tabindex=-1 means "skip spatial nav". The FOCUSABLE_SELECTOR matches
+    // anchors via `a[href]` independently of tabindex, so without this filter
+    // a media-card's inner title/subtitle links (which we set tabindex=-1 on
+    // TV) would still be picked up by the D-pad as separate focus targets.
+    if (el.getAttribute('tabindex') === '-1') return false;
     // offsetParent is null when the element (or any ancestor) has display:none,
     // visibility:hidden, or is detached — covers the cases where a parent hides
     // a focusable child via class toggling without the child itself being hidden.
@@ -186,8 +210,13 @@ function collectFocusables(root: ParentNode = document): HTMLElement[] {
     if (r.width === 0 || r.height === 0) return false;
     // Reject focusables that are positioned entirely off-screen — DaisyUI's
     // drawer-toggle checkbox lives at left: -100% and would otherwise pollute
-    // spatial nav (Left key would teleport focus into it).
-    if (r.right <= 0 || r.bottom <= 0) return false;
+    // spatial nav (Left key would teleport focus into it). Cards scrolled out
+    // of a horizontal scroller are also off-screen but are valid targets:
+    // focusing them lets the browser scroll them back into view, so we keep
+    // them when they're inside a scroller (the drawer-toggle is not).
+    if (r.right <= 0 || r.bottom <= 0) {
+      if (!el.closest('.flex.overflow-x-auto, [data-scroller]')) return false;
+    }
     const style = getComputedStyle(el);
     if (style.visibility === 'hidden' || style.display === 'none') return false;
     return true;

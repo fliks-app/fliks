@@ -14,6 +14,7 @@ import { TvSpatialNavService } from './core/services/tv-spatial-nav.service';
 import { ToastContainerComponent } from './shared/components/toast-container';
 import { ConfirmationModalComponent } from './shared/components/confirmation-modal';
 import { DismissableStackService } from './core/services/dismissable-stack.service';
+import { NavbarService } from './core/services/navbar.service';
 
 @Component({
   selector: 'app-root',
@@ -34,6 +35,7 @@ export class App implements OnInit, OnDestroy {
   private readonly tvSpatialNav = inject(TvSpatialNavService);
   private readonly router = inject(Router);
   private readonly dismissStack = inject(DismissableStackService);
+  private readonly navbar = inject(NavbarService);
   private backButtonListener?: { remove: () => Promise<void> };
   private resumeListener?: { remove: () => Promise<void> };
 
@@ -59,7 +61,7 @@ export class App implements OnInit, OnDestroy {
         });
       });
 
-      CapApp.addListener('backButton', ({ canGoBack }) => {
+      CapApp.addListener('backButton', () => {
         // Close Cast overlay first if open
         if (this.castPlayer.expanded()) {
           this.castPlayer.expanded.set(false);
@@ -77,11 +79,20 @@ export class App implements OnInit, OnDestroy {
           window.dispatchEvent(new CustomEvent('app:playerBack'));
           return;
         }
-        if (canGoBack) {
-          window.history.back();
-        } else {
-          CapApp.minimizeApp();
+        // Capacitor's `canGoBack` reflects WebView full-page history, which
+        // SPAs (Angular Router uses pushState) never grow. NavbarService
+        // tracks NavigationEnd events and navigates explicitly to the
+        // previous in-app URL — `window.history.back()` doesn't reliably
+        // pop pushState entries on Capacitor's Android WebView.
+        if (this.navbar.canGoBack()) {
+          this.navbar.goBack();
+          return;
         }
+        // On TV the back button must never minimise the app — that drops the
+        // user back to the launcher and feels like a crash. With no history,
+        // stay put and let the dedicated Home button on the remote exit.
+        if (this.tv.isTv()) return;
+        CapApp.minimizeApp();
       }).then((handle) => {
         this.backButtonListener = handle;
       });
