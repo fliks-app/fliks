@@ -95,7 +95,7 @@
   <div class="hidden lg:block relative">
     @if (m.fanartUrl) {
       <div class="absolute inset-0 -mx-6 -mt-6 overflow-hidden">
-        <img [src]="m.fanartUrl | resolveUrl" alt="" class="w-full h-full object-cover object-[50%_25%]" />
+        <img [src]="m.fanartUrl | resolveUrl:'medium'" alt="" class="w-full h-full object-cover object-[50%_25%]" />
         <div class="absolute inset-0 bg-base-100/80"></div>
         <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-base-100/30 to-base-100/50"></div>
       </div>
@@ -104,7 +104,7 @@
     <div class="flex gap-10 relative z-10">
       <div class="shrink-0 w-[240px]">
         @if (m.posterUrl) {
-          <img [src]="m.posterUrl | resolveUrl" [alt]="m.title" class="w-full rounded-xl aspect-2/3 object-cover bg-base-300" />
+          <img [src]="m.posterUrl | resolveUrl:'medium'" [alt]="m.title" class="w-full rounded-xl aspect-2/3 object-cover bg-base-300" />
         } @else {
           <div class="aspect-2/3 rounded-xl bg-base-300 flex items-center justify-center text-base-content/30">
             <svg lucideFilm class="h-20 w-20" [strokeWidth]="1.5"></svg>

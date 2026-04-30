@@ -12,7 +12,7 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
     <div class="relative -mx-4 -mt-4 hero-fanart-bleed">
       @if (fanartUrl()) {
         <img
-          [src]="fanartUrl()! | resolveUrl"
+          [src]="fanartUrl()! | resolveUrl:'medium'"
           [alt]="imageAlt()"
           class="w-full min-h-[230px] h-[38svh] max-h-[53svh] landscape:min-h-0 landscape:h-auto landscape:max-h-[47vh] landscape:aspect-video object-cover object-[50%_25%]"
         />

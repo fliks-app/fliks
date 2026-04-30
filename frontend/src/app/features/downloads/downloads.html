@@ -18,7 +18,7 @@
           <!-- Poster -->
           <div class="w-16 h-24 shrink-0 rounded overflow-hidden bg-base-300">
             @if (task.media?.posterUrl) {
-              <img [src]="task.media!.posterUrl | resolveUrl" [alt]="task.media!.title" class="w-full h-full object-cover" />
+              <img [src]="task.media!.posterUrl | resolveUrl:'thumb'" [alt]="task.media!.title" class="w-full h-full object-cover" />
             }
           </div>
 

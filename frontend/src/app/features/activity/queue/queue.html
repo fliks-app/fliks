@@ -182,7 +182,7 @@
               (change)="linkSelectedMediaId.set(m.id)"
             />
             @if (m.posterUrl) {
-              <img [src]="m.posterUrl | resolveUrl" class="w-8 h-12 rounded object-cover bg-base-300" />
+              <img [src]="m.posterUrl | resolveUrl:'thumb'" class="w-8 h-12 rounded object-cover bg-base-300" />
             } @else {
               <div class="w-8 h-12 rounded bg-base-300"></div>
             }

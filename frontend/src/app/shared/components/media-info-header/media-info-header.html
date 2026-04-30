@@ -222,7 +222,7 @@
 <div class="hidden lg:block relative">
   @if (fanartUrl()) {
     <div class="absolute inset-0 -mx-6 -mt-6 overflow-hidden">
-      <img [src]="fanartUrl()! | resolveUrl" alt="" class="w-full h-full object-cover object-[50%_25%]" />
+      <img [src]="fanartUrl()! | resolveUrl:'medium'" alt="" class="w-full h-full object-cover object-[50%_25%]" />
       <div class="absolute inset-0 bg-base-100/80"></div>
       <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-base-100/30 to-base-100/50"></div>
     </div>
@@ -247,7 +247,7 @@
          [class.w-[20%]]="posterMode() === 'still'">
       @if (posterUrl()) {
         <img
-          [src]="posterUrl()! | resolveUrl" [alt]="title()"
+          [src]="posterUrl()! | resolveUrl:'medium'" [alt]="title()"
           class="w-full rounded-xl object-cover bg-base-300"
           [class.aspect-2/3]="posterMode() === 'poster'"
           [class.aspect-video]="posterMode() === 'still'"
