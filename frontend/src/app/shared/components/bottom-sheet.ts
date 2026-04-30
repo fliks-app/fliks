@@ -10,6 +10,7 @@ import {
   DestroyRef,
   inject,
 } from '@angular/core';
+import { DismissableStackService } from '../../core/services/dismissable-stack.service';
 
 @Component({
   selector: 'app-bottom-sheet',
@@ -17,10 +18,12 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (open()) {
-      <!-- Backdrop -->
+      <!-- Backdrop — CSS @starting-style handles the fade-in declaratively
+           (browser interpolates from opacity 0 on element creation), so the
+           component does not need a JS-side toggling pattern. -->
       <div
-        [class]="'fixed inset-0 z-[100] transition-opacity duration-200 ' + (showBackdrop() ? 'bg-black/60' : '')"
-        [class.opacity-0]="entering() || dismissing()"
+        [class]="'bottom-sheet-backdrop fixed inset-0 z-[100] transition-opacity duration-200 ' + (showBackdrop() ? 'bg-black/60' : '')"
+        [class.opacity-0]="dismissing()"
         (click)="dismiss()"
       ></div>
       <!-- Sheet -->
@@ -55,14 +58,13 @@ export class BottomSheetComponent {
   readonly dragging = signal(false);
   readonly dismissing = signal(false);
   readonly dragOffset = signal(0);
-  /** True for the first 1-2 frames after open() flips, so the backdrop
-   *  starts at opacity-0 and transitions to bg-black/60 instead of
-   *  appearing instantly. */
-  readonly entering = signal(false);
 
+  private readonly dismissStack = inject(DismissableStackService);
+  private readonly dismissCallback = () => this.dismiss();
   private startY = 0;
   private startScroll = 0;
   private prevBodyOverflow: string | null = null;
+  private registered = false;
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -71,34 +73,42 @@ export class BottomSheetComponent {
       if (this.open()) {
         this.dismissing.set(false);
         this.dragOffset.set(0);
-        // Render with opacity-0 first, then flip on the next frame so the
-        // CSS transition fires. Two RAFs because Angular schedules a CD
-        // tick between them — without the second, the class change can be
-        // batched with the initial render and the transition is skipped.
-        this.entering.set(true);
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => this.entering.set(false)),
-        );
         // Lock the page scroll behind the sheet. Save+restore the previous
         // inline overflow so we don't trample a parent component's setting.
         if (typeof document !== 'undefined') {
           this.prevBodyOverflow = document.body.style.overflow;
           document.body.style.overflow = 'hidden';
         }
-      } else if (this.prevBodyOverflow !== null) {
-        if (typeof document !== 'undefined') {
-          document.body.style.overflow = this.prevBodyOverflow;
+        // Register on the dismiss stack so the hardware/gesture back closes
+        // this sheet before falling through to the route-level back handler.
+        if (!this.registered) {
+          this.dismissStack.push(this.dismissCallback);
+          this.registered = true;
         }
-        this.prevBodyOverflow = null;
+      } else {
+        if (this.prevBodyOverflow !== null) {
+          if (typeof document !== 'undefined') {
+            document.body.style.overflow = this.prevBodyOverflow;
+          }
+          this.prevBodyOverflow = null;
+        }
+        if (this.registered) {
+          this.dismissStack.remove(this.dismissCallback);
+          this.registered = false;
+        }
       }
     });
 
-    // Belt: ensure scroll is unlocked even if the component is destroyed
-    // while still open (route change, navigation, etc.).
+    // Belt: ensure scroll is unlocked + stack is clean even if the component
+    // is destroyed while still open (route change, navigation, etc.).
     destroyRef.onDestroy(() => {
       if (this.prevBodyOverflow !== null && typeof document !== 'undefined') {
         document.body.style.overflow = this.prevBodyOverflow;
         this.prevBodyOverflow = null;
+      }
+      if (this.registered) {
+        this.dismissStack.remove(this.dismissCallback);
+        this.registered = false;
       }
     });
   }

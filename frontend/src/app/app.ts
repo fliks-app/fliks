@@ -13,6 +13,7 @@ import { TvService } from './core/services/tv.service';
 import { TvSpatialNavService } from './core/services/tv-spatial-nav.service';
 import { ToastContainerComponent } from './shared/components/toast-container';
 import { ConfirmationModalComponent } from './shared/components/confirmation-modal';
+import { DismissableStackService } from './core/services/dismissable-stack.service';
 
 @Component({
   selector: 'app-root',
@@ -32,6 +33,7 @@ export class App implements OnInit, OnDestroy {
   /** Eagerly instantiate to bind the global D-pad handler on TV. */
   private readonly tvSpatialNav = inject(TvSpatialNavService);
   private readonly router = inject(Router);
+  private readonly dismissStack = inject(DismissableStackService);
   private backButtonListener?: { remove: () => Promise<void> };
   private resumeListener?: { remove: () => Promise<void> };
 
@@ -61,6 +63,10 @@ export class App implements OnInit, OnDestroy {
         // Close Cast overlay first if open
         if (this.castPlayer.expanded()) {
           this.castPlayer.expanded.set(false);
+          return;
+        }
+        // Close any open bottom sheet / dismissable layer before navigating.
+        if (this.dismissStack.dismissTop()) {
           return;
         }
         // On /watch, defer to the player's own back handler so the hardware

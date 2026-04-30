@@ -238,3 +238,13 @@ body.tablet [data-touch-only] {
 .shaka-text-container .shaka-text-wrapper {
   line-height: 1.1 !important;
 }
+/* Bottom-sheet backdrop fade-in — CSS @starting-style interpolates from
+   opacity 0 when the element is added to the DOM, so the component doesn't
+   need a JS-side toggling pattern. Falls back gracefully on older WebKit
+   that doesn't support @starting-style (the backdrop just appears at full
+   opacity instantly — no broken state, just no animation). */
+.bottom-sheet-backdrop {
+  @starting-style {
+    opacity: 0;
+  }
+}
