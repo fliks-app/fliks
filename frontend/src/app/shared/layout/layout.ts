@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   inject,
   signal,
+  computed,
   effect,
   OnInit,
   OnDestroy,
@@ -138,6 +139,14 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   /** Accessible libraries for the sidebar. */
   readonly libraries = signal<LibrarySummary[]>([]);
+  /** Libraries excluding the default Films / Séries — those have their own
+   *  shortcut elsewhere (or are deliberately omitted from the mobile More
+   *  menu to keep it short). Custom libraries (Anime, Docs, …) stay. */
+  readonly customLibraries = computed(() =>
+    this.libraries().filter(
+      (lib) => !lib.isDefaultForMovies && !lib.isDefaultForSeries,
+    ),
+  );
   /** Media count per library ID. */
   readonly libraryCounts = signal<Record<number, number>>({});
   readonly queueCount = signal(0);

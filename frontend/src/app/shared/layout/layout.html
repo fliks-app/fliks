@@ -123,32 +123,46 @@
     <!-- Native bottom navigation bar — phones only.
          Tablets and TV use the drawer/sidebar instead. -->
     @if (isNative && device.isPhone() && !keyboardOpen()) {
-      <div class="dock z-40">
+      <div class="dock z-40 dock-with-fab-cradle">
         <a routerLink="/" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: true }"
            (click)="resetNavHistory()">
           <svg lucideHome class="h-5 w-5"></svg>
-          <span class="dock-label">{{ 'nav.home' | translate }}</span>
-        </a>
-        <a routerLink="/search" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: false }"
-           (click)="resetNavHistory()">
-          <svg lucideSearch class="h-5 w-5"></svg>
-          <span class="dock-label">{{ 'search.title' | translate }}</span>
+          <span class="dock-label truncate max-w-full">{{ 'nav.home' | translate }}</span>
         </a>
         <a routerLink="/downloads" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: false }"
            (click)="resetNavHistory()">
           <svg lucideDownload class="h-5 w-5"></svg>
-          <span class="dock-label">{{ 'downloads.title' | translate }}</span>
+          <span class="dock-label truncate max-w-full">{{ 'nav.downloads' | translate }}</span>
         </a>
+        <!-- Empty cell that holds the centre slot in the flex chain so the
+             4 nav items distribute evenly across 5 columns. The FAB sits
+             outside the dock to keep .dock's position:fixed intact. -->
+        <span aria-hidden="true" class="invisible"></span>
         <a routerLink="/history" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: false }"
            (click)="resetNavHistory()">
           <svg lucideHistory class="h-5 w-5"></svg>
-          <span class="dock-label">{{ 'nav.history' | translate }}</span>
+          <span class="dock-label truncate max-w-full">{{ 'nav.history' | translate }}</span>
         </a>
-        <button (click)="toggleBottomMenu()" [class.dock-active]="bottomMenuOpen()">
+        <button (click)="toggleBottomMenu()" [class.dock-active]="bottomMenuOpen()"
+                class="[&.dock-active]:before:hidden [&.dock-active]:after:hidden">
           <svg lucideEllipsisVertical class="h-5 w-5"></svg>
-          <span class="dock-label">{{ 'nav.more' | translate }}</span>
+          <span class="dock-label truncate max-w-full">{{ 'nav.more' | translate }}</span>
         </button>
       </div>
+      <!-- Search FAB — fixed at horizontal viewport centre, vertically lifted
+           so its centre lands ~just above the top of the dock. Default: white
+           bg + primary icon (white literal so dark themes still get a white
+           circle). Active (current route): inverted via routerLinkActive.
+           Arbitrary variants suppress the DaisyUI .dock-active underline. -->
+      <a routerLink="/search"
+         [routerLinkActive]="['dock-active', '!bg-primary', '!text-primary-content']"
+         [routerLinkActiveOptions]="{ exact: false }"
+         (click)="resetNavHistory()"
+         class="fixed left-1/2 -translate-x-1/2 z-50 bg-white text-primary !rounded-full !p-0 shadow-lg flex items-center justify-center [&.dock-active]:before:hidden [&.dock-active]:after:hidden"
+         style="bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem); width: 56px; height: 56px;"
+         [attr.aria-label]="'search.title' | translate">
+        <svg lucideSearch class="h-5 w-5"></svg>
+      </a>
         <!-- More menu dropdown (opens upward, positioned relative to viewport
              since the .dock is no longer the parent stacking context). -->
         @if (bottomMenuOpen()) {
@@ -156,7 +170,7 @@
           <div class="fixed bottom-20 right-2 mb-2 bg-base-100 rounded-box shadow-xl border border-base-200 min-w-48 z-50"
                style="bottom: calc(4rem + env(safe-area-inset-bottom, 0px) + 0.5rem)">
             <ul class="menu p-2 gap-0.5">
-              @for (lib of libraries(); track lib.id) {
+              @for (lib of customLibraries(); track lib.id) {
                 <li>
                   <a [routerLink]="libraryUrl(lib)" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
                     <span class="flex items-center gap-2">

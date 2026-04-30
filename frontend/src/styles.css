@@ -248,3 +248,28 @@ body.tablet [data-touch-only] {
     opacity: 0;
   }
 }
+
+/* Dock cradle — a circular bump painted in the dock's own colour rises
+   above the dock's top edge to wrap the lower half of the Search FAB.
+   The pseudo is concentric with the FAB so its visible protrusion
+   (above the dock baseline) hugs the FAB outline.
+   `overflow: visible` is required so the pseudo can extend past the dock's
+   own bounding box (DaisyUI's .dock would otherwise clip it). */
+.dock-with-fab-cradle {
+  overflow: visible !important;
+}
+.dock-with-fab-cradle::before {
+  content: '';
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  left: 50%;
+  /* FAB (56px / radius 28) centre is 20px below the dock top
+     (bottom: 1rem + 28px − 4rem). Cradle radius 32 = FAB + 4px gap;
+     top: -12 puts the cradle's centre at the same y as the FAB. */
+  top: -12px;
+  transform: translateX(-50%);
+  background: var(--color-base-100);
+}
+
