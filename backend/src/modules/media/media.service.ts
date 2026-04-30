@@ -47,6 +47,7 @@ import { ImageService } from '../images/image.service';
 import { SubtitleStreamService } from '../streaming/subtitle-stream.service';
 import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
 import { clearMediaCache } from '../../common/utils/media-cache.util';
+import { mapWithConcurrency } from '../../common/utils/concurrency';
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
 import { SubtitlesService } from '../subtitles/subtitles.service';
@@ -1227,6 +1228,12 @@ export class MediaService {
     const dbEpMap = new Map(
       (dbSeason.episodes ?? []).map((e) => [e.episodeNumber, e]),
     );
+
+    // 1. Partition into INSERTs and UPDATEs in a single pass.
+    type UpdateJob = { id: number; updates: Partial<Episode>; stillUrl?: string | null };
+    type InsertEntry = (typeof sd.episodes)[number];
+    const updateJobs: UpdateJob[] = [];
+    const inserts: InsertEntry[] = [];
     for (const ep of sd.episodes) {
       const existing = dbEpMap.get(ep.episodeNumber);
       if (existing) {
@@ -1238,29 +1245,50 @@ export class MediaService {
           updates.airDate = ep.airDate;
         if (ep.runtime != null && ep.runtime !== existing.runtime)
           updates.runtime = ep.runtime;
-        if (Object.keys(updates).length > 0) {
-          await this.episodeRepo.update(existing.id, updates);
-        }
-        if (ep.stillUrl) {
-          await this.downloadEpisodeStill(existing.id, ep.stillUrl);
+        if (ep.stillUrl || Object.keys(updates).length > 0) {
+          updateJobs.push({ id: existing.id, updates, stillUrl: ep.stillUrl });
         }
       } else {
-        const inserted = await this.episodeRepo.save(
-          this.episodeRepo.create({
-            season: dbSeason,
-            episodeNumber: ep.episodeNumber,
-            title: ep.title || undefined,
-            overview: ep.overview || undefined,
-            airDate: ep.airDate || undefined,
-            runtime: ep.runtime ?? undefined,
-            monitored: true,
-          }),
-        );
-        if (ep.stillUrl) {
-          await this.downloadEpisodeStill(inserted.id, ep.stillUrl);
-        }
+        inserts.push(ep);
       }
     }
+
+    // 2. Batch INSERT new episodes in one save() call.
+    const insertedRows = inserts.length
+      ? await this.episodeRepo.save(
+          inserts.map((ep) =>
+            this.episodeRepo.create({
+              season: dbSeason,
+              episodeNumber: ep.episodeNumber,
+              title: ep.title || undefined,
+              overview: ep.overview || undefined,
+              airDate: ep.airDate || undefined,
+              runtime: ep.runtime ?? undefined,
+              monitored: true,
+            }),
+          ),
+        )
+      : [];
+
+    // 3. Parallelize UPDATEs + still downloads (concurrency 8). On a long
+    //    season (~20 ep × 2 image variants) this collapses ~40 sequential
+    //    HTTPs into ~5 batches.
+    type Job = { id: number; updates?: Partial<Episode>; stillUrl?: string | null };
+    const jobs: Job[] = [
+      ...updateJobs,
+      ...insertedRows.map((row, i) => ({
+        id: row.id,
+        stillUrl: inserts[i].stillUrl,
+      })),
+    ];
+    await mapWithConcurrency(jobs, 8, async ({ id, updates, stillUrl }) => {
+      if (updates && Object.keys(updates).length > 0) {
+        await this.episodeRepo.update(id, updates);
+      }
+      if (stillUrl) {
+        await this.downloadEpisodeStill(id, stillUrl);
+      }
+    });
   }
 
   /**
@@ -1755,65 +1783,90 @@ export class MediaService {
         .getMany();
       for (const p of existingPersons) personMap.set(p.tmdbId, p);
 
-      // Create missing persons
-      const missingIds = uniqueIds.filter((id) => !personMap.has(id));
       const allCredits = [...details.cast, ...details.crew];
-      for (const id of missingIds) {
-        const credit = allCredits.find((c) => c.externalId === id);
-        if (!credit) continue;
-        const person = await this.personRepo.save(
-          this.personRepo.create({
-            tmdbId: id,
-            name: credit.name,
-          }),
-        );
-        if (credit.avatarUrl) {
-          await this.downloadPersonAvatar(person.id, credit.avatarUrl);
-        }
-        personMap.set(id, person);
-      }
 
-      // Update existing persons' name/avatarUrl
+      // Batch INSERT new persons in a single save() call instead of one
+      // round-trip per missing person.
+      const missingIds = uniqueIds.filter((id) => !personMap.has(id));
+      const newRows = missingIds
+        .map((id) => allCredits.find((c) => c.externalId === id))
+        .filter((c): c is (typeof allCredits)[number] => !!c)
+        .map((c) =>
+          this.personRepo.create({ tmdbId: c.externalId, name: c.name }),
+        );
+      const inserted = newRows.length
+        ? await this.personRepo.save(newRows)
+        : [];
+      for (const p of inserted) personMap.set(p.tmdbId, p);
+
+      // Parallelize avatar downloads + name updates across new AND existing
+      // persons (concurrency 8). Each job: download avatar (best-effort),
+      // then UPDATE the row with whatever fields actually changed. This is
+      // the dominant cost on series with large casts.
+      type PersonJob = { id: number; updates: Partial<Person>; avatarUrl: string | null };
+      const jobs: PersonJob[] = [];
+      for (const p of inserted) {
+        const credit = allCredits.find((c) => c.externalId === p.tmdbId);
+        if (credit?.avatarUrl) {
+          jobs.push({ id: p.id, updates: {}, avatarUrl: credit.avatarUrl });
+        }
+      }
       for (const p of existingPersons) {
         const credit = allCredits.find((c) => c.externalId === p.tmdbId);
         if (!credit) continue;
         const updates: Partial<Person> = {};
         if (credit.name !== p.name) updates.name = credit.name;
-        if (credit.avatarUrl) {
-          const local = await this.downloadPersonAvatar(p.id, credit.avatarUrl);
-          if (local) updates.avatarUrl = local;
-        }
-        if (Object.keys(updates).length > 0) {
-          await this.personRepo.update(p.id, updates);
+        if (credit.avatarUrl || Object.keys(updates).length > 0) {
+          jobs.push({ id: p.id, updates, avatarUrl: credit.avatarUrl ?? null });
         }
       }
+      await mapWithConcurrency(jobs, 8, async ({ id, updates, avatarUrl }) => {
+        const final = { ...updates };
+        if (avatarUrl) {
+          const local = await this.imageService.downloadAndStore(
+            avatarUrl,
+            'person',
+            id,
+          );
+          if (local) final.avatarUrl = local;
+        }
+        if (Object.keys(final).length > 0) {
+          await this.personRepo.update(id, final);
+        }
+      });
     }
 
-    // Replace cast
-    await this.castRepo.delete({ media: { id: media.id } });
-    if (details.cast.length > 0) {
-      await this.castRepo.insert(
-        details.cast.map((c) => ({
-          media: { id: media.id },
-          person: { id: personMap.get(c.externalId)?.id },
-          character: c.character,
-          order: c.order,
-        })),
-      );
-    }
-
-    // Replace crew
-    await this.crewRepo.delete({ media: { id: media.id } });
-    if (details.crew.length > 0) {
-      await this.crewRepo.insert(
-        details.crew.map((c) => ({
-          media: { id: media.id },
-          person: { id: personMap.get(c.externalId)?.id },
-          job: c.job,
-          department: c.department,
-        })),
-      );
-    }
+    // Replace cast + crew atomically — without a transaction, a refresh that
+    // crashes between DELETE and INSERT would leave the media with an empty
+    // cast/crew section in the UI until the next successful refresh.
+    await this.dataSource.transaction(async (manager) => {
+      const castMgr = manager.getRepository(MediaCast);
+      await castMgr.delete({ media: { id: media.id } });
+      if (details.cast.length > 0) {
+        await castMgr.insert(
+          details.cast.map((c) => ({
+            media: { id: media.id },
+            person: { id: personMap.get(c.externalId)?.id },
+            // TMDB returns null character for some cast entries (archival
+            // footage, uncredited roles). Columns are NOT NULL — coerce.
+            character: c.character ?? '',
+            order: c.order ?? 0,
+          })),
+        );
+      }
+      const crewMgr = manager.getRepository(MediaCrew);
+      await crewMgr.delete({ media: { id: media.id } });
+      if (details.crew.length > 0) {
+        await crewMgr.insert(
+          details.crew.map((c) => ({
+            media: { id: media.id },
+            person: { id: personMap.get(c.externalId)?.id },
+            job: c.job ?? '',
+            department: c.department ?? '',
+          })),
+        );
+      }
+    });
 
     // Update search vectors + departments for persons
     if (uniqueIds.length > 0) {

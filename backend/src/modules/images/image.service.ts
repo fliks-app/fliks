@@ -81,28 +81,36 @@ export class ImageService {
     }
 
     if (isTmdb) {
-      for (const [size, tmdbSize] of Object.entries(sizes) as [
-        ImageSize,
-        string,
-      ][]) {
-        if (size === 'full') continue;
-        const sizedUrl = tmdbUrlAtSize(remoteUrl, tmdbSize);
-        if (!sizedUrl) continue;
-        try {
-          const sizedDest = this.getDiskPath(type, id, variant, size);
-          const res = await axios.get(sizedUrl, {
-            responseType: 'arraybuffer',
-            timeout: 15000,
-          });
-          fs.writeFileSync(sizedDest, res.data);
-        } catch (err) {
-          this.logger.warn(
-            `Failed to download ${size} variant ${sizedUrl}: ${err.message}`,
-          );
-          // Smaller variants are best-effort — `full` is already on disk and
-          // the controller falls back to it when a requested size is missing.
-        }
-      }
+      // Download the smaller variants in parallel — they're all independent
+      // GETs on the TMDB CDN and each adds non-trivial latency. Best-effort:
+      // a failure on one variant doesn't fail the whole call (the `full`
+      // file is already on disk and the controller falls back to it).
+      const variantJobs = (
+        Object.entries(sizes) as [ImageSize, string][]
+      )
+        .filter(([size]) => size !== 'full')
+        .map(([size, tmdbSize]) => ({
+          size,
+          url: tmdbUrlAtSize(remoteUrl, tmdbSize),
+        }))
+        .filter((job): job is { size: ImageSize; url: string } => !!job.url);
+
+      await Promise.all(
+        variantJobs.map(async ({ size, url }) => {
+          try {
+            const sizedDest = this.getDiskPath(type, id, variant, size);
+            const res = await axios.get(url, {
+              responseType: 'arraybuffer',
+              timeout: 15000,
+            });
+            fs.writeFileSync(sizedDest, res.data);
+          } catch (err) {
+            this.logger.warn(
+              `Failed to download ${size} variant ${url}: ${err.message}`,
+            );
+          }
+        }),
+      );
     }
 
     return this.getApiPath(type, id, variant);
