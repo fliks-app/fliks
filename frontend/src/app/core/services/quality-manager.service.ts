@@ -77,15 +77,40 @@ export class QualityManagerService {
 
   /**
    * Read persisted quality preference from localStorage and apply it if valid.
+   * IDs differ across media (`'original'` for the source-rung remux/DirectPlay
+   * vs `'1080p'` for a transcode rung) — when an exact id match fails, fall
+   * back to height matching so a "1080p" saved on one show maps cleanly to
+   * the equivalent rung on another (which may carry a different id).
    */
   applySavedPreference(): void {
     const saved = this.readFromStorage();
-    const ids = new Set(this.availableQualities().map(q => q.id));
-    if (saved && ids.has(saved)) {
-      this.activeQualityId.set(saved);
-    } else {
+    if (!saved) {
       this.activeQualityId.set('auto');
+      return;
     }
+    const opts = this.availableQualities();
+    const direct = opts.find((q) => q.id === saved.id);
+    if (direct) {
+      this.activeQualityId.set(direct.id);
+      return;
+    }
+    if (saved.height > 0) {
+      const exactHeight = opts.find((q) => q.height === saved.height);
+      if (exactHeight) {
+        this.activeQualityId.set(exactHeight.id);
+        return;
+      }
+      // No exact-height match — pick the largest rung still ≤ saved height
+      // (don't auto-upgrade beyond the user's intent).
+      const below = opts
+        .filter((q) => q.height > 0 && q.height <= saved.height)
+        .sort((a, b) => b.height - a.height);
+      if (below.length) {
+        this.activeQualityId.set(below[0].id);
+        return;
+      }
+    }
+    this.activeQualityId.set('auto');
   }
 
   /**
@@ -109,7 +134,7 @@ export class QualityManagerService {
   ): void {
     if (!force && option.id === this.activeQualityId()) return;
     this.activeQualityId.set(option.id);
-    if (persist) this.persistPreference(option.id);
+    if (persist) this.persistPreference(option);
 
     if (!engine) return;
 
@@ -212,11 +237,16 @@ export class QualityManagerService {
   }
 
   /**
-   * Persist quality preference to localStorage.
+   * Persist quality preference to localStorage. Stores both id and height
+   * so a follow-up media with different id naming (e.g. `'original'` instead
+   * of `'1080p'` for the same resolution) can still match by height.
    */
-  persistPreference(id: string): void {
+  persistPreference(option: QualityOption): void {
     try {
-      localStorage.setItem(PLAYER_QUALITY_STORAGE_KEY, id);
+      localStorage.setItem(
+        PLAYER_QUALITY_STORAGE_KEY,
+        JSON.stringify({ id: option.id, height: option.height }),
+      );
     } catch {
       /* private mode / quota */
     }
@@ -251,9 +281,20 @@ export class QualityManagerService {
 
   // ── Private helpers ──
 
-  private readFromStorage(): string | null {
+  private readFromStorage(): { id: string; height: number } | null {
     try {
-      return localStorage.getItem(PLAYER_QUALITY_STORAGE_KEY);
+      const raw = localStorage.getItem(PLAYER_QUALITY_STORAGE_KEY);
+      if (!raw) return null;
+      // New JSON format
+      if (raw.startsWith('{')) {
+        const parsed = JSON.parse(raw) as { id?: string; height?: number };
+        if (typeof parsed.id !== 'string') return null;
+        return { id: parsed.id, height: parsed.height ?? 0 };
+      }
+      // Legacy plain-string format — derive height from the id when possible
+      // (e.g. "1080p" → 1080). Unknown ids ('auto', 'original') get 0.
+      const m = raw.match(/^(\d+)p$/);
+      return { id: raw, height: m ? parseInt(m[1], 10) : 0 };
     } catch {
       return null;
     }
