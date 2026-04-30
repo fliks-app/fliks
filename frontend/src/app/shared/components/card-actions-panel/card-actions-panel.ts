@@ -143,8 +143,18 @@ export class CardActionsPanelComponent {
     const r = anchor.getBoundingClientRect();
     const placement = this.service.placement();
     const margin = placement === 'button' ? 4 : 12;
-    const fitsBelow = r.bottom + 320 < window.innerHeight;
-    const top = fitsBelow ? r.bottom + margin : r.top - 320 - margin;
+    // Estimate the panel's height from action count instead of a fixed 320px:
+    // a single-action menu is ~120px tall, the old constant overestimated by
+    // a factor 3 and forced the panel to render above the anchor even when
+    // there was plenty of room below — landing well above the actual card.
+    const itemCount = this.actions()?.length ?? 0;
+    const titleHeight = this.title() ? 28 : 0;
+    const estimatedHeight =
+      Math.min(360, 24 + titleHeight + Math.max(itemCount, 1) * 44);
+    const fitsBelow = r.bottom + margin + estimatedHeight < window.innerHeight;
+    const top = fitsBelow
+      ? r.bottom + margin
+      : Math.max(8, r.top - estimatedHeight - margin);
     let width: number;
     let left: number;
     if (placement === 'button') {
