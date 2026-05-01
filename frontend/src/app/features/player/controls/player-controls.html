@@ -273,10 +273,12 @@
             <ng-container [ngTemplateOutlet]="settingsMenu"></ng-container>
           </div>
         </div>
-        <!-- lucide:maximize -->
-        <button type="button" class="btn btn-ghost btn-md btn-circle text-white" (click)="toggleFullscreen.emit()">
-          <svg lucideMaximize class="h-6 w-6"></svg>
-        </button>
+        <!-- lucide:maximize — web only, native apps are already fullscreen -->
+        @if (!isNative()) {
+          <button type="button" class="btn btn-ghost btn-md btn-circle text-white" (click)="toggleFullscreen.emit()">
+            <svg lucideMaximize class="h-6 w-6"></svg>
+          </button>
+        }
       </div>
     </div>
   }
