@@ -26,6 +26,7 @@ import { DownloadCacheService } from '../../core/services/download-cache.service
 import { CastPlayerService, CastAudioOption } from '../../core/services/cast-player.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
+import { NavbarService } from '../../core/services/navbar.service';
 import { parseAudioIndex, SpriteMetadata } from '../../core/utils/player.utils';
 import {
   PlayerSettingsService, normalizeLang,
@@ -134,6 +135,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly serverConfig = inject(ServerConfigService);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly navHistory = inject(NavigationHistoryService);
+  private readonly navbar = inject(NavbarService);
 
   // New extracted services
   private readonly state = inject(PlayerStateService);
@@ -1389,6 +1391,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // consecutive entry, forcing the user to click back twice on the detail
     // page (the first back lands on the duplicate, same URL → router-reuse,
     // no visible change).
+    // Tell NavbarService to treat the upcoming NavigationEnd as a back-pop
+    // so /watch is NOT pushed onto its in-app history stack. Without this,
+    // pressing back on the destination detail page would pop /watch and
+    // send the user straight back into the player.
+    this.navbar.markAsBackNavigation();
     const prev = this.navHistory.previousUrl;
     if (prev && prev.split('?')[0] === target) {
       history.back();

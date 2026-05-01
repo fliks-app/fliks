@@ -84,6 +84,17 @@ export class NavbarService {
   }
 
   /**
+   * Mark the next navigation as a "going back" event so the resulting
+   * NavigationEnd doesn't push the URL we're leaving onto the history stack.
+   * Used by callers that navigate via Router directly (e.g. the player's
+   * onBack() does a replaceUrl jump to the media detail) but want the
+   * subsequent back press to skip over the URL they came from.
+   */
+  markAsBackNavigation() {
+    this.isPoppingBack = true;
+  }
+
+  /**
    * Navigate back in browser history when possible; otherwise fall back to a
    * provided route (useful for deep-link entries where there is no history).
    * When no fallback is given and there's no history, goes to the home page.
