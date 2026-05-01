@@ -66,6 +66,13 @@ export class BrowserDeviceProfileService {
   getProfile(): DeviceProfile {
     if (!this.cachedProfile) {
       this.cachedProfile = this.buildProfile();
+      // Diagnostic: confirm the audio capabilities we'll send to the
+      // backend on every playback request. Visible in chrome://inspect or
+      // via `adb logcat -s chromium` on Capacitor Android.
+      const dp = this.cachedProfile.directPlayProfiles[0];
+      console.log(
+        `[DeviceProfile] audioCodecs=${JSON.stringify(dp?.audioCodecs)} maxAudioChannels=${this.cachedProfile.maxAudioChannels} native=${Capacitor.isNativePlatform()}`,
+      );
     }
     // Override HDR if user forced it off (check every call — setting may change)
     if (this.playerSettings.get().forceDisableHdr) {

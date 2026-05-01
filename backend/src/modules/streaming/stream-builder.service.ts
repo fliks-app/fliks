@@ -115,8 +115,19 @@ export class StreamBuilderService {
 
     const reasons: TranscodeReason[] = [];
 
+    // --- Audio decision diagnostics ---
+    // Tracks every input that influences the "copy vs transcode" branch so
+    // we can see, from a single log line, why a 5.1 EAC-3 source ended up
+    // being downmixed to AAC stereo.
+    this.log.log(
+      `audioDecision[file=${resolved.mediaFile.id}] source={codec=${source.audioCodec}, channels=${source.audioChannels}, layout=${source.audioChannelLayout}, bitrate=${source.audioBitRate}} profile={audioCodecs=${JSON.stringify(profile.directPlayProfiles.map((p) => p.audioCodecs))}, maxAudioChannels=${profile.maxAudioChannels}}`,
+    );
+
     // --- Step 1: Try DirectPlay ---
     const directPlayResult = this.tryDirectPlay(source, profile, reasons);
+    this.log.log(
+      `audioDecision[file=${resolved.mediaFile.id}] tryDirectPlay → audioSupported=${directPlayResult.audioSupported}, containerSupported=${directPlayResult.containerSupported}, videoSupported=${directPlayResult.videoSupported}, reasons=${reasons.map((r) => r.flag).join('|') || '-'}`,
+    );
 
     // HDR on SDR client or incompatible format forces transcode
     if (needsTonemapping) {
