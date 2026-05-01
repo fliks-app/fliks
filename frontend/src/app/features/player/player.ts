@@ -1682,6 +1682,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         break;
       case 'Escape':
         e.preventDefault();
+        if (this.controlsVisible()) {
+          this.hideControls();
+          return; // skip the trailing showControls() — we want them hidden
+        }
         this.onBack();
         break;
       case '<':
@@ -1703,6 +1707,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   };
 
   private onPlayerBackEvent = () => {
+    // Back/Escape progression while watching: dropdowns close first (via
+    // DismissableStack in player-controls), then the controls bar itself,
+    // and only when the screen is truly clean does back actually leave.
+    if (this.controlsVisible()) {
+      this.hideControls();
+      return;
+    }
     this.onBack();
   };
 

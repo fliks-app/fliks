@@ -208,14 +208,20 @@ function collectFocusables(root: ParentNode = document): HTMLElement[] {
     if (el.offsetParent === null && el.tagName !== 'BODY') return false;
     const r = el.getBoundingClientRect();
     if (r.width === 0 || r.height === 0) return false;
-    // Reject focusables that are positioned entirely off-screen — DaisyUI's
-    // drawer-toggle checkbox lives at left: -100% and would otherwise pollute
-    // spatial nav (Left key would teleport focus into it). Cards scrolled out
-    // of a horizontal scroller are also off-screen but are valid targets:
-    // focusing them lets the browser scroll them back into view, so we keep
-    // them when they're inside a scroller (the drawer-toggle is not).
+    // Reject focusables only when they're positioned entirely off-document —
+    // not just scrolled out of view. DaisyUI's drawer-toggle checkbox lives
+    // at left: -100% and would otherwise pollute spatial nav (Left key would
+    // teleport focus into it). But cards scrolled off a horizontal row, or
+    // page sections scrolled above the viewport on a long detail page, are
+    // valid targets: focusing them makes the browser scroll them back into
+    // view. Document coords (viewport rect + window scroll) stay positive
+    // for scrolled-off content, and a horizontal-scroller's internal
+    // scrollLeft reaches its hidden siblings, so allow either case.
     if (r.right <= 0 || r.bottom <= 0) {
-      if (!el.closest('.flex.overflow-x-auto, [data-scroller]')) return false;
+      const inScroller = el.closest('.flex.overflow-x-auto, [data-scroller]');
+      const docRight = r.right + window.scrollX;
+      const docBottom = r.bottom + window.scrollY;
+      if (!inScroller && (docRight <= 0 || docBottom <= 0)) return false;
     }
     const style = getComputedStyle(el);
     if (style.visibility === 'hidden' || style.display === 'none') return false;

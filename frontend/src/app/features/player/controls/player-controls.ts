@@ -92,7 +92,20 @@ export class PlayerControlsComponent {
       this.dismissStack.push(close);
       onCleanup(() => this.dismissStack.remove(close));
     });
+    // TV: snap focus back to play/pause every time the controls bar shows.
+    // On a remote, the user can't reach a button without first reactivating
+    // the bar, so the next D-pad center always means "toggle playback"
+    // regardless of where focus drifted before the bar auto-hid.
+    effect(() => {
+      const visible = this.visible();
+      const wasVisible = this.lastVisible;
+      this.lastVisible = visible;
+      if (visible && !wasVisible && this.isTv()) {
+        this.playPauseBtn()?.nativeElement.focus({ preventScroll: true });
+      }
+    });
   }
+  private lastVisible = true;
   /**
    * Player layout selection. Splits the three concerns the template branches on:
    * - 'tv' → desktop-style toolbar with dropdowns (D-pad-friendly).
@@ -185,6 +198,9 @@ export class PlayerControlsComponent {
   readonly activeSheet = signal<'subtitles' | 'audio' | 'speed' | 'settings' | null>(null);
 
   readonly seekbar = viewChild(SeekbarComponent);
+  /** Desktop/TV play-pause button — focused on TV every time the controls
+   *  bar reappears, so the next D-pad center triggers play/pause. */
+  private readonly playPauseBtn = viewChild<ElementRef<HTMLButtonElement>>('playPauseBtn');
   readonly hostEl: ElementRef<HTMLElement> = inject(ElementRef);
   private readonly injector = inject(Injector);
   private dropdownTrigger: HTMLElement | null = null;
