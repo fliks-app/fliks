@@ -1,6 +1,12 @@
 @import "tailwindcss";
 @plugin "daisyui";
 
+/* `tv:` variant — applies when body.tv is set. Lets responsive utilities
+   target Android TV without depending on viewport width breakpoints (a
+   1080p TV reports innerWidth=960 due to DPR=2, so it falls into the md
+   range and Tailwind packs the same column count as a portrait tablet). */
+@custom-variant tv (&:where(body.tv *));
+
 /* Rounder corners for all DaisyUI components */
 :root, [data-theme] {
   --radius-selector: 1rem;
