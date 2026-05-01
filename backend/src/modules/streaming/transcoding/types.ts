@@ -68,16 +68,6 @@ export interface SessionContext {
    * Safe default is false (fall back to a balanced 1s/1MB probe).
    */
   trustedStreamInfo?: boolean;
-  /**
-   * Audio is bitstream-compatible with the client (declared in the device
-   * profile + channel count fits). When true, the transcode path keeps the
-   * source audio with `-c:a copy` instead of forcing AAC stereo, so 5.1
-   * EAC-3 / AC-3 reaches the TV as bitstream and the receiver lights up
-   * the surround indicator. Tracked in ActiveStreamTracker because the
-   * planning decision is made in playback-info but consumed lazily by
-   * later FFmpeg spawns (segments / quality switches).
-   */
-  copyAudio?: boolean;
 }
 
 export interface TranscodeSession {

@@ -22,9 +22,6 @@ export interface BuildFfmpegArgsOptions {
   mapAllAudio?: boolean;
   audioStreams?: { language?: string; title?: string }[];
   useFmp4?: boolean;
-  /** When true, keep the source audio with `-c:a copy` (bitstream
-   *  passthrough). When false, transcode to AAC stereo at profile bitrate. */
-  copyAudio?: boolean;
   encoderPreset?: string;
   qsvOptions?: { lookahead: boolean; lowPower: boolean; adaptive: boolean };
   sourceFps?: number;
@@ -54,7 +51,6 @@ export function buildFfmpegArgs(
     mapAllAudio = false,
     audioStreams,
     useFmp4 = true,
-    copyAudio = false,
     encoderPreset = 'faster',
     qsvOptions = { lookahead: false, lowPower: false, adaptive: true },
     sourceFps,
@@ -379,11 +375,7 @@ export function buildFfmpegArgs(
     for (let i = 0; i < audioStreams.length; i++) {
       args.push('-map', `0:a:${i}`);
     }
-    if (copyAudio) {
-      args.push('-c:a', 'copy');
-    } else {
-      args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
-    }
+    args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
 
     // Build var_stream_map: "v:0,agroup:audio a:0,agroup:audio,language:fre ..."
     const varParts = ['v:0,agroup:audio'];
@@ -431,11 +423,7 @@ export function buildFfmpegArgs(
       // pool, making the early session loop on "thread_get_buffer() failed".
       args.push('-map', '0:v:0', '-map', '0:a:0');
     }
-    if (copyAudio) {
-      args.push('-c:a', 'copy');
-    } else {
-      args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
-    }
+    args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
 
     args.push(
       '-f', 'hls',

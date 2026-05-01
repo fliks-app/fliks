@@ -171,10 +171,6 @@ export class StreamingController {
       // ffprobe ran at import/rescan and the result is cached in streamInfo —
       // tell FFmpeg to skip its own redundant avformat_find_stream_info scan.
       trustedStreamInfo: !!si?.video?.[0]?.codec,
-      // Audio bitstream compatibility (set during playback-info from
-      // tryDirectPlay). Threaded through so quality-switch FFmpeg spawns
-      // know to keep the source audio instead of forcing AAC stereo.
-      copyAudio: this.activeStreamTracker.getCanCopyAudio(mediaFileId),
     };
   }
 
