@@ -99,11 +99,20 @@ export class NavbarService {
    * provided route (useful for deep-link entries where there is no history).
    * When no fallback is given and there's no history, goes to the home page.
    */
+  /** Set when goBack() is currently navigating; consumed by the destination
+   *  page's ngOnInit to decide between restoring focus vs. landing default. */
+  readonly lastWasBack = signal(false);
+
   goBack(fallback?: readonly (string | number)[]): void {
     const prev = this.history.pop();
     if (prev) {
       this.isPoppingBack = true;
-      void this.router.navigateByUrl(prev);
+      this.lastWasBack.set(true);
+      void this.router.navigateByUrl(prev).then(() => {
+        // Reset on the next macrotask so the destination ngOnInit observes
+        // it as `true`, but later programmatic navs from that page see `false`.
+        setTimeout(() => this.lastWasBack.set(false), 0);
+      });
       return;
     }
     if (fallback?.length) {

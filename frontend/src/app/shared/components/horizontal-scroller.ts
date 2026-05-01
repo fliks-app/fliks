@@ -43,9 +43,11 @@ import { TvService } from '../../core/services/tv.service';
          extend past the row and would otherwise be clipped by overflow-y. -->
     <div
       #scroller
-      class="flex gap-3 overflow-x-auto scrollbar-none"
+      class="flex gap-3 overflow-x-auto scrollbar-none tv:[scroll-behavior:smooth]"
       [class.py-3]="tv.isTv()"
       [class.-my-3]="tv.isTv()"
+      [class.px-3]="tv.isTv()"
+      [class.-mx-3]="tv.isTv()"
       (scroll)="updateArrows()"
     >
       <ng-content />

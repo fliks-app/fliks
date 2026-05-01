@@ -76,14 +76,17 @@ export class TvSpatialNavService {
       return;
     }
     const next = this.findNeighbor(dir);
-    // Always preventDefault on D-pad keys: the browser's default ArrowDown is
-    // to scroll the page, which would push the focused card out of the
-    // viewport while keeping focus on it (focus ring vanishes from view, the
-    // user thinks the cursor disappeared). Whether or not we find a
-    // neighbour, swallow the key so spatial nav fully owns D-pad behaviour.
     e.preventDefault();
     if (next) {
       next.focus({ preventScroll: false });
+      return;
+    }
+    // No focusable neighbour: scroll the page manually so the user can
+    // reach informational content (file infos, descriptions, etc.) that
+    // sits below the last focusable card. Up/down only — left/right at a
+    // boundary should just block (intra-row).
+    if (dir === 'down' || dir === 'up') {
+      window.scrollBy({ top: dir === 'down' ? 300 : -300, behavior: 'smooth' });
     }
   }
 

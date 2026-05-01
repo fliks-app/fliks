@@ -9,9 +9,11 @@ import {
   OnDestroy,
   ElementRef,
   ViewChild,
+  afterNextRender,
   effect,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, NavigationStart, Router } from '@angular/router';
+import { Subscription, filter } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { MediaService, Media } from '../../core/services/api/media.service';
@@ -20,7 +22,9 @@ import { ProfilesService, QualityProfile } from '../../core/services/api/profile
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
+import { FocusMemoryService } from '../../core/services/focus-memory.service';
 import { NavbarService } from '../../core/services/navbar.service';
+import { TvService } from '../../core/services/tv.service';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideSlidersHorizontal } from '@lucide/angular';
 
@@ -40,9 +44,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly scrollMemory = inject(ScrollMemoryService);
+  private readonly focusMemory = inject(FocusMemoryService);
   private readonly navbar = inject(NavbarService);
+  private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
   private readonly translate = inject(TranslateService);
+  private arrivedViaBack = false;
+  private navStartSub?: Subscription;
 
   /** Resolved library (null while loading or if not found). */
   readonly library = signal<LibrarySummary | null>(null);
@@ -102,6 +110,18 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }, { allowSignalWrites: true });
 
   ngOnInit() {
+    this.arrivedViaBack = this.navbar.lastWasBack();
+    if (this.tv.isTv()) {
+      this.navStartSub = this.router.events
+        .pipe(filter((e): e is NavigationStart => e instanceof NavigationStart))
+        .subscribe(() => {
+          const active = document.activeElement as HTMLElement | null;
+          const container = active?.closest<HTMLElement>('[data-library-focus]');
+          const sel = container?.dataset['libraryFocus'];
+          const lib = this.library();
+          if (sel && lib) this.focusMemory.save(`library-${lib.id}`, sel);
+        });
+    }
     // Subscribe to route param changes (handles initial load + sidebar nav).
     this.route.params.subscribe(async (params) => {
       const rawName = params['libraryName'] as string;
@@ -149,6 +169,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.syncQueryParams();
       await this.load(lib.id);
       this.scrollMemory.restore(scrollKey, this.injector);
+      if (this.tv.isTv()) {
+        afterNextRender(() => this.applyDefaultFocus(lib.id), { injector: this.injector });
+      }
     });
   }
 
@@ -156,6 +179,31 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.scrollMemory.deactivate();
     this.list.destroy();
     this.navbar.clearPageTitle();
+    this.navStartSub?.unsubscribe();
+  }
+
+  private applyDefaultFocus(libraryId: number) {
+    const root = document.querySelector<HTMLElement>('app-library') ?? document.body;
+    const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex="0"]';
+    if (this.arrivedViaBack) {
+      const saved = this.focusMemory.retrieve(`library-${libraryId}`);
+      const container = saved
+        ? root.querySelector<HTMLElement>(`[data-library-focus="${CSS.escape(saved)}"]`)
+        : null;
+      const target = container?.matches(FOCUSABLE)
+        ? container
+        : container?.querySelector<HTMLElement>(FOCUSABLE) ?? null;
+      if (target) {
+        target.focus({ preventScroll: false });
+        return;
+      }
+    }
+    // Default: first card in the grid.
+    const firstCard = root.querySelector<HTMLElement>('[data-library-focus^="media:"]');
+    const target = firstCard?.matches(FOCUSABLE)
+      ? firstCard
+      : firstCard?.querySelector<HTMLElement>(FOCUSABLE);
+    target?.focus({ preventScroll: false });
   }
 
   scrollToLetter(letter: string) {

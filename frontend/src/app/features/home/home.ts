@@ -1,5 +1,6 @@
-import { Component, ChangeDetectionStrategy, inject, signal, OnInit, OnDestroy, Injector } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Component, ChangeDetectionStrategy, inject, signal, OnInit, OnDestroy, Injector, afterNextRender } from '@angular/core';
+import { NavigationStart, Router, RouterLink } from '@angular/router';
+import { Subscription, filter } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { MediaService, Media, CalendarEntry } from '../../core/services/api/media.service';
@@ -9,6 +10,9 @@ import { ConfirmationService } from '../../core/services/confirmation.service';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
+import { FocusMemoryService } from '../../core/services/focus-memory.service';
+import { NavbarService } from '../../core/services/navbar.service';
+import { TvService } from '../../core/services/tv.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { LucideIconComponent } from '../../shared/components/lucide-icon';
@@ -65,9 +69,16 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly castPlayer = inject(CastPlayerService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly scrollMemory = inject(ScrollMemoryService);
+  private readonly focusMemory = inject(FocusMemoryService);
+  private readonly navbar = inject(NavbarService);
+  private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
 
   private static readonly SCROLL_KEY = 'home';
+  private static readonly FOCUS_KEY = 'home';
+  /** Captured at ngOnInit before NavbarService.lastWasBack auto-resets. */
+  private arrivedViaBack = false;
+  private navStartSub?: Subscription;
 
   readonly loading = signal(true);
   readonly libraries = signal<LibrarySummary[]>([]);
@@ -92,6 +103,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
+    this.arrivedViaBack = this.navbar.lastWasBack();
     // Track scroll for back-navigation restore. Same pattern as /libraries.
     this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
     // Load non-filterable sections once
@@ -110,10 +122,46 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.loading.set(false);
     // Restore scroll once everything is in the DOM.
     this.scrollMemory.restore(HomeComponent.SCROLL_KEY, this.injector);
+    if (this.tv.isTv()) {
+      afterNextRender(() => this.applyDefaultFocus(), { injector: this.injector });
+      // NavigationStart fires the moment a click triggers a route change,
+      // before Angular tears down this component — activeElement is still
+      // the focused card so we can capture its data-home-focus once.
+      this.navStartSub = this.router.events
+        .pipe(filter((e): e is NavigationStart => e instanceof NavigationStart))
+        .subscribe(() => {
+          const active = document.activeElement as HTMLElement | null;
+          const container = active?.closest<HTMLElement>('[data-home-focus]');
+          const sel = container?.dataset['homeFocus'];
+          if (sel) this.focusMemory.save(HomeComponent.FOCUS_KEY, sel);
+        });
+    }
   }
 
   ngOnDestroy() {
     this.scrollMemory.deactivate();
+    this.navStartSub?.unsubscribe();
+  }
+
+  private applyDefaultFocus() {
+    const root = document.querySelector<HTMLElement>('app-home') ?? document.body;
+    const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex="0"]';
+    if (this.arrivedViaBack) {
+      const saved = this.focusMemory.retrieve(HomeComponent.FOCUS_KEY);
+      const container = saved
+        ? root.querySelector<HTMLElement>(`[data-home-focus="${CSS.escape(saved)}"]`)
+        : null;
+      const target =
+        container?.matches(FOCUSABLE)
+          ? container
+          : container?.querySelector<HTMLElement>(FOCUSABLE) ?? null;
+      if (target) {
+        target.focus({ preventScroll: false });
+        return;
+      }
+    }
+    // Default: first focusable in DOM order = first library card.
+    root.querySelector<HTMLElement>(FOCUSABLE)?.focus({ preventScroll: false });
   }
 
   async toggleOnlyMyRequests() {

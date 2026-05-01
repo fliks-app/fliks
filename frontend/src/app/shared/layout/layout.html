@@ -19,7 +19,11 @@
     >
       <div class="flex-none flex">
         @if (canGoBack()) {
-          <button class="btn btn-square btn-ghost" (click)="goBack()">
+          <button
+            class="btn btn-square btn-ghost"
+            [attr.tabindex]="tv.isTv() ? -1 : null"
+            (click)="goBack()"
+          >
             <svg lucideChevronLeft class="h-5 w-5"></svg>
           </button>
         }

@@ -9,6 +9,7 @@
     <app-horizontal-scroller [title]="'home.libraries' | translate">
       @for (lib of libraries(); track lib.id) {
         <a [routerLink]="libraryUrl(lib)"
+           [attr.data-home-focus]="'library:' + lib.id"
            class="shrink-0 w-36 h-20 sm:w-48 sm:h-28 rounded-xl border flex items-center gap-3 px-4 sm:px-5 hover:shadow-lg transition-shadow"
            [style.background]="'linear-gradient(135deg, color-mix(in oklch, ' + libraryColor(lib) + ' 20%, transparent), color-mix(in oklch, ' + libraryColor(lib) + ' 5%, transparent))'"
            [style.border-color]="'color-mix(in oklch, ' + libraryColor(lib) + ' 15%, transparent)'"
@@ -24,6 +25,7 @@
       <app-horizontal-scroller [title]="'home.continue_watching' | translate">
         @for (item of continueWatching(); track item.id) {
           <app-media-card [aspect]="'landscape'"
+            [attr.data-home-focus]="'cw:' + item.id"
             [imageUrl]="item.fanartUrl ?? item.posterUrl"
             [title]="item.mediaTitle"
             [subtitle]="item.episodeLabel ?? undefined"
@@ -45,6 +47,7 @@
         @for (rec of recommendations(); track rec.media.id) {
           <app-media-card
             class="shrink-0 w-28 sm:w-36"
+            [attr.data-home-focus]="'rec:' + rec.media.id"
             [imageUrl]="rec.media.posterUrl"
             [title]="rec.media.title"
             [subtitle]="'' + (rec.media.year ?? '')"
@@ -71,6 +74,7 @@
         @for (m of recentMedia(); track m.id) {
           <app-media-card
             class="shrink-0 w-28 sm:w-36"
+            [attr.data-home-focus]="'recent:' + m.id"
             [media]="m"
             [subtitle]="'' + (m.year ?? '')"
             [hideStatusBar]="true"
@@ -85,6 +89,7 @@
         @for (entry of comingSoon(); track entry.id) {
           <app-media-card
             class="shrink-0 w-28 sm:w-36"
+            [attr.data-home-focus]="'soon:' + entry.id"
             [imageUrl]="entry.posterUrl"
             [title]="entry.title"
             [subtitle]="entry.date"

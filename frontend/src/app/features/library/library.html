@@ -108,7 +108,7 @@
               <app-media-card [media]="item" [status]="watchedIds().has(item.id) ? 'watched' : null" />
             </div>
           } @else {
-            <div [id]="'media-' + item.id">
+            <div [id]="'media-' + item.id" [attr.data-library-focus]="'media:' + item.id">
               <app-media-card [media]="item" [status]="watchedIds().has(item.id) ? 'watched' : null" />
             </div>
           }
