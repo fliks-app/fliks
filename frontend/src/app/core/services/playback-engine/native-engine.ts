@@ -46,14 +46,21 @@ export class NativeEngine implements PlaybackEngine {
 
   // ── Lifecycle ──
 
+  private _initialized = false;
+
   async init(_container: HTMLElement): Promise<void> {
     // Pass 0,0 with -1,-1 (MATCH_PARENT) to fill the entire screen.
     // The native SurfaceView sits behind the transparent WebView.
     await NativePlayer.create({ x: 0, y: 0, width: -1, height: -1 });
+    this._initialized = true;
     this.bindWindowEvents();
+    if (this._subtitleStyle) {
+      NativePlayer.setSubtitleStyle(this._subtitleStyle).catch(() => {});
+    }
   }
 
   async destroy(): Promise<void> {
+    this._initialized = false;
     this.stopPositionPoll();
     this.unbindWindowEvents();
     this.destroySubtitleOverlay();
@@ -123,8 +130,9 @@ export class NativeEngine implements PlaybackEngine {
       bottomMarginPercent: settings.bottomMargin,
     };
 
-    // Apply immediately if player is active
-    NativePlayer.setSubtitleStyle(this._subtitleStyle).catch(() => {});
+    if (this._initialized) {
+      NativePlayer.setSubtitleStyle(this._subtitleStyle).catch(() => {});
+    }
   }
 
   private _preloadedSubtitles: { url: string; language: string; label: string }[] = [];
