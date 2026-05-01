@@ -101,6 +101,7 @@ export class PlayerControlsComponent {
       const wasVisible = this.lastVisible;
       this.lastVisible = visible;
       if (visible && !wasVisible && this.isTv()) {
+        this.closeDropdown();
         this.playPauseBtn()?.nativeElement.focus({ preventScroll: true });
       }
     });
