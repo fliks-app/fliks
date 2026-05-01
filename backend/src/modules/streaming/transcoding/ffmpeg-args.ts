@@ -103,10 +103,16 @@ export function buildFfmpegArgs(
   // Seek to start position if needed
   if (startSegment > 0) {
     const seekSeconds = startSegment * SEGMENT_DURATION;
-    args.push('-ss', String(seekSeconds));
+    // -noaccurate_seek lands input on the nearest keyframe so video and
+    // audio start aligned. Without it, FFmpeg seeks audio packet-precise
+    // and video to the keyframe, drifting them apart at every seek.
+    args.push('-noaccurate_seek', '-ss', String(seekSeconds));
     // -copyts preserves original timestamps so HLS segment timestamps match
-    // the source file timeline (required for subtitle sync)
-    args.push('-copyts', '-avoid_negative_ts', 'make_zero');
+    // the source file timeline (required for subtitle sync). When audio is
+    // copied through, also keep negative timestamps as-is — `make_zero`
+    // shifts only one stream and re-creates the drift we just avoided.
+    args.push('-copyts');
+    args.push('-avoid_negative_ts', copyAudio ? 'disabled' : 'make_zero');
   }
 
   // parseBitrateToBps handles both "8M" and "200k" correctly. Using parseInt()*1e6
@@ -195,6 +201,13 @@ export function buildFfmpegArgs(
   }
 
   args.push('-i', inputPath);
+
+  // Audio passthrough requires the video encoder to keep input frame PTS
+  // instead of re-timing to CFR — otherwise the encoder's frame timestamps
+  // drift away from the audio packets, image lags or leads sound.
+  if (copyAudio) {
+    args.push('-fps_mode', 'passthrough');
+  }
 
   // Video encoding
   const w = profile.maxWidth;
