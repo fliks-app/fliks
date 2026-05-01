@@ -13,6 +13,7 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
+import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
@@ -27,6 +28,7 @@ import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.DefaultLoadControl;
+import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.exoplayer.hls.HlsMediaSource;
@@ -248,11 +250,33 @@ public class NativePlayerPlugin extends Plugin {
             LoadControl loadControl = new DefaultLoadControl.Builder()
                     .setBufferDurationsMs(2000, 5000, 500, 1000)
                     .build();
+            // Renderers tuned for AV receivers / TVs that decode surround:
+            // - setEnableAudioFloatOutput(false) keeps the audio path on 16-bit
+            //   integer PCM, which is the only mode that allows AC-3 / E-AC-3
+            //   passthrough (float output forces ExoPlayer to decode + downmix
+            //   in the app, so the TV would only ever see stereo PCM).
+            // - setEnableDecoderFallback(true) lets the renderer fall back to
+            //   another decoder when the preferred one rejects the format
+            //   (e.g. some Android TV SoCs ship a buggy AC-3 decoder).
+            DefaultRenderersFactory renderersFactory =
+                    new DefaultRenderersFactory(getContext())
+                            .setEnableAudioFloatOutput(false)
+                            .setEnableDecoderFallback(true);
             player = new ExoPlayer.Builder(getContext())
+                    .setRenderersFactory(renderersFactory)
                     .setMediaSourceFactory(mediaSourceFactory)
                     .setLoadControl(loadControl)
                     .setWakeMode(C.WAKE_MODE_NETWORK)
                     .build();
+            // CONTENT_TYPE_MOVIE flags the stream as cinematic so the framework
+            // routes it through the surround-capable HDMI path; without this
+            // (default UNKNOWN) some TVs negotiate a stereo-only PCM track.
+            player.setAudioAttributes(
+                    new AudioAttributes.Builder()
+                            .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                            .setUsage(C.USAGE_MEDIA)
+                            .build(),
+                    /* handleAudioFocus= */ true);
             if (textureView != null) player.setVideoTextureView(textureView);
 
             player.addListener(new Player.Listener() {
