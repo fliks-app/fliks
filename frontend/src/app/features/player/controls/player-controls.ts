@@ -6,6 +6,7 @@ import {
   Injector,
   afterNextRender,
   computed,
+  effect,
   inject,
   input,
   output,
@@ -13,6 +14,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { DeviceService } from '../../../core/services/device.service';
+import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
 import { NgTemplateOutlet } from '@angular/common';
 import { BottomSheetComponent } from '../../../shared/components/bottom-sheet';
 import { TranslateModule } from '@ngx-translate/core';
@@ -72,8 +74,25 @@ import {
 })
 export class PlayerControlsComponent {
   private readonly device = inject(DeviceService);
+  private readonly dismissStack = inject(DismissableStackService);
   /** True on Android TV — drives 10-foot UI choices in the template. */
   readonly isTv = this.device.isTv;
+
+  constructor() {
+    // Mirror the open dropdown into the global dismissable stack so the
+    // Capacitor hardware back button (which never reaches our keydown
+    // listener — it's intercepted by the App plugin in app.ts) closes the
+    // panel before falling through to "leave the player".
+    effect((onCleanup) => {
+      if (!this.openDropdown()) return;
+      const close = () => {
+        this.closeDropdown();
+        this.dropdownTrigger?.focus({ preventScroll: true });
+      };
+      this.dismissStack.push(close);
+      onCleanup(() => this.dismissStack.remove(close));
+    });
+  }
   /**
    * Player layout selection. Splits the three concerns the template branches on:
    * - 'tv' → desktop-style toolbar with dropdowns (D-pad-friendly).
