@@ -108,11 +108,9 @@ export function buildFfmpegArgs(
     // and video to the keyframe, drifting them apart at every seek.
     args.push('-noaccurate_seek', '-ss', String(seekSeconds));
     // -copyts preserves original timestamps so HLS segment timestamps match
-    // the source file timeline (required for subtitle sync). When audio is
-    // copied through, also keep negative timestamps as-is — `make_zero`
-    // shifts only one stream and re-creates the drift we just avoided.
-    args.push('-copyts');
-    args.push('-avoid_negative_ts', copyAudio ? 'disabled' : 'make_zero');
+    // the source file timeline (required for subtitle sync — VTT cues use
+    // absolute time from the original file).
+    args.push('-copyts', '-avoid_negative_ts', 'make_zero');
   }
 
   // parseBitrateToBps handles both "8M" and "200k" correctly. Using parseInt()*1e6
