@@ -4,6 +4,12 @@ const config: CapacitorConfig = {
   appId: 'media.fliks.app',
   appName: 'Fliks',
   webDir: 'dist/frontend/browser',
+  // Capacitor logs every plugin call (call + result, so 2 lines each). Our
+  // 1Hz NativePlayer.getPosition poll for the seekbar floods the devtools
+  // console with hundreds of lines per minute, drowning out our own logs.
+  // 'none' silences the bridge chatter; our app code still uses console.*
+  // directly for diagnostics.
+  loggingBehavior: 'none',
   server: {
     androidScheme: 'http',
   },
