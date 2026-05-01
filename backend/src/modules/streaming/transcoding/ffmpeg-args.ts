@@ -200,13 +200,6 @@ export function buildFfmpegArgs(
 
   args.push('-i', inputPath);
 
-  // Audio passthrough requires the video encoder to keep input frame PTS
-  // instead of re-timing to CFR — otherwise the encoder's frame timestamps
-  // drift away from the audio packets, image lags or leads sound.
-  if (copyAudio) {
-    args.push('-fps_mode', 'passthrough');
-  }
-
   // Video encoding
   const w = profile.maxWidth;
   const cropStr = crop
