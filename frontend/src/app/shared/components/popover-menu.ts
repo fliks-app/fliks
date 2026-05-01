@@ -70,11 +70,15 @@ export class PopoverMenuComponent {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   constructor() {
-    // body.tv applies a scale transform that re-anchors any fixed-position
-    // descendant (the bottom sheet) to body's box rather than the viewport.
-    // Move the host to <html> so its fixed children fall back to the
-    // viewport while the rest of the page keeps its overscan transform.
-    if (this.tv.isTv() && typeof document !== 'undefined') {
+    // Move the host to <html> on every platform that renders the sheet
+    // variant. Two separate problems both need this:
+    //   • TV → body.tv has a scale transform that re-anchors fixed
+    //     descendants to body's box instead of the viewport.
+    //   • Mobile → the layout's drawer-content is `position: relative`,
+    //     creating a stacking context that traps z-[101] below the
+    //     bottom dock (z-40 at body level).
+    // Hosting under <html> escapes both.
+    if (typeof document !== 'undefined' && !this.useDropdown()) {
       queueMicrotask(() => {
         document.documentElement.appendChild(this.host.nativeElement);
       });

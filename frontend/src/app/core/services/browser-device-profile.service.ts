@@ -7,6 +7,11 @@ interface HdrPlugin {
 }
 const Hdr = registerPlugin<HdrPlugin>('Hdr');
 
+interface AudioCapabilitiesPlugin {
+  getSupported(): Promise<{ codecs: string[]; maxChannels: number }>;
+}
+const AudioCaps = registerPlugin<AudioCapabilitiesPlugin>('AudioCapabilities');
+
 /**
  * Builds a DeviceProfile by probing actual browser capabilities via canPlayType()
  * and MediaSource.isTypeSupported(). Inspired by Jellyfin's browserDeviceProfile.js.
@@ -50,13 +55,17 @@ export class BrowserDeviceProfileService {
   private readonly playerSettings = inject(PlayerSettingsService);
   private cachedProfile: DeviceProfile | null = null;
   private nativeHdr: boolean | null = null;
+  private nativeAudio: { codecs: string[]; maxChannels: number } | null = null;
 
   constructor() {
-    // Pre-fetch native HDR capability (async, cached for later sync use)
+    // Pre-fetch native HDR + audio capabilities (async, cached for later sync use)
     if (Capacitor.isNativePlatform()) {
       Hdr.isSupported()
         .then((r) => { this.nativeHdr = r.supported; })
         .catch(() => { this.nativeHdr = false; });
+      AudioCaps.getSupported()
+        .then((r) => { this.nativeAudio = r; this.cachedProfile = null; })
+        .catch(() => { this.nativeAudio = null; });
     }
   }
 
@@ -152,26 +161,24 @@ export class BrowserDeviceProfileService {
     }
 
     // --- Detect supported audio codecs ---
-    const audioCodecs: string[] = [];
-    if (this.testCodec(video, hasMSE, 'audio/mp4', 'mp4a.40.2')) audioCodecs.push('aac');
-    if (this.testCodec(video, hasMSE, 'audio/mpeg', '')) audioCodecs.push('mp3');
-    if (this.testCodec(video, hasMSE, 'audio/mp4', 'ac-3')) audioCodecs.push('ac3');
-    if (this.testCodec(video, hasMSE, 'audio/mp4', 'ec-3')) audioCodecs.push('eac3');
-    if (this.testCodec(video, hasMSE, 'audio/mp4', 'opus') ||
-        this.testCodec(video, hasMSE, 'audio/webm', 'opus')) audioCodecs.push('opus');
-    if (this.testCodec(video, hasMSE, 'audio/mp4', 'flac') ||
-        this.testCodec(video, hasMSE, 'audio/flac', '')) audioCodecs.push('flac');
-    if (this.testCodec(video, hasMSE, 'audio/mp4', 'alac')) audioCodecs.push('alac');
-    // Capacitor: playback goes through ExoPlayer (Android) / AVPlayer (iOS),
-    // not the WebView's HTMLMediaElement. canPlayType() above only reflects
-    // WebView capability and underreports surround formats — that's why the
-    // backend was transcoding AC-3 / E-AC-3 down to AAC stereo on the way
-    // out. Force-declare what the native player actually decodes so the
-    // backend leaves surround tracks alone (audio copy → bitstream → HDMI).
-    if (Capacitor.isNativePlatform()) {
-      for (const codec of ['ac3', 'eac3']) {
-        if (!audioCodecs.includes(codec)) audioCodecs.push(codec);
-      }
+    // On native, the platform plugin (AudioCapabilities) is the source of
+    // truth — playback goes through ExoPlayer / AVPlayer, not the WebView,
+    // so the WebView's canPlayType is irrelevant (and unreliable: some
+    // WebViews report ec-3 positive on devices that have no decoder).
+    let audioCodecs: string[];
+    if (this.nativeAudio) {
+      audioCodecs = [...this.nativeAudio.codecs];
+    } else {
+      audioCodecs = [];
+      if (this.testCodec(video, hasMSE, 'audio/mp4', 'mp4a.40.2')) audioCodecs.push('aac');
+      if (this.testCodec(video, hasMSE, 'audio/mpeg', '')) audioCodecs.push('mp3');
+      if (this.testCodec(video, hasMSE, 'audio/mp4', 'ac-3')) audioCodecs.push('ac3');
+      if (this.testCodec(video, hasMSE, 'audio/mp4', 'ec-3')) audioCodecs.push('eac3');
+      if (this.testCodec(video, hasMSE, 'audio/mp4', 'opus') ||
+          this.testCodec(video, hasMSE, 'audio/webm', 'opus')) audioCodecs.push('opus');
+      if (this.testCodec(video, hasMSE, 'audio/mp4', 'flac') ||
+          this.testCodec(video, hasMSE, 'audio/flac', '')) audioCodecs.push('flac');
+      if (this.testCodec(video, hasMSE, 'audio/mp4', 'alac')) audioCodecs.push('alac');
     }
 
     // --- Max audio channels ---
@@ -182,10 +189,10 @@ export class BrowserDeviceProfileService {
       ctx.close();
     } catch { /* fallback to stereo */ }
     // Same reasoning as the codec override above: AudioContext exposes the
-    // WebView's audio output channels (2), not what the native player can
-    // route to HDMI. Bump to 8 (7.1) so the backend doesn't downmix.
-    if (Capacitor.isNativePlatform()) {
-      maxAudioChannels = Math.max(maxAudioChannels, 8);
+    // Same source as the codec list above — the native plugin reports
+    // what the active output sink (HDMI / speakers / Bluetooth) accepts.
+    if (this.nativeAudio) {
+      maxAudioChannels = Math.max(maxAudioChannels, this.nativeAudio.maxChannels);
     }
 
     // --- HLS support ---

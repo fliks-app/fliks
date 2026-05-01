@@ -11,6 +11,7 @@ import {
   inject,
 } from '@angular/core';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
+import { TvService } from '../../core/services/tv.service';
 
 @Component({
   selector: 'app-bottom-sheet',
@@ -60,6 +61,7 @@ export class BottomSheetComponent {
   readonly dragOffset = signal(0);
 
   private readonly dismissStack = inject(DismissableStackService);
+  private readonly tv = inject(TvService);
   private readonly dismissCallback = () => this.dismiss();
   private startY = 0;
   private startScroll = 0;
@@ -76,14 +78,17 @@ export class BottomSheetComponent {
         this.dragOffset.set(0);
         // Lock the page scroll behind the sheet. Save+restore the previous
         // inline overflow so we don't trample a parent component's setting.
-        // Lock both html and body — depending on the platform either one
-        // can be the scrolling element (Android WebView typically scrolls
-        // html when body has a transform).
+        // On TV body has a scale transform that makes html the scrolling
+        // element — lock both. On other form factors body is the scroller
+        // and locking html on tablet landscape (pinned drawer) shifts the
+        // sidebar upward.
         if (typeof document !== 'undefined') {
           this.prevBodyOverflow = document.body.style.overflow;
-          this.prevHtmlOverflow = document.documentElement.style.overflow;
           document.body.style.overflow = 'hidden';
-          document.documentElement.style.overflow = 'hidden';
+          if (this.tv.isTv()) {
+            this.prevHtmlOverflow = document.documentElement.style.overflow;
+            document.documentElement.style.overflow = 'hidden';
+          }
         }
         // Register on the dismiss stack so the hardware/gesture back closes
         // this sheet before falling through to the route-level back handler.
