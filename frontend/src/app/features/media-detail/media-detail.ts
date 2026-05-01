@@ -53,6 +53,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { SseService, type SseEvent } from '../../core/services/sse.service';
 import { MediaType } from '../../core/enums/media-type.enum';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { ImgFadeInDirective } from '../../shared/directives/img-fade-in.directive';
 
 const LS_EPISODES_HAS_FILE_ONLY = 'fliks.mediaDetail.episodesHasFileOnly';
 
@@ -81,6 +82,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     RouterLink,
     NgTemplateOutlet,
     ResolveUrlPipe,
+    ImgFadeInDirective,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail.html',

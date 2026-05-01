@@ -19,9 +19,9 @@ export type ImageSize = 'thumb' | 'medium' | 'full';
  * - full  : player fanart, large desktop hero
  */
 const TMDB_SIZE_MAP: Record<string, Partial<Record<ImageSize, string>>> = {
-  'media/poster': { thumb: 'w342', medium: 'w500', full: 'original' },
+  'media/poster': { thumb: 'w185', medium: 'w500', full: 'original' },
   'media/fanart': { thumb: 'w300', medium: 'w780', full: 'original' },
-  person: { thumb: 'w185', full: 'original' },
+  person: { thumb: 'w45', full: 'original' },
   episode: { thumb: 'w300', full: 'original' },
 };
 

@@ -183,7 +183,7 @@
 <div class="hidden lg:block tv:block relative">
   @if (fanartUrl()) {
     <div class="absolute inset-0 -mx-6 -mt-6 overflow-hidden">
-      <img [src]="fanartUrl()! | resolveUrl:'medium'" alt="" class="w-full h-full object-cover object-[50%_25%]" />
+      <img appImgFadeIn [src]="fanartUrl()! | resolveUrl:'medium'" alt="" loading="eager" fetchpriority="high" class="w-full h-full object-cover object-[50%_25%]" />
       <div class="absolute inset-0 bg-base-100/80"></div>
       <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-base-100/30 to-base-100/50"></div>
     </div>
@@ -208,7 +208,9 @@
          [class.w-[20%]]="posterMode() === 'still'">
       @if (posterUrl()) {
         <img
+          appImgFadeIn
           [src]="posterUrl()! | resolveUrl:'medium'" [alt]="title()"
+          loading="eager" fetchpriority="high"
           class="w-full rounded-xl object-cover bg-base-300"
           [class.aspect-2/3]="posterMode() === 'poster'"
           [class.aspect-video]="posterMode() === 'still'"
