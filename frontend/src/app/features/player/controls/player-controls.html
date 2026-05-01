@@ -24,7 +24,7 @@
 
   <!-- Right -->
   <div class="flex items-center gap-2">
-    @if (!isMobileTouch()) {
+    @if (!isMobileTouch() && !isTv()) {
       <input
         type="range"
         class="range range-xs w-28 opacity-70 hover:opacity-100"
@@ -44,10 +44,12 @@
         }
       </button>
     }
-    <!-- lucide:picture-in-picture-2 -->
-    <button type="button" class="btn btn-ghost btn-circle text-white btn-sm lg:btn-md" (click)="togglePip.emit()">
-      <svg lucidePictureInPicture2 [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
-    </button>
+    <!-- lucide:picture-in-picture-2 — hidden on TV (no PiP on Android TV) -->
+    @if (!isTv()) {
+      <button type="button" class="btn btn-ghost btn-circle text-white btn-sm lg:btn-md" (click)="togglePip.emit()">
+        <svg lucidePictureInPicture2 [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+      </button>
+    }
     <!-- Cast -->
     @if (castAvailable()) {
       <button type="button" class="btn btn-ghost btn-circle btn-sm lg:btn-md" [class.text-info]="castConnected()" [class.text-white]="!castConnected() && !castConnecting()" [disabled]="castConnecting()" (click)="toggleCast.emit()">
