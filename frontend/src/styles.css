@@ -122,18 +122,9 @@ body.native.hero-page {
 body.tv {
   /* Slight scale-up of base text for legibility from the couch */
   font-size: 18px;
-  /* Overscan compensation — symmetric margin on all 4 sides via center scaling.
-     transform creates a containing block so position:fixed children scale with
-     us and stay inside the safe area without per-element overrides. */
-  transform: scale(0.96);
-  transform-origin: center center;
 }
-/* Player (immersive) needs the full screen — no overscan compensation */
-body.tv.immersive {
-  transform: none;
-}
-/* Backfill the area revealed by body.tv's transform: scale(0.96) so it doesn't
-   show whatever was underneath (browser default white). App is dark-only. */
+/* Backfill html so the WebView doesn't show its default white during route
+   transitions or before bootstrap. App is dark-only. */
 html.tv-host {
   background: #1d232a;
 }
