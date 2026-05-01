@@ -67,11 +67,14 @@ export class CardActionsService {
 
   constructor() {
     if (typeof window === 'undefined') return;
-    // The TV remote menu key is captured here once globally — directives only
-    // register actions, they don't each install their own listener.
-    if (this.tv.isTv()) {
-      window.addEventListener('keydown', (e) => this.onTvKey(e), { capture: true });
-    }
+    // Attach unconditionally; gate on tv.isTv() inside the handler. The
+    // TvService's signal can flip after this service is constructed (early
+    // injection chain), so a one-shot check at construction time misses
+    // the moment when the listener is actually needed.
+    window.addEventListener('keydown', (e) => this.onTvKey(e), { capture: true });
+    window.addEventListener('contextmenu', (e) => {
+      if (this.tv.isTv()) e.preventDefault();
+    }, { capture: true });
   }
 
   register(payload: {
@@ -109,7 +112,17 @@ export class CardActionsService {
   }
 
   private onTvKey(e: KeyboardEvent) {
-    if (!this.open() && (e.key === 'ContextMenu' || e.keyCode === 93 || e.keyCode === 82)) {
+    if (!this.tv.isTv()) return;
+    // ContextMenu/Menu (82/93) is the standard. BrowserFavorites covers
+    // remotes that ship a Bookmark key instead — Android dispatches it as
+    // the BrowserFavorites web key (keyCode 0).
+    if (
+      !this.open() &&
+      (e.key === 'ContextMenu' ||
+        e.key === 'BrowserFavorites' ||
+        e.keyCode === 93 ||
+        e.keyCode === 82)
+    ) {
       if (!this.hasActions()) return;
       e.preventDefault();
       e.stopPropagation();
@@ -122,4 +135,5 @@ export class CardActionsService {
       this.close();
     }
   }
+
 }

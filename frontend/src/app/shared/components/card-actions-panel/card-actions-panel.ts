@@ -64,6 +64,7 @@ export class CardActionsPanelComponent {
   private readonly device = inject(DeviceService);
 
   readonly menu = viewChild<ElementRef<HTMLElement>>('menu');
+  readonly sheet = viewChild<ElementRef<HTMLElement>>('sheet');
 
   /** Computed style for the anchored dropdown — re-read on each open. */
   readonly position = signal<{ top: number; left: number; width: number } | null>(null);
@@ -74,13 +75,25 @@ export class CardActionsPanelComponent {
   readonly title = this.service.title;
   readonly isTv = this.tv.isTv;
   /**
-   * Use the anchored dropdown for TV (D-pad menu) and any non-touch surface
-   * (i.e. desktop with a mouse). Touch surfaces (mobile, tablet, native phone)
-   * keep the bottom sheet — easier to tap and matches platform conventions.
+   * Anchored dropdown only on desktop with a mouse. TV and touch surfaces
+   * (mobile, tablet) get the bottom-sheet — bigger targets, predictable
+   * positioning, and no fragile dropdown anchoring with the body.tv scale
+   * transform.
    */
-  readonly useDropdown = computed(() => this.isTv() || !this.device.isTouch());
+  readonly useDropdown = computed(() => !this.isTv() && !this.device.isTouch());
+
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   constructor() {
+    // body.tv applies a scale transform that re-anchors any fixed-position
+    // descendant (the bottom sheet) to body's box rather than the viewport.
+    // Move the panel host to <html> so its fixed positioning falls back to
+    // the viewport while the rest of the page keeps its overscan transform.
+    if (this.tv.isTv() && typeof document !== 'undefined') {
+      queueMicrotask(() => {
+        document.documentElement.appendChild(this.host.nativeElement);
+      });
+    }
     // Recompute position and reset highlight when the panel opens.
     effect(() => {
       if (!this.service.open()) return;
@@ -89,6 +102,11 @@ export class CardActionsPanelComponent {
         queueMicrotask(() => {
           this.computePosition();
           this.menu()?.nativeElement.querySelector<HTMLButtonElement>('button')?.focus();
+        });
+      } else if (this.isTv()) {
+        // Focus first action so the user can press Enter immediately.
+        queueMicrotask(() => {
+          this.sheet()?.nativeElement.querySelector<HTMLButtonElement>('button:not([disabled])')?.focus();
         });
       }
     });

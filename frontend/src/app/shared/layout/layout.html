@@ -23,10 +23,10 @@
             <svg lucideChevronLeft class="h-5 w-5"></svg>
           </button>
         }
-        @if (!isNative || tv.isTv() || device.isTablet()) {
+        @if ((!isNative || device.isTablet()) && !tv.isTv()) {
           <!-- Hamburger appears wherever the drawer can be opened — that means
-               every form-factor except the native phone (which uses the bottom
-               navbar for primary navigation). -->
+               every form-factor except native phone (uses the bottom dock) and
+               TV (D-pad nav, drawer is always pinnable from the user menu). -->
           <label for="sidebar" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate">
             <svg lucideMenu class="h-5 w-5"></svg>
           </label>

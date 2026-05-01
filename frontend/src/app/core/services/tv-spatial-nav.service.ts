@@ -56,10 +56,17 @@ export class TvSpatialNavService {
     // still ship `keyCode` 37/38/39/40 — accept either form.
     const dir = ARROW_TO_DIR[e.key] ?? KEYCODE_TO_DIR[e.keyCode];
     if (!dir) return;
-    // Skip if focus is inside a text input — let the input handle caret movement
+    // Skip if focus is inside a text-style input — let it own caret movement.
+    // Checkbox/radio/range have no caret, so spatial nav must keep handling
+    // arrow keys for them (otherwise users get stuck on the toggle).
     const active = document.activeElement as HTMLElement | null;
     const tag = active?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || active?.isContentEditable) {
+    const inputType = (active as HTMLInputElement | null)?.type;
+    const isTextInput =
+      tag === 'TEXTAREA' ||
+      active?.isContentEditable ||
+      (tag === 'INPUT' && !['checkbox', 'radio', 'range', 'button', 'submit', 'reset'].includes(inputType ?? ''));
+    if (isTextInput) {
       return;
     }
     // Skip on sliders (seekbar, volume) — they handle ArrowLeft/Right themselves
@@ -82,10 +89,13 @@ export class TvSpatialNavService {
 
   private findNeighbor(dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null {
     const active = document.activeElement as HTMLElement | null;
-    // Focus trap: while a player dropdown is open, restrict navigation to its
-    // contents so D-pad Up/Down stays in the list and Right/Left can't escape
-    // the modal. Without this the panel stays visible but focus wanders off.
-    const openModal = document.querySelector<HTMLElement>('.dropdown-open .dropdown-content');
+    // Focus trap: any open dropdown/menu/bottom-sheet that opts in via
+    // `[data-tv-modal]` (or `.dropdown-open .dropdown-content` for the
+    // legacy player dropdowns) restricts navigation to its contents so
+    // D-pad keys can't escape the modal.
+    const openModal =
+      document.querySelector<HTMLElement>('[data-tv-modal]') ??
+      document.querySelector<HTMLElement>('.dropdown-open .dropdown-content');
     const all = openModal ? collectFocusables(openModal) : collectFocusables();
     if (!all.length) return null;
 

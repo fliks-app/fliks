@@ -3,6 +3,7 @@ import { Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
+import { DropdownToggleDirective } from '../directives/dropdown-toggle.directive';
 import { Capacitor } from '@capacitor/core';
 import {
   LucideUser,
@@ -18,13 +19,14 @@ import {
   selector: 'app-user-menu',
   imports: [
     RouterLink, TranslateModule,
+    DropdownToggleDirective,
     LucideUser, LucideSettings, LucideShield, LucideRepeat, LucideLogOut,
     LucideServer, LucideMonitorSmartphone,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="dropdown dropdown-end">
-      <div tabindex="0" role="button" class="btn btn-ghost btn-circle">
+      <div appDropdownToggle tabindex="0" role="button" class="btn btn-ghost btn-circle">
         <svg lucideUser class="h-5 w-5"></svg>
       </div>
       <div tabindex="0" class="dropdown-content z-50 bg-base-200 rounded-xl shadow-xl w-60 mt-2 text-base-content">
@@ -48,11 +50,11 @@ import {
             <li><a routerLink="/admin" class="flex items-center gap-3 w-full"><svg lucideShield class="h-4 w-4 opacity-60"></svg>{{ 'nav.administration' | translate }}</a></li>
           }
           <li><a routerLink="/pending-requests" class="flex items-center gap-3 w-full"><svg lucideMonitorSmartphone class="h-4 w-4 opacity-60"></svg>{{ 'pending_requests.menu_entry' | translate }}</a></li>
-          <li><a (click)="switchUser()" class="flex items-center gap-3 w-full"><svg lucideRepeat class="h-4 w-4 opacity-60"></svg>{{ 'nav.switch_user' | translate }}</a></li>
+          <li><button type="button" (click)="switchUser()" class="flex items-center gap-3 w-full"><svg lucideRepeat class="h-4 w-4 opacity-60"></svg>{{ 'nav.switch_user' | translate }}</button></li>
           @if (isNative) {
-            <li><a (click)="changeServer()" class="flex items-center gap-3 w-full"><svg lucideServer class="h-4 w-4 opacity-60"></svg>{{ 'nav.change_server' | translate }}</a></li>
+            <li><button type="button" (click)="changeServer()" class="flex items-center gap-3 w-full"><svg lucideServer class="h-4 w-4 opacity-60"></svg>{{ 'nav.change_server' | translate }}</button></li>
           }
-          <li><a (click)="auth.logout()" class="flex items-center gap-3 w-full text-error"><svg lucideLogOut class="h-4 w-4"></svg>{{ 'nav.logout' | translate }}</a></li>
+          <li><button type="button" (click)="auth.logout()" class="flex items-center gap-3 w-full text-error"><svg lucideLogOut class="h-4 w-4"></svg>{{ 'nav.logout' | translate }}</button></li>
         </ul>
       </div>
     </div>

@@ -45,9 +45,9 @@
       </ul>
     </div>
   } @else {
-    <!-- Mobile: bottom sheet -->
+    <!-- Mobile / TV: bottom sheet -->
     <app-bottom-sheet [open]="true" (closed)="onClose()">
-      <div class="px-2 pb-2">
+      <div #sheet data-tv-modal class="px-2 pb-2">
         @if (title()) {
           <div class="px-4 py-2 text-white/60 text-sm font-medium truncate">{{ title() }}</div>
         }
