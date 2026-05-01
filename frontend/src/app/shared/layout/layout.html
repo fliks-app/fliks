@@ -4,8 +4,10 @@
   <input id="sidebar" type="checkbox" class="drawer-toggle" />
   <div class="drawer-content flex flex-col relative">
     <nav
-      class="navbar fixed top-0 left-0 right-0 z-30 transition-all duration-300"
+      class="navbar fixed left-0 right-0 z-30 transition-all duration-300"
       style="padding-top: calc(env(safe-area-inset-top, 0px) + 4px)"
+      [class.top-0]="!tv.isTv()"
+      [class.top-4]="tv.isTv()"
       [class.lg:hidden]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
       [class.md:hidden]="device.isTablet() && navbar.effectiveSidebarPinned()"
       [class.-translate-y-full]="navbarHidden()"
@@ -79,7 +81,7 @@
     <div
       [class.lg:hidden]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
       [class.md:hidden]="device.isTablet() && navbar.effectiveSidebarPinned()"
-      [class.h-16]="!navbar.isHeroPage() && tv.isTv()"
+      [class.h-20]="!navbar.isHeroPage() && tv.isTv()"
       [style.height]="navbar.isHeroPage() ? '0px' : tv.isTv() ? null : 'calc(3rem + env(safe-area-inset-top, 0px))'"
     ></div>
     <!-- Desktop top-right: Cast + User -->
