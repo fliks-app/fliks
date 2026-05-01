@@ -182,30 +182,97 @@ export class SeekbarComponent {
   }
 
   /**
-   * Keyboard handler — only active while the seekbar itself has focus
-   * (D-pad behavior aligned with Jellyfin: arrows only seek when "on" the
-   * progress bar; otherwise they navigate between controls).
+   * Keyboard handler — only active while the seekbar itself has focus.
    *
-   *   ←/→     ±10s
-   *   Shift+← /→  ±30s
-   *   Home/End    jump to start/end
-   *   Space/Enter let the global player handler toggle play/pause
+   * Tap ←/→: seek ±10s. Hold: enters scrub mode and accelerates the step
+   * based on how long the key has been held (10s → 30s → 60s → 5min). The
+   * preview tooltip follows dragTime, the actual player seek is deferred
+   * until keyup (or a 250ms backstop if keyup never fires, e.g. on some
+   * TV remote drivers).
    */
+  private scrubStartedAt = 0;
+  private scrubCommitTimer: ReturnType<typeof setTimeout> | null = null;
+
   onKeydown(e: KeyboardEvent) {
     const dur = this.duration();
     if (!dur) return;
-    let target: number | null = null;
-    const step = e.shiftKey ? 30 : 10;
+
+    let direction = 0;
     switch (e.key) {
-      case 'ArrowLeft':  target = this.currentTime() - step; break;
-      case 'ArrowRight': target = this.currentTime() + step; break;
-      case 'Home':       target = 0; break;
-      case 'End':        target = Math.max(0, dur - 1); break;
+      case 'ArrowLeft':  direction = -1; break;
+      case 'ArrowRight': direction = 1; break;
+      case 'Home':
+        e.preventDefault();
+        e.stopPropagation();
+        this.cancelScrubTimer();
+        this.commitScrubTo(0);
+        return;
+      case 'End':
+        e.preventDefault();
+        e.stopPropagation();
+        this.cancelScrubTimer();
+        this.commitScrubTo(Math.max(0, dur - 1));
+        return;
+      default:
+        return;
     }
-    if (target === null) return;
+
     e.preventDefault();
     e.stopPropagation();
-    target = Math.max(0, Math.min(target, dur));
+
+    if (!this.dragging()) {
+      this.scrubStartedAt = Date.now();
+      this.dragTime.set(this.currentTime());
+      this.dragging.set(true);
+      this.dragChange.emit(true);
+    }
+
+    const heldMs = Date.now() - this.scrubStartedAt;
+    const step =
+      heldMs < 1500 ? 10 :
+      heldMs < 4000 ? 30 :
+      heldMs < 8000 ? 60 : 300;
+
+    const next = Math.max(0, Math.min(dur, this.dragTime() + direction * step));
+    this.dragTime.set(next);
+
+    this.cancelScrubTimer();
+    this.scrubCommitTimer = setTimeout(() => {
+      this.scrubCommitTimer = null;
+      this.commitScrub();
+    }, 250);
+  }
+
+  onKeyup(e: KeyboardEvent) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    this.cancelScrubTimer();
+    this.commitScrub();
+  }
+
+  private cancelScrubTimer() {
+    if (this.scrubCommitTimer) {
+      clearTimeout(this.scrubCommitTimer);
+      this.scrubCommitTimer = null;
+    }
+  }
+
+  private commitScrub() {
+    if (!this.dragging()) return;
+    const target = this.dragTime();
+    this.dragging.set(false);
+    this.dragChange.emit(false);
+    this.seekTarget = target;
+    this.seekPending.set(true);
+    this.seek.emit(target);
+  }
+
+  private commitScrubTo(target: number) {
+    if (this.dragging()) {
+      this.dragging.set(false);
+      this.dragChange.emit(false);
+    }
+    this.seekTarget = target;
+    this.seekPending.set(true);
     this.seek.emit(target);
   }
 }

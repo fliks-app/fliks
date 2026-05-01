@@ -10,6 +10,7 @@
   (pointermove)="onProgressHover($event)"
   (pointerleave)="onProgressLeave()"
   (keydown)="onKeydown($event)"
+  (keyup)="onKeyup($event)"
 >
   <!-- Seek tooltip -->
   @if (showTooltip() && (hovering() || dragging()) && duration()) {
