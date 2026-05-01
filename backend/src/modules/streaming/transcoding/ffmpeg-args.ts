@@ -100,16 +100,9 @@ export function buildFfmpegArgs(
     args.push('-analyzeduration', '1000000', '-probesize', '1000000');
   }
 
-  // Seek to start position if needed
   if (startSegment > 0) {
     const seekSeconds = startSegment * SEGMENT_DURATION;
-    // -noaccurate_seek lands input on the nearest keyframe so video and
-    // audio start aligned. Without it, FFmpeg seeks audio packet-precise
-    // and video to the keyframe, drifting them apart at every seek.
-    args.push('-noaccurate_seek', '-ss', String(seekSeconds));
-    // -copyts preserves original timestamps so HLS segment timestamps match
-    // the source file timeline (required for subtitle sync — VTT cues use
-    // absolute time from the original file).
+    args.push('-ss', String(seekSeconds));
     args.push('-copyts', '-avoid_negative_ts', 'make_zero');
   }
 
@@ -384,7 +377,9 @@ export function buildFfmpegArgs(
       args.push('-map', `0:a:${i}`);
     }
     if (copyAudio) {
-      args.push('-c:a', 'copy');
+      // Re-encode to E-AC-3 5.1 (preserves surround passthrough; -c:a copy
+      // can't be trimmed precisely when video is transcoded + seeked).
+      args.push('-c:a', 'eac3', '-b:a', '640k');
     } else {
       args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
     }
@@ -436,7 +431,9 @@ export function buildFfmpegArgs(
       args.push('-map', '0:v:0', '-map', '0:a:0');
     }
     if (copyAudio) {
-      args.push('-c:a', 'copy');
+      // Re-encode to E-AC-3 5.1 (preserves surround passthrough; -c:a copy
+      // can't be trimmed precisely when video is transcoded + seeked).
+      args.push('-c:a', 'eac3', '-b:a', '640k');
     } else {
       args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
     }

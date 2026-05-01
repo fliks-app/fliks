@@ -38,6 +38,19 @@ import { StreamingSettingsCache } from './streaming-settings-cache.service';
 
 const VALID_QUALITIES = new Set([...PROFILES.map((p) => p.name), 'remux']);
 
+/**
+ * Inject HLS X-TIMESTAMP-MAP header so the player aligns VTT cues to the
+ * absolute MPEGTS timeline of the video stream (which uses -copyts → PTS
+ * matches original file time). Without this, players that normalise media
+ * time treat VTT time as relative to playback start, which drifts after
+ * any seek that doesn't land on an exact keyframe (-noaccurate_seek).
+ */
+const VTT_TIMESTAMP_MAP = 'X-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000';
+function withTimestampMap(vtt: string | Buffer): string {
+  const text = typeof vtt === 'string' ? vtt : vtt.toString('utf-8');
+  return text.replace(/^(WEBVTT[^\n]*)\n/, `$1\n${VTT_TIMESTAMP_MAP}\n`);
+}
+
 /** Generate a VOD HLS playlist for a given duration and segment URL pattern. */
 /** Default segment duration — overridden by admin streaming settings via tracker. */
 let SEG_DURATION = 3;
@@ -717,7 +730,7 @@ export class StreamingController {
     const vtt = Buffer.concat(chunks);
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(vtt);
+    res.send(withTimestampMap(vtt));
   }
 
   /** Serve an external subtitle as WebVTT. */
@@ -729,7 +742,7 @@ export class StreamingController {
     const vtt = await this.subtitleStreamService.getSubtitleAsVtt(subtitleId);
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(vtt);
+    res.send(withTimestampMap(vtt));
   }
 
   // ---------------------------------------------------------------------------
