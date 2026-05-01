@@ -4,44 +4,51 @@
 <section class="space-y-4">
   @if (!hideControls()) {
   <div class="flex items-center gap-2 flex-wrap">
-    <div class="dropdown shrink-0">
-      <div tabindex="0" role="button" class="btn btn-ghost btn-circle">
-        <svg lucideEllipsisVertical class="h-5 w-5"></svg>
-      </div>
-      <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-20 w-max min-w-56 p-2 shadow-lg">
-        <li>
-          <label class="flex items-center gap-3 cursor-pointer select-none whitespace-nowrap">
-            <input
-              type="checkbox"
-              class="toggle toggle-primary toggle-sm shrink-0"
-              [checked]="episodesHasFileOnly()"
-              (change)="episodesHasFileOnlyChange.emit($any($event.target).checked)"
-            />
-            {{ 'media_detail.episodes_available_only' | translate }}
-          </label>
-        </li>
-        @if (selSeason) {
-          <li>
-            <a
-              class="flex items-center gap-3 whitespace-nowrap"
-              [class.pointer-events-none]="seasonWatchedBusyId() === selSeason.id"
-              (click)="toggleSeasonWatched.emit({ season: selSeason, watched: !seasonFullyWatched(selSeason) })"
-            >
-              @if (seasonWatchedBusyId() === selSeason.id) {
-                <span class="loading loading-spinner loading-xs"></span>
-              } @else if (seasonFullyWatched(selSeason)) {
-                <svg lucideX class="h-4 w-4 shrink-0 opacity-70"></svg>
-                {{ 'media_detail.mark_season_unwatched' | translate }}
-              } @else {
-                <svg lucideCheck class="h-4 w-4 shrink-0 opacity-70"></svg>
-                {{ 'media_detail.mark_season_watched' | translate }}
-              }
-            </a>
-          </li>
-        }
-      </ul>
-    </div>
+    <button
+      #seasonTrigger
+      type="button"
+      class="btn btn-ghost btn-circle shrink-0"
+      (click)="seasonMenuOpen.set(!seasonMenuOpen())"
+    >
+      <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+    </button>
+    <app-popover-menu
+      [open]="seasonMenuOpen()"
+      [anchor]="seasonTrigger"
+      placement="bottom-start"
+      (closed)="seasonMenuOpen.set(false)"
+    >
+      <label class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base text-white rounded-lg active:bg-white/10 hover:bg-white/5 cursor-pointer">
+        <input
+          type="checkbox"
+          class="toggle toggle-primary toggle-sm shrink-0"
+          [checked]="episodesHasFileOnly()"
+          (change)="episodesHasFileOnlyChange.emit($any($event.target).checked)"
+        />
+        <span class="flex-1">{{ 'media_detail.episodes_available_only' | translate }}</span>
+      </label>
+      @if (selSeason) {
+        <button
+          type="button"
+          [disabled]="seasonWatchedBusyId() === selSeason.id"
+          class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base text-white rounded-lg active:bg-white/10 hover:bg-white/5 disabled:opacity-40"
+          (click)="toggleSeasonWatched.emit({ season: selSeason, watched: !seasonFullyWatched(selSeason) }); seasonMenuOpen.set(false)"
+        >
+          @if (seasonWatchedBusyId() === selSeason.id) {
+            <span class="loading loading-spinner loading-sm"></span>
+            <span class="flex-1"></span>
+          } @else if (seasonFullyWatched(selSeason)) {
+            <svg lucideX class="h-5 w-5 shrink-0 opacity-80"></svg>
+            <span class="flex-1">{{ 'media_detail.mark_season_unwatched' | translate }}</span>
+          } @else {
+            <svg lucideCheck class="h-5 w-5 shrink-0 opacity-80"></svg>
+            <span class="flex-1">{{ 'media_detail.mark_season_watched' | translate }}</span>
+          }
+        </button>
+      }
+    </app-popover-menu>
     <select
+      appTvSelect
       class="select select-bordered w-fit shrink-0"
       [ngModel]="activeSeasonId()"
       (ngModelChange)="selectSeason.emit($event)"

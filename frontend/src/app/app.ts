@@ -13,12 +13,13 @@ import { TvService } from './core/services/tv.service';
 import { TvSpatialNavService } from './core/services/tv-spatial-nav.service';
 import { ToastContainerComponent } from './shared/components/toast-container';
 import { ConfirmationModalComponent } from './shared/components/confirmation-modal';
+import { SelectPickerComponent } from './shared/components/select-picker';
 import { DismissableStackService } from './core/services/dismissable-stack.service';
 import { NavbarService } from './core/services/navbar.service';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, ToastContainerComponent, ConfirmationModalComponent],
+  imports: [RouterOutlet, ToastContainerComponent, ConfirmationModalComponent, SelectPickerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app.html',
 })
@@ -62,6 +63,14 @@ export class App implements OnInit, OnDestroy {
       });
 
       CapApp.addListener('backButton', () => {
+        // A focused <select> means its picker is open (or about to open
+        // when the user pressed Enter). Blur to close it before any
+        // route-level back logic fires.
+        const active = document.activeElement as HTMLElement | null;
+        if (active?.tagName === 'SELECT') {
+          active.blur();
+          return;
+        }
         // Close Cast overlay first if open
         if (this.castPlayer.expanded()) {
           this.castPlayer.expanded.set(false);

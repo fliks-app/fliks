@@ -39,7 +39,8 @@ import { NavbarService } from '../../../core/services/navbar.service';
 import { TvService } from '../../../core/services/tv.service';
 import { MobileFanartHeroComponent } from '../mobile-fanart-hero';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
-import { DropdownToggleDirective } from '../../directives/dropdown-toggle.directive';
+import { PopoverMenuComponent } from '../popover-menu';
+import { NgTemplateOutlet } from '@angular/common';
 
 export interface MediaInfoHeaderFile {
   id: number;
@@ -67,7 +68,8 @@ interface AudioTrack {
   imports: [
     MobileFanartHeroComponent,
     ResolveUrlPipe,
-    DropdownToggleDirective,
+    PopoverMenuComponent,
+    NgTemplateOutlet,
     DecimalPipe, FormsModule, RouterLink, TranslateModule,
     LucideCaptions, LucideChevronLeft, LucideCheck, LucideDownload,
     LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideFileText,
@@ -151,6 +153,16 @@ export class MediaInfoHeaderComponent {
   readonly openDownload = output<void>();
   readonly openProfiles = output<void>();
   readonly openLibrary = output<void>();
+  /** "More actions" menu open-state — shared between mobile + desktop layouts. */
+  readonly openMoreMenu = signal(false);
+  /** Active trigger element so the dropdown variant anchors to whichever
+   *  layout (mobile or desktop) the user clicked. */
+  readonly moreAnchor = signal<HTMLElement | null>(null);
+
+  protected openMore(anchor: HTMLElement) {
+    this.moreAnchor.set(anchor);
+    this.openMoreMenu.set(true);
+  }
   readonly refreshMetadata = output<void>();
   readonly toggleMonitored = output<void>();
   readonly deleteMedia = output<void>();

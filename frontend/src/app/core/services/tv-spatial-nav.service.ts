@@ -56,17 +56,28 @@ export class TvSpatialNavService {
     // still ship `keyCode` 37/38/39/40 — accept either form.
     const dir = ARROW_TO_DIR[e.key] ?? KEYCODE_TO_DIR[e.keyCode];
     if (!dir) return;
-    // Skip if focus is inside a text-style input — let it own caret movement.
-    // Checkbox/radio/range have no caret, so spatial nav must keep handling
-    // arrow keys for them (otherwise users get stuck on the toggle).
+    // Skip if focus is inside a text-style input, a <select>, or its
+    // open-picker option — they own arrow-key handling natively (caret
+    // movement / option cycling). Checkbox/radio/range have no caret, so
+    // spatial nav keeps handling them.
     const active = document.activeElement as HTMLElement | null;
     const tag = active?.tagName;
     const inputType = (active as HTMLInputElement | null)?.type;
     const isTextInput =
       tag === 'TEXTAREA' ||
+      tag === 'SELECT' ||
+      tag === 'OPTION' ||
+      active?.closest?.('select') ||
       active?.isContentEditable ||
       (tag === 'INPUT' && !['checkbox', 'radio', 'range', 'button', 'submit', 'reset'].includes(inputType ?? ''));
     if (isTextInput) {
+      // Some Android WebViews map arrow keys on a focused <select> to
+      // tab-style focus moves (= jumps to the next focusable below). Block
+      // that — user opens the picker with Enter; once the system picker is
+      // visible Android handles its own arrows + Back.
+      if (tag === 'SELECT' || tag === 'OPTION') {
+        e.preventDefault();
+      }
       return;
     }
     // Skip on sliders (seekbar, volume) — they handle ArrowLeft/Right themselves

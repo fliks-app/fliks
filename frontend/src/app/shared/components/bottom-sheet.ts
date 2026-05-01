@@ -64,6 +64,7 @@ export class BottomSheetComponent {
   private startY = 0;
   private startScroll = 0;
   private prevBodyOverflow: string | null = null;
+  private prevHtmlOverflow: string | null = null;
   private registered = false;
 
   constructor() {
@@ -75,9 +76,14 @@ export class BottomSheetComponent {
         this.dragOffset.set(0);
         // Lock the page scroll behind the sheet. Save+restore the previous
         // inline overflow so we don't trample a parent component's setting.
+        // Lock both html and body — depending on the platform either one
+        // can be the scrolling element (Android WebView typically scrolls
+        // html when body has a transform).
         if (typeof document !== 'undefined') {
           this.prevBodyOverflow = document.body.style.overflow;
+          this.prevHtmlOverflow = document.documentElement.style.overflow;
           document.body.style.overflow = 'hidden';
+          document.documentElement.style.overflow = 'hidden';
         }
         // Register on the dismiss stack so the hardware/gesture back closes
         // this sheet before falling through to the route-level back handler.
@@ -89,8 +95,10 @@ export class BottomSheetComponent {
         if (this.prevBodyOverflow !== null) {
           if (typeof document !== 'undefined') {
             document.body.style.overflow = this.prevBodyOverflow;
+            document.documentElement.style.overflow = this.prevHtmlOverflow ?? '';
           }
           this.prevBodyOverflow = null;
+          this.prevHtmlOverflow = null;
         }
         if (this.registered) {
           this.dismissStack.remove(this.dismissCallback);
@@ -104,7 +112,9 @@ export class BottomSheetComponent {
     destroyRef.onDestroy(() => {
       if (this.prevBodyOverflow !== null && typeof document !== 'undefined') {
         document.body.style.overflow = this.prevBodyOverflow;
+        document.documentElement.style.overflow = this.prevHtmlOverflow ?? '';
         this.prevBodyOverflow = null;
+        this.prevHtmlOverflow = null;
       }
       if (this.registered) {
         this.dismissStack.remove(this.dismissCallback);
