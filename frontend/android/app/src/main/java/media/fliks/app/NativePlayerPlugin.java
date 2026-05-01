@@ -248,7 +248,7 @@ public class NativePlayerPlugin extends Plugin {
             DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory);
             // 500ms instead of ExoPlayer's default 2500ms — short-segment LAN HLS.
             LoadControl loadControl = new DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(2000, 5000, 500, 1000)
+                    .setBufferDurationsMs(3000, 8000, 500, 3000)
                     .build();
             // Renderers tuned for AV receivers / TVs that decode surround:
             // - setEnableAudioFloatOutput(false) keeps the audio path on 16-bit
@@ -750,7 +750,23 @@ public class NativePlayerPlugin extends Plugin {
         return code;
     }
 
+    private String lastEmittedState = "";
+    private long lastNonBufferingAt = 0;
+    private static final long BUFFERING_GUARD_MS = 300;
+
     private void emitStateChanged(String state) {
+        // Hysteresis on BUFFERING: ExoPlayer can briefly dip below the
+        // rebuffer threshold after a seek and oscillate ready ↔ buffering
+        // a few times in rapid succession. Swallow a BUFFERING emit if a
+        // playable state was reported < 300ms ago — wait for it to
+        // actually settle into BUFFERING before the spinner shows.
+        long now = android.os.SystemClock.uptimeMillis();
+        if ("buffering".equals(state) && now - lastNonBufferingAt < BUFFERING_GUARD_MS) {
+            return;
+        }
+        if (!"buffering".equals(state)) lastNonBufferingAt = now;
+        if (state.equals(lastEmittedState)) return;
+        lastEmittedState = state;
         getBridge().getWebView().evaluateJavascript(
                 "window.dispatchEvent(new CustomEvent('nativePlayerStateChanged',{detail:{state:'" + state + "'}}));", null);
     }
