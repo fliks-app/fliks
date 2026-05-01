@@ -155,6 +155,17 @@ export class BrowserDeviceProfileService {
     if (this.testCodec(video, hasMSE, 'audio/mp4', 'flac') ||
         this.testCodec(video, hasMSE, 'audio/flac', '')) audioCodecs.push('flac');
     if (this.testCodec(video, hasMSE, 'audio/mp4', 'alac')) audioCodecs.push('alac');
+    // Capacitor: playback goes through ExoPlayer (Android) / AVPlayer (iOS),
+    // not the WebView's HTMLMediaElement. canPlayType() above only reflects
+    // WebView capability and underreports surround formats — that's why the
+    // backend was transcoding AC-3 / E-AC-3 down to AAC stereo on the way
+    // out. Force-declare what the native player actually decodes so the
+    // backend leaves surround tracks alone (audio copy → bitstream → HDMI).
+    if (Capacitor.isNativePlatform()) {
+      for (const codec of ['ac3', 'eac3']) {
+        if (!audioCodecs.includes(codec)) audioCodecs.push(codec);
+      }
+    }
 
     // --- Max audio channels ---
     let maxAudioChannels = 2;
@@ -163,6 +174,12 @@ export class BrowserDeviceProfileService {
       maxAudioChannels = ctx.destination.maxChannelCount || 2;
       ctx.close();
     } catch { /* fallback to stereo */ }
+    // Same reasoning as the codec override above: AudioContext exposes the
+    // WebView's audio output channels (2), not what the native player can
+    // route to HDMI. Bump to 8 (7.1) so the backend doesn't downmix.
+    if (Capacitor.isNativePlatform()) {
+      maxAudioChannels = Math.max(maxAudioChannels, 8);
+    }
 
     // --- HLS support ---
     const supportsHlsTs = this.testType(video, false, 'application/x-mpegURL') ||
