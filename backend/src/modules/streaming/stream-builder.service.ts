@@ -286,8 +286,12 @@ export class StreamBuilderService {
       effectiveHwAccel = 'vaapi';
     }
 
+    // Audio can ride on the transcode path as a copy when the client
+    // supports the source codec + channel count — there's no reason to
+    // downmix EAC-3 5.1 just because the video has to be re-encoded.
+    const canCopyAudio = directPlayResult.audioSupported;
     this.log.log(
-      `Transcode for file ${resolved.mediaFile.id}: ${reasons.map((r) => r.flag).join(', ')}`,
+      `Transcode for file ${resolved.mediaFile.id}: ${reasons.map((r) => r.flag).join(', ')} (audio=${canCopyAudio ? 'copy' : 'aac'})`,
     );
     const url = `/api/stream/${resolved.mediaFile.id}/master.m3u8${tokenParam}`;
     const transcodeBitrateByQuality: NonNullable<
@@ -309,9 +313,9 @@ export class StreamBuilderService {
       contentType: 'application/vnd.apple.mpegurl',
       transcodeReasons: reasons,
       videoCopyStream: false,
-      audioCopyStream: false,
+      audioCopyStream: canCopyAudio,
       outputVideoCodec: 'h264',
-      outputAudioCodec: 'aac',
+      outputAudioCodec: canCopyAudio ? sourceAudioCodec : 'aac',
       outputContainer: 'hls',
       hwAccel: effectiveHwAccel,
       tonemapping: needsTonemapping,
