@@ -1,4 +1,4 @@
-<div class="flex flex-col gap-4">
+<div appTvSection class="flex flex-col gap-4">
 
   @if (loading()) {
     <!-- Skeleton: same vertical rhythm as the loaded layout so the page
@@ -293,9 +293,9 @@
     <div class="cv-auto" style="contain-intrinsic-size: auto 12rem">
     <app-horizontal-scroller [title]="'media_detail.cast' | translate">
       @for (c of cast(); track c.id) {
-        <a [routerLink]="['/persons', c.person.id]" class="shrink-0 w-20 sm:w-24 flex flex-col items-center gap-1.5 group">
+        <a [routerLink]="['/persons', c.person.id]" class="shrink-0 w-20 sm:w-24 flex flex-col items-center gap-1.5 group tv:focus:outline-none! tv:focus-visible:outline-none!">
           <div class="avatar">
-            <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">
+            <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full ring ring-base-200 group-hover:ring-primary group-focus:ring-primary group-focus-visible:ring-primary group-focus:ring-2 group-focus-visible:ring-2 transition-colors">
               @if (c.person.avatarUrl) {
                 <img appImgFadeIn [src]="c.person.avatarUrl | resolveUrl:'thumb'" [alt]="c.person.name" loading="lazy" fetchpriority="low" />
               } @else {

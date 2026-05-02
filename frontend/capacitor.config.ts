@@ -28,7 +28,12 @@ const config: CapacitorConfig = {
       launchAutoHide: false,
       backgroundColor: '#1d232a',
       androidSplashResourceName: 'splash_themed',
-      androidScaleType: 'CENTER_CROP',
+      // CENTER (not CENTER_CROP) keeps the splash drawable at its native
+      // pixel size and centred over the navy background. CENTER_CROP
+      // scaled the brand mark up to fill the entire TV screen on large
+      // displays — way oversized. With CENTER the mark stays at its
+      // designed size on phones, tablets, and TVs alike.
+      androidScaleType: 'CENTER',
       splashFullScreen: true,
       splashImmersive: true,
     },

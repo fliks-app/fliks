@@ -128,15 +128,15 @@ body.native.hero-page {
 body.tv {
   /* Slight scale-up of base text for legibility from the couch */
   font-size: 18px;
-  /* Horizontal overscan compensation — shrink the body 4% horizontally so
-     content stays inside the TV's displayable area. We pin the origin to
-     the top so we don't introduce a stray empty band above the navbar
-     (which the previous `center` origin created on long scrollable pages —
-     the body's vertical mid-point sat far below the viewport, making the
-     pre-scale top render dozens of pixels down). The bottom gets 4% of
-     headroom that's almost never visible while scrolling, and modern TVs
-     overscan horizontally far more than vertically. */
-  transform: scale(0.96);
+  /* Horizontal overscan compensation — shrink the body 4% horizontally
+     so content stays inside the TV's displayable area. `scaleX` only
+     (not uniform `scale`): vertical scaling silently compounded into
+     every Y offset of descendants, so a sticky bar pinned at top:50vh
+     drifted up as the user scrolled (the body's transform scaled the
+     scroll-relative offset). Modern TVs overscan horizontally far more
+     than vertically; the vertical edge isn't worth the positioning
+     headaches. */
+  transform: scaleX(0.96);
   transform-origin: top center;
 }
 /* Player (immersive) needs the full screen — no overscan compensation */
@@ -181,15 +181,27 @@ body.tv app-media-card figure > .absolute.inset-0,
 body.tv app-media-card .opacity-0.group-hover\:opacity-100 {
   display: none !important;
 }
-/* Card focus on TV — single ring drawn via outline with a negative offset so
-   it sits inside the figure (no clipping by the row container's overflow,
-   follows the figure's rounded corners on modern WebView/Chromium). The
-   !important wins against the generic body.tv :focus rule above and prevents
-   double-ringing. */
+/* Card focus on TV — drawn as an absolutely-positioned pseudo-element so
+   the ring overlays the cover image AND repaints reliably even when the
+   img sits in its own stacking context (the lingering view-transition-name
+   on the clicked card creates one). `border-radius: inherit` follows the
+   figure's `rounded-lg`, `inset: 0` snaps to its border-box, `z-index`
+   keeps it above the cover image. The matching `outline: none` defeats
+   the generic body.tv :focus rule that would otherwise draw a duplicate
+   outer ring at offset:4. */
 body.tv app-media-card figure:focus,
 body.tv app-media-card figure:focus-visible {
-  outline: 3px solid var(--color-primary, #7a3ff2) !important;
-  outline-offset: -3px !important;
+  outline: none !important;
+}
+body.tv app-media-card figure:focus::after,
+body.tv app-media-card figure:focus-visible::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 3px solid var(--color-primary, #7a3ff2);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 10;
 }
 /* Touch-only UI elements should be hidden on TV */
 body.tv [data-touch-only] {
@@ -286,5 +298,27 @@ body.tablet [data-touch-only] {
   top: -12px;
   transform: translateX(-50%);
   background: var(--color-base-100);
+}
+
+/* Skip the full-page cross-fade. Rasterizing + compositing two viewport-sized
+   `root` snapshots is the heaviest part of every view-transition on weak
+   GPUs. The hero (poster) morph still runs because it has its own named
+   pair; the rest of the page just swaps instantly — same UX as iOS-style
+   detail navigation. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+/* Force the hero (poster) morph above root. The default pseudo-tree order
+   should put named groups above root, but with `animation: none` on root
+   the old/new pair stays fully opaque for the whole transition and on some
+   builds the morphing poster ends up clipped behind it. Explicit z-index
+   removes the ambiguity. */
+::view-transition-group(*) {
+  z-index: 1;
+}
+::view-transition-group(root) {
+  z-index: 0;
 }
 

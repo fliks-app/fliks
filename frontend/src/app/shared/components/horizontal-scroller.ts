@@ -11,10 +11,11 @@ import {
 } from '@angular/core';
 import { LucideChevronLeft, LucideChevronRight } from '@lucide/angular';
 import { TvService } from '../../core/services/tv.service';
+import { TvRowDirective } from '../directives/tv-row.directive';
 
 @Component({
   selector: 'app-horizontal-scroller',
-  imports: [LucideChevronLeft, LucideChevronRight],
+  imports: [LucideChevronLeft, LucideChevronRight, TvRowDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <!-- Header: title + arrows (arrows are mouse-only — hidden on touch/TV) -->
@@ -43,11 +44,13 @@ import { TvService } from '../../core/services/tv.service';
          extend past the row and would otherwise be clipped by overflow-y. -->
     <div
       #scroller
+      appTvRow
       class="flex gap-3 overflow-x-auto scrollbar-none tv:[scroll-behavior:smooth]"
       [class.py-3]="tv.isTv()"
       [class.-my-3]="tv.isTv()"
       [class.px-3]="tv.isTv()"
       [class.-mx-3]="tv.isTv()"
+      [class.scroll-px-3]="tv.isTv()"
       (scroll)="updateArrows()"
     >
       <ng-content />

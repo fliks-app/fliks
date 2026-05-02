@@ -16,6 +16,7 @@ import { HorizontalScrollerComponent } from '../../../../shared/components/horiz
 import { MediaCardComponent } from '../../../../shared/components/media-card/media-card';
 import { PopoverMenuComponent } from '../../../../shared/components/popover-menu';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
+import { TvRowDirective } from '../../../../shared/directives/tv-row.directive';
 import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
 import {
   Episode,
@@ -34,7 +35,7 @@ import { METADATA_PROVIDER_OPTIONS_OVERRIDE } from '../../../../core/constants/m
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, FormsModule, RouterLink, ResolveUrlPipe, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, PopoverMenuComponent, TvSelectDirective, LucideCheck, LucideEllipsisVertical, LucideX],
+  imports: [TranslateModule, FormsModule, RouterLink, ResolveUrlPipe, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, PopoverMenuComponent, TvSelectDirective, TvRowDirective, LucideCheck, LucideEllipsisVertical, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })

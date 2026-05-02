@@ -14,18 +14,22 @@
         <color android:color="?attr/splashBackground" />
     </item>
     <!-- Constrain the logo to 192dp regardless of the display density.
-         Without explicit width/height, the 1024×1024 PNG sitting in the
-         density-agnostic `drawable/` folder gets up-scaled by Android's
-         density-bucket logic (≈ ×3 on xxxhdpi/Android-TV), making the logo
-         take up the entire screen. dp keeps the on-screen size constant
-         across phones and TVs. -->
+         The 1024×1024 PNG sitting in the density-agnostic `drawable/`
+         folder gets up-scaled by Android's density-bucket logic
+         (≈ ×3 on xxxhdpi / Android TV). `gravity="center"` on the
+         bitmap then renders it at its full upscaled size — overflowing
+         the 192dp item bounds and ending up full-screen on Android 11
+         TV. `gravity="fill"` instead scales the bitmap to exactly the
+         layer item's 192dp × 192dp box (no distortion: the logo is
+         already square). dp keeps the on-screen size constant across
+         phones and TVs. -->
     <item
         android:gravity="center"
         android:width="192dp"
         android:height="192dp">
         <bitmap
             android:src="@drawable/fliks_logo"
-            android:gravity="center"
+            android:gravity="fill"
             android:tileMode="disabled" />
     </item>
 </layer-list>

@@ -33,6 +33,7 @@ import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
 import { CardActionsPanelComponent } from '../components/card-actions-panel/card-actions-panel';
 import { UserMenuComponent } from '../components/user-menu';
 import { LucideIconComponent } from '../components/lucide-icon';
+import { TvRowDirective } from '../directives/tv-row.directive';
 import {
   LucideMenu,
   LucideChevronLeft,
@@ -76,6 +77,7 @@ import {
     CardActionsPanelComponent,
     UserMenuComponent,
     LucideIconComponent,
+    TvRowDirective,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './layout.html',

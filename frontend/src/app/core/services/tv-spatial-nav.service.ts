@@ -2,23 +2,47 @@ import { Injectable, inject, DestroyRef, effect } from '@angular/core';
 import { TvService } from './tv.service';
 
 /**
- * Lightweight spatial navigation for D-pad input on Android TV.
+ * Spatial navigation for D-pad input on Android TV.
  *
- * Listens globally for ArrowLeft/Right/Up/Down keys and moves focus to the
- * geometrically closest focusable element in that direction. Browsers don't
- * natively map arrows to focus changes (only Tab), so we wire it up ourselves.
+ * Two cooperating layers:
  *
- * Algorithm: among visible focusable elements that lie in the requested direction
- * (relative to the current focus rect's center), pick the one minimizing
- *   distance²  =  primary-axis-gap² + α × cross-axis-misalignment²
- * with α tuned so that "stay in the same row/column" wins over jumps when
- * possible.
+ * 1. **Container tree** (opt-in) — pages annotate sections with
+ *    `[appTvSection]` (vertical) / `[appTvRow]` (horizontal). Each
+ *    directive registers its element here, building a logical tree that
+ *    groups focusables by intent. Within an annotated zone the focus
+ *    walks the tree (last-active child memorised per container), so
+ *    `↓` from the bottom-right card always lands on the next row's
+ *    last-focused card — never on a sibling that just happens to be
+ *    geometrically closer.
+ *
+ * 2. **Rect-based fallback** — for any focus that lives outside an
+ *    annotated container the original three-pass scoring runs (in-line
+ *    → 45° cone → half-plane), so unmigrated pages keep working
+ *    unchanged. Migration is therefore strictly incremental.
+ *
+ * `findNeighbor` consults the tree first; on miss (or if the active
+ * element isn't inside any registered container) the rect-based pass
+ * runs. Keys are intercepted on the capture phase so `<select>` arrow
+ * cycling and other native consumers are pre-empted.
  */
+
+interface ContainerNode {
+  readonly el: HTMLElement;
+  readonly orientation: 'vertical' | 'horizontal';
+  readonly isWrapping: boolean;
+  parent: ContainerNode | null;
+  /** Last focusable that received focus inside this container (or any
+   * descendant). Used to dig down on re-entry. */
+  activeChild: HTMLElement | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class TvSpatialNavService {
   private readonly tv = inject(TvService);
   private readonly destroyRef = inject(DestroyRef);
   private bound = false;
+  /** Registered containers, keyed by their host element. */
+  private readonly containers = new Map<HTMLElement, ContainerNode>();
 
   constructor() {
     // Use an effect so we react to isTv flipping later (e.g. when TvService is
@@ -37,11 +61,82 @@ export class TvSpatialNavService {
     // skip every other card on horizontal nav.
     window.addEventListener('keydown', handler, { capture: true });
     this.destroyRef.onDestroy(() => window.removeEventListener('keydown', handler, { capture: true } as any));
+    // Track the deepest focused element inside each registered container so
+    // re-entering a container can dig back to the same leaf (last-active-child
+    // memory). Bubble phase is fine: focusin always reaches the document.
+    const focusInHandler = (e: FocusEvent) => this.updateActiveChild(e.target as HTMLElement | null);
+    document.addEventListener('focusin', focusInHandler);
+    this.destroyRef.onDestroy(() => document.removeEventListener('focusin', focusInHandler));
     // Android TV WebView often leaves the body un-focused on first paint, which
     // means D-pad events are consumed by the native View and never reach JS.
     // Pushing focus to the first interactive element guarantees subsequent
     // keydowns are dispatched into our handler.
     queueMicrotask(() => this.focusFirstIfNoFocus());
+  }
+
+  /**
+   * Register a container. Called by `[appTvSection]` / `[appTvRow]` on init.
+   * Parent is auto-resolved by walking up to the closest registered ancestor
+   * — DI is too coarse here because the host element of a directive may not
+   * itself be the registered host (e.g. a row inside another component's
+   * template). Walking the live DOM tree captures that automatically.
+   */
+  registerContainer(
+    el: HTMLElement,
+    options: { orientation: 'vertical' | 'horizontal'; isWrapping?: boolean },
+  ): void {
+    if (this.containers.has(el)) return;
+    const parent = this.findParentContainer(el);
+    this.containers.set(el, {
+      el,
+      orientation: options.orientation,
+      isWrapping: !!options.isWrapping,
+      parent,
+      activeChild: null,
+    });
+    // Re-resolve the parent for every existing container that lies inside
+    // `el`. Two cases this handles:
+    //   - A descendant registered before us with `parent: null` (init race).
+    //   - A descendant whose previous parent was an ancestor of us, but `el`
+    //     is now the closest ancestor (we slot in between).
+    // Iterating with the live `findParentContainer` guarantees correctness
+    // regardless of registration order.
+    for (const c of this.containers.values()) {
+      if (c.el === el || !el.contains(c.el)) continue;
+      c.parent = this.findParentContainer(c.el);
+    }
+  }
+
+  unregisterContainer(el: HTMLElement): void {
+    const node = this.containers.get(el);
+    if (!node) return;
+    // Re-parent direct children of this node to its own parent so the tree
+    // stays consistent during partial unmounts.
+    for (const c of this.containers.values()) {
+      if (c.parent === node) c.parent = node.parent;
+    }
+    this.containers.delete(el);
+  }
+
+  private findParentContainer(el: HTMLElement): ContainerNode | null {
+    let p = el.parentElement;
+    while (p) {
+      const c = this.containers.get(p);
+      if (c) return c;
+      p = p.parentElement;
+    }
+    return null;
+  }
+
+  /** Update activeChild for every ancestor container of the focused element. */
+  private updateActiveChild(focused: HTMLElement | null): void {
+    if (!focused) return;
+    let p: HTMLElement | null = focused.parentElement;
+    while (p) {
+      const c = this.containers.get(p);
+      if (c) c.activeChild = focused;
+      p = p.parentElement;
+    }
   }
 
   private focusFirstIfNoFocus() {
@@ -65,20 +160,19 @@ export class TvSpatialNavService {
     const inputType = (active as HTMLInputElement | null)?.type;
     const isTextInput =
       tag === 'TEXTAREA' ||
-      tag === 'SELECT' ||
       tag === 'OPTION' ||
-      active?.closest?.('select') ||
       active?.isContentEditable ||
       (tag === 'INPUT' && !['checkbox', 'radio', 'range', 'button', 'submit', 'reset'].includes(inputType ?? ''));
     if (isTextInput) {
-      // Some Android WebViews map arrow keys on a focused <select> to
-      // tab-style focus moves (= jumps to the next focusable below). Block
-      // that — user opens the picker with Enter; once the system picker is
-      // visible Android handles its own arrows + Back.
-      if (tag === 'SELECT' || tag === 'OPTION') {
-        e.preventDefault();
-      }
       return;
+    }
+    // Native `<select>` cycles its options on arrow keys (changing the
+    // value silently). Always block that. We still try to move focus —
+    // if a tree-aware neighbour exists, the user goes there; otherwise
+    // we preventDefault below and the focus stays put. Either way, the
+    // value of the select isn't mutated by a stray arrow press.
+    if (tag === 'SELECT') {
+      e.preventDefault();
     }
     // Skip on sliders (seekbar, volume) — they handle ArrowLeft/Right themselves
     // for value adjustment. role="slider" is the canonical signal; we also accept
@@ -103,6 +197,15 @@ export class TvSpatialNavService {
 
   private findNeighbor(dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null {
     const active = document.activeElement as HTMLElement | null;
+    // Tree-aware path runs first: if the active element sits inside a
+    // registered container, walk the logical tree (orientation-aware,
+    // last-active-child memorised). Returning the rect-based fallback only
+    // when the tree has nothing to say keeps unmigrated pages working
+    // exactly as before.
+    if (active && active !== document.body && this.containers.size > 0) {
+      const tree = this.findNeighborInTree(active, dir);
+      if (tree) return tree;
+    }
     // Focus trap: any open dropdown/menu/bottom-sheet that opts in via
     // `[data-tv-modal]` (or `.dropdown-open .dropdown-content` for the
     // legacy player dropdowns) restricts navigation to its contents so
@@ -197,6 +300,177 @@ export class TvSpatialNavService {
     }
     return null;
   }
+
+  /**
+   * Tree-aware step. Climbs from the deepest container holding `active` and
+   * at every level whose orientation matches the requested direction tries
+   * to step to the next/prev sibling navigable child. If the climb hits the
+   * tree root without matching, bridges to a peer top-level container in
+   * the requested direction (rect-scored among peers only). Returns null
+   * if neither path produces a target so the caller falls back to the
+   * page-wide rect-based scoring.
+   */
+  private findNeighborInTree(active: HTMLElement, dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null {
+    let cur = this.findParentContainer(active);
+    let topMost: ContainerNode | null = null;
+    while (cur) {
+      topMost = cur;
+      const horizontal = cur.orientation === 'horizontal';
+      const orientationMatches = horizontal === (dir === 'left' || dir === 'right');
+      if (orientationMatches) {
+        const children = this.getNavigableChildren(cur);
+        // Find the navigable child that holds the active element (it might
+        // be a focusable leaf === active, or a sub-container containing it).
+        const ownChild = children.find((c) => c === active || c.contains(active));
+        if (ownChild) {
+          const idx = children.indexOf(ownChild);
+          const step = dir === 'right' || dir === 'down' ? 1 : -1;
+          let nextIdx = idx + step;
+          if (cur.isWrapping && children.length > 0) {
+            nextIdx = (nextIdx + children.length) % children.length;
+          }
+          if (nextIdx >= 0 && nextIdx < children.length) {
+            return this.digDown(children[nextIdx]);
+          }
+        }
+      }
+      cur = cur.parent;
+    }
+    // No tree-step matched — bridge to a peer top-level container. Without
+    // this, an arrow at the boundary of an isolated container (e.g. the
+    // top-right user/cast row, which has no parent section) would always
+    // fall through to rect-based and could pick a far-away leaf instead of
+    // the next logical region.
+    if (topMost) {
+      const peer = this.findPeerContainer(topMost, dir);
+      if (peer) return this.digDown(peer.el);
+    }
+    return null;
+  }
+
+  /**
+   * Pick the closest visible top-level container in the requested direction.
+   *
+   * Only fires for vertical directions: a layout often has overlapping
+   * top-level regions on the same horizontal band (e.g. an absolutely
+   * positioned top-right user/cast row floating over the page section
+   * underneath), so an edge-based "left of" / "right of" test is ambiguous
+   * — we leave horizontal bridging to the rect-based fallback. Vertical
+   * direction is unambiguous: the user wants to step out of the current
+   * region into the next-deeper region downward (or upward).
+   */
+  private findPeerContainer(
+    from: ContainerNode,
+    dir: 'left' | 'right' | 'up' | 'down',
+  ): ContainerNode | null {
+    if (dir !== 'up' && dir !== 'down') return null;
+    const fromRect = from.el.getBoundingClientRect();
+    const fromCx = fromRect.left + fromRect.width / 2;
+    const fromCy = fromRect.top + fromRect.height / 2;
+
+    let best: ContainerNode | null = null;
+    let bestScore = Infinity;
+    for (const c of this.containers.values()) {
+      if (c === from || c.parent !== null) continue;
+      if (!isVisibleElement(c.el)) continue;
+      const r = c.el.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      // Center-based + extent check: candidate's center is in the right
+      // direction AND it extends past the source on that axis. Catches
+      // overlapping regions (page section under a floating top bar) that
+      // a strict edge check would miss.
+      const inDirection =
+        dir === 'down'
+          ? cy > fromCy && r.bottom > fromRect.bottom
+          : cy < fromCy && r.top < fromRect.top;
+      if (!inDirection) continue;
+      const dx = Math.abs(cx - fromCx);
+      const dy = Math.abs(cy - fromCy);
+      const score = dy + 2 * dx;
+      if (score < bestScore) {
+        bestScore = score;
+        best = c;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Resolve a navigable child to a focusable leaf. Priority order:
+   *   1. The container's remembered activeChild (last-focused memory).
+   *   2. A descendant with the `autofocus` attribute — page authors mark
+   *      the natural starting point (e.g. the "Reprendre" button on a
+   *      detail page) with this, so on first entry we land directly there
+   *      instead of crawling DOM-order to whichever focusable comes first.
+   *   3. The first navigable child, recursed.
+   */
+  private digDown(el: HTMLElement): HTMLElement | null {
+    const c = this.containers.get(el);
+    if (!c) return el; // it's a leaf focusable
+    if (c.activeChild && c.el.contains(c.activeChild) && isVisibleFocusable(c.activeChild)) {
+      return c.activeChild;
+    }
+    const auto = c.el.querySelector<HTMLElement>('[autofocus]');
+    if (auto && isVisibleFocusable(auto)) return auto;
+    const children = this.getNavigableChildren(c);
+    for (const child of children) {
+      const dug = this.digDown(child);
+      if (dug) return dug;
+    }
+    return null;
+  }
+
+  /**
+   * The navigable children of a container are: its registered direct
+   * sub-containers, plus the focusable leaves directly inside it that are
+   * not hidden by a deeper container. Walk the DOM and cut at every
+   * sub-container boundary so the tree-step doesn't see a sub-container's
+   * inner cards as siblings.
+   */
+  private getNavigableChildren(container: ContainerNode): HTMLElement[] {
+    const out: HTMLElement[] = [];
+    const visit = (el: HTMLElement) => {
+      // A registered sub-container: it is itself a navigable child; do not
+      // descend (the recursion stops, its own children belong to its tree).
+      if (el !== container.el && this.containers.has(el)) {
+        if (isVisibleElement(el)) out.push(el);
+        return;
+      }
+      // A focusable leaf at this level — treat as navigable, do not descend.
+      if (matchesFocusable(el) && isVisibleFocusable(el)) {
+        out.push(el);
+        return;
+      }
+      // Otherwise descend.
+      for (const child of Array.from(el.children) as HTMLElement[]) {
+        visit(child);
+      }
+    };
+    for (const child of Array.from(container.el.children) as HTMLElement[]) {
+      visit(child);
+    }
+    return out;
+  }
+}
+
+function matchesFocusable(el: HTMLElement): boolean {
+  return el.matches?.(FOCUSABLE_SELECTOR) ?? false;
+}
+
+function isVisibleElement(el: HTMLElement): boolean {
+  if (el.offsetParent === null && el.tagName !== 'BODY') return false;
+  const r = el.getBoundingClientRect();
+  if (r.width === 0 && r.height === 0) return false;
+  const style = getComputedStyle(el);
+  return style.visibility !== 'hidden' && style.display !== 'none';
+}
+
+function isVisibleFocusable(el: HTMLElement): boolean {
+  if (el.hasAttribute('disabled')) return false;
+  if (el.getAttribute('aria-hidden') === 'true') return false;
+  if (el.getAttribute('tabindex') === '-1') return false;
+  return isVisibleElement(el);
 }
 
 const ARROW_TO_DIR: Record<string, 'left' | 'right' | 'up' | 'down' | undefined> = {
