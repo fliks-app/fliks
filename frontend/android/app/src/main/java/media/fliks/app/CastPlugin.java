@@ -277,6 +277,16 @@ public class CastPlugin extends Plugin {
             .setContentType(contentType)
             .setMetadata(metadata);
 
+        // customData is the side-channel the Fliks Cast Receiver reads to
+        // identify the media (mediaId / episodeId) without parsing the URL.
+        // The Default Media Receiver ignores it harmlessly when used as a
+        // fallback receiver. Capacitor's JSObject IS-A JSONObject so it
+        // can be forwarded directly without re-parsing.
+        JSObject customData = call.getObject("customData");
+        if (customData != null) {
+            mediaInfoBuilder.setCustomData(customData);
+        }
+
         // Subtitles
         JSArray subtitlesArray = call.getArray("subtitles");
         List<MediaTrack> tracks = new ArrayList<>();

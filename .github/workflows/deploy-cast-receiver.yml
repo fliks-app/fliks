@@ -1,0 +1,42 @@
+# Deploys the Cast receiver shell to GitHub Pages on every push to main
+# that touches cast-receiver/. The receiver is static (no build step) —
+# we just publish the directory as-is. The published URL is what gets
+# registered once in the Google Cast Developer Console.
+#
+# After the first successful run, enable Pages in the repo settings:
+#   Settings → Pages → Source = "GitHub Actions"
+# Then register the URL `https://<owner>.github.io/<repo>/` (or your
+# custom domain) in the Cast Console as the receiver app's URL.
+name: Deploy Cast receiver
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cast-receiver/**'
+      - '.github/workflows/deploy-cast-receiver.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: cast-receiver
+      - id: deployment
+        uses: actions/deploy-pages@v4

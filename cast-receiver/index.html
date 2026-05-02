@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fliks Cast</title>
+  <!--
+    Cast receiver shell for Fliks. Hosted on a fixed URL so a single
+    Cast Console app ID covers every Fliks user — the receiver is
+    user-agnostic and just plays whatever stream URL the sender pushes
+    via standard MediaInformation. The user's NAS authenticates by
+    token, already inlined in the stream URL by the sender.
+  -->
+  <link rel="stylesheet" href="receiver.css">
+  <!-- CAF Receiver SDK. Loaded synchronously so cast.framework is
+       available before our boot script runs. -->
+  <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+</head>
+<body>
+  <!-- Idle / splash overlay. Hidden by CAF once a stream loads, shown
+       again on STOP. The image and copy are pure brand chrome — no
+       per-user state. -->
+  <div id="splash" class="splash">
+    <img src="fliks-mark.png" alt="Fliks" class="splash-logo">
+    <div class="splash-tagline">Fliks</div>
+  </div>
+
+  <!-- The CAST_FRAMEWORK creates the <video> element on demand inside
+       <cast-media-player>. We wrap it in a container only to layer the
+       splash above it on idle. -->
+  <cast-media-player id="player"></cast-media-player>
+
+  <script src="receiver.js"></script>
+</body>
+</html>
