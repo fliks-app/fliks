@@ -11,5 +11,5 @@
       Fliks receiver shell is published. MUST match `castAppId` in
       frontend/src/environments/environment.ts.
     -->
-    <string name="cast_receiver_app_id">CC1AD845</string>
+    <string name="cast_receiver_app_id">66BF4DAE</string>
 </resources>

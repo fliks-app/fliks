@@ -23,7 +23,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
         // Initialize Google Cast SDK early (required for device discovery)
         let castOptions = GCKCastOptions(discoveryCriteria:
-            GCKDiscoveryCriteria(applicationID: "CC1AD845"))
+            GCKDiscoveryCriteria(applicationID: "66BF4DAE"))
         castOptions.disableDiscoveryAutostart = false
         GCKCastContext.setSharedInstanceWith(castOptions)
 
