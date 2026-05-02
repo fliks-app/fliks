@@ -43,5 +43,9 @@ Thumbs.db
 # Project-specific
 volumes/*
 /backend/images/
+scripts/
+logos/
+plans/
+docs/
 
 release/
