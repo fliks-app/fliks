@@ -19,11 +19,21 @@
  *    user — not just completed, also in-progress, to avoid recommending
  *    something the user already started).
  *
- * 4. **Scoring**: for each candidate, sum the genre weights of matching genres.
- *    Track the highest-weighted genre to determine the "because" title.
+ * 4. **Scoring**: for each candidate, sum the genre weights of matching
+ *    genres, then normalize by `sqrt(candidate.genres.length)`. The
+ *    normalization removes a series-vs-movie bias: TMDB tags series with
+ *    4-5 genres on average and movies with 2-3, so the raw sum systematically
+ *    over-rewarded series. Track the highest-weighted matching genre to
+ *    determine the "because" title.
  *
- * 5. **Output**: sort by score DESC, return top 15 with media summary +
- *    `becauseTitle` (the watched title that best explains the recommendation).
+ * 5. **Stratification**: cap each media type at 10 of the 15 final slots so
+ *    one type can't crowd out the other. The cap is lifted in a fill pass
+ *    when only one type produced enough candidates, so we never return fewer
+ *    items just to enforce diversity.
+ *
+ * 6. **Output**: sort by score DESC, apply the cap, return top 15 with media
+ *    summary + `becauseTitle` (the watched title that best explains the
+ *    recommendation).
  *
  * ## Endpoint
  *
@@ -179,7 +189,14 @@ export class RecommendationService {
 
     const candidates = await qb.getMany();
 
-    // 4. Score each candidate
+    // 4. Score each candidate.
+    //
+    // Normalize by `sqrt(genres.length)` (TF-IDF-style): a raw sum rewards
+    // candidates that simply carry more genres, which biased the output
+    // toward series — they typically tag 4-5 genres against a movie's 2-3,
+    // so any partial match gave them more points. Sqrt softens the breadth
+    // penalty (vs a pure average) while still removing the "more genres
+    // beats better fit" effect.
     const scored: { media: Media; score: number; topGenre: string }[] = [];
     for (const c of candidates) {
       if (!c.genres?.length) continue;
@@ -195,13 +212,42 @@ export class RecommendationService {
         }
       }
       if (total > 0) {
-        scored.push({ media: c, score: total, topGenre });
+        scored.push({
+          media: c,
+          score: total / Math.sqrt(c.genres.length),
+          topGenre,
+        });
       }
     }
 
     scored.sort((a, b) => b.score - a.score);
 
-    return scored.slice(0, 15).map((s) => ({
+    // 5. Stratify by media type so a single type can't crowd out the other.
+    // Cap each type at 10 of the 15 slots — guarantees ≥ 5 of the other
+    // type when both exist in the candidate pool. If only one type has
+    // recommendations, the cap is lifted in the fill pass so we don't
+    // return fewer than 15 items just to enforce diversity.
+    const PER_TYPE_CAP = 10;
+    const TOTAL = 15;
+    const top: typeof scored = [];
+    const overflow: typeof scored = [];
+    const perType: Record<string, number> = {};
+    for (const s of scored) {
+      if (top.length >= TOTAL) break;
+      const t = s.media.type;
+      if ((perType[t] ?? 0) >= PER_TYPE_CAP) {
+        overflow.push(s);
+        continue;
+      }
+      top.push(s);
+      perType[t] = (perType[t] ?? 0) + 1;
+    }
+    for (const s of overflow) {
+      if (top.length >= TOTAL) break;
+      top.push(s);
+    }
+
+    return top.map((s) => ({
       media: {
         id: s.media.id,
         title: s.media.title,

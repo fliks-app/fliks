@@ -16,11 +16,16 @@
     </style>
 
 
-    <!-- Launch theme: dark splash with the centered Fliks logo. App is
-         dark-only. The splashBackground attr is kept for future flexibility
-         and read by drawable/splash_themed.xml. -->
-    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <item name="android:background">@drawable/splash_themed</item>
+    <!-- Launch theme (Android ≤ 11) — traditional `windowBackground`
+         splash. Theme.SplashScreen's AndroidX compat layer was
+         showing the launcher icon scaled to fill on Android TV 11
+         instead of honouring our splash_themed drawable; on a regular
+         AppCompat parent the system just paints windowBackground until
+         the activity's first frame, which is exactly what we want.
+         Theme.SplashScreen is kept for Android 12+ via values-v31/. -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
         <item name="android:windowBackground">@drawable/splash_themed</item>
         <item name="splashBackground">@color/splash_bg_dark</item>
     </style>

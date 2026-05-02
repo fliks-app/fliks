@@ -4,9 +4,15 @@ import { SelectPickerService } from '../../core/services/select-picker.service';
 
 /**
  * Apposed on a native `<select>`. On TV, intercepts the open gesture
- * (click / Enter / arrow) and routes through SelectPickerService for a
+ * (Enter / Space / click) and routes through SelectPickerService for a
  * styled popover. The native element stays in DOM as the value source so
- * existing [(ngModel)] / (change) bindings are unaffected.
+ * existing `[(ngModel)]` / `(change)` bindings are unaffected.
+ *
+ * Arrow keys are intentionally NOT captured here: the global
+ * `TvSpatialNavService` already preventDefaults arrow events on a focused
+ * `<select>` (blocking native option-cycling) and decides the next focus
+ * target — tree-aware when the surrounding region is annotated, rect-based
+ * fallback otherwise. Adding arrow handlers here would race with that.
  *
  * Usage: `<select appTvSelect [(ngModel)]="x">…</select>`
  */
@@ -25,8 +31,6 @@ export class TvSelectDirective {
   @HostListener('mousedown', ['$event'])
   @HostListener('keydown.enter', ['$event'])
   @HostListener('keydown.space', ['$event'])
-  @HostListener('keydown.arrowdown', ['$event'])
-  @HostListener('keydown.arrowup', ['$event'])
   protected onOpen(e: Event) {
     if (!this.tv.isTv()) return;
     e.preventDefault();

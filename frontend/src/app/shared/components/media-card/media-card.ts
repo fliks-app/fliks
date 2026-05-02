@@ -191,17 +191,29 @@ export class MediaCardComponent {
   }
 
   /**
-   * Stamp `view-transition-name: media-poster-<id>` on this card's <img> just
-   * before navigating. The browser snapshots the document on the next tick
-   * and pairs it with the matching name on the destination's poster.
-   * Wired to every click path that leads to the detail page.
+   * Stamp `view-transition-name: media-poster-<id>` on this card's <img>
+   * just before navigating. The browser snapshots the document on the
+   * next tick and pairs it with the matching name on the destination's
+   * poster. Wired to every click path that leads to the detail page.
+   *
+   * The name STAYS on the img until the next stamp clears it — both the
+   * forward (card → detail) and the back (detail → card) transitions
+   * need the name present at snapshot time. Auto-clearing it via a timer
+   * killed the back animation. Instead, before stamping we wipe any
+   * other stamped img: protects against the duplicate-name abort when the
+   * same media appears in two cards (continue-watching + recently-added,
+   * etc.).
    */
   protected flagPosterForTransition() {
     const id = this.resolveMediaId();
     const img = this.imgRef()?.nativeElement;
-    if (id != null && img) {
-      img.style.viewTransitionName = `media-poster-${id}`;
-    }
+    if (id == null || !img) return;
+    document
+      .querySelectorAll<HTMLImageElement>('img[style*="view-transition-name"]')
+      .forEach((el) => {
+        if (el !== img) el.style.viewTransitionName = '';
+      });
+    img.style.viewTransitionName = `media-poster-${id}`;
   }
   protected readonly _playable = computed(() => {
     if (this.playable()) return true;

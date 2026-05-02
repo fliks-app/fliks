@@ -90,7 +90,7 @@
       </div>
     }
     <div class="flex gap-2">
-      <div class="flex-1 min-w-0 pr-6 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4">
+      <div class="flex-1 min-w-0 pr-2 lg:pr-4 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4">
         @for (item of list.visible(); track item.id) {
           @if (bulkMode()) {
             <div
@@ -115,14 +115,17 @@
         }
       </div>
 
-      <!-- Alphabet sidebar — viewport-fixed (vh, not %) so it stays centred
-           on screen even when body.tv's scale transform makes "fixed"
-           anchor to a long body box instead of the viewport. -->
-      <nav class="fixed right-3 top-[50vh] -translate-y-1/2 z-20 flex flex-col items-center gap-0 select-none tv:pt-20">
+      <!-- Alphabet sidebar — sticky at viewport mid. Now that <main> uses
+           `overflow-x: clip` (instead of `hidden`), it's no longer a
+           vertical scroll container, so sticky's nearest scroll ancestor
+           is the actual page scroll. `self-start` keeps the nav at its
+           content size inside the flex parent so sticky has room to pin
+           within the column. -->
+      <nav class="sticky top-[50vh] -translate-y-1/2 self-start z-20 flex flex-col items-center gap-0 select-none tv:pt-20">
         @for (letter of alphabet; track letter) {
           <button
             type="button"
-            class="text-[10px] font-medium w-4 h-4 flex items-center justify-center rounded transition-colors"
+            class="text-[10px] font-medium w-4 h-4 tv:h-3.5 flex items-center justify-center rounded transition-colors"
             [class.bg-primary]="list.activeLetter() === letter"
             [class.text-primary-content]="list.activeLetter() === letter"
             [class.text-base-content/60]="list.activeLetter() !== letter && list.availableLetters().has(letter)"

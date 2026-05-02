@@ -4,6 +4,7 @@
   <input id="sidebar" type="checkbox" class="drawer-toggle" />
   <div class="drawer-content flex flex-col relative">
     <nav
+      appTvRow
       class="navbar fixed left-0 right-0 z-30 transition-all duration-300"
       style="padding-top: calc(env(safe-area-inset-top, 0px) + 4px)"
       [class.top-0]="!tv.isTv()"
@@ -21,7 +22,6 @@
         @if (canGoBack()) {
           <button
             class="btn btn-square btn-ghost"
-            [attr.tabindex]="tv.isTv() ? -1 : null"
             (click)="goBack()"
           >
             <svg lucideChevronLeft class="h-5 w-5"></svg>
@@ -89,7 +89,8 @@
       [style.height]="navbar.isHeroPage() ? '0px' : tv.isTv() ? null : 'calc(3rem + env(safe-area-inset-top, 0px))'"
     ></div>
     <!-- Desktop top-right: Cast + User -->
-    <div class="hidden items-center justify-end gap-1 absolute right-4 z-50 pointer-events-none [&>*]:pointer-events-auto"
+    <div appTvRow
+         class="hidden items-center justify-end gap-1 absolute right-4 z-50 pointer-events-none [&>*]:pointer-events-auto"
          style="top: calc(0.75rem + env(safe-area-inset-top, 0px))"
          [class.lg:flex]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
          [class.md:flex]="device.isTablet() && navbar.effectiveSidebarPinned()">
@@ -109,10 +110,15 @@
       }
       <app-user-menu />
     </div>
-    <!-- overflow-x-hidden makes overflow-y compute to auto, which clips negative-margin hero fanart under the transparent navbar -->
+    <!-- overflow-x: clip clips horizontal overflow without forcing the
+         element into a scroll container — `overflow-x: hidden` coerces
+         `overflow-y` to auto, which makes <main> a vertical scroll
+         container even when it doesn't actually scroll, breaking
+         `position: sticky` on descendants (sticky would anchor to <main>
+         and never engage because the actual scroll happens on the page). -->
     <main
       class="min-w-0 flex-1 p-4 lg:p-6"
-      [class.overflow-x-hidden]="!navbar.isHeroPage()"
+      [class.overflow-x-clip]="!navbar.isHeroPage()"
       [class.lg:pt-12]="!navbar.isHeroPage() && !isNative && !navbar.mobileNavbarVisible()"
       [style.padding-top]="!navbar.isHeroPage() && isNative && !navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 1rem)' : null"
     >

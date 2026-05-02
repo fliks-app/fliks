@@ -95,7 +95,7 @@
 
     <!-- Play buttons (mobile) -->
     @if (selectedFileId() || resumeMediaFileId()) {
-      <div class="flex gap-2" [class.mt-4]="!resumeEpisodeLabel()" [class.mt-2]="resumeEpisodeLabel()">
+      <div appTvRow class="flex gap-2" [class.mt-4]="!resumeEpisodeLabel()" [class.mt-2]="resumeEpisodeLabel()">
         <button class="btn btn-primary flex-1 gap-2" (click)="play(false)">
           <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
           @if (resumeLabel()) {
@@ -204,7 +204,8 @@
          keeps room to breathe; full 280 px from xl up. -->
     <div class="shrink-0"
          [class.w-[200px]]="posterMode() === 'poster'"
-         [class.xl:w-[280px]]="posterMode() === 'poster'"
+         [class.xl:w-[220px]]="posterMode() === 'poster'"
+         [class.2xl:w-[280px]]="posterMode() === 'poster'"
          [class.w-[20%]]="posterMode() === 'still'">
       @if (posterUrl()) {
         <img
@@ -351,7 +352,7 @@
       }
 
       <!-- Action buttons -->
-      <div class="flex flex-wrap items-center gap-2" [class.mt-4]="!resumeEpisodeLabel()" [class.mt-2]="resumeEpisodeLabel()">
+      <div appTvRow class="flex flex-wrap items-center gap-2" [class.mt-4]="!resumeEpisodeLabel()" [class.mt-2]="resumeEpisodeLabel()">
         @if (selectedFileId() || resumeMediaFileId()) {
           <button class="btn btn-primary btn gap-1" autofocus (click)="play(false)">
             <svg lucidePlay class="h-4 w-4" fill="currentColor"></svg>

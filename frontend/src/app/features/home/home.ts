@@ -17,6 +17,7 @@ import { TvService } from '../../core/services/tv.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { LucideIconComponent } from '../../shared/components/lucide-icon';
+import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 
 /**
  * # Home page
@@ -57,6 +58,7 @@ import { LucideIconComponent } from '../../shared/components/lucide-icon';
     MediaCardComponent,
     HorizontalScrollerComponent,
     LucideIconComponent,
+    TvSectionDirective,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home.html',

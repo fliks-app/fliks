@@ -68,6 +68,31 @@ export class BottomSheetComponent {
   private prevBodyOverflow: string | null = null;
   private prevHtmlOverflow: string | null = null;
   private registered = false;
+  private focusTrapActive = false;
+  /** Element focused when the sheet opened — restored on close. */
+  private prevFocused: HTMLElement | null = null;
+  private static readonly FOCUSABLE_SELECTOR =
+    'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  /**
+   * TV-only focus trap. The WebView's spatial navigation moves focus to the
+   * visually closest focusable on D-pad press; once the user reaches the
+   * sheet's last item, ↓ targets an element on the background and the
+   * browser auto-`scrollIntoView`s the background into the visible region
+   * — even with `overflow: hidden` on body/html (programmatic scroll is
+   * not blocked). Catching `focusin` and bouncing focus back inside
+   * neutralises that path.
+   */
+  private readonly onFocusIn = (e: FocusEvent) => {
+    const sheetEl = this.sheet()?.nativeElement;
+    if (!sheetEl) return;
+    const target = e.target as HTMLElement | null;
+    if (!target || sheetEl.contains(target)) return;
+    const first = sheetEl.querySelector<HTMLElement>(
+      BottomSheetComponent.FOCUSABLE_SELECTOR,
+    );
+    first?.focus({ preventScroll: true });
+  };
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -96,6 +121,15 @@ export class BottomSheetComponent {
           this.dismissStack.push(this.dismissCallback);
           this.registered = true;
         }
+        if (this.tv.isTv() && !this.focusTrapActive && typeof document !== 'undefined') {
+          // Snapshot the trigger before the trap can bounce focus inside.
+          // Restored on close so the user lands back on the element they
+          // pressed (e.g. a <select appTvSelect>) — not on the option they
+          // happened to highlight last in the sheet.
+          this.prevFocused = document.activeElement as HTMLElement | null;
+          document.addEventListener('focusin', this.onFocusIn);
+          this.focusTrapActive = true;
+        }
       } else {
         if (this.prevBodyOverflow !== null) {
           if (typeof document !== 'undefined') {
@@ -108,6 +142,14 @@ export class BottomSheetComponent {
         if (this.registered) {
           this.dismissStack.remove(this.dismissCallback);
           this.registered = false;
+        }
+        if (this.focusTrapActive && typeof document !== 'undefined') {
+          document.removeEventListener('focusin', this.onFocusIn);
+          this.focusTrapActive = false;
+          if (this.prevFocused && document.contains(this.prevFocused)) {
+            this.prevFocused.focus({ preventScroll: true });
+          }
+          this.prevFocused = null;
         }
       }
     });
@@ -125,6 +167,17 @@ export class BottomSheetComponent {
         this.dismissStack.remove(this.dismissCallback);
         this.registered = false;
       }
+      if (this.focusTrapActive && typeof document !== 'undefined') {
+        document.removeEventListener('focusin', this.onFocusIn);
+        this.focusTrapActive = false;
+      }
+      // PopoverMenu hardcodes `[open]="true"` and tears the sheet down via
+      // a parent `@if`, so the close branch of the effect above never runs
+      // for that path. Restore focus here as well to cover both lifecycles.
+      if (this.prevFocused && typeof document !== 'undefined' && document.contains(this.prevFocused)) {
+        this.prevFocused.focus({ preventScroll: true });
+      }
+      this.prevFocused = null;
     });
   }
 
