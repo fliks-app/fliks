@@ -272,6 +272,8 @@ export class CastPlayerService {
       currentTime: currentPos,
       subtitles,
       activeSubtitleTrackId,
+      mediaId: this.mediaId(),
+      episodeId: this.episodeId(),
     });
   }
 

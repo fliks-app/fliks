@@ -1,5 +1,6 @@
 import { Injectable, signal, OnDestroy } from '@angular/core';
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { environment } from '../../../environments/environment';
 
 declare const cast: any;
 declare const chrome: any;
@@ -13,13 +14,34 @@ export interface CastMediaInfo {
   currentTime?: number;
   subtitles?: { url: string; language: string; label: string }[];
   activeSubtitleTrackId?: number;
+  /**
+   * IDs forwarded to the Fliks Cast Receiver via `customData`. Reserved
+   * for receiver-side features that need to identify the media without
+   * re-parsing the stream URL — queue / next-episode, skip-intro
+   * markers, watch-history sync. Optional today; ignored by the
+   * Default Media Receiver fallback.
+   */
+  mediaId?: number;
+  episodeId?: number;
+}
+
+interface NativeCastLoadOpts {
+  url: string;
+  contentType: string;
+  title: string;
+  subtitle: string;
+  posterUrl: string;
+  currentTime: number;
+  subtitles: { url: string; language: string; label: string }[];
+  activeSubtitleTrackId: number;
+  customData?: Record<string, unknown>;
 }
 
 interface NativeCastPlugin {
   initialize(opts: { appId: string }): Promise<{ available: boolean }>;
   isConnected(): Promise<{ connected: boolean }>;
   requestSession(): Promise<void>;
-  loadMedia(opts: any): Promise<void>;
+  loadMedia(opts: NativeCastLoadOpts): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;
   seek(opts: { time: number }): Promise<void>;
@@ -29,7 +51,7 @@ interface NativeCastPlugin {
 }
 
 const NativeCast = registerPlugin<NativeCastPlugin>('NativeCast');
-const CAST_APP_ID = 'CC1AD845';
+const CAST_APP_ID = environment.castAppId;
 
 @Injectable({ providedIn: 'root' })
 export class CastService implements OnDestroy {
@@ -176,6 +198,17 @@ export class CastService implements OnDestroy {
   }
 
   async loadMedia(info: CastMediaInfo) {
+    // Forwarded to the receiver. Fields here MUST stay JSON-serialisable
+    // and free of secrets — `customData` is logged in plain text by the
+    // CAF debug overlay.
+    const customData = {
+      title: info.title,
+      subtitle: info.subtitle,
+      posterUrl: info.posterUrl,
+      mediaId: info.mediaId,
+      episodeId: info.episodeId,
+    };
+
     if (this.isNative) {
       try {
         await NativeCast.loadMedia({
@@ -187,6 +220,7 @@ export class CastService implements OnDestroy {
           currentTime: info.currentTime ?? 0,
           subtitles: info.subtitles ?? [],
           activeSubtitleTrackId: info.activeSubtitleTrackId ?? 0,
+          customData,
         });
       } catch (err) {
         console.error('NativeCast.loadMedia failed:', err);
@@ -208,7 +242,7 @@ export class CastService implements OnDestroy {
     if (info.posterUrl) {
       mediaInfo.metadata.images = [new chrome.cast.Image(info.posterUrl)];
     }
-    mediaInfo.customData = { title: info.title, subtitle: info.subtitle, posterUrl: info.posterUrl };
+    mediaInfo.customData = customData;
 
     if (info.subtitles?.length) {
       mediaInfo.tracks = info.subtitles.map((sub: any, i: number) => {

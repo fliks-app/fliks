@@ -1,0 +1,69 @@
+/* Fliks Cast receiver — brand chrome + subtitle styling that mirrors
+   the in-app player. CAF's <cast-media-player> is fixed full-viewport
+   on its own; we only override the idle/splash and subtitle look. */
+
+:root {
+  /* Synced with frontend/src/styles.css base-100 + primary. */
+  --fliks-bg: #1d232a;
+  --fliks-primary: #7a3ff2;
+  --fliks-text: #ffffff;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--fliks-bg);
+  color: var(--fliks-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+}
+
+/* Splash / idle screen. Sits above <cast-media-player>; CAF toggles
+   `castReceiverState='idle' / 'launching'` on the body — we react to
+   that in receiver.js by adding/removing the `.playing` class on body. */
+.splash {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  background: var(--fliks-bg);
+  z-index: 100;
+  pointer-events: none;
+  transition: opacity 240ms ease-out;
+}
+
+.splash-logo {
+  width: 192px;
+  height: 192px;
+  object-fit: contain;
+}
+
+.splash-tagline {
+  font-size: 2.5rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+}
+
+/* Hide splash while media is playing. Toggled from receiver.js on
+   PLAYER_LOAD_COMPLETE / PLAYER_PRELOAD events. */
+body.playing .splash {
+  opacity: 0;
+}
+
+/* Subtitle styling — overrides CAF's default. Matches the in-app
+   player's text-track style (sans-serif, white with drop-shadow,
+   no background fill). Selector targets the WebKit/Blink generated
+   pseudo-element for cue text inside the receiver's <video>. */
+::cue {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 0.85em;
+  color: white;
+  background: transparent;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 4px rgba(0, 0, 0, 0.7);
+}
