@@ -30,7 +30,7 @@ playerManager.addEventListener(
 
 [
   cast.framework.events.EventType.MEDIA_FINISHED,
-  cast.framework.events.EventType.PLAYER_LOAD_FAILED,
+  cast.framework.events.EventType.ERROR,
   cast.framework.events.EventType.ABORT,
   cast.framework.events.EventType.ENDED,
 ].forEach((evt) => {
