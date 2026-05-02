@@ -1,6 +1,7 @@
 import { Component, ChangeDetectionStrategy, inject, signal, OnInit, OnDestroy, Injector, afterNextRender } from '@angular/core';
-import { NavigationStart, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, NavigationStart, Router, RouterLink } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
+import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { MediaService, Media, CalendarEntry } from '../../core/services/api/media.service';
@@ -73,12 +74,16 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly navbar = inject(NavbarService);
   private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
+  private readonly route = inject(ActivatedRoute);
+  private readonly reuseStrategy = inject(CachingReuseStrategy);
 
   private static readonly SCROLL_KEY = 'home';
   private static readonly FOCUS_KEY = 'home';
   /** Captured at ngOnInit before NavbarService.lastWasBack auto-resets. */
   private arrivedViaBack = false;
   private navStartSub?: Subscription;
+  private attachedSub?: Subscription;
+  private detachedSub?: Subscription;
 
   readonly loading = signal(true);
   readonly libraries = signal<LibrarySummary[]>([]);
@@ -104,23 +109,9 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.arrivedViaBack = this.navbar.lastWasBack();
-    // Track scroll for back-navigation restore. Same pattern as /libraries.
     this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
-    // Load non-filterable sections once
-    try {
-      const [libs, cw, recs] = await Promise.all([
-        this.librariesApi.listMine().catch(() => []),
-        this.streamingApi.getContinueWatching().catch(() => []),
-        this.streamingApi.getRecommendations().catch(() => []),
-      ]);
-      this.libraries.set(libs);
-      this.continueWatching.set(cw);
-      this.recommendations.set(recs);
-    } catch { /* ignore */ }
-    // Load filterable sections (recent + coming soon)
-    await this.loadFilteredSections();
+    await this.loadAllSections();
     this.loading.set(false);
-    // Restore scroll once everything is in the DOM.
     this.scrollMemory.restore(HomeComponent.SCROLL_KEY, this.injector);
     if (this.tv.isTv()) {
       afterNextRender(() => this.applyDefaultFocus(), { injector: this.injector });
@@ -136,11 +127,57 @@ export class HomeComponent implements OnInit, OnDestroy {
           if (sel) this.focusMemory.save(HomeComponent.FOCUS_KEY, sel);
         });
     }
+    // The route is detached/cached on navigate-away (see CachingReuseStrategy
+    // + `data: { reuse: true }` on the home route). On return, ngOnInit does
+    // NOT fire again — refresh data + scroll + focus through this hook
+    // instead. Stale signals stay visible during the background refetch (HTTP
+    // cache makes that near-instant when warm), so the user never sees a
+    // spinner on a back navigation.
+    const ownKey = this.reuseStrategy.keyFor(this.route.snapshot);
+    this.attachedSub = this.reuseStrategy.attached$.subscribe((key) => {
+      if (key !== ownKey) return;
+      this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
+      void this.loadAllSections();
+      this.scrollMemory.restoreSticky(HomeComponent.SCROLL_KEY);
+      if (this.tv.isTv()) {
+        this.arrivedViaBack = true;
+        afterNextRender(() => this.applyDefaultFocus(), { injector: this.injector });
+      }
+    });
+    // ngOnDestroy doesn't fire when detaching, so the active scroll key would
+    // stay pointing at us — and a NavigationStart on the next page would then
+    // overwrite our saved scroll position. Deactivate iff still ours: if the
+    // next route already claimed scrollMemory in its own ngOnInit, we leave
+    // its key alone.
+    this.detachedSub = this.reuseStrategy.detached$.subscribe((key) => {
+      if (key === ownKey) this.scrollMemory.deactivateIf(HomeComponent.SCROLL_KEY);
+    });
   }
 
   ngOnDestroy() {
     this.scrollMemory.deactivate();
     this.navStartSub?.unsubscribe();
+    this.attachedSub?.unsubscribe();
+    this.detachedSub?.unsubscribe();
+  }
+
+  /**
+   * Fetch every section in parallel. Signals are updated as responses land —
+   * existing values stay visible until each new response arrives, so a
+   * background revalidation never blanks the UI.
+   */
+  private async loadAllSections(): Promise<void> {
+    try {
+      const [libs, cw, recs] = await Promise.all([
+        this.librariesApi.listMine().catch(() => null),
+        this.streamingApi.getContinueWatching().catch(() => null),
+        this.streamingApi.getRecommendations().catch(() => null),
+      ]);
+      if (libs) this.libraries.set(libs);
+      if (cw) this.continueWatching.set(cw);
+      if (recs) this.recommendations.set(recs);
+    } catch { /* ignore */ }
+    await this.loadFilteredSections();
   }
 
   private applyDefaultFocus() {

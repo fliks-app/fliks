@@ -1,10 +1,13 @@
-import { Component, ChangeDetectionStrategy, inject, signal, computed, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { Component, ChangeDetectionStrategy, inject, signal, computed, Injector, OnDestroy, OnInit } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
 import { LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { PlaybackState, StreamingApiService, WatchHistoryItem } from '../../core/services/api/streaming-api.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
+import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
+import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 
 @Component({
   selector: 'app-watch-history',
@@ -12,10 +15,17 @@ import { ConfirmationService } from '../../core/services/confirmation.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './watch-history.html',
 })
-export class WatchHistoryComponent implements OnInit {
+export class WatchHistoryComponent implements OnInit, OnDestroy {
   private readonly streamingApi = inject(StreamingApiService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly scrollMemory = inject(ScrollMemoryService);
+  private readonly reuseStrategy = inject(CachingReuseStrategy);
+  private readonly injector = inject(Injector);
+  private static readonly SCROLL_KEY = 'history';
+  private attachedSub?: Subscription;
+  private detachedSub?: Subscription;
 
   readonly loading = signal(true);
   readonly items = signal<WatchHistoryItem[]>([]);
@@ -35,17 +45,40 @@ export class WatchHistoryComponent implements OnInit {
   });
 
   async ngOnInit() {
+    this.scrollMemory.activate(WatchHistoryComponent.SCROLL_KEY);
     await this.load();
+    this.scrollMemory.restore(WatchHistoryComponent.SCROLL_KEY, this.injector);
+
+    // Route is cached on navigate-away (data: { reuse: true }). On return,
+    // ngOnInit doesn't fire — silently revalidate the current page so any
+    // changes elsewhere (newly watched items, deletions) reflect on the way
+    // back, without showing the spinner.
+    const ownKey = this.reuseStrategy.keyFor(this.route.snapshot);
+    this.attachedSub = this.reuseStrategy.attached$.subscribe((key) => {
+      if (key !== ownKey) return;
+      this.scrollMemory.activate(WatchHistoryComponent.SCROLL_KEY);
+      void this.load(true);
+      this.scrollMemory.restoreSticky(WatchHistoryComponent.SCROLL_KEY);
+    });
+    this.detachedSub = this.reuseStrategy.detached$.subscribe((key) => {
+      if (key === ownKey) this.scrollMemory.deactivateIf(WatchHistoryComponent.SCROLL_KEY);
+    });
   }
 
-  async load() {
-    this.loading.set(true);
+  ngOnDestroy() {
+    this.scrollMemory.deactivate();
+    this.attachedSub?.unsubscribe();
+    this.detachedSub?.unsubscribe();
+  }
+
+  async load(silent = false) {
+    if (!silent) this.loading.set(true);
     try {
       const res = await this.streamingApi.getHistory(this.currentPage(), this.pageSize);
       this.items.set(res.data);
       this.total.set(res.total);
     } catch { /* ignore */ }
-    this.loading.set(false);
+    if (!silent) this.loading.set(false);
   }
 
   async goToPage(page: number) {

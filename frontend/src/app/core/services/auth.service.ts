@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, catchError, firstValueFrom, map, of, tap } from 'rxjs';
 import { ServerConfigService } from './server-config.service';
+import { CachingReuseStrategy } from './route-reuse.strategy';
 import { Preferences } from '@capacitor/preferences';
 
 export interface User {
@@ -50,6 +51,7 @@ export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly serverConfig = inject(ServerConfigService);
+  private readonly reuseStrategy = inject(CachingReuseStrategy);
 
   private static readonly TOKEN_KEY = 'fliks_access_token';
 
@@ -305,6 +307,7 @@ export class AuthService {
       this._user.set(null);
       this._accessToken = null;
       await this.removeToken();
+      this.reuseStrategy.clear();
       // Land on the user picker, same as a fresh visit. The password form
       // is one tap away via the picker → user → 'Mot de passe'.
       void this.router.navigate(['/select-user']);

@@ -25,6 +25,7 @@ import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { FocusMemoryService } from '../../core/services/focus-memory.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
+import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideSlidersHorizontal } from '@lucide/angular';
 
@@ -49,8 +50,11 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
   private readonly translate = inject(TranslateService);
+  private readonly reuseStrategy = inject(CachingReuseStrategy);
   private arrivedViaBack = false;
   private navStartSub?: Subscription;
+  private attachedSub?: Subscription;
+  private detachedSub?: Subscription;
 
   /** Resolved library (null while loading or if not found). */
   readonly library = signal<LibrarySummary | null>(null);
@@ -173,6 +177,30 @@ export class LibraryComponent implements OnInit, OnDestroy {
         afterNextRender(() => this.applyDefaultFocus(lib.id), { injector: this.injector });
       }
     });
+
+    // Each /libraries/:libraryName has its own cache slot (CachingReuseStrategy
+    // keys per param). On return, ngOnInit doesn't re-fire — refresh data,
+    // re-claim scroll/focus, and rebind the navbar title via attached$.
+    const ownKey = this.reuseStrategy.keyFor(this.route.snapshot);
+    this.attachedSub = this.reuseStrategy.attached$.subscribe((key) => {
+      if (key !== ownKey) return;
+      const lib = this.library();
+      if (!lib) return;
+      const scrollKey = `library-${lib.id}`;
+      this.scrollMemory.activate(scrollKey);
+      this.navbar.setPageTitle(lib.name);
+      void this.load(lib.id, true);
+      this.scrollMemory.restoreSticky(scrollKey);
+      if (this.tv.isTv()) {
+        this.arrivedViaBack = true;
+        afterNextRender(() => this.applyDefaultFocus(lib.id), { injector: this.injector });
+      }
+    });
+    this.detachedSub = this.reuseStrategy.detached$.subscribe((key) => {
+      if (key !== ownKey) return;
+      const lib = this.library();
+      if (lib) this.scrollMemory.deactivateIf(`library-${lib.id}`);
+    });
   }
 
   ngOnDestroy() {
@@ -180,6 +208,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.list.destroy();
     this.navbar.clearPageTitle();
     this.navStartSub?.unsubscribe();
+    this.attachedSub?.unsubscribe();
+    this.detachedSub?.unsubscribe();
   }
 
   private applyDefaultFocus(libraryId: number) {
@@ -307,9 +337,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
     }
   }
 
-  private async load(libraryId?: number) {
+  private async load(libraryId?: number, silent = false) {
     if (!libraryId) return;
-    this.loading.set(true);
+    if (!silent) this.loading.set(true);
     const monitored = this.filterMonitored();
     try {
       const fs = this.filterStatus();
@@ -328,7 +358,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.list.setItems(res.data, (m) => m.title);
       this.watchedIds.set(new Set(watchedIds));
     } finally {
-      this.loading.set(false);
+      if (!silent) this.loading.set(false);
     }
   }
 }
