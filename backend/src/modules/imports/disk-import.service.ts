@@ -159,10 +159,34 @@ export class DiskImportService {
         }
 
         if (!media.path) continue; // Skip if we can't compute a path
-        const relativePath = relativePathUnderMediaRoot(
+        let relativePath = relativePathUnderMediaRoot(
           media.path,
           entry.filePath,
         );
+        // The disk folder may not match media.folderName when titles are
+        // localised (e.g. "Mean Girls (2004)" on disk vs "Lolita malgré
+        // moi (2004)" stored from a French TMDB lookup). The user-confirmed
+        // import already vouches for the media association, so realign
+        // folderName to the actual disk folder under the same rootFolder.
+        if (!relativePath && media.rootFolder?.path) {
+          const dir = path.dirname(entry.filePath);
+          if (dir.startsWith(media.rootFolder.path)) {
+            const newFolderName = dir
+              .slice(media.rootFolder.path.length)
+              .replace(/^\/+/, '')
+              .split('/')[0];
+            if (newFolderName && newFolderName !== media.folderName) {
+              await this.mediaRepo.update(media.id, {
+                folderName: newFolderName,
+              });
+              media.folderName = newFolderName;
+              relativePath = relativePathUnderMediaRoot(
+                media.path,
+                entry.filePath,
+              );
+            }
+          }
+        }
         if (!relativePath) {
           this.logger.error(
             `Disk import: file outside media folder — mediaId=${media.id} mediaPath=${media.path} filePath=${entry.filePath}`,

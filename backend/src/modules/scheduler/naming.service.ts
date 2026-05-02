@@ -101,12 +101,17 @@ export class NamingService {
     format: string,
     data: {
       seriesTitle: string;
+      originalTitle?: string;
       year?: number | null;
       tmdbId?: number | null;
     },
   ): string {
     let name = format;
     name = name.replace(/\{Series Title\}/g, data.seriesTitle ?? '');
+    name = name.replace(
+      /\{Original Title\}/g,
+      data.originalTitle || data.seriesTitle || '',
+    );
     name = name.replace(
       /\{Release Year\}/g,
       data.year ? String(data.year) : '',
