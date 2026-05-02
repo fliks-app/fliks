@@ -215,6 +215,14 @@ body.tv .dropdown:not(.dropdown-open) > .dropdown-content {
   display: none !important;
 }
 
+/* Shared item style for app-dropdown-menu (desktop dropdown + mobile/TV
+   bottom sheet). Caller adds a colour utility (`text-white`, `text-error`,
+   …) and an icon — everything else (padding, hover, focus, layout) lives
+   here so each menu item stays a one-liner. */
+.dropdown-item {
+  @apply w-full flex items-center gap-3 px-3 py-2 text-left text-base rounded-lg cursor-pointer hover:bg-white/5 active:bg-white/10 disabled:opacity-40;
+}
+
 /* ============================================================================
    Tablet form-factor — body.tablet toggled by DeviceService
    ============================================================================ */

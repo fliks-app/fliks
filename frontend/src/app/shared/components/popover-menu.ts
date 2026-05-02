@@ -8,6 +8,7 @@ import {
   input,
   output,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { BottomSheetComponent } from './bottom-sheet';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
@@ -31,28 +32,32 @@ import { DeviceService } from '../../core/services/device.service';
 @Component({
   selector: 'app-popover-menu',
   standalone: true,
-  imports: [BottomSheetComponent],
+  imports: [BottomSheetComponent, NgTemplateOutlet],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @if (open()) {
-      @if (useDropdown()) {
-        <!-- Click-out backdrop (transparent) -->
-        <div class="fixed inset-0 z-[100]" (click)="close()"></div>
-        <div
-          class="fixed z-[101] bg-base-200 rounded-box shadow-xl overflow-hidden"
-          [style.top.px]="position().top"
-          [style.left.px]="position().left"
-          [style.min-width.px]="position().width"
-        >
-          <ng-content></ng-content>
+    <!-- Capture projected content in a template ref so it can be rendered
+         in either the dropdown or sheet branch without hitting the
+         "ng-content inside @if doesn't project" issue. The <ng-template>
+         itself never renders; *ngTemplateOutlet does. -->
+    <ng-template #content><ng-content></ng-content></ng-template>
+
+    @if (open() && useDropdown()) {
+      <!-- Click-out backdrop (transparent) -->
+      <div class="fixed inset-0 z-[100]" (click)="close()"></div>
+      <div
+        class="fixed z-[101] bg-base-200 rounded-box shadow-xl overflow-hidden"
+        [style.top.px]="position().top"
+        [style.left.px]="position().left"
+        [style.min-width.px]="position().width"
+      >
+        <ng-container *ngTemplateOutlet="content"></ng-container>
+      </div>
+    } @else if (open() && !useDropdown()) {
+      <app-bottom-sheet [open]="true" (closed)="close()">
+        <div data-tv-modal class="px-2 pb-2">
+          <ng-container *ngTemplateOutlet="content"></ng-container>
         </div>
-      } @else {
-        <app-bottom-sheet [open]="true" (closed)="close()">
-          <div data-tv-modal class="px-2 pb-2">
-            <ng-content></ng-content>
-          </div>
-        </app-bottom-sheet>
-      }
+      </app-bottom-sheet>
     }
   `,
 })

@@ -4,21 +4,11 @@
 <section class="space-y-4">
   @if (!hideControls()) {
   <div appTvRow class="flex items-center gap-2 flex-wrap">
-    <button
-      #seasonTrigger
-      type="button"
-      class="btn btn-ghost btn-circle shrink-0"
-      (click)="seasonMenuOpen.set(!seasonMenuOpen())"
-    >
-      <svg lucideEllipsisVertical class="h-5 w-5"></svg>
-    </button>
-    <app-popover-menu
-      [open]="seasonMenuOpen()"
-      [anchor]="seasonTrigger"
-      placement="bottom-start"
-      (closed)="seasonMenuOpen.set(false)"
-    >
-      <label class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base text-white rounded-lg active:bg-white/10 hover:bg-white/5 cursor-pointer">
+    <app-dropdown-menu placement="bottom-start">
+      <button trigger type="button" class="btn btn-ghost btn-circle shrink-0">
+        <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+      </button>
+      <label class="dropdown-item text-white">
         <input
           type="checkbox"
           class="toggle toggle-primary toggle-sm shrink-0"
@@ -31,8 +21,8 @@
         <button
           type="button"
           [disabled]="seasonWatchedBusyId() === selSeason.id"
-          class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base text-white rounded-lg active:bg-white/10 hover:bg-white/5 disabled:opacity-40"
-          (click)="toggleSeasonWatched.emit({ season: selSeason, watched: !seasonFullyWatched(selSeason) }); seasonMenuOpen.set(false)"
+          class="dropdown-item text-white"
+          (click)="toggleSeasonWatched.emit({ season: selSeason, watched: !seasonFullyWatched(selSeason) })"
         >
           @if (seasonWatchedBusyId() === selSeason.id) {
             <span class="loading loading-spinner loading-sm"></span>
@@ -46,7 +36,7 @@
           }
         </button>
       }
-    </app-popover-menu>
+    </app-dropdown-menu>
     <select
       appTvSelect
       class="select select-bordered w-fit shrink-0"
