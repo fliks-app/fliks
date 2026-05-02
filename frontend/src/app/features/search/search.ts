@@ -3,13 +3,16 @@ import {
   ChangeDetectionStrategy,
   signal,
   inject,
+  Injector,
   OnDestroy,
+  OnInit,
   AfterViewInit,
   ElementRef,
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
 import { MediaService } from '../../core/services/api/media.service';
 import {
@@ -19,6 +22,8 @@ import {
 import { AuthService } from '../../core/services/auth.service';
 import { RequestsService, FliksRequestStatus } from '../../core/services/api/requests.service';
 import { SearchStateService } from '../../core/services/search-state.service';
+import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
+import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { MediaType } from '../../core/enums/media-type.enum';
 import { MediaCardComponent, CardBadge } from '../../shared/components/media-card/media-card';
 import { LucideSearch, LucideX, LucideSettings } from '@lucide/angular';
@@ -29,19 +34,44 @@ import { LucideSearch, LucideX, LucideSettings } from '@lucide/angular';
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './search.html',
 })
-export class SearchComponent implements AfterViewInit, OnDestroy {
+export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly metadata = inject(MetadataService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly auth = inject(AuthService);
   private readonly requestsApi = inject(RequestsService);
+  private readonly scrollMemory = inject(ScrollMemoryService);
+  private readonly reuseStrategy = inject(CachingReuseStrategy);
+  private readonly injector = inject(Injector);
   readonly state = inject(SearchStateService);
 
   readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
 
   readonly requestedTmdbIds = signal<Map<number, FliksRequestStatus>>(new Map());
 
+  private static readonly SCROLL_KEY = 'search';
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
+  private attachedSub?: Subscription;
+  private detachedSub?: Subscription;
+
+  ngOnInit() {
+    this.scrollMemory.activate(SearchComponent.SCROLL_KEY);
+    this.scrollMemory.restore(SearchComponent.SCROLL_KEY, this.injector);
+
+    // Route is cached on navigate-away (data: { reuse: true }). Search results
+    // already live in SearchStateService so there's nothing to refetch — we
+    // only need to re-claim the scroll key and put scroll back where it was.
+    const ownKey = this.reuseStrategy.keyFor(this.route.snapshot);
+    this.attachedSub = this.reuseStrategy.attached$.subscribe((key) => {
+      if (key !== ownKey) return;
+      this.scrollMemory.activate(SearchComponent.SCROLL_KEY);
+      this.scrollMemory.restoreSticky(SearchComponent.SCROLL_KEY);
+    });
+    this.detachedSub = this.reuseStrategy.detached$.subscribe((key) => {
+      if (key === ownKey) this.scrollMemory.deactivateIf(SearchComponent.SCROLL_KEY);
+    });
+  }
 
   ngAfterViewInit() {
     // Focus only if no existing query (first visit)
@@ -52,6 +82,9 @@ export class SearchComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.scrollMemory.deactivate();
+    this.attachedSub?.unsubscribe();
+    this.detachedSub?.unsubscribe();
   }
 
   async loadRequestedIds() {

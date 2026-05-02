@@ -55,12 +55,13 @@ export const routes: Routes = [
         pathMatch: 'full',
         loadComponent: () =>
           import('./features/home/home').then((m) => m.HomeComponent),
-        data: { titleKey: 'nav.home' },
+        data: { titleKey: 'nav.home', reuse: true },
       },
       {
         path: 'libraries/:libraryName',
         loadComponent: () =>
           import('./features/library/library').then((m) => m.LibraryComponent),
+        data: { reuse: true },
       },
       // Legacy redirects — resolved to actual library name in LibraryComponent
       {
@@ -83,7 +84,7 @@ export const routes: Routes = [
         path: 'persons',
         loadComponent: () =>
           import('./features/persons/persons').then((m) => m.PersonsComponent),
-        data: { titleKey: 'persons.title' },
+        data: { titleKey: 'persons.title', reuse: true },
       },
       {
         path: 'persons/:id',
@@ -112,7 +113,7 @@ export const routes: Routes = [
         path: 'search',
         loadComponent: () =>
           import('./features/search/search').then((m) => m.SearchComponent),
-        data: { titleKey: 'search.title' },
+        data: { titleKey: 'search.title', reuse: true },
       },
       {
         path: 'add/movie/:provider/:externalId',
@@ -200,7 +201,7 @@ export const routes: Routes = [
           import('./features/watch-history/watch-history').then(
             (m) => m.WatchHistoryComponent,
           ),
-        data: { titleKey: 'history.title' },
+        data: { titleKey: 'history.title', reuse: true },
       },
       {
         path: 'pending-requests',

@@ -28,13 +28,21 @@ export class InfiniteScrollList<T extends { id: number }> {
     this.batchSize = batchSize;
   }
 
-  /** Replace all items and reset visible window. */
+  /**
+   * Replace all items. Preserves the current visible window (capped to the
+   * new length) — collapsing back to `batchSize` on every reload would shrink
+   * the page under a user who'd scrolled past the first batch, breaking
+   * scroll restoration on route reattach.
+   */
   setItems(items: T[], titleFn?: (item: T) => string) {
     this.allItems = items;
     if (titleFn) this.titleFn = titleFn;
     this.all.set(items);
     this.total.set(items.length);
-    this.visibleCount = this.batchSize;
+    this.visibleCount = Math.min(
+      Math.max(this.visibleCount, this.batchSize),
+      items.length,
+    );
     this.updateVisible();
     this.recomputeLetters();
   }

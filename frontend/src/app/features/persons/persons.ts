@@ -10,10 +10,12 @@ import {
   ViewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { PersonsApiService, Person } from '../../core/services/api/persons-api.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
+import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideUsers } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
@@ -31,8 +33,11 @@ export class PersonsComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly scrollMemory = inject(ScrollMemoryService);
+  private readonly reuseStrategy = inject(CachingReuseStrategy);
   private readonly injector = inject(Injector);
   private readonly scrollKey = 'persons';
+  private attachedSub?: Subscription;
+  private detachedSub?: Subscription;
 
   readonly list = new InfiniteScrollList<Person>();
   readonly loading = signal(false);
@@ -59,11 +64,27 @@ export class PersonsComponent implements OnInit, OnDestroy {
     this.load().then(() =>
       this.scrollMemory.restore(this.scrollKey, this.injector),
     );
+
+    // Route is cached on navigate-away (data: { reuse: true }). On return,
+    // ngOnInit doesn't fire — refresh via attached$ instead, keeping stale
+    // results visible during the silent revalidation.
+    const ownKey = this.reuseStrategy.keyFor(this.route.snapshot);
+    this.attachedSub = this.reuseStrategy.attached$.subscribe((key) => {
+      if (key !== ownKey) return;
+      this.scrollMemory.activate(this.scrollKey);
+      void this.load(true);
+      this.scrollMemory.restoreSticky(this.scrollKey);
+    });
+    this.detachedSub = this.reuseStrategy.detached$.subscribe((key) => {
+      if (key === ownKey) this.scrollMemory.deactivateIf(this.scrollKey);
+    });
   }
 
   ngOnDestroy() {
     this.scrollMemory.deactivate();
     this.list.destroy();
+    this.attachedSub?.unsubscribe();
+    this.detachedSub?.unsubscribe();
   }
 
   scrollToLetter(letter: string) {
@@ -102,15 +123,15 @@ export class PersonsComponent implements OnInit, OnDestroy {
     }
   }
 
-  private async load() {
-    this.loading.set(true);
+  private async load(silent = false) {
+    if (!silent) this.loading.set(true);
     try {
       const results = await this.personsApi.search(this.searchQuery());
       results.sort((a, b) => a.name.localeCompare(b.name));
       this.allResults = results;
       this.applyFilter();
     } finally {
-      this.loading.set(false);
+      if (!silent) this.loading.set(false);
     }
   }
 
