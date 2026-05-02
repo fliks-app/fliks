@@ -55,7 +55,7 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_googlecast._tcp</string>
-		<string>_CC1AD845._googlecast._tcp</string>
+		<string>_66BF4DAE._googlecast._tcp</string>
 	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>

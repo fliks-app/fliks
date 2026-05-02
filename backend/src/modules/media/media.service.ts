@@ -141,7 +141,7 @@ export class MediaService {
       const details = await this.tmdb.getMovieDetails(String(dto.tmdbId));
       const movieFolderFormat =
         fmtMap['naming_movie_folder_format'] ??
-        '{Movie Title} ({Release Year})';
+        '{Original Title} ({Release Year})';
       const folderName = this.naming.applyMovieFolderFormat(movieFolderFormat, {
         title: details.title,
         originalTitle: details.originalTitle,
@@ -164,6 +164,7 @@ export class MediaService {
       fmtMap['naming_series_folder_format'] ?? '{Series Title}';
     const folderName = this.naming.applySeriesFolderFormat(seriesFolderFormat, {
       seriesTitle: details.title,
+      originalTitle: details.originalTitle,
       year: details.year,
       tmdbId: details.tmdbId,
     });
@@ -245,7 +246,7 @@ export class MediaService {
       }
       const movieFolderFormat =
         fmtMap['naming_movie_folder_format'] ??
-        '{Movie Title} ({Release Year})';
+        '{Original Title} ({Release Year})';
       const folderName = this.naming.applyMovieFolderFormat(movieFolderFormat, {
         title: details.title,
         originalTitle: details.originalTitle,
@@ -276,6 +277,7 @@ export class MediaService {
       fmtMap['naming_series_folder_format'] ?? '{Series Title}';
     const folderName = this.naming.applySeriesFolderFormat(seriesFolderFormat, {
       seriesTitle: details.title,
+      originalTitle: details.originalTitle,
       year: details.year,
       tmdbId: details.tmdbId,
     });

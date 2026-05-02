@@ -12,5 +12,5 @@ export const environment = {
    * box with no console registration but no Fliks branding. Keep as
    * fallback so devs without console access can still cast.
    */
-  castAppId: 'CC1AD845',
+  castAppId: '66BF4DAE',
 };

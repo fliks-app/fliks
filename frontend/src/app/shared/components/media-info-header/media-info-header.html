@@ -144,15 +144,13 @@
           {{ 'media_detail.delete' | translate }}
         </button>
       }
-      <button
-        #moreTriggerMobile
-        type="button"
-        class="flex flex-col items-center gap-1 text-sm cursor-pointer"
-        (click)="openMore(moreTriggerMobile)"
-      >
-        <svg lucideEllipsisVertical class="h-5 w-5"></svg>
-        {{ 'common.more' | translate }}
-      </button>
+      <app-dropdown-menu placement="bottom-end">
+        <button trigger type="button" class="flex flex-col items-center gap-1 text-sm cursor-pointer">
+          <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+          {{ 'common.more' | translate }}
+        </button>
+        <ng-container *ngTemplateOutlet="moreMenuItems"></ng-container>
+      </app-dropdown-menu>
     </div>
 
     <!-- Series episode progress -->
@@ -384,14 +382,12 @@
             </button>
           }
         }
-        <button
-          #moreTriggerDesktop
-          type="button"
-          class="btn btn-ghost btn btn-circle"
-          (click)="openMore(moreTriggerDesktop)"
-        >
-          <svg lucideEllipsisVertical class="h-5 w-5"></svg>
-        </button>
+        <app-dropdown-menu placement="bottom-end">
+          <button trigger type="button" class="btn btn-ghost btn btn-circle">
+            <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+          </button>
+          <ng-container *ngTemplateOutlet="moreMenuItems"></ng-container>
+        </app-dropdown-menu>
       </div>
 
       <!-- Progress bar -->
@@ -431,73 +427,63 @@
   </div>
 </div>
 
-<!-- Shared "more actions" popover — anchored to whichever trigger the user clicked. -->
-<app-popover-menu
-  [open]="openMoreMenu()"
-  [anchor]="moreAnchor()"
-  placement="bottom-end"
-  (closed)="openMoreMenu.set(false)"
->
-  <ng-container *ngTemplateOutlet="moreMenuItems"></ng-container>
-</app-popover-menu>
-
-<!-- Items shared by the popover above. -->
+<!-- Items projected into both mobile + desktop dropdown-menus. -->
 <ng-template #moreMenuItems>
   @if (mediaType() === 'series' && !episodeId()) {
-    <button type="button" class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base text-white rounded-lg active:bg-white/10 hover:bg-white/5" (click)="onToggleWatched(); openMoreMenu.set(false)">
+    <button type="button" class="dropdown-item text-white" (click)="onToggleWatched()">
       <svg lucideCheck class="h-5 w-5 shrink-0 opacity-80" [class.text-success]="watched()"></svg>
       <span class="flex-1">{{ (watched() ? 'media_detail.mark_series_unwatched' : 'media_detail.mark_series_watched') | translate }}</span>
     </button>
   }
   @if (canGrab()) {
-    <button type="button" [disabled]="grabBusy() !== null" class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base text-white rounded-lg active:bg-white/10 hover:bg-white/5 disabled:opacity-40" (click)="grabBest.emit(); openMoreMenu.set(false)">
+    <button type="button" [disabled]="grabBusy() !== null" class="dropdown-item text-white" (click)="grabBest.emit()">
       @if (grabBusy() === 'best') { <span class="loading loading-spinner loading-sm"></span> }
       @else { <svg lucideDownload class="h-5 w-5 shrink-0 opacity-80"></svg> }
       <span class="flex-1">{{ 'media_detail.grab_best' | translate }}</span>
     </button>
-    <button type="button" [disabled]="releasesLoading()" class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base text-white rounded-lg active:bg-white/10 hover:bg-white/5 disabled:opacity-40" (click)="loadReleases.emit(); openMoreMenu.set(false)">
+    <button type="button" [disabled]="releasesLoading()" class="dropdown-item text-white" (click)="loadReleases.emit()">
       @if (releasesLoading()) { <span class="loading loading-spinner loading-sm"></span> }
       @else { <svg lucideSearch class="h-5 w-5 shrink-0 opacity-80"></svg> }
       <span class="flex-1">{{ 'media_detail.search_releases' | translate }}</span>
     </button>
   }
   @if (canEditProfiles()) {
-    <button type="button" class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base text-white rounded-lg active:bg-white/10 hover:bg-white/5" (click)="openProfiles.emit(); openMoreMenu.set(false)">
+    <button type="button" class="dropdown-item text-white" (click)="openProfiles.emit()">
       <svg lucideSettings class="h-5 w-5 shrink-0 opacity-80"></svg>
       <span class="flex-1">{{ 'media_detail.edit_profiles' | translate }}</span>
     </button>
-    <button type="button" class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base text-white rounded-lg active:bg-white/10 hover:bg-white/5" (click)="openLibrary.emit(); openMoreMenu.set(false)">
+    <button type="button" class="dropdown-item text-white" (click)="openLibrary.emit()">
       <svg lucideFolder class="h-5 w-5 shrink-0 opacity-80"></svg>
       <span class="flex-1">{{ 'media_detail.edit_library' | translate }}</span>
     </button>
   }
   @if (mediaType() === 'movie' || episodeId()) {
-    <button type="button" class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base text-white rounded-lg active:bg-white/10 hover:bg-white/5" (click)="editSubtitles.emit(); openMoreMenu.set(false)">
+    <button type="button" class="dropdown-item text-white" (click)="editSubtitles.emit()">
       <svg lucideCaptions class="h-5 w-5 shrink-0 opacity-80"></svg>
       <span class="flex-1">{{ 'media_detail.edit_subtitles' | translate }}</span>
     </button>
   }
   @if (isAdmin()) {
-    <button type="button" class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base text-white rounded-lg active:bg-white/10 hover:bg-white/5" (click)="refreshMetadata.emit(); openMoreMenu.set(false)">
+    <button type="button" class="dropdown-item text-white" (click)="refreshMetadata.emit()">
       <svg lucideRotateCcw class="h-5 w-5 shrink-0 opacity-80"></svg>
       <span class="flex-1">{{ 'media_detail.refresh_metadata' | translate }}</span>
     </button>
-    <button type="button" class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base text-white rounded-lg active:bg-white/10 hover:bg-white/5" (click)="rescanFiles.emit(); openMoreMenu.set(false)">
+    <button type="button" class="dropdown-item text-white" (click)="rescanFiles.emit()">
       <svg lucideFileText class="h-5 w-5 shrink-0 opacity-80"></svg>
       <span class="flex-1">{{ 'media_detail.rescan_files' | translate }}</span>
     </button>
     @if (mediaType() === 'series') {
-      <button type="button" class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base text-white rounded-lg active:bg-white/10 hover:bg-white/5" (click)="detectIntros.emit(); openMoreMenu.set(false)">
+      <button type="button" class="dropdown-item text-white" (click)="detectIntros.emit()">
         <svg lucideSkipForward class="h-5 w-5 shrink-0 opacity-80"></svg>
         <span class="flex-1">{{ 'markers.detect_intros' | translate }}</span>
       </button>
     }
-    <button type="button" [disabled]="monitoredLoading()" class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base text-white rounded-lg active:bg-white/10 hover:bg-white/5 disabled:opacity-40" (click)="toggleMonitored.emit(); openMoreMenu.set(false)">
+    <button type="button" [disabled]="monitoredLoading()" class="dropdown-item text-white" (click)="toggleMonitored.emit()">
       @if (monitored()) { <svg lucideEyeOff class="h-5 w-5 shrink-0 opacity-80"></svg> }
       @else { <svg lucideEye class="h-5 w-5 shrink-0 opacity-80"></svg> }
       <span class="flex-1">{{ (monitored() ? 'media_detail.unmonitor' : 'media_detail.monitor') | translate }}</span>
     </button>
-    <button type="button" [disabled]="deleteLoading()" class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base text-error rounded-lg active:bg-white/10 hover:bg-white/5 disabled:opacity-40" (click)="deleteMedia.emit(); openMoreMenu.set(false)">
+    <button type="button" [disabled]="deleteLoading()" class="dropdown-item text-error" (click)="deleteMedia.emit()">
       @if (deleteLoading()) { <span class="loading loading-spinner loading-sm"></span> }
       @else { <svg lucideTrash2 class="h-5 w-5 shrink-0"></svg> }
       <span class="flex-1">{{ 'media_detail.delete_from_library' | translate }}</span>

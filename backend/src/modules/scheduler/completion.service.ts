@@ -339,6 +339,7 @@ export class CompletionService {
           })
         : this.naming.applySeriesFolderFormat(seriesFolderFormat, {
             seriesTitle: media.title,
+            originalTitle: media.originalTitle,
             year: media.year,
             tmdbId: media.tmdbId,
           }));

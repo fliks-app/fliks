@@ -5,7 +5,6 @@ import {
   inject,
   input,
   output,
-  signal,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { UpperCasePipe } from '@angular/common';
@@ -14,7 +13,7 @@ import { TranslateModule } from '@ngx-translate/core';
 import { LucideCheck, LucideEllipsisVertical, LucideX } from '@lucide/angular';
 import { HorizontalScrollerComponent } from '../../../../shared/components/horizontal-scroller';
 import { MediaCardComponent } from '../../../../shared/components/media-card/media-card';
-import { PopoverMenuComponent } from '../../../../shared/components/popover-menu';
+import { DropdownMenuComponent } from '../../../../shared/components/dropdown-menu';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { TvRowDirective } from '../../../../shared/directives/tv-row.directive';
 import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
@@ -35,13 +34,12 @@ import { METADATA_PROVIDER_OPTIONS_OVERRIDE } from '../../../../core/constants/m
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, FormsModule, RouterLink, ResolveUrlPipe, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, PopoverMenuComponent, TvSelectDirective, TvRowDirective, LucideCheck, LucideEllipsisVertical, LucideX],
+  imports: [TranslateModule, FormsModule, RouterLink, ResolveUrlPipe, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, TvSelectDirective, TvRowDirective, LucideCheck, LucideEllipsisVertical, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
 export class MediaDetailSeasonsComponent {
   private readonly router = inject(Router);
-  protected readonly seasonMenuOpen = signal(false);
   readonly media = input.required<Media>();
   readonly selectedSeason = input<Season | null>(null);
   readonly activeSeasonId = input.required<number | null>();

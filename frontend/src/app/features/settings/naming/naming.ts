@@ -45,6 +45,7 @@ function applySeriesFormat(format: string): string {
 function applySeriesFolderFormat(format: string): string {
   return format
     .replace(/\{Series Title\}/g, 'Breaking Bad')
+    .replace(/\{Original Title\}/g, 'Breaking Bad')
     .replace(/\{Release Year\}/g, '2008')
     .replace(/\{TMDB Id\}/g, '1396')
     .replace(/\s{2,}/g, ' ')
@@ -97,7 +98,7 @@ export class NamingSettingsComponent implements OnInit {
   ];
 
   readonly seriesFolderTokens = [
-    '{Series Title}', '{Release Year}', '{TMDB Id}',
+    '{Series Title}', '{Original Title}', '{Release Year}', '{TMDB Id}',
   ];
 
   readonly seasonFolderTokens = [
