@@ -1,0 +1,72 @@
+# Validates that all committed migrations apply cleanly on a fresh
+# Postgres. Catches the dev/prod drift inherent to keeping
+# `synchronize: true` locally — if a developer ships an entity change
+# without generating the matching migration, prod's `migrationsRun` at
+# boot will silently leave the schema out of sync. Catching it here at
+# PR time turns a future incident into a red CI check.
+name: DB migrations
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+
+jobs:
+  apply-migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: fliks
+          POSTGRES_PASSWORD: fliks
+          POSTGRES_DB: fliks
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fliks"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USERNAME: fliks
+      DB_PASSWORD: fliks
+      DB_NAME: fliks
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Run migrations on a fresh DB
+        run: npm run db:migration:run
+      - name: Verify entity metadata matches the migrated schema
+        # `migration:generate` against a DB that already has the latest
+        # schema must produce an empty diff. The CLI exits non-zero in
+        # the no-diff case ("No changes in database schema were found")
+        # — we treat that as success and only fail if a migration file
+        # was actually emitted (the developer forgot to commit one).
+        run: |
+          ./node_modules/.bin/typeorm-ts-node-commonjs migration:generate \
+            -d src/data-source.ts src/migrations/__ci_drift_check || true
+          if [ -f src/migrations/__ci_drift_check.ts ]; then
+            echo "::error::Entity changes are not reflected in any committed migration."
+            echo "Run 'npm run db:migration:generate -- src/migrations/<descriptive-name>' locally and commit the file."
+            cat src/migrations/__ci_drift_check.ts
+            exit 1
+          fi

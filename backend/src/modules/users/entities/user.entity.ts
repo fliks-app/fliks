@@ -46,7 +46,7 @@ export class User extends BaseEntity {
   /**
    * Admin-set flag that forces the user to set a new password on their next
    * action. Cleared automatically when the user changes their own password
-   * (UsersService.update). synchronize:true picks up the column on restart.
+   * (UsersService.update).
    */
   @Column({ default: false })
   requirePasswordChange: boolean;

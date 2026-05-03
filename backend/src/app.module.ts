@@ -48,17 +48,27 @@ import { join } from 'path';
     ),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get('DB_HOST', 'localhost'),
-        port: config.get<number>('DB_PORT', 5432),
-        username: config.get('DB_USERNAME', 'fliks'),
-        password: config.get('DB_PASSWORD', 'fliks'),
-        database: config.get('DB_NAME', 'fliks'),
-        autoLoadEntities: true,
-        synchronize: true,
-        extra: { max: 30 },
-      }),
+      useFactory: (config: ConfigService) => {
+        const isDev = config.get('NODE_ENV', 'development') !== 'production';
+        return {
+          type: 'postgres',
+          host: config.get('DB_HOST', 'localhost'),
+          port: config.get<number>('DB_PORT', 5432),
+          username: config.get('DB_USERNAME', 'fliks'),
+          password: config.get('DB_PASSWORD', 'fliks'),
+          database: config.get('DB_NAME', 'fliks'),
+          autoLoadEntities: true,
+          // Dev: auto-sync the schema from entity metadata so a column
+          // rename takes effect on the next restart without writing a
+          // migration. Prod: migrations are the only sanctioned schema
+          // mechanism — see `src/data-source.ts` and the
+          // `db:migration:*` scripts.
+          synchronize: isDev,
+          migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
+          migrationsRun: !isDev,
+          extra: { max: 30 },
+        };
+      },
     }),
     EventsModule,
     AuthModule,
