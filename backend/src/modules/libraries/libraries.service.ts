@@ -217,7 +217,12 @@ export class LibrariesService implements OnModuleInit {
   }
 
   async create(dto: CreateLibraryDto): Promise<LibraryWithDetails> {
-    return this.dataSource.transaction(async (m) => {
+    // findOne() reads through this.repo (DataSource-level), which under
+    // READ COMMITTED can't see writes from an open transaction on another
+    // connection — calling it inside the transaction returned null and
+    // threw "Library #X not found". Run the writes in the tx, then resolve
+    // the enriched view from the committed state.
+    const id = await this.dataSource.transaction(async (m) => {
       // Enforce at-most-one default per type.
       if (dto.isDefaultForMovies)
         await this.clearDefaultFlag(m, 'isDefaultForMovies');
@@ -253,12 +258,13 @@ export class LibrariesService implements OnModuleInit {
         await this.replaceUserAccess(m, lib.id, dto.userIds);
       }
 
-      return this.findOne(lib.id);
+      return lib.id;
     });
+    return this.findOne(id);
   }
 
   async update(id: number, dto: UpdateLibraryDto): Promise<LibraryWithDetails> {
-    return this.dataSource.transaction(async (m) => {
+    await this.dataSource.transaction(async (m) => {
       const lib = await m.findOne(Library, { where: { id } });
       if (!lib) throw new NotFoundException(`Library #${id} not found`);
 
@@ -293,9 +299,8 @@ export class LibrariesService implements OnModuleInit {
       if (dto.isDefaultForSeries !== undefined)
         patch.isDefaultForSeries = dto.isDefaultForSeries;
       if (Object.keys(patch).length) await m.update(Library, id, patch);
-
-      return this.findOne(id);
     });
+    return this.findOne(id);
   }
 
   async remove(id: number): Promise<void> {
