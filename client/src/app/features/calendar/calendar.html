@@ -1,0 +1,101 @@
+<div class="flex flex-col gap-4">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="sr-only lg:not-sr-only text-2xl font-bold">{{ 'calendar.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 capitalize">{{ monthLabel() }}</p>
+    </div>
+    <div class="flex gap-2">
+      <button type="button" class="btn btn-ghost btn-sm" (click)="prevMonth()">«</button>
+      <button type="button" class="btn btn-ghost btn-sm" (click)="nextMonth()">»</button>
+    </div>
+  </div>
+
+  @if (error()) {
+    <div role="alert" class="alert alert-error">{{ error() | translate }}</div>
+  }
+
+  <div class="overflow-x-auto">
+    <div class="min-w-[640px]">
+      <!-- Day headers -->
+      <div class="grid grid-cols-7 gap-px mb-px">
+        @for (day of ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']; track day) {
+          <div class="text-center text-sm font-medium text-base-content/50 py-2">{{ day }}</div>
+        }
+      </div>
+
+      <!-- Calendar grid -->
+      @if (loading()) {
+        <div class="flex justify-center py-16">
+          <span class="loading loading-spinner loading-lg"></span>
+        </div>
+      } @else {
+        <div class="flex flex-col gap-px bg-base-200 rounded-lg overflow-hidden border border-base-200">
+          @for (week of weeks(); track $index) {
+            <div class="grid grid-cols-7 gap-px bg-base-200">
+              @for (day of week.days; track day.dateStr) {
+                <div
+                  class="min-h-[6rem] p-1.5 flex flex-col gap-1"
+                  [class.bg-base-100]="day.isCurrentMonth"
+                  [class.bg-base-200/50]="!day.isCurrentMonth"
+                >
+                  <span
+                    class="text-sm font-medium w-6 h-6 flex items-center justify-center rounded-full self-start"
+                    [class.bg-primary]="day.isToday"
+                    [class.text-primary-content]="day.isToday"
+                    [class.text-base-content/40]="!day.isCurrentMonth && !day.isToday"
+                  >
+                    {{ day.date.getDate() }}
+                  </span>
+                  <div class="flex flex-col gap-0.5">
+                    @for (entry of day.entries; track $index) {
+                      <a
+                        [routerLink]="routeForEntry(entry)"
+                        class="text-sm px-2 py-1 rounded truncate leading-snug font-medium"
+                        [ngClass]="eventClass(entry)"
+                        [title]="entryLabel(entry)"
+                      >
+                        {{ entryLabel(entry) }}
+                      </a>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- Legend / Filters -->
+  <div class="flex flex-wrap gap-2 text-sm">
+    <button type="button"
+      class="flex items-center gap-1.5 px-2 py-1 rounded-lg transition-opacity cursor-pointer"
+      [class.opacity-100]="isFilterActive('cinema')"
+      [class.opacity-40]="!isFilterActive('cinema')"
+      (click)="toggleFilter('cinema')">
+      <span class="w-3 h-3 rounded bg-primary/20"></span>{{ 'calendar.legend_cinema' | translate }}
+    </button>
+    <button type="button"
+      class="flex items-center gap-1.5 px-2 py-1 rounded-lg transition-opacity cursor-pointer"
+      [class.opacity-100]="isFilterActive('digital')"
+      [class.opacity-40]="!isFilterActive('digital')"
+      (click)="toggleFilter('digital')">
+      <span class="w-3 h-3 rounded bg-info/20"></span>{{ 'calendar.legend_digital' | translate }}
+    </button>
+    <button type="button"
+      class="flex items-center gap-1.5 px-2 py-1 rounded-lg transition-opacity cursor-pointer"
+      [class.opacity-100]="isFilterActive('physical')"
+      [class.opacity-40]="!isFilterActive('physical')"
+      (click)="toggleFilter('physical')">
+      <span class="w-3 h-3 rounded bg-warning/20"></span>{{ 'calendar.legend_physical' | translate }}
+    </button>
+    <button type="button"
+      class="flex items-center gap-1.5 px-2 py-1 rounded-lg transition-opacity cursor-pointer"
+      [class.opacity-100]="isFilterActive('airing')"
+      [class.opacity-40]="!isFilterActive('airing')"
+      (click)="toggleFilter('airing')">
+      <span class="w-3 h-3 rounded bg-secondary/20"></span>{{ 'calendar.legend_airing' | translate }}
+    </button>
+  </div>
+</div>

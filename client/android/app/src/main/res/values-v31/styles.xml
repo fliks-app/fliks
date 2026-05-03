@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ override for the launch theme. On API 31+ the system
+  splash uses Theme.SplashScreen natively (no compat layer), so the
+  configuration that broke on Android TV 11 works correctly here.
+  Keeps the original behaviour the rest of the fleet was relying on.
+-->
+<resources>
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@drawable/splash_themed</item>
+        <item name="android:windowBackground">@drawable/splash_themed</item>
+        <item name="splashBackground">@color/splash_bg_dark</item>
+    </style>
+</resources>

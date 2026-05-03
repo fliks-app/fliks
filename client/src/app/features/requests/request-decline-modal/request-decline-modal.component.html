@@ -1,0 +1,32 @@
+<dialog #dialog class="modal" aria-labelledby="request-decline-title">
+  <div class="modal-box max-w-md">
+    <h2 id="request-decline-title" class="text-lg font-semibold">
+      {{ 'requests.decline_title' | translate }}
+    </h2>
+    <textarea
+      class="textarea textarea-bordered w-full mt-3"
+      rows="3"
+      [placeholder]="'requests.decline_reason_placeholder' | translate"
+      [ngModel]="reasonText()"
+      (ngModelChange)="reasonTextChange.emit($event)"
+    ></textarea>
+    <div class="modal-action mt-2">
+      <button type="button" class="btn btn-ghost btn-sm" (click)="close(); dismissed.emit()">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button
+        type="button"
+        class="btn btn-warning btn-sm"
+        [disabled]="submitBusy()"
+        (click)="submitted.emit()"
+      >
+        {{ 'requests.decline_submit' | translate }}
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="close(); dismissed.emit()" [attr.aria-label]="'common.close' | translate">
+      {{ 'common.close' | translate }}
+    </button>
+  </form>
+</dialog>

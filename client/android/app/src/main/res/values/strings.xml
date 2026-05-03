@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Fliks</string>
+    <string name="title_activity_main">Fliks</string>
+    <string name="package_name">media.fliks.app</string>
+    <string name="custom_url_scheme">media.fliks.app</string>
+    <!--
+      Google Cast receiver app ID. `CC1AD845` = Default Media Receiver
+      (works without console registration but no Fliks branding).
+      Replace with the ID generated in Cast Developer Console once the
+      Fliks receiver shell is published. MUST match `castAppId` in
+      client/src/environments/environment.ts.
+    -->
+    <string name="cast_receiver_app_id">66BF4DAE</string>
+</resources>

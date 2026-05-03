@@ -1,0 +1,119 @@
+<div class="flex flex-col gap-4">
+  <div>
+    <h1 class="text-2xl font-bold">{{ 'system.tab_streams' | translate }}</h1>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'system.streams_subtitle' | translate }}</p>
+  </div>
+
+@if (loading()) {
+  <div class="flex justify-center py-12">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+} @else if (streams().length === 0) {
+  <div class="text-center text-base-content/50 py-12">
+    Aucune activité vidéo en cours
+  </div>
+} @else {
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+    @for (s of streams(); track s.sessionId) {
+      <div class="card bg-base-100 shadow-sm overflow-hidden">
+        <!-- Header: poster + title + time -->
+        <div class="flex gap-3 p-3 pb-0">
+          @if (s.posterUrl) {
+            <img [src]="s.posterUrl | resolveUrl:'thumb'" class="w-14 h-20 rounded object-cover shrink-0" alt="" />
+          } @else {
+            <div class="w-14 h-20 rounded bg-base-300 shrink-0"></div>
+          }
+          <div class="flex-1 min-w-0 py-0.5">
+            <a [routerLink]="mediaLink(s)" class="font-bold text-sm leading-tight truncate block hover:underline">{{ s.mediaTitle }}</a>
+            @if (s.episodeLabel) {
+              <a [routerLink]="s.episodeId ? episodeLink(s) : mediaLink(s)" class="text-xs text-base-content/60 truncate block mt-0.5 hover:underline">{{ s.episodeLabel }}</a>
+            }
+            <div class="text-xs text-base-content/50 tabular-nums mt-1">
+              {{ formatTime(s.positionSeconds) }} / {{ formatTime(s.durationSeconds) }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress bar (Emby style: red progress + green transcode buffer) -->
+        @if (s.durationSeconds > 0) {
+          <div class="relative w-full h-1.5 bg-base-300 mt-2">
+            <!-- Transcode buffer (red, behind progress) -->
+            @if (s.transcodePercent != null) {
+              <div class="absolute inset-y-0 left-0 bg-error/60" [style.width.%]="s.transcodePercent"></div>
+            }
+            <!-- Playback progress (green) -->
+            <div class="absolute inset-y-0 left-0 bg-success" [style.width.%]="(s.positionSeconds / s.durationSeconds) * 100"></div>
+          </div>
+        }
+
+        <div class="divider my-0 mx-3"></div>
+
+        <!-- Stream details -->
+        <div class="px-3 py-2 space-y-1.5 text-xs">
+          <div class="flex gap-2">
+            <span class="text-base-content/40 w-10 shrink-0">Flux</span>
+            <div>
+              <span class="font-medium">{{ (s.container ?? '?') | uppercase }}</span>
+              @if (s.videoBitrate) { ({{ formatBitrate(s.videoBitrate) }}) }
+              @if (s.outputContainer) {
+                <div class="text-base-content/50">&rarr; {{ s.outputContainer }}
+                  @if (s.outputBitrate) { ({{ formatBitrate(s.outputBitrate) }}) }
+                </div>
+              }
+              @for (r of s.containerReasons; track r) {
+                <div class="text-warning/80 italic">{{ r }}</div>
+              }
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <span class="text-base-content/40 w-10 shrink-0">Vidéo</span>
+            <div>
+              <span class="font-medium">{{ s.videoResolution ?? '?' }} {{ s.videoCodec ?? '?' }}</span>
+              <div class="text-base-content/50">&rarr; {{ s.videoPlaybackMode }}</div>
+              @for (r of s.videoReasons; track r) {
+                <div class="text-warning/80 italic">{{ r }}</div>
+              }
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <span class="text-base-content/40 w-10 shrink-0">Audio</span>
+            <div>
+              <span class="font-medium">
+                @if (s.audioLanguage) { {{ s.audioLanguage }} }
+                {{ s.audioCodec ?? '?' }}
+                @if (s.audioChannels) { {{ s.audioChannels }} }
+              </span>
+              <div class="text-base-content/50">&rarr; {{ s.audioPlaybackMode }}</div>
+              @for (r of s.audioReasons; track r) {
+                <div class="text-warning/80 italic">{{ r }}</div>
+              }
+            </div>
+          </div>
+        </div>
+
+        <div class="divider my-0 mx-3"></div>
+
+        <!-- User -->
+        <div class="text-center text-xs text-base-content/60 py-1.5">
+          {{ s.username ?? '—' }}
+        </div>
+
+        <!-- Controls (centered, Emby style) -->
+        <div class="flex items-center justify-center gap-3 pb-3">
+          <button class="btn btn-ghost btn-sm btn-square" (click)="togglePause(s)" [title]="isPaused(s.sessionId) ? 'Reprendre' : 'Mettre en pause'">
+            @if (isPaused(s.sessionId)) {
+              <svg lucidePlay class="h-4 w-4"></svg>
+            } @else {
+              <svg lucidePause class="h-4 w-4"></svg>
+            }
+          </button>
+          <button class="btn btn-ghost btn-sm btn-square" (click)="confirmStop(s)" title="Arrêter la lecture">
+            <svg lucideSquare class="h-4 w-4"></svg>
+          </button>
+        </div>
+      </div>
+    }
+  </div>
+}
+</div>
+

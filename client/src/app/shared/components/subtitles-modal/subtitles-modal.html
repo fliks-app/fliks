@@ -1,0 +1,430 @@
+<dialog #modal class="modal">
+  <div class="modal-box w-11/12 max-w-5xl">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" [attr.aria-label]="'common.close' | translate">✕</button>
+    </form>
+    <h3 class="text-lg font-bold mb-4">{{ 'media_detail.edit_subtitles' | translate }}</h3>
+
+    <section class="space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        @if (canGrab()) {
+          <div class="flex gap-2 ml-auto">
+            @if (hasMissing()) {
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm shrink-0"
+                [disabled]="searchDisabled() || subtitleActionBusy()"
+                [attr.title]="searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null"
+                (click)="autoSubtitle()"
+              >
+                @if (subtitleActionBusy()) {
+                  <span class="loading loading-spinner loading-xs"></span>
+                }
+                {{ 'media_detail.search_missing_subtitles' | translate }}
+              </button>
+            }
+            <button
+              type="button"
+              class="btn btn-primary btn-sm shrink-0"
+              [disabled]="searchDisabled() || subtitleActionBusy()"
+              [attr.title]="searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null"
+              (click)="openSubtitleSearch()"
+            >
+              {{ 'media_detail.search_subtitles' | translate }}
+            </button>
+          </div>
+        }
+      </div>
+
+      @if (subtitlesLoading()) {
+        <div class="flex justify-center py-4">
+          <span class="loading loading-spinner loading-md"></span>
+        </div>
+      } @else if (rows().length === 0) {
+        <p class="text-sm text-base-content/50">{{ 'media_detail.no_subtitles' | translate }}</p>
+      } @else {
+        <div class="rounded-lg border border-base-200 overflow-x-auto">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>{{ 'media_detail.col_sub_language' | translate }}</th>
+                <th>{{ 'media_detail.col_sub_path' | translate }}</th>
+                <th>{{ 'media_detail.col_sub_provider' | translate }}</th>
+                <th class="text-center">{{ 'media_detail.col_sub_score' | translate }}</th>
+                <th class="text-center">{{ 'media_detail.col_sub_flags' | translate }}</th>
+                <th class="text-end w-32"></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of pagedRows(); track row.missing ? row.language : row.sub!.id) {
+                @if (row.missing) {
+                  <tr class="opacity-40">
+                    <td class="font-medium">{{ row.language }}</td>
+                    <td class="text-sm">—</td>
+                    <td class="text-sm">—</td>
+                    <td class="text-center">—</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                } @else {
+                  @let sub = row.sub!;
+                  <tr>
+                    <td class="font-medium">{{ sub.language }}</td>
+                    <td class="text-sm text-base-content/60 truncate max-w-48" [title]="sub.relativePath ?? ''">
+                      @if (sub.relativePath) {
+                        {{ sub.relativePath | subtitleFilename }}
+                      } @else if (sub.providerType === 'embedded') {
+                        <span class="text-base-content/30">{{ 'media_detail.embedded' | translate }}</span>
+                      } @else {
+                        —
+                      }
+                    </td>
+                    <td class="text-sm">
+                      @if (sub.providerType === 'embedded') {
+                        <span class="badge badge-sm badge-neutral">embedded</span>
+                      } @else {
+                        {{ sub.providerType }}
+                      }
+                    </td>
+                    <td class="text-center tabular-nums">
+                      @if (sub.providerType === 'embedded') {
+                        <span class="text-base-content/30">—</span>
+                      } @else {
+                        {{ sub.score }}
+                      }
+                    </td>
+                    <td class="text-center text-xs">
+                      @if (sub.forced) { <span class="badge badge-xs badge-outline mr-1">F</span> }
+                      @if (sub.hearingImpaired) { <span class="badge badge-xs badge-outline">HI</span> }
+                      @if (sub.synced) { <span class="badge badge-xs badge-info ml-1">Synced</span> }
+                      @if (sub.codec) { <span class="badge badge-xs badge-ghost ml-1">{{ sub.codec }}</span> }
+                    </td>
+                    <td class="text-end">
+                      @if (canGrab() && sub.providerType !== 'embedded') {
+                        <div class="dropdown dropdown-end dropdown-top">
+                          <div tabindex="0" role="button" class="btn btn-ghost btn-xs" [class.btn-disabled]="subtitleActionBusy()">
+                            {{ 'media_detail.subtitle_actions' | translate }}
+                            <svg lucideChevronDown class="h-3 w-3"></svg>
+                          </div>
+                          <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-10 w-56 p-2 shadow-lg text-sm">
+                            <li>
+                              <a class="flex items-center gap-3" (click)="openSyncModal(sub.id)">
+                                <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                                {{ 'media_detail.action_sync' | translate }}
+                              </a>
+                            </li>
+                            <li>
+                              <a class="flex items-center gap-3" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'removeHiTags' })">
+                                <svg lucideVolume2 class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                                {{ 'media_detail.action_remove_hi' | translate }}
+                              </a>
+                            </li>
+                            <li>
+                              <a class="flex items-center gap-3" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'removeStyleTags' })">
+                                <svg lucideCode class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                                {{ 'media_detail.action_remove_style' | translate }}
+                              </a>
+                            </li>
+                            <li>
+                              <a class="flex items-center gap-3" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'removeEmoji' })">
+                                <svg lucideSmile class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                                {{ 'media_detail.action_remove_emoji' | translate }}
+                              </a>
+                            </li>
+                            <li>
+                              <a class="flex items-center gap-3" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'ocrFixes' })">
+                                <svg lucideImage class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                                {{ 'media_detail.action_ocr_fixes' | translate }}
+                              </a>
+                            </li>
+                            <li>
+                              <a class="flex items-center gap-3" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'commonFixes' })">
+                                <svg lucideThermometer class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                                {{ 'media_detail.action_common_fixes' | translate }}
+                              </a>
+                            </li>
+                            <li>
+                              <a class="flex items-center gap-3" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'fixUppercase' })">
+                                <svg lucideMaximize2 class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                                {{ 'media_detail.action_fix_uppercase' | translate }}
+                              </a>
+                            </li>
+                            <li>
+                              <a class="flex items-center gap-3" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'reverseRtl' })">
+                                <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                                {{ 'media_detail.action_reverse_rtl' | translate }}
+                              </a>
+                            </li>
+                            <li>
+                              <a class="flex items-center gap-3" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'convertToSrt' })">
+                                <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                                {{ 'media_detail.action_convert_srt' | translate }}
+                              </a>
+                            </li>
+                            <li>
+                              <a class="flex items-center gap-3" (click)="openAdjustModal(sub.id)">
+                                <svg lucideClock class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                                {{ 'media_detail.action_adjust_times' | translate }}
+                              </a>
+                            </li>
+                            <li>
+                              <a class="flex items-center gap-3" (click)="openFpsModal(sub.id)">
+                                <svg lucideZap class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                                {{ 'media_detail.action_change_fps' | translate }}
+                              </a>
+                            </li>
+                            <li class="border-t border-base-300 mt-1 pt-1">
+                              <a class="flex items-center gap-3 text-warning" (click)="blacklistSubtitle(sub)">
+                                <svg lucideBan class="h-4 w-4 shrink-0 opacity-80" aria-hidden="true"></svg>
+                                {{ 'media_detail.action_blacklist' | translate }}
+                              </a>
+                            </li>
+                            <li>
+                              <a class="flex items-center gap-3 text-error" (click)="deleteSubtitle(sub.id)">
+                                <svg lucideTrash2 class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
+                                {{ 'media_detail.action_delete' | translate }}
+                              </a>
+                            </li>
+                          </ul>
+                        </div>
+                      }
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+        @if (totalPages() > 1) {
+          <div class="flex justify-center items-center gap-1 mt-2">
+            <button type="button" class="btn btn-ghost btn-xs" [disabled]="page() === 0" (click)="goToPage(page() - 1)">
+              {{ 'common.prev' | translate }}
+            </button>
+            @for (p of [].constructor(totalPages()); track $index) {
+              <button
+                type="button"
+                class="btn btn-xs"
+                [class.btn-primary]="$index === page()"
+                [class.btn-ghost]="$index !== page()"
+                (click)="goToPage($index)"
+              >
+                {{ $index + 1 }}
+              </button>
+            }
+            <button type="button" class="btn btn-ghost btn-xs" [disabled]="page() === totalPages() - 1" (click)="goToPage(page() + 1)">
+              {{ 'common.next' | translate }}
+            </button>
+          </div>
+        }
+      }
+    </section>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
+<!-- Search modal -->
+<app-media-detail-subtitle-search-modal
+  [subSearchLang]="subSearchLang()"
+  (subSearchLangChange)="subSearchLang.set($event)"
+  [subSearchLoading]="subSearchLoading()"
+  [subSearchSearched]="subSearchSearched()"
+  [subSearchResults]="subSearchResults()"
+  [subtitleActionBusy]="subtitleActionBusy()"
+  (search)="searchSubtitles()"
+  (download)="downloadSearchResult($event)"
+/>
+
+<!-- Sync options modal -->
+<dialog #syncDialog class="modal">
+  <div class="modal-box max-w-2xl w-11/12">
+    <h3 class="text-lg font-bold">{{ 'media_detail.sync_modal_title' | translate }}</h3>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'media_detail.sync_modal_subtitle' | translate }}</p>
+
+    <div class="flex flex-col gap-4 mt-4">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'media_detail.sync_reference' | translate }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          [ngModel]="syncReference()"
+          (ngModelChange)="syncReference.set($event)"
+        >
+          <option value="auto">{{ 'media_detail.sync_reference_auto' | translate }}</option>
+          @if (audioStreams().length) {
+            <optgroup [label]="'media_detail.sync_audio_tracks' | translate">
+              @for (s of audioStreams(); track s.streamIndex) {
+                <option [value]="'audio:' + s.streamIndex">{{ s.language }} — {{ s.codec }}@if (s.title) { ({{ s.title }}) }</option>
+              }
+            </optgroup>
+          }
+          @if (subtitleStreams().length) {
+            <optgroup [label]="'media_detail.sync_subtitle_tracks' | translate">
+              @for (s of subtitleStreams(); track s.streamIndex) {
+                <option [value]="'subtitle:' + s.streamIndex">{{ s.language }} — {{ s.codec }}@if (s.title) { ({{ s.title }}) }</option>
+              }
+            </optgroup>
+          }
+          @if (externalSubtitleRefs().length) {
+            <optgroup [label]="'media_detail.sync_external_subtitles' | translate">
+              @for (s of externalSubtitleRefs(); track s.id) {
+                <option [value]="'file:' + s.relativePath">{{ s.language }} — {{ s.providerType }} ({{ s.status }})</option>
+              }
+            </optgroup>
+          }
+        </select>
+      </label>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'media_detail.sync_max_offset' | translate }}</span>
+        <input
+          type="number"
+          class="input input-bordered input-sm w-full"
+          min="0"
+          placeholder="60"
+          [ngModel]="syncMaxOffset()"
+          (ngModelChange)="syncMaxOffset.set($event)"
+        />
+        <div class="label">
+          <span class="label-text-alt text-base-content/50">{{ 'media_detail.sync_max_offset_hint' | translate }}</span>
+        </div>
+      </label>
+
+      <label class="label cursor-pointer justify-start gap-3">
+        <input
+          type="checkbox"
+          class="checkbox checkbox-sm"
+          [ngModel]="syncNoFixFramerate()"
+          (ngModelChange)="syncNoFixFramerate.set($event)"
+        />
+        <span class="label-text">{{ 'media_detail.sync_no_fix_framerate' | translate }}</span>
+      </label>
+
+      <label class="label cursor-pointer justify-start gap-3">
+        <input
+          type="checkbox"
+          class="checkbox checkbox-sm"
+          [ngModel]="syncGoldenSection()"
+          (ngModelChange)="syncGoldenSection.set($event)"
+        />
+        <span class="label-text">{{ 'media_detail.sync_golden_section' | translate }}</span>
+      </label>
+    </div>
+
+    <div class="modal-action">
+      <button type="button" class="btn btn-ghost" (click)="closeSyncModal()">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button type="button" class="btn btn-primary" (click)="confirmSync()">
+        {{ 'media_detail.action_sync' | translate }}
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeSyncModal()">close</button>
+  </form>
+</dialog>
+
+<!-- Adjust Times modal -->
+<dialog #adjustDialog class="modal">
+  <div class="modal-box max-w-md">
+    <h3 class="text-lg font-bold">{{ 'media_detail.adjust_times_title' | translate }}</h3>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'media_detail.adjust_times_subtitle' | translate }}</p>
+
+    <div class="flex gap-3 mt-4">
+      <label class="form-control flex-1">
+        <span class="label-text">{{ 'media_detail.adjust_minutes' | translate }}</span>
+        <input
+          type="number"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="adjustMinutes()"
+          (ngModelChange)="adjustMinutes.set($event)"
+        />
+      </label>
+      <label class="form-control flex-1">
+        <span class="label-text">{{ 'media_detail.adjust_seconds' | translate }}</span>
+        <input
+          type="number"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="adjustSeconds()"
+          (ngModelChange)="adjustSeconds.set($event)"
+        />
+      </label>
+      <label class="form-control flex-1">
+        <span class="label-text">{{ 'media_detail.adjust_millis' | translate }}</span>
+        <input
+          type="number"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="adjustMillis()"
+          (ngModelChange)="adjustMillis.set($event)"
+        />
+      </label>
+    </div>
+    <div class="label">
+      <span class="label-text-alt text-base-content/50">{{ 'media_detail.adjust_offset_hint' | translate }}</span>
+    </div>
+
+    <div class="modal-action">
+      <button type="button" class="btn btn-ghost" (click)="closeAdjustModal()">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button type="button" class="btn btn-primary" (click)="confirmAdjust()">
+        {{ 'media_detail.action_adjust_times' | translate }}
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeAdjustModal()">close</button>
+  </form>
+</dialog>
+
+<!-- Change Frame Rate modal -->
+<dialog #fpsDialog class="modal">
+  <div class="modal-box max-w-md">
+    <h3 class="text-lg font-bold">{{ 'media_detail.change_fps_title' | translate }}</h3>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'media_detail.change_fps_subtitle' | translate }}</p>
+
+    <div class="flex gap-4 mt-4">
+      <label class="form-control flex-1">
+        <span class="label-text">{{ 'media_detail.fps_from' | translate }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          [ngModel]="fpsFrom()"
+          (ngModelChange)="fpsFrom.set($event)"
+        >
+          <option value="23.976">23.976</option>
+          <option value="24">24</option>
+          <option value="25">25</option>
+          <option value="29.97">29.97</option>
+          <option value="30">30</option>
+        </select>
+      </label>
+      <label class="form-control flex-1">
+        <span class="label-text">{{ 'media_detail.fps_to' | translate }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          [ngModel]="fpsTo()"
+          (ngModelChange)="fpsTo.set($event)"
+        >
+          <option value="23.976">23.976</option>
+          <option value="24">24</option>
+          <option value="25">25</option>
+          <option value="29.97">29.97</option>
+          <option value="30">30</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="modal-action">
+      <button type="button" class="btn btn-ghost" (click)="closeFpsModal()">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button type="button" class="btn btn-primary" [disabled]="fpsFrom() === fpsTo()" (click)="confirmFps()">
+        {{ 'media_detail.action_change_fps' | translate }}
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeFpsModal()">close</button>
+  </form>
+</dialog>

@@ -1,0 +1,246 @@
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'settings.download_clients.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.download_clients.subtitle' | translate }}</p>
+    </div>
+    <button type="button" class="btn btn-primary self-start sm:self-auto" (click)="openCreate()">
+      {{ 'settings.download_clients.new' | translate }}
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (listError()) {
+    <div role="alert" class="alert alert-error">{{ listError() }}</div>
+  } @else if (rows().length === 0) {
+    <p class="text-center py-12 text-base-content/50">
+      {{ 'settings.download_clients.empty' | translate }}
+    </p>
+  } @else {
+    <div class="overflow-x-auto rounded-lg border border-base-200">
+      <table class="table table-zebra table-sm">
+        <thead>
+          <tr>
+            <th>{{ 'settings.download_clients.col_name' | translate }}</th>
+            <th>{{ 'settings.download_clients.col_type' | translate }}</th>
+            <th>{{ 'settings.download_clients.col_host' | translate }}</th>
+            <th>{{ 'settings.download_clients.col_enabled' | translate }}</th>
+            <th class="text-end w-40">{{ 'settings.download_clients.actions' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (dc of rows(); track dc.id) {
+            <tr>
+              <td class="font-medium">{{ dc.name }}</td>
+              <td>
+                <span class="badge badge-ghost badge-sm">{{ dc.implementation }}</span>
+              </td>
+              <td class="font-mono text-sm">{{ dc.settings.host }}:{{ dc.settings.port ?? 8080 }}</td>
+              <td>
+                @if (dc.enabled) {
+                  <span class="badge badge-success badge-sm">{{ 'common.yes' | translate }}</span>
+                } @else {
+                  <span class="badge badge-ghost badge-sm">{{ 'common.no' | translate }}</span>
+                }
+              </td>
+              <td class="text-end">
+                <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(dc)">
+                  {{ 'settings.download_clients.edit' | translate }}
+                </button>
+                <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRow(dc)">
+                  {{ 'settings.download_clients.delete' | translate }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>
+
+  <dialog #editorDialog class="modal">
+    <div class="modal-box max-w-lg max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+      <div class="px-5 sm:px-6 pt-4 pb-3 border-b border-base-200 flex justify-between items-center shrink-0 bg-base-100">
+        <h2 class="text-lg font-bold">
+          @if (editingId() === null) {
+            {{ 'settings.download_clients.editor_create' | translate }}
+          } @else {
+            {{ 'settings.download_clients.editor_edit' | translate }}
+          }
+        </h2>
+        <button
+          type="button"
+          class="btn btn-sm btn-ghost btn-circle"
+          (click)="closeEditor()"
+          [attr.aria-label]="'common.close' | translate"
+        >
+          <svg lucideX class="h-5 w-5"></svg>
+        </button>
+      </div>
+
+      <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.download_clients.field_name' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formName()"
+            (ngModelChange)="formName.set($event)"
+          />
+        </label>
+
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.download_clients.field_type' | translate }}</span>
+          <select
+            class="select select-bordered select-sm w-full"
+            [ngModel]="formType()"
+            (ngModelChange)="formType.set($event)"
+          >
+            <option value="qbittorrent">qBittorrent</option>
+          </select>
+        </label>
+
+        <div class="grid grid-cols-3 gap-3">
+          <label class="form-control col-span-2">
+            <span class="label-text">{{ 'settings.download_clients.field_host' | translate }}</span>
+            <input
+              type="text"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formHost()"
+              (ngModelChange)="formHost.set($event)"
+              placeholder="localhost"
+            />
+          </label>
+          <label class="form-control">
+            <span class="label-text">{{ 'settings.download_clients.field_port' | translate }}</span>
+            <input
+              type="number"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formPort()"
+              (ngModelChange)="formPort.set(+$event)"
+              min="1"
+              max="65535"
+            />
+          </label>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <label class="form-control">
+            <span class="label-text">{{ 'settings.download_clients.field_username' | translate }}</span>
+            <input
+              type="text"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formUsername()"
+              (ngModelChange)="formUsername.set($event)"
+            />
+          </label>
+          <label class="form-control">
+            <span class="label-text">{{ 'settings.download_clients.field_password' | translate }}</span>
+            <input
+              type="password"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formPassword()"
+              (ngModelChange)="formPassword.set($event)"
+              [placeholder]="editingId() !== null ? '••••••••' : ''"
+            />
+          </label>
+        </div>
+
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.download_clients.field_category' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formCategory()"
+            (ngModelChange)="formCategory.set($event)"
+          />
+        </label>
+
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.download_clients.field_movie_category' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formMovieCategory()"
+            (ngModelChange)="formMovieCategory.set($event)"
+          />
+        </label>
+
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.download_clients.field_series_category' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formSeriesCategory()"
+            (ngModelChange)="formSeriesCategory.set($event)"
+          />
+        </label>
+
+        <label class="label cursor-pointer justify-start gap-3">
+          <input
+            type="checkbox"
+            class="toggle toggle-sm"
+            [ngModel]="formUseSsl()"
+            (ngModelChange)="formUseSsl.set($event)"
+          />
+          <span class="label-text">{{ 'settings.download_clients.field_ssl' | translate }}</span>
+        </label>
+
+        <label class="label cursor-pointer justify-start gap-3">
+          <input
+            type="checkbox"
+            class="toggle toggle-sm"
+            [ngModel]="formEnabled()"
+            (ngModelChange)="formEnabled.set($event)"
+          />
+          <span class="label-text">{{ 'settings.download_clients.field_enabled' | translate }}</span>
+        </label>
+
+        <!-- Test connection -->
+        <div class="flex flex-col gap-2 pt-2 border-t border-base-200">
+          <button
+            type="button"
+            class="btn btn-outline btn-sm w-fit"
+            (click)="testConnection()"
+            [disabled]="testLoading()"
+          >
+            @if (testLoading()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'settings.download_clients.test_connection' | translate }}
+          </button>
+          @if (testResult(); as tr) {
+            <div
+              role="alert"
+              class="alert text-sm py-2"
+              [class.alert-success]="tr.ok"
+              [class.alert-error]="!tr.ok"
+            >
+              {{ tr.message }}
+            </div>
+          }
+        </div>
+
+
+      </div>
+
+      <div class="modal-action shrink-0 px-5 sm:px-6 pb-4 pt-2 border-t border-base-200 bg-base-100">
+        <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
+          {{ 'settings.download_clients.cancel' | translate }}
+        </button>
+        <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+          @if (saving()) {
+            <span class="loading loading-spinner loading-sm"></span>
+          }
+          {{ 'settings.download_clients.save' | translate }}
+        </button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">close</button>
+    </form>
+  </dialog>

@@ -1,0 +1,20 @@
+<div class="flex flex-col gap-4">
+  <div>
+    <h1 class="text-2xl font-bold">{{ 'system.title' | translate }}</h1>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'system.subtitle' | translate }}</p>
+  </div>
+
+  <div role="tablist" class="tabs tabs-bordered">
+    <a role="tab" class="tab" routerLink="./" routerLinkActive="tab-active" [routerLinkActiveOptions]="{ exact: true }">
+      {{ 'system.tab_status' | translate }}
+    </a>
+    <a role="tab" class="tab" routerLink="./backups" routerLinkActive="tab-active">
+      {{ 'system.tab_backups' | translate }}
+    </a>
+    <a role="tab" class="tab" routerLink="./logs" routerLinkActive="tab-active">
+      {{ 'system.tab_logs' | translate }}
+    </a>
+  </div>
+
+  <router-outlet />
+</div>

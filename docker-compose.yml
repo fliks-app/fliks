@@ -1,0 +1,98 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: fliks
+      POSTGRES_PASSWORD: fliks
+      POSTGRES_DB: fliks
+    volumes:
+      - fliks_pgdata:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"
+
+  backend:
+    build: ./backend
+    ports:
+      - "3001:3000"
+    env_file: ./backend/.env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      CHOKIDAR_USEPOLLING: "1"
+      CHOKIDAR_INTERVAL: "1000"
+    volumes:
+      - /mnt/data/fliks/volumes/images:/app/images
+      - ./backend/src:/app/src
+      - ./backend/assets:/app/assets
+      - ./backend/scripts:/app/scripts
+      - ./backend/tsconfig.json:/app/tsconfig.json
+      - ./backend/tsconfig.build.json:/app/tsconfig.build.json
+      - ./backend/nest-cli.json:/app/nest-cli.json
+      - ./backend/package.json:/app/package.json
+      - /mnt/data/fliks/volumes/downloads:/downloads
+      - /mnt/data/fliks/volumes/medias:/medias
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "992"  # render group — required for OpenCL access to Intel GPU
+    depends_on:
+      - postgres
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "4500:4500"
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      - backend
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: fliks-qbittorrent
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Paris
+      - WEBUI_PORT=8080
+    ports:
+      - "8080:8080"
+      - "6881:6881"
+      - "6881:6881/udp"
+    volumes:
+      - qbittorrent_config:/config
+      - /mnt/data/fliks/volumes/downloads:/downloads
+    restart: unless-stopped
+
+  jackett:
+    image: lscr.io/linuxserver/jackett:latest
+    container_name: fliks-jackett
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Paris
+    ports:
+      - "9117:9117"
+    volumes:
+      - jackett_config:/config
+    restart: unless-stopped
+
+  emby:
+    image: lscr.io/linuxserver/emby:latest
+    container_name: fliks-emby
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Paris
+    ports:
+      - "8096:8096"
+    volumes:
+      - emby_config:/config
+      - /mnt/data/fliks/volumes/medias:/medias
+    restart: unless-stopped
+
+volumes:
+  fliks_pgdata:
+  qbittorrent_config:
+  jackett_config:
+  emby_config:

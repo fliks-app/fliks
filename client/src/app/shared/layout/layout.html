@@ -1,0 +1,356 @@
+<div class="drawer min-h-screen"
+     [class.lg:drawer-open]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
+     [class.md:drawer-open]="device.isTablet() && navbar.effectiveSidebarPinned()">
+  <input id="sidebar" type="checkbox" class="drawer-toggle" />
+  <div class="drawer-content flex flex-col relative">
+    <nav
+      appTvRow
+      class="navbar fixed left-0 right-0 z-30 transition-all duration-300"
+      style="padding-top: calc(env(safe-area-inset-top, 0px) + 4px)"
+      [class.top-0]="!tv.isTv()"
+      [class.top-4]="tv.isTv()"
+      [class.lg:hidden]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
+      [class.md:hidden]="device.isTablet() && navbar.effectiveSidebarPinned()"
+      [class.-translate-y-full]="navbarHidden()"
+      [class.bg-base-100]="!navbarTransparent()"
+      [class.shadow-sm]="!navbarTransparent()"
+      [class.bg-transparent]="navbarTransparent()"
+      [class.text-white]="navbarTransparent()"
+      [class.nav-hero-icons]="navbarTransparent()"
+    >
+      <div class="flex-none flex">
+        @if (canGoBack()) {
+          <button
+            class="btn btn-square btn-ghost"
+            (click)="goBack()"
+          >
+            <svg lucideChevronLeft class="h-5 w-5"></svg>
+          </button>
+        }
+        @if ((!isNative || device.isTablet()) && !tv.isTv()) {
+          <!-- Hamburger appears wherever the drawer can be opened — that means
+               every form-factor except native phone (uses the bottom dock) and
+               TV (D-pad nav, drawer is always pinnable from the user menu). -->
+          <label for="sidebar" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate">
+            <svg lucideMenu class="h-5 w-5"></svg>
+          </label>
+        }
+      </div>
+      <div class="flex-1 min-w-0">
+        @if (navbarTransparent()) {
+          @if (navbar.heroTitle()) {
+            <span
+              class="block min-w-0 pl-2 text-lg font-semibold truncate [text-shadow:0_1px_2px_rgb(0_0_0/0.45)]"
+              [attr.title]="navbar.heroTitle()"
+              >{{ navbar.heroTitle() }}</span>
+          }
+        } @else if (isNative && isHomeRoute() && navbar.mobileNavTitle()) {
+          <span class="flex items-center gap-2 pl-2 text-lg font-bold min-w-0">
+            <img src="fliks-mark.png" alt="" class="h-7 w-7 shrink-0" />
+            <span class="truncate" [attr.title]="navbar.mobileNavTitle()">{{ navbar.mobileNavTitle() }}</span>
+          </span>
+        } @else if (navbar.mobileNavTitle()) {
+          <span class="block min-w-0 pl-2 text-lg font-bold truncate" [attr.title]="navbar.mobileNavTitle()">{{
+            navbar.mobileNavTitle()
+          }}</span>
+        } @else {
+          <a class="btn btn-ghost text-xl" routerLink="/">{{ 'app.name' | translate }}</a>
+          @if (!networkService.isOnline()) {
+            <span class="badge badge-sm badge-warning">{{ 'downloads.offline' | translate }}</span>
+          }
+        }
+      </div>
+      <div class="flex-none">
+        @if (castPlayer.hasMedia()) {
+          <button class="btn btn-ghost btn-sm gap-1" (click)="toggleCastOverlay()">
+            <svg lucideCast class="h-5 w-5 text-info"></svg>
+            <span class="text-xs font-medium truncate max-w-24">{{ castPlayer.mediaTitle() }}</span>
+          </button>
+        } @else if (castService.isAvailable()) {
+          <button class="btn btn-ghost btn-circle" (click)="onToggleCastConnection()" [disabled]="castService.connecting()">
+            @if (castService.connecting()) {
+              <span class="loading loading-spinner loading-sm"></span>
+            } @else {
+              <svg lucideCast class="h-6 w-6" [class.text-info]="castService.isConnected()"></svg>
+            }
+          </button>
+        }
+        <app-user-menu />
+      </div>
+    </nav>
+    <!-- Spacer for fixed navbar on mobile (navbar height + safe area; reduced on hero pages so fanart extends under status bar).
+         TV has no safe-area-inset-top (no notch / status bar), so the 3rem
+         falls flush against the navbar; bump to 4rem there so content has
+         the same visual breathing room as phones/tablets. -->
+    <div
+      [class.lg:hidden]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
+      [class.md:hidden]="device.isTablet() && navbar.effectiveSidebarPinned()"
+      [class.h-20]="!navbar.isHeroPage() && tv.isTv()"
+      [style.height]="navbar.isHeroPage() ? '0px' : tv.isTv() ? null : 'calc(3rem + env(safe-area-inset-top, 0px))'"
+    ></div>
+    <!-- Desktop top-right: Cast + User -->
+    <div appTvRow
+         class="hidden items-center justify-end gap-1 absolute right-4 z-50 pointer-events-none [&>*]:pointer-events-auto"
+         style="top: calc(0.75rem + env(safe-area-inset-top, 0px))"
+         [class.lg:flex]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
+         [class.md:flex]="device.isTablet() && navbar.effectiveSidebarPinned()">
+      @if (castPlayer.hasMedia()) {
+        <button class="btn btn-ghost btn-sm gap-2" (click)="toggleCastOverlay()">
+          <svg lucideCast class="h-5 w-5 text-info"></svg>
+          <span class="text-xs font-medium truncate max-w-32">{{ castPlayer.mediaTitle() }}</span>
+        </button>
+      } @else if (castService.isAvailable()) {
+        <button class="btn btn-ghost btn-circle" (click)="onToggleCastConnection()" [disabled]="castService.connecting()">
+          @if (castService.connecting()) {
+            <span class="loading loading-spinner loading-sm"></span>
+          } @else {
+            <svg lucideCast class="h-6 w-6" [class.text-info]="castService.isConnected()"></svg>
+          }
+        </button>
+      }
+      <app-user-menu />
+    </div>
+    <!-- overflow-x: clip clips horizontal overflow without forcing the
+         element into a scroll container — `overflow-x: hidden` coerces
+         `overflow-y` to auto, which makes <main> a vertical scroll
+         container even when it doesn't actually scroll, breaking
+         `position: sticky` on descendants (sticky would anchor to <main>
+         and never engage because the actual scroll happens on the page). -->
+    <main
+      class="min-w-0 flex-1 p-4 lg:p-6"
+      [class.overflow-x-clip]="!navbar.isHeroPage()"
+      [class.lg:pt-12]="!navbar.isHeroPage() && !isNative && !navbar.mobileNavbarVisible()"
+      [style.padding-top]="!navbar.isHeroPage() && isNative && !navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 1rem)' : null"
+    >
+      @if (!networkService.isOnline()) {
+        <div class="alert alert-warning mb-4 flex items-center justify-between py-2">
+          <span class="text-sm">{{ 'common.offline_banner' | translate }}</span>
+          <button class="btn btn-sm btn-ghost" (click)="retryConnection()">{{ 'common.retry' | translate }}</button>
+        </div>
+      }
+      <router-outlet />
+    </main>
+    <!-- Bottom spacer for native bottom bar — phones only. Tablets and TV
+         navigate via the drawer/sidebar; phones use the dock as the primary
+         nav surface so they need the spacer to avoid content under the bar. -->
+    @if (isNative && device.isPhone()) {
+      <div class="h-20"></div>
+    }
+    <!-- Native bottom navigation bar — phones only.
+         Tablets and TV use the drawer/sidebar instead. -->
+    @if (isNative && device.isPhone() && !keyboardOpen()) {
+      <div class="dock z-40 dock-with-fab-cradle">
+        <a routerLink="/" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: true }"
+           (click)="resetNavHistory()">
+          <svg lucideHome class="h-5 w-5"></svg>
+          <span class="dock-label truncate max-w-full">{{ 'nav.home' | translate }}</span>
+        </a>
+        <a routerLink="/downloads" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: false }"
+           (click)="resetNavHistory()">
+          <svg lucideDownload class="h-5 w-5"></svg>
+          <span class="dock-label truncate max-w-full">{{ 'nav.downloads' | translate }}</span>
+        </a>
+        <!-- Empty cell that holds the centre slot in the flex chain so the
+             4 nav items distribute evenly across 5 columns. The FAB sits
+             outside the dock to keep .dock's position:fixed intact. -->
+        <span aria-hidden="true" class="invisible"></span>
+        <a routerLink="/history" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: false }"
+           (click)="resetNavHistory()">
+          <svg lucideHistory class="h-5 w-5"></svg>
+          <span class="dock-label truncate max-w-full">{{ 'nav.history' | translate }}</span>
+        </a>
+        <button (click)="toggleBottomMenu()" [class.dock-active]="bottomMenuOpen()"
+                class="[&.dock-active]:before:hidden [&.dock-active]:after:hidden">
+          <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+          <span class="dock-label truncate max-w-full">{{ 'nav.more' | translate }}</span>
+        </button>
+      </div>
+      <!-- Search FAB — fixed at horizontal viewport centre, vertically lifted
+           so its centre lands ~just above the top of the dock. Default: white
+           bg + primary icon (white literal so dark themes still get a white
+           circle). Active (current route): inverted via routerLinkActive.
+           Arbitrary variants suppress the DaisyUI .dock-active underline. -->
+      <a routerLink="/search"
+         [routerLinkActive]="['dock-active', '!bg-primary', '!text-primary-content']"
+         [routerLinkActiveOptions]="{ exact: false }"
+         (click)="resetNavHistory()"
+         class="fixed left-1/2 -translate-x-1/2 z-50 bg-white text-primary !rounded-full !p-0 shadow-lg flex items-center justify-center [&.dock-active]:before:hidden [&.dock-active]:after:hidden"
+         style="bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem); width: 56px; height: 56px;"
+         [attr.aria-label]="'search.title' | translate">
+        <svg lucideSearch class="h-5 w-5"></svg>
+      </a>
+        <!-- More menu dropdown (opens upward, positioned relative to viewport
+             since the .dock is no longer the parent stacking context). -->
+        @if (bottomMenuOpen()) {
+          <div class="fixed inset-0 z-40" (click)="bottomMenuOpen.set(false)"></div>
+          <div class="fixed bottom-20 right-2 mb-2 bg-base-100 rounded-box shadow-xl border border-base-200 min-w-48 z-50"
+               style="bottom: calc(4rem + env(safe-area-inset-bottom, 0px) + 0.5rem)">
+            <ul class="menu p-2 gap-0.5">
+              @for (lib of customLibraries(); track lib.id) {
+                <li>
+                  <a [routerLink]="libraryUrl(lib)" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
+                    <span class="flex items-center gap-2">
+                      <app-lucide-icon [name]="libraryIcon(lib)" class="h-5 w-5" />
+                      {{ lib.name }}
+                    </span>
+                    @if (libraryCounts()[lib.id]) {
+                      <span class="badge badge-sm badge-ghost">{{ libraryCounts()[lib.id] }}</span>
+                    }
+                  </a>
+                </li>
+              }
+              <li>
+                <a routerLink="/persons" routerLinkActive="active" (click)="resetNavHistory()">
+                  <svg lucideUsers class="h-5 w-5"></svg>
+                  {{ 'nav.persons' | translate }}
+                </a>
+              </li>
+              <li>
+                <a routerLink="/activity" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
+                  <span class="flex items-center gap-2">
+                    <svg lucideDownload class="h-5 w-5"></svg>
+                    {{ 'nav.activity' | translate }}
+                  </span>
+                  @if (queueCount() > 0) {
+                    <span class="badge badge-sm badge-primary">{{ queueCount() }}</span>
+                  }
+                </a>
+              </li>
+              <li>
+                <a routerLink="/requests" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
+                  <span class="flex items-center gap-2">
+                    <svg lucideClipboardList class="h-5 w-5"></svg>
+                    {{ 'nav.requests' | translate }}
+                  </span>
+                  @if (pendingRequestCount() > 0) {
+                    <span class="badge badge-sm badge-warning">{{ pendingRequestCount() }}</span>
+                  }
+                </a>
+              </li>
+              <li>
+                <a routerLink="/calendar" routerLinkActive="active" (click)="resetNavHistory()">
+                  <svg lucideCalendar class="h-5 w-5"></svg>
+                  {{ 'nav.calendar' | translate }}
+                </a>
+              </li>
+            </ul>
+          </div>
+        }
+    }
+  </div>
+
+  <!-- Cast overlay (chip + card) — global, persists across navigation -->
+  <app-cast-overlay />
+
+  <!-- Card actions panel (TV menu button / mobile long-press) — single instance -->
+  <app-card-actions-panel />
+
+  <div class="drawer-side z-40" [class.hidden]="isNative && device.isPhone()">
+    <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
+    <aside class="bg-base-100 w-64 min-h-full flex flex-col" style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 )">
+      <div class="p-4 border-b border-base-200 flex items-center gap-2">
+        <a routerLink="/" class="flex items-center gap-2 pl-2 text-2xl font-bold flex-1 min-w-0">
+          <img src="fliks-mark.png" alt="" class="h-8 w-8 shrink-0" />
+          <span class="truncate">{{ 'app.name' | translate }}</span>
+        </a>
+        @if (!networkService.isOnline()) {
+          <span class="badge badge-sm badge-warning">{{ 'downloads.offline' | translate }}</span>
+        }
+        @if (device.isTablet() || device.isTv()) {
+          <!-- Pin/unpin sidebar — tablet & TV (lg+ widths where the pin
+               actually has an effect; auto-disabled on narrower viewports
+               via effectiveSidebarPinned). Desktop is always pinned,
+               phones never have this sidebar. -->
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm btn-square hidden lg:inline-flex"
+            [class.text-primary]="navbar.sidebarPinned()"
+            (click)="navbar.toggleSidebarPinned()"
+            [attr.aria-label]="(navbar.sidebarPinned() ? 'nav.unpin_sidebar' : 'nav.pin_sidebar') | translate"
+          >
+            <svg lucidePin class="h-4 w-4"></svg>
+          </button>
+        }
+      </div>
+
+      <ul class="menu p-4 flex-1 gap-0.5 min-w-64">
+        <li>
+          <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+            <svg lucideHome class="h-5 w-5"></svg>
+            {{ 'nav.home' | translate }}
+          </a>
+        </li>
+        <li>
+          <a routerLink="/search" routerLinkActive="active">
+            <svg lucideSearch class="h-5 w-5"></svg>
+            {{ 'search.title' | translate }}
+          </a>
+        </li>
+
+        <li class="menu-title text-xs uppercase tracking-wider mt-3">{{ 'nav.section_library' | translate }}</li>
+        @for (lib of libraries(); track lib.id) {
+          <li>
+            <a [routerLink]="libraryUrl(lib)" routerLinkActive="active" class="justify-between">
+              <span class="flex items-center gap-2">
+                <app-lucide-icon [name]="libraryIcon(lib)" class="h-5 w-5" />
+                {{ lib.name }}
+              </span>
+              @if (libraryCounts()[lib.id]) {
+                <span class="badge badge-sm badge-ghost">{{ libraryCounts()[lib.id] }}</span>
+              }
+            </a>
+          </li>
+        }
+        <li>
+          <a routerLink="/persons" routerLinkActive="active">
+            <svg lucideUsers class="h-5 w-5"></svg>
+            {{ 'nav.persons' | translate }}
+          </a>
+        </li>
+        <li>
+          <a routerLink="/downloads" routerLinkActive="active">
+            <svg lucideDownload class="h-5 w-5"></svg>
+            {{ 'downloads.title' | translate }}
+          </a>
+        </li>
+        <li>
+          <a routerLink="/history" routerLinkActive="active">
+            <svg lucideHistory class="h-5 w-5"></svg>
+            {{ 'nav.history' | translate }}
+          </a>
+        </li>
+
+        <li class="menu-title text-xs uppercase tracking-wider mt-3">{{ 'nav.section_downloads' | translate }}</li>
+        <li>
+          <a routerLink="/requests" routerLinkActive="active" class="justify-between">
+            <span class="flex items-center gap-2">
+              <svg lucideClipboardList class="h-5 w-5"></svg>
+              {{ 'nav.requests' | translate }}
+            </span>
+            @if (pendingRequestCount() > 0) {
+              <span class="badge badge-sm badge-warning">{{ pendingRequestCount() }}</span>
+            }
+          </a>
+        </li>
+        <li>
+          <a routerLink="/activity" routerLinkActive="active" class="justify-between">
+            <span class="flex items-center gap-2">
+              <svg lucideDownload class="h-5 w-5"></svg>
+              {{ 'nav.activity' | translate }}
+            </span>
+            @if (queueCount() > 0) {
+              <span class="badge badge-sm badge-primary">{{ queueCount() }}</span>
+            }
+          </a>
+        </li>
+        <li>
+          <a routerLink="/calendar" routerLinkActive="active">
+            <svg lucideCalendar class="h-5 w-5"></svg>
+            {{ 'nav.calendar' | translate }}
+          </a>
+        </li>
+      </ul>
+
+    </aside>
+  </div>
+</div>

@@ -1,0 +1,69 @@
+@if (loading()) {
+  <div class="flex justify-center py-16">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+} @else {
+  <div class="space-y-4">
+    <div>
+      <h1 class="text-xl font-bold">{{ 'settings.schedulers.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60">{{ 'settings.schedulers.subtitle' | translate }}</p>
+    </div>
+
+    <div class="overflow-x-auto rounded-lg border border-base-200">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>{{ 'settings.schedulers.col_name' | translate }}</th>
+            <th>{{ 'settings.schedulers.col_interval' | translate }}</th>
+            <th>{{ 'settings.schedulers.col_last_run' | translate }}</th>
+            <th>{{ 'settings.schedulers.col_status' | translate }}</th>
+            <th>{{ 'settings.schedulers.col_next_run' | translate }}</th>
+            <th class="w-10"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (s of schedulers(); track s.name) {
+            <tr>
+              <td class="font-medium text-sm">{{ 'settings.schedulers.names.' + s.name | translate }}</td>
+              <td class="text-sm text-base-content/60 font-mono">{{ s.cron }}</td>
+              <td class="text-sm text-base-content/60">
+                @if (s.lastRun) {
+                  {{ s.lastRun | date:'dd/MM/yyyy HH:mm' }}
+                } @else {
+                  <span class="text-base-content/30">{{ 'settings.schedulers.never' | translate }}</span>
+                }
+              </td>
+              <td>
+                @if (s.lastStatus) {
+                  <span class="badge badge-sm" [class]="statusBadgeClass(s.lastStatus)">
+                    {{ 'settings.schedulers.status.' + s.lastStatus | translate }}
+                  </span>
+                } @else {
+                  <span class="text-sm text-base-content/30">—</span>
+                }
+              </td>
+              <td class="text-sm text-base-content/60">{{ s.nextRun | date:'dd/MM/yyyy HH:mm' }}</td>
+              <td>
+                @if (s.triggerable) {
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs btn-square"
+                    [disabled]="triggerBusy() !== null"
+                    [title]="'settings.schedulers.trigger' | translate"
+                    (click)="trigger(s.name)"
+                  >
+                    @if (triggerBusy() === s.name) {
+                      <span class="loading loading-spinner loading-xs"></span>
+                    } @else {
+                      <svg lucideCirclePlay class="h-4 w-4"></svg>
+                    }
+                  </button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+}

@@ -1,0 +1,119 @@
+<div class="flex flex-col gap-6">
+  <div>
+    <h1 class="text-2xl font-bold">{{ 'settings.cleanup_profiles.title' | translate }}</h1>
+    <p class="text-sm text-base-content/60 mt-1">
+      {{ 'settings.cleanup_profiles.subtitle' | translate }}
+    </p>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (loadError()) {
+    <div role="alert" class="alert alert-error">{{ loadError() }}</div>
+  } @else {
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      @for (row of rows(); track row.key) {
+        <div class="card bg-base-100 border border-base-200">
+          <div class="card-body gap-3">
+            <div class="flex items-center justify-between">
+              <h2 class="card-title text-base">
+                {{ 'settings.cleanup_profiles.profile_' + row.key | translate }}
+              </h2>
+              <span class="badge badge-outline badge-sm uppercase">{{ row.key }}</span>
+            </div>
+
+            <label class="form-control w-full">
+              <span class="label-text">{{ 'settings.cleanup_profiles.field_samples' | translate }}</span>
+              <input
+                type="number"
+                class="input input-bordered input-sm w-full"
+                min="2"
+                [ngModel]="row.draftSamples"
+                (ngModelChange)="updateDraftSamples(row.key, +$event)"
+              />
+              <div class="label">
+                <span class="label-text-alt text-base-content/50">{{ 'settings.cleanup_profiles.field_samples_hint' | translate }}</span>
+              </div>
+            </label>
+
+            <label class="form-control w-full">
+              <span class="label-text">{{ 'settings.cleanup_profiles.field_interval' | translate }}</span>
+              <input
+                type="number"
+                class="input input-bordered input-sm w-full"
+                min="1"
+                [ngModel]="row.draftIntervalMinutes"
+                (ngModelChange)="updateDraftInterval(row.key, +$event)"
+              />
+              <div class="label">
+                <span class="label-text-alt text-base-content/50">{{ 'settings.cleanup_profiles.field_interval_hint' | translate }}</span>
+              </div>
+            </label>
+
+            <label class="label cursor-pointer gap-2 justify-start">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-sm"
+                [ngModel]="row.draftAutoRestart"
+                (ngModelChange)="updateDraftAutoRestart(row.key, $event)"
+              />
+              <span class="label-text">{{ 'settings.cleanup_profiles.field_auto_restart' | translate }}</span>
+            </label>
+
+            <div class="rounded bg-base-200 px-3 py-2 text-sm">
+              {{ 'settings.cleanup_profiles.detection_time' | translate }}:
+              <strong>{{ formatDetection(detectionMinutes(row.draftSamples, row.draftIntervalMinutes)) }}</strong>
+            </div>
+
+            <div class="card-actions justify-end mt-2">
+              <button
+                type="button"
+                class="btn btn-primary btn-sm"
+                [disabled]="!isDirty(row) || row.saving"
+                (click)="save(row)"
+              >
+                @if (row.saving) {
+                  <span class="loading loading-spinner loading-xs"></span>
+                }
+                {{ 'common.save' | translate }}
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-3">
+        <h2 class="card-title text-base">{{ 'settings.cleanup_profiles.global_title' | translate }}</h2>
+        <label class="label cursor-pointer gap-2 justify-start">
+          <input
+            type="checkbox"
+            class="checkbox checkbox-sm"
+            [ngModel]="allowManualRestart()"
+            (ngModelChange)="allowManualRestart.set($event)"
+          />
+          <span class="label-text">{{ 'settings.cleanup_profiles.allow_manual_restart' | translate }}</span>
+        </label>
+        <p class="text-xs text-base-content/60">
+          {{ 'settings.cleanup_profiles.allow_manual_restart_hint' | translate }}
+        </p>
+        <div class="flex justify-end">
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            [disabled]="savingGlobal()"
+            (click)="saveGlobal()"
+          >
+            @if (savingGlobal()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'common.save' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

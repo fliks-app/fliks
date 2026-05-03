@@ -1,0 +1,105 @@
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'settings.quality_definitions.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.quality_definitions.subtitle' | translate }}</p>
+    </div>
+    <div class="flex gap-2">
+      <button type="button" class="btn btn-ghost btn-sm" (click)="resetDefaults()">
+        {{ 'settings.quality_definitions.reset' | translate }}
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary btn-sm"
+        [disabled]="saving() || !dirty()"
+        (click)="save()"
+      >
+        @if (saving()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ 'settings.quality_definitions.save' | translate }}
+      </button>
+    </div>
+  </div>
+
+  @if (error()) {
+    <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
+  }
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else {
+    <div class="flex flex-col gap-4">
+      @for (def of definitions(); track def.qualityId) {
+        <div class="card bg-base-100 border border-base-200 shadow-sm">
+          <div class="card-body p-4 gap-3">
+            <div class="flex items-center gap-3">
+              <span class="font-semibold text-sm w-40 shrink-0">{{ def.title }}</span>
+              <input
+                type="text"
+                class="input input-bordered input-xs flex-1 max-w-[12rem]"
+                [ngModel]="def.title"
+                (ngModelChange)="updateTitle(def, $event)"
+              />
+            </div>
+
+            <!-- Triple range slider -->
+            <div class="flex items-center gap-3">
+              <span class="text-xs tabular-nums w-20 text-right font-mono text-info">
+                {{ formatSize(def.minSize) }}
+              </span>
+
+              <div
+                class="flex-1 relative h-10 select-none"
+                #track
+                (mousedown)="onTrackMouseDown($event, def, track)"
+                (touchstart)="onTrackTouchStart($event, def, track)"
+              >
+                <!-- Background track -->
+                <div class="absolute inset-x-0 h-1.5 bg-base-300 rounded-full top-1/2 -translate-y-1/2"></div>
+                <!-- Colored bar min→max -->
+                <div
+                  class="absolute h-1.5 bg-primary/30 rounded-full top-1/2 -translate-y-1/2"
+                  [style.left.%]="sliderPercent(def.minSize)"
+                  [style.right.%]="100 - sliderPercent(def.maxSize || maxSlider)"
+                ></div>
+                <!-- Colored bar min→preferred -->
+                <div
+                  class="absolute h-1.5 bg-info/40 rounded-full top-1/2 -translate-y-1/2"
+                  [style.left.%]="sliderPercent(def.minSize)"
+                  [style.right.%]="100 - sliderPercent(def.preferredSize)"
+                ></div>
+
+                <!-- Min thumb -->
+                <div
+                  class="absolute w-4 h-4 rounded-full bg-info border-2 border-base-100 top-1/2 -translate-y-1/2 -translate-x-1/2 cursor-grab shadow"
+                  [style.left.%]="sliderPercent(def.minSize)"
+                ></div>
+                <!-- Preferred thumb -->
+                <div
+                  class="absolute w-4 h-4 rounded-full bg-success border-2 border-base-100 top-1/2 -translate-y-1/2 -translate-x-1/2 cursor-grab shadow z-10"
+                  [style.left.%]="sliderPercent(def.preferredSize)"
+                ></div>
+                <!-- Max thumb -->
+                <div
+                  class="absolute w-4 h-4 rounded-full bg-warning border-2 border-base-100 top-1/2 -translate-y-1/2 -translate-x-1/2 cursor-grab shadow"
+                  [style.left.%]="sliderPercent(def.maxSize || maxSlider)"
+                ></div>
+              </div>
+
+              <span class="text-xs tabular-nums w-20 text-center font-mono text-success">
+                {{ formatSize(def.preferredSize) }}
+              </span>
+              <span class="text-xs tabular-nums w-20 text-left font-mono text-warning">
+                {{ def.maxSize > 0 ? formatSize(def.maxSize) : ('settings.quality_definitions.unlimited' | translate) }}
+              </span>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+    <p class="text-xs text-base-content/50">{{ 'settings.quality_definitions.hint' | translate }}</p>
+  }
+</div>

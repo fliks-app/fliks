@@ -1,0 +1,176 @@
+<div class="flex flex-col gap-4">
+  <!-- Step 1: folder input -->
+  <div>
+    <h3 class="text-sm font-semibold mb-2">{{ 'import_disk.step_scan' | translate }}</h3>
+    <div class="flex gap-2 items-end">
+        <label class="form-control flex-1">
+          <span class="label-text">{{ 'import_disk.folder_label' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full font-mono"
+            [placeholder]="'import_disk.folder_placeholder' | translate"
+            [ngModel]="folderPath()"
+            (ngModelChange)="folderPath.set($event)"
+            (keydown.enter)="scan()"
+          />
+        </label>
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          (click)="scan()"
+          [disabled]="scanning() || !folderPath().trim()"
+        >
+          @if (scanning()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'import_disk.scan_btn' | translate }}
+        </button>
+      </div>
+    @if (scanError()) {
+      <div role="alert" class="alert alert-error text-sm mt-2">{{ scanError() }}</div>
+    }
+  </div>
+
+  <!-- Step 2: review candidates -->
+  @if (scanned()) {
+    @if (rows().length === 0) {
+      <p class="text-center py-8 text-base-content/50">{{ 'import_disk.no_files' | translate }}</p>
+    } @else {
+      <div class="flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold">
+            {{ 'import_disk.step_review' | translate }}
+            <span class="text-sm font-normal text-base-content/50 ml-2">
+              {{ rows().length }} {{ 'import_disk.files_found' | translate }}
+            </span>
+          </h2>
+          <label class="label cursor-pointer gap-2">
+            <span class="label-text text-sm">{{ 'import_disk.select_all' | translate }}</span>
+            <input
+              type="checkbox"
+              class="checkbox checkbox-sm"
+              [ngModel]="selectedCount() === rows().length && rows().length > 0"
+              (ngModelChange)="toggleAll($event)"
+            />
+          </label>
+        </div>
+
+        <div class="overflow-x-auto rounded-lg border border-base-200">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th class="w-8"></th>
+                <th>{{ 'import_disk.col_file' | translate }}</th>
+                <th class="w-20">{{ 'import_disk.col_size' | translate }}</th>
+                <th class="w-28">{{ 'import_disk.col_quality' | translate }}</th>
+                <th>{{ 'import_disk.col_media' | translate }}</th>
+                <th class="w-24">{{ 'import_disk.col_episode' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rows(); track row.candidate.filePath; let i = $index) {
+                <tr [class.opacity-40]="!row.selected" [class.bg-warning/10]="row.candidate.existingQuality && !row.force">
+                  <td>
+                    <input
+                      type="checkbox"
+                      class="checkbox checkbox-sm"
+                      [ngModel]="row.selected"
+                      (ngModelChange)="setRowSelected(i, $event)"
+                      [disabled]="!!row.candidate.existingQuality && !row.force"
+                    />
+                  </td>
+                  <td class="max-w-[16rem] xl:max-w-xs">
+                    <p class="truncate text-sm font-mono" [title]="row.candidate.filePath">
+                      {{ row.candidate.filename }}
+                    </p>
+                    @if (row.candidate.existingQuality && !row.force) {
+                      <div class="flex items-center gap-2 mt-1">
+                        <span class="text-xs text-warning">
+                          {{ 'import_disk.existing_quality' | translate:{ quality: row.candidate.existingQuality } }}
+                        </span>
+                        <button
+                          type="button"
+                          class="btn btn-warning btn-outline btn-xs"
+                          (click)="forceImportRow(i)"
+                        >
+                          {{ 'import_disk.force_import' | translate }}
+                        </button>
+                      </div>
+                    }
+                  </td>
+                  <td class="text-sm text-base-content/60 tabular-nums">
+                    {{ formatBytes(row.candidate.size) }}
+                  </td>
+                  <td>
+                    <span class="badge badge-ghost badge-sm">{{ row.candidate.qualityName }}</span>
+                  </td>
+                  <td>
+                    @if (mediaOptionsLoading()) {
+                      <span class="loading loading-spinner loading-xs"></span>
+                    } @else {
+                      <select
+                        class="select select-bordered select-xs w-full max-w-xs"
+                        [ngModel]="row.mediaId"
+                        (ngModelChange)="setRowMedia(i, $event ? +$event : null)"
+                      >
+                        <option [ngValue]="null">{{ 'import_disk.no_match' | translate }}</option>
+                        @for (opt of mediaOptions(); track opt.id) {
+                          <option [ngValue]="opt.id">{{ mediaLabel(opt) }}</option>
+                        }
+                      </select>
+                    }
+                  </td>
+                  <td class="text-sm text-base-content/60">
+                    @if (row.candidate.seasonNumber !== null && row.candidate.episodeNumber !== null) {
+                      <span class="font-mono">
+                        S{{ (row.candidate.seasonNumber | number:'2.0-0') }}E{{ (row.candidate.episodeNumber | number:'2.0-0') }}
+                      </span>
+                      @if (row.candidate.episodeTitle) {
+                        <p class="truncate max-w-[8rem]" [title]="row.candidate.episodeTitle">{{ row.candidate.episodeTitle }}</p>
+                      }
+                    } @else {
+                      <span class="text-base-content/30">—</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        @if (importResult(); as result) {
+          <div
+            role="alert"
+            class="alert text-sm"
+            [class.alert-success]="result.errors.length === 0"
+            [class.alert-warning]="result.errors.length > 0"
+          >
+            <div class="flex flex-col gap-1">
+              <span>{{ result.imported }} {{ 'import_disk.import_ok_count' | translate }}</span>
+              @for (err of result.errors; track err) {
+                <span class="text-sm opacity-80">{{ err }}</span>
+              }
+            </div>
+          </div>
+        }
+
+        <div class="flex justify-end">
+          <button
+            type="button"
+            class="btn btn-primary"
+            (click)="confirmImport()"
+            [disabled]="importing() || selectedCount() === 0"
+          >
+            @if (importing()) {
+              <span class="loading loading-spinner loading-sm"></span>
+            }
+            {{ 'import_disk.import_btn' | translate }}
+            @if (selectedCount() > 0) {
+              <span class="badge badge-sm">{{ selectedCount() }}</span>
+            }
+          </button>
+        </div>
+      </div>
+    }
+  }
+</div>

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <title>Fliks</title>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1d232a">
+  <!-- Pre-paint navy bg — kills the WebView default-white flash before
+       styles.css parses. :where() has zero specificity so daisyUI overrides
+       cleanly once it loads. App is dark-only. -->
+  <style>
+    html, body { margin: 0; }
+    :where(html) { background-color: #1d232a; }
+  </style>
+  <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1" async></script>
+</head>
+<body>
+  <app-root></app-root>
+</body>
+</html>

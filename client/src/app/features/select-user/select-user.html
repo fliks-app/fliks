@@ -1,0 +1,75 @@
+<div class="min-h-screen flex items-start justify-center bg-base-200 px-4 py-10" (click)="closeSheet()">
+  <div class="w-full max-w-3xl flex flex-col gap-8">
+    <div class="text-center">
+      <h1 class="text-3xl font-bold">{{ 'select_user.title' | translate }}</h1>
+    </div>
+
+    @if (loading()) {
+      <div class="flex justify-center py-10">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    } @else if (error()) {
+      <div role="alert" class="alert alert-error">{{ error() | translate }}</div>
+    } @else {
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
+        @for (user of users(); track user.id) {
+          @let init = initials(user.username);
+          <button
+            type="button"
+            class="flex flex-col items-center gap-2 p-2 rounded-lg hover:bg-base-100 focus:bg-base-100 transition-colors"
+            (click)="selectUser(user); $event.stopPropagation()"
+          >
+            <div class="avatar avatar-placeholder">
+              <div class="w-24 h-24 rounded-full text-2xl font-semibold text-white" [style.background-color]="'hsl(' + init.hue + ' 55% 45%)'">
+                @if (user.avatar) {
+                  <img [src]="user.avatar" [alt]="user.username" />
+                } @else {
+                  <span>{{ init.initials }}</span>
+                }
+              </div>
+            </div>
+            <span class="text-sm font-medium truncate w-full text-center">{{ user.username }}</span>
+          </button>
+        }
+      </div>
+    }
+
+    <div class="flex flex-col items-center gap-2">
+      <button type="button" class="btn btn-ghost btn-sm gap-2" (click)="goToOtherUser(); $event.stopPropagation()">
+        <svg lucideUserRoundPen class="h-4 w-4"></svg>
+        {{ 'select_user.other_user' | translate }}
+      </button>
+      @if (isNative) {
+        <button type="button" class="btn btn-ghost btn-xs" (click)="changeServer(); $event.stopPropagation()">
+          {{ 'select_user.change_server' | translate }}
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (openSheetFor() !== null) {
+    <div class="fixed inset-0 z-40 bg-black/50 flex items-end sm:items-center justify-center p-4" (click)="closeSheet()">
+      <div class="card bg-base-100 w-full max-w-sm shadow-xl" (click)="$event.stopPropagation()">
+        <div class="card-body gap-2">
+          @let selected = users().length ? users() : [];
+          @for (u of selected; track u.id) {
+            @if (u.id === openSheetFor()) {
+              <div class="text-center font-semibold mb-2">{{ u.username }}</div>
+              <button type="button" class="btn btn-primary justify-start gap-3" (click)="goToPasswordLogin(u)">
+                <svg lucideKeyRound class="h-5 w-5"></svg>
+                {{ 'select_user.use_password' | translate }}
+              </button>
+              <button type="button" class="btn btn-outline justify-start gap-3" (click)="goToQuickConnect(u)">
+                <svg lucideMonitorSmartphone class="h-5 w-5"></svg>
+                {{ 'select_user.use_quick_connect' | translate }}
+              </button>
+              <button type="button" class="btn btn-ghost btn-sm" (click)="closeSheet()">
+                {{ 'common.cancel' | translate }}
+              </button>
+            }
+          }
+        </div>
+      </div>
+    </div>
+  }
+</div>

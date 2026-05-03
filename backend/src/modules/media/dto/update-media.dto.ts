@@ -1,0 +1,91 @@
+import { CreateMediaDto } from './create-media.dto';
+import {
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsNumber,
+  IsBoolean,
+  IsArray,
+  IsDateString,
+  IsIn,
+} from 'class-validator';
+import { MediaType, MediaStatus } from '../../../common/enums';
+
+export class UpdateMediaDto {
+  @IsString()
+  @IsOptional()
+  title?: string;
+
+  @IsString()
+  @IsOptional()
+  originalTitle?: string;
+
+  @IsNumber()
+  @IsOptional()
+  year?: number;
+
+  @IsEnum(MediaType)
+  @IsOptional()
+  type?: MediaType;
+
+  @IsNumber()
+  @IsOptional()
+  tmdbId?: number;
+
+  @IsString()
+  @IsOptional()
+  imdbId?: string;
+
+  @IsString()
+  @IsOptional()
+  overview?: string;
+
+  @IsEnum(MediaStatus)
+  @IsOptional()
+  status?: MediaStatus;
+
+  @IsBoolean()
+  @IsOptional()
+  monitored?: boolean;
+
+  @IsString()
+  @IsOptional()
+  path?: string;
+
+  @IsString()
+  @IsOptional()
+  posterUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  fanartUrl?: string;
+
+  @IsNumber()
+  @IsOptional()
+  rating?: number;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  genres?: string[];
+
+  @IsNumber()
+  @IsOptional()
+  runtime?: number;
+
+  @IsDateString()
+  @IsOptional()
+  releaseDate?: string;
+
+  @IsNumber()
+  @IsOptional()
+  qualityProfileId?: number;
+
+  @IsNumber()
+  @IsOptional()
+  languageProfileId?: number;
+
+  @IsOptional()
+  @IsIn(['tmdb', 'tvdb', null])
+  preferredProvider?: 'tmdb' | 'tvdb' | null;
+}

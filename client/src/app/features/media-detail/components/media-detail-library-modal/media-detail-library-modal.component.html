@@ -1,0 +1,59 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-md">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+    </form>
+    <h3 class="text-lg font-bold mb-4">{{ 'media_detail.library_section' | translate }}</h3>
+    <form class="flex flex-col gap-4" (ngSubmit)="save.emit()">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'media_detail.library_label' | translate }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          name="library"
+          [ngModel]="selectedLibraryId()"
+          (ngModelChange)="selectedLibraryIdChange.emit($event)"
+        >
+          <option [ngValue]="null">{{ 'media_detail.no_library' | translate }}</option>
+          @for (l of libraries(); track l.id) {
+            <option [ngValue]="l.id">{{ l.name }}</option>
+          }
+        </select>
+      </label>
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'media_detail.provider_section_title' | translate }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          name="provider"
+          [ngModel]="selectedProvider()"
+          (ngModelChange)="selectedProviderChange.emit($event)"
+        >
+          @for (opt of providerOptions; track opt.value) {
+            <option [ngValue]="opt.value">
+              {{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}
+            </option>
+          }
+        </select>
+        <span class="label-text-alt opacity-60">{{ 'media_detail.provider_override_hint' | translate }}</span>
+      </label>
+      @if (saved()) {
+        <div role="alert" class="alert alert-success text-sm py-2">{{ 'media_detail.library_saved' | translate }}</div>
+      }
+      <div class="modal-action">
+        <button
+          type="submit"
+          class="btn btn-primary btn-sm"
+          [disabled]="saving() || selectedLibraryId() === null"
+        >
+          @if (saving()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'common.save' | translate }}
+        </button>
+        <button type="button" class="btn btn-sm" onclick="this.closest('dialog').close()">
+          {{ 'common.close' | translate }}
+        </button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
