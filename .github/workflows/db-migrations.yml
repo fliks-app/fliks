@@ -57,11 +57,13 @@ jobs:
         run: npm run db:migration:run
       - name: Verify entity metadata matches the migrated schema
         # `migration:generate` against a DB that already has the latest
-        # schema must produce an empty diff. If it produces a non-empty
-        # migration, the developer forgot to commit one.
+        # schema must produce an empty diff. The CLI exits non-zero in
+        # the no-diff case ("No changes in database schema were found")
+        # — we treat that as success and only fail if a migration file
+        # was actually emitted (the developer forgot to commit one).
         run: |
-          npx typeorm-ts-node-commonjs migration:generate \
-            -d src/data-source.ts src/migrations/__ci_drift_check
+          ./node_modules/.bin/typeorm-ts-node-commonjs migration:generate \
+            -d src/data-source.ts src/migrations/__ci_drift_check || true
           if [ -f src/migrations/__ci_drift_check.ts ]; then
             echo "::error::Entity changes are not reflected in any committed migration."
             echo "Run 'npm run db:migration:generate -- src/migrations/<descriptive-name>' locally and commit the file."
