@@ -1,7 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Request } from 'express';
@@ -11,6 +10,7 @@ import {
   getRequestCookieHeader,
   parseCookieValue,
 } from '../request-cookie.util';
+import { getJwtSecret } from '../../../common/utils/jwt-secret';
 
 export interface JwtPayload {
   sub: number;
@@ -28,7 +28,6 @@ function jwtFromQueryParam(req: Request): string | null {
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    config: ConfigService,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
   ) {
@@ -39,7 +38,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         jwtFromQueryParam,
       ]),
       ignoreExpiration: false,
-      secretOrKey: config.getOrThrow<string>('JWT_SECRET'),
+      // Same resolution chain as the JwtModule signing key:
+      // JWT_SECRET env > <conf-dir>/.jwt-secret > auto-generated.
+      secretOrKey: getJwtSecret(),
     });
   }
 
