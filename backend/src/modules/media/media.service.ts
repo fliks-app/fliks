@@ -2201,7 +2201,6 @@ export class MediaService {
 
     let added = 0;
     let removed = 0;
-    const changedFileIds = new Set<number>();
 
     // 3. Remove DB records whose files no longer exist on disk
     for (const dbFile of dbFiles) {
@@ -2391,7 +2390,6 @@ export class MediaService {
       try {
         await this.mediaFileRepo.save(dbFile);
         updated++;
-        if (!sizeUnchanged) changedFileIds.add(dbFile.id);
         this.log.log(
           `Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${qualityName}${sizeUnchanged ? ', skipped crop' : ''})`,
         );
@@ -2542,7 +2540,6 @@ export class MediaService {
           }),
         );
         added++;
-        changedFileIds.add(savedFile.id);
         this.log.log(
           `Rescan: added new file "${relativePath}" for media #${mediaId}`,
         );
@@ -2586,13 +2583,14 @@ export class MediaService {
           `Rescan: discovered ${discovered} external subtitle(s) on disk for media #${mediaId}`,
         );
       }
-      // Re-detect embedded subtitle streams only for files that changed
-      // (size differs) or were newly added — skip unchanged files.
+      // Always re-detect embedded subtitle streams on rescan: detectAndStore
+      // wipes the file's existing embedded rows and recreates them from
+      // ffprobe, so deleted tracks disappear and new ones get added even
+      // when the file size hasn't changed (e.g. a remux that preserves size).
       const allFiles = await this.mediaFileRepo.find({
         where: { media: { id: mediaId } },
       });
       for (const file of allFiles) {
-        if (!changedFileIds.has(file.id)) continue;
         try {
           await this.embeddedSubtitle.detectAndStore(
             mediaId,

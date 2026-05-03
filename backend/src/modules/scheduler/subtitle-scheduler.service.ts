@@ -214,6 +214,18 @@ export class SubtitleSchedulerService {
     mediaFileId: number,
     episodeId?: number,
   ): Promise<void> {
+    // Always detect & store embedded subtitles first — independent of the
+    // auto-search setting and the language profile. Skipping this when
+    // auto_search is disabled (or no languages are configured) used to
+    // leave embedded tracks invisible in the subtitle_files table even
+    // though ffprobe sees them.
+    const embeddedSubs = await this.embeddedSubtitle.detectAndStore(
+      mediaId,
+      mediaFileId,
+      episodeId,
+    );
+    const embeddedLangs = new Set(embeddedSubs.map((s) => s.language));
+
     const autoSearch = await this.settings.get('subtitle_auto_search');
     if (autoSearch === 'false') return;
 
@@ -231,14 +243,6 @@ export class SubtitleSchedulerService {
       where: { id: mediaFileId },
     });
     if (!mediaFile) return;
-
-    // Detect embedded subtitles before searching providers
-    const embeddedSubs = await this.embeddedSubtitle.detectAndStore(
-      mediaId,
-      mediaFileId,
-      episodeId,
-    );
-    const embeddedLangs = new Set(embeddedSubs.map((s) => s.language));
 
     const minScore = Number(
       (await this.settings.get('subtitle_min_score')) ?? '70',
