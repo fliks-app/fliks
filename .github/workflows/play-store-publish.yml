@@ -113,5 +113,10 @@ jobs:
           packageName: media.fliks.app
           releaseFiles: client/android/app/build/outputs/bundle/release/app-release.aab
           track: ${{ github.event.inputs.track || 'internal' }}
-          status: completed
+          # `draft` is required while the app itself is in draft status
+          # in Play Console (no production release ever submitted).
+          # Once the app is approved + published live, this can flip to
+          # `completed` so each upload rolls out automatically to the
+          # selected track.
+          status: draft
           whatsNewDirectory: client/android/app/src/main/play/release-notes
