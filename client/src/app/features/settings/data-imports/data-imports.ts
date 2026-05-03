@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
-import { RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucideDownload } from '@lucide/angular';
 import { firstValueFrom } from 'rxjs';
@@ -81,18 +81,13 @@ type LibrarySelection = number | 'new' | null;
 
 @Component({
   selector: 'app-data-imports-settings',
-  imports: [
-    FormsModule,
-    RouterLink,
-    TranslateModule,
-    LucideDownload,
-    ImportDiskComponent,
-  ],
+  imports: [FormsModule, TranslateModule, LucideDownload, ImportDiskComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './data-imports.html',
 })
 export class DataImportsSettingsComponent implements OnInit {
   private readonly http = inject(HttpClient);
+  private readonly router = inject(Router);
   private readonly settingsApi = inject(SettingsApiService);
   private readonly seerrApi = inject(SeerrApiService);
   private readonly librariesApi = inject(LibrariesApiService);
@@ -549,6 +544,17 @@ export class DataImportsSettingsComponent implements OnInit {
     this.showWizardSig(provider).set(false);
     this.previewSig(provider).set(null);
     this.mappingsSig(provider).set([]);
+  }
+
+  /**
+   * Empty-state CTA when the user has no compatible Fliks RootFolders. We
+   * navigate programmatically because mixing `routerLink` with the `(click)`
+   * handler that closes the wizard removed the anchor before Angular Router
+   * had a chance to navigate, and the click was a no-op.
+   */
+  goToLibraries(provider: Provider) {
+    this.cancelWizard(provider);
+    void this.router.navigateByUrl('/settings/libraries');
   }
 
   setMapping(provider: Provider, remotePath: string, value: MappingSelectValue) {
