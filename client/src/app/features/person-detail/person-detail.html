@@ -1,0 +1,67 @@
+@if (loading()) {
+  <div class="flex justify-center py-12">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+} @else if (detail(); as d) {
+  <div class="flex flex-col gap-6">
+    <!-- Back -->
+    <button type="button" (click)="goBack()" class="btn btn-sm btn-ghost gap-1 self-start">
+      <svg lucideChevronLeft class="h-4 w-4"></svg>
+      {{ 'persons.title' | translate }}
+    </button>
+
+    <!-- Person header -->
+    <div class="flex flex-col sm:flex-row gap-6 items-start">
+      <div class="avatar">
+        <div class="w-32 h-32 sm:w-40 sm:h-40 rounded-full">
+          @if (d.person.avatarUrl) {
+            <img [src]="d.person.avatarUrl | resolveUrl:'medium'" [alt]="d.person.name" />
+          } @else {
+            <div class="bg-base-300 flex items-center justify-center w-full h-full text-4xl font-bold text-base-content/30">
+              {{ d.person.name.charAt(0) }}
+            </div>
+          }
+        </div>
+      </div>
+      <div class="flex flex-col gap-2">
+        <h1 class="text-3xl font-bold">{{ d.person.name }}</h1>
+        @if (d.person.knownForDepartment) {
+          <span class="badge badge-ghost">{{ d.person.knownForDepartment }}</span>
+        }
+        @if (d.person.birthday) {
+          <p class="text-sm text-base-content/60">
+            {{ d.person.birthday }}
+            @if (d.person.placeOfBirth) {
+              — {{ d.person.placeOfBirth }}
+            }
+            @if (d.person.deathday) {
+              — {{ d.person.deathday }}
+            }
+          </p>
+        }
+        @if (d.person.biography) {
+          <p #bioText class="text-sm leading-relaxed" [class.line-clamp-4]="!bioExpanded()">{{ d.person.biography }}</p>
+          @if (bioClamped() || bioExpanded()) {
+            <div class="flex justify-end">
+              <button class="btn btn-xs btn-ghost mt-1" (click)="toggleBio()">
+                {{ bioExpanded() ? ('common.show_less' | translate) : ('common.show_more' | translate) }}
+              </button>
+            </div>
+          }
+        }
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div role="tablist" class="tabs tabs-bordered">
+      <a role="tab" class="tab" routerLink="./" routerLinkActive="tab-active" [routerLinkActiveOptions]="{ exact: true }">
+        {{ 'person_detail.local_credits' | translate }}
+      </a>
+      <a role="tab" class="tab" routerLink="./filmography" routerLinkActive="tab-active">
+        {{ 'person_detail.all_credits' | translate }}
+      </a>
+    </div>
+
+    <router-outlet />
+  </div>
+}

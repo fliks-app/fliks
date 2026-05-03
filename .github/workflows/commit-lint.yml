@@ -1,0 +1,19 @@
+# Validates commit messages on push + PR. Mirrors the local husky hook
+# (`.husky/commit-msg`) so a contributor who skipped local hooks can't
+# land non-conventional commits on `main`.
+name: Lint commit messages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  commitlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: wagoid/commitlint-github-action@v6

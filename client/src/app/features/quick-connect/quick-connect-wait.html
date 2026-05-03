@@ -1,0 +1,42 @@
+<div class="min-h-screen flex items-center justify-center bg-base-200 p-6">
+  <div class="card bg-base-100 shadow-xl w-full max-w-lg">
+    <div class="card-body items-center text-center gap-4">
+      @if (view() === 'starting') {
+        <span class="loading loading-spinner loading-lg"></span>
+        <p class="text-base-content/70">{{ 'quick_connect.starting' | translate }}</p>
+      } @else if (view() === 'waiting') {
+        <span class="loading loading-spinner loading-lg text-primary"></span>
+        <h1 class="card-title text-2xl">{{ 'quick_connect.waiting_title' | translate }}</h1>
+        <p class="text-base-content/70">{{ 'quick_connect.waiting_subtitle' | translate }}</p>
+        <div class="divider my-1"></div>
+        <p class="text-sm">
+          {{ 'quick_connect.device_name' | translate: { name: deviceName() } }}
+        </p>
+        <p class="text-xs text-base-content/60">
+          {{ 'quick_connect.expires_in' | translate: { minutes: minutesLeft() } }}
+        </p>
+        <button type="button" class="btn btn-ghost mt-2" (click)="cancel()">
+          {{ 'quick_connect.cancel' | translate }}
+        </button>
+      } @else if (view() === 'denied') {
+        <h1 class="card-title text-2xl text-error">{{ 'quick_connect.denied' | translate }}</h1>
+        <div class="flex gap-2 mt-2">
+          <button type="button" class="btn btn-primary" (click)="retry()">{{ 'quick_connect.retry' | translate }}</button>
+          <button type="button" class="btn btn-ghost" (click)="cancel()">{{ 'quick_connect.cancel' | translate }}</button>
+        </div>
+      } @else if (view() === 'expired') {
+        <h1 class="card-title text-2xl">{{ 'quick_connect.expired' | translate }}</h1>
+        <div class="flex gap-2 mt-2">
+          <button type="button" class="btn btn-primary" (click)="retry()">{{ 'quick_connect.retry' | translate }}</button>
+          <button type="button" class="btn btn-ghost" (click)="cancel()">{{ 'quick_connect.cancel' | translate }}</button>
+        </div>
+      } @else {
+        <h1 class="card-title text-2xl text-error">{{ 'quick_connect.error' | translate }}</h1>
+        <div class="flex gap-2 mt-2">
+          <button type="button" class="btn btn-primary" (click)="retry()">{{ 'quick_connect.retry' | translate }}</button>
+          <button type="button" class="btn btn-ghost" (click)="cancel()">{{ 'quick_connect.cancel' | translate }}</button>
+        </div>
+      }
+    </div>
+  </div>
+</div>

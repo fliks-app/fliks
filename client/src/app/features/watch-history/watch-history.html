@@ -1,0 +1,134 @@
+<div class="flex min-w-0 max-w-full flex-col gap-3">
+  <h1 class="sr-only lg:not-sr-only text-xl font-bold">{{ 'history.title' | translate }}</h1>
+
+  @if (loading()) {
+    <div class="flex justify-center py-12">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (items().length === 0) {
+    <div class="text-center py-12 text-base-content/50">
+      <svg lucideHistory class="h-12 w-12 mx-auto mb-3 opacity-30"></svg>
+      <p class="text-lg">{{ 'history.empty' | translate }}</p>
+    </div>
+  } @else {
+    <div class="flex flex-col gap-2 sm:gap-3">
+      @for (item of items(); track item.id) {
+        <div class="flex flex-row items-stretch gap-3">
+          <div
+            class="relative shrink-0 cursor-pointer rounded-md bg-base-300 shadow-sm group/thumb w-32 sm:w-full max-w-54 md:max-w-64 aspect-video"
+            (click)="goToMedia(item)"
+          >
+            <div class="absolute inset-0 overflow-hidden rounded-md">
+              @if (item.fanartUrl) {
+                <img [src]="item.fanartUrl | resolveUrl:'thumb'" [alt]="item.mediaTitle" class="h-full w-full object-contain" loading="lazy" />
+              } @else if (item.posterUrl) {
+                <img [src]="item.posterUrl | resolveUrl:'thumb'" [alt]="item.mediaTitle" class="h-full w-full object-contain" loading="lazy" />
+              } @else {
+                <div class="flex h-full w-full items-center justify-center text-base-content/30">
+                  @if (item.mediaType === 'series') {
+                    <svg lucideTv class="h-8 w-8" [strokeWidth]="1.5"></svg>
+                  } @else {
+                    <svg lucideFilm class="h-8 w-8" [strokeWidth]="1.5"></svg>
+                  }
+                </div>
+              }
+              <div class="pointer-events-none absolute bottom-0 left-0 right-0 z-3 h-1 bg-black/50">
+                @if (item.completed) {
+                  <div class="h-full w-full bg-success"></div>
+                } @else if (item.progressPercent > 0) {
+                  <div class="h-full bg-primary transition-all" [style.width.%]="item.progressPercent"></div>
+                }
+              </div>
+            </div>
+
+            @if (!item.completed) {
+              <div
+                class="pointer-events-none absolute inset-0 z-1 flex cursor-pointer items-center justify-center bg-black/35 opacity-0 transition-opacity duration-200 ease-out group-hover/thumb:pointer-events-auto group-hover/thumb:opacity-100"
+              >
+                <span class="tooltip tooltip-top z-20" [attr.data-tip]="'history.resume' | translate">
+                  <button
+                    type="button"
+                    class="btn btn-circle btn-md z-10 min-h-0 h-11 w-11 border-0 bg-black/55 text-white transition-colors duration-200 ease-out hover:bg-black/70"
+                    (click)="play(item); $event.stopPropagation()"
+                  >
+                    <svg lucidePlay class="h-6 w-6" [strokeWidth]="2"></svg>
+                  </button>
+                </span>
+              </div>
+            }
+
+          </div>
+
+          <!-- Info -->
+          <div class="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
+            <button type="button" (click)="goToMedia(item)" class="group cursor-pointer text-left w-fit">
+              <p class="text-sm sm:text-lg font-semibold leading-tight line-clamp-2 group-hover:underline">{{ item.mediaTitle }}</p>
+            </button>
+            @if (item.episodeLabel) {
+              <p class="text-xs text-base-content/65 line-clamp-2">{{ item.episodeLabel }}</p>
+            }
+            <p class="text-[11px] text-base-content/45 leading-tight">{{ formatDate(item.lastPlayedAt) }}</p>
+
+          </div>
+
+          <!-- Desktop: icon buttons -->
+          <div class="hidden sm:flex shrink-0 items-center gap-1">
+            @if (!item.completed) {
+              <span class="tooltip tooltip-left" [attr.data-tip]="'history.mark_watched' | translate">
+                <button type="button" class="btn btn-ghost btn-sm btn-circle min-h-0 h-9 w-9" (click)="markWatched(item)">
+                  <svg lucideCheck class="h-4 w-4"></svg>
+                </button>
+              </span>
+            }
+            <span class="tooltip tooltip-left" [attr.data-tip]="'history.remove' | translate">
+              <button type="button" class="btn btn-ghost btn-sm btn-circle text-error min-h-0 h-9 w-9" (click)="removeItem(item)">
+                <svg lucideTrash2 class="h-4 w-4"></svg>
+              </button>
+            </span>
+          </div>
+          <!-- Mobile: dropdown menu -->
+          <div class="sm:hidden shrink-0 self-center dropdown dropdown-end">
+            <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-circle">
+              <svg lucideEllipsisVertical class="h-4 w-4"></svg>
+            </div>
+            <ul tabindex="0" class="dropdown-content z-10 menu p-1 shadow-lg bg-base-200 rounded-lg min-w-36 mt-1">
+              @if (!item.completed) {
+                <li><button type="button" (click)="markWatched(item)" class="text-sm"><svg lucideCheck class="h-4 w-4"></svg>{{ 'history.mark_watched' | translate }}</button></li>
+              }
+              <li><button type="button" (click)="removeItem(item)" class="text-sm text-error"><svg lucideTrash2 class="h-4 w-4"></svg>{{ 'history.remove' | translate }}</button></li>
+            </ul>
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- Pagination -->
+    @if (totalPages() > 1) {
+      <div class="flex justify-center gap-1.5 pt-2">
+        <button
+          class="btn btn-sm"
+          [disabled]="currentPage() <= 1"
+          (click)="goToPage(currentPage() - 1)"
+        >
+          &laquo;
+        </button>
+        @for (p of visiblePages(); track p) {
+          <button
+            class="btn btn-sm"
+            [class.btn-primary]="currentPage() === p"
+            (click)="goToPage(p)"
+          >
+            {{ p }}
+          </button>
+        }
+        <button
+          class="btn btn-sm"
+          [disabled]="currentPage() >= totalPages()"
+          (click)="goToPage(currentPage() + 1)"
+        >
+          &raquo;
+        </button>
+      </div>
+    }
+  }
+</div>

@@ -1,0 +1,78 @@
+<div>
+  <table class="table table-sm">
+    <thead>
+      <tr>
+        <th>{{ 'media_detail.col_release' | translate }}</th>
+        <th>{{ 'media_detail.col_quality' | translate }}</th>
+        @if (showCfScore()) {
+          <th class="text-center w-16">{{ 'media_detail.col_cf_score' | translate }}</th>
+        }
+        <th class="text-right w-20">{{ 'media_detail.col_size' | translate }}</th>
+        <th class="w-20">{{ 'media_detail.col_peers' | translate }}</th>
+        <th>{{ 'media_detail.col_indexer' | translate }}</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (r of filteredReleases(); track r.downloadUrl; let i = $index) {
+        <tr [class.opacity-50]="r.blocklisted || !r.languageAllowed || r.rejections.length > 0">
+          <td class="max-w-[min(28rem,50vw)] whitespace-normal text-sm">{{ r.title }}</td>
+          <td>
+            <div class="flex flex-wrap gap-1 items-center">
+              <span class="badge badge-sm badge-ghost">{{ r.qualityName }}</span>
+              <span class="badge badge-sm" [class]="r.languageAllowed ? 'badge-info' : 'badge-warning'">{{ r.languageName }}</span>
+              @if (r.freeleech) {
+                <span class="badge badge-sm badge-success">FL</span>
+              }
+              @if (r.blocklisted) {
+                <span class="badge badge-sm badge-error">{{ 'media_detail.blocklisted' | translate }}</span>
+              }
+              @if (r.rejections.length > 0) {
+                <div class="tooltip tooltip-left" [attr.data-tip]="rejectionText(r.rejections)">
+                  <svg lucideTriangleAlert class="h-4 w-4 text-warning"></svg>
+                </div>
+              }
+            </div>
+          </td>
+          @if (showCfScore()) {
+            <td class="text-center tabular-nums text-sm">
+              @if (r.customFormatScore !== 0) {
+                <span [class]="r.customFormatScore > 0 ? 'text-success font-medium' : 'text-error'">
+                  {{ r.customFormatScore > 0 ? '+' : '' }}{{ r.customFormatScore }}
+                </span>
+              } @else {
+                <span class="text-base-content/30">—</span>
+              }
+            </td>
+          }
+          <td class="text-sm tabular-nums text-right">{{ formatBytes(r.size) }}</td>
+          <td class="text-sm tabular-nums whitespace-nowrap">
+            <span class="text-success">▲{{ r.seeders }}</span>
+            <span class="text-base-content/40 mx-0.5">/</span>
+            <span class="text-warning">▼{{ r.leechers }}</span>
+          </td>
+          <td class="text-sm">{{ r.indexerName }}</td>
+          <td class="w-10">
+            @if (canGrab() && r.allowed && !r.blocklisted) {
+              @if (grabState().get(grabKey(i)) === 'ok') {
+                <svg lucideCheck class="h-5 w-5 text-success"></svg>
+              } @else {
+                <button type="button" class="btn btn-ghost btn-xs btn-square"
+                  (click)="grab.emit({ release: r, index: i })"
+                  [disabled]="grabBusy() !== null">
+                  @if (grabBusy() === grabKey(i)) {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  } @else if (grabState().get(grabKey(i)) === 'error') {
+                    <svg lucideCircleAlert class="h-5 w-5 text-error"></svg>
+                  } @else {
+                    <svg lucideDownload class="h-5 w-5"></svg>
+                  }
+                </button>
+              }
+            }
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>

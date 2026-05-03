@@ -1,0 +1,34 @@
+<h1 class="text-2xl font-bold mb-4">{{ 'app_settings.nav.storage' | translate }}</h1>
+<div class="card bg-base-100 border border-base-200">
+  <div class="card-body gap-5">
+    <!-- Clear API cache -->
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="font-medium">{{ 'storage_settings.clear_cache' | translate }}</p>
+        <p class="text-sm text-base-content/60">{{ 'storage_settings.clear_cache_hint' | translate }}</p>
+      </div>
+      <button class="btn btn-sm btn-outline" [disabled]="clearing()" (click)="clearCache()">
+        @if (clearing()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ 'storage_settings.clear' | translate }}
+      </button>
+    </div>
+
+    <div class="divider my-0"></div>
+
+    <!-- Delete all downloads -->
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="font-medium">{{ 'storage_settings.delete_downloads' | translate }}</p>
+        <p class="text-sm text-base-content/60">{{ 'storage_settings.delete_downloads_hint' | translate }}</p>
+      </div>
+      <button class="btn btn-sm btn-outline btn-error" [disabled]="deleting()" (click)="deleteAllDownloads()">
+        @if (deleting()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ 'common.delete' | translate }}
+      </button>
+    </div>
+  </div>
+</div>

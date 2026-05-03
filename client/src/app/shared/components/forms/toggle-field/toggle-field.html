@@ -1,0 +1,16 @@
+<label class="flex items-start gap-4 cursor-pointer" [class.opacity-50]="disabled()">
+  <input
+    type="checkbox"
+    class="toggle shrink-0 mt-0.5"
+    [class]="toggleClass()"
+    [ngModel]="value()"
+    (ngModelChange)="value.set($event)"
+    [disabled]="disabled()"
+  />
+  <div class="flex-1 min-w-0 flex flex-col gap-0.5">
+    <span class="font-medium">{{ label() }}</span>
+    @if (hint()) {
+      <span class="text-sm text-base-content/60">{{ hint() }}</span>
+    }
+  </div>
+</label>

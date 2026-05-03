@@ -1,0 +1,127 @@
+@if (loading()) {
+  <div class="flex justify-center py-16">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+} @else {
+  <!-- Stats cards -->
+  @if (stats(); as s) {
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="stat bg-base-100 border border-base-200 rounded-lg p-4">
+        <div class="stat-title text-xs">{{ 'settings.subtitles.stats_total' | translate }}</div>
+        <div class="stat-value text-2xl">{{ s.total }}</div>
+      </div>
+      <div class="stat bg-base-100 border border-base-200 rounded-lg p-4">
+        <div class="stat-title text-xs">{{ 'settings.subtitles.stats_missing' | translate }}</div>
+        <div class="stat-value text-2xl" [class.text-warning]="missingCount() > 0">{{ missingCount() }}</div>
+      </div>
+      @for (entry of statusEntries(); track entry[0]) {
+        <div class="stat bg-base-100 border border-base-200 rounded-lg p-4">
+          <div class="stat-title text-xs">{{ statusLabel(entry[0]) }}</div>
+          <div class="stat-value text-2xl">{{ entry[1] }}</div>
+        </div>
+      }
+    </div>
+
+    @if (providerEntries().length) {
+      <div class="card bg-base-100 border border-base-200">
+        <div class="card-body gap-3 p-4">
+          <h2 class="card-title text-base">{{ 'settings.subtitles.stats_by_provider' | translate }}</h2>
+          <div class="flex flex-wrap gap-2">
+            @for (entry of providerEntries(); track entry[0]) {
+              <span class="badge badge-ghost gap-1">{{ entry[0] }} <span class="badge badge-sm badge-neutral">{{ entry[1] }}</span></span>
+            }
+          </div>
+        </div>
+      </div>
+    }
+  }
+
+  <!-- Missing subtitles -->
+  <div class="card bg-base-100 border border-base-200">
+    <div class="card-body gap-3 p-4">
+      <div class="flex items-center justify-between">
+        <h2 class="card-title text-base">
+          {{ 'settings.subtitles.missing_title' | translate }}
+          @if (missingCount()) {
+            <span class="badge badge-warning badge-sm">{{ missingCount() }}</span>
+          }
+        </h2>
+      </div>
+
+      @if (!missing().length) {
+        <p class="text-sm text-base-content/50">{{ 'settings.subtitles.no_missing' | translate }}</p>
+      } @else {
+        <div class="overflow-x-auto rounded-lg border border-base-200">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>{{ 'settings.subtitles.col_media' | translate }}</th>
+                <th>{{ 'settings.subtitles.col_file' | translate }}</th>
+                <th>{{ 'settings.subtitles.col_language' | translate }}</th>
+                <th class="w-10"></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of pagedMissing(); track row.fileId + row.language) {
+                <tr>
+                  <td>
+                    @if (row.episodeId) {
+                      <a class="link link-hover text-sm"
+                        [routerLink]="['/series', row.mediaId, 'episode', row.episodeId]">
+                        {{ row.mediaTitle }} <span class="text-base-content/60">- {{ row.episodeLabel }}</span>
+                      </a>
+                    } @else {
+                      <a class="link link-hover text-sm"
+                        [routerLink]="['/', row.mediaType === 'movie' ? 'movies' : 'series', row.mediaId]">
+                        {{ row.mediaTitle }}
+                      </a>
+                    }
+                  </td>
+                  <td class="text-sm text-base-content/60 max-w-48 truncate" [title]="row.fileName">{{ row.fileName }}</td>
+                  <td><span class="badge badge-sm badge-outline">{{ row.language }}</span></td>
+                  <td>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs btn-square"
+                      [disabled]="searchBusy() !== null"
+                      [title]="'settings.subtitles.search_one' | translate"
+                      (click)="searchOne(row)"
+                    >
+                      @if (searchBusy() === rowKey(row)) {
+                        <span class="loading loading-spinner loading-xs"></span>
+                      } @else {
+                        <svg lucideSearch class="h-4 w-4"></svg>
+                      }
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        @if (totalPages() > 1) {
+          <div class="flex justify-center items-center gap-1 mt-2">
+            <button type="button" class="btn btn-ghost btn-xs" [disabled]="page() === 0" (click)="goToPage(page() - 1)">
+              {{ 'common.prev' | translate }}
+            </button>
+            @for (p of [].constructor(totalPages()); track $index) {
+              <button
+                type="button"
+                class="btn btn-xs"
+                [class.btn-primary]="$index === page()"
+                [class.btn-ghost]="$index !== page()"
+                (click)="goToPage($index)"
+              >
+                {{ $index + 1 }}
+              </button>
+            }
+            <button type="button" class="btn btn-ghost btn-xs" [disabled]="page() === totalPages() - 1" (click)="goToPage(page() + 1)">
+              {{ 'common.next' | translate }}
+            </button>
+          </div>
+        }
+      }
+    </div>
+  </div>
+}

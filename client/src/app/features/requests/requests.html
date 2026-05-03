@@ -1,0 +1,243 @@
+<div class="flex flex-col gap-4">
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <h1 class="sr-only lg:not-sr-only text-2xl font-bold">{{ 'requests.title' | translate }}</h1>
+    <select
+      class="select select-bordered select-sm w-full sm:w-48"
+      [ngModel]="statusFilter()"
+      (ngModelChange)="onStatusChange($event)"
+    >
+      <option value="">{{ 'requests.filter_all' | translate }}</option>
+      <option value="pending">{{ 'requests.status.pending' | translate }}</option>
+      <option value="approved">{{ 'requests.status.approved' | translate }}</option>
+      <option value="declined">{{ 'requests.status.declined' | translate }}</option>
+      <option value="processing">{{ 'requests.status.processing' | translate }}</option>
+      <option value="available">{{ 'requests.status.available' | translate }}</option>
+      <option value="failed">{{ 'requests.status.failed' | translate }}</option>
+    </select>
+  </div>
+
+  @if (loading() && rows().length === 0) {
+    <div class="flex justify-center py-12">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (rows().length === 0) {
+    <div class="text-center py-12 text-base-content/50">
+      <p class="text-lg">{{ 'requests.empty' | translate }}</p>
+    </div>
+  } @else {
+    <div class="flex flex-col gap-3">
+      @for (row of rows(); track row.id) {
+        <article
+          class="card bg-base-100 shadow-md border border-base-200 flex flex-row overflow-hidden rounded-box"
+          [attr.title]="row.title"
+        >
+          <figure
+            class="relative w-20 sm:w-24 md:w-28 shrink-0 aspect-2/3 bg-base-300 overflow-hidden"
+          >
+            @defer (on viewport) {
+              <app-request-poster
+                class="absolute inset-0"
+                [tmdbId]="row.tmdbId"
+                [mediaType]="row.mediaType"
+                [titleText]="row.title"
+              />
+            } @placeholder {
+              <div class="absolute inset-0 skeleton rounded-none"></div>
+            }
+          </figure>
+
+          <div
+            class="card-body p-3 sm:p-4 flex-1 min-w-0 flex flex-col sm:flex-row sm:items-stretch gap-3"
+          >
+            <div class="min-w-0 flex-1 flex flex-col gap-1.5 justify-center">
+              <h2 class="text-base font-semibold leading-snug line-clamp-2 m-0">
+                <a
+                  [routerLink]="mediaLink(row)"
+                  class="link link-hover text-base-content hover:opacity-80 font-semibold text-left"
+                >
+                  {{ row.title }}
+                </a>
+              </h2>
+
+              <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/70">
+                <span
+                  class="badge badge-sm whitespace-nowrap"
+                  [class]="statusBadgeClass(row.status)"
+                >
+                  {{ ('requests.status.' + row.status) | translate }}
+                </span>
+                <span>
+                  @if (row.mediaType === 'movie') {
+                    {{ 'requests.type_movie' | translate }}
+                  } @else {
+                    {{ 'requests.type_series' | translate }}
+                  }
+                </span>
+              </div>
+
+              @if (auth.hasPermission('requests.manage')) {
+                <p class="text-sm text-base-content/70">
+                  <span class="text-base-content/50">{{ 'requests.requested_by' | translate }}</span>
+                  @if (auth.canManageUsers()) {
+                    <a
+                      [routerLink]="['/admin/users', row.user.id]"
+                      class="link link-hover link-primary font-medium"
+                    >
+                      {{ row.user.username }}
+                    </a>
+                  } @else {
+                    <span class="font-medium text-base-content">{{ row.user.username }}</span>
+                  }
+                </p>
+              }
+
+              <div class="flex flex-col gap-0.5 text-xs text-base-content/65">
+                <p>
+                  <span class="text-base-content/50">{{ 'requests.date_label' | translate }}</span>
+                  {{ row.createdAt | date: 'short' }}
+                </p>
+                <p>
+                  <span class="text-base-content/50">{{ 'discover.quality_profile' | translate }} · </span>
+                  {{ qualityProfileDisplay(row.qualityProfileId) }}
+                </p>
+                <p>
+                  <span class="text-base-content/50">{{ 'discover.language_profile' | translate }} · </span>
+                  {{ languageProfileDisplay(row.languageProfileId) }}
+                </p>
+                @if (row.mediaType === 'series' && row.seasons && row.seasons.length) {
+                  <p>
+                    <span class="text-base-content/50">{{ 'requests.seasons_label' | translate }} · </span>
+                    {{ row.seasons.join(', ') }}
+                  </p>
+                }
+              </div>
+            </div>
+
+            @if (row.status === 'declined' && row.declinedReason?.trim()) {
+              <div
+                class="flex flex-wrap items-center justify-end gap-1 shrink-0 sm:border-s sm:border-base-200 sm:ps-4 sm:min-w-[min(100%,12rem)]"
+              >
+                <button
+                  type="button"
+                  class="btn btn-outline btn-primary btn-sm"
+                  (click)="openViewDeclineReason(row)"
+                >
+                  {{ 'requests.view_decline' | translate }}
+                </button>
+                @if (auth.hasPermission('requests.manage')) {
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm text-error"
+                    [disabled]="actionBusyId() === row.id"
+                    (click)="removeRequest(row)"
+                  >
+                    {{ 'requests.delete' | translate }}
+                  </button>
+                }
+              </div>
+            }
+
+            @if (row.status === 'pending') {
+              <div
+                class="flex flex-wrap items-center sm:items-end sm:justify-end content-start gap-1 shrink-0 sm:border-s sm:border-base-200 sm:ps-4 sm:min-w-[min(100%,12rem)]"
+              >
+                @if (auth.hasPermission('requests.manage')) {
+                  <button
+                    type="button"
+                    class="btn btn-success btn-sm"
+                    [disabled]="actionBusyId() === row.id"
+                    (click)="approve(row.id)"
+                  >
+                    {{ 'requests.approve' | translate }}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-warning btn-sm"
+                    [disabled]="actionBusyId() === row.id"
+                    (click)="openDecline(row.id)"
+                  >
+                    {{ 'requests.decline' | translate }}
+                  </button>
+                }
+                @if (canEdit(row)) {
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="openEdit(row)">
+                    {{ 'requests.edit' | translate }}
+                  </button>
+                }
+                @if (auth.hasPermission('requests.manage')) {
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm text-error"
+                    [disabled]="actionBusyId() === row.id"
+                    (click)="removeRequest(row)"
+                  >
+                    {{ 'requests.delete' | translate }}
+                  </button>
+                } @else if (canCancel(row)) {
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm text-error"
+                    [disabled]="actionBusyId() === row.id"
+                    (click)="removeRequest(row)"
+                  >
+                    {{ 'requests.cancel' | translate }}
+                  </button>
+                }
+              </div>
+            }
+
+            @if (showOrphanDeleteColumn(row)) {
+              <div
+                class="flex flex-wrap items-center justify-end gap-1 shrink-0 sm:border-s sm:border-base-200 sm:ps-4 sm:min-w-[min(100%,12rem)]"
+              >
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm text-error"
+                  [disabled]="actionBusyId() === row.id"
+                  (click)="removeRequest(row)"
+                >
+                  {{ 'requests.delete' | translate }}
+                </button>
+              </div>
+            }
+          </div>
+        </article>
+      }
+    </div>
+  }
+
+  @if (canLoadMore()) {
+    <div class="flex justify-center">
+      <button type="button" class="btn btn-outline btn-sm" [disabled]="loading()" (click)="loadMore()">
+        {{ 'requests.load_more' | translate }}
+      </button>
+    </div>
+  }
+</div>
+
+<app-request-decline-modal
+  [requestId]="declineForId()"
+  [reasonText]="declineReasonText()"
+  [submitBusy]="actionBusyId() === declineForId()"
+  (reasonTextChange)="declineReasonText.set($event)"
+  (dismissed)="closeDecline()"
+  (submitted)="submitDecline()"
+/>
+
+<app-request-view-decline-modal
+  [payload]="viewDeclineReasonModal()"
+  (dismissed)="closeViewDeclineReason()"
+/>
+
+<app-request-edit-modal
+  [row]="editingRequest()"
+  [qualityProfiles]="qualityProfiles()"
+  [languageProfiles]="languageProfiles()"
+  [qualityProfileId]="editQualityProfileId()"
+  [languageProfileId]="editLanguageProfileId()"
+  [saving]="editSaving()"
+  (qualityProfileIdChange)="editQualityProfileId.set($event)"
+  (languageProfileIdChange)="editLanguageProfileId.set($event)"
+  (dismissed)="closeEdit()"
+  (save)="saveEdit()"
+/>

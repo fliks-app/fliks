@@ -1,0 +1,80 @@
+@if (state.user(); as u) {
+  <div class="flex flex-col gap-6">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between gap-4">
+      <div class="flex items-center gap-4">
+        <a routerLink="/admin/settings/users" class="btn btn-ghost btn-sm btn-circle">
+          <svg lucideChevronLeft class="h-5 w-5"></svg>
+        </a>
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-full bg-base-300 flex items-center justify-center shrink-0">
+            <svg lucideUser class="h-6 w-6 text-base-content/40"></svg>
+          </div>
+          <div>
+            <h1 class="text-2xl font-bold">{{ u.username }}</h1>
+            <div class="flex items-center gap-2 mt-0.5">
+              <span class="badge badge-sm badge-ghost">{{ u.role ?? '—' }}</span>
+              @if (u.isAdmin) {
+                <span class="badge badge-sm badge-error">Admin</span>
+              }
+              @if (u.enabled) {
+                <span class="badge badge-sm badge-success">{{ 'common.active' | translate }}</span>
+              } @else {
+                <span class="badge badge-sm badge-ghost">{{ 'common.disabled' | translate }}</span>
+              }
+              @if (auth.user()?.id === u.id) {
+                <span class="badge badge-sm badge-primary">{{ 'settings.users.you' | translate }}</span>
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        @if (auth.user()?.id !== u.id) {
+          <button type="button" class="btn btn-sm btn-ghost text-error" (click)="deleteUser()">
+            {{ 'settings.users.delete' | translate }}
+          </button>
+        }
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div role="tablist" class="tabs tabs-bordered">
+      <a
+        role="tab"
+        class="tab"
+        [routerLink]="['/admin/users', state.userId()]"
+        routerLinkActive="tab-active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        {{ 'settings.user_detail.tab_general' | translate }}
+      </a>
+      <a
+        role="tab"
+        class="tab"
+        [routerLink]="['/admin/users', state.userId(), 'requests']"
+        routerLinkActive="tab-active"
+      >
+        {{ 'settings.user_detail.tab_requests' | translate }}
+      </a>
+      <a
+        role="tab"
+        class="tab"
+        [routerLink]="['/admin/users', state.userId(), 'stats']"
+        routerLinkActive="tab-active"
+      >
+        {{ 'settings.user_detail.stats.tab' | translate }}
+      </a>
+    </div>
+
+    <!-- Tab content -->
+    <router-outlet />
+
+  </div>
+} @else {
+  <div class="text-center py-16">
+    <p class="text-lg text-base-content/50">{{ 'settings.user_detail.not_found' | translate }}</p>
+    <a routerLink="/admin/settings/users" class="btn btn-ghost btn-sm mt-4">{{ 'settings.user_detail.back' | translate }}</a>
+  </div>
+}

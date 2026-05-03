@@ -1,0 +1,230 @@
+---
+id: oldgreektracker
+name: Old Greek Tracker (OGT)
+description: "Old Greek Tracker (OGT) is a GREEK Private Torrent Tracker for PRE-2020 MOVIES / TV / GENERAL"
+language: el-GR
+type: private
+encoding: UTF-8
+links:
+  - https://oldgreektracker.xyz/
+legacylinks:
+  - http://oldgreektracker.xyz/
+
+caps:
+  categorymappings:
+    # Apps
+    - {id: 4, cat: PC/0day, desc: "Apps: Windows"}
+    - {id: 5, cat: PC/0day, desc: "Apps: Linux"}
+    - {id: 6, cat: PC/Mac, desc: "Apps: MacOS"}
+    - {id: 7, cat: PC/Mobile-Android, desc: "Apps: Android"}
+    # Music
+    - {id: 9, cat: Audio/MP3, desc: "Music: Greek MP3"}
+    - {id: 10, cat: Audio/Lossless, desc: "Music: Greek FLAC"}
+    - {id: 11, cat: Audio/MP3, desc: "Music: Foreign MP3"}
+    - {id: 12, cat: Audio/Lossless, desc: "Music: Foreign FLAC"}
+    - {id: 68, cat: Audio, desc: "Music:Discographies"}
+    - {id: 71, cat: Audio, desc: "Music: Collections"}
+    - {id: 72, cat: Audio/Other, desc: "Music: Foreign Soundtracks"}
+    - {id: 86, cat: Audio, desc: "Music: Greek Discographies"}
+    - {id: 87, cat: Audio, desc: "Music: Greek Collections"}
+    - {id: 92, cat: Audio/Other, desc: "Music: Greek Soundtracks"}
+    - {id: 115, cat: Audio/Video, desc: "Music: Foreign Music Videos"}
+    - {id: 116, cat: Audio/Video, desc: "Music: Greek Music Videos"}
+    # Movies
+    - {id: 16, cat: Movies/SD, desc: "Movies: Foreign Movies Non HD"}
+    - {id: 20, cat: Movies/SD, desc: "Movies: Filmographies"}
+    - {id: 105, cat: Movies, desc: "Movies: Animation"}
+    - {id: 106, cat: Movies, desc: "Movies: Cartoons"}
+    - {id: 112, cat: Movies/HD, desc: "Movies: Movie Packs"}
+    - {id: 119, cat: Movies/SD, desc: "Movies: Greek Movies Non HD"}
+    - {id: 122, cat: Movies/HD, desc: "Movies: Foreign HDRip / BRRip"}
+    - {id: 129, cat: Movies/SD, desc: "Movies: Greek VHS"}
+    - {id: 130, cat: Movies/SD, desc: "Movies: Foreign VHS"}
+    - {id: 132, cat: Movies/SD, desc: "Movies: CAM / TS / TC"}
+    - {id: 133, cat: Movies/DVD, desc: "Movies: Foreign DVD5/DVD9"}
+    - {id: 134, cat: Movies/DVD, desc: "Movies: Greek DVD5/DVD9"}
+    - {id: 136, cat: Movies/DVD, desc: "Movies: Greek DVDRip"}
+    - {id: 138, cat: Movies/DVD, desc: "Movies: Foreign DVDRip"}
+    - {id: 139, cat: Movies/HD, desc: "Movies: Greek HDRip / BRRip"}
+    - {id: 140, cat: Movies, desc: "Movies: Greek Audio Cartoons"}
+    - {id: 141, cat: Movies, desc: "Movies: Greek Audio Animation"}
+    - {id: 145, cat: Movies/WEB-DL, desc: "Movies: Foreign WEBRip"}
+    - {id: 146, cat: Movies/WEB-DL, desc: "Movies: Greek WEBRip"}
+    # Books
+    - {id: 23, cat: Books/EBook, desc: "Books: Foreign Books"}
+    - {id: 24, cat: Books/EBook, desc: "Books: Greek Books"}
+    - {id: 27, cat: Books/Comics, desc: "Books: Comics"}
+    - {id: 69, cat: Audio/Audiobook, desc: "Books: Greek Audio Books"}
+    - {id: 114, cat: Audio/Audiobook, desc: "Books: Foreign Audio Books"}
+    # TV
+    - {id: 29, cat: TV/Anime, desc: "TV: Foreign Animation"}
+    - {id: 31, cat: TV/Other, desc: "TV: Foreign Cartoons"}
+    - {id: 35, cat: TV, desc: "TV: Greek TV Series"}
+    - {id: 36, cat: TV, desc: "TV: Greek TV Packs"}
+    - {id: 40, cat: TV, desc: "TV: Greek TV Shows"}
+    - {id: 67, cat: TV/Sport, desc: "TV: Sports"}
+    - {id: 75, cat: TV, desc: "TV: Foreign TV Series"}
+    - {id: 76, cat: TV, desc: "TV: Foreign TV Shows"}
+    - {id: 77, cat: TV, desc: "TV: Foreign TV Episodes"}
+    - {id: 79, cat: TV/Documentary, desc: "TV: Foreign Documentaries"}
+    - {id: 127, cat: TV/Other, desc: "TV: Tutorials"}
+    - {id: 142, cat: TV/Other, desc: "TV: Greek Audio Cartoons"}
+    - {id: 143, cat: TV/Anime, desc: "TV: Greek Audio Animation"}
+    - {id: 144, cat: TV/Documentary, desc: "TV: Greek Audio Documentaries"}
+    - {id: 147, cat: TV, desc: "TV: Foreign Packs"}
+    # Movies HD
+    - {id: 42, cat: Movies/HD, desc: "Movies HD: Remux / 1080p"}
+    - {id: 43, cat: Movies/WEB-DL, desc: "Movies HD: WEB-DL / 720p"}
+    - {id: 45, cat: Movies/BluRay, desc: "Movies HD: BluRay Disk / 1080p"}
+    - {id: 46, cat: Movies/UHD, desc: "Movies HD: Remux / 4K (UHD)"}
+    - {id: 47, cat: Movies/WEB-DL, desc: "Movies HD: WEB-DL / 1080p"}
+    - {id: 48, cat: Movies/UHD, desc: "Movies HD: WEB-DL / 4K (UHD)"}
+    - {id: 49, cat: Movies/HD, desc: "Movies HD: BluRay / 720p"}
+    - {id: 50, cat: Movies/HD, desc: "Movies HD: BluRay / 1080p"}
+    - {id: 51, cat: Movies/UHD, desc: "Movies HD: BluRay / 4K (UHD)"}
+    - {id: 66, cat: Movies/BluRay, desc: "Movies HD: BluRay Disk / 4K (UHD)"}
+    # Games
+    - {id: 74, cat: PC/Games, desc: "Games: PC Games"}
+    # the following are not selectable from the site's category pull down but exist as categories in results
+    - {id: 3, cat: PC, desc: "Apps"}
+
+  modes:
+    search: [q]
+    tv-search: [q]
+    movie-search: [q]
+    music-search: [q]
+    book-search: [q]
+
+settings:
+  - name: username
+    type: text
+    label: Username
+  - name: password
+    type: password
+    label: Password
+  - name: freeleech
+    type: checkbox
+    label: Filter freeleech only
+    default: false
+  - name: sort
+    type: select
+    label: Sort requested from site
+    default: added
+    options:
+      added: created
+      seeders: seeders
+      size: size
+      name: title
+  - name: type
+    type: select
+    label: Order requested from site
+    default: desc
+    options:
+      desc: desc
+      asc: asc
+  - name: info_tpp
+    type: info
+    label: Results Per Page
+    default: For best results, change the <b>Torrents per page:</b> setting to <b>100</b> on your account profile. The Default is <i>15</i>.
+  - name: info_activity
+    type: info
+    label: Account Inactivity
+    default: "To keep records updated regularly, all inactive accounts will be deleted after 60 days of inactivity."
+
+login:
+  path: index.php?page=login
+  method: post
+  inputs:
+    uid: "{{ .Config.username }}"
+    pwd: "{{ .Config.password }}"
+  error:
+    - selector: tr td span[style="color:#FF0000;"]
+  test:
+    path: index.php
+    selector: a[href="logout.php"]
+
+search:
+  paths:
+    # https://oldgreektracker.xyz/index.php?page=torrents&search=&category=0&active=0
+    - path: index.php
+  inputs:
+    page: torrents
+    search: "{{ .Keywords }}"
+    category: "{{ range .Categories }}{{.}};{{end}}"
+    # 0 filename, 1 file&descr, 2 descr, 3 uploaders, 18 genre, 4 imdb, 5 gold, 6 silver, 7 bronze
+    options: "{{ if .Config.freeleech }}5{{ else }}0{{ end }}"
+    # 0 all, 1 active only, 2 dead only
+    active: 0
+    order: "{{ .Config.sort }}"
+    by: "{{ .Config.type }}"
+
+  keywordsfilters:
+    - name: re_replace
+      args: ["\\.", " "]
+
+  rows:
+    selector: table.lista > tbody > tr:has(a[href^="download.php?id="]):has(strong img)
+
+  fields:
+    category:
+      selector: a[href^="index.php?page=torrents&category="]
+      attribute: href
+      filters:
+        - name: querystring
+          args: category
+    title:
+      selector: a[href^="index.php?page=torrent-details&id="]
+    details:
+      selector: a[href^="index.php?page=torrent-details&id="]
+      attribute: href
+    download:
+      selector: a[href^="download.php?id="]
+      attribute: href
+    poster:
+      selector: a[href^="index.php?page=torrent-details&id="]
+      attribute: onmouseover
+      filters:
+        - name: regexp
+          args: src=(.+?) width
+        - name: replace
+          args: ["torrentimg/nocover.jpg", ""]
+    size:
+      selector: td:nth-child(12)
+    date:
+      # auto adjusted by site account profile
+      selector: td:nth-child(8)
+      filters:
+        - name: dateparse
+          args: "dd/MM/yyyy"
+    seeders:
+      selector: td:nth-child(8)
+      optional: true
+      default: 0
+    leechers:
+      optional: true
+      selector: td:nth-child(10)
+      default: 0
+    grabs:
+      optional: true
+      selector: td:nth-child(11)
+      default: 0
+    description:
+      selector: td:nth-child(1)
+      case:
+        img[src="/images/mod/ok.png"]: Verified
+        "*": Not Verified
+    downloadvolumefactor:
+      case:
+        img[src="images/freeleech.gif"]: 0
+        img[src="images/gold.gif"]: 0
+        img[src="images/silver.gif"]: 0.5
+        img[src="images/bronze.gif"]: 0.75
+        "*": 1
+    uploadvolumefactor:
+      text: 1
+    minimumratio:
+      text: 1.0
+    minimumseedtime:
+      # 3 days (as seconds = 3 x 24 x 60 x 60)
+      text: 259200
+#  xbtitFM v4.2.12

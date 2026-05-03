@@ -1,0 +1,226 @@
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'settings.custom_formats.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.custom_formats.subtitle' | translate }}</p>
+    </div>
+    <button type="button" class="btn btn-primary self-start sm:self-auto" (click)="openCreate()">
+      {{ 'settings.custom_formats.new' | translate }}
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (listError()) {
+    <div role="alert" class="alert alert-error">{{ listError() }}</div>
+  } @else if (rows().length === 0) {
+    <p class="text-center py-12 text-base-content/50">{{ 'settings.custom_formats.empty' | translate }}</p>
+  } @else {
+    <div class="overflow-x-auto rounded-lg border border-base-200">
+      <table class="table table-zebra table-sm">
+        <thead>
+          <tr>
+            <th>{{ 'settings.custom_formats.col_name' | translate }}</th>
+            <th>{{ 'settings.custom_formats.col_score' | translate }}</th>
+            <th>{{ 'settings.custom_formats.col_specs' | translate }}</th>
+            <th class="text-end w-40">{{ 'settings.custom_formats.actions' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (cf of rows(); track cf.id) {
+            <tr>
+              <td class="font-medium">{{ cf.name }}</td>
+              <td>
+                <span
+                  class="badge badge-sm"
+                  [class.badge-success]="cf.score > 0"
+                  [class.badge-error]="cf.score < 0"
+                  [class.badge-ghost]="cf.score === 0"
+                >
+                  {{ cf.score > 0 ? '+' : '' }}{{ cf.score }}
+                </span>
+              </td>
+              <td class="text-sm text-base-content/60">{{ cf.specs.length }} spec(s)</td>
+              <td class="text-end">
+                <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(cf)">
+                  {{ 'settings.custom_formats.edit' | translate }}
+                </button>
+                <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRow(cf)">
+                  {{ 'settings.custom_formats.delete' | translate }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <div class="divider"></div>
+  <h2 class="text-lg font-semibold mb-2">{{ 'settings.custom_formats.test_title' | translate }}</h2>
+  <div class="flex gap-2 items-end">
+    <input type="text" class="input input-bordered input-sm flex-1"
+      [placeholder]="'settings.custom_formats.test_placeholder' | translate"
+      [ngModel]="testTitle()" (ngModelChange)="testTitle.set($event)" />
+    <button type="button" class="btn btn-sm btn-outline" (click)="runTest()" [disabled]="testLoading() || !testTitle().trim()">
+      @if (testLoading()) { <span class="loading loading-spinner loading-xs"></span> }
+      {{ 'settings.custom_formats.test_btn' | translate }}
+    </button>
+  </div>
+  @if (testResults().length) {
+    <div class="overflow-x-auto mt-3 rounded-lg border border-base-200">
+      <table class="table table-sm">
+        <thead><tr><th>Format</th><th>Match</th><th class="text-right">Score</th></tr></thead>
+        <tbody>
+          @for (r of testResults(); track r.formatId) {
+            <tr [class.opacity-40]="!r.matched">
+              <td>{{ r.formatName }}</td>
+              <td>
+                @if (r.matched) { <span class="badge badge-success badge-sm">Oui</span> }
+                @else { <span class="badge badge-ghost badge-sm">Non</span> }
+              </td>
+              <td class="text-right tabular-nums" [class.text-success]="r.score > 0" [class.text-error]="r.score < 0">
+                {{ r.score > 0 ? '+' : '' }}{{ r.score }}
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>
+
+  <dialog #editorDialog class="modal">
+    <div class="modal-box max-w-xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+      <div class="px-5 sm:px-6 pt-4 pb-3 border-b border-base-200 flex justify-between items-center shrink-0 bg-base-100">
+        <h2 class="text-lg font-bold">
+          @if (editingId() === null) {
+            {{ 'settings.custom_formats.editor_create' | translate }}
+          } @else {
+            {{ 'settings.custom_formats.editor_edit' | translate }}
+          }
+        </h2>
+        <button
+          type="button"
+          class="btn btn-sm btn-ghost btn-circle"
+          (click)="closeEditor()"
+          [attr.aria-label]="'common.close' | translate"
+        >
+          <svg lucideX class="h-5 w-5"></svg>
+        </button>
+      </div>
+
+      <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+        <div class="grid grid-cols-3 gap-3">
+          <label class="form-control col-span-2">
+            <span class="label-text">{{ 'settings.custom_formats.field_name' | translate }}</span>
+            <input
+              type="text"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formName()"
+              (ngModelChange)="formName.set($event)"
+            />
+          </label>
+          <label class="form-control">
+            <span class="label-text">{{ 'settings.custom_formats.field_score' | translate }}</span>
+            <input
+              type="number"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formScore()"
+              (ngModelChange)="formScore.set(+$event)"
+            />
+          </label>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-medium">{{ 'settings.custom_formats.specs' | translate }}</span>
+            <button type="button" class="btn btn-ghost btn-xs" (click)="addSpec()">
+              + {{ 'settings.custom_formats.add_spec' | translate }}
+            </button>
+          </div>
+
+          @for (spec of formSpecs(); track $index) {
+            <div class="flex flex-wrap gap-2 p-3 rounded-lg bg-base-200/40 border border-base-300">
+              <select
+                class="select select-bordered select-xs"
+                [ngModel]="spec.type"
+                (ngModelChange)="updateSpec($index, { type: $event })"
+              >
+                @for (t of specTypes; track t) {
+                  <option [value]="t">{{ t }}</option>
+                }
+              </select>
+              @if (spec.type === 'indexer_flag') {
+                <select
+                  class="select select-bordered select-xs flex-1 min-w-32"
+                  [ngModel]="spec.value"
+                  (ngModelChange)="updateSpec($index, { value: $event })"
+                >
+                  @for (v of indexerFlagValues; track v) {
+                    <option [value]="v">{{ v }}</option>
+                  }
+                </select>
+              } @else {
+                <input
+                  type="text"
+                  class="input input-bordered input-xs flex-1 min-w-32"
+                  [ngModel]="spec.value"
+                  (ngModelChange)="updateSpec($index, { value: $event })"
+                  placeholder="{{ spec.type === 'title_regex' ? '/regex/' : 'value' }}"
+                />
+              }
+              <label class="label cursor-pointer gap-1.5 px-1">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-xs"
+                  [ngModel]="spec.negate"
+                  (ngModelChange)="updateSpec($index, { negate: $event })"
+                />
+                <span class="label-text text-sm">{{ 'settings.custom_formats.negate' | translate }}</span>
+              </label>
+              <label class="label cursor-pointer gap-1.5 px-1">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-xs"
+                  [ngModel]="spec.required"
+                  (ngModelChange)="updateSpec($index, { required: $event })"
+                />
+                <span class="label-text text-sm">{{ 'settings.custom_formats.required' | translate }}</span>
+              </label>
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs text-error"
+                (click)="removeSpec($index)"
+              >✕</button>
+            </div>
+          }
+
+          @if (formSpecs().length === 0) {
+            <p class="text-sm text-base-content/50 text-center py-4">
+              {{ 'settings.custom_formats.no_specs' | translate }}
+            </p>
+          }
+        </div>
+
+
+      </div>
+
+      <div class="modal-action shrink-0 px-5 sm:px-6 pb-4 pt-2 border-t border-base-200 bg-base-100">
+        <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
+          {{ 'settings.custom_formats.cancel' | translate }}
+        </button>
+        <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+          @if (saving()) {
+            <span class="loading loading-spinner loading-sm"></span>
+          }
+          {{ 'settings.custom_formats.save' | translate }}
+        </button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">close</button>
+    </form>
+  </dialog>

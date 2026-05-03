@@ -1,0 +1,145 @@
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div>
+      <a routerLink="/movies" class="btn btn-ghost btn-sm gap-1 w-fit mb-2">
+        <svg lucideChevronLeft class="h-4 w-4"></svg>
+        {{ 'settings.quality_profiles.back' | translate }}
+      </a>
+      <h1 class="text-2xl font-bold">{{ 'settings.quality_profiles.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">
+        {{ 'settings.quality_profiles.subtitle' | translate }}
+      </p>
+    </div>
+    <button type="button" class="btn btn-primary" (click)="openCreate()">
+      {{ 'settings.quality_profiles.new' | translate }}
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (listError()) {
+    <div role="alert" class="alert alert-error">{{ listError() }}</div>
+  } @else if (profiles().length === 0) {
+    <p class="text-center py-12 text-base-content/50">
+      {{ 'settings.quality_profiles.empty' | translate }}
+    </p>
+  } @else {
+    <div class="overflow-x-auto rounded-lg border border-base-200">
+      <table class="table table-zebra">
+        <thead>
+          <tr>
+            <th>{{ 'settings.quality_profiles.col_name' | translate }}</th>
+            <th>{{ 'settings.quality_profiles.col_cutoff' | translate }}</th>
+            <th>{{ 'settings.quality_profiles.col_upgrade' | translate }}</th>
+            <th class="text-end">{{ 'settings.quality_profiles.col_allowed_count' | translate }}</th>
+            <th class="text-end w-40">{{ 'settings.quality_profiles.actions' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (p of profiles(); track p.id) {
+            <tr>
+              <td class="font-medium">{{ p.name }}</td>
+              <td class="text-sm">{{ cutoffLabel(p.cutoff) }}</td>
+              <td>
+                @if (p.upgradeAllowed) {
+                  <span class="badge badge-success badge-sm">{{ 'common.yes' | translate }}</span>
+                } @else {
+                  <span class="badge badge-ghost badge-sm">{{ 'common.no' | translate }}</span>
+                }
+              </td>
+              <td class="text-end">{{ allowedCount(p) }}</td>
+              <td class="text-end">
+                <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(p)">
+                  {{ 'settings.quality_profiles.edit' | translate }}
+                </button>
+                <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteProfile(p)">
+                  {{ 'settings.quality_profiles.delete' | translate }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>
+
+  <dialog #editorDialog class="modal">
+    <div class="modal-box max-w-2xl max-h-[90vh] flex flex-col">
+      <h2 class="text-lg font-bold shrink-0">
+        @if (editingId() === null) {
+          {{ 'settings.quality_profiles.editor_create_title' | translate }}
+        } @else {
+          {{ 'settings.quality_profiles.editor_edit_title' | translate }}
+        }
+      </h2>
+      <div class="py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.quality_profiles.field_name' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formName()"
+            (ngModelChange)="formName.set($event)"
+          />
+        </label>
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.quality_profiles.field_cutoff' | translate }}</span>
+          <select
+            class="select select-bordered select-sm w-full"
+            [ngModel]="formCutoff()"
+            (ngModelChange)="formCutoff.set(+$event)"
+          >
+            @for (q of definitions(); track q.id) {
+              <option [ngValue]="q.id">{{ q.name }} ({{ q.resolution }}p · {{ q.source }})</option>
+            }
+          </select>
+        </label>
+        <label class="label cursor-pointer justify-start gap-3">
+          <input
+            type="checkbox"
+            class="toggle toggle-sm toggle-primary"
+            [ngModel]="formUpgrade()"
+            (ngModelChange)="formUpgrade.set($event)"
+          />
+          <span class="label-text">{{ 'settings.quality_profiles.field_upgrade' | translate }}</span>
+        </label>
+        <div>
+          <p class="text-sm font-medium mb-2">{{ 'settings.quality_profiles.qualities_group' | translate }}</p>
+          <div class="rounded-lg border border-base-200 divide-y divide-base-200 max-h-[28rem] overflow-y-auto">
+            @for (q of definitions(); track q.id) {
+              <div class="px-3 py-2 hover:bg-base-200/50">
+                <div class="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm"
+                    [checked]="isAllowed(q.id)"
+                    (change)="toggleQuality(q.id, $event)"
+                  />
+                  <span class="text-sm flex-1">{{ q.name }}</span>
+                  <span class="text-sm text-base-content/50 tabular-nums">{{ q.resolution }}p · {{ q.source }}</span>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-action shrink-0">
+        <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
+          {{ 'settings.quality_profiles.cancel' | translate }}
+        </button>
+        <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+          @if (saving()) {
+            <span class="loading loading-spinner loading-sm"></span>
+          }
+          {{ 'settings.quality_profiles.save' | translate }}
+        </button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">close</button>
+    </form>
+  </dialog>

@@ -1,0 +1,103 @@
+@if (loading()) {
+  <div class="flex justify-center py-16">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+} @else {
+  <div appTvSection class="flex flex-col gap-8">
+
+    <!-- Libraries -->
+    <app-horizontal-scroller [title]="'home.libraries' | translate">
+      @for (lib of libraries(); track lib.id) {
+        <a [routerLink]="libraryUrl(lib)"
+           [attr.data-home-focus]="'library:' + lib.id"
+           class="shrink-0 w-36 h-20 sm:w-48 sm:h-28 rounded-xl border flex items-center gap-3 px-4 sm:px-5 hover:shadow-lg transition-shadow"
+           [style.background]="'linear-gradient(135deg, color-mix(in oklch, ' + libraryColor(lib) + ' 20%, transparent), color-mix(in oklch, ' + libraryColor(lib) + ' 5%, transparent))'"
+           [style.border-color]="'color-mix(in oklch, ' + libraryColor(lib) + ' 15%, transparent)'"
+        >
+          <app-lucide-icon [name]="lib.icon || 'library'" class="h-6 w-6 sm:h-8 sm:w-8 shrink-0" [style.color]="libraryColor(lib)" />
+          <span class="text-sm sm:text-base font-semibold">{{ lib.name }}</span>
+        </a>
+      }
+    </app-horizontal-scroller>
+
+    <!-- Continue Watching -->
+    @if (continueWatching().length) {
+      <app-horizontal-scroller [title]="'home.continue_watching' | translate">
+        @for (item of continueWatching(); track item.id) {
+          <app-media-card [aspect]="'landscape'"
+            [attr.data-home-focus]="'cw:' + item.id"
+            [imageUrl]="item.fanartUrl ?? item.posterUrl"
+            [title]="item.mediaTitle"
+            [subtitle]="item.episodeLabel ?? undefined"
+            [progressPercent]="item.progressPercent"
+            [link]="['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId]"
+            [subtitleLink]="item.episodeId ? ['/series', '' + item.mediaId, 'episode', '' + item.episodeId] : null"
+            [dismissable]="true"
+            [clickIntent]="'play'"
+            (clicked)="playContinueWatching(item)"
+            (dismissed)="removeContinueWatching(item)"
+          />
+        }
+      </app-horizontal-scroller>
+    }
+
+    <!-- Recommendations -->
+    @if (recommendations().length) {
+      <app-horizontal-scroller [title]="'home.recommendations' | translate">
+        @for (rec of recommendations(); track rec.media.id) {
+          <app-media-card
+            class="shrink-0 w-28 sm:w-36"
+            [attr.data-home-focus]="'rec:' + rec.media.id"
+            [imageUrl]="rec.media.posterUrl"
+            [title]="rec.media.title"
+            [subtitle]="'' + (rec.media.year ?? '')"
+            [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
+            [playable]="true"
+            [dismissable]="true"
+            (played)="playRecommendation(rec)"
+            (dismissed)="dismissRecommendation(rec)"
+          />
+        }
+      </app-horizontal-scroller>
+    }
+
+    <!-- Filter toggle -->
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" class="toggle toggle-sm toggle-primary"
+        [ngModel]="onlyMyRequests()" (ngModelChange)="toggleOnlyMyRequests()" />
+      <span class="text-sm text-base-content/70">{{ 'home.only_my_requests' | translate }}</span>
+    </label>
+
+    <!-- Recently Added -->
+    @if (recentMedia().length) {
+      <app-horizontal-scroller [title]="'home.recent_media' | translate">
+        @for (m of recentMedia(); track m.id) {
+          <app-media-card
+            class="shrink-0 w-28 sm:w-36"
+            [attr.data-home-focus]="'recent:' + m.id"
+            [media]="m"
+            [subtitle]="'' + (m.year ?? '')"
+            [hideStatusBar]="true"
+          />
+        }
+      </app-horizontal-scroller>
+    }
+
+    <!-- Coming Soon -->
+    @if (comingSoon().length) {
+      <app-horizontal-scroller [title]="'home.coming_soon' | translate">
+        @for (entry of comingSoon(); track entry.id) {
+          <app-media-card
+            class="shrink-0 w-28 sm:w-36"
+            [attr.data-home-focus]="'soon:' + entry.id"
+            [imageUrl]="entry.posterUrl"
+            [title]="entry.title"
+            [subtitle]="entry.date"
+            [link]="['/' + (entry.type === 'series' ? 'series' : 'movies'), '' + entry.mediaId]"
+          />
+        }
+      </app-horizontal-scroller>
+    }
+
+  </div>
+}
