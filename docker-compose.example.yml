@@ -1,0 +1,81 @@
+# Example Docker Compose for self-hosting Fliks.
+#
+# Copy this file to `docker-compose.yml`, edit the volume paths and the
+# DB password, then `docker compose up -d`. The web UI lives at
+# http://<host>:4848.
+#
+# Image is pulled from GitHub Container Registry — no auth required for
+# public images. To pin a specific version replace `:latest` with `:1.2.3`
+# (see https://github.com/fliks-app/fliks/pkgs/container/fliks for the
+# full tag list).
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fliks
+      # Change me before exposing the stack to anything other than
+      # localhost. The DB is reached over the internal compose network
+      # only, but a default password in published Compose files is a
+      # well-known footgun.
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: fliks
+    volumes:
+      - fliks_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fliks']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  fliks:
+    image: ghcr.io/fliks-app/fliks:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # `host` networking so Chromecast / DLNA mDNS discovery works on the
+    # LAN. Without this, Cast devices are invisible to the sender. The
+    # trade-off is that the `ports:` block below is ignored and Fliks
+    # binds directly to host port 4848 — change `PORT` env if that
+    # collides with anything else on the host.
+    network_mode: host
+    environment:
+      # Default port. Override if 4848 is already used on the host.
+      PORT: 4848
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_USERNAME: fliks
+      DB_PASSWORD: changeme
+      DB_NAME: fliks
+      NODE_ENV: production
+    volumes:
+      # ---- Media library ------------------------------------------------
+      # Map your existing media tree here. Read-only is recommended; Fliks
+      # never writes to the source files. Match the path Fliks tells the
+      # user to use when adding a library in the UI.
+      - /path/to/your/media:/medias:ro
+
+      # ---- App-managed storage -----------------------------------------
+      # Cached TMDB / fanart images, sprite sheets for player seek preview.
+      - fliks_images:/app/images
+      # Optional: persistent transcoding cache (HLS segments, etc.)
+      # If omitted, a tmpfs is used per-container restart.
+      - fliks_transcode:/app/transcode
+
+  # Optional GPU-accelerated transcoding via Intel QSV / VAAPI. Uncomment
+  # the `devices` block above (under the fliks service) and pick the
+  # right /dev/dri device for your host. NVIDIA NVENC needs a different
+  # setup (runtime: nvidia + nvidia-container-toolkit on the host) and
+  # is not covered by this example.
+  #
+  # services:
+  #   fliks:
+  #     devices:
+  #       - /dev/dri:/dev/dri
+
+volumes:
+  fliks_pgdata:
+  fliks_images:
+  fliks_transcode:
