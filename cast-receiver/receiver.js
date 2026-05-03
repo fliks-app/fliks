@@ -64,6 +64,23 @@ playerManager.setMessageInterceptor(
   },
 );
 
+// --- Shaka UI text displayer --------------------------------------------
+//
+// CAF's default text track rendering goes through native ::cue, whose
+// allowed CSS is restricted (no padding, no border-radius). Switching
+// to Shaka's UITextDisplayer renders cues as HTML inside `.shaka-text-
+// container > span[translate="no"]`, where receiver.css can apply the
+// same boxed look the in-app Shaka player uses.
+playerManager.setMediaPlaybackInfoHandler((_req, cfg) => {
+  if (typeof shaka !== 'undefined' && shaka.text && shaka.text.UITextDisplayer) {
+    cfg.shakaConfig = {
+      ...(cfg.shakaConfig || {}),
+      textDisplayFactory: shaka.text.UITextDisplayer,
+    };
+  }
+  return cfg;
+});
+
 // --- Boot ---------------------------------------------------------------
 //
 // `disableIdleTimeout: true` keeps the receiver alive between clips so

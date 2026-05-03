@@ -67,3 +67,18 @@ body.playing .splash {
   background: transparent;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 4px rgba(0, 0, 0, 0.7);
 }
+
+/* Shaka UITextDisplayer (enabled in receiver.js) renders cue text as
+   HTML inside `.shaka-text-container > span[translate="no"]`. CAF
+   applies the sender's TextTrackStyle (color / background) inline on
+   that span; we add padding + radius here so the 'Black' / 'Semi'
+   background presets show up as a tidy rounded box rather than a flush
+   block. The values mirror the in-app player styling
+   (frontend/src/styles.css). */
+.shaka-text-container span[translate="no"] {
+  padding: 0.15em 0.4em !important;
+  border-radius: 0.25em !important;
+}
+.shaka-text-container .shaka-text-wrapper {
+  line-height: 1.1 !important;
+}

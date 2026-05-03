@@ -1,6 +1,7 @@
-import { Injectable, signal, OnDestroy } from '@angular/core';
+import { Injectable, inject, signal, OnDestroy } from '@angular/core';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { environment } from '../../../environments/environment';
+import { CastSettingsService, CastSubtitleStyle } from './cast-settings.service';
 
 declare const cast: any;
 declare const chrome: any;
@@ -35,6 +36,10 @@ interface NativeCastLoadOpts {
   subtitles: { url: string; language: string; label: string }[];
   activeSubtitleTrackId: number;
   customData?: Record<string, unknown>;
+  /** Optional — when present, native plugin builds the platform's
+   *  text-track-style equivalent (TextTrackStyle on Android, GCKMedia-
+   *  TextTrackStyle on iOS) and attaches to MediaInformation. */
+  textTrackStyle?: CastSubtitleStyle;
 }
 
 interface NativeCastPlugin {
@@ -67,6 +72,7 @@ export class CastService implements OnDestroy {
   readonly castStreamBaseUrl = signal('');
 
   private readonly isNative = Capacitor.isNativePlatform();
+  private readonly castSettings = inject(CastSettingsService);
 
   // Web-only
   private session: any = null;
@@ -209,6 +215,8 @@ export class CastService implements OnDestroy {
       episodeId: info.episodeId,
     };
 
+    const subtitleStyle = this.castSettings.get().subtitleStyle;
+
     if (this.isNative) {
       try {
         await NativeCast.loadMedia({
@@ -221,6 +229,7 @@ export class CastService implements OnDestroy {
           subtitles: info.subtitles ?? [],
           activeSubtitleTrackId: info.activeSubtitleTrackId ?? 0,
           customData,
+          textTrackStyle: subtitleStyle,
         });
       } catch (err) {
         console.error('NativeCast.loadMedia failed:', err);
@@ -254,14 +263,12 @@ export class CastService implements OnDestroy {
         track.language = sub.language;
         return track;
       });
-      mediaInfo.textTrackStyle = new chrome.cast.media.TextTrackStyle();
-      mediaInfo.textTrackStyle.fontScale = 0.85;
-      mediaInfo.textTrackStyle.fontGenericFamily = chrome.cast.media.TextTrackFontGenericFamily.SANS_SERIF;
-      mediaInfo.textTrackStyle.foregroundColor = '#FFFFFFFF';
-      mediaInfo.textTrackStyle.backgroundColor = '#00000000';
-      mediaInfo.textTrackStyle.edgeType = chrome.cast.media.TextTrackEdgeType.DROP_SHADOW;
-      mediaInfo.textTrackStyle.edgeColor = '#000000FF';
     }
+    // Always send the style: receiver bakes in its defaults when
+    // textTrackStyle is missing, so skipping it here would mask the
+    // user's prefs for any LOAD that happened to omit tracks (e.g.
+    // movie cast with no preselected sub).
+    mediaInfo.textTrackStyle = this.buildWebTextTrackStyle(subtitleStyle);
 
     const request = new chrome.cast.media.LoadRequest(mediaInfo);
     request.currentTime = info.currentTime ?? 0;
@@ -338,4 +345,50 @@ export class CastService implements OnDestroy {
     const request = new chrome.cast.media.EditTracksInfoRequest(activeIds);
     media.editTracksInfo(request, () => {}, () => {});
   }
+
+  /** Map subtitle presets (size / colour / shadow / background — the same
+   *  vocabulary the local player uses) onto the web Cast SDK's
+   *  `TextTrackStyle`. Native plugins replicate this mapping for parity
+   *  so the receiver sees identical Cast values regardless of sender. */
+  private buildWebTextTrackStyle(s: CastSubtitleStyle) {
+    const style = new chrome.cast.media.TextTrackStyle();
+    style.fontGenericFamily = chrome.cast.media.TextTrackFontGenericFamily.SANS_SERIF;
+    style.fontScale = SUB_SIZE_SCALE[s.size] ?? SUB_SIZE_SCALE['normal'];
+    style.foregroundColor = SUB_FG_COLOR[s.color] ?? SUB_FG_COLOR['white'];
+    style.backgroundColor = SUB_BG_COLOR[s.background] ?? SUB_BG_COLOR['transparent'];
+    const shadow = SUB_SHADOW[s.shadow] ?? SUB_SHADOW['drop'];
+    style.edgeType = chrome.cast.media.TextTrackEdgeType[shadow.edge];
+    style.edgeColor = shadow.color;
+    return style;
+  }
 }
+
+// Preset → Cast value tables. Colours follow Cast Web SDK's wire
+// format `#RRGGBBAA` (alpha last). Native plugins receive the same
+// presets and translate to their platform's int / UIColor form.
+const SUB_SIZE_SCALE: Record<string, number> = {
+  small: 0.7,
+  normal: 0.85,
+  large: 1.1,
+  xlarge: 1.4,
+};
+
+const SUB_FG_COLOR: Record<string, string> = {
+  white: '#FFFFFFFF',
+  yellow: '#FFFF00FF',
+  green: '#00FF00FF',
+  cyan: '#00FFFFFF',
+};
+
+const SUB_BG_COLOR: Record<string, string> = {
+  transparent: '#00000000',
+  semi: '#00000080',
+  black: '#000000FF',
+};
+
+const SUB_SHADOW: Record<string, { edge: string; color: string }> = {
+  none: { edge: 'NONE', color: '#00000000' },
+  drop: { edge: 'DROP_SHADOW', color: '#000000FF' },
+  outline: { edge: 'OUTLINE', color: '#000000FF' },
+  raised: { edge: 'RAISED', color: '#000000FF' },
+};

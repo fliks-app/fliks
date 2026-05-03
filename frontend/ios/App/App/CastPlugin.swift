@@ -161,16 +161,12 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
 
             if !tracks.isEmpty {
                 builder.mediaTracks = tracks
-
-                let textStyle = GCKMediaTextTrackStyle.createDefault()
-                textStyle.fontScale = 0.85
-                textStyle.fontGenericFamily = .sansSerif
-                textStyle.foregroundColor = GCKColor(uiColor: .white)
-                textStyle.backgroundColor = GCKColor(uiColor: .clear)
-                textStyle.edgeType = .dropShadow
-                textStyle.edgeColor = GCKColor(uiColor: .black)
-                builder.textTrackStyle = textStyle
             }
+            // Always set the style — receiver fills its defaults when
+            // textTrackStyle is missing, masking the user's prefs
+            // whenever the LOAD has no preselected subtitle tracks.
+            let spec = call.getObject("textTrackStyle")
+            builder.textTrackStyle = self?.buildTextTrackStyle(spec)
 
             let mediaInfo = builder.build()
 
@@ -331,6 +327,61 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         let js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { currentTime: \(time), duration: \(duration), isPaused: \(paused) } }));"
         DispatchQueue.main.async { [weak self] in
             self?.bridge?.webView?.evaluateJavaScript(js)
+        }
+    }
+
+    /// Map the sender's subtitle presets (`size` / `color` / `shadow` /
+    /// `background`) onto Cast SDK's `GCKMediaTextTrackStyle`. Same
+    /// preset vocabulary as the local player settings — keeps a single
+    /// shared UI between both. nil spec → receiver-matching defaults.
+    private func buildTextTrackStyle(_ spec: [String: Any]?) -> GCKMediaTextTrackStyle {
+        let style = GCKMediaTextTrackStyle.createDefault()
+        style.fontGenericFamily = .sansSerif
+        let size = spec?["size"] as? String ?? "normal"
+        let color = spec?["color"] as? String ?? "white"
+        let shadow = spec?["shadow"] as? String ?? "drop"
+        let bg = spec?["background"] as? String ?? "transparent"
+        style.fontScale = mapSize(size)
+        style.foregroundColor = mapFgColor(color)
+        style.backgroundColor = mapBgColor(bg)
+        let edge = mapShadow(shadow)
+        style.edgeType = edge.type
+        style.edgeColor = edge.color
+        return style
+    }
+
+    private func mapSize(_ name: String) -> CGFloat {
+        switch name {
+        case "small": return 0.7
+        case "large": return 1.1
+        case "xlarge": return 1.4
+        default: return 0.85
+        }
+    }
+
+    private func mapFgColor(_ name: String) -> GCKColor {
+        switch name {
+        case "yellow": return GCKColor(uiColor: UIColor(red: 1, green: 1, blue: 0, alpha: 1))
+        case "green": return GCKColor(uiColor: UIColor(red: 0, green: 1, blue: 0, alpha: 1))
+        case "cyan": return GCKColor(uiColor: UIColor(red: 0, green: 1, blue: 1, alpha: 1))
+        default: return GCKColor(uiColor: .white)
+        }
+    }
+
+    private func mapBgColor(_ name: String) -> GCKColor {
+        switch name {
+        case "semi": return GCKColor(uiColor: UIColor(red: 0, green: 0, blue: 0, alpha: 0.5))
+        case "black": return GCKColor(uiColor: .black)
+        default: return GCKColor(uiColor: .clear)
+        }
+    }
+
+    private func mapShadow(_ name: String) -> (type: GCKMediaTextTrackStyleEdgeType, color: GCKColor) {
+        switch name {
+        case "none": return (.none, GCKColor(uiColor: .clear))
+        case "outline": return (.outline, GCKColor(uiColor: .black))
+        case "raised": return (.raised, GCKColor(uiColor: .black))
+        default: return (.dropShadow, GCKColor(uiColor: .black))
         }
     }
 }

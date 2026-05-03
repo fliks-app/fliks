@@ -307,21 +307,14 @@ public class CastPlugin extends Plugin {
                 Log.w(TAG, "Error parsing subtitles", e);
             }
         }
+        JSObject styleSpec = call.getObject("textTrackStyle");
         if (!tracks.isEmpty()) {
             mediaInfoBuilder.setMediaTracks(tracks);
-
-            TextTrackStyle trackStyle = new TextTrackStyle();
-            trackStyle.setFontScale(0.85f);
-            trackStyle.setFontGenericFamily(TextTrackStyle.FONT_FAMILY_SANS_SERIF);
-            trackStyle.setForegroundColor(0xFFFFFFFF);
-            trackStyle.setBackgroundColor(0x00000000);
-            trackStyle.setWindowColor(0x00000000);
-
-            trackStyle.setWindowType(TextTrackStyle.WINDOW_TYPE_NONE);
-            trackStyle.setEdgeType(TextTrackStyle.EDGE_TYPE_DROP_SHADOW);
-            trackStyle.setEdgeColor(0xFF000000);
-            mediaInfoBuilder.setTextTrackStyle(trackStyle);
         }
+        // Always set the style — receiver fills its defaults when
+        // textTrackStyle is missing, masking the user's prefs whenever
+        // the LOAD has no preselected subtitle tracks.
+        mediaInfoBuilder.setTextTrackStyle(buildTextTrackStyle(styleSpec));
 
         MediaInfo mediaInfo = mediaInfoBuilder.build();
 
@@ -344,30 +337,92 @@ public class CastPlugin extends Plugin {
         client.load(requestBuilder.build());
 
         // Apply text track style after load (Default Media Receiver ignores it in MediaInfo)
-        if (!tracks.isEmpty()) {
-            pollHandler = mainHandler;
-            pollHandler.postDelayed(() -> {
-                try {
-                    TextTrackStyle style = new TextTrackStyle();
-                    style.setFontScale(0.85f);
-                    style.setFontGenericFamily(TextTrackStyle.FONT_FAMILY_SANS_SERIF);
-                    style.setForegroundColor(0xFFFFFFFF);
-                    style.setBackgroundColor(0x00000000);
-                    style.setWindowColor(0x00000000);
-                    style.setWindowType(TextTrackStyle.WINDOW_TYPE_NONE);
-                    style.setEdgeType(TextTrackStyle.EDGE_TYPE_DROP_SHADOW);
-                    style.setEdgeColor(0xFF000000);
-                    client.setTextTrackStyle(style);
-                } catch (Exception e) {
-                    Log.w(TAG, "Failed to set track style", e);
-                }
-            }, 2000);
-        }
+        pollHandler = mainHandler;
+        pollHandler.postDelayed(() -> {
+            try {
+                client.setTextTrackStyle(buildTextTrackStyle(styleSpec));
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to set track style", e);
+            }
+        }, 2000);
 
         // Start position/state polling
         startMediaPolling(client);
 
         call.resolve();
+    }
+
+    /**
+     * Map the sender's subtitle presets ({@code size} / {@code color} /
+     * {@code shadow} / {@code background}) onto Cast SDK's
+     * {@link TextTrackStyle}. Same preset vocabulary as the local
+     * player settings — keeps a single shared UI between both. When
+     * {@code spec} is null, returns the receiver-matching defaults.
+     */
+    private TextTrackStyle buildTextTrackStyle(JSObject spec) {
+        TextTrackStyle style = new TextTrackStyle();
+        style.setFontGenericFamily(TextTrackStyle.FONT_FAMILY_SANS_SERIF);
+        style.setWindowType(TextTrackStyle.WINDOW_TYPE_NONE);
+        style.setWindowColor(0x00000000);
+        String size = spec != null ? spec.optString("size", "normal") : "normal";
+        String color = spec != null ? spec.optString("color", "white") : "white";
+        String shadow = spec != null ? spec.optString("shadow", "drop") : "drop";
+        String bg = spec != null ? spec.optString("background", "transparent") : "transparent";
+        style.setFontScale(mapSize(size));
+        style.setForegroundColor(mapFgColor(color));
+        style.setBackgroundColor(mapBgColor(bg));
+        int[] edge = mapShadow(shadow);
+        style.setEdgeType(edge[0]);
+        style.setEdgeColor(edge[1]);
+        return style;
+    }
+
+    private static float mapSize(String name) {
+        switch (name) {
+            case "small": return 0.7f;
+            case "large": return 1.1f;
+            case "xlarge": return 1.4f;
+            default: return 0.85f;
+        }
+    }
+
+    private static int mapFgColor(String name) {
+        switch (name) {
+            case "yellow": return 0xFFFFFF00;
+            case "green": return 0xFF00FF00;
+            case "cyan": return 0xFF00FFFF;
+            default: return 0xFFFFFFFF;
+        }
+    }
+
+    private static int mapBgColor(String name) {
+        switch (name) {
+            case "semi": return 0x80000000;
+            case "black": return 0xFF000000;
+            // Cast SDK on Android strips integer-color fields equal to
+            // 0 from the wire payload (treats them as "unset"), so the
+            // receiver falls through to CAF's built-in default — which
+            // happens to render an opaque black box. Use a non-zero
+            // value with alpha 0: still fully transparent visually,
+            // but serialised on the wire as #01000000 so the receiver
+            // sees an explicit transparent backgroundColor.
+            default: return 0x00010000;
+        }
+    }
+
+    /** Returns {edgeType, edgeColor}. */
+    private static int[] mapShadow(String name) {
+        switch (name) {
+            // Same wire-omission concern as transparent backgrounds —
+            // a 0 colour is stripped, the receiver picks its default.
+            // Edge isn't rendered when type=NONE so the visible result
+            // is the same; we keep the wire frame complete for
+            // determinism / debuggability.
+            case "none": return new int[] { TextTrackStyle.EDGE_TYPE_NONE, 0x00010000 };
+            case "outline": return new int[] { TextTrackStyle.EDGE_TYPE_OUTLINE, 0xFF000000 };
+            case "raised": return new int[] { TextTrackStyle.EDGE_TYPE_RAISED, 0xFF000000 };
+            default: return new int[] { TextTrackStyle.EDGE_TYPE_DROP_SHADOW, 0xFF000000 };
+        }
     }
 
     @PluginMethod()

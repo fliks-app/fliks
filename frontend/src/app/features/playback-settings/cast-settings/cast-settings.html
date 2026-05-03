@@ -1,13 +1,11 @@
 <h1 class="text-2xl font-bold mb-4">Chromecast</h1>
 <div class="card bg-base-100 border border-base-200">
   <div class="card-body gap-5">
-    <div class="form-control">
-      <label class="label cursor-pointer justify-start gap-4">
-        <input type="checkbox" class="toggle toggle-primary" [ngModel]="hdr()" (ngModelChange)="hdr.set($event)" />
-        <span class="label-text font-medium">{{ 'playback_settings.cast_hdr' | translate }}</span>
-      </label>
-      <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.cast_hdr_hint' | translate }}</span></div>
-    </div>
+    <app-toggle-field
+      [(value)]="hdr"
+      [label]="'playback_settings.cast_hdr' | translate"
+      [hint]="'playback_settings.cast_hdr_hint' | translate"
+    />
 
     <div class="divider my-0"></div>
 
@@ -28,6 +26,19 @@
       </select>
       <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.cast_audio_hint' | translate }}</span></div>
     </label>
+
+    <div class="divider my-0"></div>
+
+    <app-subtitle-appearance
+      [size]="subSize()"
+      [color]="subColor()"
+      [shadow]="subShadow()"
+      [background]="subBackground()"
+      (sizeChange)="subSize.set($event)"
+      (colorChange)="subColor.set($event)"
+      (shadowChange)="subShadow.set($event)"
+      (backgroundChange)="subBackground.set($event)"
+    />
 
     <div class="card-actions justify-end pt-2">
       <button class="btn btn-primary" (click)="save()">{{ 'common.save' | translate }}</button>
