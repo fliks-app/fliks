@@ -272,15 +272,15 @@
             <button
               type="button"
               class="btn btn-primary btn-sm"
-              [disabled]="radarrLoading() || !canSubmitRadarr"
-              (click)="importRadarr()"
+              [disabled]="radarrLoading() || radarrPreviewing() || !canSubmitRadarr"
+              (click)="openRadarrWizard()"
             >
-              @if (radarrLoading()) {
+              @if (radarrLoading() || radarrPreviewing()) {
                 <span class="loading loading-spinner loading-xs"></span>
               } @else {
                 <svg lucideDownload class="h-4 w-4"></svg>
               }
-              {{ 'import.import_btn' | translate }}
+              {{ 'import.continue_btn' | translate }}
             </button>
           </div>
 
@@ -430,15 +430,15 @@
             <button
               type="button"
               class="btn btn-primary btn-sm"
-              [disabled]="sonarrLoading() || !canSubmitSonarr"
-              (click)="importSonarr()"
+              [disabled]="sonarrLoading() || sonarrPreviewing() || !canSubmitSonarr"
+              (click)="openSonarrWizard()"
             >
-              @if (sonarrLoading()) {
+              @if (sonarrLoading() || sonarrPreviewing()) {
                 <span class="loading loading-spinner loading-xs"></span>
               } @else {
                 <svg lucideDownload class="h-4 w-4"></svg>
               }
-              {{ 'import.import_btn' | translate }}
+              {{ 'import.continue_btn' | translate }}
             </button>
           </div>
 
@@ -483,6 +483,130 @@
           }
         </div>
       </section>
+    </div>
+  }
+
+  <!-- Path mapping wizards (one per provider). Rendered outside the cards so
+       the modal backdrop covers the whole page. -->
+  @if (radarrShowWizard()) {
+    <div class="modal modal-open">
+      <div class="modal-box max-w-2xl">
+        <h3 class="font-bold text-lg">{{ 'import.path_wizard.title' | translate }}</h3>
+        <p class="text-sm text-base-content/60 mt-1">{{ 'import.path_wizard.description' | translate }}</p>
+
+        @if (radarrPreview(); as preview) {
+          @if (eligibleLocalRootFolders('radarr').length === 0) {
+            <div role="alert" class="alert alert-warning mt-4 text-sm">
+              <div>
+                <p>{{ 'import.path_wizard.no_root_folders' | translate }}</p>
+                <a routerLink="/settings/libraries" class="btn btn-sm btn-primary mt-3" (click)="cancelWizard('radarr')">
+                  {{ 'import.path_wizard.go_to_root_folders' | translate }}
+                </a>
+              </div>
+            </div>
+          } @else {
+            <div class="flex flex-col gap-3 mt-4">
+              @for (m of radarrMappings(); track m.remotePath) {
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <code class="text-sm bg-base-300 px-2 py-1 rounded sm:flex-1 truncate">{{ m.remotePath }}</code>
+                  <span class="text-base-content/40 hidden sm:inline">→</span>
+                  <select
+                    class="select select-bordered select-sm sm:flex-1"
+                    [ngModel]="m.ignore ? IGNORE_VALUE : m.localRootFolderId"
+                    (ngModelChange)="setMapping('radarr', m.remotePath, $event)"
+                  >
+                    <option [ngValue]="null">—</option>
+                    @for (rf of eligibleLocalRootFolders('radarr'); track rf.id) {
+                      <option [ngValue]="rf.id">{{ rf.path }}</option>
+                    }
+                    <option [ngValue]="IGNORE_VALUE">{{ 'import.path_wizard.option_ignore' | translate }}</option>
+                  </select>
+                </div>
+              }
+            </div>
+          }
+        }
+
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost btn-sm" (click)="cancelWizard('radarr')">
+            {{ 'import.path_wizard.cancel' | translate }}
+          </button>
+          @if (eligibleLocalRootFolders('radarr').length > 0) {
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              [disabled]="!radarrCanConfirm() || radarrLoading()"
+              (click)="confirmRadarrImport()"
+            >
+              @if (radarrLoading()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+              {{ 'import.path_wizard.confirm' | translate }}
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (sonarrShowWizard()) {
+    <div class="modal modal-open">
+      <div class="modal-box max-w-2xl">
+        <h3 class="font-bold text-lg">{{ 'import.path_wizard.title' | translate }}</h3>
+        <p class="text-sm text-base-content/60 mt-1">{{ 'import.path_wizard.description' | translate }}</p>
+
+        @if (sonarrPreview(); as preview) {
+          @if (eligibleLocalRootFolders('sonarr').length === 0) {
+            <div role="alert" class="alert alert-warning mt-4 text-sm">
+              <div>
+                <p>{{ 'import.path_wizard.no_root_folders' | translate }}</p>
+                <a routerLink="/settings/libraries" class="btn btn-sm btn-primary mt-3" (click)="cancelWizard('sonarr')">
+                  {{ 'import.path_wizard.go_to_root_folders' | translate }}
+                </a>
+              </div>
+            </div>
+          } @else {
+            <div class="flex flex-col gap-3 mt-4">
+              @for (m of sonarrMappings(); track m.remotePath) {
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <code class="text-sm bg-base-300 px-2 py-1 rounded sm:flex-1 truncate">{{ m.remotePath }}</code>
+                  <span class="text-base-content/40 hidden sm:inline">→</span>
+                  <select
+                    class="select select-bordered select-sm sm:flex-1"
+                    [ngModel]="m.ignore ? IGNORE_VALUE : m.localRootFolderId"
+                    (ngModelChange)="setMapping('sonarr', m.remotePath, $event)"
+                  >
+                    <option [ngValue]="null">—</option>
+                    @for (rf of eligibleLocalRootFolders('sonarr'); track rf.id) {
+                      <option [ngValue]="rf.id">{{ rf.path }}</option>
+                    }
+                    <option [ngValue]="IGNORE_VALUE">{{ 'import.path_wizard.option_ignore' | translate }}</option>
+                  </select>
+                </div>
+              }
+            </div>
+          }
+        }
+
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost btn-sm" (click)="cancelWizard('sonarr')">
+            {{ 'import.path_wizard.cancel' | translate }}
+          </button>
+          @if (eligibleLocalRootFolders('sonarr').length > 0) {
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              [disabled]="!sonarrCanConfirm() || sonarrLoading()"
+              (click)="confirmSonarrImport()"
+            >
+              @if (sonarrLoading()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+              {{ 'import.path_wizard.confirm' | translate }}
+            </button>
+          }
+        </div>
+      </div>
     </div>
   }
 </div>

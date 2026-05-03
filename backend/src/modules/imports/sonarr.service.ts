@@ -10,13 +10,15 @@ import {
 import { APP_QUALITIES } from '../../common/constants/app-qualities';
 import { MediaType, MediaStatus } from '../../common/enums';
 import {
-  ensureRootFolderPathsExist,
+  applyPathMapping,
   parseLanguageFromPath,
   parseSubtitleTags,
-  resolveRootFolderFromArrPaths,
+  type PathMapping,
   subtitlePathsBesideEpisode,
+  suggestLocalRootFolderId,
   upsertImportedSubtitleFile,
 } from '../scheduler/utils/arr-import.util';
+import { PreviewImportResult } from './dto/preview-import.dto';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { MediaService } from '../media/media.service';
@@ -119,11 +121,58 @@ export class ImportSonarrService {
     }
   }
 
+  /**
+   * Wizard step before the import: returns the *arr's root folders alongside
+   * a server-side suggestion for which Fliks RootFolder to map each one to.
+   * Pure read — no DB writes.
+   */
+  async previewRootFolders(
+    url: string,
+    apiKey: string,
+  ): Promise<PreviewImportResult> {
+    const baseUrl = url.replace(/\/+$/, '');
+    let remoteFolders: { path: string }[];
+    try {
+      const res = await fetch(`${baseUrl}/api/v3/rootfolder`, {
+        headers: { 'X-Api-Key': apiKey },
+      });
+      if (!res.ok) {
+        throw new BadRequestException(
+          `Sonarr API returned ${res.status}: ${res.statusText}`,
+        );
+      }
+      remoteFolders = (await res.json()) as { path: string }[];
+    } catch (e) {
+      if (e instanceof BadRequestException) throw e;
+      throw new BadRequestException(
+        `Cannot connect to Sonarr: ${(e as Error).message}`,
+      );
+    }
+    const localRootFolders = await this.rootFolderRepo.find();
+    return {
+      remoteRootFolders: remoteFolders
+        .filter((r) => r.path?.trim())
+        .map((r) => ({
+          remotePath: r.path,
+          suggestedLocalRootFolderId: suggestLocalRootFolderId(
+            r.path,
+            localRootFolders,
+          ),
+        })),
+      localRootFolders: localRootFolders.map((rf) => ({
+        id: rf.id,
+        path: rf.path,
+        libraryId: rf.libraryId ?? null,
+      })),
+    };
+  }
+
   async importFromApi(
     url: string,
     apiKey: string,
     mode: 'skip' | 'update' = 'skip',
     importSubtitles = false,
+    pathMappings: PathMapping[] = [],
     target: ImportTargetSpec = {},
   ): Promise<ApiImportResult> {
     const baseUrl = url.replace(/\/+$/, '');
@@ -138,6 +187,8 @@ export class ImportSonarrService {
       mediaType: MediaType.SERIES,
       autoLabel: this.autoLibraryName(),
     });
+
+    await this.assertMappingsBelongToLibrary(pathMappings, targetLibrary.id);
 
     let series: SonarrSeries[];
     try {
@@ -166,20 +217,11 @@ export class ImportSonarrService {
       };
     }
 
-    await this.reconcileRootFolders(
-      baseUrl,
-      apiKey,
-      rootFoldersCreated,
-      targetLibrary.id,
-      errors,
-    );
     const profileMap = await this.importQualityProfiles(
       baseUrl,
       apiKey,
       qualityProfilesCreated,
     );
-
-    const rootFolders = await this.rootFolderRepo.find();
 
     const newSeriesIds: number[] = [];
 
@@ -199,14 +241,15 @@ export class ImportSonarrService {
             ? profileMap.get(s.qualityProfileId)
             : undefined;
 
-        const resolved = resolveRootFolderFromArrPaths(
-          s.path,
-          s.rootFolderPath,
-          rootFolders,
-        );
-        const folderName =
-          resolved?.folderName ??
-          (s.path ? path.basename(s.path.replace(/\/+$/, '')) : undefined);
+        const resolved = applyPathMapping(s.path, pathMappings);
+        if (resolved === null) {
+          errors.push(
+            `${title || '(no title)'}: no path mapping for "${s.path ?? ''}"`,
+          );
+          continue;
+        }
+        if ('ignore' in resolved) continue;
+        const { rootFolderId, folderName } = resolved;
 
         if (exists) {
           if (mode === 'skip') continue;
@@ -214,7 +257,8 @@ export class ImportSonarrService {
             title,
             year: s.year ?? exists.year,
             monitored: s.monitored ?? exists.monitored,
-            folderName: folderName || exists.folderName,
+            rootFolder: { id: rootFolderId } as RootFolder,
+            folderName,
             imdbId: s.imdbId || exists.imdbId,
             overview: s.overview || exists.overview,
             qualityProfileId: localProfileId ?? exists.qualityProfileId,
@@ -229,11 +273,9 @@ export class ImportSonarrService {
               type: MediaType.SERIES,
               status: MediaStatus.CONTINUING,
               monitored: s.monitored ?? true,
-              rootFolder: resolved?.rootFolderId
-                ? ({ id: resolved.rootFolderId } as RootFolder)
-                : null,
+              rootFolder: { id: rootFolderId } as RootFolder,
               library: targetLibrary,
-              folderName: folderName || undefined,
+              folderName,
               imdbId: s.imdbId || undefined,
               overview: s.overview || undefined,
               qualityProfileId: localProfileId ?? undefined,
@@ -482,36 +524,40 @@ export class ImportSonarrService {
     return 16;
   }
 
-  private async reconcileRootFolders(
-    baseUrl: string,
-    apiKey: string,
-    rootFoldersCreated: string[],
-    libraryId: number,
-    warnings: string[],
+  /**
+   * Up-front guard: every mapping that targets a Fliks RootFolder must point
+   * to one whose library is unassigned or matches the import target. We
+   * refuse to silently re-home a RootFolder belonging to another library.
+   */
+  private async assertMappingsBelongToLibrary(
+    pathMappings: PathMapping[],
+    targetLibraryId: number,
   ): Promise<void> {
-    try {
-      const rfRes = await fetch(`${baseUrl}/api/v3/rootfolder`, {
-        headers: { 'X-Api-Key': apiKey },
-      });
-      if (rfRes.ok) {
-        const remoteFolders = (await rfRes.json()) as { path: string }[];
-        const before = rootFoldersCreated.length;
-        await ensureRootFolderPathsExist(
-          this.rootFolderRepo,
-          remoteFolders.map((r) => r.path),
-          rootFoldersCreated,
-          libraryId,
-          warnings,
-        );
-        for (let i = before; i < rootFoldersCreated.length; i++) {
-          this.log.log(
-            `Created root folder from Sonarr: ${rootFoldersCreated[i]}`,
-          );
-        }
+    const ids = Array.from(
+      new Set(
+        pathMappings
+          .filter((m) => !m.ignore && m.localRootFolderId != null)
+          .map((m) => m.localRootFolderId as number),
+      ),
+    );
+    if (!ids.length) return;
+    const folders = await this.rootFolderRepo.findByIds(ids);
+    const offending: string[] = [];
+    for (const id of ids) {
+      const rf = folders.find((f) => f.id === id);
+      if (!rf) {
+        offending.push(`RootFolder #${id}: not found`);
+        continue;
       }
-    } catch (e) {
-      this.log.warn(
-        `Could not fetch Sonarr root folders: ${(e as Error).message}`,
+      if (rf.libraryId != null && rf.libraryId !== targetLibraryId) {
+        offending.push(
+          `"${rf.path}" belongs to library #${rf.libraryId} (target is #${targetLibraryId})`,
+        );
+      }
+    }
+    if (offending.length) {
+      throw new BadRequestException(
+        `Path mappings reference root folders from another library: ${offending.join('; ')}`,
       );
     }
   }

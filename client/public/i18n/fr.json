@@ -253,7 +253,7 @@
   },
   "import": {
     "title": "Importer depuis Radarr / Sonarr",
-    "subtitle": "Connectez-vous à l'API de Radarr ou Sonarr pour importer toute leur bibliothèque. Les root folders seront automatiquement créés si nécessaire.",
+    "subtitle": "Connectez-vous à l'API de Radarr ou Sonarr pour importer toute leur bibliothèque.",
     "radarr_title": "Radarr",
     "radarr_desc": "Importez tous vos films depuis Radarr via son API.",
     "sonarr_title": "Sonarr",
@@ -264,6 +264,7 @@
     "sonarr_url_placeholder": "http://localhost:8989",
     "api_key_placeholder": "Clé API (Settings > General)",
     "import_btn": "Importer",
+    "continue_btn": "Continuer",
     "error": "Erreur lors de l'import.",
     "result_imported": "{{count}} importé(s)",
     "result_skipped": "{{count}} ignoré(s)",
@@ -274,7 +275,17 @@
     "mode_skip": "Completer (ignorer les existants)",
     "mode_update": "Mettre a jour (maj les existants)",
     "import_subtitles": "Importer les sous-titres externes",
-    "result_subtitles": "{{count}} sous-titre(s) importe(s)"
+    "result_subtitles": "{{count}} sous-titre(s) importe(s)",
+    "path_wizard": {
+      "title": "Mappage des dossiers racines",
+      "description": "Associez chaque dossier racine de Radarr/Sonarr à un dossier racine Fliks existant, ou ignorez-le. Les chemins des conteneurs Radarr/Sonarr peuvent différer de ceux montés dans Fliks ; le mappage rétablit la correspondance.",
+      "no_root_folders": "Aucun dossier racine Fliks compatible n'est configuré. Créez-en un dans Réglages → Bibliothèques avant de relancer l'import.",
+      "go_to_root_folders": "Configurer les dossiers racines",
+      "option_ignore": "Ignorer",
+      "confirm": "Confirmer l'import",
+      "cancel": "Annuler",
+      "preview_error": "Impossible de récupérer les dossiers racines distants."
+    }
   },
   "dashboard": {
     "title": "Tableau de bord",

@@ -1,13 +1,29 @@
 import {
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
   IsString,
   IsUrl,
-  IsOptional,
-  IsIn,
-  IsBoolean,
-  IsInt,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+
+export class PathMappingDto {
+  @IsString()
+  remotePath: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  localRootFolderId: number | null;
+
+  @IsOptional()
+  @IsBoolean()
+  ignore?: boolean;
+}
 
 export class ImportApiDto {
   @IsUrl({ require_tld: false, require_protocol: true })
@@ -37,4 +53,14 @@ export class ImportApiDto {
   @IsOptional()
   @IsString()
   newLibraryName?: string;
+
+  /**
+   * Maps each *arr remote root folder onto an existing Fliks RootFolder, or
+   * marks it ignored. Required (can be empty when *arr exposes no roots).
+   * The wizard step in the UI is the only place these are produced.
+   */
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PathMappingDto)
+  pathMappings: PathMappingDto[];
 }

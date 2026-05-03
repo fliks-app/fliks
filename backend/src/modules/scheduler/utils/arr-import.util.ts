@@ -4,116 +4,83 @@ import { readdir } from 'fs/promises';
 import { RootFolder } from '../../root-folders/entities/root-folder.entity';
 import { SubtitleFile } from '../../subtitles/entities/subtitle-file.entity';
 import { Episode } from '../../media/entities/episode.entity';
-import { Library } from '../../libraries/entities/library.entity';
 import { Media } from '../../media/entities/media.entity';
 import { MediaFile } from '../../media/entities/media-file.entity';
 import { SubtitleProviderType, SubtitleStatus } from '../../../common/enums';
 
 // ---------------------------------------------------------------------------
-// Root folders (Radarr / Sonarr API reconcile)
+// User-provided remote→local path mapping (path mapping wizard)
 // ---------------------------------------------------------------------------
 
-/**
- * Insert missing root folders by path and link them to the given library.
- * If a path already exists but belongs to a different library, the path is
- * skipped and a warning string is pushed to `warningsOut` — it is never
- * silently re-homed.
- */
-export async function ensureRootFolderPathsExist(
-  repo: Repository<RootFolder>,
-  paths: string[],
-  createdOut: string[],
-  libraryId: number,
-  warningsOut: string[] = [],
-): Promise<void> {
-  const existing = await repo.find();
-  const byNormalizedPath = new Map(
-    existing.map((f) => [f.path.replace(/\/+$/, ''), f]),
-  );
-  for (const raw of paths) {
-    if (!raw?.trim()) continue;
-    const normalized = raw.replace(/\/+$/, '');
-    const present = byNormalizedPath.get(normalized);
-    if (present) {
-      if (present.libraryId != null && present.libraryId !== libraryId) {
-        warningsOut.push(
-          `Path "${raw}" already belongs to library #${present.libraryId}; skipped (would silently re-home it).`,
-        );
-      }
-      continue;
-    }
-    try {
-      const saved = await repo.save(
-        repo.create({
-          path: raw.trim(),
-          library: { id: libraryId } as Library,
-        }),
-      );
-      createdOut.push(raw.trim());
-      byNormalizedPath.set(normalized, saved);
-    } catch {
-      /* duplicate or DB error */
-    }
-  }
+export interface PathMapping {
+  remotePath: string;
+  localRootFolderId: number | null;
+  ignore?: boolean;
+}
+
+function normalizePath(p: string): string {
+  return path
+    .normalize(p.trim())
+    .replace(/[/\\]+$/, '')
+    .replace(/\\/g, '/');
 }
 
 /**
- * Map Radarr/Sonarr full library path + optional API rootFolderPath to our
- * rootFolderId + folderName (Media.path is computed from these).
+ * Longest-prefix match of `fullArrPath` against the user-provided mappings.
+ *   { rootFolderId, folderName }  → use this RootFolder + first-segment folder name
+ *   { ignore: true }              → matched mapping is ignored (caller skips silently)
+ *   null                          → no mapping matched (caller pushes error and skips)
+ *
+ * folderName is the first segment of the *arr path under the matched remote
+ * root, so that on-disk folder naming follows what Radarr/Sonarr already laid
+ * out — independent of how the local Fliks RootFolder is named.
  */
-export function resolveRootFolderFromArrPaths(
-  fullPath: string | undefined | null,
-  rootFolderPathFromApi: string | undefined | null,
-  rootFolders: RootFolder[],
-): { rootFolderId: number; folderName: string } | null {
-  if (!rootFolders.length) return null;
-
-  const norm = (p: string) =>
-    path
-      .normalize(p.trim())
-      .replace(/[/\\]+$/, '')
-      .replace(/\\/g, '/');
-
-  const sorted = [...rootFolders].sort(
-    (a, b) => norm(b.path).length - norm(a.path).length,
+export function applyPathMapping(
+  fullArrPath: string | null | undefined,
+  mappings: PathMapping[],
+): { rootFolderId: number; folderName: string } | { ignore: true } | null {
+  if (!fullArrPath?.trim() || !mappings.length) return null;
+  const full = normalizePath(fullArrPath);
+  const sorted = [...mappings].sort(
+    (a, b) => normalizePath(b.remotePath).length - normalizePath(a.remotePath).length,
   );
-
-  const full = fullPath?.trim() ? norm(fullPath) : '';
-  const apiRoot = rootFolderPathFromApi?.trim()
-    ? norm(rootFolderPathFromApi)
-    : '';
-
-  if (full) {
-    for (const rf of sorted) {
-      const root = norm(rf.path);
-      if (full === root) {
-        return { rootFolderId: rf.id, folderName: path.basename(full) };
-      }
-      const prefix = root + '/';
-      if (full.startsWith(prefix)) {
-        const rel = full.slice(prefix.length);
-        const folderName = rel.split('/')[0] || path.basename(full);
-        if (folderName) {
-          return { rootFolderId: rf.id, folderName };
-        }
-      }
-    }
+  for (const m of sorted) {
+    const remote = normalizePath(m.remotePath);
+    if (!remote) continue;
+    const prefix = remote + '/';
+    const isUnderRoot = full === remote || full.startsWith(prefix);
+    if (!isUnderRoot) continue;
+    if (m.ignore) return { ignore: true };
+    if (m.localRootFolderId == null) return null;
+    const rest = full === remote ? '' : full.slice(prefix.length);
+    const folderName = rest.split('/')[0] || path.basename(full);
+    if (!folderName) return null;
+    return { rootFolderId: m.localRootFolderId, folderName };
   }
+  return null;
+}
 
-  if (apiRoot && full) {
-    const rf = sorted.find((f) => norm(f.path) === apiRoot);
-    if (rf) {
-      const prefix = apiRoot + '/';
-      if (full.startsWith(prefix)) {
-        const rel = full.slice(prefix.length);
-        const folderName = rel.split('/')[0] || path.basename(full);
-        if (folderName) {
-          return { rootFolderId: rf.id, folderName };
-        }
-      }
-    }
-  }
-
+/**
+ * Server-side suggestion for the wizard pre-select:
+ *   1. unique RootFolder whose path ends with `/<basename(remotePath)>`
+ *   2. fallback: unique RootFolder whose basename equals basename(remotePath)
+ *   3. ambiguous or none → null (the row stays unselected, blocking Confirm)
+ */
+export function suggestLocalRootFolderId(
+  remotePath: string,
+  candidates: RootFolder[],
+): number | null {
+  if (!remotePath?.trim() || !candidates.length) return null;
+  const remoteBase = path.basename(normalizePath(remotePath));
+  if (!remoteBase) return null;
+  const tailMatches = candidates.filter((rf) =>
+    normalizePath(rf.path).endsWith('/' + remoteBase),
+  );
+  if (tailMatches.length === 1) return tailMatches[0].id;
+  const baseMatches = candidates.filter(
+    (rf) => path.basename(normalizePath(rf.path)) === remoteBase,
+  );
+  if (baseMatches.length === 1) return baseMatches[0].id;
   return null;
 }
 
