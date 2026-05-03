@@ -1,6 +1,6 @@
 {
   "name": "client",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "scripts": {
@@ -17,7 +17,6 @@
     "cap:build": "npm run build && npx cap sync android",
     "cap:build:ios": "npm run build && npx cap sync ios"
   },
-  "private": true,
   "packageManager": "npm@10.8.2",
   "dependencies": {
     "@angular/cdk": "^21.2.4",
