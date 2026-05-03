@@ -22,7 +22,6 @@ import { formatTime, SpriteMetadata } from '../../../core/utils/player.utils';
 import { SeekbarComponent } from '../../../shared/components/seekbar/seekbar';
 import {
   LucideCaptions,
-  LucideChartNoAxesColumnIncreasing,
   LucideCheck,
   LucideChevronLeft,
   LucideChevronRight,
@@ -38,8 +37,6 @@ import {
   LucideHeadphones,
   LucideVolume2,
   LucideVolumeX,
-  LucideScan,
-  LucideMinimize,
 } from '@lucide/angular';
 
 @Component({
@@ -47,7 +44,6 @@ import {
   imports: [
     TranslateModule,
     LucideCaptions,
-    LucideChartNoAxesColumnIncreasing,
     LucideCheck,
     LucideChevronLeft,
     LucideMaximize,
@@ -59,8 +55,6 @@ import {
     LucideHeadphones,
     LucideVolume2,
     LucideVolumeX,
-    LucideScan,
-    LucideMinimize,
     LucideSettings,
     LucideChevronRight,
     LucideArrowLeft,

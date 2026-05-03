@@ -6,7 +6,7 @@ import {
   input,
   output,
 } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { UpperCasePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
@@ -16,7 +16,6 @@ import { MediaCardComponent } from '../../../../shared/components/media-card/med
 import { DropdownMenuComponent } from '../../../../shared/components/dropdown-menu';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { TvRowDirective } from '../../../../shared/directives/tv-row.directive';
-import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
 import {
   Episode,
   Media,
@@ -34,7 +33,7 @@ import { METADATA_PROVIDER_OPTIONS_OVERRIDE } from '../../../../core/constants/m
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, FormsModule, RouterLink, ResolveUrlPipe, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, TvSelectDirective, TvRowDirective, LucideCheck, LucideEllipsisVertical, LucideX],
+  imports: [TranslateModule, FormsModule, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, TvSelectDirective, TvRowDirective, LucideCheck, LucideEllipsisVertical, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
