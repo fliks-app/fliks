@@ -60,13 +60,13 @@
           },
           "configurations": {
             "production": {
-              "buildTarget": "frontend:build:production"
+              "buildTarget": "client:build:production"
             },
             "development": {
-              "buildTarget": "frontend:build:development"
+              "buildTarget": "client:build:development"
             },
             "docker": {
-              "buildTarget": "frontend:build:development",
+              "buildTarget": "client:build:development",
               "proxyConfig": "proxy.docker.conf.json"
             }
           },
