@@ -19,5 +19,5 @@ export function resolveStreamPublicBaseUrl(
     const proto = (req.headers['x-forwarded-proto'] as string) || 'http';
     return `${proto}://${host}`;
   }
-  return `http://localhost:${process.env.PORT || 3000}`;
+  return `http://localhost:${process.env.PORT || 4848}`;
 }

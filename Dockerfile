@@ -70,6 +70,6 @@ COPY --from=client-build /app/dist/client/browser ./client
 ENV NODE_ENV=production
 ENV SERVE_STATIC_PATH=/app/client
 
-EXPOSE 3000
+EXPOSE 4848
 
 CMD ["node", "dist/main"]
