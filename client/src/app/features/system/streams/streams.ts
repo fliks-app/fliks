@@ -6,7 +6,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { NgClass, UpperCasePipe } from '@angular/common';
+import { UpperCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { StreamsApiService, ActiveStream } from '../../../core/services/api/streams-api.service';
@@ -16,7 +16,7 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 
 @Component({
   selector: 'app-system-streams',
-  imports: [NgClass, UpperCasePipe, RouterLink, TranslateModule, ResolveUrlPipe, LucidePause, LucidePlay, LucideSquare],
+  imports: [UpperCasePipe, RouterLink, TranslateModule, ResolveUrlPipe, LucidePause, LucidePlay, LucideSquare],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './streams.html',
 })

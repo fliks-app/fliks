@@ -50,7 +50,7 @@
             [attr.data-home-focus]="'rec:' + rec.media.id"
             [imageUrl]="rec.media.posterUrl"
             [title]="rec.media.title"
-            [subtitle]="'' + (rec.media.year ?? '')"
+            [subtitle]="'' + rec.media.year"
             [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
             [playable]="true"
             [dismissable]="true"
@@ -76,7 +76,7 @@
             class="shrink-0 w-28 sm:w-36"
             [attr.data-home-focus]="'recent:' + m.id"
             [media]="m"
-            [subtitle]="'' + (m.year ?? '')"
+            [subtitle]="'' + m.year"
             [hideStatusBar]="true"
           />
         }

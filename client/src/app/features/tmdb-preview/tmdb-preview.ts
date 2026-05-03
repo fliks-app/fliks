@@ -23,13 +23,13 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { RequestModalComponent } from './components/request-modal/request-modal.component';
 import { ImportModalComponent } from './components/import-modal/import-modal.component';
 import { MediaType } from '../../core/enums/media-type.enum';
-import { LucideFilm, LucideChevronLeft } from '@lucide/angular';
+import { LucideFilm } from '@lucide/angular';
 import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart-hero';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, ResolveUrlPipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, LucideFilm, LucideChevronLeft],
+  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, ResolveUrlPipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, LucideFilm],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tmdb-preview.html',
 })
