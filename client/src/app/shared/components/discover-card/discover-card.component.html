@@ -1,0 +1,50 @@
+<div
+  class="card bg-base-100 shadow-md border border-base-200 cursor-pointer hover:shadow-xl transition-shadow relative overflow-hidden"
+  (click)="clicked.emit(row())"
+>
+  <figure class="relative aspect-2/3 bg-base-300">
+    @if (row().posterUrl) {
+      <img [src]="row().posterUrl | resolveUrl:'thumb'" [alt]="row().title" class="w-full h-full object-cover" />
+    } @else {
+      <div class="flex items-center justify-center w-full h-full text-base-content/30">
+        <svg lucideFilm class="h-14 w-14"></svg>
+      </div>
+    }
+    @if (row().rating) {
+      <div class="absolute bottom-2 left-2">
+        <span class="badge badge-sm badge-warning">{{ row().rating | number:'1.1-1' }}</span>
+      </div>
+    }
+    @switch (status()) {
+      @case ('library') {
+        <div class="absolute top-2 right-2">
+          <div class="w-7 h-7 rounded-full bg-success flex items-center justify-center shadow">
+            <svg lucideCheck class="h-4 w-4 text-success-content"></svg>
+          </div>
+        </div>
+      }
+      @case ('pending') {
+        <div class="absolute top-2 right-2">
+          <div class="w-7 h-7 rounded-full bg-info flex items-center justify-center shadow">
+            <svg lucideClock class="h-4 w-4 text-info-content"></svg>
+          </div>
+        </div>
+      }
+      @case ('declined') {
+        <div class="absolute top-2 right-2">
+          <div class="w-7 h-7 rounded-full bg-error flex items-center justify-center shadow">
+            <svg lucideX class="h-4 w-4 text-error-content"></svg>
+          </div>
+        </div>
+      }
+    }
+  </figure>
+  <div class="card-body p-3 gap-1">
+    <h3 class="card-title text-sm line-clamp-2 min-h-10">{{ row().title }}</h3>
+    <p class="text-sm text-base-content/60">
+      @if (row().year) {
+        {{ row().year }}
+      }
+    </p>
+  </div>
+</div>

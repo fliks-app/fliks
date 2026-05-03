@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Theme-aware splash background. The bottom layer paints `?attr/splashBackground`
+  (set per-theme in styles.xml: dark = navy, light = white). The top layer
+  centers the Fliks logo (transparent PNG copied from logos/fliks-mark.png).
+
+  MainActivity reads the persisted Fliks theme from CapacitorStorage SharedPrefs
+  and calls setTheme() before super.onCreate() so the activity picks the right
+  variant on cold start — including subsequent launches after the user toggled
+  the in-app theme.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <color android:color="?attr/splashBackground" />
+    </item>
+    <!-- Constrain the logo to 192dp regardless of the display density.
+         The 1024×1024 PNG sitting in the density-agnostic `drawable/`
+         folder gets up-scaled by Android's density-bucket logic
+         (≈ ×3 on xxxhdpi / Android TV). `gravity="center"` on the
+         bitmap then renders it at its full upscaled size — overflowing
+         the 192dp item bounds and ending up full-screen on Android 11
+         TV. `gravity="fill"` instead scales the bitmap to exactly the
+         layer item's 192dp × 192dp box (no distortion: the logo is
+         already square). dp keeps the on-screen size constant across
+         phones and TVs. -->
+    <item
+        android:gravity="center"
+        android:width="192dp"
+        android:height="192dp">
+        <bitmap
+            android:src="@drawable/fliks_logo"
+            android:gravity="fill"
+            android:tileMode="disabled" />
+    </item>
+</layer-list>

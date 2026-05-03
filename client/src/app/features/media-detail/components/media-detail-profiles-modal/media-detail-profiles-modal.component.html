@@ -1,0 +1,62 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-md">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+    </form>
+    <h3 class="text-lg font-bold mb-4">{{ 'media_detail.profiles_section' | translate }}</h3>
+    @if (profilesOptionsLoading()) {
+      <div class="flex justify-center py-8">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    } @else {
+      <form class="flex flex-col gap-4" (ngSubmit)="save.emit()">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'media_detail.quality_profile_label' | translate }}</span>
+          <select
+            class="select select-bordered select-sm w-full"
+            name="qualityProfile"
+            [ngModel]="draftQualityProfileId()"
+            (ngModelChange)="draftQualityProfileIdChange.emit($event)"
+          >
+            <option [ngValue]="null">{{ 'media_detail.profile_none' | translate }}</option>
+            @for (p of qualityProfileOptions(); track p.id) {
+              <option [ngValue]="p.id">{{ p.name }}</option>
+            }
+          </select>
+        </label>
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'media_detail.language_profile_label' | translate }}</span>
+          <select
+            class="select select-bordered select-sm w-full"
+            name="languageProfile"
+            [ngModel]="draftLanguageProfileId()"
+            (ngModelChange)="draftLanguageProfileIdChange.emit($event)"
+          >
+            <option [ngValue]="null">{{ 'media_detail.profile_none' | translate }}</option>
+            @for (p of languageProfileOptions(); track p.id) {
+              <option [ngValue]="p.id">{{ p.name }}</option>
+            }
+          </select>
+        </label>
+        @if (profilesOk()) {
+          <div role="alert" class="alert alert-success text-sm py-2">{{ profilesOk() }}</div>
+        }
+        @if (profilesErr()) {
+          <div role="alert" class="alert alert-error text-sm py-2">{{ profilesErr() }}</div>
+        }
+        <div class="modal-action">
+          <button type="submit" class="btn btn-primary btn-sm" [disabled]="profilesSaveLoading()">
+            @if (profilesSaveLoading()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'media_detail.save_profiles' | translate }}
+          </button>
+          <button type="button" class="btn btn-sm" onclick="this.closest('dialog').close()">
+            {{ 'common.close' | translate }}
+          </button>
+        </div>
+      </form>
+    }
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>

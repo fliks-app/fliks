@@ -1,0 +1,12 @@
+<app-settings-drawer
+  [title]="'account_settings.title' | translate"
+  [backLabel]="'admin.back_to_app' | translate"
+  drawerId="account-sidebar"
+>
+  <svg drawerIcon lucideUser class="h-5 w-5"></svg>
+
+  <ng-container drawerMenu>
+    <li><a routerLink="/account/password" routerLinkActive="active"><svg lucideLock class="h-4 w-4"></svg>{{ 'account_settings.nav.password' | translate }}</a></li>
+    <li><a routerLink="/account/recommendations" routerLinkActive="active"><svg lucideSparkles class="h-4 w-4"></svg>{{ 'account_settings.nav.recommendations' | translate }}</a></li>
+  </ng-container>
+</app-settings-drawer>

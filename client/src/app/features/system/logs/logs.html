@@ -1,0 +1,33 @@
+<div class="flex justify-end gap-2 mb-3">
+  <select class="select select-bordered select-xs" [ngModel]="logLevel()" (ngModelChange)="logLevel.set($event); load()">
+    <option value="">{{ 'system.logs_all_levels' | translate }}</option>
+    <option value="log">Info</option>
+    <option value="warn">Warning</option>
+    <option value="error">Error</option>
+  </select>
+  <input type="text" class="input input-bordered input-xs w-40" [placeholder]="'common.search' | translate"
+    [ngModel]="logSearch()" (ngModelChange)="logSearch.set($event); load()" />
+</div>
+
+<div class="overflow-x-auto max-h-[32rem] overflow-y-auto rounded-lg border border-base-200">
+  <table class="table table-xs font-mono">
+    <thead class="sticky top-0 bg-base-100">
+      <tr>
+        <th class="w-40">{{ 'system.col_log_time' | translate }}</th>
+        <th class="w-16">{{ 'system.col_log_level' | translate }}</th>
+        <th class="w-32">{{ 'system.col_log_context' | translate }}</th>
+        <th>{{ 'system.col_log_message' | translate }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (entry of logs(); track entry.timestamp + entry.message) {
+        <tr [class.text-warning]="entry.level === 'warn'" [class.text-error]="entry.level === 'error'" [class.text-info]="entry.level === 'debug'">
+          <td class="text-xs tabular-nums whitespace-nowrap">{{ entry.timestamp | date:'HH:mm:ss.SSS' }}</td>
+          <td><span class="badge badge-xs" [ngClass]="{'badge-success': entry.level === 'log', 'badge-warning': entry.level === 'warn', 'badge-error': entry.level === 'error', 'badge-info': entry.level === 'debug'}">{{ entry.level }}</span></td>
+          <td class="text-xs truncate max-w-32">{{ entry.context }}</td>
+          <td class="text-xs whitespace-pre-wrap break-all">{{ entry.message }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>

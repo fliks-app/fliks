@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/.angular
+**/.git
+**/*.md
+**/coverage
+backend/.env
+backend/.env.*
+!backend/.env.example
+client/android
+client/ios

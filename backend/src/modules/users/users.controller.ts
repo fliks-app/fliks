@@ -1,0 +1,76 @@
+import {
+  Controller,
+  Get,
+  Put,
+  Delete,
+  Post,
+  Body,
+  Param,
+  UseGuards,
+  ParseIntPipe,
+} from '@nestjs/common';
+import { UsersService } from './users.service';
+import { UsersStatsService } from './users-stats.service';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
+import { PoliciesGuard } from '../auth/casl/policies.guard';
+import { CheckPolicies } from '../auth/casl/check-policies.decorator';
+import { Action } from '../auth/casl/actions.enum';
+import { User } from './entities/user.entity';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+
+@Controller('users')
+@UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
+export class UsersController {
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly usersStatsService: UsersStatsService,
+  ) {}
+
+  /** Admin: list all users */
+  @Get()
+  @CheckPolicies((ability) => ability.can(Action.Manage, User))
+  findAll() {
+    return this.usersService.findAll();
+  }
+
+  /** Admin: create a new user */
+  @Post()
+  @CheckPolicies((ability) => ability.can(Action.Manage, User))
+  create(@Body() dto: CreateUserDto) {
+    return this.usersService.create(dto);
+  }
+
+  /** Admin or self */
+  @Get(':id')
+  @CheckPolicies((ability) => ability.can(Action.Read, User))
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.findOne(id);
+  }
+
+  /** Admin: aggregated activity stats for the user-detail Statistics tab. */
+  @Get(':id/stats')
+  @CheckPolicies((ability) => ability.can(Action.Manage, User))
+  getStats(@Param('id', ParseIntPipe) id: number) {
+    return this.usersStatsService.getUserStats(id);
+  }
+
+  /** Admin or self */
+  @Put(':id')
+  @CheckPolicies((ability) => ability.can(Action.Update, User))
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateUserDto,
+    @CurrentUser() requester: User,
+  ) {
+    return this.usersService.update(id, dto, requester);
+  }
+
+  /** Admin only */
+  @Delete(':id')
+  @CheckPolicies((ability) => ability.can(Action.Manage, User))
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.remove(id);
+  }
+}

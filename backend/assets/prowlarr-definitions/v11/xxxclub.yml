@@ -1,0 +1,82 @@
+---
+id: xxxclub
+name: XXXClub
+description: "XXXClub is a Public torrent site for 3X"
+language: en-US
+type: public
+encoding: UTF-8
+requestDelay: 3
+links:
+  - https://xxxclub.to/
+  - https://xxxclub.cc/
+  - https://xxxclub.me/
+
+caps:
+  categorymappings:
+    - {id: 0, cat: XXX/SD, desc: "XXX 480p/SD"}
+    - {id: 1, cat: XXX/x264, desc: "XXX 720p/HD"}
+    - {id: 2, cat: XXX/x264, desc: "XXX 1080p/FullHD"}
+    - {id: 4, cat: XXX/UHD, desc: "XXX 2160p/UHD/4K"}
+    - {id: 3, cat: XXX/WEB-DL, desc: "XXX Movies/DVD/WEB"}
+    - {id: 5, cat: XXX/ImageSet, desc: "XXX IMAGESET"}
+    - {id: 6, cat: XXX/Other, desc: "XXX VR/VirtualReality"}
+    - {id: 7, cat: XXX/Pack, desc: "XXX Pack/MegaPack"}
+
+  modes:
+    search: [q]
+
+settings:
+  - name: info_flaresolverr
+    type: info_flaresolverr
+
+download:
+  selectors:
+    - selector: a[href^="/torrents/download/"], a[href^="magnet:?xt="]
+      attribute: href
+
+search:
+  paths:
+    # https://xxxclub.to/torrents/browse/all/
+    # https://xxxclub.to/torrents/search/all/metartx
+    - path: "torrents/{{ if .Keywords }}search/all/{{ .Keywords }}{{ else }}browse/all/{{ end }}"
+
+  headers:
+    User-Agent: ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36 Edg/115.0.1901.203"]
+
+  rows:
+    selector: div.browsetableinside > ul > li:not(:first-child)
+
+  fields:
+    category:
+      selector: a.catah
+      attribute: href
+      filters:
+        - name: regexp
+          args: (\d)
+    title:
+      selector: a[href^="/torrents/details/"]
+    details:
+      selector: a[href^="/torrents/details/"]
+      attribute: href
+    download:
+      selector: a[href^="/torrents/details/"]
+      attribute: href
+    poster:
+      selector: img
+      attribute: src
+    date:
+      selector: span.adde
+      filters:
+        - name: dateparse
+          args: "dd MMM yyyy HH:mm:ss"
+    size:
+      selector: span.siz
+    seeders:
+      selector: span.see
+    leechers:
+      selector: span.lee
+    downloadvolumefactor:
+      text: 0
+    uploadvolumefactor:
+      text: 1
+# engine n/a

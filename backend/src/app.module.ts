@@ -1,0 +1,88 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuthModule } from './modules/auth/auth.module';
+import { UsersModule } from './modules/users/users.module';
+import { MediaModule } from './modules/media/media.module';
+import { ProfilesModule } from './modules/profiles/profiles.module';
+import { MetadataProvidersModule } from './modules/metadata-providers/metadata-providers.module';
+import { IndexersModule } from './modules/indexers/indexers.module';
+import { DownloadClientsModule } from './modules/download-clients/download-clients.module';
+import { RequestsModule } from './modules/requests/requests.module';
+import { FliksSchedulerModule } from './modules/scheduler/scheduler.module';
+import { EventsModule } from './modules/scheduler/events.module';
+import { CleanupProfilesModule } from './modules/cleanup-profiles/cleanup-profiles.module';
+import { LibrariesModule } from './modules/libraries/libraries.module';
+import { BlocklistModule } from './modules/blocklist/blocklist.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { SettingsModule } from './modules/settings/settings.module';
+import { SubtitlesModule } from './modules/subtitles/subtitles.module';
+import { MediaServersModule } from './modules/media-servers/media-servers.module';
+import { RolesModule } from './modules/roles/roles.module';
+import { StreamingModule } from './modules/streaming/streaming.module';
+import { MarkersModule } from './modules/markers/markers.module';
+import { PersonsModule } from './modules/persons/persons.module';
+import { ImageModule } from './modules/images/image.module';
+import { ImportsModule } from './modules/imports/imports.module';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    ServeStaticModule.forRoot(
+      {
+        rootPath: join(__dirname, '..', 'public'),
+        serveRoot: '/cast',
+        serveStaticOptions: { index: false },
+      },
+      // Serve the Angular frontend in production (when SERVE_STATIC_PATH is set)
+      ...(process.env.SERVE_STATIC_PATH
+        ? [
+            {
+              rootPath: process.env.SERVE_STATIC_PATH,
+              exclude: ['/api/{*path}', '/cast/{*path}'],
+            },
+          ]
+        : []),
+    ),
+    TypeOrmModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        type: 'postgres',
+        host: config.get('DB_HOST', 'localhost'),
+        port: config.get<number>('DB_PORT', 5432),
+        username: config.get('DB_USERNAME', 'fliks'),
+        password: config.get('DB_PASSWORD', 'fliks'),
+        database: config.get('DB_NAME', 'fliks'),
+        autoLoadEntities: true,
+        synchronize: true,
+        extra: { max: 30 },
+      }),
+    }),
+    EventsModule,
+    AuthModule,
+    UsersModule,
+    MediaModule,
+    PersonsModule,
+    ProfilesModule,
+    MetadataProvidersModule,
+    IndexersModule,
+    DownloadClientsModule,
+    RequestsModule,
+    FliksSchedulerModule,
+    CleanupProfilesModule,
+    LibrariesModule,
+    BlocklistModule,
+    NotificationsModule,
+    SettingsModule,
+    SubtitlesModule,
+    MediaServersModule,
+    RolesModule,
+    StreamingModule,
+    ImageModule,
+    MarkersModule,
+    ImportsModule,
+  ],
+})
+export class AppModule {}

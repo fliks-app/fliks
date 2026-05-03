@@ -1,0 +1,138 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-2xl">
+    <h2 class="text-lg font-bold text-primary">
+      @if (mediaType() === 'series') {
+        {{ 'discover.request_series_title' | translate }}
+      } @else {
+        {{ 'discover.request_movie_title' | translate }}
+      }
+    </h2>
+    <p class="text-base-content/80">{{ title() }}</p>
+
+    @if (mediaType() === 'series') {
+      @if (seasonsLoading()) {
+        <div class="flex justify-center py-8">
+          <span class="loading loading-spinner loading-md"></span>
+        </div>
+      } @else if (seasons().length) {
+        <div class="overflow-x-auto mt-4 rounded-lg border border-base-200">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th class="w-12">
+                  <input
+                    type="checkbox"
+                    class="toggle toggle-sm toggle-primary"
+                    [checked]="selectedSeasons().size === seasons().length"
+                    (change)="toggleAllSeasons()"
+                  />
+                </th>
+                <th>{{ 'discover.col_season' | translate }}</th>
+                <th>{{ 'discover.col_episodes' | translate }}</th>
+                <th>{{ 'discover.col_status' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (s of seasons(); track s.seasonNumber) {
+                <tr class="hover" [class.opacity-50]="!selectedSeasons().has(s.seasonNumber)">
+                  <td>
+                    <input
+                      type="checkbox"
+                      class="toggle toggle-sm toggle-primary"
+                      [checked]="selectedSeasons().has(s.seasonNumber)"
+                      (change)="toggleSeason(s.seasonNumber)"
+                    />
+                  </td>
+                  <td class="font-medium">{{ 'discover.season_label' | translate }} {{ s.seasonNumber }}</td>
+                  <td>{{ s.episodeCount }}</td>
+                  <td>
+                    @if (selectedSeasons().has(s.seasonNumber)) {
+                      <span class="badge badge-primary badge-sm">{{ 'discover.status_selected' | translate }}</span>
+                    } @else {
+                      <span class="badge badge-ghost badge-sm">{{ 'discover.status_not_requested' | translate }}</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+
+    @if (qualityProfiles().length || languageProfiles().length || compatibleLibraries().length > 1) {
+      <div class="mt-6">
+        <h3 class="text-base font-semibold mb-3">{{ 'discover.advanced_options' | translate }}</h3>
+        <div class="flex flex-col gap-3">
+          @if (qualityProfiles().length) {
+            <label class="form-control w-full">
+              <span class="label-text text-base-content/60">{{ 'discover.quality_profile' | translate }}</span>
+              <select
+                class="select select-bordered select-sm w-full"
+                [ngModel]="qualityProfileId()"
+                (ngModelChange)="qualityProfileId.set(+$event)"
+              >
+                @for (p of qualityProfiles(); track p.id) {
+                  <option [ngValue]="p.id">{{ p.name }}</option>
+                }
+              </select>
+            </label>
+          }
+          @if (languageProfiles().length) {
+            <label class="form-control w-full">
+              <span class="label-text text-base-content/60">{{ 'discover.language_profile' | translate }}</span>
+              <select
+                class="select select-bordered select-sm w-full"
+                [ngModel]="languageProfileId()"
+                (ngModelChange)="languageProfileId.set(+$event)"
+              >
+                @for (p of languageProfiles(); track p.id) {
+                  <option [ngValue]="p.id">{{ p.name }}</option>
+                }
+              </select>
+            </label>
+          }
+          @if (compatibleLibraries().length > 1) {
+            <label class="form-control w-full">
+              <span class="label-text text-base-content/60">{{ 'settings.libraries.title' | translate }}</span>
+              <select
+                class="select select-bordered select-sm w-full"
+                [ngModel]="libraryId()"
+                (ngModelChange)="libraryId.set($event ? +$event : null)"
+              >
+                <option [ngValue]="null">—</option>
+                @for (l of compatibleLibraries(); track l.id) {
+                  <option [ngValue]="l.id">{{ l.name }}</option>
+                }
+              </select>
+            </label>
+          }
+        </div>
+      </div>
+    }
+
+    <div class="modal-action">
+      <button type="button" class="btn btn-ghost" (click)="close()">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        [disabled]="requesting() || (mediaType() === 'series' && selectedSeasons().size === 0)"
+        (click)="confirm()"
+      >
+        @if (requesting()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        @if (mediaType() === 'series') {
+          {{ 'discover.select_seasons' | translate }}
+        } @else {
+          {{ 'discover.request' | translate }}
+        }
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="close()">close</button>
+  </form>
+</dialog>

@@ -1,0 +1,332 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+/* `tv:` variant — applies when body.tv is set. Lets responsive utilities
+   target Android TV without depending on viewport width breakpoints (a
+   1080p TV reports innerWidth=960 due to DPR=2, so it falls into the md
+   range and Tailwind packs the same column count as a portrait tablet). */
+@custom-variant tv (&:where(body.tv *));
+
+/* Rounder corners for all DaisyUI components */
+:root, [data-theme] {
+  --radius-selector: 1rem;
+  --radius-field: 1rem;
+  --radius-box: 0.5rem;
+}
+
+/* Thinner focus outline on form fields */
+.select:focus, .input:focus, .textarea:focus {
+  outline-width: 1px;
+  outline-offset: 0px;
+}
+
+/* Flex children inherit `min-width: auto`, which prevents inner text from
+   wrapping inside DaisyUI labels — the label expands to the longest line
+   instead, causing horizontal overflow. Force the side div + alt text to
+   shrink so paragraphs wrap normally. DaisyUI also applies `white-space:
+   nowrap` to `.label-text*` spans, which we override to allow line breaks. */
+.label.cursor-pointer > div,
+.label > .label-text-alt {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.label .label-text,
+.label .label-text-alt {
+  white-space: normal;
+}
+
+/* Native app (Capacitor): offset content from system bars */
+body.native {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+/* Player goes fullscreen — override safe area padding */
+body.native.immersive {
+  padding: 0 !important;
+}
+/* Native player (ExoPlayer/AVPlayer behind WebView) — force ALL layers transparent
+   so the native video surface shows through the WebView. */
+html.native-player-active {
+  background: transparent !important;
+}
+html.native-player-active body {
+  background: transparent !important;
+}
+html.native-player-active .drawer,
+html.native-player-active .drawer-content,
+html.native-player-active app-root,
+html.native-player-active app-layout,
+html.native-player-active main,
+html.native-player-active router-outlet + *,
+html.native-player-active app-player {
+  background: transparent !important;
+}
+/* Pages with hero fanart — content extends behind status bar */
+body.native.hero-page {
+  padding-top: 0 !important;
+}
+
+/* Landscape: fanart edge-to-edge into side safe areas (browser + native); body/main padding keeps content safe */
+@media (orientation: landscape) {
+  body.hero-page .hero-fanart-bleed {
+    margin-left: calc(-1rem - env(safe-area-inset-left, 0px));
+    margin-right: calc(-1rem - env(safe-area-inset-right, 0px));
+  }
+}
+
+/* Mobile navbar: legibility of white icons on fanart (toolbar only — reset inside user menu panel) */
+.nav-hero-icons svg {
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.28)) drop-shadow(0 0 2px rgb(0 0 0 / 0.12));
+}
+.nav-hero-icons .dropdown-content svg {
+  filter: none;
+}
+
+@theme {
+  --breakpoint-3xl: 120rem;
+  --breakpoint-4xl: 160rem;
+  --breakpoint-5xl: 240rem;
+}
+
+/* Skip rendering of off-screen grid items — massive perf win for long lists */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 10rem;
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in-right 0.3s ease-out;
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.25s ease-out;
+}
+
+/* ============================================================================
+   Android TV / 10-foot UI overrides — body.tv toggled by TvService
+   ============================================================================ */
+body.tv {
+  /* Slight scale-up of base text for legibility from the couch */
+  font-size: 18px;
+  /* Horizontal overscan compensation — shrink the body 4% horizontally
+     so content stays inside the TV's displayable area. `scaleX` only
+     (not uniform `scale`): vertical scaling silently compounded into
+     every Y offset of descendants, so a sticky bar pinned at top:50vh
+     drifted up as the user scrolled (the body's transform scaled the
+     scroll-relative offset). Modern TVs overscan horizontally far more
+     than vertically; the vertical edge isn't worth the positioning
+     headaches. */
+  transform: scaleX(0.96);
+  transform-origin: top center;
+}
+/* Player (immersive) needs the full screen — no overscan compensation */
+body.tv.immersive {
+  transform: none;
+}
+/* Backfill html so the WebView doesn't show its default white during route
+   transitions, before bootstrap, or in the 4% bottom band the scale leaves.
+   scroll-behavior smooth turns the abrupt focus-into-view jumps (D-pad
+   navigation between rows of cards) into a fluid animated scroll. */
+html.tv-host {
+  background: #1d232a;
+  scroll-behavior: smooth;
+}
+/* Disable hover styles on TV — there is no pointer */
+body.tv *:hover {
+  background-color: revert;
+}
+/* High-contrast focus ring for D-pad navigation */
+body.tv :is(a, button, [role="button"], [tabindex]):focus-visible,
+body.tv :is(a, button, [role="button"], [tabindex]):focus {
+  outline: 3px solid var(--color-primary, #7a3ff2);
+  outline-offset: 4px;
+  z-index: 1;
+  position: relative;
+}
+/* Cards/list items — scale up on focus to give a clear "selected" affordance */
+body.tv .media-card:focus-within,
+body.tv .media-card:focus,
+body.tv [data-tv-focusable]:focus-visible,
+body.tv [data-tv-focusable]:focus {
+  transform: scale(1.06);
+  transition: transform 0.15s ease-out;
+}
+
+/* Media-card simplification on TV: the card is a single focus target. The
+   internal hover overlay (play button, dismiss, etc.) is replaced by the
+   contextual actions panel, so we hide them entirely. The watched toggle stays
+   visible since it also acts as a status indicator. */
+body.tv app-media-card figure > .group-hover\:opacity-100,
+body.tv app-media-card figure > .absolute.inset-0,
+body.tv app-media-card .opacity-0.group-hover\:opacity-100 {
+  display: none !important;
+}
+/* Card focus on TV — drawn as an absolutely-positioned pseudo-element so
+   the ring overlays the cover image AND repaints reliably even when the
+   img sits in its own stacking context (the lingering view-transition-name
+   on the clicked card creates one). `border-radius: inherit` follows the
+   figure's `rounded-lg`, `inset: 0` snaps to its border-box, `z-index`
+   keeps it above the cover image. The matching `outline: none` defeats
+   the generic body.tv :focus rule that would otherwise draw a duplicate
+   outer ring at offset:4. */
+body.tv app-media-card figure:focus,
+body.tv app-media-card figure:focus-visible {
+  outline: none !important;
+}
+body.tv app-media-card figure:focus::after,
+body.tv app-media-card figure:focus-visible::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 3px solid var(--color-primary, #7a3ff2);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 10;
+}
+/* Touch-only UI elements should be hidden on TV */
+body.tv [data-touch-only] {
+  display: none !important;
+}
+
+/* TV: dropdowns are signal-controlled (`.dropdown-open`). Neutralise any
+   `:focus-within` fallback that DaisyUI might re-introduce — D-pad focus alone
+   should never auto-open a dropdown. */
+body.tv .dropdown:not(.dropdown-open) > .dropdown-content {
+  display: none !important;
+}
+
+/* Shared item style for app-dropdown-menu (desktop dropdown + mobile/TV
+   bottom sheet). Caller adds a colour utility (`text-white`, `text-error`,
+   …) and an icon — everything else (padding, hover, focus, layout) lives
+   here so each menu item stays a one-liner. */
+.dropdown-item {
+  @apply w-full flex items-center gap-3 px-3 py-2 text-left text-base rounded-lg cursor-pointer hover:bg-white/5 active:bg-white/10 disabled:opacity-40;
+}
+
+/* ============================================================================
+   Tablet form-factor — body.tablet toggled by DeviceService
+   ============================================================================ */
+body.tablet [data-touch-only] {
+  /* Touch-only affordances stay visible on tablet (it's a touch device). */
+  display: revert;
+}
+
+/* ============================================================================
+   Shaka UITextDisplayer subtitle styling
+   ----------------------------------------------------------------------------
+   Shaka renders cues into `.shaka-text-container` (a child of `.player-
+   container`), with each line as a `.shaka-text-wrapper` flex item. CSS
+   variables are set per-video by PlayerComponent.applySubtitleStyle on
+   `.player-container`. These rules live in global styles (not the
+   component) because Shaka builds these elements outside Angular's view
+   encapsulation and they don't carry our `_ngcontent-*` attribute.
+   ============================================================================ */
+.player-container > .shaka-text-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: transform 200ms ease;
+  transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh)));
+}
+.player-video.controls-visible ~ .shaka-text-container {
+  transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh) - 10vh));
+}
+/* Visual styling applies to the leaf text span (Shaka tags it with
+   `translate="no"` and bakes a default background-color inline on it).
+   Single-line cues skip the .shaka-text-wrapper hop, so we must target
+   the leaf to reach both single- and multi-line cases. !important
+   overrides Shaka's inline styles. */
+.shaka-text-container span[translate="no"] {
+  font-size: var(--cue-font-size, 0.7em) !important;
+  color: var(--cue-color, #ffffff) !important;
+  background: var(--cue-bg, transparent) !important;
+  background-color: var(--cue-bg, transparent) !important;
+  text-shadow: var(--cue-shadow, 0 2px 4px rgba(0,0,0,0.9)) !important;
+  line-height: 1.1 !important;
+  padding: 0.15em 0.4em !important;
+  border-radius: 0.25em !important;
+}
+/* Multi-line wrapper carries `line-height: normal` inline; tightening it
+   here closes the gap between stacked lines (which native VTTCue
+   rendering can't do because each line becomes a separate cue box). */
+.shaka-text-container .shaka-text-wrapper {
+  line-height: 1.1 !important;
+}
+/* Bottom-sheet backdrop fade-in — CSS @starting-style interpolates from
+   opacity 0 when the element is added to the DOM, so the component doesn't
+   need a JS-side toggling pattern. Falls back gracefully on older WebKit
+   that doesn't support @starting-style (the backdrop just appears at full
+   opacity instantly — no broken state, just no animation). */
+.bottom-sheet-backdrop {
+  @starting-style {
+    opacity: 0;
+  }
+}
+
+
+/* Dock cradle — a circular bump painted in the dock's own colour rises
+   above the dock's top edge to wrap the lower half of the Search FAB.
+   The pseudo is concentric with the FAB so its visible protrusion
+   (above the dock baseline) hugs the FAB outline.
+   `overflow: visible` is required so the pseudo can extend past the dock's
+   own bounding box (DaisyUI's .dock would otherwise clip it). */
+.dock-with-fab-cradle {
+  overflow: visible !important;
+}
+.dock-with-fab-cradle::before {
+  content: '';
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  left: 50%;
+  /* FAB (56px / radius 28) centre is 20px below the dock top
+     (bottom: 1rem + 28px − 4rem). Cradle radius 32 = FAB + 4px gap;
+     top: -12 puts the cradle's centre at the same y as the FAB. */
+  top: -12px;
+  transform: translateX(-50%);
+  background: var(--color-base-100);
+}
+
+/* Skip the full-page cross-fade. Rasterizing + compositing two viewport-sized
+   `root` snapshots is the heaviest part of every view-transition on weak
+   GPUs. The hero (poster) morph still runs because it has its own named
+   pair; the rest of the page just swaps instantly — same UX as iOS-style
+   detail navigation. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+/* Force the hero (poster) morph above root. The default pseudo-tree order
+   should put named groups above root, but with `animation: none` on root
+   the old/new pair stays fully opaque for the whole transition and on some
+   builds the morphing poster ends up clipped behind it. Explicit z-index
+   removes the ambiguity. */
+::view-transition-group(*) {
+  z-index: 1;
+}
+::view-transition-group(root) {
+  z-index: 0;
+}
+

@@ -1,0 +1,85 @@
+<div
+  class="group relative w-full flex items-center cursor-pointer touch-none focus:outline-none"
+  [class]="variant() === 'player' ? 'h-6' : 'h-5'"
+  tabindex="0"
+  role="slider"
+  [attr.aria-valuemin]="0"
+  [attr.aria-valuemax]="duration() || 0"
+  [attr.aria-valuenow]="currentTime()"
+  (pointerdown)="onProgressDown($event)"
+  (pointermove)="onProgressHover($event)"
+  (pointerleave)="onProgressLeave()"
+  (keydown)="onKeydown($event)"
+  (keyup)="onKeyup($event)"
+>
+  <!-- Seek tooltip -->
+  @if (showTooltip() && (hovering() || dragging()) && duration()) {
+    <div
+      class="absolute bottom-full mb-3 pointer-events-none z-50 -translate-x-1/2"
+      [style.left]="tooltipLeft()"
+    >
+      <div class="bg-neutral/95 backdrop-blur-sm rounded-lg shadow-2xl overflow-hidden">
+        @if (spriteUrl() && spriteMetadata()) {
+          <div class="relative">
+            <div
+              class="bg-no-repeat"
+              [style.width.px]="previewWidth()"
+              [style.height.px]="previewHeight()"
+              [style.background-image]="'url(' + spriteUrl() + ')'"
+              [style.background-position]="thumbnailBgPositionScaled()"
+              [style.background-size]="spriteBgSizeScaled()"
+            ></div>
+            <div class="absolute bottom-0 inset-x-0 text-center pb-1 pt-3 bg-gradient-to-t from-black/70 to-transparent">
+              <span class="text-white text-xs tabular-nums font-medium drop-shadow">
+                {{ formatTime(dragging() ? dragTime() : hoverTime()) }}
+              </span>
+            </div>
+          </div>
+        } @else {
+          <div class="px-3 py-1.5 text-center">
+            <span class="text-white text-xs tabular-nums font-medium">
+              {{ formatTime(dragging() ? dragTime() : hoverTime()) }}
+            </span>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Track -->
+  <div
+    class="relative w-full rounded-full overflow-hidden transition-all"
+    [class]="variant() === 'player' ? 'h-2 group-hover:h-2.5 bg-white/20' : 'h-2 bg-base-300'"
+  >
+    <!-- Buffered -->
+    @if (showBuffered() && bufferedEnd()) {
+      <div
+        class="absolute inset-y-0 left-0 bg-white/30 rounded-full"
+        [style.width.%]="duration() ? (bufferedEnd() / duration()) * 100 : 0"
+      ></div>
+    }
+    <!-- Progress -->
+    <div
+      class="absolute inset-y-0 left-0 rounded-full"
+      [class]="variant() === 'player' ? 'bg-white' : 'bg-info'"
+      [style.width.%]="displayPercent()"
+    ></div>
+    <!-- Chapter ticks -->
+    @for (t of chapterTicks(); track t.percent) {
+      <div
+        class="absolute inset-y-0 w-0.5 bg-black/60 pointer-events-none"
+        [style.left.%]="t.percent"
+        [title]="t.title ?? ''"
+      ></div>
+    }
+  </div>
+
+  <!-- Thumb -->
+  @if (showThumb()) {
+    <div
+      class="absolute h-3.5 w-3.5 rounded-full bg-white shadow -translate-x-1/2 pointer-events-none group-hover:scale-125 transition-transform"
+      [class.scale-125]="dragging()"
+      [style.left.%]="displayPercent()"
+    ></div>
+  }
+</div>

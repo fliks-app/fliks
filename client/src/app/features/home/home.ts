@@ -1,0 +1,320 @@
+import { Component, ChangeDetectionStrategy, inject, signal, OnInit, OnDestroy, Injector, afterNextRender } from '@angular/core';
+import { ActivatedRoute, NavigationStart, Router, RouterLink } from '@angular/router';
+import { Subscription, filter } from 'rxjs';
+import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
+import { FormsModule } from '@angular/forms';
+import { TranslateModule } from '@ngx-translate/core';
+import { MediaService, Media, CalendarEntry } from '../../core/services/api/media.service';
+import { StreamingApiService, ContinueWatchingItem, RecommendationItem } from '../../core/services/api/streaming-api.service';
+import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
+import { ConfirmationService } from '../../core/services/confirmation.service';
+import { CastService } from '../../core/services/cast.service';
+import { CastPlayerService } from '../../core/services/cast-player.service';
+import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
+import { FocusMemoryService } from '../../core/services/focus-memory.service';
+import { NavbarService } from '../../core/services/navbar.service';
+import { TvService } from '../../core/services/tv.service';
+import { MediaCardComponent } from '../../shared/components/media-card/media-card';
+import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
+import { LucideIconComponent } from '../../shared/components/lucide-icon';
+import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
+
+/**
+ * # Home page
+ *
+ * Displays several horizontal scroller sections:
+ *
+ * ## Libraries
+ * One card per accessible library with custom icon + color gradient.
+ * Data: `GET /api/libraries/mine`.
+ *
+ * ## Continuer à regarder
+ * Media the user started but didn't finish (< 90% or < dur-30s).
+ * Data: `GET /api/playback/continue-watching`.
+ *
+ * ## Bientôt disponible
+ * Movies (digitalRelease) and episodes (airDate) releasing within
+ * -3 days to +30 days that are monitored and don't have a file yet.
+ * Keeps entries visible up to 3 days after release date so newly
+ * released content stays until actually downloaded.
+ * Data: `GET /api/media/calendar?start=<J-3>&end=<J+30>&monitoredOnly=true`.
+ * Client-side filter: `!hasFile && (event === 'digital' || 'airing' || 'release')`.
+ * Deduplicated by mediaId (earliest date kept).
+ *
+ * ## Récemment ajoutés
+ * Last 20 media added to the library (movies + series mixed),
+ * excluding already-watched and missing-file entries.
+ * Data: `GET /api/media?sortBy=createdAt&sortOrder=DESC&limit=20&excludeWatched=true&missing=false`.
+ *
+ * ## Recommandations
+ * Genre-based suggestions derived from the user's watch history.
+ * See `RecommendationService` for the algorithm.
+ * Data: `GET /api/playback/recommendations`.
+ */
+@Component({
+  selector: 'app-home',
+  imports: [
+    RouterLink, TranslateModule, FormsModule,
+    MediaCardComponent,
+    HorizontalScrollerComponent,
+    LucideIconComponent,
+    TvSectionDirective,
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  templateUrl: './home.html',
+})
+export class HomeComponent implements OnInit, OnDestroy {
+  private readonly mediaService = inject(MediaService);
+  private readonly streamingApi = inject(StreamingApiService);
+  private readonly confirmation = inject(ConfirmationService);
+  private readonly router = inject(Router);
+  private readonly castService = inject(CastService);
+  private readonly castPlayer = inject(CastPlayerService);
+  private readonly librariesApi = inject(LibrariesApiService);
+  private readonly scrollMemory = inject(ScrollMemoryService);
+  private readonly focusMemory = inject(FocusMemoryService);
+  private readonly navbar = inject(NavbarService);
+  private readonly tv = inject(TvService);
+  private readonly injector = inject(Injector);
+  private readonly route = inject(ActivatedRoute);
+  private readonly reuseStrategy = inject(CachingReuseStrategy);
+
+  private static readonly SCROLL_KEY = 'home';
+  private static readonly FOCUS_KEY = 'home';
+  /** Captured at ngOnInit before NavbarService.lastWasBack auto-resets. */
+  private arrivedViaBack = false;
+  private navStartSub?: Subscription;
+  private attachedSub?: Subscription;
+  private detachedSub?: Subscription;
+
+  readonly loading = signal(true);
+  readonly libraries = signal<LibrarySummary[]>([]);
+  readonly continueWatching = signal<ContinueWatchingItem[]>([]);
+  readonly recentMedia = signal<Media[]>([]);
+  readonly comingSoon = signal<CalendarEntry[]>([]);
+  readonly recommendations = signal<RecommendationItem[]>([]);
+  readonly onlyMyRequests = signal(
+    localStorage.getItem('fliks.home.onlyMyRequests') === 'true',
+  );
+
+  libraryUrl(lib: LibrarySummary): string {
+    return `/libraries/${encodeURIComponent(lib.name)}`;
+  }
+
+  /** CSS color for library card. DaisyUI 5 names → var(--color-<name>). */
+  libraryColor(lib: LibrarySummary): string {
+    const c = lib.color || 'primary';
+    const daisyColors = ['primary', 'secondary', 'accent', 'info', 'success', 'warning', 'error'];
+    if (daisyColors.includes(c)) return `var(--color-${c})`;
+    return c;
+  }
+
+  async ngOnInit() {
+    this.arrivedViaBack = this.navbar.lastWasBack();
+    this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
+    await this.loadAllSections();
+    this.loading.set(false);
+    this.scrollMemory.restore(HomeComponent.SCROLL_KEY, this.injector);
+    if (this.tv.isTv()) {
+      afterNextRender(() => this.applyDefaultFocus(), { injector: this.injector });
+      // NavigationStart fires the moment a click triggers a route change,
+      // before Angular tears down this component — activeElement is still
+      // the focused card so we can capture its data-home-focus once.
+      this.navStartSub = this.router.events
+        .pipe(filter((e): e is NavigationStart => e instanceof NavigationStart))
+        .subscribe(() => {
+          const active = document.activeElement as HTMLElement | null;
+          const container = active?.closest<HTMLElement>('[data-home-focus]');
+          const sel = container?.dataset['homeFocus'];
+          if (sel) this.focusMemory.save(HomeComponent.FOCUS_KEY, sel);
+        });
+    }
+    // The route is detached/cached on navigate-away (see CachingReuseStrategy
+    // + `data: { reuse: true }` on the home route). On return, ngOnInit does
+    // NOT fire again — refresh data + scroll + focus through this hook
+    // instead. Stale signals stay visible during the background refetch (HTTP
+    // cache makes that near-instant when warm), so the user never sees a
+    // spinner on a back navigation.
+    const ownKey = this.reuseStrategy.keyFor(this.route.snapshot);
+    this.attachedSub = this.reuseStrategy.attached$.subscribe((key) => {
+      if (key !== ownKey) return;
+      this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
+      void this.loadAllSections();
+      this.scrollMemory.restoreSticky(HomeComponent.SCROLL_KEY);
+      if (this.tv.isTv()) {
+        this.arrivedViaBack = true;
+        afterNextRender(() => this.applyDefaultFocus(), { injector: this.injector });
+      }
+    });
+    // ngOnDestroy doesn't fire when detaching, so the active scroll key would
+    // stay pointing at us — and a NavigationStart on the next page would then
+    // overwrite our saved scroll position. Deactivate iff still ours: if the
+    // next route already claimed scrollMemory in its own ngOnInit, we leave
+    // its key alone.
+    this.detachedSub = this.reuseStrategy.detached$.subscribe((key) => {
+      if (key === ownKey) this.scrollMemory.deactivateIf(HomeComponent.SCROLL_KEY);
+    });
+  }
+
+  ngOnDestroy() {
+    this.scrollMemory.deactivate();
+    this.navStartSub?.unsubscribe();
+    this.attachedSub?.unsubscribe();
+    this.detachedSub?.unsubscribe();
+  }
+
+  /**
+   * Fetch every section in parallel. Signals are updated as responses land —
+   * existing values stay visible until each new response arrives, so a
+   * background revalidation never blanks the UI.
+   */
+  private async loadAllSections(): Promise<void> {
+    try {
+      const [libs, cw, recs] = await Promise.all([
+        this.librariesApi.listMine().catch(() => null),
+        this.streamingApi.getContinueWatching().catch(() => null),
+        this.streamingApi.getRecommendations().catch(() => null),
+      ]);
+      if (libs) this.libraries.set(libs);
+      if (cw) this.continueWatching.set(cw);
+      if (recs) this.recommendations.set(recs);
+    } catch { /* ignore */ }
+    await this.loadFilteredSections();
+  }
+
+  private applyDefaultFocus() {
+    const root = document.querySelector<HTMLElement>('app-home') ?? document.body;
+    const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex="0"]';
+    if (this.arrivedViaBack) {
+      const saved = this.focusMemory.retrieve(HomeComponent.FOCUS_KEY);
+      const container = saved
+        ? root.querySelector<HTMLElement>(`[data-home-focus="${CSS.escape(saved)}"]`)
+        : null;
+      const target =
+        container?.matches(FOCUSABLE)
+          ? container
+          : container?.querySelector<HTMLElement>(FOCUSABLE) ?? null;
+      if (target) {
+        target.focus({ preventScroll: false });
+        return;
+      }
+    }
+    // Default: first focusable in DOM order = first library card.
+    root.querySelector<HTMLElement>(FOCUSABLE)?.focus({ preventScroll: false });
+  }
+
+  async toggleOnlyMyRequests() {
+    this.onlyMyRequests.update((v) => !v);
+    localStorage.setItem('fliks.home.onlyMyRequests', String(this.onlyMyRequests()));
+    await this.loadFilteredSections();
+  }
+
+  private async loadFilteredSections() {
+    const mine = this.onlyMyRequests();
+    const today = new Date();
+    const threeDaysAgo = new Date(today);
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+    const in30d = new Date(today);
+    in30d.setDate(in30d.getDate() + 30);
+    const startStr = threeDaysAgo.toISOString().slice(0, 10);
+    const in30dStr = in30d.toISOString().slice(0, 10);
+
+    try {
+      const [recent, calendar] = await Promise.all([
+        this.mediaService.getAll({
+          sortBy: 'createdAt',
+          sortOrder: 'DESC',
+          limit: 20,
+          excludeWatched: true,
+          missing: false,
+          requestedByMe: mine || undefined,
+        }),
+        this.mediaService.getCalendar(startStr, in30dStr, true, mine).catch(() => []),
+      ]);
+      this.recentMedia.set(recent.data);
+      const upcoming = calendar
+        .filter((e) => !e.hasFile && (e.event === 'digital' || e.event === 'airing' || e.event === 'release'))
+        .sort((a, b) => a.date.localeCompare(b.date));
+      const seen = new Set<number>();
+      this.comingSoon.set(
+        upcoming.filter((e) => {
+          if (seen.has(e.mediaId)) return false;
+          seen.add(e.mediaId);
+          return true;
+        }),
+      );
+    } catch { /* ignore */ }
+  }
+
+  /**
+   * Persist a "remove from recommendations" gesture. The local list is
+   * updated optimistically so the card disappears immediately; a failed
+   * request restores it via a fresh fetch.
+   */
+  async dismissRecommendation(rec: RecommendationItem) {
+    const id = rec.media.id;
+    this.recommendations.update((list) => list.filter((r) => r.media.id !== id));
+    try {
+      await this.streamingApi.dismissRecommendation(id);
+    } catch {
+      // Restore the row by refetching — the global error toast already fired.
+      this.streamingApi
+        .getRecommendations()
+        .then((list) => this.recommendations.set(list))
+        .catch(() => {});
+    }
+  }
+
+  /**
+   * Recommendation cards expose a Lire action even though the lean DTO
+   * doesn't carry file ids — we fetch the full media on demand and route
+   * to the first playable file. If nothing is playable (e.g. a "to add"
+   * suggestion not yet downloaded) we fall back to the detail page.
+   */
+  async playRecommendation(rec: RecommendationItem) {
+    try {
+      const media = await this.mediaService.getOne(rec.media.id);
+      const file = media.files?.[0];
+      if (!file) {
+        const segment = media.type === 'series' ? 'series' : 'movies';
+        void this.router.navigate(['/' + segment, media.id]);
+        return;
+      }
+      const qp: Record<string, number> = { mediaId: media.id };
+      if (file.episodeId) qp['episodeId'] = file.episodeId;
+      void this.router.navigate(['/watch', file.id], { queryParams: qp });
+    } catch {
+      /* error handled by global interceptor */
+    }
+  }
+
+  async playContinueWatching(item: ContinueWatchingItem) {
+    if (this.castService.isConnected()) {
+      await this.castPlayer.quickStart({
+        mediaFileId: item.mediaFileId,
+        mediaId: item.mediaId,
+        episodeId: item.episodeId ?? undefined,
+        title: item.mediaTitle,
+        episodeTitle: item.episodeLabel ?? undefined,
+        fanartUrl: item.fanartUrl ?? item.posterUrl,
+      });
+      this.castPlayer.expanded.set(true);
+    } else {
+      const qp: Record<string, number> = { mediaId: item.mediaId };
+      if (item.episodeId) qp['episodeId'] = item.episodeId;
+      this.router.navigate(['/watch', item.mediaFileId], { queryParams: qp });
+    }
+  }
+
+  async removeContinueWatching(item: ContinueWatchingItem) {
+    const confirmed = await this.confirmation.confirm({
+      title: 'Retirer',
+      message: `Retirer "${item.mediaTitle}" de la liste ?`,
+    });
+    if (!confirmed) return;
+    try {
+      await this.streamingApi.hideFromContinueWatching(item.mediaId);
+      this.continueWatching.update(list => list.filter(i => i.mediaId !== item.mediaId));
+    } catch { /* ignore */ }
+  }
+}

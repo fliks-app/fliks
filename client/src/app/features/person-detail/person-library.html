@@ -1,0 +1,37 @@
+@if (parent.detail(); as d) {
+  @if (d.cast.length > 0) {
+    <div>
+      <h2 class="text-lg font-semibold mb-3">{{ 'person_detail.as_actor' | translate }}</h2>
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-1.5 sm:gap-4">
+        @for (c of d.cast; track c.id) {
+          <app-media-card
+            [imageUrl]="c.media.posterUrl"
+            [title]="c.media.title"
+            [subtitle]="c.character"
+            [rating]="c.media.rating"
+            [link]="['/' + (c.media.type === 'movie' ? 'movies' : 'series'), '' + c.media.id]"
+          />
+        }
+      </div>
+    </div>
+  }
+  @if (d.crew.length > 0) {
+    <div>
+      <h2 class="text-lg font-semibold mb-3">{{ 'person_detail.as_crew' | translate }}</h2>
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-1.5 sm:gap-4">
+        @for (c of d.crew; track c.id) {
+          <app-media-card
+            [imageUrl]="c.media.posterUrl"
+            [title]="c.media.title"
+            [subtitle]="c.job"
+            [rating]="c.media.rating"
+            [link]="['/' + (c.media.type === 'movie' ? 'movies' : 'series'), '' + c.media.id]"
+          />
+        }
+      </div>
+    </div>
+  }
+  @if (d.cast.length === 0 && d.crew.length === 0) {
+    <p class="text-base-content/50 text-center py-6">{{ 'person_detail.no_local_credits' | translate }}</p>
+  }
+}

@@ -1,0 +1,156 @@
+<div class="flex flex-col gap-4">
+  <div class="flex items-center justify-between gap-3">
+    <div>
+      <h2 class="text-xl font-semibold">{{ 'settings.auto_approval.title' | translate }}</h2>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.auto_approval.subtitle' | translate }}</p>
+    </div>
+    <button type="button" class="btn btn-primary btn-sm" (click)="openCreate()">
+      + {{ 'settings.auto_approval.new' | translate }}
+    </button>
+  </div>
+
+  @if (listError()) {
+    <div role="alert" class="alert alert-error text-sm">{{ listError() }}</div>
+  }
+
+  @if (loading()) {
+    <div class="flex justify-center py-8"><span class="loading loading-spinner loading-md"></span></div>
+  } @else if (rules().length === 0) {
+    <p class="text-base-content/50 text-center py-8">{{ 'settings.auto_approval.empty' | translate }}</p>
+  } @else {
+    <div class="overflow-x-auto rounded-lg border border-base-200">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>{{ 'settings.auto_approval.col_name' | translate }}</th>
+            <th>{{ 'settings.auto_approval.col_priority' | translate }}</th>
+            <th>{{ 'settings.auto_approval.col_conditions' | translate }}</th>
+            <th>{{ 'settings.auto_approval.col_enabled' | translate }}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (rule of rules(); track rule.id) {
+            <tr [class.opacity-50]="!rule.enabled">
+              <td class="font-medium">{{ rule.name }}</td>
+              <td>{{ rule.priority }}</td>
+              <td class="text-sm text-base-content/70">{{ rule.conditions.length }}</td>
+              <td>
+                <span class="badge badge-sm" [class]="rule.enabled ? 'badge-success' : 'badge-ghost'">
+                  {{ (rule.enabled ? 'common.yes' : 'common.no') | translate }}
+                </span>
+              </td>
+              <td class="text-end">
+                <div class="flex justify-end gap-1">
+                  <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(rule)">
+                    {{ 'settings.auto_approval.edit' | translate }}
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-xs text-error" (click)="remove(rule)">
+                    {{ 'settings.auto_approval.delete' | translate }}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>
+
+<dialog #editorDialog class="modal">
+  <div class="modal-box max-w-lg">
+      <h3 class="text-lg font-semibold mb-4">
+        {{ (editingId() != null ? 'settings.auto_approval.editor_edit' : 'settings.auto_approval.editor_create') | translate }}
+      </h3>
+      <div class="flex flex-col gap-4">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.auto_approval.field_name' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formName()"
+            (ngModelChange)="formName.set($event)"
+          />
+        </label>
+        <div class="flex gap-4">
+          <label class="form-control flex-1">
+            <span class="label-text">{{ 'settings.auto_approval.field_priority' | translate }}</span>
+            <input
+              type="number"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formPriority()"
+              (ngModelChange)="formPriority.set(+$event)"
+            />
+          </label>
+          <label class="form-control flex-none flex-row items-center gap-2 mt-6">
+            <input
+              type="checkbox"
+              class="checkbox checkbox-sm"
+              [ngModel]="formEnabled()"
+              (ngModelChange)="formEnabled.set($event)"
+            />
+            <span class="label-text">{{ 'settings.auto_approval.field_enabled' | translate }}</span>
+          </label>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <span class="label-text font-medium">{{ 'settings.auto_approval.conditions' | translate }}</span>
+            <button type="button" class="btn btn-ghost btn-xs" (click)="addCondition()">
+              + {{ 'settings.auto_approval.add_condition' | translate }}
+            </button>
+          </div>
+          @if (formConditions().length === 0) {
+            <p class="text-sm text-base-content/50">{{ 'settings.auto_approval.no_conditions' | translate }}</p>
+          }
+          @for (cond of formConditions(); track $index; let i = $index) {
+            <div class="flex items-center gap-2 mb-2 p-2 border border-base-200 rounded">
+              <select
+                class="select select-bordered select-xs flex-1"
+                [ngModel]="cond.field"
+                (ngModelChange)="updateCondition(i, { field: $event })"
+              >
+                @for (f of fields; track f) {
+                  <option [value]="f">{{ ('settings.auto_approval.field_' + f) | translate }}</option>
+                }
+              </select>
+              <select
+                class="select select-bordered select-xs flex-1"
+                [ngModel]="cond.operator"
+                (ngModelChange)="updateCondition(i, { operator: $event })"
+              >
+                @for (op of operators; track op) {
+                  <option [value]="op">{{ ('settings.auto_approval.op_' + op) | translate }}</option>
+                }
+              </select>
+              <input
+                type="text"
+                class="input input-bordered input-xs flex-1"
+                [ngModel]="cond.value"
+                (ngModelChange)="updateCondition(i, { value: $event })"
+                [placeholder]="'settings.auto_approval.value_placeholder' | translate"
+              />
+              <button type="button" class="btn btn-ghost btn-xs text-error" (click)="removeCondition(i)">✕</button>
+            </div>
+          }
+        </div>
+
+
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost btn-sm" (click)="closeEditor()">
+            {{ 'common.cancel' | translate }}
+          </button>
+          <button type="button" class="btn btn-primary btn-sm" [disabled]="saving()" (click)="save()">
+            @if (saving()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'common.save' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeEditor()">close</button>
+  </form>
+</dialog>

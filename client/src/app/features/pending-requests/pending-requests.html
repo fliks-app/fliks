@@ -1,0 +1,53 @@
+<div class="flex min-w-0 max-w-full flex-col gap-3">
+  <h1 class="sr-only lg:not-sr-only text-xl font-bold">{{ 'pending_requests.title' | translate }}</h1>
+
+  @if (loading()) {
+    <div class="flex justify-center py-12">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (error()) {
+    <div role="alert" class="alert alert-error">{{ error() | translate }}</div>
+  } @else if (requests().length === 0) {
+    <div class="text-center py-12 text-base-content/50">
+      <svg lucideMonitorSmartphone class="h-12 w-12 mx-auto mb-3 opacity-30"></svg>
+      <p class="text-lg">{{ 'pending_requests.empty' | translate }}</p>
+    </div>
+  } @else {
+    <ul class="flex flex-col gap-2 sm:gap-3">
+      @for (req of requests(); track req.pairingId) {
+        <li class="flex flex-row items-center gap-3 rounded-md bg-base-100 shadow-sm p-3">
+          <div class="text-base-content/60 shrink-0">
+            @switch (iconFor(req.deviceName)) {
+              @case ('tv') { <svg lucideTv class="h-8 w-8"></svg> }
+              @case ('tablet') { <svg lucideTablet class="h-8 w-8"></svg> }
+              @case ('phone') { <svg lucideSmartphone class="h-8 w-8"></svg> }
+              @default { <svg lucideMonitor class="h-8 w-8"></svg> }
+            }
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold truncate">{{ req.deviceName }}</div>
+            <div class="text-xs text-base-content/60">{{ formatRelative(req.requestedAt) }}</div>
+          </div>
+          <div class="flex gap-2 shrink-0">
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              [disabled]="busy() === req.pairingId"
+              (click)="approve(req)"
+            >
+              {{ 'pending_requests.approve' | translate }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              [disabled]="busy() === req.pairingId"
+              (click)="deny(req)"
+            >
+              {{ 'pending_requests.deny' | translate }}
+            </button>
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</div>

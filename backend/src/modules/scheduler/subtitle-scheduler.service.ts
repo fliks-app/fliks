@@ -1,0 +1,294 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Media } from '../media/entities/media.entity';
+import { MediaFile } from '../media/entities/media-file.entity';
+import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
+import { SubtitlesService } from '../subtitles/subtitles.service';
+import { SubtitleSyncService } from '../subtitles/subtitle-sync.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { SettingsService } from '../settings/settings.service';
+import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
+import { SubtitleLanguageItem } from '../profiles/entities/language-profile.entity';
+import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
+import { MediaServersService } from '../media-servers/media-servers.service';
+
+@Injectable()
+export class SubtitleSchedulerService {
+  private readonly log = new Logger(SubtitleSchedulerService.name);
+  private lastSearchRun = 0;
+  private lastUpgradeRun = 0;
+
+  constructor(
+    @InjectRepository(Media)
+    private readonly mediaRepo: Repository<Media>,
+    @InjectRepository(MediaFile)
+    private readonly mediaFileRepo: Repository<MediaFile>,
+    @InjectRepository(SubtitleFile)
+    private readonly subtitleFileRepo: Repository<SubtitleFile>,
+    private readonly subtitlesService: SubtitlesService,
+    private readonly subtitleSync: SubtitleSyncService,
+    private readonly notifications: NotificationsService,
+    private readonly settings: SettingsService,
+    private readonly embeddedSubtitle: EmbeddedSubtitleService,
+    private readonly mediaServers: MediaServersService,
+  ) {}
+
+  /** Check every minute if it's time to run search or upgrade */
+  @Cron(CronExpression.EVERY_6_HOURS)
+  async tick(): Promise<void> {
+    const now = Date.now();
+    const searchInterval =
+      Number((await this.settings.get('subtitle_search_interval')) ?? '360') *
+      60_000;
+    const upgradeInterval =
+      Number((await this.settings.get('subtitle_upgrade_interval')) ?? '720') *
+      60_000;
+
+    if (now - this.lastSearchRun >= searchInterval) {
+      this.lastSearchRun = now;
+      await this.searchMissingSubtitles();
+    }
+    if (now - this.lastUpgradeRun >= upgradeInterval) {
+      this.lastUpgradeRun = now;
+      await this.upgradeSubtitles();
+    }
+  }
+
+  async searchMissingSubtitles(): Promise<void> {
+    const autoSearch = await this.settings.get('subtitle_auto_search');
+    if (autoSearch === 'false') return;
+
+    const minScore = Number(
+      (await this.settings.get('subtitle_min_score')) ?? '70',
+    );
+    const autoSyncEnabled =
+      (await this.settings.get('subtitle_auto_sync')) === 'true';
+    const encodeUtf8 =
+      (await this.settings.get('subtitle_encode_utf8')) !== 'false';
+
+    const mediaList = await this.mediaRepo.find({
+      where: { monitored: true },
+      relations: ['languageProfile', 'files'],
+    });
+
+    for (const media of mediaList) {
+      const subtitleLangs: SubtitleLanguageItem[] =
+        media.languageProfile?.subtitleLanguages ?? [];
+      if (!subtitleLangs.length) continue;
+      if (!media.files?.length) continue;
+
+      for (const file of media.files) {
+        // Ensure embedded subtitles are detected before checking for missing ones
+        await this.embeddedSubtitle.detectAndStore(
+          media.id,
+          file.id,
+          file.episodeId ?? undefined,
+        );
+
+        const existingSubs = await this.subtitleFileRepo.find({
+          where: { mediaFile: { id: file.id } },
+        });
+
+        for (const langItem of subtitleLangs) {
+          const hasSub = existingSubs.some(
+            (s) =>
+              s.language === langItem.isoCode &&
+              s.status !== SubtitleStatus.FAILED,
+          );
+          if (hasSub) continue;
+
+          try {
+            const results = await this.subtitlesService.searchSubtitles({
+              imdbId: media.imdbId ?? undefined,
+              tmdbId: media.tmdbId,
+              title: media.title,
+              year: media.year ?? undefined,
+              language: langItem.isoCode,
+            });
+
+            const best = results.find((r) => r.score >= minScore);
+            if (!best) continue;
+
+            const sub = await this.subtitlesService.downloadSubtitle(
+              media.id,
+              file.id,
+              file.episodeId ?? undefined,
+              best,
+            );
+
+            if (encodeUtf8) {
+              await this.subtitleSync.reencodeToUtf8(sub.id);
+            }
+            if (autoSyncEnabled) {
+              await this.subtitleSync.syncSubtitle(sub.id);
+            }
+
+            void this.notifications.dispatch('subtitle.downloaded', {
+              title: media.title,
+              language: langItem.isoCode,
+              provider: best.providerName,
+              score: best.score,
+            });
+
+            void this.mediaServers.dispatch('subtitle.downloaded', {
+              title: media.title,
+              path: media.path,
+            });
+
+            this.log.log(
+              `SubtitleSearch: downloaded ${langItem.isoCode} sub for "${media.title}" (score: ${best.score})`,
+            );
+          } catch (err) {
+            this.log.warn(
+              `SubtitleSearch: failed for "${media.title}" [${langItem.isoCode}]: ${err}`,
+            );
+            void this.notifications.dispatch('subtitle.failed', {
+              title: media.title,
+              language: langItem.isoCode,
+              error: String(err),
+            });
+          }
+        }
+      }
+    }
+  }
+
+  async upgradeSubtitles(): Promise<void> {
+    const autoSearch = await this.settings.get('subtitle_auto_search');
+    if (autoSearch === 'false') return;
+
+    const threshold = Number(
+      (await this.settings.get('subtitle_upgrade_threshold')) ?? '90',
+    );
+
+    const lowScoreSubs = await this.subtitleFileRepo
+      .createQueryBuilder('sf')
+      .where('sf.score < :threshold', { threshold })
+      .andWhere('sf.status != :failed', { failed: SubtitleStatus.FAILED })
+      .andWhere('sf.locked = false')
+      .leftJoinAndSelect('sf.media', 'media')
+      .leftJoinAndSelect('sf.mediaFile', 'mf')
+      .getMany();
+
+    for (const sub of lowScoreSubs) {
+      try {
+        const results = await this.subtitlesService.searchSubtitles({
+          imdbId: sub.media?.imdbId ?? undefined,
+          tmdbId: sub.media?.tmdbId,
+          title: sub.media?.title ?? '',
+          language: sub.language,
+        });
+
+        const better = results.find((r) => r.score > sub.score);
+        if (!better) continue;
+
+        await this.subtitlesService.upgradeSubtitle(sub.id, better);
+
+        void this.notifications.dispatch('subtitle.upgraded', {
+          title: sub.media?.title,
+          language: sub.language,
+          oldScore: sub.score,
+          newScore: better.score,
+          provider: better.providerName,
+        });
+
+        void this.mediaServers.dispatch('subtitle.upgraded', {
+          title: sub.media?.title,
+          path: sub.media?.path,
+        });
+
+        this.log.log(
+          `SubtitleUpgrade: upgraded ${sub.language} for "${sub.media?.title}" (${sub.score} → ${better.score})`,
+        );
+      } catch (err) {
+        this.log.warn(`SubtitleUpgrade: failed for sub #${sub.id}: ${err}`);
+      }
+    }
+  }
+
+  /** Called after a media file import to trigger subtitle search */
+  async onMediaFileImported(
+    mediaId: number,
+    mediaFileId: number,
+    episodeId?: number,
+  ): Promise<void> {
+    const autoSearch = await this.settings.get('subtitle_auto_search');
+    if (autoSearch === 'false') return;
+
+    const media = await this.mediaRepo.findOne({
+      where: { id: mediaId },
+      relations: ['languageProfile'],
+    });
+    if (!media) return;
+
+    const subtitleLangs: SubtitleLanguageItem[] =
+      media.languageProfile?.subtitleLanguages ?? [];
+    if (!subtitleLangs.length) return;
+
+    const mediaFile = await this.mediaFileRepo.findOne({
+      where: { id: mediaFileId },
+    });
+    if (!mediaFile) return;
+
+    // Detect embedded subtitles before searching providers
+    const embeddedSubs = await this.embeddedSubtitle.detectAndStore(
+      mediaId,
+      mediaFileId,
+      episodeId,
+    );
+    const embeddedLangs = new Set(embeddedSubs.map((s) => s.language));
+
+    const minScore = Number(
+      (await this.settings.get('subtitle_min_score')) ?? '70',
+    );
+    const autoSyncEnabled =
+      (await this.settings.get('subtitle_auto_sync')) === 'true';
+    const encodeUtf8 =
+      (await this.settings.get('subtitle_encode_utf8')) !== 'false';
+
+    for (const langItem of subtitleLangs) {
+      if (embeddedLangs.has(langItem.isoCode)) {
+        this.log.log(
+          `PostImport: skipping ${langItem.isoCode} for "${media.title}" — embedded subtitle found`,
+        );
+        continue;
+      }
+      try {
+        const results = await this.subtitlesService.searchSubtitles({
+          imdbId: media.imdbId ?? undefined,
+          tmdbId: media.tmdbId,
+          title: media.title,
+          year: media.year ?? undefined,
+          language: langItem.isoCode,
+        });
+
+        const best = results.find((r) => r.score >= minScore);
+        if (!best) continue;
+
+        const sub = await this.subtitlesService.downloadSubtitle(
+          mediaId,
+          mediaFileId,
+          episodeId,
+          best,
+        );
+
+        if (encodeUtf8) {
+          await this.subtitleSync.reencodeToUtf8(sub.id);
+        }
+        if (autoSyncEnabled) {
+          await this.subtitleSync.syncSubtitle(sub.id);
+        }
+
+        this.log.log(
+          `PostImport subtitle: ${langItem.isoCode} for "${media.title}"`,
+        );
+      } catch (err) {
+        this.log.warn(
+          `PostImport subtitle failed for "${media.title}" [${langItem.isoCode}]: ${err}`,
+        );
+      }
+    }
+  }
+}

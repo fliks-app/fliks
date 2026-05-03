@@ -1,0 +1,206 @@
+<div class="flex flex-col gap-4">
+  <!-- Header -->
+  <div class="flex flex-col gap-3">
+    <h1 class="sr-only lg:not-sr-only text-2xl font-bold">{{ libraryName() }}</h1>
+    <!-- Search + filter toggle -->
+    <div class="flex gap-2 items-center">
+      <div class="relative flex-1">
+        <svg lucideSearch class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-base-content/40 pointer-events-none z-10"></svg>
+        <input
+          type="text"
+          [placeholder]="'common.search' | translate"
+          class="input input-bordered input-sm w-full pl-9"
+          [ngModel]="searchQuery()"
+          (ngModelChange)="onSearch($event)"
+        />
+      </div>
+      <button class="btn btn-sm btn-square btn-ghost relative" (click)="filtersOpen.set(!filtersOpen())">
+        <svg lucideSlidersHorizontal class="h-5 w-5"></svg>
+        @if (hasActiveFilters()) {
+          <span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-primary"></span>
+        }
+      </button>
+      <button
+        class="hidden lg:inline-flex btn btn-sm"
+        [class.btn-primary]="bulkMode()"
+        [class.btn-outline]="!bulkMode()"
+        (click)="toggleBulkMode()"
+      >
+        {{ 'library.bulk_edit' | translate }}
+      </button>
+    </div>
+    <!-- Collapsible filters -->
+    @if (filtersOpen()) {
+      <div class="flex flex-wrap gap-2">
+        <select
+          class="select select-bordered select-sm flex-1 min-w-28"
+          [ngModel]="filterMonitored()"
+          (ngModelChange)="filterMonitored.set($event); onFilterChange()"
+        >
+          <option value="">{{ 'library.filter_all' | translate }}</option>
+          <option value="true">{{ 'library.filter_monitored' | translate }}</option>
+          <option value="false">{{ 'library.filter_unmonitored' | translate }}</option>
+        </select>
+        <select
+          class="select select-bordered select-sm flex-1 min-w-28"
+          [ngModel]="filterStatus()"
+          (ngModelChange)="filterStatus.set($event); onFilterChange()"
+        >
+          <option value="">{{ 'library.filter_all_status' | translate }}</option>
+          <option value="downloaded">{{ 'library.filter_downloaded' | translate }}</option>
+          <option value="missing">{{ 'library.filter_missing' | translate }}</option>
+          <option value="cutoffUnmet">{{ 'library.filter_cutoff_unmet' | translate }}</option>
+        </select>
+        <select
+          class="select select-bordered select-sm flex-1 min-w-28"
+          [ngModel]="sortBy()"
+          (ngModelChange)="sortBy.set($event); onFilterChange()"
+        >
+          <option value="title">{{ 'library.sort_title' | translate }}</option>
+          <option value="year">{{ 'library.sort_year' | translate }}</option>
+          <option value="added">{{ 'library.sort_added' | translate }}</option>
+          <option value="rating">{{ 'library.sort_rating' | translate }}</option>
+        </select>
+        <button
+          class="btn btn-sm lg:hidden"
+          [class.btn-primary]="bulkMode()"
+          [class.btn-outline]="!bulkMode()"
+          (click)="toggleBulkMode()"
+        >
+          {{ 'library.bulk_edit' | translate }}
+        </button>
+      </div>
+    }
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-12">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (list.visible().length === 0) {
+    <div class="text-center py-12 text-base-content/50">
+      <p class="text-lg">{{ 'library.empty' | translate }}</p>
+      <p class="text-sm mt-2">{{ 'library.empty_hint' | translate }}</p>
+    </div>
+  } @else {
+    @if (bulkMode()) {
+      <div class="flex items-center gap-2 text-sm">
+        <button class="btn btn-xs btn-ghost" (click)="selectAll()">{{ 'library.bulk_select_all' | translate }}</button>
+        <button class="btn btn-xs btn-ghost" (click)="deselectAll()">{{ 'library.bulk_deselect' | translate }}</button>
+      </div>
+    }
+    <div class="flex gap-2">
+      <div class="flex-1 min-w-0 pr-2 lg:pr-4 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4">
+        @for (item of list.visible(); track item.id) {
+          @if (bulkMode()) {
+            <div
+              class="relative cursor-pointer cv-auto"
+              [id]="'media-' + item.id"
+              (click)="toggleSelect(item.id)"
+            >
+              <input
+                type="checkbox"
+                class="checkbox checkbox-primary checkbox-sm absolute top-2 left-2 z-10"
+                [checked]="selectedIds().has(item.id)"
+                (click)="$event.stopPropagation()"
+                (change)="toggleSelect(item.id)"
+              />
+              <app-media-card [media]="item" [status]="watchedIds().has(item.id) ? 'watched' : null" />
+            </div>
+          } @else {
+            <div [id]="'media-' + item.id" [attr.data-library-focus]="'media:' + item.id">
+              <app-media-card [media]="item" [status]="watchedIds().has(item.id) ? 'watched' : null" />
+            </div>
+          }
+        }
+      </div>
+
+      <!-- Alphabet sidebar — sticky at viewport mid. Now that <main> uses
+           `overflow-x: clip` (instead of `hidden`), it's no longer a
+           vertical scroll container, so sticky's nearest scroll ancestor
+           is the actual page scroll. `self-start` keeps the nav at its
+           content size inside the flex parent so sticky has room to pin
+           within the column. -->
+      <nav class="sticky top-[50vh] -translate-y-1/2 self-start z-20 flex flex-col items-center gap-0 select-none tv:pt-20">
+        @for (letter of alphabet; track letter) {
+          <button
+            type="button"
+            class="text-[10px] font-medium w-4 h-4 tv:h-3.5 flex items-center justify-center rounded transition-colors"
+            [class.bg-primary]="list.activeLetter() === letter"
+            [class.text-primary-content]="list.activeLetter() === letter"
+            [class.text-base-content/60]="list.activeLetter() !== letter && list.availableLetters().has(letter)"
+            [class.text-base-content/15]="!list.availableLetters().has(letter)"
+            [class.hover:bg-primary/20]="list.activeLetter() !== letter && list.availableLetters().has(letter)"
+            [disabled]="!list.availableLetters().has(letter)"
+            (click)="scrollToLetter(letter)"
+          >
+            {{ letter }}
+          </button>
+        }
+      </nav>
+    </div>
+
+    @if (list.hasMore()) {
+      <div #sentinel class="flex justify-center py-4">
+        <span class="loading loading-spinner loading-sm"></span>
+      </div>
+    }
+  }
+
+  @if (bulkMode() && selectedIds().size > 0) {
+    <div class="sticky bottom-0 z-20 bg-base-200 border-t border-base-300 px-4 py-3 flex flex-wrap items-center gap-3 shadow-lg rounded-t-lg">
+      <span class="font-semibold text-sm">{{ 'library.bulk_selected' | translate:{ count: selectedIds().size } }}</span>
+      <select
+        class="select select-bordered select-sm"
+        [ngModel]="bulkQualityProfileId()"
+        (ngModelChange)="bulkQualityProfileId.set($event)"
+      >
+        <option [ngValue]="null">{{ 'library.bulk_quality_profile' | translate }}</option>
+        @for (profile of qualityProfiles(); track profile.id) {
+          <option [ngValue]="profile.id">{{ profile.name }}</option>
+        }
+      </select>
+      <select
+        class="select select-bordered select-sm"
+        [ngModel]="bulkMonitored()"
+        (ngModelChange)="bulkMonitored.set($event)"
+      >
+        <option value="">{{ 'library.bulk_monitored' | translate }}</option>
+        <option value="true">{{ 'library.filter_monitored' | translate }}</option>
+        <option value="false">{{ 'library.filter_unmonitored' | translate }}</option>
+      </select>
+      <button class="btn btn-sm btn-primary" (click)="applyBulk()" [disabled]="bulkSaving()">
+        @if (bulkSaving()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ 'library.bulk_apply' | translate }}
+      </button>
+      <button class="btn btn-sm btn-ghost" (click)="toggleBulkMode()">
+        {{ 'library.bulk_cancel' | translate }}
+      </button>
+    </div>
+  }
+
+  @if (list.visible().length > 0) {
+    <div class="flex flex-wrap items-start justify-between gap-6 mt-6 px-2 py-3 border-t border-base-200 text-sm text-base-content/70">
+      <div class="flex flex-col gap-1">
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-green-500"></span> {{ 'legend.downloaded_monitored' | translate }}</div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-green-800"></span> {{ 'legend.downloaded_unmonitored' | translate }}</div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-red-500"></span> {{ 'legend.missing_monitored' | translate }}</div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-amber-500"></span> {{ 'legend.missing_unmonitored' | translate }}</div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-blue-400"></span> {{ 'legend.unreleased' | translate }}</div>
+      </div>
+      <div class="flex flex-wrap gap-x-8 gap-y-1">
+        <div><span class="font-semibold">{{ 'legend.total' | translate }}</span> {{ list.total() }}</div>
+        @if (hasMovies()) {
+          <div><span class="font-semibold">{{ 'legend.movie_files' | translate }}</span> {{ movieFileCount() }}</div>
+        }
+        @if (hasSeries()) {
+          <div><span class="font-semibold">{{ 'legend.episodes' | translate }}</span> {{ downloadedEpisodes() }} / {{ totalEpisodes() }}</div>
+        }
+        <div><span class="font-semibold">{{ 'legend.monitored' | translate }}</span> {{ monitoredCount() }}</div>
+        <div><span class="font-semibold">{{ 'legend.unmonitored' | translate }}</span> {{ list.total() - monitoredCount() }}</div>
+      </div>
+    </div>
+  }
+</div>

@@ -1,0 +1,45 @@
+<dialog #dialog class="modal">
+  <div class="modal-box w-[95%] max-w-7xl my-8 max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden p-0">
+    <div class="px-6 pt-6 pb-3 shrink-0">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-lg font-bold">{{ 'media_detail.download_section' | translate }}</h3>
+        <form method="dialog">
+          <button class="btn btn-sm btn-circle btn-ghost">✕</button>
+        </form>
+      </div>
+      <input
+        type="text"
+        class="input input-bordered input-sm w-full"
+        [placeholder]="'media_detail.custom_search_placeholder' | translate"
+        [ngModel]="customSearchQuery()"
+        (ngModelChange)="customSearchQueryChange.emit($event)"
+      />
+    </div>
+    <div class="flex-1 overflow-y-auto px-6">
+      @if (releasesLoading()) {
+        <div class="flex justify-center py-8">
+          <span class="loading loading-spinner loading-lg"></span>
+        </div>
+      } @else if (releasesError()) {
+        <div role="alert" class="alert alert-error text-sm">{{ releasesError() }}</div>
+      } @else if (releasesSearched() && releases().length === 0) {
+        <p class="text-sm text-base-content/60 py-4">{{ 'media_detail.releases_empty' | translate }}</p>
+      } @else if (releases().length) {
+        <app-releases-table
+          [releases]="releases()"
+          [grabBusy]="grabBusy()"
+          [grabState]="grabState()"
+          [canGrab]="canGrab()"
+          grabPrefix="r"
+          (grab)="grabRelease.emit($event)"
+        />
+      }
+    </div>
+    <div class="modal-action px-6 pb-4 pt-2 shrink-0">
+      <form method="dialog">
+        <button class="btn btn-sm">{{ 'common.close' | translate }}</button>
+      </form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>

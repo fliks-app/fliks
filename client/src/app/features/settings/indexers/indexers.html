@@ -1,0 +1,295 @@
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'settings.indexers.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">
+        {{ 'settings.indexers.subtitle' | translate }}
+      </p>
+    </div>
+    <button type="button" class="btn btn-primary self-start sm:self-auto" (click)="openCreate()">
+      {{ 'settings.indexers.new' | translate }}
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (listError()) {
+    <div role="alert" class="alert alert-error">{{ listError() }}</div>
+  } @else if (rows().length === 0) {
+    <p class="text-center py-12 text-base-content/50">
+      {{ 'settings.indexers.empty' | translate }}
+    </p>
+  } @else {
+    <div class="overflow-x-auto rounded-lg border border-base-200">
+      <table class="table table-zebra table-sm">
+        <thead>
+          <tr>
+            <th>{{ 'settings.indexers.col_name' | translate }}</th>
+            <th>{{ 'settings.indexers.col_priority' | translate }}</th>
+            <th>{{ 'settings.indexers.col_enabled' | translate }}</th>
+            <th class="text-end w-40">{{ 'settings.indexers.actions' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (ix of rows(); track ix.id) {
+            <tr>
+              <td class="font-medium">{{ ix.name }}</td>
+              <td class="tabular-nums">{{ ix.priority }}</td>
+              <td>
+                @if (ix.enabled) {
+                  <span class="badge badge-success badge-sm">{{ 'common.yes' | translate }}</span>
+                } @else {
+                  <span class="badge badge-ghost badge-sm">{{ 'common.no' | translate }}</span>
+                }
+              </td>
+              <td class="text-end">
+                <button type="button" class="btn btn-ghost btn-xs" (click)="openStats(ix)">
+                  {{ 'settings.indexers.stats' | translate }}
+                </button>
+                <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(ix)">
+                  {{ 'settings.indexers.edit' | translate }}
+                </button>
+                <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRow(ix)">
+                  {{ 'settings.indexers.delete' | translate }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>
+
+  <dialog #editorDialog class="modal">
+    <div class="modal-box max-w-2xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+      <div
+        class="px-5 sm:px-6 pt-4 pb-3 border-b border-base-200 flex justify-between items-start gap-3 shrink-0 bg-base-100"
+      >
+        <h2 class="text-lg font-bold leading-tight">
+          @if (editingId() === null) {
+            {{ 'settings.indexers.editor_create' | translate }}
+          } @else {
+            {{ 'settings.indexers.editor_edit' | translate }}
+          }
+        </h2>
+        <button
+          type="button"
+          class="btn btn-sm btn-ghost btn-circle shrink-0"
+          (click)="closeEditor()"
+          [attr.aria-label]="'common.close' | translate"
+        >
+          <svg lucideX class="h-5 w-5"></svg>
+        </button>
+      </div>
+      <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.indexers.field_name' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formName()"
+            (ngModelChange)="formName.set($event)"
+          />
+        </label>
+
+        <label class="form-control w-full">
+          <span class="label-text">Torznab base URL</span>
+          <input
+            type="url"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formTorznabBase()"
+            (ngModelChange)="formTorznabBase.set($event)"
+            placeholder="http://prowlarr:9696/1/api"
+          />
+        </label>
+        <label class="form-control w-full">
+          <span class="label-text">API key</span>
+          <input
+            type="password"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formTorznabKey()"
+            (ngModelChange)="formTorznabKey.set($event)"
+          />
+        </label>
+
+        <div class="flex flex-col gap-2 pt-2 border-t border-base-200">
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              class="btn btn-outline btn-sm"
+              (click)="testConnection()"
+              [disabled]="testLoading() || !formTorznabBase().trim()"
+            >
+              @if (testLoading()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+              {{ 'settings.indexers.test_connection' | translate }}
+            </button>
+          </div>
+          @if (testResult(); as tr) {
+            <div
+              role="alert"
+              class="alert text-sm py-2"
+              [class.alert-success]="tr.ok"
+              [class.alert-error]="!tr.ok"
+            >
+              {{ tr.message }}
+            </div>
+          }
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.indexers.field_priority' | translate }}</span>
+            <input
+              type="number"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formPriority()"
+              (ngModelChange)="formPriority.set(+$event)"
+              min="0"
+            />
+          </label>
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.indexers.field_min_seeders' | translate }}</span>
+            <input
+              type="number"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formMinSeeders()"
+              (ngModelChange)="formMinSeeders.set(+$event)"
+              min="0"
+            />
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.indexers.field_seed_ratio' | translate }}</span>
+            <input
+              type="number"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formSeedRatio()"
+              (ngModelChange)="formSeedRatio.set(+$event)"
+              min="0"
+              step="0.1"
+            />
+            <div class="label">
+              <span class="label-text-alt text-base-content/50">{{ 'settings.indexers.seed_ratio_hint' | translate }}</span>
+            </div>
+          </label>
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.indexers.field_max_retention' | translate }}</span>
+            <input
+              type="number"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formMaxRetentionDays()"
+              (ngModelChange)="formMaxRetentionDays.set($event ? +$event : null)"
+              min="0"
+            />
+            <div class="label">
+              <span class="label-text-alt text-base-content/50">{{ 'settings.indexers.max_retention_hint' | translate }}</span>
+            </div>
+          </label>
+        </div>
+        <label class="label cursor-pointer justify-start gap-3">
+          <input
+            type="checkbox"
+            class="toggle toggle-sm"
+            [ngModel]="formEnabled()"
+            (ngModelChange)="formEnabled.set($event)"
+          />
+          <span class="label-text">{{ 'settings.indexers.field_enabled' | translate }}</span>
+        </label>
+        <label class="label cursor-pointer justify-start gap-3">
+          <input
+            type="checkbox"
+            class="toggle toggle-sm"
+            [ngModel]="formEnableSearch()"
+            (ngModelChange)="formEnableSearch.set($event)"
+          />
+          <span class="label-text">{{ 'settings.indexers.field_enable_search' | translate }}</span>
+        </label>
+
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.indexers.field_unknown_language' | translate }}</span>
+          <select
+            class="select select-bordered select-sm w-full"
+            [ngModel]="formUnknownLanguage()"
+            (ngModelChange)="formUnknownLanguage.set($event)"
+          >
+            <option value="">{{ 'settings.indexers.unknown_language_none' | translate }}</option>
+            @for (l of languages(); track l.isoCode) {
+              <option [value]="l.isoCode">{{ l.name }} ({{ l.isoCode }})</option>
+            }
+          </select>
+          <div class="label">
+            <span class="label-text-alt text-base-content/50">{{ 'settings.indexers.unknown_language_hint' | translate }}</span>
+          </div>
+        </label>
+
+
+      </div>
+      <div class="modal-action shrink-0 px-5 sm:px-6 pb-4 pt-2 border-t border-base-200 bg-base-100">
+        <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
+          {{ 'settings.indexers.cancel' | translate }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="save()"
+          [disabled]="saving()"
+        >
+          @if (saving()) {
+            <span class="loading loading-spinner loading-sm"></span>
+          }
+          {{ 'settings.indexers.save' | translate }}
+        </button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">close</button>
+    </form>
+  </dialog>
+
+  <dialog #statsDialog class="modal">
+    <div class="modal-box max-w-2xl">
+      <h2 class="text-lg font-bold">{{ statsIndexerName() }} — {{ 'settings.indexers.stats_title' | translate }}</h2>
+      @if (statsLoading()) {
+        <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+      } @else if (statsData().length === 0) {
+        <p class="text-center py-8 text-base-content/50">{{ 'settings.indexers.stats_empty' | translate }}</p>
+      } @else {
+        <div class="overflow-x-auto mt-4 rounded-lg border border-base-200">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>{{ 'settings.indexers.stats_date' | translate }}</th>
+                <th class="text-right">{{ 'settings.indexers.stats_queries' | translate }}</th>
+                <th class="text-right">{{ 'settings.indexers.stats_avg_time' | translate }}</th>
+                <th class="text-right">{{ 'settings.indexers.stats_results' | translate }}</th>
+                <th class="text-right">{{ 'settings.indexers.stats_errors' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of statsData(); track row.date) {
+                <tr>
+                  <td class="tabular-nums">{{ row.date }}</td>
+                  <td class="text-right tabular-nums">{{ row.queries }}</td>
+                  <td class="text-right tabular-nums">{{ row.avgResponseMs }}ms</td>
+                  <td class="text-right tabular-nums">{{ row.totalResults }}</td>
+                  <td class="text-right tabular-nums" [class.text-error]="row.errors > 0">{{ row.errors }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+      <div class="modal-action">
+        <button type="button" class="btn btn-ghost" (click)="closeStats()">{{ 'common.close' | translate }}</button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button type="button" (click)="closeStats()">close</button>
+    </form>
+  </dialog>
