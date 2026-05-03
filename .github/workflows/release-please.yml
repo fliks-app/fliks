@@ -1,0 +1,33 @@
+# Reads conventional commits since the last release tag and opens (or
+# updates) a "release PR" that bumps the version in
+# .release-please-manifest.json + the package.json files listed in
+# release-please-config.json's `extra-files`, and appends an auto-
+# generated CHANGELOG.md entry. Merging the release PR creates a git
+# tag `v<X.Y.Z>` and a GitHub release whose body mirrors the
+# changelog entry.
+#
+# The version bump rules:
+#   - `feat:`            → minor (1.0.0 → 1.1.0)
+#   - `fix:`             → patch (1.0.0 → 1.0.1)
+#   - `BREAKING CHANGE:` → major (1.0.0 → 2.0.0)
+#   - `chore`, `docs`, … → no bump (they show in the changelog under
+#                         "Miscellaneous Chores" only if explicitly
+#                         configured to)
+name: Release please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
