@@ -14,6 +14,7 @@ import { ImportApiDto } from './dto/import-api.dto';
 import { TestConnectionDto } from './dto/test-connection.dto';
 import { ScanFolderDto } from './dto/scan-folder.dto';
 import { ConfirmDiskImportDto } from './dto/confirm-disk-import.dto';
+import { PreviewImportDto } from './dto/preview-import.dto';
 
 @Controller('imports')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
@@ -39,6 +40,12 @@ export class ImportsController {
     return this.importRadarrService.testConnection(dto.url, dto.apiKey);
   }
 
+  @Post('radarr/preview')
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
+  previewRadarr(@Body() dto: PreviewImportDto) {
+    return this.importRadarrService.previewRootFolders(dto.url, dto.apiKey);
+  }
+
   @Post('radarr')
   @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
   importRadarrApi(@Body() dto: ImportApiDto): Promise<ApiImportResult> {
@@ -47,6 +54,7 @@ export class ImportsController {
       dto.apiKey,
       dto.mode ?? 'skip',
       dto.importSubtitles ?? false,
+      dto.pathMappings,
       {
         targetLibraryId: dto.targetLibraryId,
         newLibraryName: dto.newLibraryName,
@@ -64,6 +72,12 @@ export class ImportsController {
     return this.importSonarrService.testConnection(dto.url, dto.apiKey);
   }
 
+  @Post('sonarr/preview')
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
+  previewSonarr(@Body() dto: PreviewImportDto) {
+    return this.importSonarrService.previewRootFolders(dto.url, dto.apiKey);
+  }
+
   @Post('sonarr')
   @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
   importSonarrApi(@Body() dto: ImportApiDto): Promise<ApiImportResult> {
@@ -72,6 +86,7 @@ export class ImportsController {
       dto.apiKey,
       dto.mode ?? 'skip',
       dto.importSubtitles ?? false,
+      dto.pathMappings,
       {
         targetLibraryId: dto.targetLibraryId,
         newLibraryName: dto.newLibraryName,
