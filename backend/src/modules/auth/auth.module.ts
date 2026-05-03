@@ -15,6 +15,7 @@ import { EventsModule } from '../scheduler/events.module';
 import { PairingRequest } from './pairing/entities/pairing-request.entity';
 import { PairingService } from './pairing/pairing.service';
 import { PairingController } from './pairing/pairing.controller';
+import { getJwtSecret } from '../../common/utils/jwt-secret';
 
 @Module({
   imports: [
@@ -26,7 +27,10 @@ import { PairingController } from './pairing/pairing.controller';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.getOrThrow<string>('JWT_SECRET'),
+        // Resolved from JWT_SECRET env, then <conf-dir>/.jwt-secret,
+        // then auto-generated on first boot. See
+        // common/utils/jwt-secret.ts.
+        secret: getJwtSecret(),
         signOptions: {
           expiresIn: config.get('JWT_EXPIRATION', '7d'),
         },

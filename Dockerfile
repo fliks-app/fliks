@@ -70,6 +70,13 @@ COPY --from=client-build /app/dist/client/browser ./client
 ENV NODE_ENV=production
 ENV SERVE_STATIC_PATH=/app/client
 
+# Persistent conf dir for auto-generated server-side secrets (JWT
+# signing key, future encryption keys, etc.). Mount this as a Docker
+# volume so the secret survives container restarts and image
+# rebuilds. Permissions stay 0700; the secret files inside are 0600.
+RUN mkdir -p /app/conf && chmod 700 /app/conf
+VOLUME /app/conf
+
 EXPOSE 4848
 
 CMD ["node", "dist/main"]
