@@ -7,8 +7,13 @@ android {
         applicationId "media.fliks.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
+        // versionCode is monotonic and managed by the build workflow
+        // (derived from `git rev-list --count HEAD` so each merge to
+        // main produces a strictly-increasing value Play Store will
+        // accept). The committed value here is just a sane local
+        // default; CI overrides it before assembling release builds.
         versionCode 1
-        versionName "1.0"
+        versionName "1.0.0" // x-release-please-version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

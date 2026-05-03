@@ -16,7 +16,9 @@
           "type": "json",
           "path": "client/package.json",
           "jsonpath": "$.version"
-        }
+        },
+        "client/android/app/build.gradle",
+        "cast-receiver/index.html"
       ]
     }
   }
