@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
+import { RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucideDownload } from '@lucide/angular';
 import { firstValueFrom } from 'rxjs';
@@ -49,6 +50,28 @@ interface ArrImportResult {
   subtitlesImported?: number;
 }
 
+interface PathMapping {
+  remotePath: string;
+  localRootFolderId: number | null;
+  ignore?: boolean;
+}
+
+interface PreviewRow {
+  remotePath: string;
+  suggestedLocalRootFolderId: number | null;
+}
+
+interface PreviewImportResult {
+  remoteRootFolders: PreviewRow[];
+  localRootFolders: { id: number; path: string; libraryId: number | null }[];
+}
+
+type Provider = 'radarr' | 'sonarr';
+
+/** Sentinel passed through the mapping select in place of a numeric RootFolder id. */
+const IGNORE_VALUE = '__ignore__' as const;
+type MappingSelectValue = number | typeof IGNORE_VALUE | null;
+
 /**
  * "new" sentinel for the library select -> tells the import to create a new
  * library (optionally with `newLibraryName`). null/undefined means "auto-create
@@ -58,7 +81,13 @@ type LibrarySelection = number | 'new' | null;
 
 @Component({
   selector: 'app-data-imports-settings',
-  imports: [FormsModule, TranslateModule, LucideDownload, ImportDiskComponent],
+  imports: [
+    FormsModule,
+    RouterLink,
+    TranslateModule,
+    LucideDownload,
+    ImportDiskComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './data-imports.html',
 })
@@ -131,6 +160,29 @@ export class DataImportsSettingsComponent implements OnInit {
   } | null>(null);
   readonly sonarrResult = signal<ArrImportResult | null>(null);
   readonly sonarrError = signal('');
+
+  // ---- Path mapping wizard ----
+  readonly radarrPreview = signal<PreviewImportResult | null>(null);
+  readonly radarrMappings = signal<PathMapping[]>([]);
+  readonly radarrPreviewing = signal(false);
+  readonly radarrShowWizard = signal(false);
+  readonly radarrCanConfirm = computed(() =>
+    this.radarrMappings().every(
+      (m) => m.ignore || m.localRootFolderId != null,
+    ),
+  );
+
+  readonly sonarrPreview = signal<PreviewImportResult | null>(null);
+  readonly sonarrMappings = signal<PathMapping[]>([]);
+  readonly sonarrPreviewing = signal(false);
+  readonly sonarrShowWizard = signal(false);
+  readonly sonarrCanConfirm = computed(() =>
+    this.sonarrMappings().every(
+      (m) => m.ignore || m.localRootFolderId != null,
+    ),
+  );
+
+  readonly IGNORE_VALUE = IGNORE_VALUE;
 
   private lastHandledEvent: unknown = null;
 
@@ -437,73 +489,175 @@ export class DataImportsSettingsComponent implements OnInit {
     return {};
   }
 
-  async importRadarr() {
-    const url = this.radarrUrl().trim();
-    const apiKey = this.radarrApiKey().trim();
+  /**
+   * Step 1 of the import: ask the backend for *arr root folders + suggestions.
+   * Three branches:
+   *   - *arr exposes 0 root folders → skip the wizard and import with empty mappings
+   *   - Fliks has 0 root folders     → open wizard in "no roots configured" state
+   *   - otherwise                    → open wizard with one row per remote root
+   */
+  async openRadarrWizard() {
+    await this.openWizard('radarr');
+  }
+
+  async openSonarrWizard() {
+    await this.openWizard('sonarr');
+  }
+
+  private async openWizard(provider: Provider) {
+    const url = this.urlSig(provider)().trim();
+    const apiKey = this.apiKeySig(provider)().trim();
     if (!url || !apiKey) return;
 
-    // Persist before launching so the next reload of the page pre-fills.
-    await this.saveRadarrCredentials();
+    if (provider === 'radarr') await this.saveRadarrCredentials();
+    else await this.saveSonarrCredentials();
 
-    this.radarrLoading.set(true);
-    this.radarrResult.set(null);
-    this.radarrError.set('');
+    this.previewingSig(provider).set(true);
+    this.errorSig(provider).set('');
+    this.resultSig(provider).set(null);
     try {
-      const result = await firstValueFrom(
-        this.http.post<ArrImportResult>('/api/imports/radarr', {
-          url,
-          apiKey,
-          mode: this.radarrMode(),
-          importSubtitles: this.radarrImportSubs(),
-          ...this.libraryBody(
-            this.radarrLibrary(),
-            this.radarrNewLibraryName(),
-          ),
-        }),
+      const preview = await firstValueFrom(
+        this.http.post<PreviewImportResult>(
+          `/api/imports/${provider}/preview`,
+          { url, apiKey },
+        ),
       );
-      this.radarrResult.set(result);
+      this.previewSig(provider).set(preview);
+      if (preview.remoteRootFolders.length === 0) {
+        await this.confirmImport(provider, []);
+        return;
+      }
+      this.mappingsSig(provider).set(
+        preview.remoteRootFolders.map((row) => ({
+          remotePath: row.remotePath,
+          localRootFolderId: row.suggestedLocalRootFolderId,
+        })),
+      );
+      this.showWizardSig(provider).set(true);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      this.radarrError.set(
-        httpErr.error?.message ?? this.translate.instant('import.error'),
+      this.errorSig(provider).set(
+        httpErr.error?.message ??
+          this.translate.instant('import.path_wizard.preview_error'),
       );
     } finally {
-      this.radarrLoading.set(false);
+      this.previewingSig(provider).set(false);
     }
   }
 
-  async importSonarr() {
-    const url = this.sonarrUrl().trim();
-    const apiKey = this.sonarrApiKey().trim();
+  cancelWizard(provider: Provider) {
+    this.showWizardSig(provider).set(false);
+    this.previewSig(provider).set(null);
+    this.mappingsSig(provider).set([]);
+  }
+
+  setMapping(provider: Provider, remotePath: string, value: MappingSelectValue) {
+    this.mappingsSig(provider).update((list) =>
+      list.map((m) =>
+        m.remotePath === remotePath
+          ? value === IGNORE_VALUE
+            ? { remotePath, localRootFolderId: null, ignore: true }
+            : { remotePath, localRootFolderId: value }
+          : m,
+      ),
+    );
+  }
+
+  /**
+   * Filter local root folders for the picker: a row is eligible when its
+   * library matches the import target or is unassigned. The backend enforces
+   * the same rule; this is just to hide the unselectable options.
+   */
+  eligibleLocalRootFolders(provider: Provider) {
+    const preview = this.previewSig(provider)();
+    if (!preview) return [];
+    const target =
+      provider === 'radarr' ? this.radarrLibrary() : this.sonarrLibrary();
+    return preview.localRootFolders.filter((rf) => {
+      if (rf.libraryId == null) return true;
+      return typeof target === 'number' && rf.libraryId === target;
+    });
+  }
+
+  async confirmRadarrImport() {
+    await this.confirmImport('radarr', this.radarrMappings());
+  }
+
+  async confirmSonarrImport() {
+    await this.confirmImport('sonarr', this.sonarrMappings());
+  }
+
+  private async confirmImport(provider: Provider, mappings: PathMapping[]) {
+    const url = this.urlSig(provider)().trim();
+    const apiKey = this.apiKeySig(provider)().trim();
     if (!url || !apiKey) return;
 
-    // Persist before launching so the next reload of the page pre-fills.
-    await this.saveSonarrCredentials();
+    this.showWizardSig(provider).set(false);
+    this.loadingSig(provider).set(true);
+    this.resultSig(provider).set(null);
+    this.errorSig(provider).set('');
 
-    this.sonarrLoading.set(true);
-    this.sonarrResult.set(null);
-    this.sonarrError.set('');
+    const lib =
+      provider === 'radarr' ? this.radarrLibrary() : this.sonarrLibrary();
+    const newLibName =
+      provider === 'radarr'
+        ? this.radarrNewLibraryName()
+        : this.sonarrNewLibraryName();
+    const mode = provider === 'radarr' ? this.radarrMode() : this.sonarrMode();
+    const importSubs =
+      provider === 'radarr'
+        ? this.radarrImportSubs()
+        : this.sonarrImportSubs();
+
     try {
       const result = await firstValueFrom(
-        this.http.post<ArrImportResult>('/api/imports/sonarr', {
+        this.http.post<ArrImportResult>(`/api/imports/${provider}`, {
           url,
           apiKey,
-          mode: this.sonarrMode(),
-          importSubtitles: this.sonarrImportSubs(),
-          ...this.libraryBody(
-            this.sonarrLibrary(),
-            this.sonarrNewLibraryName(),
-          ),
+          mode,
+          importSubtitles: importSubs,
+          pathMappings: mappings,
+          ...this.libraryBody(lib, newLibName),
         }),
       );
-      this.sonarrResult.set(result);
+      this.resultSig(provider).set(result);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      this.sonarrError.set(
+      this.errorSig(provider).set(
         httpErr.error?.message ?? this.translate.instant('import.error'),
       );
     } finally {
-      this.sonarrLoading.set(false);
+      this.loadingSig(provider).set(false);
     }
+  }
+
+  // ---- Provider signal accessors (avoids duplicating the wizard pipeline) ----
+
+  private urlSig(p: Provider) {
+    return p === 'radarr' ? this.radarrUrl : this.sonarrUrl;
+  }
+  private apiKeySig(p: Provider) {
+    return p === 'radarr' ? this.radarrApiKey : this.sonarrApiKey;
+  }
+  private previewSig(p: Provider) {
+    return p === 'radarr' ? this.radarrPreview : this.sonarrPreview;
+  }
+  private mappingsSig(p: Provider) {
+    return p === 'radarr' ? this.radarrMappings : this.sonarrMappings;
+  }
+  private previewingSig(p: Provider) {
+    return p === 'radarr' ? this.radarrPreviewing : this.sonarrPreviewing;
+  }
+  private showWizardSig(p: Provider) {
+    return p === 'radarr' ? this.radarrShowWizard : this.sonarrShowWizard;
+  }
+  private loadingSig(p: Provider) {
+    return p === 'radarr' ? this.radarrLoading : this.sonarrLoading;
+  }
+  private resultSig(p: Provider) {
+    return p === 'radarr' ? this.radarrResult : this.sonarrResult;
+  }
+  private errorSig(p: Provider) {
+    return p === 'radarr' ? this.radarrError : this.sonarrError;
   }
 }
