@@ -58,6 +58,11 @@ services:
       - /path/to/your/media:/medias:ro
 
       # ---- App-managed storage -----------------------------------------
+      # Server-side secrets auto-generated on first boot (JWT signing
+      # key, future encryption keys). Must be persisted across container
+      # restarts — losing this file invalidates every JWT and forces all
+      # users to log back in. Permissions inside are 0700 / 0600.
+      - fliks_conf:/app/conf
       # Cached TMDB / fanart images, sprite sheets for player seek preview.
       - fliks_images:/app/images
       # Optional: persistent transcoding cache (HLS segments, etc.)
@@ -77,5 +82,6 @@ services:
 
 volumes:
   fliks_pgdata:
+  fliks_conf:
   fliks_images:
   fliks_transcode:
