@@ -59,7 +59,7 @@
               </div>
             </div>
             <span class="text-xs sm:text-sm text-center font-medium truncate w-full">{{ person.name }}</span>
-            @if (person.departments?.length) {
+            @if (person.departments.length) {
               <span class="text-[10px] text-base-content/50 -mt-1.5 truncate w-full text-center">{{ person.departments.join(', ') }}</span>
             }
           </a>
