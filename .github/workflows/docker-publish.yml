@@ -1,0 +1,74 @@
+# Builds and publishes the Fliks Docker image to GHCR on:
+#   - every release tag `v*`           → semver tags (1.2.3, 1.2, 1, latest)
+#   - every push to main               → `main` tag for downstream tests
+#   - manual workflow_dispatch         → `manual-<sha>` tag, ad-hoc rebuilds
+#
+# First push leaves the package private — flip it to Public once via
+# https://github.com/orgs/fliks-app/packages → fliks → settings →
+# Change visibility. After that, TrueNAS users (and anyone else) can
+# `docker pull ghcr.io/fliks-app/fliks:<version>` without auth.
+name: Publish Docker image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Tag pushes (release-please's v1.2.3 produces all of these)
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # Branch pushes (main → :main, useful for downstream smoke tests)
+            type=ref,event=branch
+            # Manual / ad-hoc runs
+            type=raw,value=manual-{{sha}},enable=${{ github.event_name == 'workflow_dispatch' }}
+            # `:latest` only on tag pushes — never on a main commit, so a
+            # broken main never overrides a stable tag for users tracking
+            # `:latest`.
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          # amd64 only for now — TrueNAS SCALE is x86, the ARM hosts
+          # (Pi 5, Apple Silicon containers, ARM NAS) come in a follow-up
+          # once the image is proven on amd64.
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
