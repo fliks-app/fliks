@@ -29,5 +29,11 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v4
         with:
+          # Personal access token instead of the default GITHUB_TOKEN
+          # so the tag + release commit it creates can trigger
+          # *other* workflows (notably docker-publish on the v* tag).
+          # GitHub blocks the default token from triggering further
+          # runs as an anti-loop measure.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
