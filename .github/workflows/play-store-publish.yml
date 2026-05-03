@@ -1,0 +1,117 @@
+# Builds a signed AAB of the Fliks Android client and uploads it to
+# the Play Store internal track on every release tag (`v*` produced by
+# release-please) plus on manual `workflow_dispatch` for ad-hoc
+# re-uploads to other tracks.
+#
+# Promotion from `internal` → `alpha`/`beta`/`production` stays a
+# manual click in Play Console; this workflow never touches anything
+# beyond what the dispatch input asks for.
+#
+# Required repo secrets (one-shot setup, see
+# `plans/play-store-automation.plan.md`):
+#   - ANDROID_UPLOAD_KEYSTORE_BASE64
+#   - ANDROID_UPLOAD_KEYSTORE_PASSWORD
+#   - ANDROID_UPLOAD_KEY_ALIAS
+#   - ANDROID_UPLOAD_KEY_PASSWORD
+#   - PLAY_STORE_SERVICE_ACCOUNT_JSON
+name: Publish Android to Play Store
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      track:
+        description: 'Play Store track'
+        type: choice
+        options: [internal, alpha, beta, production]
+        default: internal
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history needed so `git rev-list --count HEAD` produces
+          # a meaningful commit count for the versionCode.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install client dependencies
+        run: npm ci
+
+      - name: Build Angular client
+        run: npm run build
+
+      - name: Capacitor sync to Android shell
+        run: npx cap sync android
+
+      - name: Compute versionCode from commit count
+        id: vcode
+        run: echo "value=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+        working-directory: ${{ github.workspace }}
+
+      - name: Decode upload keystore
+        run: |
+          echo "${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}" \
+            | base64 -d > android/app/fliks-upload.jks
+
+      - name: Assemble signed release AAB
+        env:
+          ORG_GRADLE_PROJECT_FLIKS_VERSION_CODE: ${{ steps.vcode.outputs.value }}
+          ORG_GRADLE_PROJECT_FLIKS_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_FLIKS_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_FLIKS_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: |
+          cd android
+          ./gradlew bundleRelease
+
+      - name: Extract latest release notes from CHANGELOG.md
+        # release-please writes one section per release in the format
+        # `## [X.Y.Z]` (followed by the date). Awk grabs everything
+        # between the first such header and the next one — that is
+        # the body of the most recent release. The result is dropped
+        # into the path the upload action reads (en-US default).
+        run: |
+          mkdir -p android/app/src/main/play/release-notes/en-US
+          awk '
+            /^## \[/ { count++; if (count > 1) exit }
+            count == 1 { print }
+          ' ../CHANGELOG.md \
+            | tail -n +2 \
+            > android/app/src/main/play/release-notes/en-US/default.txt
+          # Play Store rejects empty release notes — fail loudly rather
+          # than upload a blank section.
+          if [ ! -s android/app/src/main/play/release-notes/en-US/default.txt ]; then
+            echo "::error::Could not extract release notes from CHANGELOG.md"
+            exit 1
+          fi
+
+      - name: Upload to Play Store
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
+          packageName: media.fliks.app
+          releaseFiles: client/android/app/build/outputs/bundle/release/app-release.aab
+          track: ${{ github.event.inputs.track || 'internal' }}
+          status: completed
+          whatsNewDirectory: client/android/app/src/main/play/release-notes

@@ -41,6 +41,10 @@ coverage/
 Thumbs.db
 
 # Project-specific
+# Android signing keystore — never commit. Local copy lives outside
+# the repo (1Password / etc.); CI receives it as a base64-encoded
+# secret decoded at build time.
+client/android/app/fliks-upload.jks
 volumes/*
 /backend/images/
 scripts/
