@@ -29,12 +29,6 @@ export class GeneralSettingsComponent implements OnInit {
   readonly publicUrl = signal('');
   readonly savingServer = signal(false);
 
-  // Providers
-  readonly tmdbApiKey = signal('');
-  readonly tvdbApiKey = signal('');
-  readonly tvdbPin = signal('');
-  readonly savingProviders = signal(false);
-
   // Automation
   readonly searchMissingAuto = signal('true');
   readonly rssSyncInterval = signal('15');
@@ -50,9 +44,6 @@ export class GeneralSettingsComponent implements OnInit {
       const map = await this.api.getAll();
       this.serverName.set(map['server_name'] ?? '');
       this.publicUrl.set(map['public_url'] ?? '');
-      this.tmdbApiKey.set(map['tmdb_api_key'] ?? '');
-      this.tvdbApiKey.set(map['tvdb_api_key'] ?? '');
-      this.tvdbPin.set(map['tvdb_pin'] ?? '');
       this.searchMissingAuto.set(map['search_missing_auto'] ?? 'true');
       this.rssSyncInterval.set(map['rss_sync_interval'] ?? '15');
       this.postImportScript.set(map['post_import_script'] ?? '');
@@ -76,18 +67,6 @@ export class GeneralSettingsComponent implements OnInit {
       });
       this.toast.success(this.translate.instant('settings.general.saved'));
     } catch { /* interceptor */ } finally { this.savingServer.set(false); }
-  }
-
-  async saveProviders() {
-    this.savingProviders.set(true);
-    try {
-      await this.api.setBulk({
-        tmdb_api_key: this.tmdbApiKey(),
-        tvdb_api_key: this.tvdbApiKey(),
-        tvdb_pin: this.tvdbPin() || null,
-      });
-      this.toast.success(this.translate.instant('settings.general.saved'));
-    } catch { /* interceptor */ } finally { this.savingProviders.set(false); }
   }
 
   async saveAutomation() {

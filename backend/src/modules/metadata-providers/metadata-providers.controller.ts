@@ -153,12 +153,12 @@ export class MetadataProvidersController {
       searchTvShow: any;
     }) => Promise<MetadataSearchResult[]>,
   ): Promise<MetadataSearchResult[]> {
-    const provider = await this.registry.resolve(providerName ?? null);
+    const provider = this.registry.resolve(providerName ?? null);
     let results = await searchFn(provider);
 
     // Fallback if empty and another provider is available
     if (!results.length) {
-      const fallback = await this.registry.getFallback(provider.name);
+      const fallback = this.registry.getFallback(provider.name);
       if (fallback) {
         results = await searchFn(fallback);
       }
