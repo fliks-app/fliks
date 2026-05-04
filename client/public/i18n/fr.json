@@ -279,8 +279,8 @@
     "path_wizard": {
       "title": "Mappage des dossiers racines",
       "description": "Associez chaque dossier racine de Radarr/Sonarr à un dossier racine Fliks existant, ou ignorez-le. Les chemins des conteneurs Radarr/Sonarr peuvent différer de ceux montés dans Fliks ; le mappage rétablit la correspondance.",
-      "no_root_folders": "Aucun dossier racine Fliks compatible n'est configuré. Créez-en un dans Réglages → Bibliothèques avant de relancer l'import.",
-      "go_to_root_folders": "Configurer les dossiers racines",
+      "no_root_folders": "Aucun dossier racine Fliks compatible n'est configuré. Les dossiers racines se définissent via les bibliothèques — créez ou éditez une bibliothèque avant de relancer l'import.",
+      "go_to_root_folders": "Configurer les bibliothèques",
       "option_ignore": "Ignorer",
       "confirm": "Confirmer l'import",
       "cancel": "Annuler",
