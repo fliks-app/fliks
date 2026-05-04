@@ -2489,8 +2489,9 @@ export class MediaService {
           }
         } else {
           this.log.warn(
-            `Rescan[media #${mediaId}]: series file name has no SxxEyy pattern — "${filename}" (file will not link to an episode)`,
+            `Rescan[media #${mediaId}]: series file name has no SxxEyy pattern — "${filename}" (skipped, alien file in series folder)`,
           );
+          continue;
         }
       }
 
