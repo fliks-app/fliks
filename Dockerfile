@@ -70,6 +70,15 @@ COPY --from=client-build /app/dist/client/browser ./client
 ENV NODE_ENV=production
 ENV SERVE_STATIC_PATH=/app/client
 
+# Provider API keys baked at build time from CI secrets. Empty in local
+# builds unless `--build-arg TMDB_API_KEY=… --build-arg TVDB_API_KEY=…`
+# is passed; the published image carries the keys configured in the
+# repo's GitHub Actions secrets.
+ARG TMDB_API_KEY=""
+ARG TVDB_API_KEY=""
+ENV TMDB_API_KEY=${TMDB_API_KEY}
+ENV TVDB_API_KEY=${TVDB_API_KEY}
+
 # Persistent conf dir for auto-generated server-side secrets (JWT
 # signing key, future encryption keys, etc.). Mount this as a Docker
 # volume so the secret survives container restarts and image

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 import {
   IMetadataProvider,
@@ -9,7 +10,6 @@ import {
   PersonCombinedCredits,
   ExternalIdResult,
 } from '../interfaces/metadata-provider.interface';
-import { SettingsService } from '../../settings/settings.service';
 import type {
   TvdbResponse,
   TvdbLoginResponse,
@@ -43,7 +43,7 @@ export class TvdbProvider implements IMetadataProvider {
   private token: string | null = null;
   private tokenExpiresAt = 0;
 
-  constructor(private readonly settings: SettingsService) {
+  constructor(private readonly config: ConfigService) {
     this.client = axios.create({ baseURL: TVDB_BASE, timeout: 15000 });
   }
 
@@ -51,16 +51,12 @@ export class TvdbProvider implements IMetadataProvider {
 
   private async ensureAuth(): Promise<void> {
     if (this.token && Date.now() < this.tokenExpiresAt) return;
-    const apiKey = await this.settings.get('tvdb_api_key');
+    const apiKey = this.config.get<string>('TVDB_API_KEY', '');
     if (!apiKey) throw new Error('TVDB API key not configured');
-    const pin = await this.settings.get('tvdb_pin');
-
-    const body: Record<string, string> = { apikey: apiKey };
-    if (pin) body.pin = pin;
 
     const { data } = await axios.post<TvdbResponse<TvdbLoginResponse>>(
       `${TVDB_BASE}/login`,
-      body,
+      { apikey: apiKey },
     );
     this.token = data.data.token;
     // Token valid 30 days, refresh after 25 days
