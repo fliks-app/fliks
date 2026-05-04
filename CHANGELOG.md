@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.0](https://github.com/fliks-app/fliks/compare/v1.3.1...v1.4.0) (2026-05-04)
+
+
+### Features
+
+* **providers:** bake TMDB & TVDB keys into image at build time ([#30](https://github.com/fliks-app/fliks/issues/30)) ([5380a45](https://github.com/fliks-app/fliks/commit/5380a45c0fc20379c091eb3cb0fb82a78b6350cf))
+
+
+### Bug Fixes
+
+* **i18n:** point empty-state CTA at libraries, not root folders ([#28](https://github.com/fliks-app/fliks/issues/28)) ([e5ad486](https://github.com/fliks-app/fliks/commit/e5ad48650cc2b0bdd7b639df1444dc13de9c4567))
+* **rescan:** skip non-episode files in series folders, drop orphan rows ([#31](https://github.com/fliks-app/fliks/issues/31)) ([6f5fe03](https://github.com/fliks-app/fliks/commit/6f5fe03cc2c5756ffa8671caafaf4034872e86d5))
+* **system:** read version from package.json, not npm env var ([#29](https://github.com/fliks-app/fliks/issues/29)) ([2a41be4](https://github.com/fliks-app/fliks/commit/2a41be414657589a418f46b55c0de9c68d09dbf7))
+
 ## [1.3.1](https://github.com/fliks-app/fliks/compare/v1.3.0...v1.3.1) (2026-05-03)
 
 
