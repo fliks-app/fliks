@@ -34,6 +34,17 @@ import { PlaybackService } from '../streaming/playback.service';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';
 
+const APP_VERSION: string = (() => {
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'),
+    ) as { version?: string };
+    return pkg.version ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+})();
+
 export interface ActiveStreamDto {
   sessionId: string;
   userId: number | null;
@@ -140,7 +151,7 @@ export class SystemController {
     ]);
 
     return {
-      version: process.env.npm_package_version ?? '0.1.0',
+      version: APP_VERSION,
       uptimeSeconds: Math.floor(process.uptime()),
       database: dbStatus,
       indexers,
