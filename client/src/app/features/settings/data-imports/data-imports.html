@@ -499,9 +499,9 @@
             <div role="alert" class="alert alert-warning mt-4 text-sm">
               <div>
                 <p>{{ 'import.path_wizard.no_root_folders' | translate }}</p>
-                <a routerLink="/settings/libraries" class="btn btn-sm btn-primary mt-3" (click)="cancelWizard('radarr')">
+                <button type="button" class="btn btn-sm btn-primary mt-3" (click)="goToLibraries('radarr')">
                   {{ 'import.path_wizard.go_to_root_folders' | translate }}
-                </a>
+                </button>
               </div>
             </div>
           } @else {
@@ -560,9 +560,9 @@
             <div role="alert" class="alert alert-warning mt-4 text-sm">
               <div>
                 <p>{{ 'import.path_wizard.no_root_folders' | translate }}</p>
-                <a routerLink="/settings/libraries" class="btn btn-sm btn-primary mt-3" (click)="cancelWizard('sonarr')">
+                <button type="button" class="btn btn-sm btn-primary mt-3" (click)="goToLibraries('sonarr')">
                   {{ 'import.path_wizard.go_to_root_folders' | translate }}
-                </a>
+                </button>
               </div>
             </div>
           } @else {
