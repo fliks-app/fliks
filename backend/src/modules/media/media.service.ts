@@ -184,7 +184,7 @@ export class MediaService {
    * Cross-references IDs between providers when possible.
    */
   async importMedia(dto: ImportMediaDto): Promise<Media> {
-    const provider = await this.providerRegistry.resolve(dto.provider ?? null);
+    const provider = this.providerRegistry.resolve(dto.provider ?? null);
 
     // Check for existing media (by any known ID)
     const existingCheck: any[] = [];
@@ -1487,13 +1487,13 @@ export class MediaService {
     }
 
     // 4. Fallback: use whichever ID + provider is available
-    if (media.tmdbId && (await this.providerRegistry.isAvailable('tmdb'))) {
+    if (media.tmdbId && this.providerRegistry.isAvailable('tmdb')) {
       this.log.log(
         `resolveProvider: ${label} — fallback to tmdb (tmdbId=${media.tmdbId})`,
       );
       return { provider: this.tmdb, externalId: String(media.tmdbId) };
     }
-    if (media.tvdbId && (await this.providerRegistry.isAvailable('tvdb'))) {
+    if (media.tvdbId && this.providerRegistry.isAvailable('tvdb')) {
       this.log.log(
         `resolveProvider: ${label} — fallback to tvdb (tvdbId=${media.tvdbId})`,
       );
@@ -1523,7 +1523,7 @@ export class MediaService {
   ): Promise<{ provider: IMetadataProvider; externalId: string } | null> {
     const label = `"${media.title}" (#${media.id})`;
     this.log.log(`resolveProvider: ${label} — ${origin} prefers ${pref}`);
-    if (!(await this.providerRegistry.isAvailable(pref))) {
+    if (!this.providerRegistry.isAvailable(pref)) {
       this.log.warn(
         `resolveProvider: ${label} — ${origin} preferred ${pref} but not available (no API key?)`,
       );

@@ -56,69 +56,6 @@
       </div>
     </div>
 
-    <!-- Providers -->
-    <div class="card bg-base-100 border border-base-200">
-      <div class="card-body gap-5">
-        <h2 class="card-title text-base">{{ 'settings.general.section_providers' | translate }}</h2>
-
-        <label class="form-control w-full max-w-md">
-          <div class="label">
-            <span class="label-text">{{ 'settings.general.tmdb_api_key' | translate }}</span>
-          </div>
-          <input
-            type="password"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="tmdbApiKey()"
-            (ngModelChange)="tmdbApiKey.set($event)"
-            placeholder="eyJhbGciOiJIUzI1NiJ9..."
-          />
-          <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.general.tmdb_api_key_hint' | translate }}</span>
-          </div>
-        </label>
-
-        <div class="divider my-0"></div>
-
-        <label class="form-control w-full max-w-md">
-          <div class="label">
-            <span class="label-text">{{ 'settings.general.tvdb_api_key' | translate }}</span>
-          </div>
-          <input
-            type="password"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="tvdbApiKey()"
-            (ngModelChange)="tvdbApiKey.set($event)"
-            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-          />
-          <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.general.tvdb_api_key_hint' | translate }}</span>
-          </div>
-        </label>
-
-        <label class="form-control w-full max-w-md">
-          <div class="label">
-            <span class="label-text">{{ 'settings.general.tvdb_pin' | translate }}</span>
-          </div>
-          <input
-            type="password"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="tvdbPin()"
-            (ngModelChange)="tvdbPin.set($event)"
-          />
-          <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.general.tvdb_pin_hint' | translate }}</span>
-          </div>
-        </label>
-
-        <div class="card-actions justify-end">
-          <button type="button" class="btn btn-primary" (click)="saveProviders()" [disabled]="savingProviders()">
-            @if (savingProviders()) { <span class="loading loading-spinner loading-sm"></span> }
-            {{ 'common.save' | translate }}
-          </button>
-        </div>
-      </div>
-    </div>
-
     <!-- Automation -->
     <div class="card bg-base-100 border border-base-200">
       <div class="card-body gap-5">
