@@ -227,7 +227,9 @@ export class CastPlayerService {
     const currentPos = positionOverride ?? this.cast.currentTime();
     const audioIdx = this.activeAudioStreamIndex
       ?? parseAudioIndex(this.activeAudioTrackId() ?? 'audio-0');
-    const transcodeQuality = this.resolveTranscodeQuality(this.activeQualityId());
+    // The cast dropdown only contains concrete transcode rungs, so the
+    // active id is the rung name to send to the backend.
+    const transcodeQuality = this.activeQualityId();
 
     // Parallel: playback-info (triggers backend prewarm) + cast token fetch.
     const castProfile = this.getCastDeviceProfile();
@@ -240,17 +242,6 @@ export class CastPlayerService {
     ]);
 
     await this.dispatchLoad(mfId, pi, currentPos, transcodeQuality, castInfo);
-  }
-
-  /**
-   * Resolve the concrete transcode profile name from the active quality id.
-   * The cast quality list is built without 'auto' / 'original' rungs (cast
-   * forces transcode), so the active id is normally concrete. Defensive
-   * fallback to '1080p' for any stray sentinel.
-   */
-  private resolveTranscodeQuality(qualityId: string): string {
-    if (qualityId === 'auto' || qualityId === 'original') return '1080p';
-    return qualityId;
   }
 
   /**
