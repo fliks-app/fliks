@@ -72,7 +72,15 @@ playerManager.addEventListener(
 
 context.addCustomMessageListener(FLIKS_AUDIO_NAMESPACE, (event) => {
   console.log('[fliks-cast] audio msg received:', event.data);
-  const { language, name } = event.data ?? {};
+  // Sender posts a JSON string (see cast.service.ts comment for why).
+  let payload;
+  try {
+    payload = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+  } catch (err) {
+    console.warn('[fliks-cast] audio msg: JSON parse failed', err, event.data);
+    return;
+  }
+  const { language, name } = payload ?? {};
   if (!language) {
     console.warn('[fliks-cast] audio msg: no language → bail');
     return;
@@ -164,7 +172,7 @@ options.playbackConfig = new cast.framework.PlaybackConfig();
 options.playbackConfig.autoResumeDuration = 5;
 options.supportedCommands = cast.framework.messages.Command.ALL_BASIC_MEDIA;
 options.customNamespaces = {
-  [FLIKS_AUDIO_NAMESPACE]: cast.framework.system.MessageType.JSON,
+  [FLIKS_AUDIO_NAMESPACE]: cast.framework.system.MessageType.STRING,
 };
 context.start(options);
 console.log('[fliks-cast] context.start called');
