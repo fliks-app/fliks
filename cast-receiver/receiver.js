@@ -19,6 +19,12 @@
 const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
 
+// Custom message bus shared with the Fliks sender for actions CAF doesn't
+// expose natively. Today: HLS audio rendition switching — CAF + Shaka don't
+// propagate EXT-X-MEDIA audio renditions back to the sender as Track objects,
+// so the sender can't switch them via EditTracksInfoRequest.
+const FLIKS_AUDIO_NAMESPACE = 'urn:x-cast:fliks.audio';
+
 // Verbose CAF + Shaka logging — surfaces in chrome://inspect on the
 // receiver, the only practical way to diagnose a Cast freeze or load
 // failure on a real device.
@@ -57,6 +63,36 @@ playerManager.addEventListener(
     document.body.classList.remove('playing');
   },
 );
+
+// --- Audio rendition switch (custom message bus) ------------------------
+//
+// Sender posts `{ language, name }` matching the master.m3u8 EXT-X-MEDIA
+// attributes. We resolve via CAF's AudioTracksManager so the swap happens
+// in-place (no LOAD round-trip, no ffmpeg restart).
+
+context.addCustomMessageListener(FLIKS_AUDIO_NAMESPACE, (event) => {
+  const { language, name } = event.data ?? {};
+  if (!language) return;
+  let mgr;
+  try { mgr = playerManager.getAudioTracksManager(); } catch { return; }
+  if (!mgr) return;
+  const tracks = mgr.getTracks() ?? [];
+  const matches = tracks.filter((t) => t.language === language);
+  const target =
+    matches.find((t) => t.name === name)
+    ?? (matches.length === 1 ? matches[0] : null);
+  if (!target) {
+    console.warn(
+      `[fliks-cast] audio switch: no unique match for language=${language} name=${name}`,
+      tracks.map((t) => ({ trackId: t.trackId, language: t.language, name: t.name })),
+    );
+    return;
+  }
+  console.log(
+    `[fliks-cast] audio switch → trackId=${target.trackId} (${language} / ${name})`,
+  );
+  mgr.setActiveById(target.trackId);
+});
 
 // --- Subtitle styling baked into every load -----------------------------
 //
@@ -108,5 +144,8 @@ options.useShakaForHls = true;
 options.playbackConfig = new cast.framework.PlaybackConfig();
 options.playbackConfig.autoResumeDuration = 5;
 options.supportedCommands = cast.framework.messages.Command.ALL_BASIC_MEDIA;
+options.customNamespaces = {
+  [FLIKS_AUDIO_NAMESPACE]: cast.framework.system.MessageType.JSON,
+};
 context.start(options);
 console.log('[fliks-cast] context.start called');
