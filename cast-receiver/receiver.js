@@ -64,63 +64,6 @@ playerManager.addEventListener(
   },
 );
 
-// --- Audio rendition switch (custom message bus) ------------------------
-//
-// Sender posts `{ language, name }` matching the master.m3u8 EXT-X-MEDIA
-// attributes. We resolve via CAF's AudioTracksManager so the swap happens
-// in-place (no LOAD round-trip, no ffmpeg restart).
-
-context.addCustomMessageListener(FLIKS_AUDIO_NAMESPACE, (event) => {
-  console.log('[fliks-cast] audio msg received:', event.data);
-  // Sender posts a JSON string (see cast.service.ts comment for why).
-  let payload;
-  try {
-    payload = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-  } catch (err) {
-    console.warn('[fliks-cast] audio msg: JSON parse failed', err, event.data);
-    return;
-  }
-  const { language, name } = payload ?? {};
-  if (!language) {
-    console.warn('[fliks-cast] audio msg: no language → bail');
-    return;
-  }
-  let mgr;
-  try {
-    mgr = playerManager.getAudioTracksManager();
-  } catch (err) {
-    console.warn('[fliks-cast] getAudioTracksManager threw → bail', err);
-    return;
-  }
-  if (!mgr) {
-    console.warn('[fliks-cast] getAudioTracksManager returned null → bail');
-    return;
-  }
-  const tracks = mgr.getTracks() ?? [];
-  console.log(
-    `[fliks-cast] audio msg: ${tracks.length} tracks visible to receiver`,
-    tracks.map((t) => ({ trackId: t.trackId, language: t.language, name: t.name })),
-  );
-  const matches = tracks.filter((t) => t.language === language);
-  const target =
-    matches.find((t) => t.name === name)
-    ?? (matches.length === 1 ? matches[0] : null);
-  if (!target) {
-    console.warn(
-      `[fliks-cast] audio switch: no unique match for language=${language} name=${name}`,
-    );
-    return;
-  }
-  console.log(
-    `[fliks-cast] audio switch → trackId=${target.trackId} (${language} / ${name})`,
-  );
-  try {
-    mgr.setActiveById(target.trackId);
-  } catch (err) {
-    console.error('[fliks-cast] setActiveById threw', err);
-  }
-});
-
 // --- Subtitle styling baked into every load -----------------------------
 //
 // Senders may still override per-load via MediaInformation.textTrackStyle;
@@ -172,7 +115,74 @@ options.playbackConfig = new cast.framework.PlaybackConfig();
 options.playbackConfig.autoResumeDuration = 5;
 options.supportedCommands = cast.framework.messages.Command.ALL_BASIC_MEDIA;
 options.customNamespaces = {
-  [FLIKS_AUDIO_NAMESPACE]: cast.framework.system.MessageType.STRING,
+  [FLIKS_AUDIO_NAMESPACE]: cast.framework.system.MessageType.JSON,
 };
 context.start(options);
 console.log('[fliks-cast] context.start called');
+
+// --- Audio rendition switch (custom message bus) ------------------------
+//
+// Sender posts `{ language, name }` matching the master.m3u8 EXT-X-MEDIA
+// attributes. We resolve via CAF's AudioTracksManager so the swap happens
+// in-place (no LOAD round-trip, no ffmpeg restart).
+//
+// Listener is registered AFTER `context.start()` — the order CAF expects
+// for custom-namespace handlers to actually receive messages once the
+// session is live (registering before start hooks the function but the
+// dispatch table isn't wired until start, which silently dropped messages
+// on the previous attempt).
+
+console.log(
+  `[fliks-cast] registering audio listener on ${FLIKS_AUDIO_NAMESPACE}`,
+);
+context.addCustomMessageListener(FLIKS_AUDIO_NAMESPACE, (event) => {
+  console.log(
+    '[fliks-cast] audio msg received:',
+    JSON.stringify({ data: event.data, senderId: event.senderId }),
+  );
+  // event.data may arrive as object (MessageType.JSON) or string in some
+  // CAF builds — handle both.
+  let payload = event.data;
+  if (typeof payload === 'string') {
+    try { payload = JSON.parse(payload); } catch { /* leave as string */ }
+  }
+  const { language, name } = payload ?? {};
+  if (!language) {
+    console.warn('[fliks-cast] audio msg: no language → bail', payload);
+    return;
+  }
+  let mgr;
+  try {
+    mgr = playerManager.getAudioTracksManager();
+  } catch (err) {
+    console.warn('[fliks-cast] getAudioTracksManager threw → bail', err);
+    return;
+  }
+  if (!mgr) {
+    console.warn('[fliks-cast] getAudioTracksManager returned null → bail');
+    return;
+  }
+  const tracks = mgr.getTracks() ?? [];
+  console.log(
+    `[fliks-cast] audio msg: ${tracks.length} tracks visible to receiver`,
+    tracks.map((t) => ({ trackId: t.trackId, language: t.language, name: t.name })),
+  );
+  const matches = tracks.filter((t) => t.language === language);
+  const target =
+    matches.find((t) => t.name === name)
+    ?? (matches.length === 1 ? matches[0] : null);
+  if (!target) {
+    console.warn(
+      `[fliks-cast] audio switch: no unique match for language=${language} name=${name}`,
+    );
+    return;
+  }
+  console.log(
+    `[fliks-cast] audio switch → trackId=${target.trackId} (${language} / ${name})`,
+  );
+  try {
+    mgr.setActiveById(target.trackId);
+  } catch (err) {
+    console.error('[fliks-cast] setActiveById threw', err);
+  }
+});
