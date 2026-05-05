@@ -23,7 +23,13 @@ import { OfflineStorageService } from '../../core/services/offline-storage.servi
 import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
 import { NetworkService } from '../../core/services/network.service';
 import { DownloadCacheService } from '../../core/services/download-cache.service';
-import { CastPlayerService, CastAudioOption, buildCastAudioOptions } from '../../core/services/cast-player.service';
+import {
+  CastPlayerService,
+  CastAudioOption,
+  buildCastAudioOptions,
+  buildCastQualityOptions,
+} from '../../core/services/cast-player.service';
+import { CastSettingsService } from '../../core/services/cast-settings.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -132,6 +138,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly authService = inject(AuthService);
   readonly castService = inject(CastService);
   private readonly castPlayerService = inject(CastPlayerService);
+  private readonly castSettings = inject(CastSettingsService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly navHistory = inject(NavigationHistoryService);
@@ -1276,6 +1283,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Push current player state to the CastPlayerService and start streaming. */
   private async startCastFromPlayer(position?: number) {
+    // Don't reuse the local player's quality list — that's the web ladder
+    // (Auto + every Shaka rung up to source). Cast forces transcode and is
+    // capped by the user's Cast-side maxQuality preference. Pass the
+    // backend-authoritative qualities through the cast filter.
+    const castQualities = buildCastQualityOptions(
+      this.playbackInfo?.qualities,
+      this.castSettings.get().maxQuality,
+    );
+    // Snap the active pick onto the cast list when the local quality (e.g.
+    // 'auto', 'original', '2160p' on a 1080p-capped cast profile) doesn't
+    // exist there.
+    const localActive = this.activeQualityId();
+    const activeCastQualityId =
+      castQualities.find(q => q.id === localActive)?.id
+      ?? castQualities[0]?.id
+      ?? '1080p';
+
     this.castPlayerService.startCast({
       mediaFileId: this.mediaFileId,
       mediaId: this.mediaId,
@@ -1292,13 +1316,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         subtitleDbId: s.subtitleDbId,
         url: s.url,
       })),
-      qualities: this.availableQualities().map(q => ({
-        id: q.id,
-        label: q.id === 'auto' ? 'Auto' : q.label,
-        lowBandwidth: q.lowBandwidth,
-      })),
+      qualities: castQualities,
       audioTracks: this.castAudioOptions(),
-      activeQualityId: this.activeQualityId(),
+      activeQualityId: activeCastQualityId,
       activeSubtitleId: this.activeSubtitleId(),
       activeAudioTrackId: this.activeAudioTrackId(),
       activeBurnInId: this.activeBurnInId,

@@ -4,7 +4,7 @@ import { CastSettingsService } from './cast-settings.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { AuthService } from './auth.service';
-import { BrowserDeviceProfileService, DeviceProfile } from './browser-device-profile.service';
+import { DeviceProfile } from './browser-device-profile.service';
 import { ServerConfigService } from './server-config.service';
 import { formatAudioLabel, parseAudioIndex, SpriteMetadata } from '../utils/player.utils';
 import { PlayerSettingsService } from './player-settings.service';
@@ -55,6 +55,25 @@ export interface CastQualityOption {
   lowBandwidth?: boolean;
 }
 
+/** Filter a backend-authoritative quality list for Cast: drop the
+ *  'original' rung (Cast forces transcode, never direct-streams) and
+ *  cap by the user's Cast-side `maxQuality` preference. The cap is
+ *  derived from the rung id itself (`parseInt('Np')`) so adding a new
+ *  rung server-side requires no client change. */
+export function buildCastQualityOptions(
+  qualities: { id: string; label: string; height: number }[] | undefined,
+  maxQuality: string | undefined,
+): CastQualityOption[] {
+  if (!qualities?.length) return [];
+  const heightCap =
+    maxQuality && maxQuality !== 'original'
+      ? parseInt(maxQuality, 10) || Infinity
+      : Infinity;
+  return qualities
+    .filter(q => q.id !== 'original' && q.height <= heightCap)
+    .map(q => ({ id: q.id, label: q.label }));
+}
+
 interface SubtitleInfo {
   id: string;
   label: string;
@@ -76,7 +95,6 @@ export class CastPlayerService {
   private readonly streamingApi = inject(StreamingApiService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly authService = inject(AuthService);
-  private readonly deviceProfile = inject(BrowserDeviceProfileService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly trackManager = inject(TrackManagerService);
@@ -224,19 +242,15 @@ export class CastPlayerService {
     await this.dispatchLoad(mfId, pi, currentPos, transcodeQuality, castInfo);
   }
 
-  /** Resolve the concrete transcode profile name from the active quality id. */
-  private resolveTranscodeQuality(qualityId: string): string | undefined {
-    if (qualityId !== 'auto' && qualityId !== 'original') return qualityId;
-    const cs = this.castSettings.get();
-    const qualities = this.availableQualities().filter(
-      q => q.id !== 'auto' && q.id !== 'original',
-    );
-    if (cs.maxQuality === 'original') {
-      return qualities[0]?.id ?? '1080p';
-    }
-    return qualities.find(q => q.id === cs.maxQuality)?.id
-      ?? qualities[0]?.id
-      ?? '1080p';
+  /**
+   * Resolve the concrete transcode profile name from the active quality id.
+   * The cast quality list is built without 'auto' / 'original' rungs (cast
+   * forces transcode), so the active id is normally concrete. Defensive
+   * fallback to '1080p' for any stray sentinel.
+   */
+  private resolveTranscodeQuality(qualityId: string): string {
+    if (qualityId === 'auto' || qualityId === 'original') return '1080p';
+    return qualityId;
   }
 
   /**
@@ -370,17 +384,6 @@ export class CastPlayerService {
     } catch { /* ignore */ }
   }
 
-  /** Resolve the initial Cast quality from Cast settings (maxQuality). */
-  private resolveInitialCastQuality(qualities: CastQualityOption[]): string {
-    const cs = this.castSettings.get();
-    const maxQ = cs.maxQuality;
-    const filtered = qualities.filter(q => q.id !== 'auto' && q.id !== 'original');
-    if (maxQ === 'original') {
-      return filtered[0]?.id ?? '1080p';
-    }
-    return filtered.find(q => q.id === maxQ)?.id ?? filtered[0]?.id ?? '1080p';
-  }
-
   /** Find the subtitle matching the user's remembered language+type for this media. */
   private resolveRememberedSubtitleId(
     mediaId: number,
@@ -469,23 +472,6 @@ export class CastPlayerService {
     }
     startTime ??= 0;
 
-    // Build quality options from source resolution (streamInfo, no need to
-    // wait for playback-info first).
-    const srcW = streamInfo?.video?.[0]?.width ?? 1920;
-    const srcH = streamInfo?.video?.[0]?.height ?? 1080;
-    const profiles = [
-      { id: '1080p', label: '1080p', minWidth: 1920 },
-      { id: '720p', label: '720p', minWidth: 1280 },
-      { id: '480p', label: '480p', minWidth: 854 },
-      { id: '360p', label: '360p', minWidth: 640 },
-    ];
-    // The Cast profile has empty directPlayProfiles → backend can never
-    // remux for Cast → no 'original' rung surfaced.
-    const qualities: CastQualityOption[] = [];
-    for (const p of profiles) {
-      if (srcW >= p.minWidth) qualities.push(p);
-    }
-
     const audioStreams: { language?: string }[] = streamInfo?.audio ?? [];
     const audioIndex = this.playerSettings.resolveAudioStreamIndex(
       opts.mediaFileId, audioStreams, opts.mediaId,
@@ -517,8 +503,22 @@ export class CastPlayerService {
 
     const audioTracks = buildCastAudioOptions(streamInfo?.audio);
 
-    // Seed state so dispatchLoad can read activeSubtitleId / subtitleInfos.
-    const initialQualityId = this.resolveInitialCastQuality(qualities);
+    // Phase 2 — single playback-info call. We pass the user's cast cap as
+    // startQuality so the backend pre-spawns ffmpeg at the right rung; the
+    // backend snaps it to whatever the source can actually serve.
+    const cs = this.castSettings.get();
+    const startQuality = cs.maxQuality === 'original' ? '1080p' : cs.maxQuality;
+    const pi = await this.streamingApi.getPlaybackInfo(
+      opts.mediaFileId, this.getCastDeviceProfile(),
+      undefined, audioIndex, startQuality, Math.floor(startTime),
+    );
+
+    // Build the dropdown list from the backend-authoritative qualities,
+    // capped by the user's cast preference. Active pick defaults to the
+    // first (highest) rung in the filtered list.
+    const qualities = buildCastQualityOptions(pi.qualities, cs.maxQuality);
+    const activeQualityId = qualities[0]?.id ?? '1080p';
+
     this.startCast({
       mediaFileId: opts.mediaFileId,
       mediaId: opts.mediaId,
@@ -530,21 +530,13 @@ export class CastPlayerService {
       subtitles: subtitleInfos,
       qualities,
       audioTracks,
-      activeQualityId: initialQualityId,
+      activeQualityId,
       activeSubtitleId: this.resolveRememberedSubtitleId(opts.mediaId, subtitleInfos),
       activeAudioTrackId: audioIndex != null ? `audio-${audioIndex}` : (audioTracks[0]?.id ?? null),
       activeBurnInId: null,
       activeAudioStreamIndex: audioIndex,
     });
 
-    // Phase 2 — single playback-info call, with startQuality + startAt set
-    // so the backend pre-spawns ffmpeg right away (no second round-trip).
-    const transcodeQuality = this.resolveTranscodeQuality(initialQualityId);
-    const pi = await this.streamingApi.getPlaybackInfo(
-      opts.mediaFileId, this.getCastDeviceProfile(),
-      undefined, audioIndex, transcodeQuality, Math.floor(startTime),
-    );
-
-    await this.dispatchLoad(opts.mediaFileId, pi, startTime, transcodeQuality, castInfo);
+    await this.dispatchLoad(opts.mediaFileId, pi, startTime, activeQualityId, castInfo);
   }
 }
