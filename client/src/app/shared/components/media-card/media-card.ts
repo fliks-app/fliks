@@ -11,6 +11,7 @@ import { CardActionsDirective } from '../../directives/card-actions.directive';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
 import { TvService } from '../../../core/services/tv.service';
 import { DeviceService } from '../../../core/services/device.service';
+import { PlayableMediaService } from '../../../core/services/playable-media.service';
 
 export type MediaCardAspect = 'portrait' | 'landscape';
 
@@ -38,6 +39,7 @@ export class MediaCardComponent {
   private readonly router = inject(Router);
   private readonly tv = inject(TvService);
   private readonly cardActionsService = inject(CardActionsService);
+  private readonly playableMedia = inject(PlayableMediaService);
   protected readonly device = inject(DeviceService);
   protected readonly isNative = Capacitor.isNativePlatform();
   /** Hover overlay (play button) only makes sense on a real pointer device. */
@@ -272,16 +274,16 @@ export class MediaCardComponent {
     this.played.emit();
     this.clicked.emit();
     const m = this.media();
-    if (m?.files?.length) {
-      const file = m.files[0];
-      const qp: Record<string, number> = { mediaId: m.id };
-      if (file.episodeId) qp['episodeId'] = file.episodeId;
-      const fanartUrl = (m as any).fanartUrl ?? this._img() ?? null;
-      void this.router.navigate(['/watch', file.id], {
-        queryParams: qp,
-        state: { fanartUrl },
-      });
-    }
+    if (!m?.files?.length) return;
+    const file = m.files[0];
+    void this.playableMedia.play({
+      fileId: file.id,
+      mediaId: m.id,
+      episodeId: file.episodeId ?? undefined,
+      title: m.title,
+      fanartUrl: (m as any).fanartUrl ?? this._img() ?? null,
+      streamInfo: (file as any).streamInfo,
+    }, false);
   }
 
   /**

@@ -6,7 +6,6 @@ import {
   input,
   output,
 } from '@angular/core';
-import { Router } from '@angular/router';
 import { UpperCasePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
@@ -29,6 +28,7 @@ import {
   seasonsVisibleWithDiskFilter,
 } from '../../media-detail.utils';
 import { METADATA_PROVIDER_OPTIONS_OVERRIDE } from '../../../../core/constants/metadata-providers';
+import { PlayableMediaService } from '../../../../core/services/playable-media.service';
 
 
 @Component({
@@ -38,7 +38,7 @@ import { METADATA_PROVIDER_OPTIONS_OVERRIDE } from '../../../../core/constants/m
   templateUrl: './media-detail-seasons.component.html',
 })
 export class MediaDetailSeasonsComponent {
-  private readonly router = inject(Router);
+  private readonly playableMedia = inject(PlayableMediaService);
   readonly media = input.required<Media>();
   readonly selectedSeason = input<Season | null>(null);
   readonly activeSeasonId = input.required<number | null>();
@@ -118,17 +118,16 @@ export class MediaDetailSeasonsComponent {
 
   playEpisode(ep: Episode) {
     const files = this.trackedFilesForEpisode(ep.id);
-    if (files.length) {
-      const m = this.media();
-      // Detour via '/' forces Angular to remount the player component
-      // (same-route navigation reuses the component without re-reading params).
-      void this.router
-        .navigateByUrl('/', { skipLocationChange: true })
-        .then(() =>
-          this.router.navigate(['/watch', files[0].id], {
-            queryParams: { mediaId: m.id, episodeId: ep.id },
-          }),
-        );
-    }
+    if (!files.length) return;
+    const m = this.media();
+    void this.playableMedia.play({
+      fileId: files[0].id,
+      mediaId: m.id,
+      episodeId: ep.id,
+      title: m.title,
+      episodeTitle: ep.title ?? undefined,
+      fanartUrl: m.fanartUrl ?? null,
+      streamInfo: (files[0] as any).streamInfo,
+    }, false);
   }
 }

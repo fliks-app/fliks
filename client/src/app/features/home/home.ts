@@ -8,8 +8,7 @@ import { MediaService, Media, CalendarEntry } from '../../core/services/api/medi
 import { StreamingApiService, ContinueWatchingItem, RecommendationItem } from '../../core/services/api/streaming-api.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
-import { CastService } from '../../core/services/cast.service';
-import { CastPlayerService } from '../../core/services/cast-player.service';
+import { PlayableMediaService } from '../../core/services/playable-media.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { FocusMemoryService } from '../../core/services/focus-memory.service';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -68,8 +67,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly streamingApi = inject(StreamingApiService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly router = inject(Router);
-  private readonly castService = inject(CastService);
-  private readonly castPlayer = inject(CastPlayerService);
+  private readonly playableMedia = inject(PlayableMediaService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly focusMemory = inject(FocusMemoryService);
@@ -280,30 +278,28 @@ export class HomeComponent implements OnInit, OnDestroy {
         void this.router.navigate(['/' + segment, media.id]);
         return;
       }
-      const qp: Record<string, number> = { mediaId: media.id };
-      if (file.episodeId) qp['episodeId'] = file.episodeId;
-      void this.router.navigate(['/watch', file.id], { queryParams: qp });
+      await this.playableMedia.play({
+        fileId: file.id,
+        mediaId: media.id,
+        episodeId: file.episodeId ?? undefined,
+        title: media.title,
+        fanartUrl: media.fanartUrl ?? media.posterUrl ?? null,
+        streamInfo: (file as any).streamInfo,
+      }, false);
     } catch {
       /* error handled by global interceptor */
     }
   }
 
   async playContinueWatching(item: ContinueWatchingItem) {
-    if (this.castService.isConnected()) {
-      await this.castPlayer.quickStart({
-        mediaFileId: item.mediaFileId,
-        mediaId: item.mediaId,
-        episodeId: item.episodeId ?? undefined,
-        title: item.mediaTitle,
-        episodeTitle: item.episodeLabel ?? undefined,
-        fanartUrl: item.fanartUrl ?? item.posterUrl,
-      });
-      this.castPlayer.expanded.set(true);
-    } else {
-      const qp: Record<string, number> = { mediaId: item.mediaId };
-      if (item.episodeId) qp['episodeId'] = item.episodeId;
-      this.router.navigate(['/watch', item.mediaFileId], { queryParams: qp });
-    }
+    await this.playableMedia.play({
+      fileId: item.mediaFileId,
+      mediaId: item.mediaId,
+      episodeId: item.episodeId ?? undefined,
+      title: item.mediaTitle,
+      episodeTitle: item.episodeLabel ?? undefined,
+      fanartUrl: item.fanartUrl ?? item.posterUrl ?? null,
+    }, false);
   }
 
   async removeContinueWatching(item: ContinueWatchingItem) {
