@@ -61,11 +61,9 @@ playerManager.addEventListener(
 
 // --- Expose Shaka audio renditions to the sender ------------------------
 //
-// CAF + Shaka discover EXT-X-MEDIA audio renditions in the HLS manifest
-// but don't propagate them back to the sender as MediaInformation tracks.
-// We mirror them manually so the sender can switch via the standard
-// EditTracksInfoRequest, which rides the media bus and survives the
-// transient sender-disconnect that happens shortly after every LOAD.
+// CAF + Shaka discover EXT-X-MEDIA audio renditions but don't expose them
+// to the sender as MediaInformation tracks. We mirror them manually so the
+// sender can switch via the standard EditTracksInfoRequest on the media bus.
 
 function publishAudioTracks() {
   let mgr;
@@ -93,14 +91,9 @@ function publishAudioTracks() {
   );
   info.tracks = [...otherTracks, ...cafAudioTracks];
   playerManager.setMediaInformation(info);
-  // Push the updated media info to senders via MEDIA_STATUS so they see the
-  // audio tracks in MediaInformation.tracks and can switch them via
-  // EditTracksInfoRequest.
+  // Push the updated MediaInformation to senders via MEDIA_STATUS so the
+  // new tracks land in their `media.tracks`.
   playerManager.broadcastStatus(true);
-  console.log(
-    `[fliks-cast] published ${cafAudioTracks.length} audio tracks to media info`,
-    cafAudioTracks.map((t) => ({ trackId: t.trackId, language: t.language, name: t.name })),
-  );
 }
 
 // --- Subtitle styling baked into every load -----------------------------
