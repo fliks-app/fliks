@@ -3,7 +3,8 @@
  * Fliks Cast Receiver — minimal CAF receiver bootstrap.
  *
  * The receiver is a thin shell:
- *   1. CAF SDK runs the player (HLS / MP4 via shaka-packaged Cast).
+ *   1. CAF SDK runs the player. `useShakaForHls` switches HLS playback to
+ *      Shaka — the same engine the Fliks web/Android paths use.
  *   2. We hook LOAD to apply Fliks-specific defaults (subtitle styling,
  *      idle splash toggling) and forward whatever the sender sent.
  *   3. customData is reserved for future-extension features
@@ -18,6 +19,12 @@
 const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
 
+// Verbose CAF + Shaka logging — surfaces in chrome://inspect on the
+// receiver, the only practical way to diagnose a Cast freeze or load
+// failure on a real device.
+context.setLoggerLevel(cast.framework.LoggerLevel.DEBUG);
+console.log('[fliks-cast] receiver boot start');
+
 // --- Idle splash visibility ---------------------------------------------
 //
 // CAF doesn't expose a "media is showing" flag directly — we infer it from
@@ -25,12 +32,14 @@ const playerManager = context.getPlayerManager();
 
 playerManager.addEventListener(
   cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
-  () => document.body.classList.add('playing'),
+  () => {
+    console.log('[fliks-cast] PLAYER_LOAD_COMPLETE');
+    document.body.classList.add('playing');
+  },
 );
 
 [
   cast.framework.events.EventType.MEDIA_FINISHED,
-  cast.framework.events.EventType.ERROR,
   cast.framework.events.EventType.ABORT,
   cast.framework.events.EventType.ENDED,
 ].forEach((evt) => {
@@ -38,6 +47,16 @@ playerManager.addEventListener(
     document.body.classList.remove('playing'),
   );
 });
+
+// Surface any player error on the device's DevTools console with the full
+// CAF event payload (detailedErrorCode, reason, shaka-side error data).
+playerManager.addEventListener(
+  cast.framework.events.EventType.ERROR,
+  (event) => {
+    console.error('[fliks-cast] ERROR', JSON.stringify(event));
+    document.body.classList.remove('playing');
+  },
+);
 
 // --- Subtitle styling baked into every load -----------------------------
 //
@@ -48,6 +67,12 @@ playerManager.addEventListener(
 playerManager.setMessageInterceptor(
   cast.framework.messages.MessageType.LOAD,
   (loadRequest) => {
+    console.log(
+      '[fliks-cast] LOAD intercepted — contentId=',
+      loadRequest.media?.contentId,
+      'contentType=',
+      loadRequest.media?.contentType,
+    );
     const media = loadRequest.media;
     if (media && !media.textTrackStyle) {
       const style = new cast.framework.messages.TextTrackStyle();
@@ -74,10 +99,14 @@ playerManager.setMessageInterceptor(
 // queue/skip-intro features work later without re-launching the app.
 // `autoResumeDuration: 5` starts/resumes playback on 5s of buffered media
 // (default 10) — snappier resume after a seek or transient stall.
+// `supportedCommands` is set explicitly so the sender's transport
+// controls (play/pause/seek/skip-ad) are all advertised.
 
 const options = new cast.framework.CastReceiverOptions();
 options.disableIdleTimeout = true;
 options.useShakaForHls = true;
 options.playbackConfig = new cast.framework.PlaybackConfig();
 options.playbackConfig.autoResumeDuration = 5;
+options.supportedCommands = cast.framework.messages.Command.ALL_BASIC_MEDIA;
 context.start(options);
+console.log('[fliks-cast] context.start called');
