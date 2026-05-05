@@ -767,7 +767,7 @@ export class PlaybackService implements OnModuleInit {
     mediaId: number,
   ): Promise<void> {
     await this.repo.update(
-      { userId, mediaId },
+      { user: { id: userId }, media: { id: mediaId } },
       { hiddenFromContinueWatching: true },
     );
   }
