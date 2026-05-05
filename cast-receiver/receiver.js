@@ -19,12 +19,6 @@
 const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
 
-// Custom message bus shared with the Fliks sender for actions CAF doesn't
-// expose natively. Today: HLS audio rendition switching — CAF + Shaka don't
-// propagate EXT-X-MEDIA audio renditions back to the sender as Track objects,
-// so the sender can't switch them via EditTracksInfoRequest.
-const FLIKS_AUDIO_NAMESPACE = 'urn:x-cast:fliks.audio';
-
 // Verbose CAF + Shaka logging — surfaces in chrome://inspect on the
 // receiver, the only practical way to diagnose a Cast freeze or load
 // failure on a real device.
@@ -41,6 +35,7 @@ playerManager.addEventListener(
   () => {
     console.log('[fliks-cast] PLAYER_LOAD_COMPLETE');
     document.body.classList.add('playing');
+    publishAudioTracks();
   },
 );
 
@@ -63,6 +58,46 @@ playerManager.addEventListener(
     document.body.classList.remove('playing');
   },
 );
+
+// --- Expose Shaka audio renditions to the sender ------------------------
+//
+// CAF + Shaka discover EXT-X-MEDIA audio renditions in the HLS manifest
+// but don't propagate them back to the sender as MediaInformation tracks.
+// We mirror them manually so the sender can switch via the standard
+// EditTracksInfoRequest, which rides the media bus and survives the
+// transient sender-disconnect that happens shortly after every LOAD.
+
+function publishAudioTracks() {
+  let mgr;
+  try { mgr = playerManager.getAudioTracksManager(); } catch { return; }
+  if (!mgr) return;
+  const audioRenditions = mgr.getTracks() ?? [];
+  if (!audioRenditions.length) return;
+
+  const info = playerManager.getMediaInformation();
+  if (!info) return;
+
+  const cafAudioTracks = audioRenditions.map((r) => {
+    const track = new cast.framework.messages.Track(
+      r.trackId,
+      cast.framework.messages.TrackType.AUDIO,
+    );
+    track.language = r.language;
+    track.name = r.name;
+    return track;
+  });
+
+  // Keep any non-audio tracks (subtitles supplied by the sender) intact.
+  const otherTracks = (info.tracks ?? []).filter(
+    (t) => t.type !== cast.framework.messages.TrackType.AUDIO,
+  );
+  info.tracks = [...otherTracks, ...cafAudioTracks];
+  playerManager.setMediaInformation(info, /* opt_broadcast */ true);
+  console.log(
+    `[fliks-cast] published ${cafAudioTracks.length} audio tracks to media info`,
+    cafAudioTracks.map((t) => ({ trackId: t.trackId, language: t.language, name: t.name })),
+  );
+}
 
 // --- Subtitle styling baked into every load -----------------------------
 //
@@ -114,66 +149,5 @@ options.useShakaForHls = true;
 options.playbackConfig = new cast.framework.PlaybackConfig();
 options.playbackConfig.autoResumeDuration = 5;
 options.supportedCommands = cast.framework.messages.Command.ALL_BASIC_MEDIA;
-options.customNamespaces = {
-  [FLIKS_AUDIO_NAMESPACE]: cast.framework.system.MessageType.JSON,
-};
 context.start(options);
 console.log('[fliks-cast] context.start called');
-
-// --- Audio rendition switch (custom message bus) ------------------------
-//
-// Sender posts `{ language, name }` matching the master.m3u8 EXT-X-MEDIA
-// attributes. We resolve via CAF's AudioTracksManager so the swap happens
-// in-place (no LOAD round-trip, no ffmpeg restart).
-//
-// Listener must be registered AFTER `context.start()`: CAF only wires the
-// custom-namespace dispatch table at start, so listeners attached earlier
-// never fire.
-
-context.addCustomMessageListener(FLIKS_AUDIO_NAMESPACE, (event) => {
-  // event.data may arrive as object (MessageType.JSON) or string depending
-  // on the CAF build — handle both.
-  let payload = event.data;
-  if (typeof payload === 'string') {
-    try { payload = JSON.parse(payload); } catch { /* leave as string */ }
-  }
-  const { language, name } = payload ?? {};
-  if (!language) {
-    console.warn('[fliks-cast] audio msg: no language → bail', payload);
-    return;
-  }
-  let mgr;
-  try {
-    mgr = playerManager.getAudioTracksManager();
-  } catch (err) {
-    console.warn('[fliks-cast] getAudioTracksManager threw → bail', err);
-    return;
-  }
-  if (!mgr) {
-    console.warn('[fliks-cast] getAudioTracksManager returned null → bail');
-    return;
-  }
-  const tracks = mgr.getTracks() ?? [];
-  console.log(
-    `[fliks-cast] audio msg: ${tracks.length} tracks visible to receiver`,
-    tracks.map((t) => ({ trackId: t.trackId, language: t.language, name: t.name })),
-  );
-  const matches = tracks.filter((t) => t.language === language);
-  const target =
-    matches.find((t) => t.name === name)
-    ?? (matches.length === 1 ? matches[0] : null);
-  if (!target) {
-    console.warn(
-      `[fliks-cast] audio switch: no unique match for language=${language} name=${name}`,
-    );
-    return;
-  }
-  console.log(
-    `[fliks-cast] audio switch → trackId=${target.trackId} (${language} / ${name})`,
-  );
-  try {
-    mgr.setActiveById(target.trackId);
-  } catch (err) {
-    console.error('[fliks-cast] setActiveById threw', err);
-  }
-});
