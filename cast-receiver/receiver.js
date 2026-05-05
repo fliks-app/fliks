@@ -126,22 +126,13 @@ console.log('[fliks-cast] context.start called');
 // attributes. We resolve via CAF's AudioTracksManager so the swap happens
 // in-place (no LOAD round-trip, no ffmpeg restart).
 //
-// Listener is registered AFTER `context.start()` — the order CAF expects
-// for custom-namespace handlers to actually receive messages once the
-// session is live (registering before start hooks the function but the
-// dispatch table isn't wired until start, which silently dropped messages
-// on the previous attempt).
+// Listener must be registered AFTER `context.start()`: CAF only wires the
+// custom-namespace dispatch table at start, so listeners attached earlier
+// never fire.
 
-console.log(
-  `[fliks-cast] registering audio listener on ${FLIKS_AUDIO_NAMESPACE}`,
-);
 context.addCustomMessageListener(FLIKS_AUDIO_NAMESPACE, (event) => {
-  console.log(
-    '[fliks-cast] audio msg received:',
-    JSON.stringify({ data: event.data, senderId: event.senderId }),
-  );
-  // event.data may arrive as object (MessageType.JSON) or string in some
-  // CAF builds — handle both.
+  // event.data may arrive as object (MessageType.JSON) or string depending
+  // on the CAF build — handle both.
   let payload = event.data;
   if (typeof payload === 'string') {
     try { payload = JSON.parse(payload); } catch { /* leave as string */ }
