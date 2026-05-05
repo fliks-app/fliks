@@ -23,11 +23,11 @@ import { OfflineStorageService } from '../../core/services/offline-storage.servi
 import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
 import { NetworkService } from '../../core/services/network.service';
 import { DownloadCacheService } from '../../core/services/download-cache.service';
-import { CastPlayerService, CastAudioOption } from '../../core/services/cast-player.service';
+import { CastPlayerService, CastAudioOption, buildCastAudioOptions } from '../../core/services/cast-player.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 import { NavbarService } from '../../core/services/navbar.service';
-import { parseAudioIndex, SpriteMetadata } from '../../core/utils/player.utils';
+import { formatAudioLabel, parseAudioIndex, SpriteMetadata } from '../../core/utils/player.utils';
 import {
   PlayerSettingsService, normalizeLang,
   SUBTITLE_SIZE_MAP, SUBTITLE_COLOR_MAP, SUBTITLE_SHADOW_MAP, SUBTITLE_BG_MAP,
@@ -209,13 +209,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Audio tracks from streamInfo for the Cast remote */
   readonly castAudioOptions = computed<CastAudioOption[]>(() => {
     const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
-    const si = file?.streamInfo as any;
-    if (!si?.audio?.length) return [];
-    return si.audio.map((a: any, i: number) => ({
-      id: `audio-${i}`,
-      label: `${a.language ?? 'und'}${a.title ? ' - ' + a.title : ''} (${(a.codec ?? '').toUpperCase()}${a.channels ? ' ' + a.channels + 'ch' : ''})`,
-      language: a.language ?? 'und',
-    }));
+    return buildCastAudioOptions(file?.streamInfo?.audio);
   });
 
   readonly isNative = Capacitor.isNativePlatform();
@@ -1476,7 +1470,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (audioList?.length > 1) {
           const tracks = audioList.map((a: any, i: number) => ({
             id: `si-${i}`,
-            label: `${a.language ?? 'und'}${a.title ? ' - ' + a.title : ''} (${(a.codec ?? '').toUpperCase()}${a.channels ? ' ' + a.channels + 'ch' : ''})`,
+            label: formatAudioLabel(a),
             language: normalizeLang(a.language),
           }));
           this.availableAudioTracks.set(tracks);
@@ -1492,9 +1486,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         return;
       }
 
-      const tracks = engineTracks.map(t => ({
+      // Shaka's variant tracks expose `language` + `audioCodec` but not the
+      // source-side title (English / Portuguese (Brazil) / …) — that lives in
+      // streamInfo. With our HLS backend each EXT-X-MEDIA rendition is emitted
+      // in streamInfo.audio order, so the i-th engine track maps to
+      // streamInfo.audio[i]; use that to render the same label as the
+      // streamInfo dropdown.
+      const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
+      const audioList = (file?.streamInfo as any)?.audio ?? [];
+      const tracks = engineTracks.map((t, i) => ({
         id: t.id,
-        label: t.label,
+        label: audioList[i] ? formatAudioLabel(audioList[i]) : t.label,
         language: normalizeLang(t.language),
       }));
 

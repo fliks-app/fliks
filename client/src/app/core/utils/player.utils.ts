@@ -34,3 +34,19 @@ export function calcHoverPercent(e: PointerEvent, bar: HTMLElement): number {
 export function parseAudioIndex(trackId: string): number {
   return parseInt(trackId.replace(/^(si-|shaka-|audio-)/, ''), 10);
 }
+
+/** Render a streamInfo audio entry as a dropdown label. Prefers the source
+ *  title when present (e.g. "English (EAC3 6ch)"), falls back to the
+ *  language code (e.g. "eng (AAC 2ch)"). */
+export function formatAudioLabel(audio: {
+  language?: string;
+  title?: string;
+  codec?: string;
+  channels?: number;
+}): string {
+  const head = audio.title || audio.language || 'und';
+  const codec = (audio.codec ?? '').toUpperCase();
+  const channels = audio.channels ? `${audio.channels}ch` : '';
+  const tail = [codec, channels].filter(Boolean).join(' ');
+  return tail ? `${head} (${tail})` : head;
+}
