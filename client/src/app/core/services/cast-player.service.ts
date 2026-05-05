@@ -60,7 +60,6 @@ export class CastPlayerService {
   private readonly trackManager = inject(TrackManagerService);
   private readonly mediaService = inject(MediaService);
 
-  /** Chromecast device profile — only H264 + AAC, forces transcode for incompatible codecs. */
   /** Chromecast profile — force full transcode to guarantee H264+AAC HLS output. */
   private getCastDeviceProfile(): DeviceProfile {
     const cs = this.castSettings.get();
@@ -70,10 +69,12 @@ export class CastPlayerService {
       codecConditions: [],
       maxStreamingBitrate: 20_000_000,
       maxAudioChannels: cs.audioChannels ?? 2,
-      supportsHlsFmp4: false,  // Default Cast receiver (MPL) doesn't support fMP4 HLS
+      // The receiver opts into Shaka for HLS, which prefers fMP4 (no TS
+      // demux step). TS is kept as a fallback for older receivers.
+      supportsHlsFmp4: true,
       supportsHlsTs: true,
       supportsHdr: cs.hdr ?? false,
-      hdrRequiresFmp4: false,  // Cast uses TS — HDR will be tonemapped if needed
+      hdrRequiresFmp4: true,
       supportsMultiAudioMuxed: false,
       deviceType: 'desktop',
     };
