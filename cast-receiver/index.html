@@ -16,6 +16,10 @@
     token, already inlined in the stream URL by the sender.
   -->
   <link rel="stylesheet" href="receiver.css">
+  <!-- Preload the splash logo so the browser starts fetching + decoding
+       it before the SDK script blocks parsing. WebP avoids the visible
+       row-by-row PNG decode jitter on lower-end Chromecasts. -->
+  <link rel="preload" as="image" href="fliks-mark.webp">
   <!-- CAF Receiver SDK. Loaded synchronously so cast.framework is
        available before our boot script runs. -->
   <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
@@ -25,7 +29,7 @@
        again on STOP. The image and copy are pure brand chrome — no
        per-user state. -->
   <div id="splash" class="splash">
-    <img src="fliks-mark.png" alt="Fliks" class="splash-logo">
+    <img src="fliks-mark.webp" alt="Fliks" class="splash-logo" decoding="async">
     <div class="splash-tagline">Fliks</div>
   </div>
 
