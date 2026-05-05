@@ -37,14 +37,7 @@ export interface DeviceProfile {
   codecConditions: CodecCondition[];
   maxStreamingBitrate: number;
   maxAudioChannels: number;
-  supportsHlsFmp4: boolean;
-  supportsHlsTs: boolean;
   supportsHdr: boolean;
-  /** True when HDR playback requires fMP4 segments (HEVC can't be carried in TS).
-   *  iOS AVPlayer needs this; Android ExoPlayer handles HEVC in TS fine. */
-  hdrRequiresFmp4: boolean;
-  /** True when the player handles multi-audio from muxed TS (ExoPlayer). False = use EXT-X-MEDIA. */
-  supportsMultiAudioMuxed: boolean;
   /** Client device category — selects the backend bitrate ladder.
    *  Capacitor native (iOS/Android app) → 'mobile'; web (incl. Cast sender) → 'desktop'. */
   deviceType: 'mobile' | 'desktop';
@@ -195,15 +188,6 @@ export class BrowserDeviceProfileService {
       maxAudioChannels = Math.max(maxAudioChannels, this.nativeAudio.maxChannels);
     }
 
-    // --- HLS support ---
-    const supportsHlsTs = this.testType(video, false, 'application/x-mpegURL') ||
-                           this.testType(video, false, 'application/vnd.apple.mpegurl');
-    // On web, fMP4 requires MSE (Shaka/hls.js). On native platforms
-    // (Capacitor), AVPlayer/ExoPlayer handle fMP4 HLS natively — no MSE
-    // needed. Without this, iOS gets HLS-TS which can't carry HEVC (HDR
-    // content is typically HEVC 10-bit → AVPlayer crash).
-    const supportsHlsFmp4 = hasMSE || Capacitor.isNativePlatform();
-
     // --- HDR support ---
     let supportsHdr: boolean;
     if (Capacitor.isNativePlatform()) {
@@ -224,16 +208,7 @@ export class BrowserDeviceProfileService {
       codecConditions,
       maxStreamingBitrate: 0, // 0 = no limit
       maxAudioChannels,
-      supportsHlsFmp4,
-      supportsHlsTs,
       supportsHdr,
-      // iOS AVPlayer can't decode HEVC in TS containers — HDR content
-      // (HEVC 10-bit) must be delivered via fMP4 or tonemapped to H264 SDR.
-      // Android ExoPlayer handles HEVC in TS fine.
-      hdrRequiresFmp4: Capacitor.getPlatform() === 'ios',
-      // Multi-audio in muxed TS doesn't work reliably (ExoPlayer can't switch PIDs).
-      // Audio switching always goes through server-side reload.
-      supportsMultiAudioMuxed: false,
       deviceType: Capacitor.isNativePlatform() ? 'mobile' : 'desktop',
     };
   }

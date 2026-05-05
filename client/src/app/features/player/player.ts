@@ -1542,18 +1542,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    // si-* tracks are the streamInfo fallback. For fMP4 HLS, the manifest
-    // always exposes every audio rendition via EXT-X-MEDIA so Shaka switches
+    // si-* tracks are the streamInfo fallback. For HLS, the manifest always
+    // exposes every audio rendition via EXT-X-MEDIA so Shaka switches
     // client-side — any transient si-* list upgrades to shaka-* as soon as
     // Shaka fires trackschanged, and the user picks the real track then.
-    // For TS HLS and direct MP4 play, switching audio requires a backend
-    // reload with a new audioStreamIndex. Offline: no backend.
+    // For direct MP4 play, switching audio requires a backend reload with a
+    // new audioStreamIndex. Offline: no backend.
     if (this.isOfflinePlayback) return;
     if (!trackId.startsWith('si-')) return;
-    const isFmp4Hls =
-      this.playbackMode() !== 'direct' &&
-      this.playbackInfo?.segmentFormat === 'fmp4';
-    if (!isFmp4Hls) {
+    if (this.playbackMode() === 'direct') {
       await this.reloadStream();
     }
   }

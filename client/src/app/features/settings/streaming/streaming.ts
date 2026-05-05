@@ -18,7 +18,6 @@ export class StreamingSettingsComponent implements OnInit {
   readonly loading = signal(true);
   readonly saving = signal(false);
 
-  readonly segmentFormat = signal('auto');
   readonly segmentDuration = signal('3');
   readonly initTime = signal('1');
   readonly qsvPreset = signal('faster');
@@ -29,7 +28,6 @@ export class StreamingSettingsComponent implements OnInit {
   async ngOnInit() {
     try {
       const all = await this.api.getAll();
-      this.segmentFormat.set(all['streaming_segment_format'] ?? 'auto');
       this.segmentDuration.set(all['streaming_segment_duration'] ?? '3');
       this.initTime.set(all['streaming_init_time'] ?? '1');
       this.qsvPreset.set(all['streaming_qsv_preset'] ?? 'faster');
@@ -49,7 +47,6 @@ export class StreamingSettingsComponent implements OnInit {
     this.saving.set(true);
     try {
       await this.api.setBulk({
-        streaming_segment_format: this.segmentFormat(),
         streaming_segment_duration: this.segmentDuration(),
         streaming_init_time: this.initTime(),
         streaming_qsv_preset: this.qsvPreset(),

@@ -19,9 +19,7 @@ export interface BuildFfmpegArgsOptions {
   audioStreamIndex?: number;
   crop?: { width: number; height: number; x: number; y: number };
   videoOnly?: boolean;
-  mapAllAudio?: boolean;
   audioStreams?: { language?: string; title?: string }[];
-  useFmp4?: boolean;
   /** When true, keep the source audio with `-c:a copy` (bitstream
    *  passthrough). When false, transcode to AAC stereo at profile bitrate. */
   copyAudio?: boolean;
@@ -51,9 +49,7 @@ export function buildFfmpegArgs(
     audioStreamIndex,
     crop,
     videoOnly = false,
-    mapAllAudio = false,
     audioStreams,
-    useFmp4 = true,
     copyAudio = false,
     encoderPreset = 'faster',
     qsvOptions = { lookahead: false, lowPower: false, adaptive: true },
@@ -359,14 +355,14 @@ export function buildFfmpegArgs(
   }
 
   // ── Audio mapping + HLS output ──
-  // Always use var_stream_map for fMP4 multi-audio, even when the user has
+  // Always use var_stream_map for multi-audio, even when the user has
   // picked a specific track — otherwise switching audio would require a
   // full backend reload. With all audio renditions exposed, Shaka switches
   // client-side via EXT-X-MEDIA. The picked track is signalled via
   // DEFAULT=YES in the master.m3u8 (see streaming.controller.ts).
   const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
   const useVarStreamMap =
-    useFmp4 && videoOnly && audioStreams && audioStreams.length > 1;
+    videoOnly && audioStreams && audioStreams.length > 1;
 
   if (useVarStreamMap) {
     // Single FFmpeg process for video + all audio renditions (perfect sync).
@@ -405,29 +401,16 @@ export function buildFfmpegArgs(
       path.join(outputDir, '%v', 'index.m3u8'),
     );
   } else {
-    // Standard single-stream output.
-    // `userPickedAudio` (audioStreamIndex set) wins over `mapAllAudio`:
-    // when the user explicitly chose a track from the UI, honour it with a
-    // single -map so the next reload actually plays that audio. Otherwise
-    // mapAllAudio mux every PID for native client-side switching.
+    // Standard single-stream output: video + one audio track muxed.
+    // When the user picked a track from the UI honour it; otherwise default
+    // to the first audio. Explicit -map skips ffmpeg's auto-pick of a
+    // subtitle stream — mandatory on sources with many subtitle tracks
+    // (some HEVC MKVs have 28+) where the parallel subrip→webvtt pipeline
+    // starves the VAAPI HEVC decoder buffer pool, making the early session
+    // loop on "thread_get_buffer() failed".
     if (userPickedAudio) {
       args.push('-map', '0:v:0', '-map', `0:a:${audioStreamIndex}`);
-    } else if (mapAllAudio && audioStreams && audioStreams.length > 1) {
-      // TS + multi-audio: mux ALL audio tracks so native players (ExoPlayer/AVPlayer) can switch
-      args.push('-map', '0:v:0');
-      for (let i = 0; i < audioStreams.length; i++) {
-        args.push('-map', `0:a:${i}`);
-        const lang = audioStreams[i].language;
-        if (lang) {
-          args.push(`-metadata:s:a:${i}`, `language=${lang}`);
-        }
-      }
     } else {
-      // Default: explicitly map only video + first audio. Skips ffmpeg's
-      // auto-pick of a subtitle stream — mandatory on sources with many
-      // subtitle tracks (some HEVC MKVs have 28+) where the parallel
-      // subrip→webvtt pipeline starves the VAAPI HEVC decoder buffer
-      // pool, making the early session loop on "thread_get_buffer() failed".
       args.push('-map', '0:v:0', '-map', '0:a:0');
     }
     if (copyAudio) {
@@ -444,17 +427,9 @@ export function buildFfmpegArgs(
       '-hls_init_time', String(INIT_TIME),
       '-hls_list_size', '0',
       '-start_number', String(startSegment),
-    );
-    if (useFmp4) {
-      args.push(
-        '-hls_segment_type', 'fmp4',
-        '-hls_fmp4_init_filename', 'init.mp4',
-        '-hls_segment_filename', path.join(outputDir, 'seg-%04d.m4s'),
-      );
-    } else {
-      args.push('-hls_segment_filename', path.join(outputDir, 'seg-%04d.ts'));
-    }
-    args.push(
+      '-hls_segment_type', 'fmp4',
+      '-hls_fmp4_init_filename', 'init.mp4',
+      '-hls_segment_filename', path.join(outputDir, 'seg-%04d.m4s'),
       '-hls_flags', 'independent_segments',
       path.join(outputDir, 'index.m3u8'),
     );
@@ -527,9 +502,6 @@ export function buildRemuxArgs(
   audioBitrate = '192k',
   startSegment = 0,
   videoOnly = false,
-  mapAllAudio = false,
-  audioStreams?: { language?: string; title?: string }[],
-  useFmp4 = true,
   trustedStreamInfo = false,
   audioStreamIndex?: number,
   log?: Logger,
@@ -555,22 +527,10 @@ export function buildRemuxArgs(
 
   const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
   if (videoOnly && !userPickedAudio) {
-    // Video-only remux for fMP4 var_stream_map (audio served separately).
+    // Video-only remux for var_stream_map (audio served separately).
     args.push('-map', '0:v:0', '-c:v', 'copy', '-an');
   } else if (userPickedAudio) {
     args.push('-map', '0:v:0', '-map', `0:a:${audioStreamIndex}`, '-c:v', 'copy');
-    if (copyAudio) {
-      args.push('-c:a', 'copy');
-    } else {
-      args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
-    }
-  } else if (mapAllAudio && audioStreams && audioStreams.length > 1) {
-    args.push('-map', '0:v:0', '-c:v', 'copy');
-    for (let i = 0; i < audioStreams.length; i++) {
-      args.push('-map', `0:a:${i}`);
-      const lang = audioStreams[i].language;
-      if (lang) args.push(`-metadata:s:a:${i}`, `language=${lang}`);
-    }
     if (copyAudio) {
       args.push('-c:a', 'copy');
     } else {
@@ -585,24 +545,15 @@ export function buildRemuxArgs(
     }
   }
 
-  // HLS output — fMP4 or TS based on useFmp4
   args.push(
     '-f', 'hls',
     '-hls_time', String(SEGMENT_DURATION),
     '-hls_init_time', String(INIT_TIME),
     '-hls_list_size', '0',
     '-start_number', String(startSegment),
-  );
-  if (useFmp4) {
-    args.push(
-      '-hls_segment_type', 'fmp4',
-      '-hls_fmp4_init_filename', 'init.mp4',
-      '-hls_segment_filename', path.join(outputDir, 'seg-%04d.m4s'),
-    );
-  } else {
-    args.push('-hls_segment_filename', path.join(outputDir, 'seg-%04d.ts'));
-  }
-  args.push(
+    '-hls_segment_type', 'fmp4',
+    '-hls_fmp4_init_filename', 'init.mp4',
+    '-hls_segment_filename', path.join(outputDir, 'seg-%04d.m4s'),
     '-hls_flags', 'independent_segments',
     path.join(outputDir, 'index.m3u8'),
   );

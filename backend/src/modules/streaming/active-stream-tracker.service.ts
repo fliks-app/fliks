@@ -115,27 +115,6 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.audioStreamCountCache.get(mediaFileId) ?? 0;
   }
 
-  /** Whether the client handles multi-audio from muxed TS (ExoPlayer/AVPlayer) */
-  private readonly multiAudioMuxedCache = new Map<number, boolean>();
-
-  setMultiAudioMuxed(mediaFileId: number, value: boolean) {
-    this.multiAudioMuxedCache.set(mediaFileId, value);
-  }
-
-  getMultiAudioMuxed(mediaFileId: number): boolean {
-    return this.multiAudioMuxedCache.get(mediaFileId) ?? false;
-  }
-
-  private readonly fmp4SupportedCache = new Map<number, boolean>();
-
-  setFmp4Supported(mediaFileId: number, value: boolean) {
-    this.fmp4SupportedCache.set(mediaFileId, value);
-  }
-
-  getFmp4Supported(mediaFileId: number): boolean {
-    return this.fmp4SupportedCache.get(mediaFileId) ?? true;
-  }
-
   /** Client device category ('mobile' | 'desktop') captured at playback-info.
    *  Used by hlsMaster and HLS segment endpoints to pick the right bitrate ladder. */
   private readonly deviceTypeCache = new Map<number, 'mobile' | 'desktop'>();

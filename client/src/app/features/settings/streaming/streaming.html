@@ -5,17 +5,6 @@
     <h2 class="text-xl font-semibold">{{ 'settings.streaming.title' | translate }}</h2>
     <p class="text-base-content/60">{{ 'settings.streaming.description' | translate }}</p>
 
-    <!-- Segment format -->
-    <div class="form-control">
-      <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.segment_format' | translate }}</span></label>
-      <select class="select select-bordered w-full" [ngModel]="segmentFormat()" (ngModelChange)="segmentFormat.set($event)">
-        <option value="auto">{{ 'settings.streaming.format_auto' | translate }}</option>
-        <option value="ts">MPEG-TS</option>
-        <option value="fmp4">fMP4</option>
-      </select>
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.segment_format_help' | translate }}</span></label>
-    </div>
-
     <!-- Segment duration -->
     <div class="form-control">
       <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.segment_duration' | translate }}</span></label>

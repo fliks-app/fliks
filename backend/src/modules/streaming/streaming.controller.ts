@@ -143,26 +143,15 @@ export class StreamingController {
       audioStreamIndex:
         this.activeStreamTracker.getAudioStreamIndex(mediaFileId),
       crop: si?.video?.[0]?.crop ?? undefined,
-      // videoOnly only makes sense with fMP4 (var_stream_map produces separate audio).
-      // For TS, audio must stay muxed in the video stream.
-      // Multi-audio handling depends on segment format:
-      //   - fMP4: videoOnly + var_stream_map (separate audio renditions in
-      //     subdirs) → Shaka can switch via EXT-X-MEDIA.
-      //   - TS:   mapAllAudio muxes every audio track as distinct PIDs in a
-      //     single TS stream → ExoPlayer/AVPlayer switch by PID natively.
+      // Multi-audio: produce video-only segments and let ffmpeg's var_stream_map
+      // emit one audio rendition per track (subdirs 1..N) so Shaka can switch
+      // client-side via EXT-X-MEDIA.
       videoOnly:
-        this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
-        this.activeStreamTracker.getFmp4Supported(mediaFileId),
-      mapAllAudio:
-        this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1 &&
-        !this.activeStreamTracker.getFmp4Supported(mediaFileId),
-      // Pass audio stream info for both var_stream_map (fMP4) and
-      // mapAllAudio (TS) — both paths need language metadata.
+        this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1,
       audioStreams:
         this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1
           ? ((si?.audio as { language?: string; title?: string }[]) ?? [])
           : undefined,
-      useFmp4: this.activeStreamTracker.getFmp4Supported(mediaFileId),
       deviceType: this.activeStreamTracker.getDeviceType(mediaFileId),
       encoderPreset: this.activeStreamTracker.getEncoderPreset(mediaFileId),
       qsvOptions: this.activeStreamTracker.getQsvOptions(),
@@ -380,22 +369,13 @@ export class StreamingController {
     const audioStreamIndex =
       audioStreamRaw != null ? parseInt(audioStreamRaw, 10) : undefined;
 
-    // Compute segment format early — the stream builder needs it to decide
-    // whether HDR passthrough is possible (HEVC requires fMP4 on iOS).
     const ss = await this.getStreamingSettings();
-    const audioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 1;
-    const clientFmp4 = deviceProfile.supportsHlsFmp4 ?? true;
-    let useFmp4: boolean;
-    if (ss.segmentFormat === 'ts') useFmp4 = false;
-    else if (ss.segmentFormat === 'fmp4') useFmp4 = clientFmp4;
-    else useFmp4 = audioCount > 1 && clientFmp4; // auto: fMP4 for multi-audio only
 
     const result = this.streamBuilder.evaluate(
       resolved,
       deviceProfile,
       tokenParam,
       burnInSubtitleId,
-      useFmp4,
     );
     // Cache transcode reasons for the admin dashboard
     if (result.transcodeReasons.length) {
@@ -422,15 +402,10 @@ export class StreamingController {
       this.activeStreamTracker.setBurnIn(mediaFileId, undefined);
     }
     this.activeStreamTracker.setAudioStreamIndex(mediaFileId, audioStreamIndex);
-    this.activeStreamTracker.setMultiAudioMuxed(
-      mediaFileId,
-      deviceProfile.supportsMultiAudioMuxed ?? false,
-    );
     this.activeStreamTracker.setDeviceType(
       mediaFileId,
       deviceProfile.deviceType ?? 'desktop',
     );
-    this.activeStreamTracker.setFmp4Supported(mediaFileId, useFmp4);
     this.activeStreamTracker.setStreamingDurations(
       ss.segmentDuration,
       ss.initTime,
@@ -550,7 +525,6 @@ export class StreamingController {
       durationSeconds: duration,
       markers,
       chapters,
-      segmentFormat: useFmp4 ? 'fmp4' : 'ts',
     };
   }
 
@@ -621,19 +595,12 @@ export class StreamingController {
     const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
     const audioStreams: { language?: string; title?: string }[] =
       si?.audio ?? [];
-    // Use EXT-X-MEDIA only when the client needs it (Shaka on web) AND supports fMP4.
-    // Native players (ExoPlayer/AVPlayer) handle multi-audio from muxed TS.
-    // Cast (TS) can't handle separate fMP4 audio renditions.
-    // Always expose every rendition even when the user has picked a specific
-    // track — the picked track is marked DEFAULT=YES in the playlist so Shaka
-    // preselects it, and subsequent switches happen client-side (no reload).
-    const clientMuxesAudio =
-      this.activeStreamTracker.getMultiAudioMuxed(mediaFileId);
-    const fmp4Supported =
-      this.activeStreamTracker.getFmp4Supported(mediaFileId);
+    // Multi-audio is exposed via separate EXT-X-MEDIA renditions so the
+    // player can switch audio client-side without a reload. Every rendition
+    // is listed even when the user has picked a specific track — the picked
+    // track is marked DEFAULT=YES so the player preselects it.
     const pickedIdx = this.activeStreamTracker.getAudioStreamIndex(mediaFileId);
-    const useExtXMedia =
-      audioStreams.length > 1 && !clientMuxesAudio && fmp4Supported;
+    const useExtXMedia = audioStreams.length > 1;
     const onlyQuality = firstQueryString(req.query, 'startQuality');
     // Device type: URL param wins (stream URL is built by the frontend with
     // the cached client profile); fall back to whatever playback-info stored.
@@ -941,25 +908,14 @@ export class StreamingController {
     const token = firstQueryString(req.query, 'token');
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
     const basePath = `/api/stream/${mediaFileId}/${quality}`;
-    const useFmp4 = this.activeStreamTracker.getFmp4Supported(mediaFileId);
     // Use the master.m3u8 decision — must match to avoid init filename mismatch.
     const multiAudio = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
-
-    let playlist: string;
-    if (useFmp4) {
-      const initName = multiAudio ? 'init_0.mp4' : 'init.mp4';
-      playlist = buildVodPlaylist(
-        duration,
-        (seg) => `${basePath}/seg-${seg}.m4s${tokenParam}`,
-        `${basePath}/${initName}${tokenParam}`,
-      );
-    } else {
-      // MPEG-TS for Cast (no init segment needed)
-      playlist = buildVodPlaylist(
-        duration,
-        (seg) => `${basePath}/seg-${seg}.ts${tokenParam}`,
-      );
-    }
+    const initName = multiAudio ? 'init_0.mp4' : 'init.mp4';
+    const playlist = buildVodPlaylist(
+      duration,
+      (seg) => `${basePath}/seg-${seg}.m4s${tokenParam}`,
+      `${basePath}/${initName}${tokenParam}`,
+    );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -967,7 +923,7 @@ export class StreamingController {
     res.send(playlist);
   }
 
-  /** HLS segment — serves a transcoded .ts/.m4s segment or fMP4 init. */
+  /** HLS segment — serves a transcoded .m4s segment or fMP4 init. */
   @Get(':mediaFileId/:quality/:segment')
   async hlsSegment(
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
@@ -979,11 +935,11 @@ export class StreamingController {
     if (!VALID_QUALITIES.has(quality)) {
       throw new BadRequestException(`Invalid quality: ${quality}`);
     }
-    const VIDEO_SEG_RE = /^(seg-\d{3,4}\.(ts|m4s)|init(_\d+)?\.mp4)$/;
+    const VIDEO_SEG_RE = /^(seg-\d{3,4}\.m4s|init(_\d+)?\.mp4)$/;
     if (!VIDEO_SEG_RE.test(segment)) {
       throw new BadRequestException(`Invalid segment name: ${segment}`);
     }
-    if (segment.startsWith('init') || segment === 'seg-0000.m4s' || segment === 'seg-0000.ts') {
+    if (segment.startsWith('init') || segment === 'seg-0000.m4s') {
       this.log.log(
         `[request] ${segment} mfid=${mediaFileId} quality=${quality}`,
       );
