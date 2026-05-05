@@ -66,12 +66,18 @@ playerManager.setMessageInterceptor(
 
 // --- Boot ---------------------------------------------------------------
 //
+// `useShakaForHls: true` makes CAF use Shaka for HLS — the same engine
+// the Fliks web/Android paths use, so all three clients share buffering
+// and ABR behaviour.
+//
 // `disableIdleTimeout: true` keeps the receiver alive between clips so
 // queue/skip-intro features work later without re-launching the app.
-// `playbackConfig` left at defaults — Shaka inside CAF handles HLS/DASH
-// for us. CORS on the user's NAS responses is the only blocker; document
-// in README.
+// `autoResumeDuration: 5` starts/resumes playback on 5s of buffered media
+// (default 10) — snappier resume after a seek or transient stall.
 
-context.start({
-  disableIdleTimeout: true,
-});
+const options = new cast.framework.CastReceiverOptions();
+options.disableIdleTimeout = true;
+options.useShakaForHls = true;
+options.playbackConfig = new cast.framework.PlaybackConfig();
+options.playbackConfig.autoResumeDuration = 5;
+context.start(options);
