@@ -338,12 +338,67 @@ export class CastService implements OnDestroy {
       NativeCast.setActiveSubtitle({ trackId });
       return;
     }
-    if (!this.session) return;
-    const media = this.session.getMediaSession();
-    if (!media) return;
-    const activeIds = trackId > 0 ? [trackId] : [];
-    const request = new chrome.cast.media.EditTracksInfoRequest(activeIds);
+    this.applyActiveTracks({ textId: trackId > 0 ? trackId : null });
+  }
+
+  /**
+   * Switch the active audio rendition by language + name through the
+   * standard CAF media bus. The receiver mirrors Shaka's HLS audio
+   * renditions into MediaInformation with type=AUDIO so each becomes a
+   * regular CAF Track addressable via EditTracksInfoRequest.
+   */
+  setActiveAudioLanguage(language: string, name: string): boolean {
+    if (this.isNative) return false;
+    const session = cast.framework.CastContext.getInstance().getCurrentSession?.();
+    const media = session?.getMediaSession?.();
+    if (!media?.media) return false;
+
+    const audioTracks = ((media.media.tracks ?? []) as any[]).filter(
+      (t) => t.type === chrome.cast.media.TrackType.AUDIO,
+    );
+    if (!audioTracks.length) return false;
+
+    // Match by name first: Shaka rewrites manifest LANGUAGE attributes from
+    // ISO 639-2 (eng) to ISO 639-1 (en) before exposing them, so a plain
+    // language equality fails on 3-letter sources. The NAME we emit in
+    // master.m3u8 (track title or language fallback) is preserved verbatim.
+    const target =
+      audioTracks.find((t) => t.name === name)
+      ?? audioTracks.find((t) => t.language === language);
+    if (!target) return false;
+
+    return this.applyActiveTracks({ audioId: target.trackId });
+  }
+
+  /**
+   * Send an EditTracksInfoRequest with the union of AUDIO + TEXT active IDs.
+   * CAF replaces the whole active set in one shot, so we have to send both
+   * to keep them alive. Field semantics:
+   *   - undefined → keep current active track of that type
+   *   - null      → disable that track type
+   *   - number    → set as new active track of that type
+   */
+  private applyActiveTracks(update: {
+    audioId?: number | null;
+    textId?: number | null;
+  }): boolean {
+    const session = cast.framework.CastContext.getInstance().getCurrentSession?.();
+    const media = session?.getMediaSession?.();
+    if (!media?.media) return false;
+    const tracks = (media.media.tracks ?? []) as any[];
+    const activeIds = (media.activeTrackIds ?? []) as number[];
+    const activeOfType = (type: any) =>
+      activeIds.find((id) => tracks.some((t) => t.trackId === id && t.type === type));
+    const audioId = update.audioId === undefined
+      ? activeOfType(chrome.cast.media.TrackType.AUDIO)
+      : update.audioId;
+    const textId = update.textId === undefined
+      ? activeOfType(chrome.cast.media.TrackType.TEXT)
+      : update.textId;
+    const newActive = [audioId, textId].filter((x): x is number => x != null);
+    const request = new chrome.cast.media.EditTracksInfoRequest(newActive);
     media.editTracksInfo(request, () => {}, () => {});
+    return true;
   }
 
   /** Map subtitle presets (size / colour / shadow / background — the same

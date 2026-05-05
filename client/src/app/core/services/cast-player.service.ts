@@ -6,7 +6,7 @@ import { SubtitlesApiService } from './api/subtitles-api.service';
 import { AuthService } from './auth.service';
 import { BrowserDeviceProfileService, DeviceProfile } from './browser-device-profile.service';
 import { ServerConfigService } from './server-config.service';
-import { parseAudioIndex, SpriteMetadata } from '../utils/player.utils';
+import { formatAudioLabel, parseAudioIndex, SpriteMetadata } from '../utils/player.utils';
 import { PlayerSettingsService } from './player-settings.service';
 import { TrackManagerService } from './track-manager.service';
 import { MediaService } from './api/media.service';
@@ -24,7 +24,29 @@ export interface CastSubtitleOption {
 export interface CastAudioOption {
   id: string;
   label: string;
-  language?: string;
+  language: string;
+  /** Source-side title — must mirror the NAME attribute the backend writes
+   *  in master.m3u8 (transcoding/master-playlist.ts). The receiver-side
+   *  audio switch matches on this, so any divergence breaks switching. */
+  name: string;
+}
+
+/** Build CastAudioOption[] from streamInfo audio streams. Single source of
+ *  truth for both quickStart (cast from a detail page) and the player's
+ *  castAudioOptions (cast in-progress). */
+export function buildCastAudioOptions(
+  audioStreams: { language?: string; title?: string; codec?: string; channels?: number }[] | undefined,
+): CastAudioOption[] {
+  if (!audioStreams?.length) return [];
+  return audioStreams.map((a, i) => {
+    const lang = a.language ?? 'und';
+    return {
+      id: `audio-${i}`,
+      label: formatAudioLabel(a),
+      language: lang,
+      name: a.title || lang,
+    };
+  });
 }
 
 export interface CastQualityOption {
@@ -69,13 +91,7 @@ export class CastPlayerService {
       codecConditions: [],
       maxStreamingBitrate: 20_000_000,
       maxAudioChannels: cs.audioChannels ?? 2,
-      // The receiver opts into Shaka for HLS, which prefers fMP4 (no TS
-      // demux step). TS is kept as a fallback for older receivers.
-      supportsHlsFmp4: true,
-      supportsHlsTs: true,
       supportsHdr: cs.hdr ?? false,
-      hdrRequiresFmp4: true,
-      supportsMultiAudioMuxed: false,
       deviceType: 'desktop',
     };
   }
@@ -178,50 +194,68 @@ export class CastPlayerService {
     this.spriteMetadata.set(null);
   }
 
+  /**
+   * Reload the Cast stream after a quality / audio / burn-in change.
+   * Drops any in-flight ffmpeg session before re-spawning, since the new
+   * audio/burn-in context wouldn't be picked up by an existing session
+   * (transcoding.service only auto-replaces on quality change).
+   */
   async reloadCastStream(positionOverride?: number) {
     const mfId = this.mediaFileId();
     if (!mfId) return;
 
-    // Kill any existing session — Cast uses TS while desktop uses fMP4.
     await this.streamingApi.stopSessions(mfId).catch(() => {});
 
-    const castProfile = this.getCastDeviceProfile();
-
-    // Resolve audio index from active track ID if not explicitly set
+    const currentPos = positionOverride ?? this.cast.currentTime();
     const audioIdx = this.activeAudioStreamIndex
       ?? parseAudioIndex(this.activeAudioTrackId() ?? 'audio-0');
+    const transcodeQuality = this.resolveTranscodeQuality(this.activeQualityId());
 
-    const pi = await this.streamingApi.getPlaybackInfo(
-      mfId, castProfile, this.activeBurnInId ?? undefined, audioIdx,
+    // Parallel: playback-info (triggers backend prewarm) + cast token fetch.
+    const castProfile = this.getCastDeviceProfile();
+    const [pi, castInfo] = await Promise.all([
+      this.streamingApi.getPlaybackInfo(
+        mfId, castProfile, this.activeBurnInId ?? undefined, audioIdx,
+        transcodeQuality, Math.floor(currentPos),
+      ),
+      this.authService.getCastInfo(),
+    ]);
+
+    await this.dispatchLoad(mfId, pi, currentPos, transcodeQuality, castInfo);
+  }
+
+  /** Resolve the concrete transcode profile name from the active quality id. */
+  private resolveTranscodeQuality(qualityId: string): string | undefined {
+    if (qualityId !== 'auto' && qualityId !== 'original') return qualityId;
+    const cs = this.castSettings.get();
+    const qualities = this.availableQualities().filter(
+      q => q.id !== 'auto' && q.id !== 'original',
     );
+    if (cs.maxQuality === 'original') {
+      return qualities[0]?.id ?? '1080p';
+    }
+    return qualities.find(q => q.id === cs.maxQuality)?.id
+      ?? qualities[0]?.id
+      ?? '1080p';
+  }
 
-    // Update playback mode from backend decision (may differ from local player)
+  /**
+   * Build the cast URL from a playback-info response and dispatch loadMedia.
+   * Shared between quickStart (initial cast) and reloadCastStream (changes).
+   */
+  private async dispatchLoad(
+    mfId: number,
+    pi: { playMethod: string },
+    currentPos: number,
+    transcodeQuality: string | undefined,
+    castInfo: { token: string; streamBaseUrl: string },
+  ) {
     const castMode: 'direct' | 'remux' | 'transcode' =
       pi.playMethod === 'DirectPlay' ? 'direct' :
       pi.playMethod === 'DirectStream' ? 'remux' : 'transcode';
     this.playbackMode.set(castMode);
 
-    const currentPos = positionOverride ?? this.cast.currentTime();
-    const qualityId = this.activeQualityId();
-
-    let transcodeQuality: string | undefined;
-    if (castMode === 'transcode') {
-      if (qualityId !== 'auto' && qualityId !== 'original') {
-        transcodeQuality = qualityId;
-      } else {
-        const cs = this.castSettings.get();
-        const maxQ = cs.maxQuality;
-        const qualities = this.availableQualities().filter(q => q.id !== 'auto' && q.id !== 'original');
-        if (maxQ === 'original') {
-          transcodeQuality = qualities[0]?.id ?? '1080p';
-        } else {
-          transcodeQuality = qualities.find(q => q.id === maxQ)?.id ?? qualities[0]?.id ?? '1080p';
-        }
-      }
-    }
-
-    // Token + base URL le plus tard possible avant loadMedia (expiration du token Cast).
-    const { token: castToken, streamBaseUrl } = await this.authService.getCastInfo();
+    const { token: castToken, streamBaseUrl } = castInfo;
     this.cast.setCastStreamBase(streamBaseUrl);
     const fromServer = streamBaseUrl.replace(/\/+$/, '');
     const lanUrl =
@@ -230,21 +264,26 @@ export class CastPlayerService {
         ? this.serverConfig.serverUrl()
         : window.location.origin);
 
+    // Route Cast through master.m3u8 (same as desktop/Android) so the
+    // backend's tracker sets useExtXMedia for multi-audio renditions —
+    // bypassing master breaks `init_N.mp4` resolution + drops audio entirely
+    // when var_stream_map is used.
     let castUrl: string;
     let contentType: string;
+    const tokenQ = encodeURIComponent(castToken);
+    const startAtParam = `&startAt=${Math.floor(currentPos)}`;
     if (castMode === 'direct') {
       castUrl = this.streamingApi.getAbsoluteStreamUrl(mfId, castToken);
       contentType = 'video/mp4';
     } else if (castMode === 'remux') {
-      castUrl = `${lanUrl}/api/stream/${mfId}/remux/index.m3u8?token=${encodeURIComponent(castToken)}&copyAudio=false&startAt=${Math.floor(currentPos)}`;
+      castUrl = `${lanUrl}/api/stream/${mfId}/master.m3u8?token=${tokenQ}&remux=1${startAtParam}`;
       contentType = 'application/x-mpegurl';
     } else {
       const q = transcodeQuality ?? '1080p';
-      castUrl = `${lanUrl}/api/stream/${mfId}/${q}/index.m3u8?token=${encodeURIComponent(castToken)}&startAt=${Math.floor(currentPos)}`;
+      castUrl = `${lanUrl}/api/stream/${mfId}/master.m3u8?token=${tokenQ}&startQuality=${q}${startAtParam}`;
       contentType = 'application/x-mpegurl';
     }
 
-    // Build subtitle list (only non-burn-in sidecar, absolute URLs)
     const subtitles = this.subtitleInfos
       .filter(s => !s.burnIn && s.subtitleDbId)
       .map(s => ({
@@ -255,7 +294,6 @@ export class CastPlayerService {
         label: s.label,
       }));
 
-    // Find active subtitle track ID for Cast (1-based)
     const activeSubId = this.activeSubtitleId();
     let activeSubtitleTrackId: number | undefined;
     if (activeSubId) {
@@ -286,11 +324,19 @@ export class CastPlayerService {
   async changeAudio(audioIndex: number) {
     this.activeAudioStreamIndex = audioIndex;
 
-    // Save selection via shared TrackManager
     const trackId = `audio-${audioIndex}`;
     this.trackManager.saveAudioSelection(
       trackId, this.availableAudioTracks(), this.mediaId(), 0,
     );
+    this.activeAudioTrackId.set(trackId);
+
+    // Fast path: switch the active audio rendition via EditTracksInfoRequest
+    // on the standard media bus. Sub-100ms swap, no ffmpeg restart. Native
+    // Cast plugin falls through to a full reload.
+    const audio = this.availableAudioTracks()[audioIndex];
+    if (audio && this.cast.setActiveAudioLanguage(audio.language, audio.name)) {
+      return;
+    }
 
     await this.reloadCastStream();
   }
@@ -390,93 +436,89 @@ export class CastPlayerService {
     streamInfo?: any;
     startTime?: number;
   }) {
-    const castProfile = this.getCastDeviceProfile();
+    // Phase 1 — parallelize every fetch that doesn't depend on streamInfo
+    // resolution. Saves ~3 sequential round-trips on cold cast.
+    const needsMediaFetch = !opts.streamInfo;
+    const needsSavedState = opts.startTime == null;
+    const [mediaResult, subsResult, savedState, castInfo] = await Promise.all([
+      needsMediaFetch
+        ? this.mediaService.getOne(opts.mediaId).catch(() => null)
+        : Promise.resolve(null),
+      this.subtitlesApi.getForMedia(opts.mediaId).catch(() => [] as any[]),
+      needsSavedState
+        ? this.streamingApi
+            .getPlaybackState(opts.mediaId, opts.episodeId)
+            .catch(() => null)
+        : Promise.resolve(null),
+      this.authService.getCastInfo(),
+    ]);
 
-    // Fetch media info if streamInfo not provided (e.g. from "Continue Watching")
     let streamInfo = opts.streamInfo;
     let fanartUrl = opts.fanartUrl ?? null;
-    if (!streamInfo) {
-      try {
-        const media = await this.mediaService.getOne(opts.mediaId);
-        const file = media.files?.find((f: any) => f.id === opts.mediaFileId);
-        streamInfo = file?.streamInfo;
-        if (!fanartUrl && media.fanartUrl) fanartUrl = media.fanartUrl;
-      } catch { /* ignore — will proceed without streamInfo */ }
+    if (mediaResult) {
+      const file = mediaResult.files?.find((f: any) => f.id === opts.mediaFileId);
+      streamInfo = file?.streamInfo;
+      if (!fanartUrl && mediaResult.fanartUrl) fanartUrl = mediaResult.fanartUrl;
     }
-    // Resolve relative URLs to absolute (needed on mobile where origin is localhost)
     if (fanartUrl) fanartUrl = this.serverConfig.resolveUrl(fanartUrl);
 
-    // Resolve preferred audio stream index from user settings
-    const audioStreams: { language?: string }[] = streamInfo?.audio ?? [];
-    const audioIndex = this.playerSettings.resolveAudioStreamIndex(
-      opts.mediaFileId, audioStreams, opts.mediaId,
-    );
+    // Resolve start position: explicit > saved playback state > 0
+    let startTime = opts.startTime;
+    if (startTime == null && savedState && !savedState.completed && savedState.positionSeconds > 10) {
+      startTime = savedState.positionSeconds;
+    }
+    startTime ??= 0;
 
-    // Fetch playback info
-    const pi = await this.streamingApi.getPlaybackInfo(opts.mediaFileId, castProfile, undefined, audioIndex);
-    const mode: 'direct' | 'remux' | 'transcode' =
-      pi.playMethod === 'DirectPlay' ? 'direct' :
-      pi.playMethod === 'DirectStream' ? 'remux' : 'transcode';
-
-    // Build quality options from source resolution
-    const srcW = pi.source.width ?? 1920;
-    const srcH = pi.source.height ?? 1080;
+    // Build quality options from source resolution (streamInfo, no need to
+    // wait for playback-info first).
+    const srcW = streamInfo?.video?.[0]?.width ?? 1920;
+    const srcH = streamInfo?.video?.[0]?.height ?? 1080;
     const profiles = [
       { id: '1080p', label: '1080p', minWidth: 1920 },
       { id: '720p', label: '720p', minWidth: 1280 },
       { id: '480p', label: '480p', minWidth: 854 },
       { id: '360p', label: '360p', minWidth: 640 },
     ];
+    // The Cast profile has empty directPlayProfiles → backend can never
+    // remux for Cast → no 'original' rung surfaced.
     const qualities: CastQualityOption[] = [];
-    if (pi.videoCopyStream) {
-      qualities.push({ id: 'original', label: `${srcH}p` });
-    }
     for (const p of profiles) {
       if (srcW >= p.minWidth) qualities.push(p);
     }
 
-    // Fetch subtitles
+    const audioStreams: { language?: string }[] = streamInfo?.audio ?? [];
+    const audioIndex = this.playerSettings.resolveAudioStreamIndex(
+      opts.mediaFileId, audioStreams, opts.mediaId,
+    );
+
+    // Build subtitle list from the parallel fetch
     const subtitleInfos: SubtitleInfo[] = [];
     const bitmapCodecs = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle']);
-    try {
-      const subs = await this.subtitlesApi.getForMedia(opts.mediaId);
-      for (const sub of subs) {
-        if (sub.mediaFileId !== opts.mediaFileId) continue;
-        const isBitmap = bitmapCodecs.has(sub.codec ?? '');
-        if (sub.relativePath) {
-          subtitleInfos.push({
-            id: `ext-${sub.id}`, label: `${sub.language}${sub.forced ? ' (Forced)' : ''}`,
-            language: sub.language, burnIn: false, subtitleDbId: sub.id,
-            url: this.streamingApi.getSubtitleUrl(opts.mediaFileId, sub.id),
-            forced: sub.forced ?? false,
-          });
-        } else if (sub.streamIndex != null) {
-          subtitleInfos.push({
-            id: `emb-${sub.streamIndex}`,
-            label: `${sub.language}${sub.forced ? ' (Forced)' : ''}${isBitmap ? ' [PGS]' : ' [embedded]'}`,
-            language: sub.language, burnIn: isBitmap, subtitleDbId: sub.id,
-            url: isBitmap ? '' : this.streamingApi.getEmbeddedSubtitleUrl(opts.mediaFileId, sub.streamIndex!),
-            forced: sub.forced ?? false,
-          });
-        }
-      }
-    } catch { /* ignore */ }
-
-    // Build audio tracks from streamInfo
-    const audioTracks: CastAudioOption[] = [];
-    const si = streamInfo;
-    if (si?.audio?.length) {
-      for (let i = 0; i < si.audio.length; i++) {
-        const a = si.audio[i];
-        audioTracks.push({
-          id: `audio-${i}`,
-          label: `${a.language ?? 'und'}${a.title ? ' - ' + a.title : ''} (${(a.codec ?? '').toUpperCase()}${a.channels ? ' ' + a.channels + 'ch' : ''})`,
-          language: a.language ?? 'und',
+    for (const sub of subsResult) {
+      if (sub.mediaFileId !== opts.mediaFileId) continue;
+      const isBitmap = bitmapCodecs.has(sub.codec ?? '');
+      if (sub.relativePath) {
+        subtitleInfos.push({
+          id: `ext-${sub.id}`, label: `${sub.language}${sub.forced ? ' (Forced)' : ''}`,
+          language: sub.language, burnIn: false, subtitleDbId: sub.id,
+          url: this.streamingApi.getSubtitleUrl(opts.mediaFileId, sub.id),
+          forced: sub.forced ?? false,
+        });
+      } else if (sub.streamIndex != null) {
+        subtitleInfos.push({
+          id: `emb-${sub.streamIndex}`,
+          label: `${sub.language}${sub.forced ? ' (Forced)' : ''}${isBitmap ? ' [PGS]' : ' [embedded]'}`,
+          language: sub.language, burnIn: isBitmap, subtitleDbId: sub.id,
+          url: isBitmap ? '' : this.streamingApi.getEmbeddedSubtitleUrl(opts.mediaFileId, sub.streamIndex!),
+          forced: sub.forced ?? false,
         });
       }
     }
 
-    // Initialize state
+    const audioTracks = buildCastAudioOptions(streamInfo?.audio);
+
+    // Seed state so dispatchLoad can read activeSubtitleId / subtitleInfos.
+    const initialQualityId = this.resolveInitialCastQuality(qualities);
     this.startCast({
       mediaFileId: opts.mediaFileId,
       mediaId: opts.mediaId,
@@ -484,27 +526,25 @@ export class CastPlayerService {
       mediaTitle: opts.title,
       episodeTitle: opts.episodeTitle ?? '',
       fanartUrl,
-      playbackMode: mode,
+      playbackMode: 'transcode',
       subtitles: subtitleInfos,
       qualities,
       audioTracks,
-      activeQualityId: this.resolveInitialCastQuality(qualities),
+      activeQualityId: initialQualityId,
       activeSubtitleId: this.resolveRememberedSubtitleId(opts.mediaId, subtitleInfos),
       activeAudioTrackId: audioIndex != null ? `audio-${audioIndex}` : (audioTracks[0]?.id ?? null),
       activeBurnInId: null,
       activeAudioStreamIndex: audioIndex,
     });
 
-    // Resolve start position: explicit > saved playback state > 0
-    let startTime = opts.startTime;
-    if (startTime == null) {
-      try {
-        const state = await this.streamingApi.getPlaybackState(opts.mediaId, opts.episodeId);
-        if (state && !state.completed && state.positionSeconds > 10) {
-          startTime = state.positionSeconds;
-        }
-      } catch { /* ignore */ }
-    }
-    await this.reloadCastStream(startTime ?? 0);
+    // Phase 2 — single playback-info call, with startQuality + startAt set
+    // so the backend pre-spawns ffmpeg right away (no second round-trip).
+    const transcodeQuality = this.resolveTranscodeQuality(initialQualityId);
+    const pi = await this.streamingApi.getPlaybackInfo(
+      opts.mediaFileId, this.getCastDeviceProfile(),
+      undefined, audioIndex, transcodeQuality, Math.floor(startTime),
+    );
+
+    await this.dispatchLoad(opts.mediaFileId, pi, startTime, transcodeQuality, castInfo);
   }
 }
