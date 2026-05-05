@@ -267,10 +267,10 @@ export class ThumbnailService {
       message: label,
     });
 
-    // Global 4-minute timeout for the entire sprite (extraction + tiling).
-    const SPRITE_TIMEOUT_MS = 4 * 60_000;
+    // Global 10-minute timeout for the entire sprite (extraction + tiling).
+    const SPRITE_TIMEOUT_MS = 10 * 60_000;
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`Sprite generation timed out after 4 minutes`)), SPRITE_TIMEOUT_MS),
+      setTimeout(() => reject(new Error(`Sprite generation timed out after 10 minutes`)), SPRITE_TIMEOUT_MS),
     );
 
     try {
