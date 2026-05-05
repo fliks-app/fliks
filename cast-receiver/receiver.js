@@ -92,7 +92,11 @@ function publishAudioTracks() {
     (t) => t.type !== cast.framework.messages.TrackType.AUDIO,
   );
   info.tracks = [...otherTracks, ...cafAudioTracks];
-  playerManager.setMediaInformation(info, /* opt_broadcast */ true);
+  playerManager.setMediaInformation(info);
+  // Push the updated media info to senders via MEDIA_STATUS so they see the
+  // audio tracks in MediaInformation.tracks and can switch them via
+  // EditTracksInfoRequest.
+  playerManager.broadcastStatus(true);
   console.log(
     `[fliks-cast] published ${cafAudioTracks.length} audio tracks to media info`,
     cafAudioTracks.map((t) => ({ trackId: t.trackId, language: t.language, name: t.name })),
