@@ -498,9 +498,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           audioStreamIndex: ctx?.audioStreamIndex,
           crop: ctx?.crop,
           videoOnly: isVideoOnly,
-          mapAllAudio: ctx?.mapAllAudio ?? false,
           audioStreams: ctxAudioStreams,
-          useFmp4: ctx?.useFmp4 ?? true,
           copyAudio: ctx?.copyAudio ?? false,
           encoderPreset: ctx?.encoderPreset,
           qsvOptions: ctx?.qsvOptions,
@@ -517,7 +515,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
       const usesVarStreamMap =
         isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
-      const useFmp4 = ctx?.useFmp4 ?? true;
       const session = this.spawnFfmpegSession({
         id,
         mediaFileId,
@@ -525,7 +522,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         args,
         sessionDir,
         startSegment: 0,
-        segExt: useFmp4 ? '.m4s' : '.ts',
+        segExt: '.m4s',
         segSubDir: usesVarStreamMap ? '0' : undefined,
         extra: { actualHwAccel: this.detectedHwAccel },
       });
@@ -542,7 +539,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     for (let i = 0; i < 120; i++) {
       if (await fileExists(playlistPath)) {
         const content = await fsp.readFile(playlistPath, 'utf-8');
-        if (content.includes('.ts') || content.includes('.m4s')) return content;
+        if (content.includes('.m4s')) return content;
       }
       await new Promise((r) => setTimeout(r, 500));
     }
@@ -754,7 +751,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ): TranscodeSession {
     const isVideoOnly = ctx?.videoOnly ?? false;
     const audioStreams = ctx?.audioStreams;
-    const useFmp4 = ctx?.useFmp4 ?? true;
 
     const args = buildFfmpegArgs(
       {
@@ -768,9 +764,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         audioStreamIndex: ctx?.audioStreamIndex,
         crop: ctx?.crop,
         videoOnly: isVideoOnly,
-        mapAllAudio: ctx?.mapAllAudio ?? false,
         audioStreams,
-        useFmp4,
         copyAudio: ctx?.copyAudio ?? false,
         encoderPreset: ctx?.encoderPreset,
         qsvOptions: ctx?.qsvOptions,
@@ -782,7 +776,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     const usesVarStreamMap =
       isVideoOnly && audioStreams && audioStreams.length > 1;
-    const segExt = useFmp4 ? '.m4s' : '.ts';
     return this.spawnFfmpegSession({
       id: sessionId,
       mediaFileId,
@@ -790,7 +783,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args,
       sessionDir,
       startSegment,
-      segExt,
+      segExt: '.m4s',
       segSubDir: usesVarStreamMap ? '0' : undefined,
       extra: { actualHwAccel: hwAccel },
     });
@@ -960,9 +953,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       '192k',
       requestedSegment,
       isVideoOnly,
-      ctx?.mapAllAudio ?? false,
-      ctx?.audioStreams,
-      ctx?.useFmp4 ?? true,
       ctx?.trustedStreamInfo,
       ctx?.audioStreamIndex,
       this.log,

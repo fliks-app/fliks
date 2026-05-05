@@ -76,10 +76,6 @@ export interface PlaybackInfoResponse {
   };
   /** Embedded chapters from the container (MKV/MP4). */
   chapters?: { startSeconds: number; endSeconds: number; title?: string }[];
-  /** HLS segment format decided by admin setting + client capability.
-   *  fmp4 supports EXT-X-MEDIA multi-audio (client-side switch); TS doesn't
-   *  (switching audio requires a backend reload). */
-  segmentFormat?: 'fmp4' | 'ts';
 }
 
 export interface MediaResumeInfo {

@@ -2,7 +2,6 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { SettingsService } from '../settings/settings.service';
 
 export interface StreamingSettings {
-  segmentFormat: 'auto' | 'ts' | 'fmp4';
   segmentDuration: number;
   initTime: number;
   qsvPreset:
@@ -19,7 +18,6 @@ export interface StreamingSettings {
 }
 
 const KEYS = [
-  'streaming_segment_format',
   'streaming_segment_duration',
   'streaming_init_time',
   'streaming_qsv_preset',
@@ -58,7 +56,6 @@ export class StreamingSettingsCache implements OnModuleInit {
   private async load(): Promise<StreamingSettings> {
     const values = await Promise.all(KEYS.map((k) => this.settings.get(k)));
     const [
-      format,
       duration,
       initTime,
       qsvPreset,
@@ -67,7 +64,6 @@ export class StreamingSettingsCache implements OnModuleInit {
       qsvAdaptive,
     ] = values;
     return {
-      segmentFormat: (format ?? 'auto') as StreamingSettings['segmentFormat'],
       segmentDuration: parseFloat(duration ?? '3') || 3,
       initTime: parseFloat(initTime ?? '1') || 1,
       qsvPreset: (qsvPreset ?? 'faster') as StreamingSettings['qsvPreset'],

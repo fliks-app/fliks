@@ -71,23 +71,7 @@ export class DeviceProfileDto {
 
   @IsBoolean()
   @IsOptional()
-  supportsHlsFmp4?: boolean;
-
-  @IsBoolean()
-  @IsOptional()
-  supportsHlsTs?: boolean;
-
-  @IsBoolean()
-  @IsOptional()
   supportsHdr?: boolean;
-
-  @IsBoolean()
-  @IsOptional()
-  hdrRequiresFmp4?: boolean;
-
-  @IsBoolean()
-  @IsOptional()
-  supportsMultiAudioMuxed?: boolean;
 
   @IsIn(['mobile', 'desktop'])
   @IsOptional()

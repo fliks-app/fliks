@@ -35,12 +35,8 @@ export interface SessionContext {
   crop?: { width: number; height: number; x: number; y: number };
   /** When true, produce video-only segments (audio served separately via EXT-X-MEDIA) */
   videoOnly?: boolean;
-  /** When true, mux ALL audio tracks into the output (for native players like ExoPlayer) */
-  mapAllAudio?: boolean;
   /** Audio stream info for multi-audio var_stream_map (single FFmpeg process) */
   audioStreams?: { language?: string; title?: string }[];
-  /** Whether to use fMP4 segments (true) or MPEG-TS (false, for Cast) */
-  useFmp4?: boolean;
   /** Client device category — selects the per-device bitrate ladder. */
   deviceType?: DeviceType;
   /**

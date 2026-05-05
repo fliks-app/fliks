@@ -39,8 +39,6 @@ export class StreamBuilderService {
     profile: DeviceProfileDto,
     tokenParam: string,
     burnInSubtitleId?: number,
-    /** Whether the output will use fMP4 segments (false = TS). */
-    useFmp4 = true,
   ): PlaybackInfoResponse {
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
@@ -100,16 +98,7 @@ export class StreamBuilderService {
     // HDR detection
     const isSourceHdr = !!source.hdrFormat;
     const clientSupportsHdr = profile.supportsHdr === true;
-    // HDR passthrough requires HEVC which some containers can't carry:
-    // iOS AVPlayer crashes on HEVC in TS. When the client declares
-    // hdrRequiresFmp4 and the output is TS, force tonemapping to H264 SDR.
-    const hdrBlockedByFormat =
-      isSourceHdr &&
-      clientSupportsHdr &&
-      profile.hdrRequiresFmp4 === true &&
-      !useFmp4;
-    const needsTonemapping =
-      (isSourceHdr && !clientSupportsHdr) || hdrBlockedByFormat;
+    const needsTonemapping = isSourceHdr && !clientSupportsHdr;
     const needsBurnIn = !!burnInSubtitleId;
     const needsCrop = !!v?.crop;
 
@@ -129,14 +118,14 @@ export class StreamBuilderService {
       `audioDecision[file=${resolved.mediaFile.id}] tryDirectPlay → audioSupported=${directPlayResult.audioSupported}, containerSupported=${directPlayResult.containerSupported}, videoSupported=${directPlayResult.videoSupported}, reasons=${reasons.map((r) => r.flag).join('|') || '-'}`,
     );
 
-    // HDR on SDR client or incompatible format forces transcode
+    // HDR on SDR client forces transcode
     if (needsTonemapping) {
       if (directPlayResult.canDirectPlay)
         directPlayResult.canDirectPlay = false;
-      const reason = hdrBlockedByFormat
-        ? `HDR → SDR (HEVC incompatible with TS, ${source.hdrFormat})`
-        : `HDR → SDR (tone mapping ${source.hdrFormat})`;
-      reasons.push({ flag: 'VideoHdrNotSupported', message: reason });
+      reasons.push({
+        flag: 'VideoHdrNotSupported',
+        message: `HDR → SDR (tone mapping ${source.hdrFormat})`,
+      });
     }
 
     // Subtitle burn-in forces transcode
