@@ -71,12 +71,28 @@ playerManager.addEventListener(
 // in-place (no LOAD round-trip, no ffmpeg restart).
 
 context.addCustomMessageListener(FLIKS_AUDIO_NAMESPACE, (event) => {
+  console.log('[fliks-cast] audio msg received:', event.data);
   const { language, name } = event.data ?? {};
-  if (!language) return;
+  if (!language) {
+    console.warn('[fliks-cast] audio msg: no language → bail');
+    return;
+  }
   let mgr;
-  try { mgr = playerManager.getAudioTracksManager(); } catch { return; }
-  if (!mgr) return;
+  try {
+    mgr = playerManager.getAudioTracksManager();
+  } catch (err) {
+    console.warn('[fliks-cast] getAudioTracksManager threw → bail', err);
+    return;
+  }
+  if (!mgr) {
+    console.warn('[fliks-cast] getAudioTracksManager returned null → bail');
+    return;
+  }
   const tracks = mgr.getTracks() ?? [];
+  console.log(
+    `[fliks-cast] audio msg: ${tracks.length} tracks visible to receiver`,
+    tracks.map((t) => ({ trackId: t.trackId, language: t.language, name: t.name })),
+  );
   const matches = tracks.filter((t) => t.language === language);
   const target =
     matches.find((t) => t.name === name)
@@ -84,14 +100,17 @@ context.addCustomMessageListener(FLIKS_AUDIO_NAMESPACE, (event) => {
   if (!target) {
     console.warn(
       `[fliks-cast] audio switch: no unique match for language=${language} name=${name}`,
-      tracks.map((t) => ({ trackId: t.trackId, language: t.language, name: t.name })),
     );
     return;
   }
   console.log(
     `[fliks-cast] audio switch → trackId=${target.trackId} (${language} / ${name})`,
   );
-  mgr.setActiveById(target.trackId);
+  try {
+    mgr.setActiveById(target.trackId);
+  } catch (err) {
+    console.error('[fliks-cast] setActiveById threw', err);
+  }
 });
 
 // --- Subtitle styling baked into every load -----------------------------
