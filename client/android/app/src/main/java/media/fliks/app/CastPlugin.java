@@ -493,6 +493,88 @@ public class CastPlugin extends Plugin {
         });
     }
 
+    /**
+     * Switch the active audio rendition on the receiver via the standard
+     * media bus (setActiveMediaTracks → EDIT_TRACKS_INFO). The receiver
+     * mirrors Shaka's HLS audio renditions into MediaInformation as
+     * AUDIO tracks, so Cast SDK's track-selection API drives the swap
+     * client-side without an ffmpeg restart.
+     *
+     * Resolves with {@code success: false} when no matching track is
+     * found — caller falls back to a full reload in that case.
+     */
+    @PluginMethod()
+    public void setActiveAudioLanguage(PluginCall call) {
+        runOnMainThread(() -> {
+            String language = call.getString("language", "");
+            String name = call.getString("name", "");
+            RemoteMediaClient client = getClient();
+            if (client == null) {
+                call.resolve(new JSObject().put("success", false));
+                return;
+            }
+            // Prefer MediaStatus' MediaInfo: it reflects receiver-side
+            // setMediaInformation() updates (where the audio renditions are
+            // published). Fall back to client.getMediaInfo() for safety.
+            MediaInfo mediaInfo = client.getMediaStatus() != null
+                ? client.getMediaStatus().getMediaInfo()
+                : null;
+            if (mediaInfo == null) mediaInfo = client.getMediaInfo();
+            List<MediaTrack> tracks = mediaInfo != null ? mediaInfo.getMediaTracks() : null;
+            if (tracks == null || tracks.isEmpty()) {
+                call.resolve(new JSObject().put("success", false));
+                return;
+            }
+            // Match by NAME first: Shaka rewrites manifest LANGUAGE from
+            // ISO 639-2 (eng) to ISO 639-1 (en) before exposing renditions,
+            // so plain language equality fails on 3-letter sources. The
+            // NAME emitted in master.m3u8 (track title or language fallback)
+            // is preserved verbatim.
+            MediaTrack target = null;
+            for (MediaTrack t : tracks) {
+                if (t.getType() == MediaTrack.TYPE_AUDIO && name.equals(t.getName())) {
+                    target = t;
+                    break;
+                }
+            }
+            if (target == null) {
+                for (MediaTrack t : tracks) {
+                    if (t.getType() == MediaTrack.TYPE_AUDIO && language.equals(t.getLanguage())) {
+                        target = t;
+                        break;
+                    }
+                }
+            }
+            if (target == null) {
+                call.resolve(new JSObject().put("success", false));
+                return;
+            }
+            // Preserve any active text track — setActiveMediaTracks replaces
+            // the whole active set in one shot, mirroring the web's
+            // applyActiveTracks union semantics.
+            long textId = -1;
+            if (client.getMediaStatus() != null) {
+                long[] active = client.getMediaStatus().getActiveTrackIds();
+                if (active != null) {
+                    for (long id : active) {
+                        for (MediaTrack t : tracks) {
+                            if (t.getId() == id && t.getType() == MediaTrack.TYPE_TEXT) {
+                                textId = id;
+                                break;
+                            }
+                        }
+                        if (textId >= 0) break;
+                    }
+                }
+            }
+            long[] newActive = textId >= 0
+                ? new long[] { target.getId(), textId }
+                : new long[] { target.getId() };
+            client.setActiveMediaTracks(newActive);
+            call.resolve(new JSObject().put("success", true));
+        });
+    }
+
     private RemoteMediaClient getClient() {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             Log.w(TAG, "getClient() must run on main thread");

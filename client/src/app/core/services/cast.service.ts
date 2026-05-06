@@ -53,6 +53,7 @@ interface NativeCastPlugin {
   stop(): Promise<void>;
   disconnect(): Promise<void>;
   setActiveSubtitle(opts: { trackId: number }): Promise<void>;
+  setActiveAudioLanguage(opts: { language: string; name: string }): Promise<{ success: boolean }>;
 }
 
 const NativeCast = registerPlugin<NativeCastPlugin>('NativeCast');
@@ -345,10 +346,21 @@ export class CastService implements OnDestroy {
    * Switch the active audio rendition by language + name through the
    * standard CAF media bus. The receiver mirrors Shaka's HLS audio
    * renditions into MediaInformation with type=AUDIO so each becomes a
-   * regular CAF Track addressable via EditTracksInfoRequest.
+   * regular CAF Track addressable via EditTracksInfoRequest (web) or
+   * RemoteMediaClient.setActiveMediaTracks (native).
+   *
+   * Returns false when no matching track is found — caller falls back
+   * to a full ffmpeg-restart reload in that case.
    */
-  setActiveAudioLanguage(language: string, name: string): boolean {
-    if (this.isNative) return false;
+  async setActiveAudioLanguage(language: string, name: string): Promise<boolean> {
+    if (this.isNative) {
+      try {
+        const { success } = await NativeCast.setActiveAudioLanguage({ language, name });
+        return success;
+      } catch {
+        return false;
+      }
+    }
     const session = cast.framework.CastContext.getInstance().getCurrentSession?.();
     const media = session?.getMediaSession?.();
     if (!media?.media) return false;
