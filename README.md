@@ -1,7 +1,7 @@
 # Fliks
 
 Self-hosted media server — alternative to Plex / Jellyfin / Emby with built-in
-library management (replaces Radarr / Sonarr / Prowlarr).
+library management.
 
 NestJS backend, Angular client wrapped in Capacitor for iOS / Android /
 Android TV, Chromecast receiver, FFmpeg / Shaka transcoding pipeline.
