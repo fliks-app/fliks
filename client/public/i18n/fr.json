@@ -1602,6 +1602,18 @@
     "remove_from_list": "Retirer de cette liste",
     "actions": "Actions"
   },
+  "cast": {
+    "error": {
+      "generic": "Erreur de lecture sur le Chromecast (code {{code}}).",
+      "shaka_1001": "Le Chromecast n'a pas pu joindre le serveur (code 1001).",
+      "shaka_1002": "Délai dépassé en récupérant un segment depuis le Chromecast (code 1002).",
+      "shaka_3015": "Le Chromecast a refusé un fragment (code 3015).",
+      "shaka_3016": "Le Chromecast a rencontré une erreur de décodage vidéo (code 3016).",
+      "shaka_3017": "Le Chromecast a saturé sa mémoire de lecture. Essayez une qualité plus basse (code 3017).",
+      "shaka_4001": "Manifeste HLS invalide reçu par le Chromecast (code 4001).",
+      "shaka_6001": "Le Chromecast ne supporte pas ce codec audio/vidéo (code 6001)."
+    }
+  },
   "legend": {
     "downloaded_monitored": "Téléchargé (suivi)",
     "downloaded_unmonitored": "Téléchargé (non suivi)",

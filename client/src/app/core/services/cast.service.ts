@@ -1,7 +1,32 @@
 import { Injectable, inject, signal, OnDestroy } from '@angular/core';
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { TranslateService } from '@ngx-translate/core';
 import { environment } from '../../../environments/environment';
 import { CastSettingsService, CastSubtitleStyle } from './cast-settings.service';
+import { ToastService } from './toast.service';
+
+/** Custom Cast message namespace shared between the Fliks receiver and
+ *  every sender. Used today for receiver → sender error forwarding;
+ *  reserved for any future bidirectional control message. Keep in sync
+ *  with `cast-receiver/receiver.js`. */
+const FLIKS_CAST_NAMESPACE = 'urn:x-cast:media.fliks.app';
+
+/** Receiver → sender error payload. Fields mirror what the receiver
+ *  pushes via `fliksBus.broadcast`; everything is optional because the
+ *  receiver is forward-compatible with older senders. */
+interface ReceiverPlayerError {
+  kind: 'player_error';
+  at?: number;
+  detailedErrorCode?: number;
+  severity?: number;
+  shakaErrorCode?: number;
+  shakaErrorData?: unknown;
+  reason?: string;
+  mediaTitle?: string;
+  mediaSubtitle?: string;
+  mediaId?: number;
+  episodeId?: number;
+}
 
 declare const cast: any;
 declare const chrome: any;
@@ -74,6 +99,11 @@ export class CastService implements OnDestroy {
 
   private readonly isNative = Capacitor.isNativePlatform();
   private readonly castSettings = inject(CastSettingsService);
+  private readonly toast = inject(ToastService);
+  private readonly translate = inject(TranslateService);
+  /** Tracks which session id we already attached the error listener to
+   *  so a reconnect to the same session doesn't double-listen. */
+  private errorListenerSessionId: string | null = null;
 
   // Web-only
   private session: any = null;
@@ -188,6 +218,56 @@ export class CastService implements OnDestroy {
     this.session = connected
       ? cast.framework.CastContext.getInstance().getCurrentSession()
       : null;
+    if (this.session) {
+      this.attachReceiverMessageListener(this.session);
+    } else {
+      this.errorListenerSessionId = null;
+    }
+  }
+
+  /** Wires the receiver-side custom message bus to the sender's toast.
+   *  CAF auto-removes the listener when the session is torn down, but we
+   *  guard against re-adding on the same session so a reconnect with the
+   *  same id doesn't stack listeners and double-toast the same error. */
+  private attachReceiverMessageListener(session: any) {
+    const sessionId = session?.getSessionId?.();
+    if (sessionId && sessionId === this.errorListenerSessionId) return;
+    try {
+      session.addMessageListener(FLIKS_CAST_NAMESPACE, (_ns: string, raw: string) => {
+        try {
+          const payload = JSON.parse(raw) as ReceiverPlayerError;
+          if (payload?.kind === 'player_error') this.handleReceiverError(payload);
+        } catch {
+          /* malformed messages are ignored — receiver is forward-compatible */
+        }
+      });
+      this.errorListenerSessionId = sessionId ?? null;
+    } catch (err) {
+      console.warn('Cast addMessageListener failed', err);
+    }
+  }
+
+  private handleReceiverError(payload: ReceiverPlayerError) {
+    // Map the Shaka error code to a translation key when we recognise it
+    // so the toast wording is actionable; fall back to a generic message
+    // with the raw code for everything else.
+    const knownKey = `cast.error.shaka_${payload.shakaErrorCode}`;
+    const fallbackKey = 'cast.error.generic';
+    const params = {
+      title: payload.mediaTitle ?? '',
+      code:
+        payload.shakaErrorCode != null
+          ? String(payload.shakaErrorCode)
+          : payload.detailedErrorCode != null
+            ? String(payload.detailedErrorCode)
+            : '?',
+    };
+    const translated = this.translate.instant(knownKey, params);
+    const message =
+      translated === knownKey
+        ? this.translate.instant(fallbackKey, params)
+        : translated;
+    this.toast.error(message);
   }
 
   // ---------------------------------------------------------------------------
