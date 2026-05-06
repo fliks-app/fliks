@@ -307,12 +307,14 @@
             {{ 'nav.persons' | translate }}
           </a>
         </li>
-        <li>
-          <a routerLink="/downloads" routerLinkActive="active">
-            <svg lucideDownload class="h-5 w-5"></svg>
-            {{ 'downloads.title' | translate }}
-          </a>
-        </li>
+        @if (!tv.isTv()) {
+          <li>
+            <a routerLink="/downloads" routerLinkActive="active">
+              <svg lucideDownload class="h-5 w-5"></svg>
+              {{ 'downloads.title' | translate }}
+            </a>
+          </li>
+        }
         <li>
           <a routerLink="/history" routerLinkActive="active">
             <svg lucideHistory class="h-5 w-5"></svg>

@@ -87,7 +87,7 @@
           <svg lucideCheck class="h-5 w-5"></svg>
           {{ 'media_info.watched' | translate }}
         </button>
-        @if (mediaType() === 'movie' || episodeId()) {
+        @if ((mediaType() === 'movie' || episodeId()) && !tv.isTv()) {
           <button class="flex flex-col items-center gap-1 text-sm" (click)="openDownload.emit()">
             <svg lucideDownload class="h-5 w-5"></svg>
             {{ 'downloads.download' | translate }}
