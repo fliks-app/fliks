@@ -1,9 +1,8 @@
 # Fliks
 
-Self-hosted media server for the videos you already own — point Fliks at
-a folder on your NAS or PC and it gives you a clean player, on every
-screen in the house, with adaptive streaming, multi-audio and
-multi-subtitle support, and fast Cast-to-TV.
+Self-hosted media server: organise your media folders into libraries
+and stream them on every screen in the house — adaptive streaming,
+multi-audio and multi-subtitle support, fast Cast-to-TV.
 
 NestJS backend, Angular client (web + iOS + Android + Android TV via
 Capacitor; Samsung Tizen and LG webOS targets in progress), custom
@@ -29,6 +28,27 @@ Chromecast receiver, FFmpeg / Shaka transcoding pipeline.
   auto-brightness on devices that expose the API.
 - 10-foot TV UI with D-pad spatial navigation; one-handed phone UI
   with a long-press contextual menu.
+
+### Browse & discover
+- Multiple libraries side by side, each pointed at its own folder
+  (movies, series, anime, kids, …) — switch from the sidebar.
+- Cross-library search by title with a movie / series filter, plus
+  TMDB-backed metadata suggestions to surface posters and details for
+  matching titles.
+- Per-library filter and sort: by status, by date added, alphabetical,
+  rating, runtime.
+- Genre tags pulled from TMDB / TVDB and surfaced on every detail
+  page; click a genre to see everything in your libraries that shares
+  it.
+- People browsing — every cast and crew member becomes a clickable
+  page listing all the media they worked on across your libraries.
+- Home rows: Continue Watching (resume position synced across
+  devices), Recently Added, and personalised Recommendations weighted
+  by the genres of what you've already watched.
+- Per-user watch history with mark-watched / mark-unwatched and
+  "remove from continue watching" gestures.
+- Calendar view of upcoming episode releases for the series you
+  follow.
 
 ### Streaming engine
 - FFmpeg-driven HLS / fMP4 transcoder. Hardware acceleration on Intel
