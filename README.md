@@ -53,12 +53,9 @@ Chromecast receiver, FFmpeg / Shaka transcoding pipeline.
 
 ### Cross-platform
 - Web (PWA-installable).
-- Native iOS and Android via Capacitor.
-- Native Android TV with D-pad navigation and Leanback launcher
-  integration.
-- Samsung Tizen `.wgt` and LG webOS `.ipk` build pipelines in CI
-  (sideloadable in developer mode; store-publication signing comes
-  next).
+- Native iOS and Android.
+- Native Android TV integration.
+- Samsung Tizen and LG webOS support.
 
 ### Server-side
 - Multi-user with per-user playback state and preferences.
