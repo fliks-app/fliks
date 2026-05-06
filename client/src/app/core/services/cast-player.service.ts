@@ -336,10 +336,11 @@ export class CastPlayerService {
     this.activeAudioTrackId.set(trackId);
 
     // Fast path: switch the active audio rendition via EditTracksInfoRequest
-    // on the standard media bus. Sub-100ms swap, no ffmpeg restart. Native
-    // Cast plugin falls through to a full reload.
+    // (web) or RemoteMediaClient.setActiveMediaTracks (native) on the
+    // standard media bus. Sub-100ms swap, no ffmpeg restart. Falls through
+    // to a full reload when the receiver hasn't published the rendition yet.
     const audio = this.availableAudioTracks()[audioIndex];
-    if (audio && this.cast.setActiveAudioLanguage(audio.language, audio.name)) {
+    if (audio && (await this.cast.setActiveAudioLanguage(audio.language, audio.name))) {
       return;
     }
 
