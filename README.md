@@ -1,8 +1,9 @@
 # Fliks
 
-Self-hosted media server: organise your media folders into libraries
-and stream them on every screen in the house — adaptive streaming,
-multi-audio and multi-subtitle support, fast Cast-to-TV.
+Self-hosted media server — an alternative to Plex, Jellyfin and Emby.
+Organise your media folders into libraries and stream them on every
+screen in the house, with adaptive streaming, multi-audio and
+multi-subtitle support and fast Cast-to-TV.
 
 NestJS backend, Angular client (web + iOS + Android + Android TV via
 Capacitor; Samsung Tizen and LG webOS targets in progress), custom
