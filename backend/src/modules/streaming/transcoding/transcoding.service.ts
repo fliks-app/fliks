@@ -15,6 +15,7 @@ import {
   SEEK_WAIT_THRESHOLD,
   SESSION_TIMEOUT_MS,
   getSegmentDuration,
+  segmentIndexToSeconds,
   setSegmentDurations as applySegmentDurations,
 } from './constants';
 import {
@@ -180,17 +181,25 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ): Promise<number> {
     if (!durationSeconds || durationSeconds <= 0) return 0;
     try {
-      const files = await fsp.readdir(session.cachePath);
+      // var_stream_map sessions write video into a `0/` subdir; fall back to
+      // the session root for single-stream sessions and remux output.
+      const rootDir = session.cachePath;
+      const dirs = [path.join(rootDir, '0'), rootDir];
       let maxSeg = -1;
-      for (const f of files) {
-        const m = f.match(/^seg-(\d+)\.ts$/);
-        if (m) {
-          const n = parseInt(m[1], 10);
-          if (n > maxSeg) maxSeg = n;
+      for (const dir of dirs) {
+        let files: string[];
+        try { files = await fsp.readdir(dir); } catch { continue; }
+        for (const f of files) {
+          const m = f.match(/^seg-(\d+)\.m4s$/);
+          if (m) {
+            const n = parseInt(m[1], 10);
+            if (n > maxSeg) maxSeg = n;
+          }
         }
+        if (maxSeg >= 0) break;
       }
       if (maxSeg < 0) return 0;
-      const transcodedUpTo = (maxSeg + 1) * getSegmentDuration();
+      const transcodedUpTo = segmentIndexToSeconds(maxSeg + 1);
       return Math.min(100, (transcodedUpTo / durationSeconds) * 100);
     } catch {
       return 0;

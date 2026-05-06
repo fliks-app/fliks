@@ -112,16 +112,25 @@ playerManager.setMessageInterceptor(
       loadRequest.media?.contentType,
     );
     const media = loadRequest.media;
-    if (media && !media.textTrackStyle) {
-      const style = new cast.framework.messages.TextTrackStyle();
-      style.fontGenericFamily =
-        cast.framework.messages.TextTrackFontGenericFamily.SANS_SERIF;
-      style.fontScale = 0.85;
-      style.foregroundColor = '#FFFFFFFF';
-      style.backgroundColor = '#00000000';
-      style.edgeType = cast.framework.messages.TextTrackEdgeType.DROP_SHADOW;
-      style.edgeColor = '#000000FF';
-      media.textTrackStyle = style;
+    if (media) {
+      // Tell CAF the segments are fMP4 so Shaka picks the right HLS
+      // demuxer up-front instead of probing seg-0 with the TS parser
+      // (which fails silently on init.mp4 + .m4s output).
+      media.hlsSegmentFormat =
+        cast.framework.messages.HlsSegmentFormat.FMP4;
+      media.hlsVideoSegmentFormat =
+        cast.framework.messages.HlsVideoSegmentFormat.FMP4;
+      if (!media.textTrackStyle) {
+        const style = new cast.framework.messages.TextTrackStyle();
+        style.fontGenericFamily =
+          cast.framework.messages.TextTrackFontGenericFamily.SANS_SERIF;
+        style.fontScale = 0.85;
+        style.foregroundColor = '#FFFFFFFF';
+        style.backgroundColor = '#00000000';
+        style.edgeType = cast.framework.messages.TextTrackEdgeType.DROP_SHADOW;
+        style.edgeColor = '#000000FF';
+        media.textTrackStyle = style;
+      }
     }
     return loadRequest;
   },
@@ -140,11 +149,73 @@ playerManager.setMessageInterceptor(
 // `supportedCommands` is set explicitly so the sender's transport
 // controls (play/pause/seek/skip-ad) are all advertised.
 
+// Tuned for VOD with a long-running transcoder behind it: deeper buffer
+// goal, larger gap tolerance for the PTS jitter at segment boundaries
+// (`-copyts`), and longer network retry timeout to ride out a transcode
+// cold-start. Mirrors the web player's `engine.configure(...)` budget so
+// the three engines stall under the same conditions.
+const SHAKA_CONFIG = {
+  streaming: {
+    bufferingGoal: 30,
+    rebufferingGoal: 4,
+    bufferBehind: 30,
+    retryParameters: {
+      timeout: 60000,
+      maxAttempts: 6,
+      baseDelay: 1000,
+      backoffFactor: 2,
+      fuzzFactor: 0.5,
+    },
+    stallEnabled: true,
+    stallThreshold: 1,
+    stallSkip: 0.1,
+    gapDetectionThreshold: 0.5,
+    smallGapLimit: 1.5,
+    jumpLargeGaps: true,
+  },
+  manifest: {
+    retryParameters: {
+      timeout: 30000,
+      maxAttempts: 5,
+      baseDelay: 1000,
+      backoffFactor: 2,
+      fuzzFactor: 0.5,
+    },
+    hls: {
+      mediaPlaylistFullMimeType:
+        'video/mp4; codecs="avc1.640028,mp4a.40.2"',
+    },
+  },
+};
+
+// CAF wraps Shaka when `useShakaForHls: true`. The wrapped instance is
+// reachable via `playerManager.getPlayer()`; calling `.configure(...)` on
+// PLAYER_LOADING is the supported hook to override Shaka defaults before
+// the manifest is parsed.
+playerManager.addEventListener(
+  cast.framework.events.EventType.PLAYER_LOADING,
+  () => {
+    try {
+      const shaka = playerManager.getPlayer && playerManager.getPlayer();
+      if (shaka && typeof shaka.configure === 'function') {
+        shaka.configure(SHAKA_CONFIG);
+        console.log('[fliks-cast] Shaka configured');
+      }
+    } catch (err) {
+      console.warn('[fliks-cast] Shaka configure failed', err);
+    }
+  },
+);
+
 const options = new cast.framework.CastReceiverOptions();
 options.disableIdleTimeout = true;
 options.useShakaForHls = true;
 options.playbackConfig = new cast.framework.PlaybackConfig();
 options.playbackConfig.autoResumeDuration = 5;
+// Some CAF builds also accept the Shaka config declaratively on
+// `playbackConfig.shakaConfig`; setting both keeps the receiver robust
+// across SDK versions without relying on a single code path.
+options.playbackConfig.shakaConfig = SHAKA_CONFIG;
 options.supportedCommands = cast.framework.messages.Command.ALL_BASIC_MEDIA;
 context.start(options);
 console.log('[fliks-cast] context.start called');

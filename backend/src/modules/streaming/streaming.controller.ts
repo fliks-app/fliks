@@ -27,6 +27,7 @@ import {
   SessionContext,
   getLadderForDevice,
 } from './transcoding';
+import { secondsToSegmentIndex } from './transcoding/constants';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
@@ -52,30 +53,54 @@ function withTimestampMap(vtt: string | Buffer): string {
 }
 
 /** Generate a VOD HLS playlist for a given duration and segment URL pattern. */
-/** Default segment duration — overridden by admin streaming settings via tracker. */
+/** Default segment + init durations — overridden by admin streaming settings. */
 let SEG_DURATION = 3;
+let INIT_TIME = 1;
 
 function buildVodPlaylist(
   duration: number,
   segmentUrl: (index: string) => string,
   initUrl?: string,
 ): string {
+  // FFmpeg `-hls_init_time` shortens segment 0 to ~INIT_TIME so the first
+  // frame ships sooner; remaining segments are SEG_DURATION. The EXTINF
+  // values below mirror that layout so Shaka's presentation timeline stays
+  // aligned with the moof PTS the segments actually carry.
+  const useShortInit = INIT_TIME > 0 && INIT_TIME < SEG_DURATION;
   // Subtract small epsilon before ceil to avoid phantom last segment when
   // ffprobe duration has floating-point imprecision (e.g. 120.001 → ceil
   // produces 41 segments but FFmpeg only writes 40).
-  const segCount = Math.max(1, Math.ceil((duration - 0.05) / SEG_DURATION));
+  const epsilon = 0.05;
+  const tail = Math.max(0, duration - (useShortInit ? INIT_TIME : 0) - epsilon);
+  const tailCount = Math.ceil(tail / SEG_DURATION);
+  const segCount = Math.max(1, (useShortInit ? 1 : 0) + tailCount);
   const lines = [
     '#EXTM3U',
     '#EXT-X-VERSION:7',
-    `#EXT-X-TARGETDURATION:${SEG_DURATION}`,
+    `#EXT-X-TARGETDURATION:${Math.ceil(SEG_DURATION)}`,
     '#EXT-X-MEDIA-SEQUENCE:0',
     '#EXT-X-PLAYLIST-TYPE:VOD',
+    '#EXT-X-INDEPENDENT-SEGMENTS',
   ];
   if (initUrl) {
     lines.push(`#EXT-X-MAP:URI="${initUrl}"`);
   }
   for (let i = 0; i < segCount; i++) {
-    const segLen = Math.min(SEG_DURATION, duration - i * SEG_DURATION);
+    let segStart: number;
+    let segLen: number;
+    if (useShortInit) {
+      if (i === 0) {
+        segStart = 0;
+        segLen = Math.min(INIT_TIME, duration);
+      } else {
+        segStart = INIT_TIME + (i - 1) * SEG_DURATION;
+        segLen = Math.min(SEG_DURATION, duration - segStart);
+      }
+    } else {
+      segStart = i * SEG_DURATION;
+      segLen = Math.min(SEG_DURATION, duration - segStart);
+    }
+    if (segLen <= 0) break;
     lines.push(`#EXTINF:${segLen.toFixed(3)},`);
     lines.push(segmentUrl(String(i).padStart(4, '0')));
   }
@@ -223,10 +248,7 @@ export class StreamingController {
         const top = ladder.find((p) => p.maxWidth <= sourceW) ?? ladder[0];
         targetQuality = top.name;
       }
-      const startSegment = Math.max(
-        0,
-        Math.floor(effectiveStartAt / SEG_DURATION),
-      );
+      const startSegment = Math.max(0, secondsToSegmentIndex(effectiveStartAt));
 
       // Spawn early en PARALLÈLE de main (fire-and-forget). hlsSegment
       // routera vers cette session pour seg-0 via isEarlyProbe pendant
@@ -412,6 +434,7 @@ export class StreamingController {
     );
     // Update module-level constants used by buildVodPlaylist and transcoding
     SEG_DURATION = ss.segmentDuration;
+    INIT_TIME = ss.initTime;
     this.transcodingService.setSegmentDurations(
       ss.segmentDuration,
       ss.initTime,
@@ -828,9 +851,7 @@ export class StreamingController {
       return;
     }
 
-    const contentType =
-      segment === 'init.mp4' ? 'video/mp4' : 'video/iso.segment';
-    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Access-Control-Allow-Origin', '*');
     const stream = fs.createReadStream(segPath);
     stream.on('error', () => {
@@ -881,7 +902,7 @@ export class StreamingController {
       );
       if (!existing || existing.process.exitCode !== null) {
         const startAtSec = parseInt(startAtRaw, 10);
-        const startSegment = startAtSec > 0 ? Math.floor(startAtSec / 6) : 0;
+        const startSegment = secondsToSegmentIndex(startAtSec);
         const ctx = this.buildSessionContext(req, resolved, mediaFileId);
         if (quality === 'remux') {
           const copyAudio =

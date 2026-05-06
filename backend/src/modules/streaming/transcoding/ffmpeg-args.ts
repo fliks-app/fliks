@@ -1,6 +1,10 @@
 import { Logger } from '@nestjs/common';
 import * as path from 'path';
-import { getInitTime, getSegmentDuration } from './constants';
+import {
+  getInitTime,
+  getSegmentDuration,
+  segmentIndexToSeconds,
+} from './constants';
 import { parseBitrateToBps } from './profiles';
 import type {
   BurnInSubtitle,
@@ -97,8 +101,10 @@ export function buildFfmpegArgs(
   }
 
   if (startSegment > 0) {
-    const seekSeconds = startSegment * SEGMENT_DURATION;
-    args.push('-ss', String(seekSeconds));
+    // -hls_init_time skews the segment-N → seconds map (seg-0 = INIT_TIME,
+    // seg-N>=1 = INIT_TIME + (N-1)*SEG_DURATION); seek to that exact start
+    // so the resumed encode picks up at the cached segment grid.
+    args.push('-ss', String(segmentIndexToSeconds(startSegment)));
     args.push('-copyts', '-avoid_negative_ts', 'make_zero');
   }
 
@@ -466,7 +472,7 @@ export function buildAudioOnlyFfmpegArgs(
   }
 
   if (startSegment > 0) {
-    args.push('-ss', String(startSegment * SEGMENT_DURATION));
+    args.push('-ss', String(segmentIndexToSeconds(startSegment)));
     args.push('-copyts', '-avoid_negative_ts', 'make_zero');
   }
 
@@ -519,7 +525,7 @@ export function buildRemuxArgs(
   }
 
   if (startSegment > 0) {
-    args.push('-ss', String(startSegment * SEGMENT_DURATION));
+    args.push('-ss', String(segmentIndexToSeconds(startSegment)));
     args.push('-copyts', '-avoid_negative_ts', 'make_zero');
   }
 
