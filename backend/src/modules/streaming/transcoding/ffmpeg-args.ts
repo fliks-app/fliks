@@ -101,11 +101,23 @@ export function buildFfmpegArgs(
   }
 
   if (startSegment > 0) {
-    // -hls_init_time skews the segment-N → seconds map (seg-0 = INIT_TIME,
-    // seg-N>=1 = INIT_TIME + (N-1)*SEG_DURATION); seek to that exact start
-    // so the resumed encode picks up at the cached segment grid.
-    args.push('-ss', String(segmentIndexToSeconds(startSegment)));
-    args.push('-copyts', '-avoid_negative_ts', 'make_zero');
+    // Two-step timestamp handling so the moof tfdt of seg-K matches the
+    // playlist's presentation time for seg-K (= INIT_TIME + (K-1)*SEG):
+    //
+    //  1. `-ss <T>` before `-i` does an *input* seek that snaps to the
+    //     nearest source IDR at or before T. force_key_frames re-injects
+    //     a clean keyframe at exactly T on the encoder output, so the
+    //     first encoded video frame has output PTS 0 (after FFmpeg's
+    //     natural re-zeroing) — but audio packets sit at the nearest
+    //     audio-frame boundary, ~10–40 ms early.
+    //  2. `-output_ts_offset <T>` shifts every output stream by T. Both
+    //     video and audio inherit the same anchor, so their tfdts agree
+    //     in seg-K and Shaka doesn't end up with one track ~tens of ms
+    //     ahead of the other on resume.
+    const seekSeconds = segmentIndexToSeconds(startSegment);
+    args.push('-ss', String(seekSeconds));
+    args.push('-output_ts_offset', String(seekSeconds));
+    args.push('-avoid_negative_ts', 'make_zero');
   }
 
   // parseBitrateToBps handles both "8M" and "200k" correctly. Using parseInt()*1e6
@@ -472,8 +484,10 @@ export function buildAudioOnlyFfmpegArgs(
   }
 
   if (startSegment > 0) {
-    args.push('-ss', String(segmentIndexToSeconds(startSegment)));
-    args.push('-copyts', '-avoid_negative_ts', 'make_zero');
+    const seekSeconds = segmentIndexToSeconds(startSegment);
+    args.push('-ss', String(seekSeconds));
+    args.push('-output_ts_offset', String(seekSeconds));
+    args.push('-avoid_negative_ts', 'make_zero');
   }
 
   args.push('-i', inputPath);
@@ -525,8 +539,10 @@ export function buildRemuxArgs(
   }
 
   if (startSegment > 0) {
-    args.push('-ss', String(segmentIndexToSeconds(startSegment)));
-    args.push('-copyts', '-avoid_negative_ts', 'make_zero');
+    const seekSeconds = segmentIndexToSeconds(startSegment);
+    args.push('-ss', String(seekSeconds));
+    args.push('-output_ts_offset', String(seekSeconds));
+    args.push('-avoid_negative_ts', 'make_zero');
   }
 
   args.push('-i', inputPath);
