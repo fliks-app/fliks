@@ -788,64 +788,85 @@ export class StreamingController {
 
     const segMatch = segment.match(/seg-(\d+)\.m4s/);
     const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
+    const isInit = segment.startsWith('init');
     const user = req.user;
+    // var_stream_map writes audio under `<variantIdx>/`; variant 0 is video,
+    // each audio rendition lives under `<audioIndex+1>/` and its init is
+    // named `init_<audioIndex+1>.mp4` to match `-hls_fmp4_init_filename`.
+    const varStreamPath = `${audioIndex + 1}/${segment}`;
 
-    // Fast path: try video session's var_stream_map subdir first (no DB query).
-    const videoSession = this.transcodingService.getExistingSession(
+    // Spawn the video session if Shaka raced ahead of playback-info / master.m3u8
+    // and there is none registered yet. The audio rendition playlist always rides
+    // on a multi-audio video session (master.m3u8 only emits EXT-X-MEDIA when
+    // `audioStreams.length > 1`), so we don't need a separate audio-only path —
+    // any segment Shaka asks for here is in `<videoSession.cachePath>/<varStreamPath>`.
+    let videoSession = this.transcodingService.getExistingSession(
       mediaFileId,
       user?.id,
     );
+    if (!videoSession) {
+      const resolved = await this.streamingService.resolveFile(
+        mediaFileId,
+        req.user as User,
+      );
+      const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+      const deviceType =
+        this.activeStreamTracker.getDeviceType(mediaFileId) ?? 'desktop';
+      const sourceW =
+        this.activeStreamTracker.getSourceWidth(mediaFileId) || 1920;
+      const sourceH =
+        this.activeStreamTracker.getSourceHeight(mediaFileId) || 1080;
+      const profiles = this.transcodingService.getAvailableProfiles(
+        sourceW,
+        sourceH,
+        deviceType,
+      );
+      const quality = (profiles[0] ?? PROFILES[PROFILES.length - 1]).name;
+      videoSession = await this.transcodingService.getOrCreateSession(
+        mediaFileId,
+        quality,
+        resolved.absolutePath,
+        0,
+        ctx,
+        /* skipVerify */ true,
+      );
+    }
 
-    let segPath: string | null = null;
-
-    // Resume mid-file: when the requested audio segment is below the main
-    // prewarm's startSegment, serve from the early companion session (which
-    // covers seg-0..seg-1). Avoids a 60s wait on the main session that will
-    // never produce these early segments.
+    // Resume: the early companion produces variant inits + seg-0/seg-1 in
+    // parallel with main, so it lands first. Use a short timeout — main
+    // covers the same files behind it, so wasting 60s on early when it has
+    // already exited adds latency for nothing.
     const earlySession = this.transcodingService.getExistingEarlySession(
       mediaFileId,
       user?.id,
     );
     const useEarly =
-      videoSession != null &&
       earlySession != null &&
       videoSession.startSegment != null &&
       videoSession.startSegment > 0 &&
-      segIndex < videoSession.startSegment &&
-      earlySession.quality === videoSession.quality;
-    if (useEarly) {
-      const varStreamPath = `${audioIndex + 1}/${segment}`;
+      earlySession.quality === videoSession.quality &&
+      (isInit || segIndex < videoSession.startSegment);
+
+    let segPath: string | null = null;
+    if (useEarly && earlySession) {
       segPath = await this.transcodingService.getSegmentPath(
-        earlySession!,
+        earlySession,
         varStreamPath,
+        10_000,
       );
-    } else if (videoSession) {
-      const varStreamPath = `${audioIndex + 1}/${segment}`;
+    }
+
+    // Fall through to main when:
+    //   - no early companion (fresh play, startSegment === 0), or
+    //   - early didn't produce in time (already exited / cleaned up), or
+    //   - segIndex >= startSegment (only main ever writes those).
+    if (!segPath) {
       segPath = await this.transcodingService.getSegmentPath(
         videoSession,
         varStreamPath,
       );
     }
 
-    // Fallback: separate audio session (needs DB for absolutePath).
-    if (!segPath) {
-      const resolved = await this.streamingService.resolveFile(
-        mediaFileId,
-        req.user as User,
-      );
-      const audioSession =
-        await this.transcodingService.getOrCreateAudioSession(
-          mediaFileId,
-          audioIndex,
-          resolved.absolutePath,
-          segIndex,
-          { userId: user?.id },
-        );
-      segPath = await this.transcodingService.getSegmentPath(
-        audioSession,
-        segment,
-      );
-    }
     if (!segPath) {
       res.status(404).send('Segment not found');
       return;
