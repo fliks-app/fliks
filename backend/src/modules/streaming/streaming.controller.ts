@@ -443,9 +443,7 @@ export class StreamingController {
     // Persist encoder preset + QSV advanced options for downstream sessions.
     this.activeStreamTracker.setEncoderPreset(mediaFileId, ss.qsvPreset);
     this.activeStreamTracker.setQsvOptions({
-      lookahead: ss.qsvLookahead,
       lowPower: ss.qsvLowPower,
-      adaptive: ss.qsvAdaptive,
     });
 
     // Persist source→client codec compatibility so hlsMaster can pick a

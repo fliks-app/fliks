@@ -12,18 +12,14 @@ export interface StreamingSettings {
     | 'slow'
     | 'slower'
     | 'veryslow';
-  qsvLookahead: boolean;
   qsvLowPower: boolean;
-  qsvAdaptive: boolean;
 }
 
 const KEYS = [
   'streaming_segment_duration',
   'streaming_init_time',
   'streaming_qsv_preset',
-  'streaming_qsv_lookahead',
   'streaming_qsv_low_power',
-  'streaming_qsv_adaptive',
 ] as const;
 
 @Injectable()
@@ -55,21 +51,12 @@ export class StreamingSettingsCache implements OnModuleInit {
 
   private async load(): Promise<StreamingSettings> {
     const values = await Promise.all(KEYS.map((k) => this.settings.get(k)));
-    const [
-      duration,
-      initTime,
-      qsvPreset,
-      qsvLookahead,
-      qsvLowPower,
-      qsvAdaptive,
-    ] = values;
+    const [duration, initTime, qsvPreset, qsvLowPower] = values;
     return {
       segmentDuration: parseFloat(duration ?? '3') || 3,
       initTime: parseFloat(initTime ?? '1') || 1,
       qsvPreset: (qsvPreset ?? 'faster') as StreamingSettings['qsvPreset'],
-      qsvLookahead: qsvLookahead === 'true',
       qsvLowPower: qsvLowPower === 'true',
-      qsvAdaptive: qsvAdaptive == null ? true : qsvAdaptive === 'true',
     };
   }
 }

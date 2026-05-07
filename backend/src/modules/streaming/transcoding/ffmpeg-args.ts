@@ -28,7 +28,7 @@ export interface BuildFfmpegArgsOptions {
    *  passthrough). When false, transcode to AAC stereo at profile bitrate. */
   copyAudio?: boolean;
   encoderPreset?: string;
-  qsvOptions?: { lookahead: boolean; lowPower: boolean; adaptive: boolean };
+  qsvOptions?: { lowPower: boolean };
   sourceFps?: number;
   trustedStreamInfo?: boolean;
   /** Short-lived parallel session producing only seg-0/seg-1 during a
@@ -56,7 +56,7 @@ export function buildFfmpegArgs(
     audioStreams,
     copyAudio = false,
     encoderPreset = 'faster',
-    qsvOptions = { lookahead: false, lowPower: false, adaptive: true },
+    qsvOptions = { lowPower: false },
     sourceFps,
     trustedStreamInfo = false,
     early = false,
@@ -74,16 +74,13 @@ export function buildFfmpegArgs(
   // INIT_TIME). When INIT_TIME >= SEGMENT_DURATION, collapses to regular
   // fixed-GOP behaviour.
   const forceKeyframesExpr = `expr:if(eq(n_forced,0),gte(t,0),gte(t,${INIT_TIME}+(n_forced-1)*${SEGMENT_DURATION}))`;
-  // Build reusable QSV extra options flag list.
-  const qsvExtra: string[] = [];
-  if (qsvOptions.lookahead) {
-    qsvExtra.push('-look_ahead', '1', '-look_ahead_depth', '40');
-  }
+  // adaptive_i/adaptive_b let QSV pick I/B placement per scene complexity —
+  // measurable quality win on dense / fast-motion content, no perf cost.
+  // QSV BRC drift on long continuous runs is handled separately by
+  // SEGMENT_ROTATION_THRESHOLD respawning the encoder periodically.
+  const qsvExtra: string[] = ['-adaptive_i', '1', '-adaptive_b', '1'];
   if (qsvOptions.lowPower) {
     qsvExtra.push('-low_power', '1');
-  }
-  if (qsvOptions.adaptive) {
-    qsvExtra.push('-adaptive_i', '1', '-adaptive_b', '1');
   }
   const args = ['-hide_banner', '-loglevel', 'warning'];
 

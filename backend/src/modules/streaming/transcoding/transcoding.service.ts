@@ -13,11 +13,13 @@ import { TRANSCODE_DIR } from '../../../common/constants/paths';
 import {
   MAX_SESSIONS,
   SEEK_WAIT_THRESHOLD,
+  SEGMENT_ROTATION_THRESHOLD,
   SESSION_TIMEOUT_MS,
   getSegmentDuration,
   segmentIndexToSeconds,
   setSegmentDurations as applySegmentDurations,
 } from './constants';
+import { getLadderForDevice } from './profiles';
 import {
   buildAudioOnlyFfmpegArgs,
   buildFfmpegArgs,
@@ -25,7 +27,6 @@ import {
 } from './ffmpeg-args';
 import { detectHwAccel } from './hw-detect';
 import { generateMasterPlaylist, getAvailableProfiles } from './master-playlist';
-import { getLadderForDevice } from './profiles';
 import {
   fileExists,
   firstMissingSegment,
@@ -54,6 +55,28 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     await fsp.mkdir(this.cachePath, { recursive: true });
+
+    // The in-memory `sessions` map only knows about live sessions. After a
+    // backend restart the map starts empty, so any directory still under
+    // `cachePath` is an orphan — written by a previous process that is no
+    // longer alive to evict it. Wipe them so a re-load on the same
+    // (mediaFileId, userId) starts from a clean slate instead of inheriting
+    // partial / overflow segments from the previous run.
+    try {
+      const entries = await fsp.readdir(this.cachePath);
+      if (entries.length) {
+        await Promise.all(
+          entries.map((e) =>
+            fsp.rm(path.join(this.cachePath, e), { recursive: true, force: true }),
+          ),
+        );
+        this.log.log(
+          `[disk] init wipe: removed ${entries.length} orphan session dir(s)`,
+        );
+      }
+    } catch (err) {
+      this.log.warn(`[disk] init wipe failed: ${(err as Error).message}`);
+    }
 
     this.detectedHwAccel = await detectHwAccel(this.log);
     this.log.log(`Hardware acceleration: ${this.detectedHwAccel}`);
@@ -674,6 +697,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const firstSegName = path.basename(firstSeg);
 
     let readyWatcher: FSWatcher | null = null;
+    let segmentWatcher: FSWatcher | null = null;
+    const segmentNameRe = new RegExp(`^seg-\\d+\\${segExt}$`);
     const checkReady = () => {
       if (!resolved && existsSync(firstSeg)) {
         resolved = true;
@@ -692,6 +717,40 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           if (filename === firstSegName) checkReady();
         },
       );
+      // Persistent watcher: count every segment written so we can rotate
+      // the encoder before its BRC accumulates state across the periodic-
+      // bad-GOP threshold. Skipped for audio-only and remux sessions
+      // (only the QSV main encoder hits the BRC drift).
+      const isMainTranscode =
+        !extra?.remux && !extra?.isAudioOnly && !id.endsWith('-early');
+      if (isMainTranscode) {
+        // inotify emits both `rename` (create) and `change` (every write/
+        // close while ffmpeg streams the moof+mdat) for the same file, so
+        // counting raw events inflates `segmentsProduced` ~3-5×. Track
+        // unique filenames instead so the rotation threshold maps to real
+        // segments produced.
+        const seenSegments = new Set<string>();
+        segmentWatcher = watch(
+          segDir,
+          { persistent: false },
+          (_event, filename) => {
+            if (typeof filename !== 'string' || !segmentNameRe.test(filename)) {
+              return;
+            }
+            if (seenSegments.has(filename)) return;
+            seenSegments.add(filename);
+            session.segmentsProduced = seenSegments.size;
+            if (
+              session.segmentsProduced >= SEGMENT_ROTATION_THRESHOLD &&
+              !session.rotationScheduled &&
+              !session.intentionallyKilled
+            ) {
+              session.rotationScheduled = true;
+              void this.rotateSession(session);
+            }
+          },
+        );
+      }
     } catch {
       // Directory will be created by ffmpeg shortly — pollTimer covers this.
     }
@@ -708,6 +767,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     proc.on('close', (code) => {
       clearInterval(pollTimer);
       readyWatcher?.close();
+      segmentWatcher?.close();
       const firstSegProduced = resolved;
       if (!resolved) {
         resolved = true;
@@ -785,7 +845,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     const usesVarStreamMap =
       isVideoOnly && audioStreams && audioStreams.length > 1;
-    return this.spawnFfmpegSession({
+    const session = this.spawnFfmpegSession({
       id: sessionId,
       mediaFileId,
       quality,
@@ -794,8 +854,14 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       startSegment,
       segExt: '.m4s',
       segSubDir: usesVarStreamMap ? '0' : undefined,
-      extra: { actualHwAccel: hwAccel },
+      extra: {
+        actualHwAccel: hwAccel,
+        // Stored for the rotation worker; see SEGMENT_ROTATION_THRESHOLD.
+        absolutePath,
+        ctx,
+      },
     });
+    return session;
   }
 
   private startSeekSession(
@@ -1070,6 +1136,58 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     this.applyContext(session, ctx);
     return session;
+  }
+
+  /** Kill the current ffmpeg cleanly and respawn at the next un-encoded
+   *  segment so the encoder's BRC state is reset. Triggered from the
+   *  per-segment fs watcher once `segmentsProduced` crosses
+   *  `SEGMENT_ROTATION_THRESHOLD`. The rotation runs under the same
+   *  per-key lock as `getOrCreateSession`, so a player request that
+   *  arrives mid-rotation queues behind it and gets the new session. */
+  private async rotateSession(session: TranscodeSession): Promise<void> {
+    const id = session.id;
+    return this.withLock(id, async () => {
+      // The session might have been replaced (seek, quality change) or
+      // already rotated by a concurrent caller — bail if so.
+      if (this.sessions.get(id) !== session) return;
+      if (!session.absolutePath || !session.ctx) {
+        this.log.warn(`[rotate] ${id}: missing absolutePath/ctx, skipping`);
+        return;
+      }
+      const produced = session.segmentsProduced ?? 0;
+      const newStart = (session.startSegment ?? 0) + produced;
+      this.log.log(
+        `[rotate] ${id}: produced ${produced} segments since seg-${session.startSegment ?? 0}, restarting at seg-${newStart}`,
+      );
+
+      // Graceful (SIGTERM → SIGKILL after 5 s) so ffmpeg flushes its
+      // moof+mdat for the in-flight segment cleanly. The cache stays
+      // intact (resolveExistingSession only wipes on non-zero exit).
+      session.intentionallyKilled = true;
+      this.sessions.delete(id);
+      await this.killProcess(session.process, /* graceful */ true);
+
+      // Re-derive the profile from quality (same code path as the
+      // initial spawn) so any change to the ladder takes effect on
+      // rotation as well.
+      const ladder = getLadderForDevice(session.ctx.deviceType);
+      const profile =
+        ladder.find((p) => p.name === session.quality) ?? ladder[0];
+
+      const next = this.startFfmpeg(
+        id,
+        session.mediaFileId,
+        session.quality,
+        session.absolutePath,
+        profile,
+        session.cachePath,
+        session.actualHwAccel ?? this.detectedHwAccel,
+        newStart,
+        session.ctx,
+      );
+      this.applyContext(next, session.ctx);
+      this.sessions.set(id, next);
+    });
   }
 
   private cleanupStaleSessions() {
