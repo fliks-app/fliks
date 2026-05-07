@@ -112,7 +112,7 @@ export interface TranscodeSession {
   ctx?: SessionContext;
   /** Number of segments the current ffmpeg has written since spawn.
    *  Driven by the post-write fs watcher. Used to schedule a periodic
-   *  kill+respawn (see `SEGMENT_ROTATION_THRESHOLD`) — QSV's BRC
+   *  kill+respawn (see `SEGMENT_ROTATION_INTERVAL_SECONDS`) — QSV's BRC
    *  accumulates state over long runs and eventually emits a 45 s GOP
    *  that overruns the playlist's EXTINF slot; rotating every ~10 min
    *  of content resets the encoder before that drift hits. */
