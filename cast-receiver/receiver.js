@@ -49,13 +49,41 @@ playerManager.addEventListener(
   );
 });
 
+// Custom message bus the Fliks senders subscribe to so they can surface
+// receiver-side errors in the phone / desktop UI (a stalled stream on the
+// TV would otherwise look like silence on the controlling device).
+const FLIKS_MESSAGE_NAMESPACE = 'urn:x-cast:media.fliks.app';
+const fliksBus = context.getCastMessageBus(
+  FLIKS_MESSAGE_NAMESPACE,
+  cast.framework.system.MessageType.JSON,
+);
+
 // Surface any player error on the device's DevTools console with the full
-// CAF event payload (detailedErrorCode, reason, shaka-side error data).
+// CAF event payload (detailedErrorCode, reason, shaka-side error data),
+// and forward a structured payload to senders so they can show a toast.
 playerManager.addEventListener(
   cast.framework.events.EventType.ERROR,
   (event) => {
     console.error('[fliks-cast] ERROR', JSON.stringify(event));
     document.body.classList.remove('playing');
+    try {
+      const info = playerManager.getMediaInformation();
+      fliksBus.broadcast({
+        kind: 'player_error',
+        at: Date.now(),
+        detailedErrorCode: event.detailedErrorCode,
+        severity: event.severity,
+        shakaErrorCode: event.error?.shakaErrorCode,
+        shakaErrorData: event.error?.shakaErrorData,
+        reason: event.reason,
+        mediaTitle: info?.metadata?.title,
+        mediaSubtitle: info?.metadata?.subtitle,
+        mediaId: info?.customData?.mediaId,
+        episodeId: info?.customData?.episodeId,
+      });
+    } catch (err) {
+      console.warn('[fliks-cast] failed to forward error to senders', err);
+    }
   },
 );
 
