@@ -69,7 +69,8 @@ export const MOBILE_PROFILES: TranscodeProfile[] = [
 ];
 
 export function getLadderForDevice(deviceType: DeviceType | undefined): TranscodeProfile[] {
-  return deviceType === 'mobile' ? MOBILE_PROFILES : DESKTOP_PROFILES;
+  if (deviceType === 'mobile') return MOBILE_PROFILES;
+  return DESKTOP_PROFILES;
 }
 
 /** Backward-compatible alias — most callers want the desktop ladder. */

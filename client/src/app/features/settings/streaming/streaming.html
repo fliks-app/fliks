@@ -52,26 +52,10 @@
 
     <div class="form-control">
       <label class="label cursor-pointer justify-start gap-3">
-        <input type="checkbox" class="toggle" [ngModel]="qsvLookahead()" (ngModelChange)="qsvLookahead.set($event)" />
-        <span class="label-text font-medium">{{ 'settings.streaming.qsv_lookahead' | translate }}</span>
-      </label>
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.qsv_lookahead_help' | translate }}</span></label>
-    </div>
-
-    <div class="form-control">
-      <label class="label cursor-pointer justify-start gap-3">
         <input type="checkbox" class="toggle" [ngModel]="qsvLowPower()" (ngModelChange)="qsvLowPower.set($event)" />
         <span class="label-text font-medium">{{ 'settings.streaming.qsv_low_power' | translate }}</span>
       </label>
       <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.qsv_low_power_help' | translate }}</span></label>
-    </div>
-
-    <div class="form-control">
-      <label class="label cursor-pointer justify-start gap-3">
-        <input type="checkbox" class="toggle" [ngModel]="qsvAdaptive()" (ngModelChange)="qsvAdaptive.set($event)" />
-        <span class="label-text font-medium">{{ 'settings.streaming.qsv_adaptive' | translate }}</span>
-      </label>
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.qsv_adaptive_help' | translate }}</span></label>
     </div>
 
     <button class="btn btn-primary" [disabled]="saving()" (click)="save()">
