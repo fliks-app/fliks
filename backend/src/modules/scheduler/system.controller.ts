@@ -353,11 +353,11 @@ export class SystemController {
       let positionSeconds = 0;
       let durationSeconds = si?.durationSeconds ?? 0;
       let episodeId: number | null = null;
-      if (s.userId) {
+      if (s.userId && mf?.mediaId) {
         try {
           const ps = await this.playbackService.getState(
             s.userId,
-            s.mediaFileId,
+            mf.mediaId,
           );
           if (ps) {
             positionSeconds = ps.positionSeconds;
