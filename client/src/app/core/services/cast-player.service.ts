@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, effect, inject, signal } from '@angular/core';
 import { CastService } from './cast.service';
 import { CastSettingsService } from './cast-settings.service';
 import { StreamingApiService } from './api/streaming-api.service';
@@ -201,15 +201,32 @@ export class CastPlayerService {
     this.loadSpriteMetadata(opts.mediaFileId);
   }
 
-  /** Clear Cast media state (on disconnect/stop). Saves position first. */
+  /** Clear Cast media state (on disconnect/stop). Saves position first
+   *  and kills the backend transcode session so its ffmpeg stops; without
+   *  this the session lingers until SESSION_TIMEOUT_MS, holding HW
+   *  encoder slots and disk cache. */
   clear() {
+    const mfId = this.mediaFileId();
     this.saveCastPosition(); // Save final position before clearing
     this.stopPositionSaving();
+    if (mfId) {
+      this.streamingApi.stopSessions(mfId).catch(() => {});
+    }
     this.hasMedia.set(false);
     this.expanded.set(false);
     this.mediaFileId.set(0);
     this.spriteUrl.set(null);
     this.spriteMetadata.set(null);
+  }
+
+  constructor() {
+    // Auto-clear when the cast session drops (TV remote stop, network drop,
+    // sender app closed) — without this hook the backend ffmpeg keeps
+    // running until the next stale-session sweep.
+    effect(() => {
+      const connected = this.cast.isConnected();
+      if (!connected && this.hasMedia()) this.clear();
+    });
   }
 
   /**
