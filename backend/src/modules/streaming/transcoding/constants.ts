@@ -2,12 +2,19 @@ export const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30min HLS session timeout
 export const MAX_SESSIONS = 4;
 /** Max gap (in segments) between FFmpeg frontier and requested segment before restarting. */
 export const SEEK_WAIT_THRESHOLD = 15;
-/** Kill+respawn the encoder every N segments produced. QSV's BRC quietly
- *  accumulates state over long continuous runs and eventually refuses to
- *  insert IDRs on dense scenes, producing 45 s GOPs that overrun the
- *  HLS playlist's EXTINF slots. Rotating periodically resets the encoder
- *  before that drift becomes visible. 200 segments × 3 s = ~10 min content. */
-export const SEGMENT_ROTATION_THRESHOLD = 200;
+/** Kill+respawn the encoder every ~N seconds of content. QSV's BRC
+ *  quietly accumulates state over long continuous runs and eventually
+ *  refuses to insert IDRs on dense scenes, producing 45 s GOPs that
+ *  overrun the HLS playlist's EXTINF slots. The bad-GOP regime hits
+ *  around ~17 min, so we rotate well before that. Expressed in seconds
+ *  of content (not segments) so the cadence holds whatever the admin
+ *  picks for `streaming_segment_duration`. */
+export const SEGMENT_ROTATION_INTERVAL_SECONDS = 600;
+/** Translate the seconds budget into a segment count for the current
+ *  segment duration setting. */
+export function getRotationSegmentThreshold(): number {
+  return Math.max(1, Math.ceil(SEGMENT_ROTATION_INTERVAL_SECONDS / segmentDuration));
+}
 
 /** Mutable runtime state for HLS segment durations. Updated from admin
  *  streaming settings via `setSegmentDurations()`. Read by FFmpeg arg

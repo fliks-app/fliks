@@ -13,8 +13,8 @@ import { TRANSCODE_DIR } from '../../../common/constants/paths';
 import {
   MAX_SESSIONS,
   SEEK_WAIT_THRESHOLD,
-  SEGMENT_ROTATION_THRESHOLD,
   SESSION_TIMEOUT_MS,
+  getRotationSegmentThreshold,
   getSegmentDuration,
   segmentIndexToSeconds,
   setSegmentDurations as applySegmentDurations,
@@ -741,7 +741,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             seenSegments.add(filename);
             session.segmentsProduced = seenSegments.size;
             if (
-              session.segmentsProduced >= SEGMENT_ROTATION_THRESHOLD &&
+              session.segmentsProduced >= getRotationSegmentThreshold() &&
               !session.rotationScheduled &&
               !session.intentionallyKilled
             ) {
@@ -856,7 +856,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       segSubDir: usesVarStreamMap ? '0' : undefined,
       extra: {
         actualHwAccel: hwAccel,
-        // Stored for the rotation worker; see SEGMENT_ROTATION_THRESHOLD.
+        // Stored for the rotation worker; see SEGMENT_ROTATION_INTERVAL_SECONDS.
         absolutePath,
         ctx,
       },
@@ -1141,7 +1141,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   /** Kill the current ffmpeg cleanly and respawn at the next un-encoded
    *  segment so the encoder's BRC state is reset. Triggered from the
    *  per-segment fs watcher once `segmentsProduced` crosses
-   *  `SEGMENT_ROTATION_THRESHOLD`. The rotation runs under the same
+   *  the rotation segment threshold. The rotation runs under the same
    *  per-key lock as `getOrCreateSession`, so a player request that
    *  arrives mid-rotation queues behind it and gets the new session. */
   private async rotateSession(session: TranscodeSession): Promise<void> {

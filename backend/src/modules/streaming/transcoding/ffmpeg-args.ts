@@ -77,7 +77,7 @@ export function buildFfmpegArgs(
   // adaptive_i/adaptive_b let QSV pick I/B placement per scene complexity —
   // measurable quality win on dense / fast-motion content, no perf cost.
   // QSV BRC drift on long continuous runs is handled separately by
-  // SEGMENT_ROTATION_THRESHOLD respawning the encoder periodically.
+  // SEGMENT_ROTATION_INTERVAL_SECONDS respawning the encoder periodically.
   const qsvExtra: string[] = ['-adaptive_i', '1', '-adaptive_b', '1'];
   if (qsvOptions.lowPower) {
     qsvExtra.push('-low_power', '1');
