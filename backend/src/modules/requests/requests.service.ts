@@ -314,15 +314,22 @@ export class RequestsService {
     row.approvedBy = admin;
     row.declinedReason = null;
 
-    // Import the media into the library
+    // Import the media into the library. Attribute the new Media row to the
+    // requester (not the approving admin) so the "Afficher uniquement les
+    // médias que j'ai demandé" filter — which matches `addedById = me OR
+    // requests.userId = me` — keeps surfacing it even if the Request row is
+    // later purged.
     try {
-      const media = await this.mediaService.importFromTmdb({
-        type: row.mediaType,
-        tmdbId: row.tmdbId,
-        qualityProfileId: row.qualityProfileId ?? undefined,
-        languageProfileId: row.languageProfileId ?? undefined,
-        rootFolderId: row.rootFolderId ?? undefined,
-      });
+      const media = await this.mediaService.importFromTmdb(
+        {
+          type: row.mediaType,
+          tmdbId: row.tmdbId,
+          qualityProfileId: row.qualityProfileId ?? undefined,
+          languageProfileId: row.languageProfileId ?? undefined,
+          rootFolderId: row.rootFolderId ?? undefined,
+        },
+        row.userId ?? null,
+      );
       row.media = media;
     } catch (err) {
       // If already in library, resolve the existing media ID

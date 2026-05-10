@@ -339,6 +339,23 @@ export class MediaCardComponent {
     return actions;
   });
 
+  /**
+   * Resolved top-right status. Falls back to an auto-detected `'missing'`
+   * marker when the media is in the library but has no playable files yet
+   * (movies: no files; series: zero downloaded episodes), so cards in
+   * Recently Added / Library make the missing-file state immediately visible
+   * without each parent having to wire `[status]` itself.
+   */
+  protected readonly _resolvedStatus = computed((): CardStatus => {
+    if (this.status()) return this.status();
+    if (this.badge()) return null;
+    const m = this.media();
+    if (!m) return null;
+    const s = computeMediaBarStatus(m);
+    if (s === 'missing-monitored' || s === 'missing-unmonitored') return 'missing';
+    return null;
+  });
+
   /** Status badge shown in the top-left corner of the poster. */
   protected readonly statusBadge = computed((): { text: string; class: string } | null => {
     const s = this._barStatus();

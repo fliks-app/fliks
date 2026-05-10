@@ -43,14 +43,22 @@
       </div>
     }
 
-    <!-- Top-left: status badge or episode number -->
-    @if (statusBadge()) {
-      <div class="absolute top-1.5 left-1.5 z-20">
-        <span class="badge badge-sm" [ngClass]="statusBadge()!.class">{{ statusBadge()!.text }}</span>
-      </div>
-    } @else if (topLeftBadge()) {
-      <div class="absolute top-1.5 left-1.5 z-20">
-        <span class="badge badge-sm badge-neutral font-mono">{{ topLeftBadge() }}</span>
+    <!-- Top-left: missing-files indicator (auto), status badge, episode number -->
+    @if (_resolvedStatus() === 'missing' || statusBadge() || topLeftBadge()) {
+      <div class="absolute top-2 left-2 z-30 flex items-center gap-1">
+        @if (_resolvedStatus() === 'missing') {
+          <svg
+            lucideCircleX
+            class="h-5 w-5 text-error drop-shadow"
+            [attr.aria-label]="'media_card.missing_files' | translate"
+            [attr.title]="'media_card.missing_files' | translate"
+          ></svg>
+        }
+        @if (statusBadge()) {
+          <span class="badge badge-sm" [ngClass]="statusBadge()!.class">{{ statusBadge()!.text }}</span>
+        } @else if (topLeftBadge()) {
+          <span class="badge badge-sm badge-neutral font-mono">{{ topLeftBadge() }}</span>
+        }
       </div>
     }
 
@@ -75,10 +83,6 @@
           }
         }
       </div>
-    } @else if (status() === 'missing') {
-      <div class="absolute top-1.5 right-1.5 z-20">
-        <svg lucideCircleX class="h-5 w-5 text-error/60 drop-shadow"></svg>
-      </div>
     } @else if (interactiveWatched()) {
       <button
         type="button"
@@ -97,7 +101,7 @@
           [class.text-white/80]="status() !== 'watched'"
         ></svg>
       </button>
-    } @else if (status() === 'watched') {
+    } @else if (_resolvedStatus() === 'watched') {
       <div class="absolute top-1.5 right-1.5 z-20">
         <div class="w-6 h-6 rounded-full bg-success flex items-center justify-center shadow">
           <svg lucideCheck class="h-3.5 w-3.5 text-success-content"></svg>

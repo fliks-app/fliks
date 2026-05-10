@@ -69,14 +69,14 @@ export class MediaController {
 
   @Post('import/tmdb')
   @CheckPolicies((ability) => ability.can(Action.Create, Media))
-  importFromTmdb(@Body() dto: ImportTmdbDto) {
-    return this.mediaService.importFromTmdb(dto);
+  importFromTmdb(@Body() dto: ImportTmdbDto, @CurrentUser() user: User) {
+    return this.mediaService.importFromTmdb(dto, user?.id ?? null);
   }
 
   @Post('import')
   @CheckPolicies((ability) => ability.can(Action.Create, Media))
-  importMedia(@Body() dto: ImportMediaDto) {
-    return this.mediaService.importMedia(dto);
+  importMedia(@Body() dto: ImportMediaDto, @CurrentUser() user: User) {
+    return this.mediaService.importMedia(dto, user?.id ?? null);
   }
 
   @Post()

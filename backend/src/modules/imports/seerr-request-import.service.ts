@@ -215,6 +215,14 @@ export class SeerrRequestImportService {
       },
     });
 
+    // When the Seerr request maps to a Media already in Fliks that nobody
+    // owns yet (`addedById` null — typical for *arr-migrated or disk-rescanned
+    // rows), claim it for the Seerr requester so the "Mine" filter surfaces
+    // it without waiting on a manual re-approval.
+    if (media && media.addedById == null) {
+      await this.mediaRepo.update(media.id, { addedById: user.id });
+    }
+
     if (existing) {
       existing.status = status;
       existing.seasons = seasons;

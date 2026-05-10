@@ -42,8 +42,8 @@ import { TvSectionDirective } from '../../shared/directives/tv-section.directive
  *
  * ## Récemment ajoutés
  * Last 20 media added to the library (movies + series mixed),
- * excluding already-watched and missing-file entries.
- * Data: `GET /api/media?sortBy=createdAt&sortOrder=DESC&limit=20&excludeWatched=true&missing=false`.
+ * excluding already-watched entries. Includes items still awaiting download.
+ * Data: `GET /api/media?sortBy=createdAt&sortOrder=DESC&limit=20&excludeWatched=true`.
  *
  * ## Recommandations
  * Genre-based suggestions derived from the user's watch history.
@@ -224,7 +224,6 @@ export class HomeComponent implements OnInit, OnDestroy {
           sortOrder: 'DESC',
           limit: 20,
           excludeWatched: true,
-          missing: false,
           requestedByMe: mine || undefined,
         }),
         this.mediaService.getCalendar(startStr, in30dStr, true, mine).catch(() => []),

@@ -1587,6 +1587,7 @@
     "unmonitored": "Non surveillé",
     "unreleased": "Non sorti",
     "queued": "En file",
+    "missing_files": "Fichiers manquants",
     "play": "Lire",
     "open_detail": "Voir la fiche",
     "mark_watched": "Marquer comme vu",
