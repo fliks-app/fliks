@@ -34,6 +34,9 @@ import {
 } from '../metadata-providers/interfaces/metadata-provider.interface';
 import { MediaType, MediaStatus } from '../../common/enums';
 import { ProfilesService } from '../profiles/profiles.service';
+import { QualityProfile } from '../profiles/entities/quality-profile.entity';
+import { LanguageProfile } from '../profiles/entities/language-profile.entity';
+import { User } from '../users/entities/user.entity';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { Library } from '../libraries/entities/library.entity';
 import { LibrariesService } from '../libraries/libraries.service';
@@ -97,7 +100,10 @@ export class MediaService {
     private readonly subtitleStream: SubtitleStreamService,
   ) {}
 
-  async importFromTmdb(dto: ImportTmdbDto): Promise<Media> {
+  async importFromTmdb(
+    dto: ImportTmdbDto,
+    addedByUserId: number | null = null,
+  ): Promise<Media> {
     const key = this.config.get<string>('TMDB_API_KEY', '');
     if (!key?.trim()) {
       throw new BadRequestException('TMDB API key is not configured');
@@ -155,6 +161,7 @@ export class MediaService {
         rootFolderId,
         folderName,
         libraryId,
+        addedByUserId,
       );
     }
 
@@ -176,6 +183,7 @@ export class MediaService {
       rootFolderId,
       folderName,
       libraryId,
+      addedByUserId,
     );
   }
 
@@ -183,7 +191,10 @@ export class MediaService {
    * Import media from any provider (TMDB, TVDB).
    * Cross-references IDs between providers when possible.
    */
-  async importMedia(dto: ImportMediaDto): Promise<Media> {
+  async importMedia(
+    dto: ImportMediaDto,
+    addedByUserId: number | null = null,
+  ): Promise<Media> {
     const provider = this.providerRegistry.resolve(dto.provider ?? null);
 
     // Check for existing media (by any known ID)
@@ -260,6 +271,7 @@ export class MediaService {
         rootFolderId,
         folderName,
         libraryId,
+        addedByUserId,
       );
     }
 
@@ -289,6 +301,7 @@ export class MediaService {
       rootFolderId,
       folderName,
       libraryId,
+      addedByUserId,
     );
   }
 
@@ -455,13 +468,10 @@ export class MediaService {
     }
 
     if (query.requestedByMe && userId) {
-      qb.andWhere(
-        `media.id IN (
-          SELECT r."mediaId" FROM requests r
-          WHERE r."userId" = :reqUserId AND r."mediaId" IS NOT NULL
-        )`,
-        { reqUserId: userId },
-      );
+      // Approved requests set `media.addedById` to the requester, and direct
+      // imports set it to the importer — so a single column lookup covers
+      // both flows.
+      qb.andWhere('media."addedById" = :reqUserId', { reqUserId: userId });
     }
 
     if (query.q) {
@@ -707,20 +717,24 @@ export class MediaService {
   ): Promise<Media> {
     await this.findOne(id);
     const patch: {
-      qualityProfileId?: number | null;
-      languageProfileId?: number | null;
+      qualityProfile?: QualityProfile | null;
+      languageProfile?: LanguageProfile | null;
     } = {};
     if (dto.qualityProfileId !== undefined) {
       if (dto.qualityProfileId !== null) {
         await this.profiles.findOneQualityProfile(dto.qualityProfileId);
+        patch.qualityProfile = { id: dto.qualityProfileId } as QualityProfile;
+      } else {
+        patch.qualityProfile = null;
       }
-      patch.qualityProfileId = dto.qualityProfileId;
     }
     if (dto.languageProfileId !== undefined) {
       if (dto.languageProfileId !== null) {
         await this.profiles.findOneLanguageProfile(dto.languageProfileId);
+        patch.languageProfile = { id: dto.languageProfileId } as LanguageProfile;
+      } else {
+        patch.languageProfile = null;
       }
-      patch.languageProfileId = dto.languageProfileId;
     }
     if (Object.keys(patch).length === 0) {
       throw new BadRequestException(
@@ -738,10 +752,16 @@ export class MediaService {
     const patch: Partial<Record<string, unknown>> = {};
 
     if (dto.qualityProfileId !== undefined) {
-      patch.qualityProfileId = dto.qualityProfileId;
+      patch.qualityProfile =
+        dto.qualityProfileId === null
+          ? null
+          : ({ id: dto.qualityProfileId } as QualityProfile);
     }
     if (dto.languageProfileId !== undefined) {
-      patch.languageProfileId = dto.languageProfileId;
+      patch.languageProfile =
+        dto.languageProfileId === null
+          ? null
+          : ({ id: dto.languageProfileId } as LanguageProfile);
     }
     if (dto.monitored !== undefined) {
       patch.monitored = dto.monitored;
@@ -857,10 +877,7 @@ export class MediaService {
         moviesQb.andWhere('m.monitored = true');
       }
       if (dto.requestedByMe && userId) {
-        moviesQb.andWhere(
-          `m.id IN (SELECT r."mediaId" FROM requests r WHERE r."userId" = :calUserId AND r."mediaId" IS NOT NULL)`,
-          { calUserId: userId },
-        );
+        moviesQb.andWhere('m."addedById" = :calUserId', { calUserId: userId });
       }
       if (accessibleLibraryIds !== undefined && accessibleLibraryIds !== null) {
         if (accessibleLibraryIds.length === 0) {
@@ -928,10 +945,7 @@ export class MediaService {
         epQb.andWhere('media.monitored = true').andWhere('ep.monitored = true');
       }
       if (dto.requestedByMe && userId) {
-        epQb.andWhere(
-          `media.id IN (SELECT r."mediaId" FROM requests r WHERE r."userId" = :calUserId AND r."mediaId" IS NOT NULL)`,
-          { calUserId: userId },
-        );
+        epQb.andWhere('media."addedById" = :calUserId', { calUserId: userId });
       }
       if (accessibleLibraryIds !== undefined && accessibleLibraryIds !== null) {
         if (accessibleLibraryIds.length === 0) {
@@ -1935,18 +1949,26 @@ export class MediaService {
     rootFolderId?: number,
     folderName?: string,
     libraryId?: number,
+    addedByUserId?: number | null,
   ): Promise<Media> {
     const row = this.mediaRepo.create({
       ...this.buildMediaFieldsFromTmdb(details, MediaType.MOVIE),
       monitored: true,
       metadataRefreshedAt: new Date(),
-      ...(qualityProfileId != null ? { qualityProfileId } : {}),
-      ...(languageProfileId != null ? { languageProfileId } : {}),
+      ...(qualityProfileId != null
+        ? { qualityProfile: { id: qualityProfileId } as QualityProfile }
+        : {}),
+      ...(languageProfileId != null
+        ? { languageProfile: { id: languageProfileId } as LanguageProfile }
+        : {}),
       ...(rootFolderId
         ? { rootFolder: { id: rootFolderId } as RootFolder }
         : {}),
       ...(libraryId ? { library: { id: libraryId } as Library } : {}),
       ...(folderName ? { folderName } : {}),
+      ...(addedByUserId
+        ? { addedBy: { id: addedByUserId } as User }
+        : {}),
     });
     const saved = await this.mediaRepo.save(row);
     await this.downloadMediaImages(saved.id, details);
@@ -1963,18 +1985,26 @@ export class MediaService {
     rootFolderId?: number,
     folderName?: string,
     libraryId?: number,
+    addedByUserId?: number | null,
   ): Promise<Media> {
     const row = this.mediaRepo.create({
       ...this.buildMediaFieldsFromTmdb(details, MediaType.SERIES),
       monitored: true,
       metadataRefreshedAt: new Date(),
-      ...(qualityProfileId != null ? { qualityProfileId } : {}),
-      ...(languageProfileId != null ? { languageProfileId } : {}),
+      ...(qualityProfileId != null
+        ? { qualityProfile: { id: qualityProfileId } as QualityProfile }
+        : {}),
+      ...(languageProfileId != null
+        ? { languageProfile: { id: languageProfileId } as LanguageProfile }
+        : {}),
       ...(rootFolderId
         ? { rootFolder: { id: rootFolderId } as RootFolder }
         : {}),
       ...(libraryId ? { library: { id: libraryId } as Library } : {}),
       ...(folderName ? { folderName } : {}),
+      ...(addedByUserId
+        ? { addedBy: { id: addedByUserId } as User }
+        : {}),
     });
     const saved = await this.mediaRepo.save(row);
     await this.downloadMediaImages(saved.id, details);

@@ -19,6 +19,7 @@ import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
 import { RootFolder } from '../../root-folders/entities/root-folder.entity';
 import { Library } from '../../libraries/entities/library.entity';
+import { User } from '../../users/entities/user.entity';
 import { Season } from './season.entity';
 import { MediaFile } from './media-file.entity';
 import { MediaMetadata } from './media-metadata.entity';
@@ -182,6 +183,18 @@ export class Media extends BaseEntity {
 
   @OneToMany(() => MediaFile, (file) => file.media, { cascade: true })
   files: MediaFile[];
+
+  /**
+   * User who initiated the direct import (no Request involved). Null for media
+   * created via approved Requests, disk rescans, or arr migrations — those
+   * flows attribute ownership elsewhere (Request.user, etc.).
+   */
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'addedById' })
+  addedBy: User | null;
+
+  @RelationId((m: Media) => m.addedBy)
+  addedById: number | null;
 
   toJSON() {
     return { ...this, path: this.path };
