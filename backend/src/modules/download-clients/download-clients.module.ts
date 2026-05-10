@@ -6,6 +6,7 @@ import { QbittorrentService } from './qbittorrent.service';
 import { DownloadClientsService } from './download-clients.service';
 import { DownloadClientsController } from './download-clients.controller';
 import { AuthModule } from '../auth/auth.module';
+import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
 
 @Module({
   imports: [
@@ -13,7 +14,7 @@ import { AuthModule } from '../auth/auth.module';
     AuthModule,
   ],
   controllers: [DownloadClientsController],
-  providers: [QbittorrentService, DownloadClientsService],
-  exports: [TypeOrmModule, QbittorrentService],
+  providers: [QbittorrentService, DownloadClientsService, TorrentHistoryMatcher],
+  exports: [TypeOrmModule, QbittorrentService, TorrentHistoryMatcher],
 })
 export class DownloadClientsModule {}
