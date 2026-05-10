@@ -2710,12 +2710,18 @@ export class MediaService {
     actualHeight?: number,
     actualWidth?: number,
   ): string {
-    // Use width to determine resolution (stable across aspect ratios)
+    // Resolution bucket from frame dimensions: first ceiling that fits BOTH
+    // width AND height wins. Ceilings on both axes absorb anamorphic / scope
+    // crops (e.g. a 1080p source encoded as 1796x1076 or 1920x800) which a
+    // width-only threshold mis-buckets as 720p.
+    const w = actualWidth ?? 0;
+    const h = actualHeight ?? 0;
     let resolution: number;
-    if (actualWidth && actualWidth >= 3800) resolution = 2160;
-    else if (actualWidth && actualWidth >= 1900) resolution = 1080;
-    else if (actualWidth && actualWidth >= 1260) resolution = 720;
-    else resolution = 480;
+    if (!w && !h) resolution = 480;
+    else if (w <= 720 && h <= 576) resolution = 480;
+    else if (w <= 1280 && h <= 962) resolution = 720;
+    else if (w <= 1920 && h <= 1440) resolution = 1080;
+    else resolution = 2160;
 
     // Determine source from filename (bluray, web, remux, etc.)
     const t = filename.replace(/\./g, ' ').toLowerCase();
