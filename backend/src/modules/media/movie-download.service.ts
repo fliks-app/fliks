@@ -13,6 +13,7 @@ import { DownloadClient } from '../download-clients/entities/download-client.ent
 import { TorznabService, TorznabRelease } from '../indexers/torznab.service';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
+import { ProfilesService } from '../profiles/profiles.service';
 import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -85,6 +86,7 @@ export class MovieDownloadService {
     private readonly blocklist: BlocklistService,
     private readonly notifications: NotificationsService,
     private readonly qualityDefs: QualityDefinitionsService,
+    private readonly profiles: ProfilesService,
   ) {}
 
   private allowedQualityIds(
@@ -155,12 +157,8 @@ export class MovieDownloadService {
       );
     }
 
-    const allowed = this.allowedQualityIds(media.qualityProfile?.items);
-    if (!allowed.size) {
-      throw new BadRequestException(
-        'Assign a quality profile with at least one allowed quality to this movie',
-      );
-    }
+    const { allowed, allowedLangs } =
+      this.profiles.resolveAllowedForMediaOrThrow(media, 'movie');
 
     const indexers = await this.indexerRepo.find({
       where: { enabled: true },
@@ -171,9 +169,6 @@ export class MovieDownloadService {
       indexers.map((ix) => this.searchIndexer(ix, query)),
     );
     const flat = batches.flat();
-    const allowedLangs = allowedAudioLanguageIds(
-      media.languageProfile?.audioLanguages,
-    );
 
     const rows = await this.buildMovieReleaseRows(
       flat,
@@ -206,12 +201,10 @@ export class MovieDownloadService {
       );
     }
 
-    const allowed = this.allowedQualityIds(media.qualityProfile?.items);
-    if (!allowed.size) {
-      throw new BadRequestException(
-        'Assign a quality profile with at least one allowed quality to this movie',
-      );
-    }
+    const { allowed } = this.profiles.resolveAllowedForMediaOrThrow(
+      media,
+      'movie',
+    );
 
     let downloadUrl = dto.downloadUrl?.trim();
     let sourceTitle = dto.sourceTitle?.trim();

@@ -45,6 +45,7 @@ import {
   getAppQualityById,
   APP_QUALITIES,
 } from '../../common/constants/app-qualities';
+import { rankFromQualityString } from './release-rejection.helper';
 
 import { ImageService } from '../images/image.service';
 import { SubtitleStreamService } from '../streaming/subtitle-stream.service';
@@ -529,15 +530,72 @@ export class MediaService {
     });
 
     if (query.cutoffUnmet === true) {
-      const qualityByName = new Map(APP_QUALITIES.map((q) => [q.name, q]));
+      // Cutoff comparison must reach below the cutoff *on the unit that gets
+      // downloaded* — the whole movie for movies, each individual episode
+      // for series. The previous implementation looked at all
+      // `media.files[]` collectively for series, so a single upgraded
+      // episode hid every other below-cutoff one. We also fold "totally
+      // missing" media (no file → rank 0) into this bucket and lean on
+      // `parseReleaseQuality` (via {@link rankFromQualityString}) so legacy
+      // stored quality strings are parsed instead of needing an exact
+      // `APP_QUALITIES.name` match.
+      const cutoffByMedia = new Map<number, number>();
+      for (const m of enriched) {
+        if (!m.qualityProfile) continue;
+        const cq = getAppQualityById(m.qualityProfile.cutoff);
+        if (cq) cutoffByMedia.set(m.id, cq.rank);
+      }
+      const seriesIds = enriched
+        .filter(
+          (m) => m.type === MediaType.SERIES && cutoffByMedia.has(m.id),
+        )
+        .map((m) => m.id);
+      const epBestByMedia = new Map<number, Map<number, number>>();
+      if (seriesIds.length) {
+        const epRows: {
+          mediaId: number;
+          epId: number;
+          quality: string | null;
+        }[] = await this.dataSource.query(
+          `SELECT s."mediaId" AS "mediaId",
+                  e.id      AS "epId",
+                  f."quality" AS "quality"
+             FROM seasons s
+             JOIN episodes e ON e."seasonId" = s.id
+             LEFT JOIN media_files f ON f."episodeId" = e.id
+            WHERE s."mediaId" = ANY($1)
+              AND s."seasonNumber" > 0
+              AND e.monitored = true`,
+          [seriesIds],
+        );
+        for (const row of epRows) {
+          let byEp = epBestByMedia.get(row.mediaId);
+          if (!byEp) {
+            byEp = new Map();
+            epBestByMedia.set(row.mediaId, byEp);
+          }
+          const rank = rankFromQualityString(row.quality);
+          const prev = byEp.get(row.epId);
+          if (prev == null || rank > prev) byEp.set(row.epId, rank);
+        }
+      }
       enriched = enriched.filter((m) => {
-        if (!m.files?.length || !m.qualityProfile) return false;
-        const cutoffQuality = getAppQualityById(m.qualityProfile.cutoff);
-        if (!cutoffQuality) return false;
-        return !m.files.some((f) => {
-          const fq = qualityByName.get(f.quality);
-          return fq && fq.rank >= cutoffQuality.rank;
-        });
+        const cutoffRank = cutoffByMedia.get(m.id);
+        if (cutoffRank == null) return false;
+        if (m.type === MediaType.MOVIE) {
+          let rank = 0;
+          for (const f of m.files ?? []) {
+            const r = rankFromQualityString(f.quality);
+            if (r > rank) rank = r;
+          }
+          return rank < cutoffRank;
+        }
+        const byEp = epBestByMedia.get(m.id);
+        if (!byEp || byEp.size === 0) return false;
+        for (const rank of byEp.values()) {
+          if (rank < cutoffRank) return true;
+        }
+        return false;
       });
     }
 

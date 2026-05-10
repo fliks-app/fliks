@@ -10,6 +10,19 @@ import {
 } from './release-language.parser';
 
 /**
+ * Resolve a stored media-file quality string (e.g. `"WEBDL-1080p"`,
+ * `"HDTV-720p"`) into its rank via {@link parseReleaseQuality}. Returns
+ * 0 for null / empty / unparsable input so callers can treat
+ * "no usable file" as "below any cutoff".
+ */
+export function rankFromQualityString(
+  quality: string | null | undefined,
+): number {
+  if (!quality) return 0;
+  return parseReleaseQuality(quality).quality.rank;
+}
+
+/**
  * Convert a language profile's audio language items into a set of app-language IDs
  * for rejection checking. Empty set = no language restriction.
  */

@@ -10,6 +10,11 @@ import { LanguageProfile } from './entities/language-profile.entity';
 import { CreateQualityProfileDto } from './dto/create-quality-profile.dto';
 import { CreateLanguageProfileDto } from './dto/create-language-profile.dto';
 import { buildDefaultMovieQualityProfileDto } from './default-movie-quality-profile';
+import { buildDefaultLanguageProfileDto } from './default-language-profile';
+import {
+  buildAllowedQualityIds,
+  allowedAudioLanguageIds,
+} from '../media/release-rejection.helper';
 
 @Injectable()
 export class ProfilesService {
@@ -23,6 +28,11 @@ export class ProfilesService {
   async ensureDefaultQualityProfiles(): Promise<void> {
     if ((await this.qpRepo.count()) > 0) return;
     await this.createQualityProfile(buildDefaultMovieQualityProfileDto());
+  }
+
+  async ensureDefaultLanguageProfiles(): Promise<void> {
+    if ((await this.lpRepo.count()) > 0) return;
+    await this.createLanguageProfile(buildDefaultLanguageProfileDto());
   }
 
   async resolveQualityProfileIdForImport(
@@ -45,9 +55,60 @@ export class ProfilesService {
     return first?.id ?? null;
   }
 
+  /**
+   * Effective allowed-quality + allowed-audio-language sets for a media.
+   * No runtime fallback to system-default profiles — defaults are seeded
+   * once (via `ensureDefault*Profiles`) and the import flow assigns them
+   * automatically. A media reaching this code without a profile yields an
+   * empty allowed set; the search/grab pipelines treat that as "skip /
+   * refuse to act". The same rule applies to both quality and language.
+   */
+  resolveAllowedForMedia(media: {
+    qualityProfile?: QualityProfile | null;
+    languageProfile?: LanguageProfile | null;
+  }): { allowed: Set<number>; allowedLangs: Set<number> } {
+    return {
+      allowed: buildAllowedQualityIds(media.qualityProfile?.items),
+      allowedLangs: allowedAudioLanguageIds(
+        media.languageProfile?.audioLanguages,
+      ),
+    };
+  }
+
+  /**
+   * Strict variant for the manual grab paths: throws `BadRequest` with a
+   * caller-aware noun when either profile is missing, or when the quality
+   * profile has zero allowed qualities. The auto SearchMissing path uses
+   * the non-throwing variant and skips silently via `classifyForSearch`.
+   */
+  resolveAllowedForMediaOrThrow(
+    media: {
+      qualityProfile?: QualityProfile | null;
+      languageProfile?: LanguageProfile | null;
+    },
+    noun: 'movie' | 'series',
+  ): { allowed: Set<number>; allowedLangs: Set<number> } {
+    if (!media.qualityProfile) {
+      throw new BadRequestException(
+        `Assign a quality profile with at least one allowed quality to this ${noun}`,
+      );
+    }
+    if (!media.languageProfile) {
+      throw new BadRequestException(`Assign a language profile to this ${noun}`);
+    }
+    const sets = this.resolveAllowedForMedia(media);
+    if (!sets.allowed.size) {
+      throw new BadRequestException(
+        `Assign a quality profile with at least one allowed quality to this ${noun}`,
+      );
+    }
+    return sets;
+  }
+
   async resolveLanguageProfileIdForImport(
     requested?: number,
   ): Promise<number | null> {
+    await this.ensureDefaultLanguageProfiles();
     if (requested != null) {
       const p = await this.lpRepo.findOne({ where: { id: requested } });
       if (!p) {
@@ -57,7 +118,11 @@ export class ProfilesService {
       }
       return p.id;
     }
-    return null;
+    const [first] = await this.lpRepo.find({
+      order: { id: 'ASC' },
+      take: 1,
+    });
+    return first?.id ?? null;
   }
 
   async createQualityProfile(

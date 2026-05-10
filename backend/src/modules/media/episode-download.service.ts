@@ -20,6 +20,7 @@ import {
   resolveUnknownLanguage,
 } from './release-language.parser';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
+import { ProfilesService } from '../profiles/profiles.service';
 import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -82,6 +83,7 @@ export class EpisodeDownloadService {
     private readonly blocklist: BlocklistService,
     private readonly notifications: NotificationsService,
     private readonly qualityDefs: QualityDefinitionsService,
+    private readonly profiles: ProfilesService,
   ) {}
 
   private allowedQualityIds(
@@ -125,21 +127,14 @@ export class EpisodeDownloadService {
       episodeId,
     );
 
-    const allowed = this.allowedQualityIds(media.qualityProfile?.items);
-    if (!allowed.size) {
-      throw new BadRequestException(
-        'Assign a quality profile with at least one allowed quality to this series',
-      );
-    }
+    const { allowed, allowedLangs } =
+      this.profiles.resolveAllowedForMediaOrThrow(media, 'series');
 
     const indexers = await this.indexerRepo.find({
       where: { enabled: true },
       order: { priority: 'ASC', id: 'ASC' },
     });
 
-    const allowedLangs = allowedAudioLanguageIds(
-      media.languageProfile?.audioLanguages,
-    );
     const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
     const indexerMinSeeders = buildIndexerMinSeeders(indexers);
     const indexerUnknownLang = new Map(
@@ -203,12 +198,10 @@ export class EpisodeDownloadService {
       );
     }
 
-    const allowed = this.allowedQualityIds(media.qualityProfile?.items);
-    if (!allowed.size) {
-      throw new BadRequestException(
-        'Assign a quality profile with at least one allowed quality to this series',
-      );
-    }
+    const { allowed } = this.profiles.resolveAllowedForMediaOrThrow(
+      media,
+      'series',
+    );
 
     let downloadUrl = dto?.downloadUrl?.trim();
     let sourceTitle = dto?.sourceTitle?.trim();
@@ -375,21 +368,14 @@ export class EpisodeDownloadService {
       );
     }
 
-    const allowed = this.allowedQualityIds(media.qualityProfile?.items);
-    if (!allowed.size) {
-      throw new BadRequestException(
-        'Assign a quality profile with at least one allowed quality to this series',
-      );
-    }
+    const { allowed, allowedLangs } =
+      this.profiles.resolveAllowedForMediaOrThrow(media, 'series');
 
     const indexers = await this.indexerRepo.find({
       where: { enabled: true },
       order: { priority: 'ASC', id: 'ASC' },
     });
 
-    const allowedLangs = allowedAudioLanguageIds(
-      media.languageProfile?.audioLanguages,
-    );
     const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
     const indexerMinSeeders = buildIndexerMinSeeders(indexers);
     const indexerUnknownLang = new Map(
@@ -460,12 +446,8 @@ export class EpisodeDownloadService {
       );
     }
 
-    const allowed = this.allowedQualityIds(media.qualityProfile?.items);
-    if (!allowed.size) {
-      throw new BadRequestException(
-        'Assign a quality profile with at least one allowed quality to this series',
-      );
-    }
+    const { allowed, allowedLangs } =
+      this.profiles.resolveAllowedForMediaOrThrow(media, 'series');
 
     const clients = await this.clientRepo.find({
       order: { priority: 'ASC', id: 'ASC' },
@@ -523,9 +505,6 @@ export class EpisodeDownloadService {
       order: { priority: 'ASC', id: 'ASC' },
     });
 
-    const allowedLangs = allowedAudioLanguageIds(
-      media.languageProfile?.audioLanguages,
-    );
     const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
     const indexerMinSeeders = buildIndexerMinSeeders(indexers);
     const indexerUnknownLang = new Map(

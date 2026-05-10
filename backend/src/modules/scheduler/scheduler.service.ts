@@ -29,15 +29,16 @@ import {
   buildSpriteLabel,
 } from '../streaming/thumbnail.service';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
+import { ProfilesService } from '../profiles/profiles.service';
 import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
 import { MarkersService } from '../markers/markers.service';
 import {
-  buildAllowedQualityIds,
   buildIndexerMinSeeders,
-  allowedAudioLanguageIds,
+  rankFromQualityString,
   scoreAndSortReleases,
 } from '../media/release-rejection.helper';
+import { getAppQualityById } from '../../common/constants/app-qualities';
 
 /** Yield the event loop so HTTP requests aren't starved by bulk tasks. */
 const yieldLoop = () => new Promise<void>((r) => setTimeout(r, 50));
@@ -77,6 +78,7 @@ export class SchedulerService implements OnModuleInit {
     private readonly qualityDefs: QualityDefinitionsService,
     private readonly blocklist: BlocklistService,
     private readonly markers: MarkersService,
+    private readonly profiles: ProfilesService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -384,17 +386,22 @@ export class SchedulerService implements OnModuleInit {
     indexers: Indexer[],
     qbitClient: DownloadClient,
   ): Promise<void> {
-    const missing = await this.mediaRepo
+    // Candidates = monitored movies that are either missing on disk OR have
+    // files below the cutoff. SQL keeps the first cut narrow; the
+    // file-vs-cutoff comparison is finished in JS using `currentRankOf`.
+    const candidates = await this.mediaRepo
       .createQueryBuilder('m')
-      .leftJoin('m.files', 'f')
       .leftJoinAndSelect('m.qualityProfile', 'qp')
       .leftJoinAndSelect('m.languageProfile', 'lp')
+      .leftJoinAndSelect('m.files', 'f')
       .where('m.monitored = true')
       .andWhere('m.type = :type', { type: MediaType.MOVIE })
-      .andWhere('f.id IS NULL')
+      // Narrow to rows that *could* need action: nothing on disk OR a profile
+      // that allows upgrades. Cutoff comparison is finished in JS.
+      .andWhere('(f.id IS NULL OR qp."upgradeAllowed" = true)')
       .getMany();
 
-    if (!missing.length) return;
+    if (!candidates.length) return;
 
     const today = new Date().toISOString().slice(0, 10);
     const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
@@ -406,17 +413,27 @@ export class SchedulerService implements OnModuleInit {
       ]),
     );
 
-    for (let i = 0; i < missing.length; i++) {
-      const media = missing[i];
+    for (let i = 0; i < candidates.length; i++) {
+      const media = candidates[i];
       this.eventsService.emit({
         type: 'task.progress',
         command: 'SearchMissing',
         current: i,
-        total: missing.length,
+        total: candidates.length,
         message: media.title,
       });
 
       if (!this.isAvailable(media, today)) continue;
+
+      const decision = this.classifyForSearch(media, media.files ?? []);
+      if (decision.mode !== 'missing' && decision.mode !== 'upgrade') {
+        if (decision.mode === 'unprofiled') {
+          this.log.debug?.(
+            `SearchMissing[movie]: "${media.title}" has no quality profile — skipped (assign one to enable auto-grab/upgrade)`,
+          );
+        }
+        continue;
+      }
 
       const pending = await this.historyRepo.findOne({
         where: { media: { id: media.id }, status: 'grabbed' },
@@ -432,13 +449,13 @@ export class SchedulerService implements OnModuleInit {
       );
       if (!results.length) continue;
 
+      const { allowed, allowedLangs } =
+        this.profiles.resolveAllowedForMedia(media);
       const sorted = await scoreAndSortReleases(
         results,
         {
-          allowed: buildAllowedQualityIds(media.qualityProfile?.items),
-          allowedLangs: allowedAudioLanguageIds(
-            media.languageProfile?.audioLanguages,
-          ),
+          allowed,
+          allowedLangs,
           sizeByQuality,
           indexerMinSeeders,
           indexerUnknownLang,
@@ -446,10 +463,15 @@ export class SchedulerService implements OnModuleInit {
         },
         this.scorerDeps(),
       );
-      const pick = sorted.find((r) => r.rejections.length === 0);
+      const pick = sorted.find(
+        (r) =>
+          r.rejections.length === 0 &&
+          r.rank > decision.minRankExclusive &&
+          r.rank <= decision.maxRankInclusive,
+      );
       if (!pick) {
         this.log.debug?.(
-          `SearchMissing[movie]: no release without rejections for "${media.title}" (${sorted.length} checked)`,
+          `SearchMissing[movie]: no eligible release for "${media.title}" (mode=${decision.mode}, ${sorted.length} checked)`,
         );
         continue;
       }
@@ -486,10 +508,64 @@ export class SchedulerService implements OnModuleInit {
     this.eventsService.emit({
       type: 'task.progress',
       command: 'SearchMissing',
-      current: missing.length,
-      total: missing.length,
+      current: candidates.length,
+      total: candidates.length,
       message: 'SearchMissing',
     });
+  }
+
+  /**
+   * Decide what (if anything) SearchMissing should do for a given media.
+   *
+   * - `skip`        — has files at/above cutoff, OR has files but profile
+   *                   forbids upgrades, OR no monitored profile.
+   * - `unprofiled`  — no quality profile assigned: we refuse to act without
+   *                   one. The system-default profile is a seed only and is
+   *                   NOT applied at runtime.
+   * - `missing`     — no files on disk; grab the best release.
+   * - `upgrade`     — has files below cutoff and `upgradeAllowed` is true;
+   *                   only releases strictly better than current AND within
+   *                   cutoff are eligible.
+   */
+  private classifyForSearch(
+    media: Media,
+    files: { quality?: string | null }[],
+  ):
+    | { mode: 'skip' | 'unprofiled' }
+    | {
+        mode: 'missing' | 'upgrade';
+        minRankExclusive: number;
+        maxRankInclusive: number;
+      } {
+    // Same rule for both axes: a media without a profile gets no action.
+    // Defaults are seeded at install and assigned automatically by the import
+    // flow; there is no runtime fallback.
+    if (!media.qualityProfile || !media.languageProfile) {
+      return { mode: 'unprofiled' };
+    }
+    if (!files.length) {
+      return {
+        mode: 'missing',
+        minRankExclusive: 0,
+        maxRankInclusive: Number.POSITIVE_INFINITY,
+      };
+    }
+    // Files exist — upgrade only.
+    const profile = media.qualityProfile;
+    if (!profile.upgradeAllowed) return { mode: 'skip' };
+    let currentRank = 0;
+    for (const f of files) {
+      const r = rankFromQualityString(f.quality);
+      if (r > currentRank) currentRank = r;
+    }
+    const cutoffRank = getAppQualityById(profile.cutoff)?.rank;
+    if (cutoffRank == null) return { mode: 'skip' };
+    if (currentRank >= cutoffRank) return { mode: 'skip' };
+    return {
+      mode: 'upgrade',
+      minRankExclusive: currentRank,
+      maxRankInclusive: cutoffRank,
+    };
   }
 
   private async searchMissingEpisodes(
@@ -506,8 +582,9 @@ export class SchedulerService implements OnModuleInit {
       ]),
     );
 
-    // Find monitored series with monitored, un-downloaded, aired episodes.
-    // Include quality + language profiles for scoring.
+    // Candidate episodes: aired & monitored, on a monitored series — and
+    // either missing on disk OR potentially upgradeable. The cutoff
+    // comparison is finished in JS using the linked MediaFile's quality.
     const episodes = await this.episodeRepo
       .createQueryBuilder('ep')
       .innerJoin('ep.season', 'season')
@@ -518,15 +595,46 @@ export class SchedulerService implements OnModuleInit {
       .andWhere('media.type = :type', { type: MediaType.SERIES })
       .andWhere('season.monitored = true')
       .andWhere('ep.monitored = true')
-      .andWhere('ep.hasFile = false')
       .andWhere('ep.airDate IS NOT NULL')
       .andWhere('ep.airDate <= :today', { today })
-      .select(['ep.id', 'ep.episodeNumber', 'ep.title', 'ep.airDate'])
+      .andWhere('(ep.hasFile = false OR qp."upgradeAllowed" = true)')
+      .select([
+        'ep.id',
+        'ep.episodeNumber',
+        'ep.title',
+        'ep.airDate',
+        'ep.hasFile',
+      ])
       .addSelect(['season.id', 'season.seasonNumber', 'season.mediaId'])
       .addSelect(['media.id', 'media.title', 'media.year', 'media.runtime'])
       .getMany();
 
     if (!episodes.length) return;
+
+    // Batch-load the linked MediaFile quality for upgrade-candidate episodes
+    // so the cutoff comparison runs in JS without an N+1.
+    const upgradeEpIds = episodes
+      .filter((e) => e.hasFile)
+      .map((e) => e.id);
+    const fileQualityByEpId = new Map<number, string>();
+    if (upgradeEpIds.length) {
+      const fileRows = await this.mediaFileRepo
+        .createQueryBuilder('f')
+        .select(['f.episodeId AS "episodeId"', 'f.quality AS "quality"'])
+        .where('f.episodeId IN (:...ids)', { ids: upgradeEpIds })
+        .getRawMany<{ episodeId: number; quality: string }>();
+      for (const row of fileRows) {
+        // Multiple files per ep: keep the best quality seen.
+        const prev = fileQualityByEpId.get(row.episodeId);
+        if (!prev) {
+          fileQualityByEpId.set(row.episodeId, row.quality);
+          continue;
+        }
+        const prevRank = rankFromQualityString(prev);
+        const curRank = rankFromQualityString(row.quality);
+        if (curRank > prevRank) fileQualityByEpId.set(row.episodeId, row.quality);
+      }
+    }
 
     for (let i = 0; i < episodes.length; i++) {
       const ep = episodes[i];
@@ -541,6 +649,19 @@ export class SchedulerService implements OnModuleInit {
         total: episodes.length,
         message: `${media.title} ${epLabel}`,
       });
+
+      const fileLike = ep.hasFile
+        ? [{ quality: fileQualityByEpId.get(ep.id) ?? null }]
+        : [];
+      const decision = this.classifyForSearch(media, fileLike);
+      if (decision.mode !== 'missing' && decision.mode !== 'upgrade') {
+        if (decision.mode === 'unprofiled') {
+          this.log.debug?.(
+            `SearchMissing[series]: "${media.title}" ${epLabel} has no quality profile — skipped`,
+          );
+        }
+        continue;
+      }
 
       const pending = await this.historyRepo
         .createQueryBuilder('h')
@@ -567,13 +688,13 @@ export class SchedulerService implements OnModuleInit {
       );
       if (!results.length) continue;
 
+      const { allowed, allowedLangs } =
+        this.profiles.resolveAllowedForMedia(media);
       const sorted = await scoreAndSortReleases(
         results,
         {
-          allowed: buildAllowedQualityIds(media.qualityProfile?.items),
-          allowedLangs: allowedAudioLanguageIds(
-            media.languageProfile?.audioLanguages,
-          ),
+          allowed,
+          allowedLangs,
           sizeByQuality,
           indexerMinSeeders,
           indexerUnknownLang,
@@ -582,10 +703,15 @@ export class SchedulerService implements OnModuleInit {
         },
         this.scorerDeps(),
       );
-      const pick = sorted.find((r) => r.rejections.length === 0);
+      const pick = sorted.find(
+        (r) =>
+          r.rejections.length === 0 &&
+          r.rank > decision.minRankExclusive &&
+          r.rank <= decision.maxRankInclusive,
+      );
       if (!pick) {
         this.log.debug?.(
-          `SearchMissing[series]: no release without rejections for "${media.title}" ${epLabel} (${sorted.length} checked)`,
+          `SearchMissing[series]: no eligible release for "${media.title}" ${epLabel} (mode=${decision.mode}, ${sorted.length} checked)`,
         );
         continue;
       }
