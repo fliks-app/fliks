@@ -8,6 +8,7 @@ import { QbittorrentService, QbittorrentTorrent } from './qbittorrent.service';
 import { CreateDownloadClientDto } from './dto/create-download-client.dto';
 import { UpdateDownloadClientDto } from './dto/update-download-client.dto';
 import { TestDownloadClientDto } from './dto/test-download-client.dto';
+import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
 
 export interface QueueEntry extends QbittorrentTorrent {
   clientId: number;
@@ -55,6 +56,7 @@ export class DownloadClientsService {
     @InjectRepository(DownloadHistory)
     private readonly historyRepo: Repository<DownloadHistory>,
     private readonly qbittorrent: QbittorrentService,
+    private readonly historyMatcher: TorrentHistoryMatcher,
   ) {}
 
   async testConnection(
@@ -246,16 +248,10 @@ export class DownloadClientsService {
     });
 
     for (const entry of results) {
-      const hash = entry.hash?.toLowerCase();
-      const name = entry.name.toLowerCase();
-
-      const match =
-        historyEntries.find((h) => h.torrentHash && h.torrentHash === hash) ??
-        historyEntries.find(
-          (h) =>
-            h.sourceTitle.toLowerCase() === name ||
-            name.startsWith(h.sourceTitle.toLowerCase()),
-        );
+      const match = await this.historyMatcher.matchAndHeal(
+        entry,
+        historyEntries,
+      );
       if (match?.media) {
         entry.mediaId = match.mediaId;
         entry.mediaTitle = match.media.title;

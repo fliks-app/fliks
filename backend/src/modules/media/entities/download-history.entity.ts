@@ -4,6 +4,19 @@ import { Media } from './media.entity';
 import { Indexer } from '../../indexers/entities/indexer.entity';
 import { DownloadClient } from '../../download-clients/entities/download-client.entity';
 
+/** Canonical lifecycle of a {@link DownloadHistory} row. */
+export const DOWNLOAD_HISTORY_STATUSES = [
+  'grabbed',
+  'importing',
+  'completed',
+  'failed',
+  'warning',
+] as const;
+export type DownloadHistoryStatus = (typeof DOWNLOAD_HISTORY_STATUSES)[number];
+
+/** Whether the grab was triggered by a user (manual) or by the scheduler (auto). */
+export type GrabSource = 'auto' | 'manual';
+
 @Entity('download_history')
 export class DownloadHistory extends BaseEntity {
   @ManyToOne(() => Media, { onDelete: 'CASCADE' })
@@ -40,7 +53,7 @@ export class DownloadHistory extends BaseEntity {
   torrentHash: string;
 
   @Column({ default: 'grabbed' })
-  status: string;
+  status: DownloadHistoryStatus;
 
   @Column({ type: 'text', nullable: true })
   statusMessage: string;
@@ -51,5 +64,5 @@ export class DownloadHistory extends BaseEntity {
    * Used by the stalled-cleanup job to decide whether re-grab after removal.
    */
   @Column({ type: 'varchar', length: 8, default: 'auto' })
-  grabSource: 'auto' | 'manual';
+  grabSource: GrabSource;
 }

@@ -34,6 +34,7 @@ import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 import { StalledCheck } from './entities/stalled-check.entity';
 import { CleanupProfile } from '../cleanup-profiles/entities/cleanup-profile.entity';
 import { Library } from '../libraries/entities/library.entity';
+import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
 
 @Injectable()
 export class CompletionService {
@@ -73,6 +74,7 @@ export class CompletionService {
     private readonly events: EventsService,
     private readonly ffprobe: FfprobeService,
     private readonly thumbnailService: ThumbnailService,
+    private readonly historyMatcher: TorrentHistoryMatcher,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -110,21 +112,16 @@ export class CompletionService {
         t.state === 'stoppedUP',
     );
 
-    // Purge grabbed/failed entries that have no matching torrent in any client
-    const allTorrentHashes = new Set(
-      allTorrents.map((t) => t.hash?.toLowerCase()),
-    );
-    const allTorrentNames = new Set(
-      allTorrents.map((t) => t.name.toLowerCase()),
-    );
-    const orphaned = grabbed.filter(
-      (h) =>
-        !(h.torrentHash && allTorrentHashes.has(h.torrentHash)) &&
-        !allTorrentNames.has(h.sourceTitle.toLowerCase()) &&
-        !allTorrents.some((t) =>
-          t.name.toLowerCase().startsWith(h.sourceTitle.toLowerCase()),
-        ),
-    );
+    // Purge grabbed/failed entries that have no matching torrent in any
+    // client. Build the reverse view: for each history, ask the matcher
+    // whether at least one current torrent maps to it — exactly the same
+    // rule processCompleted uses below to find the import target.
+    const matchedHistoryIds = new Set<number>();
+    for (const t of allTorrents) {
+      const m = this.historyMatcher.findMatch(t, grabbed);
+      if (m) matchedHistoryIds.add(m.history.id);
+    }
+    const orphaned = grabbed.filter((h) => !matchedHistoryIds.has(h.id));
     if (orphaned.length) {
       await this.historyRepo.remove(orphaned);
       this.log.log(
@@ -168,18 +165,19 @@ export class CompletionService {
       order: { path: 'ASC' },
     });
 
+    // Reverse-lookup: build `historyId → torrent` from the matcher (which
+    // also self-heals missing torrentHash on each history row).
+    const torrentByHistoryId = new Map<
+      number,
+      (typeof completedTorrents)[number]
+    >();
+    for (const t of completedTorrents) {
+      const matchedHistory = await this.historyMatcher.matchAndHeal(t, grabbed);
+      if (matchedHistory) torrentByHistoryId.set(matchedHistory.id, t);
+    }
+
     for (const history of grabbed) {
-      const torrent =
-        completedTorrents.find(
-          (t) =>
-            history.torrentHash &&
-            t.hash?.toLowerCase() === history.torrentHash,
-        ) ??
-        completedTorrents.find(
-          (t) =>
-            t.name.toLowerCase() === history.sourceTitle.toLowerCase() ||
-            t.name.toLowerCase().startsWith(history.sourceTitle.toLowerCase()),
-        );
+      const torrent = torrentByHistoryId.get(history.id);
       if (!torrent) {
         this.log.debug(
           `Import: no completed torrent matching "${history.sourceTitle}" (mediaId=${history.mediaId})`,
