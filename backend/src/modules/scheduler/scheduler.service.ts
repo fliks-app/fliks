@@ -37,6 +37,7 @@ import {
   buildIndexerMinSeeders,
   rankFromQualityString,
   scoreAndSortReleases,
+  ScoredRelease,
 } from '../media/release-rejection.helper';
 import { getAppQualityById } from '../../common/constants/app-qualities';
 
@@ -476,33 +477,13 @@ export class SchedulerService implements OnModuleInit {
         continue;
       }
 
-      try {
-        this.log.log(
-          `SearchMissing: sending movie "${pick.title}" to qBittorrent — ${pick.downloadUrl}`,
-        );
-        await this.qbittorrent.addTorrentUrl(
-          qbitClient,
-          pick.downloadUrl,
-          'movie',
-        );
-        await this.historyRepo.save(
-          this.historyRepo.create({
-            media,
-            downloadClient: qbitClient,
-            indexer: { id: pick.indexerId } as Indexer,
-            sourceTitle: pick.title,
-            quality: this.naming.parseQuality(pick.title),
-            status: 'grabbed',
-          }),
-        );
-        this.log.log(
-          `SearchMissing[movie]: grabbed "${pick.title}" for "${media.title}"`,
-        );
-      } catch (e) {
-        this.log.warn(
-          `SearchMissing[movie]: grab failed for "${media.title}": ${(e as Error).message}`,
-        );
-      }
+      await this.autoGrabAndRecord({
+        media,
+        pick,
+        qbitClient,
+        mediaType: 'movie',
+        label: media.title,
+      });
     }
 
     this.eventsService.emit({
@@ -512,6 +493,54 @@ export class SchedulerService implements OnModuleInit {
       total: candidates.length,
       message: 'SearchMissing',
     });
+  }
+
+  /**
+   * Send the picked release to qBittorrent and record the resulting
+   * `DownloadHistory` row. Capturing the returned info hash is critical:
+   * `CompletionService.processCompleted` and the stalled/seed cleaners all
+   * key off `history.torrentHash` first and only fall back to fragile
+   * `sourceTitle` matching otherwise — without it, an auto-grab could be
+   * matched to the wrong completed torrent (or never matched at all).
+   */
+  private async autoGrabAndRecord(args: {
+    media: Media;
+    pick: ScoredRelease;
+    qbitClient: DownloadClient;
+    mediaType: 'movie' | 'series';
+    /** Free-form label for logs (e.g. `"Dune (2021)"` or `"Show S01E03"`). */
+    label: string;
+  }): Promise<void> {
+    const { media, pick, qbitClient, mediaType, label } = args;
+    try {
+      this.log.log(
+        `SearchMissing: sending ${mediaType} "${pick.title}" to qBittorrent — ${pick.downloadUrl}`,
+      );
+      const torrentHash = await this.qbittorrent.addTorrentUrl(
+        qbitClient,
+        pick.downloadUrl,
+        mediaType,
+      );
+      await this.historyRepo.save(
+        this.historyRepo.create({
+          media,
+          downloadClient: qbitClient,
+          indexer: { id: pick.indexerId } as Indexer,
+          sourceTitle: pick.title,
+          quality: this.naming.parseQuality(pick.title),
+          status: 'grabbed',
+          grabSource: 'auto',
+          torrentHash: torrentHash || undefined,
+        }),
+      );
+      this.log.log(
+        `SearchMissing[${mediaType}]: grabbed "${pick.title}" for "${label}"`,
+      );
+    } catch (e) {
+      this.log.warn(
+        `SearchMissing[${mediaType}]: grab failed for "${label}": ${(e as Error).message}`,
+      );
+    }
   }
 
   /**
@@ -613,9 +642,7 @@ export class SchedulerService implements OnModuleInit {
 
     // Batch-load the linked MediaFile quality for upgrade-candidate episodes
     // so the cutoff comparison runs in JS without an N+1.
-    const upgradeEpIds = episodes
-      .filter((e) => e.hasFile)
-      .map((e) => e.id);
+    const upgradeEpIds = episodes.filter((e) => e.hasFile).map((e) => e.id);
     const fileQualityByEpId = new Map<number, string>();
     if (upgradeEpIds.length) {
       const fileRows = await this.mediaFileRepo
@@ -632,7 +659,8 @@ export class SchedulerService implements OnModuleInit {
         }
         const prevRank = rankFromQualityString(prev);
         const curRank = rankFromQualityString(row.quality);
-        if (curRank > prevRank) fileQualityByEpId.set(row.episodeId, row.quality);
+        if (curRank > prevRank)
+          fileQualityByEpId.set(row.episodeId, row.quality);
       }
     }
 
@@ -716,33 +744,13 @@ export class SchedulerService implements OnModuleInit {
         continue;
       }
 
-      try {
-        this.log.log(
-          `SearchMissing: sending episode "${pick.title}" to qBittorrent — ${pick.downloadUrl}`,
-        );
-        await this.qbittorrent.addTorrentUrl(
-          qbitClient,
-          pick.downloadUrl,
-          'series',
-        );
-        await this.historyRepo.save(
-          this.historyRepo.create({
-            media,
-            downloadClient: qbitClient,
-            indexer: { id: pick.indexerId } as Indexer,
-            sourceTitle: pick.title,
-            quality: this.naming.parseQuality(pick.title),
-            status: 'grabbed',
-          }),
-        );
-        this.log.log(
-          `SearchMissing[series]: grabbed "${pick.title}" for "${media.title}" ${epLabel}`,
-        );
-      } catch (e) {
-        this.log.warn(
-          `SearchMissing[series]: grab failed for "${media.title}" ep ${ep.id}: ${(e as Error).message}`,
-        );
-      }
+      await this.autoGrabAndRecord({
+        media,
+        pick,
+        qbitClient,
+        mediaType: 'series',
+        label: `${media.title} ${epLabel}`,
+      });
     }
 
     this.eventsService.emit({
@@ -816,7 +824,9 @@ export class SchedulerService implements OnModuleInit {
     // Only when not forcing regeneration.
     const fileIds = force
       ? allIds
-      : allIds.filter(({ id }) => !existsSync(this.thumbnailService.getMetadataPath(id)));
+      : allIds.filter(
+          ({ id }) => !existsSync(this.thumbnailService.getMetadataPath(id)),
+        );
     this.log.log(
       `${commandName}: ${fileIds.length} to generate (${allIds.length - fileIds.length} already exist, ${allIds.length} total)`,
     );
@@ -861,7 +871,10 @@ export class SchedulerService implements OnModuleInit {
           }
 
           return this.thumbnailService.generateForFile(
-            file, file.media, label, { force, skipTracking: true },
+            file,
+            file.media,
+            label,
+            { force, skipTracking: true },
           );
         } catch (e) {
           this.log.warn(
@@ -1046,7 +1059,9 @@ export class SchedulerService implements OnModuleInit {
         message: media.title,
       });
       try {
-        const result = await this.mediaService.rescanFiles(media.id, { skipWarmup: true });
+        const result = await this.mediaService.rescanFiles(media.id, {
+          skipWarmup: true,
+        });
         totalUpdated += result.added + result.removed + result.updated;
       } catch (e) {
         skipped++;
@@ -1069,7 +1084,9 @@ export class SchedulerService implements OnModuleInit {
       `${commandName}: scanned ${mediaList.length - skipped}/${mediaList.length} media, ${totalUpdated} change(s), ${skipped} skipped`,
     );
     if (skipped > 0) {
-      this.log.warn(`${commandName}: ${skipped} media failed (see WARN lines above per title)`);
+      this.log.warn(
+        `${commandName}: ${skipped} media failed (see WARN lines above per title)`,
+      );
     }
   }
 
