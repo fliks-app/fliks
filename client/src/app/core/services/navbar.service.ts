@@ -1,5 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { NavigationEnd, Router } from '@angular/router';
+import { NavigationEnd, NavigationStart, Router } from '@angular/router';
 import { Capacitor } from '@capacitor/core';
 import { DeviceService } from './device.service';
 
@@ -57,6 +57,17 @@ export class NavbarService {
     }
     let lastUrl = this.router.url;
     this.router.events.subscribe((e) => {
+      // Browser back/forward: mirror the pop on our internal stack so the
+      // next in-app back button doesn't re-push the URL we just left (which
+      // would let goBack() walk *forward* into the page the user came back
+      // from — e.g. media-detail → player → browser-back → "Retour" would
+      // otherwise reopen the player).
+      if (e instanceof NavigationStart && e.navigationTrigger === 'popstate') {
+        this.isPoppingBack = true;
+        if (this.history[this.history.length - 1] === e.url) {
+          this.history.pop();
+        }
+      }
       if (e instanceof NavigationEnd) {
         this.navCount++;
         // Track the previous URL on every NavigationEnd. We can't trust
