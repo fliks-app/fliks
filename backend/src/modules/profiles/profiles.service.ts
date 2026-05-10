@@ -76,10 +76,13 @@ export class ProfilesService {
   }
 
   /**
-   * Strict variant for the manual grab paths: throws `BadRequest` with a
-   * caller-aware noun when either profile is missing, or when the quality
-   * profile has zero allowed qualities. The auto SearchMissing path uses
-   * the non-throwing variant and skips silently via `classifyForSearch`.
+   * Strict variant for the manual grab paths: throws `BadRequest` when the
+   * quality profile is missing or empty. Language profile is treated as
+   * optional — a null profile yields an empty `allowedLangs` set (permissive)
+   * so the manual "Search releases" button doesn't break on legacy media
+   * imported before language profiles were always assigned. The auto
+   * SearchMissing pipeline uses the non-throwing variant and refuses to
+   * act on missing-profile rows via `classifyForSearch`.
    */
   resolveAllowedForMediaOrThrow(
     media: {
@@ -92,9 +95,6 @@ export class ProfilesService {
       throw new BadRequestException(
         `Assign a quality profile with at least one allowed quality to this ${noun}`,
       );
-    }
-    if (!media.languageProfile) {
-      throw new BadRequestException(`Assign a language profile to this ${noun}`);
     }
     const sets = this.resolveAllowedForMedia(media);
     if (!sets.allowed.size) {
