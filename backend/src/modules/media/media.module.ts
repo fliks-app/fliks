@@ -22,6 +22,7 @@ import { SubtitlesModule } from '../subtitles/subtitles.module';
 import { MediaServersModule } from '../media-servers/media-servers.module';
 import { MovieDownloadService } from './movie-download.service';
 import { EpisodeDownloadService } from './episode-download.service';
+import { AutoGrabPipelineService } from './auto-grab-pipeline.service';
 import { NamingService } from '../scheduler/naming.service';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { Library } from '../libraries/entities/library.entity';
@@ -64,8 +65,9 @@ import { StreamingModule } from '../streaming/streaming.module';
     MediaService,
     MovieDownloadService,
     EpisodeDownloadService,
+    AutoGrabPipelineService,
     NamingService,
   ],
-  exports: [MediaService],
+  exports: [MediaService, AutoGrabPipelineService],
 })
 export class MediaModule {}

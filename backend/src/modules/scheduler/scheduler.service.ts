@@ -20,7 +20,6 @@ import { MediaType, MinimumAvailability } from '../../common/enums';
 import { ConfigService } from '@nestjs/config';
 import { CompletionService } from './completion.service';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
-import { NamingService } from './naming.service';
 import { DelayProfile } from '../profiles/entities/delay-profile.entity';
 import { EventsService } from './events.service';
 import { MediaFile } from '../media/entities/media-file.entity';
@@ -28,18 +27,14 @@ import {
   ThumbnailService,
   buildSpriteLabel,
 } from '../streaming/thumbnail.service';
-import { CustomFormatsService } from '../profiles/custom-formats.service';
-import { ProfilesService } from '../profiles/profiles.service';
-import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
-import { BlocklistService } from '../blocklist/blocklist.service';
+import { AutoGrabPipelineService } from '../media/auto-grab-pipeline.service';
 import { MarkersService } from '../markers/markers.service';
-import {
-  buildIndexerMinSeeders,
-  rankFromQualityString,
-  scoreAndSortReleases,
-  ScoredRelease,
-} from '../media/release-rejection.helper';
-import { getAppQualityById } from '../../common/constants/app-qualities';
+import { rankFromQualityString } from '../media/release-rejection.helper';
+
+// Note: scoring/profile/blocklist/quality-definition wiring lives in
+// AutoGrabPipelineService. This file only orchestrates the high-level
+// scheduler tasks (cron loops, candidate queries) and delegates each
+// grab attempt to `this.autoGrab.tryAutoGrab(...)`.
 
 /** Yield the event loop so HTTP requests aren't starved by bulk tasks. */
 const yieldLoop = () => new Promise<void>((r) => setTimeout(r, 50));
@@ -67,7 +62,6 @@ export class SchedulerService implements OnModuleInit {
     private readonly mediaService: MediaService,
     private readonly config: ConfigService,
     private readonly completion: CompletionService,
-    private readonly naming: NamingService,
     @InjectRepository(DelayProfile)
     private readonly delayProfileRepo: Repository<DelayProfile>,
     private readonly eventsService: EventsService,
@@ -75,11 +69,8 @@ export class SchedulerService implements OnModuleInit {
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly thumbnailService: ThumbnailService,
-    private readonly customFormats: CustomFormatsService,
-    private readonly qualityDefs: QualityDefinitionsService,
-    private readonly blocklist: BlocklistService,
     private readonly markers: MarkersService,
-    private readonly profiles: ProfilesService,
+    private readonly autoGrab: AutoGrabPipelineService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -387,9 +378,6 @@ export class SchedulerService implements OnModuleInit {
     indexers: Indexer[],
     qbitClient: DownloadClient,
   ): Promise<void> {
-    // Candidates = monitored movies that are either missing on disk OR have
-    // files below the cutoff. SQL keeps the first cut narrow; the
-    // file-vs-cutoff comparison is finished in JS using `currentRankOf`.
     const candidates = await this.mediaRepo
       .createQueryBuilder('m')
       .leftJoinAndSelect('m.qualityProfile', 'qp')
@@ -397,22 +385,13 @@ export class SchedulerService implements OnModuleInit {
       .leftJoinAndSelect('m.files', 'f')
       .where('m.monitored = true')
       .andWhere('m.type = :type', { type: MediaType.MOVIE })
-      // Narrow to rows that *could* need action: nothing on disk OR a profile
-      // that allows upgrades. Cutoff comparison is finished in JS.
       .andWhere('(f.id IS NULL OR qp."upgradeAllowed" = true)')
       .getMany();
 
     if (!candidates.length) return;
 
     const today = new Date().toISOString().slice(0, 10);
-    const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
-    const indexerMinSeeders = buildIndexerMinSeeders(indexers);
-    const indexerUnknownLang = new Map(
-      indexers.map((ix) => [
-        ix.id,
-        ix.settings?.unknownLanguageIsoCode as string | undefined,
-      ]),
-    );
+    const scoring = await this.autoGrab.buildScoringContext(indexers);
 
     for (let i = 0; i < candidates.length; i++) {
       const media = candidates[i];
@@ -426,63 +405,29 @@ export class SchedulerService implements OnModuleInit {
 
       if (!this.isAvailable(media, today)) continue;
 
-      const decision = this.classifyForSearch(media, media.files ?? []);
-      if (decision.mode !== 'missing' && decision.mode !== 'upgrade') {
-        if (decision.mode === 'unprofiled') {
-          this.log.debug?.(
-            `SearchMissing[movie]: "${media.title}" has no quality profile — skipped (assign one to enable auto-grab/upgrade)`,
-          );
-        }
-        continue;
-      }
-
-      const pending = await this.historyRepo.findOne({
-        where: { media: { id: media.id }, status: 'grabbed' },
-      });
-      if (pending) continue;
-
       const query = [media.title, media.year].filter(Boolean).join(' ');
       const batches = await Promise.allSettled(
         indexers.map((ix) => this.torznab.searchMovie(ix, query)),
       );
-      const results = batches.flatMap((r) =>
+      const releases = batches.flatMap((r) =>
         r.status === 'fulfilled' ? r.value : [],
       );
-      if (!results.length) continue;
 
-      const { allowed, allowedLangs } =
-        this.profiles.resolveAllowedForMedia(media);
-      const sorted = await scoreAndSortReleases(
-        results,
-        {
-          allowed,
-          allowedLangs,
-          sizeByQuality,
-          indexerMinSeeders,
-          indexerUnknownLang,
-          runtimeMinutes: media.runtime ?? 0,
-        },
-        this.scorerDeps(),
-      );
-      const pick = sorted.find(
-        (r) =>
-          r.rejections.length === 0 &&
-          r.rank > decision.minRankExclusive &&
-          r.rank <= decision.maxRankInclusive,
-      );
-      if (!pick) {
-        this.log.debug?.(
-          `SearchMissing[movie]: no eligible release for "${media.title}" (mode=${decision.mode}, ${sorted.length} checked)`,
-        );
-        continue;
-      }
-
-      await this.autoGrabAndRecord({
+      await this.autoGrab.tryAutoGrab({
         media,
-        pick,
+        files: media.files ?? [],
+        releases,
         qbitClient,
+        scoring,
         mediaType: 'movie',
         label: media.title,
+        runtimeMinutes: media.runtime ?? 0,
+        pendingCheck: async () => {
+          const pending = await this.historyRepo.findOne({
+            where: { media: { id: media.id }, status: 'grabbed' },
+          });
+          return !!pending;
+        },
       });
     }
 
@@ -495,125 +440,13 @@ export class SchedulerService implements OnModuleInit {
     });
   }
 
-  /**
-   * Send the picked release to qBittorrent and record the resulting
-   * `DownloadHistory` row. Capturing the returned info hash is critical:
-   * `CompletionService.processCompleted` and the stalled/seed cleaners all
-   * key off `history.torrentHash` first and only fall back to fragile
-   * `sourceTitle` matching otherwise — without it, an auto-grab could be
-   * matched to the wrong completed torrent (or never matched at all).
-   */
-  private async autoGrabAndRecord(args: {
-    media: Media;
-    pick: ScoredRelease;
-    qbitClient: DownloadClient;
-    mediaType: 'movie' | 'series';
-    /** Free-form label for logs (e.g. `"Dune (2021)"` or `"Show S01E03"`). */
-    label: string;
-  }): Promise<void> {
-    const { media, pick, qbitClient, mediaType, label } = args;
-    try {
-      this.log.log(
-        `SearchMissing: sending ${mediaType} "${pick.title}" to qBittorrent — ${pick.downloadUrl}`,
-      );
-      const torrentHash = await this.qbittorrent.addTorrentUrl(
-        qbitClient,
-        pick.downloadUrl,
-        mediaType,
-      );
-      await this.historyRepo.save(
-        this.historyRepo.create({
-          media,
-          downloadClient: qbitClient,
-          indexer: { id: pick.indexerId } as Indexer,
-          sourceTitle: pick.title,
-          quality: this.naming.parseQuality(pick.title),
-          status: 'grabbed',
-          grabSource: 'auto',
-          torrentHash: torrentHash || undefined,
-        }),
-      );
-      this.log.log(
-        `SearchMissing[${mediaType}]: grabbed "${pick.title}" for "${label}"`,
-      );
-    } catch (e) {
-      this.log.warn(
-        `SearchMissing[${mediaType}]: grab failed for "${label}": ${(e as Error).message}`,
-      );
-    }
-  }
-
-  /**
-   * Decide what (if anything) SearchMissing should do for a given media.
-   *
-   * - `skip`        — has files at/above cutoff, OR has files but profile
-   *                   forbids upgrades, OR no monitored profile.
-   * - `unprofiled`  — no quality profile assigned: we refuse to act without
-   *                   one. The system-default profile is a seed only and is
-   *                   NOT applied at runtime.
-   * - `missing`     — no files on disk; grab the best release.
-   * - `upgrade`     — has files below cutoff and `upgradeAllowed` is true;
-   *                   only releases strictly better than current AND within
-   *                   cutoff are eligible.
-   */
-  private classifyForSearch(
-    media: Media,
-    files: { quality?: string | null }[],
-  ):
-    | { mode: 'skip' | 'unprofiled' }
-    | {
-        mode: 'missing' | 'upgrade';
-        minRankExclusive: number;
-        maxRankInclusive: number;
-      } {
-    // Same rule for both axes: a media without a profile gets no action.
-    // Defaults are seeded at install and assigned automatically by the import
-    // flow; there is no runtime fallback.
-    if (!media.qualityProfile || !media.languageProfile) {
-      return { mode: 'unprofiled' };
-    }
-    if (!files.length) {
-      return {
-        mode: 'missing',
-        minRankExclusive: 0,
-        maxRankInclusive: Number.POSITIVE_INFINITY,
-      };
-    }
-    // Files exist — upgrade only.
-    const profile = media.qualityProfile;
-    if (!profile.upgradeAllowed) return { mode: 'skip' };
-    let currentRank = 0;
-    for (const f of files) {
-      const r = rankFromQualityString(f.quality);
-      if (r > currentRank) currentRank = r;
-    }
-    const cutoffRank = getAppQualityById(profile.cutoff)?.rank;
-    if (cutoffRank == null) return { mode: 'skip' };
-    if (currentRank >= cutoffRank) return { mode: 'skip' };
-    return {
-      mode: 'upgrade',
-      minRankExclusive: currentRank,
-      maxRankInclusive: cutoffRank,
-    };
-  }
-
   private async searchMissingEpisodes(
     indexers: Indexer[],
     qbitClient: DownloadClient,
   ): Promise<void> {
     const today = new Date().toISOString().slice(0, 10);
-    const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
-    const indexerMinSeeders = buildIndexerMinSeeders(indexers);
-    const indexerUnknownLang = new Map(
-      indexers.map((ix) => [
-        ix.id,
-        ix.settings?.unknownLanguageIsoCode as string | undefined,
-      ]),
-    );
+    const scoring = await this.autoGrab.buildScoringContext(indexers);
 
-    // Candidate episodes: aired & monitored, on a monitored series — and
-    // either missing on disk OR potentially upgradeable. The cutoff
-    // comparison is finished in JS using the linked MediaFile's quality.
     const episodes = await this.episodeRepo
       .createQueryBuilder('ep')
       .innerJoin('ep.season', 'season')
@@ -666,8 +499,8 @@ export class SchedulerService implements OnModuleInit {
 
     for (let i = 0; i < episodes.length; i++) {
       const ep = episodes[i];
-      const season = (ep as any).season as Season;
-      const media = (season as any).media as Media;
+      const season = (ep as unknown as { season: Season }).season;
+      const media = (season as unknown as { media: Media }).media;
       const epLabel = `S${String(season.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
 
       this.eventsService.emit({
@@ -678,28 +511,9 @@ export class SchedulerService implements OnModuleInit {
         message: `${media.title} ${epLabel}`,
       });
 
-      const fileLike = ep.hasFile
+      const files = ep.hasFile
         ? [{ quality: fileQualityByEpId.get(ep.id) ?? null }]
         : [];
-      const decision = this.classifyForSearch(media, fileLike);
-      if (decision.mode !== 'missing' && decision.mode !== 'upgrade') {
-        if (decision.mode === 'unprofiled') {
-          this.log.debug?.(
-            `SearchMissing[series]: "${media.title}" ${epLabel} has no quality profile — skipped`,
-          );
-        }
-        continue;
-      }
-
-      const pending = await this.historyRepo
-        .createQueryBuilder('h')
-        .where('h.mediaId = :mediaId', { mediaId: media.id })
-        .andWhere('h.status = :status', { status: 'grabbed' })
-        .andWhere(`h.sourceTitle ILIKE :pattern`, {
-          pattern: `%S${String(season.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}%`,
-        })
-        .getOne();
-      if (pending) continue;
 
       const batches = await Promise.allSettled(
         indexers.map((ix) =>
@@ -711,45 +525,29 @@ export class SchedulerService implements OnModuleInit {
           ),
         ),
       );
-      const results = batches.flatMap((r) =>
+      const releases = batches.flatMap((r) =>
         r.status === 'fulfilled' ? r.value : [],
       );
-      if (!results.length) continue;
 
-      const { allowed, allowedLangs } =
-        this.profiles.resolveAllowedForMedia(media);
-      const sorted = await scoreAndSortReleases(
-        results,
-        {
-          allowed,
-          allowedLangs,
-          sizeByQuality,
-          indexerMinSeeders,
-          indexerUnknownLang,
-          // Episodes are typically 20-60 min; use 30 min as fallback for size check.
-          runtimeMinutes: media.runtime ?? 30,
-        },
-        this.scorerDeps(),
-      );
-      const pick = sorted.find(
-        (r) =>
-          r.rejections.length === 0 &&
-          r.rank > decision.minRankExclusive &&
-          r.rank <= decision.maxRankInclusive,
-      );
-      if (!pick) {
-        this.log.debug?.(
-          `SearchMissing[series]: no eligible release for "${media.title}" ${epLabel} (mode=${decision.mode}, ${sorted.length} checked)`,
-        );
-        continue;
-      }
-
-      await this.autoGrabAndRecord({
+      await this.autoGrab.tryAutoGrab({
         media,
-        pick,
+        files,
+        releases,
         qbitClient,
+        scoring,
         mediaType: 'series',
         label: `${media.title} ${epLabel}`,
+        // Episodes are typically 20-60 min; 30 min fallback for size check.
+        runtimeMinutes: media.runtime ?? 30,
+        pendingCheck: async () => {
+          const pending = await this.historyRepo
+            .createQueryBuilder('h')
+            .where('h.mediaId = :mediaId', { mediaId: media.id })
+            .andWhere('h.status = :status', { status: 'grabbed' })
+            .andWhere(`h.sourceTitle ILIKE :pattern`, { pattern: `%${epLabel}%` })
+            .getOne();
+          return !!pending;
+        },
       });
     }
 
@@ -902,11 +700,23 @@ export class SchedulerService implements OnModuleInit {
 
     if (!indexers.length) return;
 
-    // Collect monitored movie titles for matching
-    const monitored = await this.mediaRepo.find({
-      where: { monitored: true, type: MediaType.MOVIE },
-      select: ['id', 'title', 'year'],
-    });
+    // Full candidates (with profiles + files) so RSS reuses the exact same
+    // missing/upgrade pipeline as SearchMissing: title match → classify →
+    // score → autoGrabAndRecord. The previous flow short-circuited all of
+    // this, so it grabbed below-cutoff releases, ignored profiles, and
+    // never wrote `torrentHash` / `grabSource` onto the DownloadHistory
+    // — which left rows unlinkable in Activities and bypassed the
+    // stalled/seed cleaners.
+    const candidates = await this.mediaRepo
+      .createQueryBuilder('m')
+      .leftJoinAndSelect('m.qualityProfile', 'qp')
+      .leftJoinAndSelect('m.languageProfile', 'lp')
+      .leftJoinAndSelect('m.files', 'f')
+      .where('m.monitored = true')
+      .andWhere('m.type = :type', { type: MediaType.MOVIE })
+      .andWhere('(f.id IS NULL OR qp."upgradeAllowed" = true)')
+      .getMany();
+
     const clients = await this.clientRepo.find({ where: { enabled: true } });
     const qbitClient = clients.find((c) => this.qbittorrent.supports(c));
     if (!qbitClient) {
@@ -920,6 +730,7 @@ export class SchedulerService implements OnModuleInit {
       throw new Error(`Download client unreachable — ${connCheck.message}`);
     }
 
+    const scoring = await this.autoGrab.buildScoringContext(indexers);
     const delayProfiles = await this.delayProfileRepo.find({
       order: { order: 'ASC' },
     });
@@ -936,49 +747,46 @@ export class SchedulerService implements OnModuleInit {
       try {
         const results = await this.torznab.rssSearch(indexer);
         for (const release of results) {
-          const match = monitored.find((m) =>
-            release.title.toLowerCase().includes(m.title.toLowerCase()),
-          );
+          const lowerTitle = release.title.toLowerCase();
+          // Title-substring match, plus year guard when known — without
+          // the year filter, short common titles ("Up", "It", "Heat",
+          // "Cars") matched dozens of unrelated releases.
+          const match = candidates.find((m) => {
+            if (!lowerTitle.includes(m.title.toLowerCase())) return false;
+            if (!m.year) return true;
+            return release.title.includes(String(m.year));
+          });
           if (!match) continue;
 
-          // Check delay profile
           if (
             release.publishDate &&
             this.isDelayed(match, release.publishDate, delayProfiles)
-          )
+          ) {
             continue;
-
-          // Check if already in history
-          const alreadyGrabbed = await this.historyRepo.findOne({
-            where: { media: { id: match.id }, sourceTitle: release.title },
-          });
-          if (alreadyGrabbed) continue;
-
-          try {
-            this.log.log(
-              `RSS: sending "${release.title}" to qBittorrent — ${release.downloadUrl}`,
-            );
-            await this.qbittorrent.addTorrentUrl(
-              qbitClient,
-              release.downloadUrl,
-              'movie',
-            );
-            await this.historyRepo.save(
-              this.historyRepo.create({
-                media: match,
-                downloadClient: qbitClient,
-                indexer: { id: release.indexerId } as Indexer,
-                sourceTitle: release.title,
-                quality: this.naming.parseQuality(release.title),
-                status: 'grabbed',
-              }),
-            );
-            this.log.log(
-              `RssSync: grabbed "${release.title}" for "${match.title}"`,
-            );
-          } catch {
-            // ignore individual grab errors
           }
+
+          await this.autoGrab.tryAutoGrab({
+            media: match,
+            files: match.files ?? [],
+            releases: [release],
+            qbitClient,
+            scoring,
+            mediaType: 'movie',
+            label: match.title,
+            runtimeMinutes: match.runtime ?? 0,
+            pendingCheck: async () => {
+              const pending = await this.historyRepo.findOne({
+                where: { media: { id: match.id }, status: 'grabbed' },
+              });
+              if (pending) return true;
+              // Same source-title already in history — RSS-specific dedupe
+              // because the same release can re-appear across feed polls.
+              const alreadyGrabbed = await this.historyRepo.findOne({
+                where: { media: { id: match.id }, sourceTitle: release.title },
+              });
+              return !!alreadyGrabbed;
+            },
+          });
         }
       } catch (e) {
         this.log.warn(
@@ -1208,16 +1016,6 @@ export class SchedulerService implements OnModuleInit {
     return ageHours < profile.torrentDelay;
   }
 
-  /** Build the async scorer deps for scoreAndSortReleases. */
-  private scorerDeps() {
-    return {
-      scoreCustomFormats: (
-        title: string,
-        meta: { freeleech?: boolean; downloadVolumeFactor?: number },
-      ) => this.customFormats.scoreRelease(title, meta),
-      isBlocked: (title: string) => this.blocklist.isBlocked(title),
-    };
-  }
 
   private isAvailable(media: Media, today: string): boolean {
     switch (media.minimumAvailability) {
