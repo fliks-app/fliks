@@ -195,6 +195,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly statsRefreshTick = signal(0);
   readonly subtitlePickerOpen = signal(false);
   readonly qualityPickerOpen = signal(false);
+  /** True when any panel inside <app-player-controls> (desktop dropdown or
+   *  mobile bottom sheet) is open — suspends the auto-hide timer. */
+  private readonly controlsPanelOpen = signal(false);
 
   // ── Skip-intro state ──
   /** Episode-level intro marker received in playback-info (null for movies / no marker). */
@@ -1048,11 +1051,29 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private isDropdownOpen(): boolean {
     // Check via signals (reliable on mobile)
     if (this.subtitlePickerOpen() || this.qualityPickerOpen()) return true;
+    // Click-driven dropdowns / bottom sheets owned by <app-player-controls>.
+    // Reported via (panelOpenChange) so we don't depend on DOM focus.
+    if (this.controlsPanelOpen()) return true;
     // Check via DOM (DaisyUI dropdowns use focus-within)
     const container = this.containerEl()?.nativeElement;
     if (container?.querySelector('.dropdown:focus-within')) return true;
     const active = document.activeElement;
     return !!active && !!active.closest('.dropdown');
+  }
+
+  /**
+   * Called by <app-player-controls> when its dropdown / bottom-sheet state
+   * changes. While open, we keep the controls visible. On close, re-arm
+   * the auto-hide so the bar fades back out in the normal delay.
+   */
+  onControlsPanelOpenChange(open: boolean): void {
+    this.controlsPanelOpen.set(open);
+    if (open) {
+      if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
+      this.controlsVisible.set(true);
+    } else {
+      this.resetHideTimer();
+    }
   }
 
   // ── Player actions ──
