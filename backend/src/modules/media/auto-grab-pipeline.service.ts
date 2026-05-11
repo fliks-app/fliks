@@ -143,6 +143,9 @@ export class AutoGrabPipelineService {
     mediaType: 'movie' | 'series';
     /** Free-form label for logs — e.g. `"Dune (2021)"` or `"Show S01E03"`. */
     label: string;
+    /** Expected media title(s) — pass canonical + TMDB/TVDB alternatives
+     *  so localised release names still match. */
+    expectedTitle?: string | string[];
     runtimeMinutes: number;
     /** Per-source pending check (e.g. episode-scoped lookup). */
     pendingCheck?: () => Promise<boolean>;
@@ -173,6 +176,7 @@ export class AutoGrabPipelineService {
         indexerMinSeeders: args.scoring.indexerMinSeeders,
         indexerUnknownLang: args.scoring.indexerUnknownLang,
         runtimeMinutes: args.runtimeMinutes,
+        expectedTitle: args.expectedTitle,
       },
       {
         scoreCustomFormats: (title, meta) =>

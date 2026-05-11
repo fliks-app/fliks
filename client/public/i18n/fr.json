@@ -685,7 +685,8 @@
       "SIZE_TOO_LOW": "Taille trop faible ({{actual}} MB < {{min}} MB)",
       "SIZE_TOO_HIGH": "Taille trop élevée ({{actual}} MB > {{max}} MB)",
       "SIZE_NOT_PREFERRED": "Taille éloignée du recommandé ({{actual}} MB ≠ {{preferred}} MB)",
-      "MIN_SEEDERS": "Seeders insuffisants ({{actual}} < {{min}})"
+      "MIN_SEEDERS": "Seeders insuffisants ({{actual}} < {{min}})",
+      "TITLE_MISMATCH": "Titre ne correspond pas au média"
     }
   },
   "requests": {

@@ -120,6 +120,73 @@ export function buildIndexerMinSeeders(
  * Compute every reason a release does **not** perfectly match the user's criteria.
  * Returns an empty array when the release fully matches.
  */
+/**
+ * Stop-words dropped before comparing a release title against the expected
+ * show / movie title. Keeps the meaningful tokens (proper nouns, distinct
+ * words) and avoids false matches on connectors that are nearly universal.
+ */
+const TITLE_STOPWORDS = new Set([
+  // FR
+  'a', 'au', 'aux', 'de', 'des', 'du', 'la', 'le', 'les', 'l',
+  'un', 'une', 'et', 'ou', 'en', 'd', 's',
+  // EN
+  'the', 'an', 'of', 'and', 'or', 'in', 'on', 'at', 'to', 'for',
+]);
+
+/** Normalize a title for matching: lowercase, strip accents, replace any
+ *  non-alphanumeric with a space, collapse whitespace. */
+function normalizeForMatch(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+/** Significant tokens of a title — tokens that must appear in the release
+ *  title for it to be considered a match. Excludes stopwords and very short
+ *  tokens (1 char). Falls back to the full normalized title when filtering
+ *  leaves nothing (e.g. titles made entirely of stopwords). */
+function significantTokens(title: string): string[] {
+  const normalized = normalizeForMatch(title);
+  if (!normalized) return [];
+  const tokens = normalized
+    .split(' ')
+    .filter((t) => t.length > 1 && !TITLE_STOPWORDS.has(t));
+  return tokens.length ? tokens : normalized.split(' ').filter(Boolean);
+}
+
+/**
+ * Return true when a release title plausibly matches *any* of the expected
+ * titles. Every significant token of one expected variant must appear as
+ * a whole-word substring in the normalized release title.
+ *
+ * Multiple expected titles is the normal case: an "Au service de la France"
+ * release indexed under its international name "A Very Secret Service"
+ * still passes when both forms are in the candidate list (TMDB's
+ * `alternative_titles` / TVDB's `aliases`).
+ *
+ * Used as a backend safety net for indexers that ignore `q=` and return any
+ * S01 / category-2000 release regardless of what we asked for.
+ */
+export function titleMatchesExpectation(
+  releaseTitle: string,
+  expected: string | string[],
+): boolean {
+  const candidates = (Array.isArray(expected) ? expected : [expected]).filter(
+    (s): s is string => !!s && s.trim().length > 0,
+  );
+  if (!candidates.length) return true; // nothing meaningful to match
+  const releaseTokens = new Set(normalizeForMatch(releaseTitle).split(' '));
+  for (const cand of candidates) {
+    const tokens = significantTokens(cand);
+    if (!tokens.length) return true; // pathological — treat as match
+    if (tokens.every((t) => releaseTokens.has(t))) return true;
+  }
+  return false;
+}
+
 export function computeRejections(opts: {
   qualityId: number;
   allowed: Set<number>;
@@ -133,10 +200,20 @@ export function computeRejections(opts: {
   seeders: number;
   indexerId: number;
   indexerMinSeeders: Map<number, number>;
-  /** Release title — used to detect video codec for size-limit scaling. */
+  /** Release title — used to detect video codec for size-limit scaling AND
+   *  for the title-mismatch check below. */
   releaseTitle?: string;
+  /** Expected show / movie title(s). Pass the canonical title together
+   *  with TMDB / TVDB alternative titles so that releases indexed under a
+   *  localised name still pass; otherwise they get `TITLE_MISMATCH`. */
+  expectedTitle?: string | string[];
 }): ReleaseRejection[] {
   const out: ReleaseRejection[] = [];
+
+  if (opts.expectedTitle && opts.releaseTitle &&
+      !titleMatchesExpectation(opts.releaseTitle, opts.expectedTitle)) {
+    out.push({ code: 'TITLE_MISMATCH' });
+  }
 
   if (!opts.allowed.has(opts.qualityId)) {
     out.push({ code: 'QUALITY_NOT_ALLOWED' });
@@ -317,6 +394,10 @@ export async function scoreAndSortReleases(
     indexerMinSeeders: Map<number, number>;
     indexerUnknownLang: Map<number, string | undefined>;
     runtimeMinutes: number;
+    /** Title(s) we expect releases to refer to. Releases whose name
+     *  doesn't contain the significant tokens of *any* candidate are
+     *  flagged TITLE_MISMATCH. */
+    expectedTitle?: string | string[];
   },
   deps: ReleaseScorerDeps,
 ): Promise<ScoredRelease[]> {
@@ -347,6 +428,7 @@ export async function scoreAndSortReleases(
         indexerId: r.indexerId,
         indexerMinSeeders: opts.indexerMinSeeders,
         releaseTitle: r.title,
+        expectedTitle: opts.expectedTitle,
       });
       return {
         ...r,

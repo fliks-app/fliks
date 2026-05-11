@@ -101,6 +101,7 @@ export class MovieDownloadService {
     indexers: Indexer[],
     allowed: Set<number>,
     allowedLangs: Set<number>,
+    expectedTitle?: string | string[],
   ): Promise<MovieReleaseRow[]> {
     const scored = await scoreAndSortReleases(
       releases,
@@ -116,6 +117,7 @@ export class MovieDownloadService {
           ]),
         ),
         runtimeMinutes: media.runtime ?? 0,
+        expectedTitle,
       },
       {
         scoreCustomFormats: (title, meta) =>
@@ -132,8 +134,12 @@ export class MovieDownloadService {
   private searchIndexer(
     indexer: Indexer,
     query: string,
+    media?: Media,
   ): Promise<TorznabRelease[]> {
-    return this.torznab.searchMovie(indexer, query);
+    return this.torznab.searchMovie(indexer, query, {
+      imdbId: media?.imdbId,
+      tmdbId: media?.tmdbId,
+    });
   }
 
   private searchQueryForMedia(media: Media): string {
@@ -164,9 +170,10 @@ export class MovieDownloadService {
       where: { enabled: true },
       order: { priority: 'ASC', id: 'ASC' },
     });
-    const query = customQuery?.trim() || this.searchQueryForMedia(media);
+    const customTitle = customQuery?.trim();
+    const query = customTitle || this.searchQueryForMedia(media);
     const batches = await Promise.all(
-      indexers.map((ix) => this.searchIndexer(ix, query)),
+      indexers.map((ix) => this.searchIndexer(ix, query, media)),
     );
     const flat = batches.flat();
 
@@ -176,6 +183,7 @@ export class MovieDownloadService {
       indexers,
       allowed,
       allowedLangs,
+      customTitle || [media.title, ...(media.alternativeTitles ?? [])],
     );
 
     return sortReleasesByRelevance(rows);
@@ -337,9 +345,10 @@ export class MovieDownloadService {
       where: { enabled: true },
       order: { priority: 'ASC', id: 'ASC' },
     });
-    const query = customQuery?.trim() || this.searchQueryForMedia(media);
+    const customTitle = customQuery?.trim();
+    const query = customTitle || this.searchQueryForMedia(media);
     const batches = await Promise.all(
-      indexers.map((ix) => this.searchIndexer(ix, query)),
+      indexers.map((ix) => this.searchIndexer(ix, query, media)),
     );
     const flat = batches.flat();
     const allowedLangs = allowedAudioLanguageIds(
@@ -352,6 +361,7 @@ export class MovieDownloadService {
       indexers,
       allowed,
       allowedLangs,
+      customTitle || [media.title, ...(media.alternativeTitles ?? [])],
     );
 
     // Only keep releases that are strictly better than current AND within cutoff

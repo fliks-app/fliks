@@ -36,6 +36,16 @@ export class Media extends BaseEntity {
   @Column({ nullable: true })
   originalTitle: string;
 
+  /**
+   * International release titles (TMDB `alternative_titles`, TVDB
+   * `aliases`). Used to validate Torznab results: a release labelled with
+   * a localised name — e.g. "A Very Secret Service" for "Au service de la
+   * France" — still matches if the localised form is in this list.
+   * Empty array when the provider returns no aliases.
+   */
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  alternativeTitles: string[];
+
   @Column({ nullable: true })
   year: number;
 
