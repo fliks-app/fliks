@@ -978,9 +978,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // fallback (si-*), even at equal length — their IDs enable client-side
     // PID switching instead of a full backend reload.
     engine.on('audioTracksChanged', (e) => {
-      const tracks = e.tracks.map((t: any) => ({
+      // Cross-reference engine tracks with streamInfo.audio so the dropdown
+      // label matches what the media-detail header shows (e.g.
+      // "Français (EAC3 - 5.1)" instead of Shaka's raw "fre" / "English (eng)").
+      // Engine emits tracks in streamInfo order — see comment at the
+      // streamInfo-fallback branch below.
+      const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
+      const audioList = (file?.streamInfo as any)?.audio ?? [];
+      const tracks = e.tracks.map((t: any, i: number) => ({
         id: t.id,
-        label: t.label,
+        label: audioList[i] ? formatAudioLabel(audioList[i], this.translate) : t.label,
         language: normalizeLang(t.language),
         selected: !!t.selected,
       }));

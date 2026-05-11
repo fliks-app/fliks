@@ -30,45 +30,49 @@
 
     <!-- Stream info: video (or file select) / audio / subtitles (hidden on series overview) -->
     @if (selectedFileId() && (mediaType() !== 'series' || episodeId())) {
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
-        <span class="text-base-content/50">{{ 'media_info.video' | translate }}</span>
-        @if (multipleFiles()) {
-          <select class="select select-bordered select-sm w-fit" [ngModel]="selectedFileId()" (ngModelChange)="selectedFileIdChange.emit($event)">
-            @for (f of files(); track f.id) {
-              <option [ngValue]="f.id">{{ fileLabel(f) }}</option>
-            }
-          </select>
-        } @else if (videoLabel()) {
-          <span>{{ videoLabel() }}</span>
-        }
-        @if (audioTracks().length) {
-          <span class="text-base-content/50">{{ 'media_info.audio' | translate }}</span>
-          @if (audioTracks().length === 1) {
-            <span>{{ audioTracks()[0].label }}</span>
-          } @else {
-            <select class="select select-bordered select-sm w-fit" [ngModel]="selectedAudioIndex()" (ngModelChange)="onAudioChange($event)">
-              @for (t of audioTracks(); track t.index) {
-                <option [ngValue]="t.index">{{ t.label }}</option>
+      <div class="flex flex-col gap-y-1 mt-3">
+        <div class="flex items-center gap-x-4">
+          <span class="text-base-content/50">{{ 'media_info.video' | translate }}</span>
+          @if (multipleFiles()) {
+            <select class="select select-bordered select-sm w-fit" [ngModel]="selectedFileId()" (ngModelChange)="selectedFileIdChange.emit($event)">
+              @for (f of files(); track f.id) {
+                <option [ngValue]="f.id">{{ fileLabel(f) }}</option>
               }
             </select>
-          }
-        }
-      </div>
-      @if (subtitles().length) {
-        <div class="flex items-center gap-x-4 mt-2">
-          <span class="text-base-content/50">{{ 'media_info.subtitles' | translate }}</span>
-          @if (subtitles().length === 1) {
-            <span>{{ subtitles()[0].label }}</span>
-          } @else {
-            <select class="select select-bordered select-sm w-fit" [ngModel]="selectedSubtitleId()" (ngModelChange)="onSubtitleChange($event)">
-              <option [ngValue]="null">{{ 'player.off' | translate }}</option>
-              @for (s of subtitles(); track s.id) {
-                <option [ngValue]="s.id">{{ s.label }}</option>
-              }
-            </select>
+          } @else if (videoLabel()) {
+            <span>{{ videoLabel() }}</span>
           }
         </div>
-      }
+        @if (audioTracks().length) {
+          <div class="flex items-center gap-x-4">
+            <span class="text-base-content/50">{{ 'media_info.audio' | translate }}</span>
+            @if (audioTracks().length === 1) {
+              <span>{{ audioTracks()[0].label }}</span>
+            } @else {
+              <select class="select select-bordered select-sm w-fit" [ngModel]="selectedAudioIndex()" (ngModelChange)="onAudioChange($event)">
+                @for (t of audioTracks(); track t.index) {
+                  <option [ngValue]="t.index">{{ t.label }}</option>
+                }
+              </select>
+            }
+          </div>
+        }
+        @if (subtitles().length) {
+          <div class="flex items-center gap-x-4">
+            <span class="text-base-content/50">{{ 'media_info.subtitles' | translate }}</span>
+            @if (subtitles().length === 1) {
+              <span>{{ subtitles()[0].label }}</span>
+            } @else {
+              <select class="select select-bordered select-sm w-fit" [ngModel]="selectedSubtitleId()" (ngModelChange)="onSubtitleChange($event)">
+                <option [ngValue]="null">{{ 'player.off' | translate }}</option>
+                @for (s of subtitles(); track s.id) {
+                  <option [ngValue]="s.id">{{ s.label }}</option>
+                }
+              </select>
+            }
+          </div>
+        }
+      </div>
     }
 
     <!-- Library info + genres -->
@@ -258,7 +262,7 @@
 
       <!-- Stream info: Video (or file select) / Audio / Subtitles (hidden on series overview) -->
       @if (selectedFileId() && (mediaType() !== 'series' || episodeId())) {
-        <div class="flex flex-wrap items-center gap-x-5 gap-y-1.5 mt-3">
+        <div class="flex flex-col gap-y-1.5 mt-3">
           <div class="flex items-center gap-2">
             <span class="text-base-content/50 font-medium">{{ 'media_info.video' | translate }}</span>
             @if (multipleFiles()) {
