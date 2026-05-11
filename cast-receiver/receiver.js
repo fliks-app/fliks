@@ -162,7 +162,13 @@ const CAPS_VIDEO = [
   { codec: 'av01.0.04M.08',       label: 'av1' },
 ];
 
+console.log('[fliks-cast] registering caps listener on', CAPS_NAMESPACE);
 context.addCustomMessageListener(CAPS_NAMESPACE, (event) => {
+  console.log(
+    '[fliks-cast] caps msg in:',
+    'senderId=', event.senderId,
+    'data=', JSON.stringify(event.data),
+  );
   if (!event.data || event.data.type !== 'probe') return;
   const probe = (mime) => {
     try { return MediaSource.isTypeSupported(mime); } catch { return false; }
