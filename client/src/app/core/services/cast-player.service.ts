@@ -187,23 +187,36 @@ export class CastPlayerService {
     const session = (window as any).cast?.framework?.CastContext
       ?.getInstance?.()
       ?.getCurrentSession?.();
-    if (!session) return;
+    if (!session) {
+      console.log('[fliks-cast/sender] probe skipped: no session');
+      return;
+    }
     const deviceName = session.getCastDevice?.()?.friendlyName;
-    if (!deviceName) return;
+    if (!deviceName) {
+      console.log('[fliks-cast/sender] probe skipped: no friendlyName');
+      return;
+    }
     // Skip if we already have caps for this device — the probe is idempotent
     // but each round-trip is ~150–300 ms and slows the first loadMedia.
-    if (this.castSettings.getDeviceCapabilities(deviceName)) return;
+    const cached = this.castSettings.getDeviceCapabilities(deviceName);
+    if (cached) {
+      console.log('[fliks-cast/sender] probe skipped (cached):', deviceName, cached);
+      return;
+    }
 
     const namespace = 'urn:x-cast:app.fliks.caps';
+    console.log('[fliks-cast/sender] probing', deviceName, 'on', namespace);
     await new Promise<void>((resolve) => {
       let settled = false;
-      const finish = () => {
+      const finish = (reason: string) => {
         if (settled) return;
         settled = true;
+        console.log('[fliks-cast/sender] probe finished:', reason);
         try { session.removeMessageListener?.(namespace, listener); } catch { /* noop */ }
         resolve();
       };
       const listener = (_ns: string, raw: string) => {
+        console.log('[fliks-cast/sender] probe reply raw:', raw);
         try {
           const data = JSON.parse(raw);
           if (data?.type !== 'caps') return;
@@ -211,23 +224,23 @@ export class CastPlayerService {
             audioCodecs: Array.isArray(data.audioCodecs) ? data.audioCodecs : [],
             videoCodecs: Array.isArray(data.videoCodecs) ? data.videoCodecs : [],
           });
-        } catch {
-          /* malformed reply — leave the cache empty, the next session
-             retries against the safe stereo fallback */
+        } catch (err) {
+          console.warn('[fliks-cast/sender] probe parse error:', err);
         }
-        finish();
+        finish('reply');
       };
       try {
         session.addMessageListener(namespace, listener);
         session.sendMessage(namespace, JSON.stringify({ type: 'probe' }));
-      } catch {
-        finish();
+      } catch (err) {
+        console.warn('[fliks-cast/sender] sendMessage threw:', err);
+        finish('exception');
         return;
       }
       // 2 s ceiling — older receivers that don't implement the namespace
       // won't answer, falling back to whatever capabilities (or absence)
       // the cache already has.
-      setTimeout(finish, 2000);
+      setTimeout(() => finish('timeout'), 2000);
     });
   }
 
