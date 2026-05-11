@@ -28,6 +28,11 @@ export function generateMasterPlaylist(
   onlyQuality?: string,
   defaultAudioIndex = 0,
   deviceType: DeviceType = 'desktop',
+  /** True when the active transcode preserves surround channels via the
+   *  `copyAudio` branch in ffmpeg-args (output codec = AC-3 5.1). The
+   *  advertised CODECS string must match the actual stream codec or the
+   *  receiver rejects the segment at MSE chunk-demuxer append. */
+  canCopyAudio = false,
 ): string {
   const multiAudio = audioStreams && audioStreams.length > 1;
   const lines = ['#EXTM3U'];
@@ -53,9 +58,11 @@ export function generateMasterPlaylist(
   // skip fetching seg 0 purely to probe codecs (TS has no init segment) —
   // otherwise a user resuming mid-file wastes a transcode pass at seg 0
   // before the real seek-aware session starts at their resume position.
-  // We always produce H.264 High @ L4.0 + AAC-LC, so the string is fixed.
+  // Video is always H.264 High @ L4.0. Audio is AAC-LC by default, or
+  // AC-3 ("ac-3") when the transcode is preserving surround.
   const audioAttr = multiAudio ? ',AUDIO="audio"' : '';
-  const transcodeCodecs = ',CODECS="avc1.640028,mp4a.40.2"';
+  const audioCodec = canCopyAudio ? 'ac-3' : 'mp4a.40.2';
+  const transcodeCodecs = `,CODECS="avc1.640028,${audioCodec}"`;
 
   // The HLS master never advertises the `/remux/` variant — it proved
   // unreliable on ExoPlayer (Android), which would ABR-downgrade from the

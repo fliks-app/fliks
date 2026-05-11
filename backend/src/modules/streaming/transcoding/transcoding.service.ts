@@ -250,6 +250,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     onlyQuality?: string,
     defaultAudioIndex = 0,
     deviceType: DeviceType = 'desktop',
+    canCopyAudio = false,
   ): string {
     return generateMasterPlaylist(
       mediaFileId,
@@ -262,6 +263,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       onlyQuality,
       defaultAudioIndex,
       deviceType,
+      canCopyAudio,
     );
   }
 
@@ -537,6 +539,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           sourceFps: ctx?.sourceFps,
           trustedStreamInfo: ctx?.trustedStreamInfo,
           early: true,
+          useTs: ctx?.useTs ?? false,
         },
         this.log,
       );
@@ -554,7 +557,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         args,
         sessionDir,
         startSegment: 0,
-        segExt: '.m4s',
+        segExt: ctx?.useTs ? '.ts' : '.m4s',
         segSubDir: usesVarStreamMap ? '0' : undefined,
         extra: { actualHwAccel: this.detectedHwAccel },
       });
@@ -839,6 +842,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         qsvOptions: ctx?.qsvOptions,
         sourceFps: ctx?.sourceFps,
         trustedStreamInfo: ctx?.trustedStreamInfo,
+        useTs: ctx?.useTs ?? false,
       },
       this.log,
     );
@@ -852,7 +856,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args,
       sessionDir,
       startSegment,
-      segExt: '.m4s',
+      segExt: ctx?.useTs ? '.ts' : '.m4s',
       segSubDir: usesVarStreamMap ? '0' : undefined,
       extra: {
         actualHwAccel: hwAccel,
@@ -1122,6 +1126,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       requestedSegment,
       ctx?.trustedStreamInfo ?? false,
       this.log,
+      ctx?.useTs ?? false,
     );
 
     const session = this.spawnFfmpegSession({
@@ -1131,6 +1136,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args,
       sessionDir,
       startSegment: requestedSegment,
+      segExt: ctx?.useTs ? '.ts' : undefined,
       extra: { isAudioOnly: true },
     });
 

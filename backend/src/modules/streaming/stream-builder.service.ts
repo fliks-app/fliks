@@ -275,12 +275,29 @@ export class StreamBuilderService {
       effectiveHwAccel = 'vaapi';
     }
 
-    // Audio can ride on the transcode path as a copy when the client
-    // supports the source codec + channel count — there's no reason to
-    // downmix EAC-3 5.1 just because the video has to be re-encoded.
-    const canCopyAudio = directPlayResult.audioSupported;
+    // Audio output strategy on the transcode path. Two valid surround
+    // paths trigger `canCopyAudio=true` (= "preserve channels"):
+    //
+    //   1. Source codec is decodable by the receiver + channels ≤ max →
+    //      ffmpeg-args runs `-c:a copy` (no re-encode, no priming).
+    //   2. Source has ≥ 6 channels + the receiver accepts at least one
+    //      surround codec (AC-3 / EAC-3) + maxAudioChannels permits → we
+    //      re-encode to the best supported surround codec instead of
+    //      downmixing to AAC stereo. Lets a Cast 2 (only AC-3) still play
+    //      a 5.1 EAC-3 source in surround via EAC-3 → AC-3.
+    const profileAudioCodecs = profile.directPlayProfiles
+      .flatMap((p) => p.audioCodecs)
+      .map((c) => c.toLowerCase());
+    const srcChannels = source.audioChannels ?? 2;
+    const maxChannels = profile.maxAudioChannels ?? 2;
+    const surroundSupported =
+      srcChannels >= 6 &&
+      maxChannels >= 6 &&
+      (profileAudioCodecs.includes('ac3') ||
+        profileAudioCodecs.includes('eac3'));
+    const canCopyAudio = directPlayResult.audioSupported || surroundSupported;
     this.log.log(
-      `Transcode for file ${resolved.mediaFile.id}: ${reasons.map((r) => r.flag).join(', ')} (audio=${canCopyAudio ? 'copy' : 'aac'})`,
+      `Transcode for file ${resolved.mediaFile.id}: ${reasons.map((r) => r.flag).join(', ')} (audio=${canCopyAudio ? 'copy' : 'aac'}, srcCh=${srcChannels}, maxCh=${maxChannels}, surroundPath=${surroundSupported})`,
     );
     const url = `/api/stream/${resolved.mediaFile.id}/master.m3u8${tokenParam}`;
     const transcodeBitrateByQuality: NonNullable<

@@ -138,6 +138,18 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.useExtXMediaCache.get(mediaFileId) ?? false;
   }
 
+  /** Set when the playback target is a Chromecast receiver. Drives the
+   *  HLS segment container choice (mpegts vs fmp4) in `buildFfmpegArgs`. */
+  private readonly useTsCache = new Map<number, boolean>();
+
+  setUseTs(mediaFileId: number, value: boolean) {
+    this.useTsCache.set(mediaFileId, value);
+  }
+
+  getUseTs(mediaFileId: number): boolean {
+    return this.useTsCache.get(mediaFileId) ?? false;
+  }
+
   private segmentDurationCache = 3;
   private initTimeCache = 1;
 
