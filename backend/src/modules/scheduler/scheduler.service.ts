@@ -407,7 +407,12 @@ export class SchedulerService implements OnModuleInit {
 
       const query = [media.title, media.year].filter(Boolean).join(' ');
       const batches = await Promise.allSettled(
-        indexers.map((ix) => this.torznab.searchMovie(ix, query)),
+        indexers.map((ix) =>
+          this.torznab.searchMovie(ix, query, {
+            imdbId: media.imdbId,
+            tmdbId: media.tmdbId,
+          }),
+        ),
       );
       const releases = batches.flatMap((r) =>
         r.status === 'fulfilled' ? r.value : [],
@@ -421,6 +426,7 @@ export class SchedulerService implements OnModuleInit {
         scoring,
         mediaType: 'movie',
         label: media.title,
+        expectedTitle: [media.title, ...(media.alternativeTitles ?? [])],
         runtimeMinutes: media.runtime ?? 0,
         pendingCheck: async () => {
           const pending = await this.historyRepo.findOne({
@@ -522,6 +528,7 @@ export class SchedulerService implements OnModuleInit {
             media.title,
             season.seasonNumber,
             ep.episodeNumber,
+            { tvdbId: media.tvdbId, imdbId: media.imdbId },
           ),
         ),
       );
@@ -537,6 +544,7 @@ export class SchedulerService implements OnModuleInit {
         scoring,
         mediaType: 'series',
         label: `${media.title} ${epLabel}`,
+        expectedTitle: [media.title, ...(media.alternativeTitles ?? [])],
         // Episodes are typically 20-60 min; 30 min fallback for size check.
         runtimeMinutes: media.runtime ?? 30,
         pendingCheck: async () => {

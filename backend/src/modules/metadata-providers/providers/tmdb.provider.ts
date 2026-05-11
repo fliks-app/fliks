@@ -26,6 +26,46 @@ import type {
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
+/**
+ * Pull alternative_titles out of a TMDB movie / tv details response.
+ * The two endpoints differ on field name (`titles` vs `results`) and item
+ * key (`title` vs `name`). Output is deduplicated against `data.title /
+ * data.name` and `data.original_title / data.original_name` so callers
+ * don't have to filter again.
+ */
+function extractAlternativeTitles(
+  data: TmdbMovieDetailsResponse | TmdbTvDetailsResponse,
+  kind: 'movie' | 'series',
+): string[] {
+  const raw =
+    kind === 'movie'
+      ? ((data as TmdbMovieDetailsResponse).alternative_titles?.titles ?? [])
+      : ((data as TmdbTvDetailsResponse).alternative_titles?.results ?? []);
+  const primary =
+    kind === 'movie'
+      ? (data as TmdbMovieDetailsResponse).title
+      : (data as TmdbTvDetailsResponse).name;
+  const original =
+    kind === 'movie'
+      ? (data as TmdbMovieDetailsResponse).original_title
+      : (data as TmdbTvDetailsResponse).original_name;
+  const seen = new Set<string>(
+    [primary, original]
+      .filter((s): s is string => !!s)
+      .map((s) => s.toLowerCase()),
+  );
+  const out: string[] = [];
+  for (const entry of raw as { title?: string; name?: string }[]) {
+    const t = (entry.title ?? entry.name ?? '').trim();
+    if (!t) continue;
+    const k = t.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+  }
+  return out;
+}
+
 @Injectable()
 export class TmdbProvider implements IMetadataProvider {
   readonly name = 'tmdb';
@@ -77,7 +117,7 @@ export class TmdbProvider implements IMetadataProvider {
         params: {
           language: 'fr-FR',
           append_to_response:
-            'external_ids,images,release_dates,credits,videos,keywords',
+            'external_ids,images,release_dates,credits,videos,keywords,alternative_titles',
         },
       },
     );
@@ -141,6 +181,7 @@ export class TmdbProvider implements IMetadataProvider {
         name: v.name,
       })),
       keywords: (data.keywords?.keywords ?? []).map((k) => k.name),
+      alternativeTitles: extractAlternativeTitles(data, 'movie'),
     };
   }
 
@@ -151,7 +192,8 @@ export class TmdbProvider implements IMetadataProvider {
       {
         params: {
           language: 'fr-FR',
-          append_to_response: 'external_ids,images,credits,videos,keywords',
+          append_to_response:
+            'external_ids,images,credits,videos,keywords,alternative_titles',
         },
       },
     );
@@ -215,6 +257,7 @@ export class TmdbProvider implements IMetadataProvider {
         name: v.name,
       })),
       keywords: (data.keywords?.results ?? []).map((k) => k.name),
+      alternativeTitles: extractAlternativeTitles(data, 'series'),
     };
   }
 

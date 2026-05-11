@@ -145,24 +145,21 @@ export class EpisodeDownloadService {
     );
 
     const searchQuery = customQuery?.trim();
+    const queryTitle = searchQuery || media.title;
+    const expectedTitle: string | string[] = searchQuery
+      ? searchQuery
+      : [media.title, ...(media.alternativeTitles ?? [])];
+    const externalIds = { tvdbId: media.tvdbId, imdbId: media.imdbId };
     const batches = await Promise.all(
-      searchQuery
-        ? indexers.map((ix) =>
-            this.torznab.searchSeries(
-              ix,
-              searchQuery,
-              season.seasonNumber,
-              episode.episodeNumber,
-            ),
-          )
-        : indexers.map((ix) =>
-            this.torznab.searchSeries(
-              ix,
-              media.title,
-              season.seasonNumber,
-              episode.episodeNumber,
-            ),
-          ),
+      indexers.map((ix) =>
+        this.torznab.searchSeries(
+          ix,
+          queryTitle,
+          season.seasonNumber,
+          episode.episodeNumber,
+          externalIds,
+        ),
+      ),
     );
     const flat = batches.flat();
 
@@ -176,6 +173,7 @@ export class EpisodeDownloadService {
           indexerMinSeeders,
           media.runtime ?? 45,
           indexerUnknownLang,
+          expectedTitle,
         ),
       ),
     );
@@ -292,6 +290,7 @@ export class EpisodeDownloadService {
     indexerMinSeeders: Map<number, number>,
     runtimeMinutes: number,
     indexerUnknownLang: Map<number, string | undefined>,
+    expectedTitle?: string | string[],
   ): Promise<EpisodeReleaseRow> {
     const parsed = parseReleaseQuality(r.title);
     const lang = resolveUnknownLanguage(
@@ -318,6 +317,7 @@ export class EpisodeDownloadService {
       indexerId: r.indexerId,
       indexerMinSeeders,
       releaseTitle: r.title,
+      expectedTitle,
     });
     return {
       title: r.title,
@@ -391,10 +391,20 @@ export class EpisodeDownloadService {
         0,
       ) || defaultEpRuntime;
 
-    const searchTitle = customQuery?.trim() || media.title;
+    const customTitle = customQuery?.trim();
+    const searchTitle = customTitle || media.title;
+    const expectedTitle: string | string[] = customTitle
+      ? customTitle
+      : [media.title, ...(media.alternativeTitles ?? [])];
+    const externalIds = { tvdbId: media.tvdbId, imdbId: media.imdbId };
     const batches = await Promise.all(
       indexers.map((ix) =>
-        this.torznab.searchSeasonPack(ix, searchTitle, season.seasonNumber),
+        this.torznab.searchSeasonPack(
+          ix,
+          searchTitle,
+          season.seasonNumber,
+          externalIds,
+        ),
       ),
     );
 
@@ -410,6 +420,7 @@ export class EpisodeDownloadService {
             indexerMinSeeders,
             seasonRuntime,
             indexerUnknownLang,
+            expectedTitle,
           ),
         ),
     );
@@ -514,9 +525,16 @@ export class EpisodeDownloadService {
       ]),
     );
 
+    const externalIds = { tvdbId: media.tvdbId, imdbId: media.imdbId };
+    const expectedTitles = [media.title, ...(media.alternativeTitles ?? [])];
     const packBatches = await Promise.all(
       indexers.map((ix) =>
-        this.torznab.searchSeasonPack(ix, media.title, season.seasonNumber),
+        this.torznab.searchSeasonPack(
+          ix,
+          media.title,
+          season.seasonNumber,
+          externalIds,
+        ),
       ),
     );
     // Season pack runtime = episode runtime × number of episodes
@@ -539,6 +557,7 @@ export class EpisodeDownloadService {
             indexerMinSeeders,
             seasonRuntime,
             indexerUnknownLang,
+            expectedTitles,
           ),
         ),
     );
@@ -597,6 +616,7 @@ export class EpisodeDownloadService {
               media.title,
               season.seasonNumber,
               ep.episodeNumber,
+              externalIds,
             ),
           ),
         );
@@ -612,6 +632,7 @@ export class EpisodeDownloadService {
                 indexerMinSeeders,
                 media.runtime ?? 45,
                 indexerUnknownLang,
+                expectedTitles,
               ),
             ),
         );

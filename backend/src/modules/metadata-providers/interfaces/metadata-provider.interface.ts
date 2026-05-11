@@ -35,6 +35,11 @@ export interface MetadataDetails extends MetadataSearchResult {
   crew: MetadataCrewItem[];
   videos: MetadataVideo[];
   keywords: string[];
+  /** International release titles surfaced by the metadata provider (TMDB's
+   *  `alternative_titles`). Used to match Torznab results indexed under a
+   *  localised name (e.g. "A Very Secret Service" for "Au service de la
+   *  France") that the strict title-mismatch filter would otherwise drop. */
+  alternativeTitles: string[];
 }
 
 export interface MetadataCastItem {

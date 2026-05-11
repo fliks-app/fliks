@@ -27,6 +27,38 @@ function decodeXmlEntities(s: string): string {
     .replace(/&quot;/g, '"');
 }
 
+/**
+ * Build a Torznab query string. Drops null/undefined params so optional
+ * external-id filters (tvdbid / imdbid / tmdbid) are only sent when known.
+ * IMDb IDs are stripped of the `tt` prefix — that's what every Newznab-spec
+ * indexer expects on the wire.
+ */
+function buildTorznabQuery(opts: {
+  t: string;
+  q?: string;
+  season?: number;
+  ep?: number;
+  cat: string;
+  apiKey: string;
+  tvdbId?: number | null;
+  imdbId?: string | null;
+  tmdbId?: number | null;
+}): string {
+  const parts: string[] = [`t=${opts.t}`];
+  if (opts.q) parts.push(`q=${encodeURIComponent(opts.q)}`);
+  if (opts.season != null) parts.push(`season=${opts.season}`);
+  if (opts.ep != null) parts.push(`ep=${opts.ep}`);
+  parts.push(`cat=${opts.cat}`);
+  parts.push(`apikey=${encodeURIComponent(opts.apiKey)}`);
+  if (opts.tvdbId) parts.push(`tvdbid=${opts.tvdbId}`);
+  if (opts.imdbId) {
+    const stripped = opts.imdbId.replace(/^tt/i, '');
+    if (stripped) parts.push(`imdbid=${stripped}`);
+  }
+  if (opts.tmdbId) parts.push(`tmdbid=${opts.tmdbId}`);
+  return parts.join('&');
+}
+
 function extractInnerXml(block: string, tag: string): string | null {
   const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i');
   const m = block.match(re);
@@ -220,6 +252,7 @@ export class TorznabService {
     indexer: Indexer,
     showTitle: string,
     season: number,
+    externalIds?: { tvdbId?: number | null; imdbId?: string | null },
   ): Promise<TorznabRelease[]> {
     if (!indexer.enabled || !indexer.enableSearch) return [];
     const impl = (indexer.implementation || '').toLowerCase();
@@ -230,7 +263,15 @@ export class TorznabService {
     const apiKey = String(settings.apiKey || '');
     if (!baseUrl) return [];
 
-    const url = `${baseUrl}?t=tvsearch&q=${encodeURIComponent(showTitle)}&season=${season}&cat=5000&apikey=${encodeURIComponent(apiKey)}`;
+    const url = `${baseUrl}?${buildTorznabQuery({
+      t: 'tvsearch',
+      q: showTitle,
+      season,
+      cat: '5000',
+      apiKey,
+      tvdbId: externalIds?.tvdbId,
+      imdbId: externalIds?.imdbId,
+    })}`;
     const start = Date.now();
     try {
       const res = await axios.get<string>(url, {
@@ -273,6 +314,7 @@ export class TorznabService {
     showTitle: string,
     season: number,
     episode: number,
+    externalIds?: { tvdbId?: number | null; imdbId?: string | null },
   ): Promise<TorznabRelease[]> {
     if (!indexer.enabled || !indexer.enableSearch) return [];
     const impl = (indexer.implementation || '').toLowerCase();
@@ -283,7 +325,16 @@ export class TorznabService {
     const apiKey = String(settings.apiKey || '');
     if (!baseUrl) return [];
 
-    const url = `${baseUrl}?t=tvsearch&q=${encodeURIComponent(showTitle)}&season=${season}&ep=${episode}&cat=5000&apikey=${encodeURIComponent(apiKey)}`;
+    const url = `${baseUrl}?${buildTorznabQuery({
+      t: 'tvsearch',
+      q: showTitle,
+      season,
+      ep: episode,
+      cat: '5000',
+      apiKey,
+      tvdbId: externalIds?.tvdbId,
+      imdbId: externalIds?.imdbId,
+    })}`;
     const start = Date.now();
     try {
       const res = await axios.get<string>(url, {
@@ -324,6 +375,7 @@ export class TorznabService {
   async searchMovie(
     indexer: Indexer,
     query: string,
+    externalIds?: { imdbId?: string | null; tmdbId?: number | null },
   ): Promise<TorznabRelease[]> {
     if (!indexer.enabled || !indexer.enableSearch) return [];
     const impl = (indexer.implementation || '').toLowerCase();
@@ -337,7 +389,18 @@ export class TorznabService {
       return [];
     }
 
-    const url = `${baseUrl}?t=search&q=${encodeURIComponent(query)}&cat=2000&apikey=${encodeURIComponent(apiKey)}`;
+    // `t=movie` is the spec'd endpoint for imdbid/tmdbid filtering. Fall back
+    // to the generic `t=search&cat=2000` when no external IDs are available
+    // so q=-only trackers stay reachable.
+    const useMovieSearch = !!(externalIds?.imdbId || externalIds?.tmdbId);
+    const url = `${baseUrl}?${buildTorznabQuery({
+      t: useMovieSearch ? 'movie' : 'search',
+      q: query,
+      cat: '2000',
+      apiKey,
+      imdbId: externalIds?.imdbId,
+      tmdbId: externalIds?.tmdbId,
+    })}`;
     const start = Date.now();
     try {
       const res = await axios.get<string>(url, {

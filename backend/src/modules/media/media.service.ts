@@ -1721,6 +1721,7 @@ export class MediaService {
     return {
       title: details.title,
       originalTitle: details.originalTitle ?? details.title,
+      alternativeTitles: details.alternativeTitles ?? [],
       year,
       type,
       tmdbId: details.tmdbId || undefined,

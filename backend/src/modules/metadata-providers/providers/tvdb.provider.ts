@@ -26,9 +26,33 @@ import type {
   TvdbRemoteId,
   TvdbTranslation,
   TvdbSeasonBase,
+  TvdbAlias,
 } from './tvdb-api.types';
 
 const TVDB_BASE = 'https://api4.thetvdb.com/v4';
+
+/**
+ * Collect TVDB aliases into the same flat string array shape that the TMDB
+ * provider produces. Deduplicates against the canonical name and lowercase
+ * variants so we don't pad the field with redundant entries.
+ */
+function dedupeAliases(
+  aliases: TvdbAlias[] | undefined,
+  canonical: string,
+): string[] {
+  if (!aliases?.length) return [];
+  const seen = new Set<string>([canonical.toLowerCase()]);
+  const out: string[] = [];
+  for (const a of aliases) {
+    const t = (a.name ?? '').trim();
+    if (!t) continue;
+    const k = t.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+  }
+  return out;
+}
 
 /** Artwork type IDs: 2=poster, 3=background/fanart, 7=banner, 12=clearart */
 const ART_POSTER = 2;
@@ -159,6 +183,7 @@ export class TvdbProvider implements IMetadataProvider {
         name: t.name,
       })),
       keywords: (m.tagOptions ?? []).map((t) => t.name),
+      alternativeTitles: dedupeAliases(m.aliases, m.name),
     };
   }
 
@@ -219,6 +244,7 @@ export class TvdbProvider implements IMetadataProvider {
         name: t.name,
       })),
       keywords: (s.tagOptions ?? []).map((t) => t.name),
+      alternativeTitles: dedupeAliases(s.aliases, s.name),
     };
   }
 
