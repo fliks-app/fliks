@@ -203,8 +203,5 @@ options.useShakaForHls = true;
 options.playbackConfig = new cast.framework.PlaybackConfig();
 options.playbackConfig.autoResumeDuration = 5;
 options.supportedCommands = cast.framework.messages.Command.ALL_BASIC_MEDIA;
-options.customNamespaces = {
-  [CAPS_NAMESPACE]: cast.framework.system.MessageType.JSON,
-};
 context.start(options);
 console.log('[fliks-cast] context.start called');
