@@ -30,7 +30,13 @@ export interface ActiveStream {
   outputContainer: string | null;
   outputBitrate: number | null;
   videoPlaybackMode: string;
-  audioPlaybackMode: string;
+  /** Real audio output codec emitted by ffmpeg (e.g. `'aac'`, `'ac3'`).
+   *  `null` when audio is direct-played / copy-remuxed without transcode. */
+  audioOutputCodec: string | null;
+  audioOutputBitrateBps: number | null;
+  /** `'direct'` = source file served as-is; `'copy'` = container changed
+   *  but audio bitstream verbatim; `'transcode'` = ffmpeg re-encoded. */
+  audioMode: 'direct' | 'copy' | 'transcode';
   transcodePercent: number | null;
   videoReasons: string[];
   audioReasons: string[];

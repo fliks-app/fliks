@@ -28,11 +28,11 @@ export function generateMasterPlaylist(
   onlyQuality?: string,
   defaultAudioIndex = 0,
   deviceType: DeviceType = 'desktop',
-  /** True when the active transcode preserves surround channels via the
-   *  `copyAudio` branch in ffmpeg-args (output codec = AC-3 5.1). The
-   *  advertised CODECS string must match the actual stream codec or the
-   *  receiver rejects the segment at MSE chunk-demuxer append. */
-  canCopyAudio = false,
+  /** Output audio codec actually emitted by ffmpeg. The CODECS attribute
+   *  must match or the receiver rejects the segment at MSE chunk-demuxer
+   *  append. Recognised values: `'aac'` (AAC-LC), `'ac3'` (Dolby Digital),
+   *  `'eac3'` (Dolby Digital Plus). Defaults to AAC for legacy callers. */
+  outputAudioCodec: 'aac' | 'ac3' | 'eac3' = 'aac',
 ): string {
   const multiAudio = audioStreams && audioStreams.length > 1;
   const lines = ['#EXTM3U'];
@@ -58,10 +58,11 @@ export function generateMasterPlaylist(
   // skip fetching seg 0 purely to probe codecs (TS has no init segment) —
   // otherwise a user resuming mid-file wastes a transcode pass at seg 0
   // before the real seek-aware session starts at their resume position.
-  // Video is always H.264 High @ L4.0. Audio is AAC-LC by default, or
-  // AC-3 ("ac-3") when the transcode is preserving surround.
+  // Video is always H.264 High @ L4.0. Audio codec depends on the path
+  // chosen in stream-builder.
   const audioAttr = multiAudio ? ',AUDIO="audio"' : '';
-  const audioCodec = canCopyAudio ? 'ac-3' : 'mp4a.40.2';
+  const audioCodecMap = { aac: 'mp4a.40.2', ac3: 'ac-3', eac3: 'ec-3' };
+  const audioCodec = audioCodecMap[outputAudioCodec] ?? 'mp4a.40.2';
   const transcodeCodecs = `,CODECS="avc1.640028,${audioCodec}"`;
 
   // The HLS master never advertises the `/remux/` variant — it proved

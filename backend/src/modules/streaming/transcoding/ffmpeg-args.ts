@@ -24,9 +24,16 @@ export interface BuildFfmpegArgsOptions {
   crop?: { width: number; height: number; x: number; y: number };
   videoOnly?: boolean;
   audioStreams?: { language?: string; title?: string }[];
-  /** When true, keep the source audio with `-c:a copy` (bitstream
-   *  passthrough). When false, transcode to AAC stereo at profile bitrate. */
-  copyAudio?: boolean;
+  /** Audio output decision — see {@link SessionContext.audioPlan}. When
+   *  omitted, ffmpeg-args falls back to AAC stereo at the profile bitrate
+   *  (safe default that plays everywhere). */
+  audioPlan?:
+    | { mode: 'copy'; codec: string }
+    | {
+        mode: 'transcode';
+        codec: 'aac' | 'ac3' | 'eac3';
+        bitrateBps: number;
+      };
   encoderPreset?: string;
   qsvOptions?: { lowPower: boolean };
   sourceFps?: number;
@@ -58,7 +65,7 @@ export function buildFfmpegArgs(
     crop,
     videoOnly = false,
     audioStreams,
-    copyAudio = false,
+    audioPlan,
     encoderPreset = 'faster',
     qsvOptions = { lowPower: false },
     sourceFps,
@@ -76,6 +83,19 @@ export function buildFfmpegArgs(
 
   const SEGMENT_DURATION = getSegmentDuration();
   const INIT_TIME = getInitTime();
+
+  // Audio output args derived from the stream-builder decision. No
+  // re-derivation here — we just emit what we were told. Safe fallback to
+  // AAC stereo when no plan is supplied (legacy call sites).
+  const audioArgs: string[] = (() => {
+    if (audioPlan?.mode === 'copy') return ['-c:a', 'copy'];
+    const codec = audioPlan?.mode === 'transcode' ? audioPlan.codec : 'aac';
+    if (codec === 'aac') {
+      return ['-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2'];
+    }
+    // EAC-3 / AC-3 keep source channels (no `-ac`) at 640 kbps.
+    return ['-c:a', codec, '-b:a', '640k'];
+  })();
 
   // GOP = segment_duration × fps so each segment starts exactly on an IDR.
   // Fallback to 24 fps when source fps is unknown (safe for most content).
@@ -429,17 +449,7 @@ export function buildFfmpegArgs(
     for (let i = 0; i < audioStreams.length; i++) {
       args.push('-map', `0:a:${i}`);
     }
-    if (copyAudio) {
-      // Re-encode to AC-3 5.1 (Dolby Digital). Every Chromecast generation
-      // including the HDMI dongles decodes AC-3 to PCM 5.1 over HDMI, so it
-      // is the lowest common denominator for surround. EAC-3 (DD+) would
-      // need to be gated on the Ultra+ class which we don't currently
-      // distinguish. `-c:a copy` is avoided because the hybrid seek needs
-      // a re-encode to trim precisely on resume.
-      args.push('-c:a', 'ac3', '-b:a', '640k');
-    } else {
-      args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
-    }
+    args.push(...audioArgs);
 
     // Build var_stream_map: "v:0,agroup:audio a:0,agroup:audio,language:fre ..."
     const varParts = ['v:0,agroup:audio'];
@@ -474,13 +484,7 @@ export function buildFfmpegArgs(
     } else {
       args.push('-map', '0:v:0', '-map', '0:a:0');
     }
-    if (copyAudio) {
-      // Re-encode to AC-3 5.1 — see the var_stream_map branch above for the
-      // rationale (lowest common denominator for Cast surround).
-      args.push('-c:a', 'ac3', '-b:a', '640k');
-    } else {
-      args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
-    }
+    args.push(...audioArgs);
 
     args.push(
       '-f', 'hls',

@@ -194,10 +194,10 @@ export class StreamingController {
       // ffprobe ran at import/rescan and the result is cached in streamInfo —
       // tell FFmpeg to skip its own redundant avformat_find_stream_info scan.
       trustedStreamInfo: !!si?.video?.[0]?.codec,
-      // Audio bitstream compatibility (set during playback-info from
-      // tryDirectPlay). Threaded through so quality-switch FFmpeg spawns
-      // know to keep the source audio instead of forcing AAC stereo.
-      copyAudio: this.activeStreamTracker.getCanCopyAudio(mediaFileId),
+      // Canonical audio decision — computed once in stream-builder, lives
+      // in the tracker, threaded through here so respawns / quality
+      // switches stay coherent with what playback-info promised.
+      audioPlan: this.activeStreamTracker.getAudioPlan(mediaFileId) ?? undefined,
     };
   }
 
@@ -468,6 +468,10 @@ export class StreamingController {
       mediaFileId,
       result.audioCopyStream,
     );
+    // Canonical audio decision computed by stream-builder. Drives the
+    // ffmpeg-args codec branch, master-playlist CODECS string and admin
+    // dashboard rendering — single source of truth.
+    this.activeStreamTracker.setAudioPlan(mediaFileId, result.audioPlan);
     const sv = resolved.mediaFile.streamInfo?.video?.[0];
     this.activeStreamTracker.setSourceDimensions(
       mediaFileId,
@@ -654,7 +658,8 @@ export class StreamingController {
       onlyQuality,
       pickedIdx ?? 0,
       deviceType,
-      this.activeStreamTracker.getCanCopyAudio(mediaFileId),
+      (this.activeStreamTracker.getAudioPlan(mediaFileId)?.codec ?? 'aac') as
+        | 'aac' | 'ac3' | 'eac3',
     );
 
     this.activeStreamTracker.setAudioStreamCount(

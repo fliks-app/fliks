@@ -75,7 +75,16 @@ export interface ActiveStreamDto {
   outputContainer: string | null;
   outputBitrate: number | null;
   videoPlaybackMode: string; // "Lecture directe" / "Transcodage (QSV)"
-  audioPlaybackMode: string; // "Lecture directe" / "Transcoder (AAC 192 kbps)"
+  /** `null` when audio is direct-played (no transcode). For transcoded
+   *  sessions, the actual codec ffmpeg emits — caller renders the display
+   *  string from these raw values. */
+  audioOutputCodec: string | null;
+  audioOutputBitrateBps: number | null;
+  /** Computed audio pipeline state — `'direct'` = no Fliks involvement
+   *  (DirectPlay), `'copy'` = container changed but audio bitstream
+   *  preserved (remux + supported codec), `'transcode'` = ffmpeg re-encoded
+   *  to a different codec. Frontend renders straight from this value. */
+  audioMode: 'direct' | 'copy' | 'transcode';
   /** Transcode buffer progress (0-100), null for direct play */
   transcodePercent: number | null;
   /** Reasons why transcoding is needed, split by category */
@@ -371,24 +380,41 @@ export class SystemController {
 
       // Determine playback modes
       let videoPlaybackMode = 'Lecture directe';
-      let audioPlaybackMode = 'Lecture directe';
       let outputContainer: string | null = null;
       let outputBitrate: number | null = null;
+      let audioOutputCodec: string | null = null;
+      let audioOutputBitrateBps: number | null = null;
+      let audioMode: 'direct' | 'copy' | 'transcode' = 'direct';
+      // Single source of truth: the audio plan stream-builder stored at
+      // playback-info time. mode/codec/bitrate are read directly — no
+      // re-derivation, no string comparison gymnastics.
+      const audioPlan = this.activeStreamTracker.getAudioPlan(s.mediaFileId);
 
       if (s.mode === 'transcode') {
         videoPlaybackMode =
           hwAccel !== 'none'
             ? `Transcodage (${hwAccel.toUpperCase()})`
             : 'Transcodage (CPU)';
-        audioPlaybackMode = 'Transcoder (AAC 192 kbps)';
         outputContainer = 'HLS';
         const profile = { '1080p': 8, '720p': 4, '480p': 2 }[s.quality];
         outputBitrate = profile ? profile * 1_000_000 : null;
+        if (audioPlan) {
+          audioMode = audioPlan.mode;
+          audioOutputCodec = audioPlan.codec;
+          audioOutputBitrateBps =
+            audioPlan.mode === 'transcode' ? audioPlan.bitrateBps : null;
+        }
       } else if (s.mode === 'remux') {
         outputContainer = 'HLS';
         outputBitrate = (v?.bitRate ?? 0) + (a?.bitRate ?? 0) || null;
-        audioPlaybackMode =
-          a?.codec === 'aac' ? 'Lecture directe' : 'Transcoder (AAC 192 kbps)';
+        if (audioPlan) {
+          audioMode = audioPlan.mode;
+          audioOutputCodec = audioPlan.codec;
+          audioOutputBitrateBps =
+            audioPlan.mode === 'transcode' ? audioPlan.bitrateBps : null;
+        } else {
+          audioMode = 'copy';
+        }
       }
 
       const sourceResLabel =
@@ -439,7 +465,9 @@ export class SystemController {
         outputContainer,
         outputBitrate,
         videoPlaybackMode,
-        audioPlaybackMode,
+        audioOutputCodec,
+        audioOutputBitrateBps,
+        audioMode,
         transcodePercent: null as number | null, // filled below for transcode sessions
         videoReasons: [] as string[],
         audioReasons: [] as string[],
