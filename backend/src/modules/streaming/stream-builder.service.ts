@@ -166,6 +166,7 @@ export class StreamBuilderService {
         audioCopyStream: true,
         outputVideoCodec: sourceVideoCodec,
         outputAudioCodec: sourceAudioCodec,
+        audioPlan: { mode: 'copy', codec: sourceAudioCodec },
         outputContainer: sourceContainer,
         hwAccel: 'none',
         tonemapping: false,
@@ -238,6 +239,15 @@ export class StreamBuilderService {
         audioCopyStream: canCopyAudio,
         outputVideoCodec: sourceVideoCodec,
         outputAudioCodec,
+        audioPlan: canCopyAudio
+          ? { mode: 'copy', codec: sourceAudioCodec }
+          : {
+              mode: 'transcode',
+              codec: 'aac',
+              bitrateBps: parseBitrateToBps(
+                ladder[0]?.audioBitrate ?? '192k',
+              ),
+            },
         outputContainer: 'hls',
         hwAccel: canCopyAudio
           ? 'none'
@@ -275,29 +285,60 @@ export class StreamBuilderService {
       effectiveHwAccel = 'vaapi';
     }
 
-    // Audio output strategy on the transcode path. Two valid surround
-    // paths trigger `canCopyAudio=true` (= "preserve channels"):
+    // Audio output decision — single source of truth for ffmpeg-args and
+    // the master playlist. Three paths:
     //
-    //   1. Source codec is decodable by the receiver + channels ≤ max →
-    //      ffmpeg-args runs `-c:a copy` (no re-encode, no priming).
-    //   2. Source has ≥ 6 channels + the receiver accepts at least one
-    //      surround codec (AC-3 / EAC-3) + maxAudioChannels permits → we
-    //      re-encode to the best supported surround codec instead of
-    //      downmixing to AAC stereo. Lets a Cast 2 (only AC-3) still play
-    //      a 5.1 EAC-3 source in surround via EAC-3 → AC-3.
+    //   1. Source codec decodable by the receiver + channels ≤ max →
+    //      `audioOutputCodec = source.audioCodec`, `canCopyAudio = true`.
+    //      ffmpeg-args runs `-c:a copy` (verbatim bitstream, no priming).
+    //   2. Source has ≥ 6 channels + receiver accepts a surround codec →
+    //      pick the best (EAC-3 > AC-3) and transcode to it at 640 kbps.
+    //      `canCopyAudio = false` — ffmpeg re-encodes preserving channels.
+    //   3. Otherwise → AAC stereo downmix at the ladder bitrate.
     const profileAudioCodecs = profile.directPlayProfiles
       .flatMap((p) => p.audioCodecs)
       .map((c) => c.toLowerCase());
     const srcChannels = source.audioChannels ?? 2;
     const maxChannels = profile.maxAudioChannels ?? 2;
-    const surroundSupported =
+    const srcCodec = (source.audioCodec ?? '').toLowerCase();
+    const srcCompatible =
+      directPlayResult.audioSupported && srcChannels <= maxChannels;
+    const surroundPossible =
       srcChannels >= 6 &&
       maxChannels >= 6 &&
-      (profileAudioCodecs.includes('ac3') ||
-        profileAudioCodecs.includes('eac3'));
-    const canCopyAudio = directPlayResult.audioSupported || surroundSupported;
+      (profileAudioCodecs.includes('eac3') ||
+        profileAudioCodecs.includes('ac3'));
+
+    let outputAudioCodec: 'aac' | 'ac3' | 'eac3' | string;
+    let outputAudioBitrateBps: number;
+    let canCopyAudio = false;
+
+    if (srcCompatible) {
+      outputAudioCodec = srcCodec;
+      outputAudioBitrateBps = source.audioBitRate ?? 0;
+      canCopyAudio = true;
+    } else if (surroundPossible) {
+      if (profileAudioCodecs.includes('eac3')) outputAudioCodec = 'eac3';
+      else outputAudioCodec = 'ac3';
+      outputAudioBitrateBps = 640_000;
+    } else {
+      outputAudioCodec = 'aac';
+      outputAudioBitrateBps = parseBitrateToBps(
+        ladder[0]?.audioBitrate ?? '192k',
+      );
+    }
+
+    // When the surround path is what saved us, don't keep claiming the
+    // source codec is incompatible — the user actually gets surround.
+    if (surroundPossible && !srcCompatible) {
+      const idx = reasons.findIndex(
+        (r) => r.flag === 'AudioCodecNotSupported',
+      );
+      if (idx >= 0) reasons.splice(idx, 1);
+    }
+
     this.log.log(
-      `Transcode for file ${resolved.mediaFile.id}: ${reasons.map((r) => r.flag).join(', ')} (audio=${canCopyAudio ? 'copy' : 'aac'}, srcCh=${srcChannels}, maxCh=${maxChannels}, surroundPath=${surroundSupported})`,
+      `Transcode for file ${resolved.mediaFile.id}: ${reasons.map((r) => r.flag).join(', ')} (audioOut=${outputAudioCodec}, copy=${canCopyAudio}, srcCh=${srcChannels}, maxCh=${maxChannels})`,
     );
     const url = `/api/stream/${resolved.mediaFile.id}/master.m3u8${tokenParam}`;
     const transcodeBitrateByQuality: NonNullable<
@@ -305,7 +346,7 @@ export class StreamBuilderService {
     > = {};
     for (const p of ladder) {
       const v = parseBitrateToBps(p.videoBitrate);
-      const a = parseBitrateToBps(p.audioBitrate);
+      const a = outputAudioBitrateBps ?? parseBitrateToBps(p.audioBitrate);
       transcodeBitrateByQuality[p.name] = {
         videoBitrateBps: v,
         audioBitrateBps: a,
@@ -321,7 +362,14 @@ export class StreamBuilderService {
       videoCopyStream: false,
       audioCopyStream: canCopyAudio,
       outputVideoCodec: 'h264',
-      outputAudioCodec: canCopyAudio ? sourceAudioCodec : 'aac',
+      outputAudioCodec,
+      audioPlan: canCopyAudio
+        ? { mode: 'copy', codec: srcCodec }
+        : {
+            mode: 'transcode',
+            codec: outputAudioCodec as 'aac' | 'ac3' | 'eac3',
+            bitrateBps: outputAudioBitrateBps,
+          },
       outputContainer: 'hls',
       hwAccel: effectiveHwAccel,
       tonemapping: needsTonemapping,

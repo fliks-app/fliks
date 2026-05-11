@@ -215,6 +215,35 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.canCopyAudioCache.get(mediaFileId) ?? false;
   }
 
+  /** Canonical audio output decision computed by `stream-builder` at
+   *  `playback-info` time. Every consumer (ffmpeg-args, master-playlist,
+   *  admin dashboard) reads from here — no re-derivation downstream. */
+  private readonly audioPlanCache = new Map<
+    number,
+    | { mode: 'copy'; codec: string }
+    | {
+        mode: 'transcode';
+        codec: 'aac' | 'ac3' | 'eac3';
+        bitrateBps: number;
+      }
+  >();
+
+  setAudioPlan(
+    mediaFileId: number,
+    plan:
+      | { mode: 'copy'; codec: string }
+      | {
+          mode: 'transcode';
+          codec: 'aac' | 'ac3' | 'eac3';
+          bitrateBps: number;
+        },
+  ) {
+    this.audioPlanCache.set(mediaFileId, plan);
+  }
+  getAudioPlan(mediaFileId: number) {
+    return this.audioPlanCache.get(mediaFileId) ?? null;
+  }
+
   setSourceDimensions(mediaFileId: number, width: number, height: number) {
     this.sourceWidthCache.set(mediaFileId, width);
     this.sourceHeightCache.set(mediaFileId, height);

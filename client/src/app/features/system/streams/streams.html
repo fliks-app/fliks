@@ -83,7 +83,24 @@
                 {{ s.audioCodec ?? '?' }}
                 @if (s.audioChannels) { {{ s.audioChannels }} }
               </span>
-              <div class="text-base-content/50">&rarr; {{ s.audioPlaybackMode }}</div>
+              <div class="text-base-content/50">
+                &rarr;
+                @switch (s.audioMode) {
+                  @case ('direct') {
+                    {{ 'system.streams_audio_direct' | translate }}
+                  }
+                  @case ('copy') {
+                    {{ 'system.streams_audio_copy' | translate:{ codec: (s.audioCodec ?? '?').toUpperCase() } }}
+                  }
+                  @case ('transcode') {
+                    @if (s.audioOutputBitrateBps) {
+                      {{ 'system.streams_audio_transcode_with_bitrate' | translate:{ codec: (s.audioOutputCodec ?? 'aac').toUpperCase(), kbps: (s.audioOutputBitrateBps / 1000) } }}
+                    } @else {
+                      {{ 'system.streams_audio_transcode' | translate:{ codec: (s.audioOutputCodec ?? 'aac').toUpperCase() } }}
+                    }
+                  }
+                }
+              </div>
               @for (r of s.audioReasons; track r) {
                 <div class="text-warning/80 italic">{{ r }}</div>
               }

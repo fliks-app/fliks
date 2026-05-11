@@ -69,7 +69,30 @@ export interface SessionContext {
    * planning decision is made in playback-info but consumed lazily by
    * later FFmpeg spawns (segments / quality switches).
    */
-  copyAudio?: boolean;
+  /**
+   * Canonical audio output decision — single source of truth, computed by
+   * `stream-builder` from the source codec / channels and the device's
+   * audio allow-list. Everyone downstream (ffmpeg-args, master-playlist,
+   * admin dashboard) consumes it without re-deriving anything.
+   *
+   * - `{ mode: 'copy', codec: <source codec> }` → ffmpeg `-c:a copy`. No
+   *   re-encode, no priming, source bitrate preserved.
+   * - `{ mode: 'transcode', codec: 'eac3' | 'ac3' | 'aac', bitrateBps }` →
+   *   ffmpeg re-encodes. EAC-3 / AC-3 keep the source channel layout
+   *   (5.1 stays 5.1) at the indicated bitrate; AAC always downmixes to
+   *   stereo.
+   *
+   * Priority for the surround codec selection is EAC-3 > AC-3 — when the
+   * source isn't decodable as-is but the device accepts a surround codec.
+   * Pure stereo or no-surround-codec falls back to `'aac'`.
+   */
+  audioPlan?:
+    | { mode: 'copy'; codec: string }
+    | {
+        mode: 'transcode';
+        codec: 'aac' | 'ac3' | 'eac3';
+        bitrateBps: number;
+      };
   /**
    * True when the playback target is a Chromecast receiver. Switches HLS
    * segments to MPEG-TS (instead of fMP4) so the Cast receiver isn't

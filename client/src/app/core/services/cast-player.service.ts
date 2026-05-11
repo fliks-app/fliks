@@ -137,10 +137,16 @@ export class CastPlayerService {
 
     // Filter against codecs the backend can actually emit (the transcoder
     // produces AAC, AC-3, or EAC-3) and against the channel preference.
+    // EAC-3 is intentionally NOT exposed here even when the receiver
+    // claims `audio/mp4; codecs="ec-3"` is supported via MSE — multiple
+    // Android TV / Cast firmwares advertise it but then fail at chunk
+    // append or load. AC-3 is the safe surround target across the entire
+    // Cast generation lineup. Revisit if we can confirm EAC-3 actually
+    // works end-to-end on a given receiver via chrome://inspect logs.
     const surroundOk = maxChannels >= 6;
     const allowedAudio = receiverAudio.filter((c) => {
       if (c === 'aac' || c === 'aac-he') return true;
-      if (c === 'ac3' || c === 'eac3') return surroundOk;
+      if (c === 'ac3') return surroundOk;
       return false;
     });
     // Normalise to the codec strings stream-builder compares against.
@@ -148,9 +154,6 @@ export class CastPlayerService {
       c === 'aac-he' ? 'aac' : c,
     );
 
-    const hasSurroundCodec = audioCodecs.some(
-      (c) => c === 'ac3' || c === 'eac3',
-    );
     return {
       directPlayProfiles: [
         { containers: ['hls'], videoCodecs: [], audioCodecs },
@@ -160,7 +163,15 @@ export class CastPlayerService {
       maxAudioChannels: maxChannels,
       supportsHdr: cs.hdr ?? false,
       deviceType: 'desktop',
-      useTs: !hasSurroundCodec,
+      // HLS-TS is disabled on Cast in every scenario. Originally
+      // introduced as a workaround for the fMP4 + AAC encoder priming
+      // desync (Shaka ignores the init segment `edts/elst` atom), but it
+      // breaks mid-file resume (Shaka error 3016) and prevents AC-3 / EAC-3
+      // surround paths (Shaka can't transmux Dolby in TS → MSE). fMP4
+      // works for every codec path we currently emit. The `useTs` flag
+      // and its backend plumbing are kept as dead code so we can flip
+      // back later without re-doing the plumbing.
+      useTs: false,
     };
   }
 

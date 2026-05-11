@@ -250,7 +250,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     onlyQuality?: string,
     defaultAudioIndex = 0,
     deviceType: DeviceType = 'desktop',
-    canCopyAudio = false,
+    outputAudioCodec: 'aac' | 'ac3' | 'eac3' = 'aac',
   ): string {
     return generateMasterPlaylist(
       mediaFileId,
@@ -263,7 +263,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       onlyQuality,
       defaultAudioIndex,
       deviceType,
-      canCopyAudio,
+      outputAudioCodec,
     );
   }
 
@@ -533,7 +533,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           crop: ctx?.crop,
           videoOnly: isVideoOnly,
           audioStreams: ctxAudioStreams,
-          copyAudio: ctx?.copyAudio ?? false,
+          audioPlan: ctx?.audioPlan,
           encoderPreset: ctx?.encoderPreset,
           qsvOptions: ctx?.qsvOptions,
           sourceFps: ctx?.sourceFps,
@@ -837,7 +837,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         crop: ctx?.crop,
         videoOnly: isVideoOnly,
         audioStreams,
-        copyAudio: ctx?.copyAudio ?? false,
+        audioPlan: ctx?.audioPlan,
         encoderPreset: ctx?.encoderPreset,
         qsvOptions: ctx?.qsvOptions,
         sourceFps: ctx?.sourceFps,

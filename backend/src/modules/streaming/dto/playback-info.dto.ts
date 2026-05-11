@@ -56,6 +56,16 @@ export interface PlaybackInfoResponse {
   /** Output audio codec (same as source for copy, target for transcode) */
   outputAudioCodec: string;
 
+  /** Canonical audio output decision. Authoritative; every downstream
+   *  consumer (ffmpeg, admin dashboard, master playlist) reads from here. */
+  audioPlan:
+    | { mode: 'copy'; codec: string }
+    | {
+        mode: 'transcode';
+        codec: 'aac' | 'ac3' | 'eac3';
+        bitrateBps: number;
+      };
+
   /** Output container format */
   outputContainer: string;
 
