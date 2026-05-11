@@ -97,11 +97,13 @@ export class App implements OnInit, OnDestroy {
           this.navbar.goBack();
           return;
         }
-        // On TV the back button must never minimise the app — that drops the
-        // user back to the launcher and feels like a crash. With no history,
-        // stay put and let the dedicated Home button on the remote exit.
-        if (this.tv.isTv()) return;
-        CapApp.minimizeApp();
+        // Back at a top-level page with no in-app history left: stay put.
+        // Minimising would drop the user out of the app on a "just navigate"
+        // gesture, which on Android 14+ feels indistinguishable from a crash.
+        // Modern UX convention is to leave the app via the home gesture or
+        // the recent-apps switcher — never the back gesture. TV already
+        // followed this rule; mobile now does too.
+        return;
       }).then((handle) => {
         this.backButtonListener = handle;
       });

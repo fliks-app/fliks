@@ -99,7 +99,16 @@ export class PlayerControlsComponent {
         this.playPauseBtn()?.nativeElement.focus({ preventScroll: true });
       }
     });
+    // Propagate any-panel-open state to the parent player so it can suspend
+    // its auto-hide timer while a dropdown or bottom sheet is up.
+    effect(() => {
+      const open = this.openDropdown() !== null || this.activeSheet() !== null;
+      if (open === this.lastPanelOpen) return;
+      this.lastPanelOpen = open;
+      this.panelOpenChange.emit(open);
+    });
   }
+  private lastPanelOpen = false;
   private lastVisible = true;
   /**
    * Player layout selection. Splits the three concerns the template branches on:
@@ -173,6 +182,13 @@ export class PlayerControlsComponent {
   readonly toggleFillScreen = output<void>();
   readonly openMedia = output<void>();
   readonly seekDragChange = output<boolean>();
+  /**
+   * Fires whenever any of the controls' own panels (desktop dropdown OR
+   * mobile bottom sheet) opens or closes. Lets the parent player pause its
+   * auto-hide timer while a panel is up — otherwise the subtitle/audio sheet
+   * on mobile gets orphaned when the 3 s timer hides the controls behind it.
+   */
+  readonly panelOpenChange = output<boolean>();
 
   readonly speedOptions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
