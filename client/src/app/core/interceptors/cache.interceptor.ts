@@ -12,7 +12,8 @@ import { Observable, of, tap } from 'rxjs';
  * Storage: IndexedDB ("fliks-api-cache" database).
  */
 
-const DB_NAME = 'fliks-api-cache';
+export const REQUEST_CACHE_DB = 'fliks-api-cache';
+const DB_NAME = REQUEST_CACHE_DB;
 const DB_VERSION = 1;
 const STORE_NAME = 'responses';
 

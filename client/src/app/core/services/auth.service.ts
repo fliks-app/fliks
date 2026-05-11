@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, catchError, firstValueFrom, map, of, tap } from 'rxjs';
 import { ServerConfigService } from './server-config.service';
-import { CachingReuseStrategy } from './route-reuse.strategy';
+import { ServerCacheService } from './server-cache.service';
 import { Preferences } from '@capacitor/preferences';
 
 export interface User {
@@ -51,7 +51,7 @@ export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly serverConfig = inject(ServerConfigService);
-  private readonly reuseStrategy = inject(CachingReuseStrategy);
+  private readonly serverCache = inject(ServerCacheService);
 
   private static readonly TOKEN_KEY = 'fliks_access_token';
 
@@ -100,6 +100,10 @@ export class AuthService {
     const res = await firstValueFrom(
       this.http.post<LoginResponse>('/api/auth/login', { username, password }),
     );
+    // Discard any cached data from the previous session before publishing the
+    // new user — a "switch user" path otherwise inherits the previous user's
+    // home rows, library views, etc. from the IDB request cache.
+    await this.serverCache.clearAll();
     this._user.set(res.user);
     if (this.serverConfig.isNative && res.accessToken) {
       this._accessToken = res.accessToken;
@@ -169,6 +173,7 @@ export class AuthService {
       this._accessToken = accessToken;
       await this.saveToken(accessToken);
     }
+    await this.serverCache.clearAll();
     const user = await firstValueFrom(this.http.get<User>('/api/auth/me'));
     this._user.set(user);
     const activeUrl = this.serverConfig.serverUrl();
@@ -307,7 +312,7 @@ export class AuthService {
       this._user.set(null);
       this._accessToken = null;
       await this.removeToken();
-      this.reuseStrategy.clear();
+      await this.serverCache.clearAll();
       // Land on the user picker, same as a fresh visit. The password form
       // is one tap away via the picker → user → 'Mot de passe'.
       void this.router.navigate(['/select-user']);

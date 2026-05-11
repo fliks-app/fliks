@@ -2,6 +2,7 @@ import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
+import { ServerCacheService } from '../../core/services/server-cache.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { DropdownMenuComponent } from './dropdown-menu';
 import { Capacitor } from '@capacitor/core';
@@ -84,13 +85,16 @@ export class UserMenuComponent {
   readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly serverConfig = inject(ServerConfigService);
+  private readonly serverCache = inject(ServerCacheService);
   protected readonly isNative = Capacitor.isNativePlatform();
 
-  protected switchUser() {
+  protected async switchUser() {
+    await this.serverCache.clearAll();
     this.router.navigate(['/login'], { queryParams: { switch: true } });
   }
 
   protected async changeServer() {
+    await this.serverCache.clearAll();
     await this.serverConfig.clear();
     this.router.navigate(['/setup']);
   }

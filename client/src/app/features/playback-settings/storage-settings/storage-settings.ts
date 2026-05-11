@@ -4,8 +4,7 @@ import { ToastService } from '../../../core/services/toast.service';
 import { DownloadManagerService } from '../../../core/services/download-manager.service';
 import { DownloadCacheService } from '../../../core/services/download-cache.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
-
-const API_CACHE_DB = 'fliks-api-cache';
+import { ServerCacheService } from '../../../core/services/server-cache.service';
 
 @Component({
   selector: 'app-storage-settings',
@@ -19,6 +18,7 @@ export class StorageSettingsPageComponent {
   private readonly dlManager = inject(DownloadManagerService);
   private readonly dlCache = inject(DownloadCacheService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly serverCache = inject(ServerCacheService);
 
   readonly clearing = signal(false);
   readonly deleting = signal(false);
@@ -26,13 +26,7 @@ export class StorageSettingsPageComponent {
   async clearCache() {
     this.clearing.set(true);
     try {
-      // Delete the IndexedDB API cache
-      await new Promise<void>((resolve, reject) => {
-        const req = indexedDB.deleteDatabase(API_CACHE_DB);
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
-        req.onblocked = () => resolve(); // DB in use — will clear on next open
-      });
+      await this.serverCache.clearAll();
       this.toast.success(this.translate.instant('storage_settings.cache_cleared'));
     } catch {
       this.toast.error(this.translate.instant('common.error'));
