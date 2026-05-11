@@ -87,10 +87,18 @@ export class NavbarService {
     });
   }
 
-  /** Reset history tracking — called when a top-level nav entry (home, library, …) is chosen. */
+  /**
+   * Reset history tracking — called from top-level nav entries (home,
+   * downloads, search, …). Click handlers fire *before* the resulting
+   * `NavigationEnd`, so we also flip `isPoppingBack` to suppress the
+   * push that would otherwise re-add the page we're leaving onto the
+   * freshly-cleared stack — which is why the back arrow used to flash
+   * on the first dock click and only disappear on the second.
+   */
   resetNavHistory() {
     this.navCount = 0;
     this.history.length = 0;
+    this.isPoppingBack = true;
     this.canGoBack.set(false);
   }
 
