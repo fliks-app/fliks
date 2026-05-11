@@ -61,6 +61,50 @@ function openDb(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
+/**
+ * Wipe the cache's IDB store. Closes the module-level connection first
+ * so `indexedDB.deleteDatabase` doesn't get stuck in the `blocked` state
+ * (which then makes a subsequent delete hang forever waiting behind the
+ * previous never-completed delete). Resolves within a short ceiling so a
+ * stuck IDB doesn't gate a login spinner.
+ */
+export function clearRequestCache(): Promise<void> {
+  const closeExisting = dbPromise
+    ? dbPromise
+        .then((db) => {
+          try { db.close(); } catch { /* ignore */ }
+        })
+        .catch(() => {
+          /* the open itself failed — nothing to close */
+        })
+    : Promise.resolve();
+  dbPromise = null;
+  return closeExisting.then(() => {
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      try {
+        const req = indexedDB.deleteDatabase(DB_NAME);
+        req.onsuccess = done;
+        req.onerror = done;
+        req.onblocked = done;
+      } catch {
+        done();
+        return;
+      }
+      // Safety net: some Capacitor WebViews never fire any of the events
+      // when another tab/process holds a connection. Don't gate the UI on
+      // it — the data is small (TTL-capped per-entry) and any stragglers
+      // are overwritten on the next put().
+      setTimeout(done, 500);
+    });
+  });
+}
+
 async function getCached(url: string): Promise<CacheEntry | null> {
   try {
     const db = await openDb();
