@@ -20,6 +20,7 @@ import { MediaService } from '../../core/services/api/media.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { DownloadClientsApiService } from '../../core/services/api/download-clients-api.service';
 import { RequestsService } from '../../core/services/api/requests.service';
+import { ServerCacheService } from '../../core/services/server-cache.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SseService } from '../../core/services/sse.service';
 import { CastService } from '../../core/services/cast.service';
@@ -74,6 +75,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly downloadApi = inject(DownloadClientsApiService);
   private readonly requestsService = inject(RequestsService);
   readonly serverConfig = inject(ServerConfigService);
+  private readonly serverCache = inject(ServerCacheService);
   private readonly sse = inject(SseService);
   private readonly downloadManager = inject(DownloadManagerService);
   readonly networkService = inject(NetworkService);
@@ -283,9 +285,11 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.castPlayer.expanded.update(v => !v);
   }
 
-  switchUser() {
-    // Navigate to login without clearing the current session
-    // (allows reconnection later without password)
+  async switchUser() {
+    // Wipe cached server data so the next login does not inherit the previous
+    // user's home rows / library views. Auth state survives — the user keeps
+    // the current session until they actually log in as someone else.
+    await this.serverCache.clearAll();
     this.router.navigate(['/login'], { queryParams: { switch: true } });
   }
 

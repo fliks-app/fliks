@@ -8,6 +8,7 @@ import { Router } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { Capacitor } from '@capacitor/core';
 import { AuthService, PublicUserSummary } from '../../core/services/auth.service';
+import { ServerCacheService } from '../../core/services/server-cache.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { initialsAvatar } from '../../core/utils/initials-avatar';
 import { LucideMonitorSmartphone, LucideKeyRound, LucideUserRoundPen } from '@lucide/angular';
@@ -27,6 +28,7 @@ export class SelectUserComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly serverConfig = inject(ServerConfigService);
+  private readonly serverCache = inject(ServerCacheService);
 
   readonly users = signal<PublicUserSummary[]>([]);
   readonly loading = signal(true);
@@ -73,6 +75,7 @@ export class SelectUserComponent {
   }
 
   async changeServer() {
+    await this.serverCache.clearAll();
     await this.serverConfig.clear();
     void this.router.navigate(['/setup']);
   }
