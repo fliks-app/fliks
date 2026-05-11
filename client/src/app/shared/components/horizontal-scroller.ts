@@ -18,25 +18,29 @@ import { TvRowDirective } from '../directives/tv-row.directive';
   imports: [LucideChevronLeft, LucideChevronRight, TvRowDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <!-- Header: title + arrows (arrows are mouse-only — hidden on touch/TV) -->
+    <!-- Header: title + arrows (arrows are mouse-only — hidden on touch/TV,
+         and when content fits without scrolling so we don't show two grey
+         disabled chevrons doing nothing). -->
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-lg font-bold">{{ title() }}</h2>
-      <div class="flex gap-1 scroll-arrows">
-        <button
-          class="btn btn-ghost btn-sm btn-circle"
-          [disabled]="atStart()"
-          (click)="scrollLeft()"
-        >
-          <svg lucideChevronLeft class="h-5 w-5"></svg>
-        </button>
-        <button
-          class="btn btn-ghost btn-sm btn-circle"
-          [disabled]="atEnd()"
-          (click)="scrollRight()"
-        >
-          <svg lucideChevronRight class="h-5 w-5"></svg>
-        </button>
-      </div>
+      @if (!atStart() || !atEnd()) {
+        <div class="flex gap-1 scroll-arrows">
+          <button
+            class="btn btn-ghost btn-sm btn-circle"
+            [disabled]="atStart()"
+            (click)="scrollLeft()"
+          >
+            <svg lucideChevronLeft class="h-5 w-5"></svg>
+          </button>
+          <button
+            class="btn btn-ghost btn-sm btn-circle"
+            [disabled]="atEnd()"
+            (click)="scrollRight()"
+          >
+            <svg lucideChevronRight class="h-5 w-5"></svg>
+          </button>
+        </div>
+      }
     </div>
     <!-- Scrollable content (no visible scrollbar). On TV the scroller gets
          vertical padding (and a matching negative margin so neighbours don't
