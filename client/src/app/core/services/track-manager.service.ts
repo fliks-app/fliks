@@ -1,7 +1,9 @@
 import { Injectable, inject } from '@angular/core';
+import { TranslateService } from '@ngx-translate/core';
 import { PlayerSettingsService, normalizeLang } from './player-settings.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { StreamingApiService } from './api/streaming-api.service';
+import { formatSubtitleLabel } from '../utils/player.utils';
 import type { PlaybackEngine, AudioTrack } from './playback-engine/playback-engine';
 
 export interface SubtitleOption {
@@ -21,6 +23,7 @@ export interface SubtitleOption {
 export class TrackManagerService {
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
+  private readonly translate = inject(TranslateService);
 
   // ── Audio track methods ──
 
@@ -132,7 +135,7 @@ export class TrackManagerService {
           seen.add(key);
           options.push({
             id: `ext-${sub.id}`,
-            label: `${sub.language}${sub.hearingImpaired ? ' (HI)' : ''}${sub.forced ? ' (Forced)' : ''}`,
+            label: formatSubtitleLabel(sub, this.translate),
             url: streamingApi.getSubtitleUrl(mediaFileId, sub.id),
             language: sub.language,
             burnIn: false,
@@ -145,7 +148,7 @@ export class TrackManagerService {
           seen.add(key);
           options.push({
             id: key,
-            label: `${sub.language}${sub.hearingImpaired ? ' (HI)' : ''}${sub.forced ? ' (Forced)' : ''}${isBitmap ? ' [PGS]' : ' [embedded]'}`,
+            label: formatSubtitleLabel(sub, this.translate),
             url: isBitmap ? '' : streamingApi.getEmbeddedSubtitleUrl(mediaFileId, sub.streamIndex!),
             language: sub.language,
             burnIn: isBitmap,
@@ -167,7 +170,7 @@ export class TrackManagerService {
           if (isBitmap) continue; // Bitmap from streamInfo only (no DB ID for burn-in)
           options.push({
             id: key,
-            label: `${emb.language}${emb.hearingImpaired ? ' (HI)' : ''}${emb.forced ? ' (Forced)' : ''} [embedded]`,
+            label: formatSubtitleLabel(emb, this.translate),
             url: streamingApi.getEmbeddedSubtitleUrl(mediaFileId, emb.streamIndex),
             language: emb.language,
             burnIn: false,

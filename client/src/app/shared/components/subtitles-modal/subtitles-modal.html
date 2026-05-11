@@ -59,7 +59,7 @@
               @for (row of pagedRows(); track row.missing ? row.language : row.sub!.id) {
                 @if (row.missing) {
                   <tr class="opacity-40">
-                    <td class="font-medium">{{ row.language }}</td>
+                    <td class="font-medium">{{ row.language | localizeLanguage }}</td>
                     <td class="text-sm">—</td>
                     <td class="text-sm">—</td>
                     <td class="text-center">—</td>
@@ -69,7 +69,7 @@
                 } @else {
                   @let sub = row.sub!;
                   <tr>
-                    <td class="font-medium">{{ sub.language }}</td>
+                    <td class="font-medium">{{ sub.language | localizeLanguage }}</td>
                     <td class="text-sm text-base-content/60 truncate max-w-48" [title]="sub.relativePath ?? ''">
                       @if (sub.relativePath) {
                         {{ sub.relativePath | subtitleFilename }}
@@ -254,21 +254,21 @@
           @if (audioStreams().length) {
             <optgroup [label]="'media_detail.sync_audio_tracks' | translate">
               @for (s of audioStreams(); track s.streamIndex) {
-                <option [value]="'audio:' + s.streamIndex">{{ s.language }} — {{ s.codec }}@if (s.title) { ({{ s.title }}) }</option>
+                <option [value]="'audio:' + s.streamIndex">{{ s.language | localizeLanguage }} — {{ s.codec }}@if (s.title) { ({{ s.title }}) }</option>
               }
             </optgroup>
           }
           @if (subtitleStreams().length) {
             <optgroup [label]="'media_detail.sync_subtitle_tracks' | translate">
               @for (s of subtitleStreams(); track s.streamIndex) {
-                <option [value]="'subtitle:' + s.streamIndex">{{ s.language }} — {{ s.codec }}@if (s.title) { ({{ s.title }}) }</option>
+                <option [value]="'subtitle:' + s.streamIndex">{{ s.language | localizeLanguage }} — {{ s.codec }}@if (s.title) { ({{ s.title }}) }</option>
               }
             </optgroup>
           }
           @if (externalSubtitleRefs().length) {
             <optgroup [label]="'media_detail.sync_external_subtitles' | translate">
               @for (s of externalSubtitleRefs(); track s.id) {
-                <option [value]="'file:' + s.relativePath">{{ s.language }} — {{ s.providerType }} ({{ s.status }})</option>
+                <option [value]="'file:' + s.relativePath">{{ s.language | localizeLanguage }} — {{ s.providerType }} ({{ s.status }})</option>
               }
             </optgroup>
           }

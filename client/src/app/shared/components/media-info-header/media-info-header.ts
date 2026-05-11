@@ -39,6 +39,7 @@ import { NavbarService } from '../../../core/services/navbar.service';
 import { TvService } from '../../../core/services/tv.service';
 import { MobileFanartHeroComponent } from '../mobile-fanart-hero';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
+import { formatAudioLabel } from '../../../core/utils/player.utils';
 import { DropdownMenuComponent } from '../dropdown-menu';
 import { ImgFadeInDirective } from '../../directives/img-fade-in.directive';
 import { TvRowDirective } from '../../directives/tv-row.directive';
@@ -219,14 +220,11 @@ export class MediaInfoHeaderComponent {
     const file = this.selectedFile();
     const audio = file?.streamInfo?.audio as any[] | undefined;
     if (!audio?.length) return [];
-    return audio.map((a: any, i: number) => {
-      const lang = a.language ?? 'und';
-      const codec = (a.codec ?? '').toUpperCase().replace('TRUEHD', 'TrueHD');
-      const ch = a.channels
-        ? (a.channels === 6 ? '5.1' : a.channels === 8 ? '7.1' : a.channels + '.0')
-        : '';
-      return { index: i, label: `${lang} ${codec}${ch ? ' ' + ch : ''}`, language: lang };
-    });
+    return audio.map((a: any, i: number) => ({
+      index: i,
+      label: formatAudioLabel(a, this.translate),
+      language: a.language ?? 'und',
+    }));
   });
 
   private readonly resolveDefaultsEffect = effect(() => {
