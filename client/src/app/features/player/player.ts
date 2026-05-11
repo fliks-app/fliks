@@ -12,7 +12,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/api/streaming-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
 import { BrowserDeviceProfileService } from '../../core/services/browser-device-profile.service';
@@ -143,6 +143,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly navHistory = inject(NavigationHistoryService);
   private readonly navbar = inject(NavbarService);
+  private readonly translate = inject(TranslateService);
 
   // New extracted services
   private readonly state = inject(PlayerStateService);
@@ -216,7 +217,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Audio tracks from streamInfo for the Cast remote */
   readonly castAudioOptions = computed<CastAudioOption[]>(() => {
     const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
-    return buildCastAudioOptions(file?.streamInfo?.audio);
+    return buildCastAudioOptions(file?.streamInfo?.audio, this.translate);
   });
 
   readonly isNative = Capacitor.isNativePlatform();
@@ -1490,7 +1491,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (audioList?.length > 1) {
           const tracks = audioList.map((a: any, i: number) => ({
             id: `si-${i}`,
-            label: formatAudioLabel(a),
+            label: formatAudioLabel(a, this.translate),
             language: normalizeLang(a.language),
           }));
           this.availableAudioTracks.set(tracks);
@@ -1516,7 +1517,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const audioList = (file?.streamInfo as any)?.audio ?? [];
       const tracks = engineTracks.map((t, i) => ({
         id: t.id,
-        label: audioList[i] ? formatAudioLabel(audioList[i]) : t.label,
+        label: audioList[i] ? formatAudioLabel(audioList[i], this.translate) : t.label,
         language: normalizeLang(t.language),
       }));
 

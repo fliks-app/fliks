@@ -1,4 +1,5 @@
 import { Injectable, effect, inject, signal } from '@angular/core';
+import { TranslateService } from '@ngx-translate/core';
 import { CastService } from './cast.service';
 import { CastSettingsService } from './cast-settings.service';
 import { StreamingApiService } from './api/streaming-api.service';
@@ -6,7 +7,7 @@ import { SubtitlesApiService } from './api/subtitles-api.service';
 import { AuthService } from './auth.service';
 import { DeviceProfile } from './browser-device-profile.service';
 import { ServerConfigService } from './server-config.service';
-import { formatAudioLabel, parseAudioIndex, SpriteMetadata } from '../utils/player.utils';
+import { formatAudioLabel, formatSubtitleLabel, parseAudioIndex, SpriteMetadata } from '../utils/player.utils';
 import { PlayerSettingsService } from './player-settings.service';
 import { TrackManagerService } from './track-manager.service';
 import { MediaService } from './api/media.service';
@@ -36,13 +37,14 @@ export interface CastAudioOption {
  *  castAudioOptions (cast in-progress). */
 export function buildCastAudioOptions(
   audioStreams: { language?: string; title?: string; codec?: string; channels?: number }[] | undefined,
+  translate: TranslateService,
 ): CastAudioOption[] {
   if (!audioStreams?.length) return [];
   return audioStreams.map((a, i) => {
     const lang = a.language ?? 'und';
     return {
       id: `audio-${i}`,
-      label: formatAudioLabel(a),
+      label: formatAudioLabel(a, translate),
       language: lang,
       name: a.title || lang,
     };
@@ -99,6 +101,7 @@ export class CastPlayerService {
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly trackManager = inject(TrackManagerService);
   private readonly mediaService = inject(MediaService);
+  private readonly translate = inject(TranslateService);
 
   /** Chromecast profile — force full transcode to guarantee H264+AAC HLS output. */
   private getCastDeviceProfile(): DeviceProfile {
@@ -494,7 +497,7 @@ export class CastPlayerService {
       const isBitmap = bitmapCodecs.has(sub.codec ?? '');
       if (sub.relativePath) {
         subtitleInfos.push({
-          id: `ext-${sub.id}`, label: `${sub.language}${sub.forced ? ' (Forced)' : ''}`,
+          id: `ext-${sub.id}`, label: formatSubtitleLabel(sub, this.translate),
           language: sub.language, burnIn: false, subtitleDbId: sub.id,
           url: this.streamingApi.getSubtitleUrl(opts.mediaFileId, sub.id),
           forced: sub.forced ?? false,
@@ -502,7 +505,7 @@ export class CastPlayerService {
       } else if (sub.streamIndex != null) {
         subtitleInfos.push({
           id: `emb-${sub.streamIndex}`,
-          label: `${sub.language}${sub.forced ? ' (Forced)' : ''}${isBitmap ? ' [PGS]' : ' [embedded]'}`,
+          label: formatSubtitleLabel(sub, this.translate),
           language: sub.language, burnIn: isBitmap, subtitleDbId: sub.id,
           url: isBitmap ? '' : this.streamingApi.getEmbeddedSubtitleUrl(opts.mediaFileId, sub.streamIndex!),
           forced: sub.forced ?? false,
@@ -510,7 +513,7 @@ export class CastPlayerService {
       }
     }
 
-    const audioTracks = buildCastAudioOptions(streamInfo?.audio);
+    const audioTracks = buildCastAudioOptions(streamInfo?.audio, this.translate);
 
     // Phase 2 — single playback-info call. We pass the user's cast cap as
     // startQuality so the backend pre-spawns ffmpeg at the right rung; the

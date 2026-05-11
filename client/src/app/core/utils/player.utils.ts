@@ -1,3 +1,6 @@
+import type { TranslateService } from '@ngx-translate/core';
+import { localizeLanguage } from './language.utils';
+
 /** Format seconds to h:mm:ss or m:ss. */
 export function formatTime(seconds: number): string {
   if (!seconds || !isFinite(seconds)) return '0:00';
@@ -35,18 +38,67 @@ export function parseAudioIndex(trackId: string): number {
   return parseInt(trackId.replace(/^(si-|shaka-|audio-)/, ''), 10);
 }
 
-/** Render a streamInfo audio entry as a dropdown label. Prefers the source
- *  title when present (e.g. "English (EAC3 6ch)"), falls back to the
- *  language code (e.g. "eng (AAC 2ch)"). */
-export function formatAudioLabel(audio: {
-  language?: string;
-  title?: string;
-  codec?: string;
-  channels?: number;
-}): string {
-  const head = audio.title || audio.language || 'und';
-  const codec = (audio.codec ?? '').toUpperCase();
-  const channels = audio.channels ? `${audio.channels}ch` : '';
-  const tail = [codec, channels].filter(Boolean).join(' ');
+/** Map a raw FFmpeg/ffprobe subtitle codec name to a short, user-friendly
+ *  tag (PGS, SRT, ASS, VTT). Falls back to "SRT" for external files
+ *  (typical) and "EMB" for embedded streams without a codec hint. */
+function shortSubtitleCodec(codec: string | null | undefined, hasFile: boolean): string {
+  const c = (codec ?? '').toLowerCase();
+  if (c === 'hdmv_pgs_subtitle' || c === 'dvd_subtitle' || c === 'dvb_subtitle') return 'PGS';
+  if (c === 'subrip') return 'SRT';
+  if (c === 'ass' || c === 'ssa') return 'ASS';
+  if (c === 'webvtt') return 'VTT';
+  if (c === 'mov_text') return 'TX3G';
+  if (c) return c.toUpperCase();
+  return hasFile ? 'SRT' : 'EMB';
+}
+
+/** Channel count to a recognizable layout label (5.1, 7.1, 2.0, …). */
+function audioChannelsLabel(channels: number | null | undefined): string {
+  if (!channels) return '';
+  if (channels === 6) return '5.1';
+  if (channels === 8) return '7.1';
+  return `${channels}.0`;
+}
+
+/**
+ * Render an audio track as a dropdown label. Used by both the player and
+ * the media-detail audio menu so the text matches in both places.
+ *
+ * Format: `"<langue> (CODEC - channels)"`, e.g. `"Français (EAC3 - 5.1)"`.
+ * Codec and/or channels are dropped when missing.
+ */
+export function formatAudioLabel(
+  audio: { language?: string; title?: string; codec?: string; channels?: number },
+  translate: TranslateService,
+): string {
+  const head = localizeLanguage(audio.language, translate);
+  const codec = (audio.codec ?? '').toUpperCase().replace('TRUEHD', 'TrueHD');
+  const channels = audioChannelsLabel(audio.channels);
+  const tail = [codec, channels].filter(Boolean).join(' - ');
   return tail ? `${head} (${tail})` : head;
+}
+
+/**
+ * Render a subtitle as a dropdown label. Mirrors {@link formatAudioLabel} so
+ * the player and media-detail subtitle menus stay consistent.
+ *
+ * Format: `"<lang> (HI) (Forced) (CODEC)"` with the parenthesised parts
+ * omitted when the corresponding flag is absent.
+ */
+export function formatSubtitleLabel(
+  sub: {
+    language?: string;
+    codec?: string | null;
+    forced?: boolean | null;
+    hearingImpaired?: boolean | null;
+    relativePath?: string | null;
+  },
+  translate: TranslateService,
+): string {
+  const head = localizeLanguage(sub.language, translate);
+  const parts: string[] = [];
+  if (sub.hearingImpaired) parts.push('HI');
+  if (sub.forced) parts.push('Forced');
+  parts.push(shortSubtitleCodec(sub.codec, !!sub.relativePath));
+  return `${head} (${parts.join(') (')})`;
 }

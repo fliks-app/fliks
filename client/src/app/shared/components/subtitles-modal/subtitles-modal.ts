@@ -27,6 +27,8 @@ import {
   LucideVolume2,
   LucideZap,
 } from '@lucide/angular';
+import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
+import { formatSubtitleLabel } from '../../../core/utils/player.utils';
 import { SubtitleFilenamePipe } from '../../pipes/subtitle-filename.pipe';
 import {
   MediaStream,
@@ -63,6 +65,7 @@ interface SubtitleRow {
   imports: [
     FormsModule,
     TranslateModule,
+    LocalizeLanguagePipe,
     SubtitleFilenamePipe,
     MediaDetailSubtitleSearchModalComponent,
     LucideArrowRightLeft,
@@ -194,17 +197,10 @@ export class SubtitlesModalComponent {
   readonly headerSubtitles = computed<MediaInfoHeaderSubtitle[]>(() => {
     const subs = this.filteredSubtitles();
     return subs.map((s) => {
-      const fmt =
-        s.codec
-          ?.replace('hdmv_pgs_subtitle', 'PGS')
-          .replace('subrip', 'SRT')
-          .replace('ass', 'ASS')
-          .replace('webvtt', 'VTT')
-          .toUpperCase() ?? (s.relativePath ? 'SRT' : 'EMB');
       const id = s.streamIndex != null ? `emb-${s.streamIndex}` : `ext-${s.id}`;
       return {
         id,
-        label: `${s.language}${s.forced ? ' (Forced)' : ''} (${fmt})`,
+        label: formatSubtitleLabel(s, this.translate),
         language: s.language,
         forced: s.forced,
       };
