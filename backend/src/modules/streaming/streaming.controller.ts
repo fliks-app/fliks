@@ -57,6 +57,12 @@ function withTimestampMap(vtt: string | Buffer): string {
 let SEG_DURATION = 3;
 let INIT_TIME = 1;
 
+/** Pick the right HLS segment Content-Type. fMP4 (.m4s / .mp4) → video/mp4,
+ *  MPEG-TS (.ts, used for Chromecast sessions) → video/MP2T. */
+function segmentContentType(segment: string): string {
+  return segment.endsWith('.ts') ? 'video/MP2T' : 'video/mp4';
+}
+
 function buildVodPlaylist(
   duration: number,
   segmentUrl: (index: string) => string,
@@ -178,6 +184,7 @@ export class StreamingController {
           ? ((si?.audio as { language?: string; title?: string }[]) ?? [])
           : undefined,
       deviceType: this.activeStreamTracker.getDeviceType(mediaFileId),
+      useTs: this.activeStreamTracker.getUseTs(mediaFileId),
       encoderPreset: this.activeStreamTracker.getEncoderPreset(mediaFileId),
       qsvOptions: this.activeStreamTracker.getQsvOptions(),
       // Source framerate (e.g. "24", "23.976", "29.97") — used to compute an
@@ -428,6 +435,10 @@ export class StreamingController {
       mediaFileId,
       deviceProfile.deviceType ?? 'desktop',
     );
+    this.activeStreamTracker.setUseTs(
+      mediaFileId,
+      !!deviceProfile.useTs,
+    );
     this.activeStreamTracker.setStreamingDurations(
       ss.segmentDuration,
       ss.initTime,
@@ -643,6 +654,7 @@ export class StreamingController {
       onlyQuality,
       pickedIdx ?? 0,
       deviceType,
+      this.activeStreamTracker.getCanCopyAudio(mediaFileId),
     );
 
     this.activeStreamTracker.setAudioStreamCount(
@@ -758,10 +770,14 @@ export class StreamingController {
     const token = firstQueryString(req.query, 'token');
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
     const basePath = `/api/stream/${mediaFileId}/audio/${audioIndex}`;
+    const useTs = this.activeStreamTracker.getUseTs(mediaFileId);
+    const segExt = useTs ? 'ts' : 'm4s';
     const playlist = buildVodPlaylist(
       duration,
-      (seg) => `${basePath}/seg-${seg}.m4s${tokenParam}`,
-      `${basePath}/init_${audioIndex + 1}.mp4${tokenParam}`,
+      (seg) => `${basePath}/seg-${seg}.${segExt}${tokenParam}`,
+      useTs
+        ? undefined
+        : `${basePath}/init_${audioIndex + 1}.mp4${tokenParam}`,
     );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -779,12 +795,12 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const AUDIO_SEG_RE = /^(init(_\d+)?\.mp4|seg-\d{3,4}\.m4s)$/;
+    const AUDIO_SEG_RE = /^(init(_\d+)?\.mp4|seg-\d{3,4}\.(m4s|ts))$/;
     if (!AUDIO_SEG_RE.test(segment)) {
       throw new BadRequestException(`Invalid audio segment name: ${segment}`);
     }
 
-    const segMatch = segment.match(/seg-(\d+)\.m4s/);
+    const segMatch = segment.match(/seg-(\d+)\.(m4s|ts)/);
     const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
     const isInit = segment.startsWith('init');
     const user = req.user;
@@ -870,7 +886,7 @@ export class StreamingController {
       return;
     }
 
-    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Type', segmentContentType(segment));
     res.setHeader('Access-Control-Allow-Origin', '*');
     const stream = fs.createReadStream(segPath);
     stream.on('error', () => {
@@ -950,11 +966,19 @@ export class StreamingController {
     const basePath = `/api/stream/${mediaFileId}/${quality}`;
     // Use the master.m3u8 decision — must match to avoid init filename mismatch.
     const multiAudio = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
-    const initName = multiAudio ? 'init_0.mp4' : 'init.mp4';
+    const useTs = this.activeStreamTracker.getUseTs(mediaFileId);
+    // Cast sessions use MPEG-TS segments (no init segment) to avoid the
+    // fMP4 priming desync the Cast receiver doesn't compensate for.
+    const segExt = useTs ? 'ts' : 'm4s';
+    const initName = useTs
+      ? undefined
+      : multiAudio
+        ? 'init_0.mp4'
+        : 'init.mp4';
     const playlist = buildVodPlaylist(
       duration,
-      (seg) => `${basePath}/seg-${seg}.m4s${tokenParam}`,
-      `${basePath}/${initName}${tokenParam}`,
+      (seg) => `${basePath}/seg-${seg}.${segExt}${tokenParam}`,
+      initName ? `${basePath}/${initName}${tokenParam}` : undefined,
     );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -975,11 +999,15 @@ export class StreamingController {
     if (!VALID_QUALITIES.has(quality)) {
       throw new BadRequestException(`Invalid quality: ${quality}`);
     }
-    const VIDEO_SEG_RE = /^(seg-\d{3,4}\.m4s|init(_\d+)?\.mp4)$/;
+    const VIDEO_SEG_RE = /^(seg-\d{3,4}\.(m4s|ts)|init(_\d+)?\.mp4)$/;
     if (!VIDEO_SEG_RE.test(segment)) {
       throw new BadRequestException(`Invalid segment name: ${segment}`);
     }
-    if (segment.startsWith('init') || segment === 'seg-0000.m4s') {
+    if (
+      segment.startsWith('init') ||
+      segment === 'seg-0000.m4s' ||
+      segment === 'seg-0000.ts'
+    ) {
       this.log.log(
         `[request] ${segment} mfid=${mediaFileId} quality=${quality}`,
       );
@@ -1020,7 +1048,7 @@ export class StreamingController {
           initFile,
         );
         if (initPath) {
-          res.setHeader('Content-Type', 'video/mp4');
+          res.setHeader('Content-Type', segmentContentType(segment));
           res.setHeader('Access-Control-Allow-Origin', '*');
           const initStream = fs.createReadStream(initPath);
           initStream.on('error', () => {
@@ -1044,7 +1072,7 @@ export class StreamingController {
       const segPath = `${existing.cachePath}/${segName}`;
       if (fs.existsSync(segPath)) {
         existing.lastAccess = Date.now();
-        res.setHeader('Content-Type', 'video/mp4');
+        res.setHeader('Content-Type', segmentContentType(segment));
         res.setHeader('Access-Control-Allow-Origin', '*');
         const stream = fs.createReadStream(segPath);
         stream.on('error', () => {
@@ -1091,7 +1119,7 @@ export class StreamingController {
           10_000,
         );
         if (segPath) {
-          res.setHeader('Content-Type', 'video/mp4');
+          res.setHeader('Content-Type', segmentContentType(segment));
           res.setHeader('Access-Control-Allow-Origin', '*');
           const stream = fs.createReadStream(segPath);
           stream.on('error', () => {
@@ -1143,7 +1171,7 @@ export class StreamingController {
       return;
     }
 
-    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Type', segmentContentType(segment));
     res.setHeader('Access-Control-Allow-Origin', '*');
     const stream = fs.createReadStream(segPath);
     stream.on('error', () => {

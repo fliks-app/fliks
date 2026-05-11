@@ -41,6 +41,10 @@ export interface DeviceProfile {
   /** Client device category — selects the backend bitrate ladder.
    *  Capacitor native (iOS/Android app) → 'mobile'; web (incl. Cast sender) → 'desktop'. */
   deviceType: 'mobile' | 'desktop';
+  /** True when the playback target is a Chromecast receiver. Drives the
+   *  HLS segment container choice on the backend (MPEG-TS instead of
+   *  fMP4) — see `device-profile.dto.ts` for the rationale. */
+  useTs?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })

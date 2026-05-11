@@ -76,4 +76,16 @@ export class DeviceProfileDto {
   @IsIn(['mobile', 'desktop'])
   @IsOptional()
   deviceType?: 'mobile' | 'desktop';
+
+  /**
+   * True when the request originates from a Chromecast sender. Drives the
+   * HLS segment container choice: MPEG-TS instead of fMP4. TS avoids the
+   * AAC/EAC3 encoder priming desync, because each audio packet in a TS
+   * stream carries its own PTS and there's no init segment / edit-list
+   * for the receiver to honour or ignore. fMP4 stays the default for web
+   * (Shaka), native (ExoPlayer / AVPlayer) and TV.
+   */
+  @IsBoolean()
+  @IsOptional()
+  useTs?: boolean;
 }

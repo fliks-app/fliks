@@ -136,6 +136,48 @@ playerManager.setMessageInterceptor(
   },
 );
 
+// --- Capability probe protocol ------------------------------------------
+//
+// Sender sends `{type:'probe'}` on the caps namespace and we reply with
+// the list of audio/video codecs MediaSource actually accepts on this
+// device. Lets the sender build an accurate device profile per-receiver:
+// e.g. a Cast 2 reports AAC-only via MSE even though its hardware decodes
+// AC-3 over HDMI passthrough — the sender needs the truthful MSE list,
+// otherwise Shaka rejects the segment at chunk-demuxer append.
+//
+// Result is cached sender-side keyed on the device's friendly name, so
+// only the first cast to a new device pays the probe round-trip.
+const CAPS_NAMESPACE = 'urn:x-cast:app.fliks.caps';
+const CAPS_AUDIO = [
+  { codec: 'mp4a.40.2',       label: 'aac' },
+  { codec: 'mp4a.40.5',       label: 'aac-he' },
+  { codec: 'ac-3',            label: 'ac3' },
+  { codec: 'ec-3',            label: 'eac3' },
+  { codec: 'opus',            label: 'opus' },
+];
+const CAPS_VIDEO = [
+  { codec: 'avc1.640028',         label: 'h264' },
+  { codec: 'hvc1.1.6.L150.B0',    label: 'hevc' },
+  { codec: 'vp09.00.50.08',       label: 'vp9' },
+  { codec: 'av01.0.04M.08',       label: 'av1' },
+];
+
+context.addCustomMessageListener(CAPS_NAMESPACE, (event) => {
+  if (!event.data || event.data.type !== 'probe') return;
+  const probe = (mime) => {
+    try { return MediaSource.isTypeSupported(mime); } catch { return false; }
+  };
+  const audioCodecs = CAPS_AUDIO
+    .filter((c) => probe(`audio/mp4; codecs="${c.codec}"`))
+    .map((c) => c.label);
+  const videoCodecs = CAPS_VIDEO
+    .filter((c) => probe(`video/mp4; codecs="${c.codec}"`))
+    .map((c) => c.label);
+  const reply = { type: 'caps', audioCodecs, videoCodecs };
+  console.log('[fliks-cast] caps probe →', JSON.stringify(reply));
+  context.sendCustomMessage(CAPS_NAMESPACE, event.senderId, reply);
+});
+
 // --- Boot ---------------------------------------------------------------
 //
 // `useShakaForHls: true` makes CAF use Shaka for HLS — the same engine
@@ -161,5 +203,8 @@ options.useShakaForHls = true;
 options.playbackConfig = new cast.framework.PlaybackConfig();
 options.playbackConfig.autoResumeDuration = 5;
 options.supportedCommands = cast.framework.messages.Command.ALL_BASIC_MEDIA;
+options.customNamespaces = {
+  [CAPS_NAMESPACE]: cast.framework.system.MessageType.JSON,
+};
 context.start(options);
 console.log('[fliks-cast] context.start called');

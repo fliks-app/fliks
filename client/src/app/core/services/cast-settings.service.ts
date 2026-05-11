@@ -14,11 +14,24 @@ export interface CastSubtitleStyle {
   background: string;  // 'transparent' | 'semi' | 'black'
 }
 
+export interface CastDeviceCapabilities {
+  /** Audio codecs `MediaSource.isTypeSupported` accepts on the receiver
+   *  (`'aac' | 'aac-he' | 'ac3' | 'eac3' | 'opus'`). What MSE accepts —
+   *  may differ from the firmware's HDMI-passthrough capability set. */
+  audioCodecs: string[];
+  /** Video codecs `MediaSource.isTypeSupported` accepts on the receiver. */
+  videoCodecs: string[];
+}
+
 export interface CastSettings {
   hdr: boolean;
   maxQuality: string; // 'original' | '2160p' | '1080p' | '720p' | '480p'
   audioChannels: number; // 2 = stereo, 6 = 5.1, 8 = 7.1
   subtitleStyle: CastSubtitleStyle;
+  /** Capabilities cache, keyed by Cast device friendly name. Populated on
+   *  first session via the `urn:x-cast:app.fliks.caps` namespace probe so
+   *  subsequent sessions to the same device skip the round-trip. */
+  capabilities?: Record<string, CastDeviceCapabilities>;
 }
 
 const STORAGE_KEY = 'cast.settings';
@@ -83,5 +96,22 @@ export class CastSettingsService {
 
   get(): CastSettings {
     return this.settings();
+  }
+
+  /** Look up cached MSE-codec capabilities for a Cast device. Returns
+   *  `null` on first sight; the sender then probes the receiver and
+   *  calls {@link setDeviceCapabilities} to populate the cache. */
+  getDeviceCapabilities(deviceName: string): CastDeviceCapabilities | null {
+    const caps = this.settings().capabilities?.[deviceName];
+    return caps ?? null;
+  }
+
+  setDeviceCapabilities(deviceName: string, caps: CastDeviceCapabilities) {
+    const current = this.settings();
+    const updated: CastSettings = {
+      ...current,
+      capabilities: { ...(current.capabilities ?? {}), [deviceName]: caps },
+    };
+    this.save(updated);
   }
 }

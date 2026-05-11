@@ -103,18 +103,132 @@ export class CastPlayerService {
   private readonly mediaService = inject(MediaService);
   private readonly translate = inject(TranslateService);
 
-  /** Chromecast profile — force full transcode to guarantee H264+AAC HLS output. */
+  /** Chromecast profile, derived from the receiver-probed MSE codec list
+   *  (see `probeReceiverCapabilities`). `videoCodecs: []` keeps every Cast
+   *  on the transcode path so the backend ladder drives quality/ABR; the
+   *  surround output codec is picked in stream-builder from the audio
+   *  codecs we list here (priority EAC-3 > AC-3 > AAC).
+   *
+   *  Without cached caps (first cast to a new device, or older receiver
+   *  that doesn't answer the probe), we fall back to AAC-only stereo — a
+   *  Cast generation we don't recognise is safer downmixed than failing
+   *  to play.
+   *
+   *  `useTs` is conditional on the path:
+   *  - Stereo (AAC re-encode) → `useTs=true`. fMP4 + AAC suffers from the
+   *    encoder priming desync (~44 ms) because Shaka on Cast ignores the
+   *    init segment `edts/elst` atom. TS sidesteps the issue.
+   *  - Surround (AC-3 / EAC-3 re-encode) → `useTs=false`. Dolby codecs
+   *    have no encoder priming (MDCT overlap is built into the codec, not
+   *    extra lookahead) and AC-3 in TS doesn't survive the receiver's
+   *    Shaka transmuxer to fMP4 for MSE (error 4032), so fMP4 is required. */
   private getCastDeviceProfile(): DeviceProfile {
     const cs = this.castSettings.get();
+    const maxChannels = cs.audioChannels ?? 2;
+
+    // Pull the receiver's probed capabilities for the currently connected
+    // device (cached from a previous session, or just-populated by an
+    // in-flight probe). Default to AAC-only when we have nothing.
+    const deviceName = this.currentDeviceName();
+    const caps = deviceName
+      ? this.castSettings.getDeviceCapabilities(deviceName)
+      : null;
+    const receiverAudio = caps?.audioCodecs ?? ['aac'];
+
+    // Filter against codecs the backend can actually emit (the transcoder
+    // produces AAC, AC-3, or EAC-3) and against the channel preference.
+    const surroundOk = maxChannels >= 6;
+    const allowedAudio = receiverAudio.filter((c) => {
+      if (c === 'aac' || c === 'aac-he') return true;
+      if (c === 'ac3' || c === 'eac3') return surroundOk;
+      return false;
+    });
+    // Normalise to the codec strings stream-builder compares against.
+    const audioCodecs = allowedAudio.map((c) =>
+      c === 'aac-he' ? 'aac' : c,
+    );
+
+    const hasSurroundCodec = audioCodecs.some(
+      (c) => c === 'ac3' || c === 'eac3',
+    );
     return {
-      // Empty direct play profiles → nothing can direct play or remux → always transcode
-      directPlayProfiles: [],
+      directPlayProfiles: [
+        { containers: ['hls'], videoCodecs: [], audioCodecs },
+      ],
       codecConditions: [],
       maxStreamingBitrate: 20_000_000,
-      maxAudioChannels: cs.audioChannels ?? 2,
+      maxAudioChannels: maxChannels,
       supportsHdr: cs.hdr ?? false,
       deviceType: 'desktop',
+      useTs: !hasSurroundCodec,
     };
+  }
+
+  /** Friendly name of the currently connected Cast device, or null when
+   *  no session is active. Used as the cache key for receiver-probed
+   *  capabilities. */
+  private currentDeviceName(): string | null {
+    try {
+      const session = (window as any).cast?.framework?.CastContext
+        ?.getInstance?.()
+        ?.getCurrentSession?.();
+      return session?.getCastDevice?.()?.friendlyName ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Ask the receiver which audio/video codecs `MediaSource.isTypeSupported`
+   *  accepts. The receiver answers on the same `urn:x-cast:app.fliks.caps`
+   *  namespace. Result is cached per device so only the first session to
+   *  a new Cast pays the round-trip; subsequent sessions read directly
+   *  from {@link CastSettingsService.getDeviceCapabilities}. */
+  private async probeReceiverCapabilities(): Promise<void> {
+    const session = (window as any).cast?.framework?.CastContext
+      ?.getInstance?.()
+      ?.getCurrentSession?.();
+    if (!session) return;
+    const deviceName = session.getCastDevice?.()?.friendlyName;
+    if (!deviceName) return;
+    // Skip if we already have caps for this device — the probe is idempotent
+    // but each round-trip is ~150–300 ms and slows the first loadMedia.
+    if (this.castSettings.getDeviceCapabilities(deviceName)) return;
+
+    const namespace = 'urn:x-cast:app.fliks.caps';
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        try { session.removeMessageListener?.(namespace, listener); } catch { /* noop */ }
+        resolve();
+      };
+      const listener = (_ns: string, raw: string) => {
+        try {
+          const data = JSON.parse(raw);
+          if (data?.type !== 'caps') return;
+          this.castSettings.setDeviceCapabilities(deviceName, {
+            audioCodecs: Array.isArray(data.audioCodecs) ? data.audioCodecs : [],
+            videoCodecs: Array.isArray(data.videoCodecs) ? data.videoCodecs : [],
+          });
+        } catch {
+          /* malformed reply — leave the cache empty, the next session
+             retries against the safe stereo fallback */
+        }
+        finish();
+      };
+      try {
+        session.addMessageListener(namespace, listener);
+        session.sendMessage(namespace, JSON.stringify({ type: 'probe' }));
+      } catch {
+        finish();
+        return;
+      }
+      // 2 s ceiling — older receivers that don't implement the namespace
+      // won't answer, falling back to whatever capabilities (or absence)
+      // the cache already has.
+      setTimeout(finish, 2000);
+    });
   }
 
   // Sprite preview
@@ -229,6 +343,14 @@ export class CastPlayerService {
     effect(() => {
       const connected = this.cast.isConnected();
       if (!connected && this.hasMedia()) this.clear();
+    });
+    // On every session connect, ask the receiver which audio/video codecs
+    // its MediaSource accepts and cache the answer by device name. The
+    // probe is a no-op when the cache already covers this device.
+    effect(() => {
+      if (this.cast.isConnected()) {
+        void this.probeReceiverCapabilities();
+      }
     });
   }
 

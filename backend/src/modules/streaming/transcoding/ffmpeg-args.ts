@@ -36,6 +36,10 @@ export interface BuildFfmpegArgsOptions {
    *  for ramp-up speed: fastest encoder preset + reduced rate-control
    *  buffer so the first frame ships sooner. */
   early?: boolean;
+  /** When true, emit MPEG-TS segments instead of fMP4. Used for Chromecast
+   *  sessions to avoid the priming desync caused by the Cast receiver
+   *  ignoring the init fMP4 `edts/elst` atom. */
+  useTs?: boolean;
 }
 
 export function buildFfmpegArgs(
@@ -60,7 +64,15 @@ export function buildFfmpegArgs(
     sourceFps,
     trustedStreamInfo = false,
     early = false,
+    useTs = false,
   } = opts;
+
+  // Segment container choice. Cast → MPEG-TS (fixes the priming desync
+  // because TS packets carry per-frame PTS and there's no init fMP4 atom
+  // for the receiver to honour or ignore). Everyone else → fMP4 (better
+  // for HEVC / DASH-like manifests on Shaka & MSE).
+  const segType = useTs ? 'mpegts' : 'fmp4';
+  const segExt = useTs ? 'ts' : 'm4s';
 
   const SEGMENT_DURATION = getSegmentDuration();
   const INIT_TIME = getInitTime();
@@ -418,9 +430,13 @@ export function buildFfmpegArgs(
       args.push('-map', `0:a:${i}`);
     }
     if (copyAudio) {
-      // Re-encode to E-AC-3 5.1 (preserves surround passthrough; -c:a copy
-      // can't be trimmed precisely when video is transcoded + seeked).
-      args.push('-c:a', 'eac3', '-b:a', '640k');
+      // Re-encode to AC-3 5.1 (Dolby Digital). Every Chromecast generation
+      // including the HDMI dongles decodes AC-3 to PCM 5.1 over HDMI, so it
+      // is the lowest common denominator for surround. EAC-3 (DD+) would
+      // need to be gated on the Ultra+ class which we don't currently
+      // distinguish. `-c:a copy` is avoided because the hybrid seek needs
+      // a re-encode to trim precisely on resume.
+      args.push('-c:a', 'ac3', '-b:a', '640k');
     } else {
       args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
     }
@@ -438,11 +454,11 @@ export function buildFfmpegArgs(
       '-hls_init_time', String(INIT_TIME),
       '-hls_list_size', '0',
       '-start_number', String(startSegment),
-      '-hls_segment_type', 'fmp4',
-      '-hls_fmp4_init_filename', 'init_%v.mp4',
+      '-hls_segment_type', segType,
+      ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init_%v.mp4']),
       '-hls_flags', 'independent_segments',
       '-var_stream_map', varParts.join(' '),
-      '-hls_segment_filename', path.join(outputDir, '%v', 'seg-%04d.m4s'),
+      '-hls_segment_filename', path.join(outputDir, '%v', `seg-%04d.${segExt}`),
       path.join(outputDir, '%v', 'index.m3u8'),
     );
   } else {
@@ -459,9 +475,9 @@ export function buildFfmpegArgs(
       args.push('-map', '0:v:0', '-map', '0:a:0');
     }
     if (copyAudio) {
-      // Re-encode to E-AC-3 5.1 (preserves surround passthrough; -c:a copy
-      // can't be trimmed precisely when video is transcoded + seeked).
-      args.push('-c:a', 'eac3', '-b:a', '640k');
+      // Re-encode to AC-3 5.1 — see the var_stream_map branch above for the
+      // rationale (lowest common denominator for Cast surround).
+      args.push('-c:a', 'ac3', '-b:a', '640k');
     } else {
       args.push('-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2');
     }
@@ -472,9 +488,9 @@ export function buildFfmpegArgs(
       '-hls_init_time', String(INIT_TIME),
       '-hls_list_size', '0',
       '-start_number', String(startSegment),
-      '-hls_segment_type', 'fmp4',
-      '-hls_fmp4_init_filename', 'init.mp4',
-      '-hls_segment_filename', path.join(outputDir, 'seg-%04d.m4s'),
+      '-hls_segment_type', segType,
+      ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init.mp4']),
+      '-hls_segment_filename', path.join(outputDir, `seg-%04d.${segExt}`),
       '-hls_flags', 'independent_segments',
       path.join(outputDir, 'index.m3u8'),
     );
@@ -495,7 +511,10 @@ export function buildAudioOnlyFfmpegArgs(
   startSegment = 0,
   trustedStreamInfo = false,
   log: Logger,
+  useTs = false,
 ): string[] {
+  const segType = useTs ? 'mpegts' : 'fmp4';
+  const segExt = useTs ? 'ts' : 'm4s';
   const SEGMENT_DURATION = getSegmentDuration();
   const INIT_TIME = getInitTime();
 
@@ -539,9 +558,9 @@ export function buildAudioOnlyFfmpegArgs(
     '-hls_init_time', String(INIT_TIME),
     '-hls_list_size', '0',
     '-start_number', String(startSegment),
-    '-hls_segment_type', 'fmp4',
-    '-hls_fmp4_init_filename', 'init.mp4',
-    '-hls_segment_filename', path.join(outputDir, 'seg-%04d.m4s'),
+    '-hls_segment_type', segType,
+    ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init.mp4']),
+    '-hls_segment_filename', path.join(outputDir, `seg-%04d.${segExt}`),
     '-hls_flags', 'independent_segments',
     path.join(outputDir, 'index.m3u8'),
   );

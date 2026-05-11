@@ -70,6 +70,14 @@ export interface SessionContext {
    * later FFmpeg spawns (segments / quality switches).
    */
   copyAudio?: boolean;
+  /**
+   * True when the playback target is a Chromecast receiver. Switches HLS
+   * segments to MPEG-TS (instead of fMP4) so the Cast receiver isn't
+   * subject to the encoder-priming desync that comes from an unhonoured
+   * init fMP4 `edts/elst` atom. Container choice only — codecs and the
+   * rest of the pipeline are unchanged.
+   */
+  useTs?: boolean;
 }
 
 export interface TranscodeSession {
