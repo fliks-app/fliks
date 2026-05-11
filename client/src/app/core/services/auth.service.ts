@@ -97,23 +97,27 @@ export class AuthService {
   }
 
   async login(username: string, password: string): Promise<LoginResponse> {
+    // Wipe any cached data from a previous session BEFORE the auth round-trip,
+    // so the new login starts on a clean slate and `_user` / `_accessToken`
+    // are then set in a single block without an async point between them
+    // where a stray effect could observe a mid-update inconsistency.
+    await this.serverCache.clearAll();
     const res = await firstValueFrom(
       this.http.post<LoginResponse>('/api/auth/login', { username, password }),
     );
-    // Discard any cached data from the previous session before publishing the
-    // new user — a "switch user" path otherwise inherits the previous user's
-    // home rows, library views, etc. from the IDB request cache.
-    await this.serverCache.clearAll();
-    this._user.set(res.user);
     if (this.serverConfig.isNative && res.accessToken) {
       this._accessToken = res.accessToken;
       await this.saveToken(res.accessToken);
     }
-    // Bump the active server in the known-servers list so it surfaces first
-    // in /setup next time. Keeps the last username for pre-fill on return.
+    this._user.set(res.user);
+    // Fire-and-forget — bumps the active server in the known-servers list
+    // so it surfaces first in /setup next time. Awaiting here could block
+    // the login spinner if Preferences write stalled.
     const activeUrl = this.serverConfig.serverUrl();
     if (activeUrl) {
-      await this.serverConfig.addOrTouchKnownServer(activeUrl, { username: res.user.username });
+      void this.serverConfig.addOrTouchKnownServer(activeUrl, {
+        username: res.user.username,
+      });
     }
     return res;
   }

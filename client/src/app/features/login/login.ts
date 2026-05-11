@@ -50,10 +50,6 @@ export class LoginComponent {
 
     const { username, password } = this.form.getRawValue();
     try {
-      // Trim only the username — a password can legitimately contain leading/
-      // trailing whitespace and we shouldn't quietly mutate it. Whitespace
-      // around usernames is almost always a copy-paste artefact that breaks
-      // auth.
       await this.auth.login(username.trim(), password);
       this.loading.set(false);
       void this.router.navigate(['/'], { replaceUrl: true });

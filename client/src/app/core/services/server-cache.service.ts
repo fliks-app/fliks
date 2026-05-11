@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { REQUEST_CACHE_DB } from '../interceptors/cache.interceptor';
+import { clearRequestCache } from '../interceptors/cache.interceptor';
 import { CachingReuseStrategy } from './route-reuse.strategy';
 
 /**
@@ -23,24 +23,10 @@ export class ServerCacheService {
 
   async clearAll(): Promise<void> {
     await Promise.all([
-      this.deleteRequestCacheDb(),
+      clearRequestCache(),
       this.clearCachedUser(),
       this.clearRouteReuse(),
     ]);
-  }
-
-  private deleteRequestCacheDb(): Promise<void> {
-    return new Promise<void>((resolve) => {
-      try {
-        const req = indexedDB.deleteDatabase(REQUEST_CACHE_DB);
-        req.onsuccess = () => resolve();
-        req.onerror = () => resolve();
-        // Another tab still has the DB open — it'll be deleted when that closes.
-        req.onblocked = () => resolve();
-      } catch {
-        resolve();
-      }
-    });
   }
 
   private async clearCachedUser(): Promise<void> {
