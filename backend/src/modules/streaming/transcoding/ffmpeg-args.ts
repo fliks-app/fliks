@@ -163,14 +163,19 @@ export function buildFfmpegArgs(
     //     the decoded domain. Re-encoded audio is trimmed sample-accurately
     //     (not packet-snapped) so its first sample lines up with the first
     //     video frame at internal t = postSeek = source time T.
-    //  3. `-output_ts_offset preSeek` shifts the muxer-side PTS so the
-    //     first emitted PTS = postSeek + preSeek = T, matching the
-    //     playlist's expected tfdt for seg-K.
+    //  3. `-output_ts_offset preSeek` (placed AFTER `-i` — it's an
+    //     OPT_OUTPUT option per FFmpeg, see fftools/ffmpeg_opt.c) shifts
+    //     the muxer-side PTS so the first emitted PTS = postSeek +
+    //     preSeek = T, matching the playlist's expected tfdt for seg-K.
+    //     Placed before `-i` it lives in the input option group and can
+    //     get silently dropped or re-shifted by the muxer's
+    //     `avoid_negative_ts auto`, causing a PRE_SEEK_MARGIN_SECONDS
+    //     overlap with the previous segment (= a 2 s video repeat at
+    //     every rotation seam on Chromecast).
     //
     // Cost: PRE_SEEK_MARGIN_SECONDS of extra HW/CPU decode every
     // SEGMENT_ROTATION_INTERVAL_SECONDS — negligible.
     args.push('-ss', String(preSeek));
-    args.push('-output_ts_offset', String(preSeek));
   }
 
   // parseBitrateToBps handles both "8M" and "200k" correctly. Using parseInt()*1e6
@@ -260,10 +265,13 @@ export function buildFfmpegArgs(
 
   args.push('-i', inputPath);
 
-  if (startSegment > 0 && postSeek > 0) {
+  if (startSegment > 0) {
     // Output-seek companion to the input-seek above; trims the decoded
     // PRE_SEEK_MARGIN_SECONDS prelude sample-accurately on both tracks.
-    args.push('-ss', String(postSeek));
+    // `-output_ts_offset` is also placed here (after `-i`) because it's
+    // an OPT_OUTPUT option in FFmpeg — see the comment block above.
+    if (postSeek > 0) args.push('-ss', String(postSeek));
+    args.push('-output_ts_offset', String(preSeek));
   }
 
   // Video encoding
@@ -543,13 +551,15 @@ export function buildAudioOnlyFfmpegArgs(
 
   if (startSegment > 0) {
     args.push('-ss', String(preSeek));
-    args.push('-output_ts_offset', String(preSeek));
   }
 
   args.push('-i', inputPath);
 
-  if (startSegment > 0 && postSeek > 0) {
-    args.push('-ss', String(postSeek));
+  if (startSegment > 0) {
+    // `-ss postSeek` + `-output_ts_offset preSeek` placed after `-i` —
+    // both are OPT_OUTPUT options. Same rationale as buildFfmpegArgs.
+    if (postSeek > 0) args.push('-ss', String(postSeek));
+    args.push('-output_ts_offset', String(preSeek));
   }
 
   args.push('-map', `0:a:${audioStreamIndex}`);
