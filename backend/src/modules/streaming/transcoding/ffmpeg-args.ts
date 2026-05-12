@@ -267,10 +267,28 @@ export function buildFfmpegArgs(
 
   if (startSegment > 0) {
     // Output-seek companion to the input-seek above; trims the decoded
-    // PRE_SEEK_MARGIN_SECONDS prelude sample-accurately on both tracks.
+    // PRE_SEEK_MARGIN_SECONDS prelude on the video side (the AAC encoder
+    // ignores this on the audio side — see the `-af atrim` below).
     // `-output_ts_offset` is also placed here (after `-i`) because it's
     // an OPT_OUTPUT option in FFmpeg — see the comment block above.
-    if (postSeek > 0) args.push('-ss', String(postSeek));
+    if (postSeek > 0) {
+      args.push('-ss', String(postSeek));
+      // Sample-accurate audio trim. `-ss` after `-i` does NOT reliably
+      // drop the pre-seek prelude for an AAC / AC-3 / EAC-3 re-encode:
+      // the encoder receives the full decoded stream starting at the
+      // input-seek point (internal_t = 0) and emits packets from
+      // PTS = 0, which after `output_ts_offset = preSeek` lands at
+      // tfdt = preSeek instead of preSeek + postSeek. On a Chromecast
+      // (which doesn't honour fMP4 `edts/elst` for priming) that
+      // surfaces as the new segment overlapping the previous one's
+      // last PRE_SEEK_MARGIN_SECONDS of audio — a 2 s "echo" at every
+      // rotation seam. `atrim` runs in the filter graph (before the
+      // encoder), so the prelude is dropped sample-accurately; we
+      // intentionally skip `asetpts` so the first kept sample keeps
+      // PTS = postSeek and `output_ts_offset` lifts it to the
+      // expected boundary.
+      args.push('-af', `atrim=start=${postSeek}`);
+    }
     args.push('-output_ts_offset', String(preSeek));
   }
 
@@ -557,8 +575,14 @@ export function buildAudioOnlyFfmpegArgs(
 
   if (startSegment > 0) {
     // `-ss postSeek` + `-output_ts_offset preSeek` placed after `-i` —
-    // both are OPT_OUTPUT options. Same rationale as buildFfmpegArgs.
-    if (postSeek > 0) args.push('-ss', String(postSeek));
+    // both are OPT_OUTPUT options. `atrim` runs in the audio filter
+    // graph and is what actually drops the pre-seek prelude before
+    // the AAC encoder sees it — `-ss` post-`-i` is unreliable here
+    // (see the comment block in `buildFfmpegArgs`).
+    if (postSeek > 0) {
+      args.push('-ss', String(postSeek));
+      args.push('-af', `atrim=start=${postSeek}`);
+    }
     args.push('-output_ts_offset', String(preSeek));
   }
 

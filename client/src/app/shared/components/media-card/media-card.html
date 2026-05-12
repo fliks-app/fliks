@@ -37,7 +37,7 @@
 
     <!-- Rating badge (bottom-left, portrait only) -->
     @if (_rating() > 0 && aspect() === 'portrait') {
-      <div class="absolute bottom-1.5 left-1.5 z-20 flex items-center gap-0.5 bg-black/60 rounded-md px-1.5 py-0.5">
+      <div class="absolute bottom-1.5 left-1.5 z-10 flex items-center gap-0.5 bg-black/60 rounded-md px-1.5 py-0.5">
         <svg lucideStar class="h-3 w-3 text-yellow-400 fill-yellow-400"></svg>
         <span class="text-[11px] text-white font-semibold tabular-nums">{{ _rating() | number:'1.1-1' }}</span>
       </div>
@@ -45,7 +45,7 @@
 
     <!-- Top-left: missing-files indicator (auto), status badge, episode number -->
     @if (_resolvedStatus() === 'missing' || statusBadge() || topLeftBadge()) {
-      <div class="absolute top-2 left-2 z-30 flex items-center gap-1">
+      <div class="absolute top-2 left-2 z-10 flex items-center gap-1">
         @if (_resolvedStatus() === 'missing') {
           <svg
             lucideCircleX
@@ -64,7 +64,7 @@
 
     <!-- Top-right: discover badge OR status icon -->
     @if (badge()) {
-      <div class="absolute top-1.5 right-1.5 z-20">
+      <div class="absolute top-1.5 right-1.5 z-10">
         @switch (badge()) {
           @case ('library') {
             <div class="w-6 h-6 rounded-full bg-success flex items-center justify-center shadow">
@@ -86,7 +86,7 @@
     } @else if (interactiveWatched()) {
       <button
         type="button"
-        class="absolute top-1.5 right-1.5 z-20 w-6 h-6 rounded-full flex items-center justify-center shadow transition-colors cursor-pointer"
+        class="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded-full flex items-center justify-center shadow transition-colors cursor-pointer"
         [class.bg-success]="status() === 'watched'"
         [class.hover:bg-success/90]="status() === 'watched'"
         [class.bg-black/50]="status() !== 'watched'"
@@ -102,7 +102,7 @@
         ></svg>
       </button>
     } @else if (_resolvedStatus() === 'watched') {
-      <div class="absolute top-1.5 right-1.5 z-20">
+      <div class="absolute top-1.5 right-1.5 z-10">
         <div class="w-6 h-6 rounded-full bg-success flex items-center justify-center shadow">
           <svg lucideCheck class="h-3.5 w-3.5 text-success-content"></svg>
         </div>
@@ -134,7 +134,7 @@
     @if (showHoverOverlay() && cardActions().length) {
       <button
         type="button"
-        class="absolute top-2 right-2 z-20 btn btn-circle btn-sm border-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/65"
+        class="absolute top-2 right-2 z-10 btn btn-circle btn-sm border-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/65"
         (click)="openActions($event)"
         [attr.aria-label]="'media_card.actions' | translate"
       >
