@@ -479,9 +479,21 @@ export class MediaService {
       this.applyFullTextSearch(qb, query.q);
     }
 
-    const sortBy = query.sortBy ?? 'media.title';
-    const sortOrder = query.sortOrder ?? 'ASC';
-    qb.orderBy(sortBy.includes('.') ? sortBy : `media.${sortBy}`, sortOrder);
+    // Whitelist + column mapping for ORDER BY. The raw `sortBy` value
+    // arrives from the client, so we must reject anything outside the
+    // allowed keys (otherwise the string ends up concatenated into the
+    // SQL — classic ORDER BY injection vector) and translate UI-side
+    // aliases like `added` to the actual physical column (`createdAt`,
+    // inherited from BaseEntity).
+    const SORT_BY_MAP: Record<string, string> = {
+      title: 'media.title',
+      year: 'media.year',
+      added: 'media.createdAt',
+      rating: 'media.rating',
+    };
+    const sortBy = SORT_BY_MAP[query.sortBy ?? 'title'] ?? 'media.title';
+    const sortOrder = query.sortOrder === 'DESC' ? 'DESC' : 'ASC';
+    qb.orderBy(sortBy, sortOrder);
 
     if (limit > 0) {
       qb.skip(offset).take(limit);
