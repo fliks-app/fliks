@@ -317,23 +317,11 @@ export class PlaybackService implements OnModuleInit {
 
   async getContinueWatching(
     userId: number,
-    accessibleLibraryIds?: number[] | null,
+    accessibleLibraryIds: number[],
   ): Promise<ContinueWatchingItem[]> {
-    if (
-      accessibleLibraryIds !== undefined &&
-      accessibleLibraryIds !== null &&
-      accessibleLibraryIds.length === 0
-    ) {
-      return [];
-    }
-    const libFilter =
-      accessibleLibraryIds === undefined || accessibleLibraryIds === null
-        ? ''
-        : ` AND m."libraryId" = ANY($2)`;
-    const params: unknown[] =
-      accessibleLibraryIds === undefined || accessibleLibraryIds === null
-        ? [userId]
-        : [userId, accessibleLibraryIds];
+    if (accessibleLibraryIds.length === 0) return [];
+    const libFilter = ` AND m."libraryId" = ANY($2)`;
+    const params: unknown[] = [userId, accessibleLibraryIds];
     // 1. Movies: in-progress, one per media (guaranteed unique by new schema)
     const movies: ContinueWatchingItem[] = await this.repo.query(
       `SELECT
@@ -470,24 +458,17 @@ export class PlaybackService implements OnModuleInit {
     userId: number,
     page: number,
     limit: number,
-    accessibleLibraryIds?: number[] | null,
+    accessibleLibraryIds: number[],
   ): Promise<{ data: WatchHistoryItem[]; total: number }> {
-    if (
-      accessibleLibraryIds !== undefined &&
-      accessibleLibraryIds !== null &&
-      accessibleLibraryIds.length === 0
-    ) {
-      return { data: [], total: 0 };
-    }
-    const useAcl =
-      accessibleLibraryIds !== undefined && accessibleLibraryIds !== null;
+    if (accessibleLibraryIds.length === 0) return { data: [], total: 0 };
 
     // No dedup needed — one state per (mediaId, episodeId) by design
     const countResult = await this.repo.query(
       `SELECT COUNT(*) AS cnt
        FROM playback_states ps
-       WHERE ps."userId" = $1 AND ps."playedAt" IS NOT NULL${useAcl ? ` AND EXISTS (SELECT 1 FROM media mAcl WHERE mAcl.id = ps."mediaId" AND mAcl."libraryId" = ANY($2))` : ''}`,
-      useAcl ? [userId, accessibleLibraryIds] : [userId],
+       WHERE ps."userId" = $1 AND ps."playedAt" IS NOT NULL
+         AND EXISTS (SELECT 1 FROM media mAcl WHERE mAcl.id = ps."mediaId" AND mAcl."libraryId" = ANY($2))`,
+      [userId, accessibleLibraryIds],
     );
     const total = Number(countResult[0]?.cnt ?? 0);
 
@@ -509,12 +490,11 @@ export class PlaybackService implements OnModuleInit {
        JOIN media m ON m.id = ps."mediaId"
        LEFT JOIN episodes e ON e.id = ps."episodeId"
        LEFT JOIN seasons s ON s.id = e."seasonId"
-       WHERE ps."userId" = $1 AND ps."playedAt" IS NOT NULL${useAcl ? ` AND m."libraryId" = ANY($4)` : ''}
+       WHERE ps."userId" = $1 AND ps."playedAt" IS NOT NULL
+         AND m."libraryId" = ANY($4)
        ORDER BY ps."playedAt" DESC
        LIMIT $2 OFFSET $3`,
-      useAcl
-        ? [userId, limit, (page - 1) * limit, accessibleLibraryIds]
-        : [userId, limit, (page - 1) * limit],
+      [userId, limit, (page - 1) * limit, accessibleLibraryIds],
     );
 
     for (const item of data) {
@@ -535,31 +515,17 @@ export class PlaybackService implements OnModuleInit {
 
   async getWatchedMediaIds(
     userId: number,
-    accessibleLibraryIds?: number[] | null,
+    accessibleLibraryIds: number[],
   ): Promise<number[]> {
-    if (
-      accessibleLibraryIds !== undefined &&
-      accessibleLibraryIds !== null &&
-      accessibleLibraryIds.length === 0
-    ) {
-      return [];
-    }
-    const useAcl =
-      accessibleLibraryIds !== undefined && accessibleLibraryIds !== null;
-    const movieFilter = useAcl ? ` AND m."libraryId" = ANY($2)` : '';
-    const seriesFilter = useAcl
-      ? ` AND EXISTS (SELECT 1 FROM media m2 WHERE m2.id = s."mediaId" AND m2."libraryId" = ANY($2))`
-      : '';
-    const params: unknown[] = useAcl
-      ? [userId, accessibleLibraryIds]
-      : [userId];
+    if (accessibleLibraryIds.length === 0) return [];
 
     const rows: { id: number }[] = await this.repo.query(
       `
       SELECT DISTINCT ps."mediaId" AS id
       FROM playback_states ps
       JOIN media m ON m.id = ps."mediaId"
-      WHERE ps."userId" = $1 AND ps.completed = true AND m.type = 'movie'${movieFilter}
+      WHERE ps."userId" = $1 AND ps.completed = true AND m.type = 'movie'
+        AND m."libraryId" = ANY($2)
 
       UNION
 
@@ -568,11 +534,12 @@ export class PlaybackService implements OnModuleInit {
       JOIN episodes e ON e."seasonId" = s.id
       LEFT JOIN playback_states ps
         ON ps."userId" = $1 AND ps."episodeId" = e.id AND ps.completed = true
-      WHERE s."seasonNumber" > 0 AND e."hasFile" = true${seriesFilter}
+      WHERE s."seasonNumber" > 0 AND e."hasFile" = true
+        AND EXISTS (SELECT 1 FROM media m2 WHERE m2.id = s."mediaId" AND m2."libraryId" = ANY($2))
       GROUP BY s."mediaId"
       HAVING COUNT(*) > 0 AND COUNT(*) = COUNT(ps.id)
       `,
-      params,
+      [userId, accessibleLibraryIds],
     );
     return rows.map((r) => r.id);
   }

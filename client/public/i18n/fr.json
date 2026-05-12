@@ -482,7 +482,9 @@
     "filter_disabled": "Désactivé",
     "filter_monitoring_label": "Surveillance",
     "filter_status_label": "Statut",
-    "coming_soon": "Bientôt disponible"
+    "coming_soon": "Bientôt disponible",
+    "suggestions_empty": "Pas encore de suggestions",
+    "suggestions_empty_hint": "Regardez quelques films / séries pour alimenter les recommandations basées sur votre historique."
   },
   "movies": {
     "title": "Films"

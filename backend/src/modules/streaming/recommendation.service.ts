@@ -49,7 +49,7 @@
  *   not full series completion.
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Media } from '../media/entities/media.entity';
@@ -110,8 +110,13 @@ export class RecommendationService {
 
   async getRecommendations(
     userId: number,
-    accessibleLibraryIds?: number[] | null,
+    accessibleLibraryIds: number[],
+    /** Override the default 15-item cap. Capped server-side at 50 by
+     *  the controller, so this only widens — passing larger values has
+     *  no effect once the cap is hit. */
+    limit?: number,
   ): Promise<RecommendationItem[]> {
+    if (accessibleLibraryIds.length === 0) return [];
     // 1. Recently completed media
     const recentStates = await this.playbackRepo.find({
       where: { user: { id: userId }, completed: true },
@@ -180,12 +185,7 @@ export class RecommendationService {
       });
     }
 
-    if (accessibleLibraryIds !== undefined && accessibleLibraryIds !== null) {
-      if (accessibleLibraryIds.length === 0) return [];
-      qb.andWhere('m."libraryId" IN (:...libs)', {
-        libs: accessibleLibraryIds,
-      });
-    }
+    qb.andWhere('m."libraryId" IN (:...libs)', { libs: accessibleLibraryIds });
 
     const candidates = await qb.getMany();
 
@@ -227,8 +227,10 @@ export class RecommendationService {
     // type when both exist in the candidate pool. If only one type has
     // recommendations, the cap is lifted in the fill pass so we don't
     // return fewer than 15 items just to enforce diversity.
-    const PER_TYPE_CAP = 10;
-    const TOTAL = 15;
+    const TOTAL = limit ?? 15;
+    // Keep the per-type cap proportional so a wider window still
+    // guarantees a real mix between movies + series.
+    const PER_TYPE_CAP = Math.max(10, Math.ceil(TOTAL * 0.7));
     const top: typeof scored = [];
     const overflow: typeof scored = [];
     const perType: Record<string, number> = {};

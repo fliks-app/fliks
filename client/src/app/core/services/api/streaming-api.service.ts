@@ -349,15 +349,27 @@ export class StreamingApiService {
     );
   }
 
-  getContinueWatching() {
+  getContinueWatching(libraryId?: number) {
+    const params = libraryId
+      ? { params: { libraryId: String(libraryId) } }
+      : {};
     return firstValueFrom(
-      this.http.get<ContinueWatchingItem[]>('/api/playback/continue-watching'),
+      this.http.get<ContinueWatchingItem[]>(
+        '/api/playback/continue-watching',
+        params,
+      ),
     );
   }
 
-  getRecommendations() {
+  getRecommendations(opts: { libraryId?: number; limit?: number } = {}) {
+    const params: Record<string, string> = {};
+    if (opts.libraryId) params['libraryId'] = String(opts.libraryId);
+    if (opts.limit) params['limit'] = String(opts.limit);
     return firstValueFrom(
-      this.http.get<RecommendationItem[]>('/api/playback/recommendations'),
+      this.http.get<RecommendationItem[]>(
+        '/api/playback/recommendations',
+        Object.keys(params).length ? { params } : {},
+      ),
     );
   }
 

@@ -22,6 +22,11 @@ import { ProfilesService, QualityProfile } from '../../core/services/api/profile
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
+import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
+import type {
+  ContinueWatchingItem,
+  RecommendationItem,
+} from '../../core/services/api/streaming-api.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { FocusMemoryService } from '../../core/services/focus-memory.service';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -54,6 +59,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
   imports: [
     MediaCardComponent,
     DropdownMenuComponent,
+    HorizontalScrollerComponent,
     FormsModule,
     TranslateModule,
     LucideSearch,
@@ -96,6 +102,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
   readonly filterMonitored = signal<FilterMonitored>('');
   readonly filterStatus = signal('');
   readonly viewMode = signal<LibraryViewMode>('all');
+
+  // ── Suggestions view ────────────────────────────────────────────────
+  /** Continue-watching items, scoped to the active library. */
+  readonly suggestionsContinue = signal<ContinueWatchingItem[]>([]);
+  /** History-based recommendations, scoped to the active library. */
+  readonly suggestionsRecommendations = signal<RecommendationItem[]>([]);
+  readonly suggestionsLoading = signal(false);
 
   readonly monitoredCount = computed(() => this.list.all().filter((m) => m.monitored).length);
   readonly movieFileCount = computed(() =>
@@ -206,6 +219,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.list.trackScroll('media');
       this.syncQueryParams();
       await this.load(lib.id);
+      if (this.viewMode() === 'suggestions') {
+        // Either a deep-link with `?view=suggestions` or a return from
+        // back-nav with the persisted mode. Fetch the suggestions data
+        // alongside the regular grid so the panel isn't empty.
+        void this.loadSuggestions();
+      }
       this.scrollMemory.restore(scrollKey, this.injector);
       if (this.tv.isTv()) {
         afterNextRender(() => this.applyDefaultFocus(lib.id), { injector: this.injector });
@@ -224,6 +243,11 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.scrollMemory.activate(scrollKey);
       this.navbar.setPageTitle(lib.name);
       void this.load(lib.id, true);
+      // Re-fire suggestions when we're on that tab so the SWR cache
+      // has a chance to bring in fresh data on a back-navigation.
+      if (this.viewMode() === 'suggestions') {
+        void this.loadSuggestions();
+      }
       this.scrollMemory.restoreSticky(scrollKey);
       if (this.tv.isTv()) {
         this.arrivedViaBack = true;
@@ -302,6 +326,33 @@ export class LibraryComponent implements OnInit, OnDestroy {
   setViewMode(mode: LibraryViewMode) {
     this.viewMode.set(mode);
     this.syncQueryParams();
+    if (mode === 'suggestions') {
+      void this.loadSuggestions();
+    }
+  }
+
+  /** Fetches continue-watching + recommendations for the active library.
+   *  No in-memory dedup — the HTTP cache (stale-while-revalidate) handles
+   *  the no-op case when the entry is fresh, and we want every `attached$`
+   *  re-visit to give the SWR a chance to pull in updated data. Signals
+   *  keep their previous value until each response lands, so flipping
+   *  between tabs never blanks the panel. */
+  private async loadSuggestions(): Promise<void> {
+    const lib = this.library();
+    if (!lib) return;
+    this.suggestionsLoading.set(true);
+    try {
+      const [cw, recs] = await Promise.all([
+        this.streamingApi.getContinueWatching(lib.id).catch(() => null),
+        this.streamingApi
+          .getRecommendations({ libraryId: lib.id, limit: 30 })
+          .catch(() => null),
+      ]);
+      if (cw) this.suggestionsContinue.set(cw);
+      if (recs) this.suggestionsRecommendations.set(recs);
+    } finally {
+      this.suggestionsLoading.set(false);
+    }
   }
 
   toggleSelect(id: number) {

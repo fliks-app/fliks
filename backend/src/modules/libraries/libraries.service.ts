@@ -145,13 +145,17 @@ export class LibrariesService implements OnModuleInit {
   // ---------------------------------------------------------------------------
 
   /**
-   * Returns the list of library IDs the user can read.
-   *  - `null` means "no filter" — admins or users with `manage:all`.
-   *  - `[]` means "user has no library access" — caller should return empty.
-   *  - non-empty array — apply `WHERE libraryId IN (…)`.
+   * Returns the list of library IDs the user can read. Always concrete —
+   * admins / `manage:all` get every existing library ID (resolved at call
+   * time, so libraries added after login show up immediately). `[]` means
+   * the user has no library access at all and the caller should return
+   * empty without further work.
    */
-  async getAccessibleLibraryIds(user: User): Promise<number[] | null> {
-    if (user.isAdmin || user.permissions.includes('manage:all')) return null;
+  async getAccessibleLibraryIds(user: User): Promise<number[]> {
+    if (user.isAdmin || user.permissions.includes('manage:all')) {
+      const rows = await this.repo.find({ select: ['id'] });
+      return rows.map((r) => r.id);
+    }
     // libraryId is @RelationId — TypeORM auto-populates it without loading the
     // related Library entity.
     const rows = await this.accessRepo.find({
