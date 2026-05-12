@@ -30,10 +30,27 @@ export class PlaybackController {
   ) {}
 
   @Get('recommendations')
-  async recommendations(@Req() req: Request) {
+  async recommendations(
+    @Req() req: Request,
+    @Query('libraryId') libraryIdRaw?: string,
+    @Query('limit') limitRaw?: string,
+  ) {
     const user = req.user as User;
-    const libraryIds = await this.libraries.getAccessibleLibraryIds(user);
-    return this.recommendationService.getRecommendations(user.id, libraryIds);
+    const accessible = await this.libraries.getAccessibleLibraryIds(user);
+    // Scope to a single library when requested, but only if it's in the
+    // user's accessible set — silent intersection (empty result) rather
+    // than a 403, to keep the page renderable.
+    let libraryIds = accessible;
+    const libraryId = libraryIdRaw ? parseInt(libraryIdRaw, 10) : null;
+    if (libraryId && Number.isFinite(libraryId)) {
+      libraryIds = accessible.includes(libraryId) ? [libraryId] : [];
+    }
+    const limit = limitRaw ? Math.min(50, Math.max(1, parseInt(limitRaw, 10) || 15)) : undefined;
+    return this.recommendationService.getRecommendations(
+      user.id,
+      libraryIds,
+      limit,
+    );
   }
 
   /** Persist a "remove from recommendations" gesture. Idempotent. */
@@ -67,9 +84,17 @@ export class PlaybackController {
   }
 
   @Get('continue-watching')
-  async continueWatching(@Req() req: Request) {
+  async continueWatching(
+    @Req() req: Request,
+    @Query('libraryId') libraryIdRaw?: string,
+  ) {
     const user = req.user as User;
-    const libraryIds = await this.libraries.getAccessibleLibraryIds(user);
+    const accessible = await this.libraries.getAccessibleLibraryIds(user);
+    let libraryIds = accessible;
+    const libraryId = libraryIdRaw ? parseInt(libraryIdRaw, 10) : null;
+    if (libraryId && Number.isFinite(libraryId)) {
+      libraryIds = accessible.includes(libraryId) ? [libraryId] : [];
+    }
     return this.playbackService.getContinueWatching(user.id, libraryIds);
   }
 

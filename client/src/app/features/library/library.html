@@ -323,8 +323,54 @@
         </div>
       </div>
     }
+  } @else if (viewMode() === 'suggestions') {
+    @if (suggestionsLoading()) {
+      <div class="flex justify-center py-12">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    } @else {
+      <!-- Continue watching (horizontal scroller). Hidden when nothing
+           in-progress in this library so we don't render an empty row. -->
+      @if (suggestionsContinue().length) {
+        <app-horizontal-scroller [title]="'home.continue_watching' | translate">
+          @for (item of suggestionsContinue(); track item.id) {
+            <app-media-card
+              [aspect]="'landscape'"
+              [imageUrl]="item.fanartUrl ?? item.posterUrl"
+              [title]="item.mediaTitle"
+              [subtitle]="item.episodeLabel ?? undefined"
+              [progressPercent]="item.progressPercent"
+              [link]="['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId]"
+              [subtitleLink]="item.episodeId ? ['/series', '' + item.mediaId, 'episode', '' + item.episodeId] : null"
+            />
+          }
+        </app-horizontal-scroller>
+      }
+
+      <!-- Recommendations grid — same column rhythm as the main `all`
+           grid so the suggestions feel like a continuation of the same
+           page rather than a separate component. -->
+      @if (suggestionsRecommendations().length) {
+        <h2 class="text-lg font-semibold mt-2">{{ 'home.recommendations' | translate }}</h2>
+        <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4">
+          @for (rec of suggestionsRecommendations(); track rec.media.id) {
+            <app-media-card
+              [imageUrl]="rec.media.posterUrl"
+              [title]="rec.media.title"
+              [subtitle]="rec.media.year ? '' + rec.media.year : undefined"
+              [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
+            />
+          }
+        </div>
+      } @else if (!suggestionsContinue().length) {
+        <div class="text-center py-24 text-base-content/50">
+          <p class="text-lg">{{ 'library.suggestions_empty' | translate }}</p>
+          <p class="text-sm mt-2">{{ 'library.suggestions_empty_hint' | translate }}</p>
+        </div>
+      }
+    }
   } @else {
-    <!-- Placeholders for upcoming views -->
+    <!-- Genres placeholder (next iteration). -->
     <div class="text-center py-24 text-base-content/50">
       <p class="text-lg">{{ 'library.coming_soon' | translate }}</p>
     </div>

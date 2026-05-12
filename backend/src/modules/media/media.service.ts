@@ -388,7 +388,7 @@ export class MediaService {
   }
 
   async getCounts(
-    accessibleLibraryIds?: number[] | null,
+    accessibleLibraryIds: number[],
   ): Promise<{ movies: number; series: number }> {
     const buildQb = (type: MediaType) => {
       const qb = this.mediaRepo
@@ -405,7 +405,7 @@ export class MediaService {
   }
 
   async getCountsByLibrary(
-    accessibleLibraryIds: number[] | null,
+    accessibleLibraryIds: number[],
   ): Promise<Record<number, number>> {
     const qb = this.mediaRepo
       .createQueryBuilder('m')
@@ -421,7 +421,7 @@ export class MediaService {
   async findAll(
     query: SearchMediaDto,
     userId?: number,
-    accessibleLibraryIds?: number[] | null,
+    accessibleLibraryIds: number[] = [],
   ): Promise<{ data: Media[]; total: number }> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 25;
@@ -614,14 +614,18 @@ export class MediaService {
     return { data: enriched, total };
   }
 
+  /** When `accessibleLibraryIds` is omitted the lookup is unscoped — used
+   *  by internal callers (admin approve path, schedulers) that have
+   *  already validated access. Controllers must pass the user's library
+   *  set so the result respects the ACL. */
   async findByTmdbId(
     tmdbId: number,
     type: MediaType,
-    accessibleLibraryIds?: number[] | null,
+    accessibleLibraryIds?: number[],
   ): Promise<Media | null> {
     const m = await this.mediaRepo.findOne({ where: { tmdbId, type } });
     if (!m) return null;
-    if (accessibleLibraryIds !== undefined && accessibleLibraryIds !== null) {
+    if (accessibleLibraryIds) {
       if (m.libraryId == null || !accessibleLibraryIds.includes(m.libraryId)) {
         return null;
       }
@@ -632,13 +636,11 @@ export class MediaService {
   /**
    * Throws NotFoundException when the media exists but is outside the user's
    * accessible libraries — same shape as "not found" so we don't leak existence.
-   * Pass `null` to skip the check (admins / internal callers).
    */
   async assertAccessible(
     mediaId: number,
-    accessibleLibraryIds: number[] | null,
+    accessibleLibraryIds: number[],
   ): Promise<void> {
-    if (accessibleLibraryIds === null) return;
     // `libraryId` is a @RelationId virtual — TypeORM's findOne + select
     // can't project it. Use a raw query on the join column instead.
     const row = await this.mediaRepo
@@ -672,15 +674,16 @@ export class MediaService {
     return e.season.mediaId;
   }
 
-  /** Adds `WHERE <alias>.libraryId IN (...)` when ACL is in effect. Uses the
-   *  query builder's own alias so it works whether the caller aliased the
-   *  media table as "media" (default) or "m" (findAll / counts queries). */
+  /** Adds `WHERE <alias>.libraryId IN (...)` to scope a query to the
+   *  caller's accessible libraries. Uses the query builder's own alias
+   *  so it works whether the caller aliased the media table as "media"
+   *  (default) or "m" (findAll / counts queries). An empty array short-
+   *  circuits to `1 = 0` so the caller still hits a real WHERE and
+   *  returns no rows. */
   private applyLibraryAcl(
     qb: SelectQueryBuilder<Media>,
-    accessibleLibraryIds: number[] | null | undefined,
+    accessibleLibraryIds: number[],
   ): void {
-    if (accessibleLibraryIds === undefined || accessibleLibraryIds === null)
-      return;
     if (accessibleLibraryIds.length === 0) {
       qb.andWhere('1 = 0');
       return;
@@ -879,7 +882,7 @@ export class MediaService {
 
   async getCalendar(
     dto: CalendarQueryDto,
-    accessibleLibraryIds?: number[] | null,
+    accessibleLibraryIds: number[],
     userId?: number,
   ) {
     // TypeORM may return PostgreSQL `date` columns as Date objects.
@@ -954,14 +957,12 @@ export class MediaService {
       if (dto.requestedByMe && userId) {
         moviesQb.andWhere('m."addedById" = :calUserId', { calUserId: userId });
       }
-      if (accessibleLibraryIds !== undefined && accessibleLibraryIds !== null) {
-        if (accessibleLibraryIds.length === 0) {
-          moviesQb.andWhere('1 = 0');
-        } else {
-          moviesQb.andWhere('m.libraryId IN (:...accessibleLibraryIds)', {
-            accessibleLibraryIds,
-          });
-        }
+      if (accessibleLibraryIds.length === 0) {
+        moviesQb.andWhere('1 = 0');
+      } else {
+        moviesQb.andWhere('m.libraryId IN (:...accessibleLibraryIds)', {
+          accessibleLibraryIds,
+        });
       }
       const movies = await moviesQb.getMany();
 
@@ -1022,14 +1023,12 @@ export class MediaService {
       if (dto.requestedByMe && userId) {
         epQb.andWhere('media."addedById" = :calUserId', { calUserId: userId });
       }
-      if (accessibleLibraryIds !== undefined && accessibleLibraryIds !== null) {
-        if (accessibleLibraryIds.length === 0) {
-          epQb.andWhere('1 = 0');
-        } else {
-          epQb.andWhere('media.libraryId IN (:...accessibleLibraryIds)', {
-            accessibleLibraryIds,
-          });
-        }
+      if (accessibleLibraryIds.length === 0) {
+        epQb.andWhere('1 = 0');
+      } else {
+        epQb.andWhere('media.libraryId IN (:...accessibleLibraryIds)', {
+          accessibleLibraryIds,
+        });
       }
       const episodes = await epQb.getMany();
 
