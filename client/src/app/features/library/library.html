@@ -1,9 +1,12 @@
 <div class="flex flex-col gap-4 h-full">
-  <!-- Library title -->
-  <h1 class="text-2xl font-bold">{{ libraryName() }}</h1>
+  <!-- Library title — hidden when the mobile topbar already shows it
+       (avoids the duplicated heading on small screens). -->
+  @if (!navbar.mobileNavbarVisible()) {
+    <h1 class="text-2xl font-bold">{{ libraryName() }}</h1>
+  }
 
   <!-- View tabs (own row, centered like the reference) -->
-  <nav class="flex items-center gap-1">
+  <nav class="flex items-center gap-1 mt-2">
     <button
       type="button"
       class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
@@ -49,6 +52,20 @@
       <span class="text-sm text-base-content/70 mr-1">
         {{ 'library.element_count' | translate:{ count: list.total() } }}
       </span>
+
+      @if (selectedGenre()) {
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/15 text-primary text-sm">
+          <span class="font-medium">{{ selectedGenre() }}</span>
+          <button
+            type="button"
+            class="hover:bg-primary/20 rounded-full p-0.5"
+            [attr.aria-label]="'library.clear_genre' | translate"
+            (click)="clearSelectedGenre()"
+          >
+            <svg lucideX class="h-3 w-3"></svg>
+          </button>
+        </span>
+      }
 
       <div class="flex items-center gap-1">
         <select
@@ -204,8 +221,8 @@
           <button class="btn btn-xs btn-ghost" (click)="deselectAll()">{{ 'library.bulk_deselect' | translate }}</button>
         </div>
       }
-      <div class="flex gap-2 h-full">
-        <div class="flex-1 min-w-0 pr-2 lg:pr-4 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4">
+      <div class="flex gap-1">
+        <div class="flex-1 min-w-0 pr-1 lg:pr-2 grid content-start grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4">
           @for (item of list.visible(); track item.id) {
             @if (bulkMode()) {
               <div
@@ -233,14 +250,14 @@
         <!-- Alphabet sidebar — only meaningful when items are actually
              ordered alphabetically (sort=title ASC). Any other sort
              would make the letter jumps random, so we hide it.
-             Sticky at viewport mid: now that <main> uses `overflow-x:
-             clip` (instead of `hidden`), it's no longer a vertical scroll
-             container, so sticky's nearest scroll ancestor is the actual
-             page scroll. `self-start` keeps the nav at its content size
-             inside the flex parent so sticky has room to pin within the
-             column. -->
+             `position: fixed` rather than sticky: sticky would un-stick
+             whenever the cards grid is shorter than the viewport (no
+             containing block to anchor against), leaving the alphabet
+             floating against the cards instead of the viewport mid.
+             Fixed keeps it nailed to the right side at vertical center
+             regardless of how many items the grid holds. -->
         @if (sortBy() === 'title' && sortOrder() === 'ASC') {
-          <nav class="sticky top-[50vh] -translate-y-1/2 self-start z-20 flex flex-col items-center gap-0 select-none tv:pt-20">
+          <nav class="fixed top-1/2 right-1 lg:right-2 -translate-y-1/2 z-20 flex flex-col items-center gap-0 select-none tv:pt-20">
             @for (letter of alphabet; track letter) {
               <button
                 type="button"
@@ -369,8 +386,56 @@
         </div>
       }
     }
+  } @else if (viewMode() === 'genres') {
+    <div class="flex items-center gap-3">
+      <span class="text-sm text-base-content/70">
+        {{ 'library.element_count' | translate:{ count: genresList().length } }}
+      </span>
+    </div>
+    @if (genresLoading() && !genresList().length) {
+      <div class="flex justify-center py-12">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    } @else if (!genresList().length) {
+      <div class="text-center py-24 text-base-content/50">
+        <p class="text-lg">{{ 'library.genres_empty' | translate }}</p>
+      </div>
+    } @else {
+      <!-- Genre grid — Emby-style: each card is a 4-poster mosaic
+           (when posters are available) or a folder icon, with the
+           genre name below. Click → pivot to `all` with the genre
+           filter applied. -->
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 gap-3 sm:gap-4">
+        @for (g of genresList(); track g.genre) {
+          <button
+            type="button"
+            class="group flex flex-col items-stretch gap-2 text-left focus:outline-none"
+            (click)="pickGenre(g.genre)"
+          >
+            <div class="aspect-square rounded-xl overflow-hidden bg-base-300 ring-1 ring-base-300 group-hover:ring-primary group-focus-visible:ring-primary group-focus-visible:ring-2 transition-colors">
+              @if (g.posters.length >= 4) {
+                <div class="grid grid-cols-2 grid-rows-2 w-full h-full">
+                  @for (p of g.posters.slice(0, 4); track p) {
+                    <img appImgFadeIn [src]="p | resolveUrl:'thumb'" alt="" loading="lazy" class="w-full h-full object-cover" />
+                  }
+                </div>
+              } @else if (g.posters.length > 0) {
+                <img appImgFadeIn [src]="g.posters[0] | resolveUrl:'medium'" alt="" loading="lazy" class="w-full h-full object-cover" />
+              } @else {
+                <div class="w-full h-full flex items-center justify-center text-base-content/30">
+                  <svg lucideFolder class="w-12 h-12" [strokeWidth]="1.5"></svg>
+                </div>
+              }
+            </div>
+            <div class="text-sm">
+              <div class="font-medium truncate group-hover:text-primary transition-colors">{{ g.genre }}</div>
+              <div class="text-xs text-base-content/50">{{ g.count }}</div>
+            </div>
+          </button>
+        }
+      </div>
+    }
   } @else {
-    <!-- Genres placeholder (next iteration). -->
     <div class="text-center py-24 text-base-content/50">
       <p class="text-lg">{{ 'library.coming_soon' | translate }}</p>
     </div>

@@ -148,6 +148,15 @@ export interface MediaPage {
   total: number;
 }
 
+/** One row of the library Genres tab: a genre, how many media carry it,
+ *  and the URLs of the first up-to-4 posters (rendered as a mosaic
+ *  when populated, fallback folder icon when empty). */
+export interface GenreSummary {
+  genre: string;
+  count: number;
+  posters: string[];
+}
+
 export interface SearchParams {
   q?: string;
   type?: MediaType;
@@ -230,6 +239,15 @@ export class MediaService {
   getCountsByLibrary() {
     return firstValueFrom(
       this.http.get<Record<number, number>>('/api/media/counts-by-library'),
+    );
+  }
+
+  getGenres(libraryId?: number) {
+    const params = libraryId
+      ? { params: { libraryId: String(libraryId) } }
+      : {};
+    return firstValueFrom(
+      this.http.get<GenreSummary[]>('/api/media/genres', params),
     );
   }
 
