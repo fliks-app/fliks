@@ -1,9 +1,10 @@
-# Long-running QSV transcodes + seek-resume seam
+# Long-running QSV transcodes + uniform-grid segment timing
 
-This note explains the encoder configuration and the seek-resume FFmpeg
-args used by `backend/src/modules/streaming/transcoding/ffmpeg-args.ts`,
-plus the two bugs they fix. Keep it next to the source — when you
-question why a flag is there, the answer is here.
+This note explains the encoder configuration and the timestamp-wiring
+FFmpeg args used by
+`backend/src/modules/streaming/transcoding/ffmpeg-args.ts`, plus the
+three bugs they fix. Keep it next to the source — when you question
+why a flag is there, the answer is here.
 
 ## Background
 
@@ -14,9 +15,12 @@ segment request, killed only on seek-resume (when the player requests a
 segment ahead of the encoder's frontier by more than
 `SEEK_WAIT_THRESHOLD`).
 
-Two distinct issues bite in this setup. The first concerns the encoder
-itself drifting over long runs; the second concerns the timestamp
-wiring at seek-resume. They each have their own root cause and fix.
+Three distinct issues bite in this setup. The first concerns the
+encoder itself drifting over long runs. The second concerns the
+timestamp wiring on every spawn — required for subtitle alignment on
+cold spawns and for video/audio alignment on seek-resume. The third
+concerns the HLS segment grid, which has to stay uniform from `t=0`
+onwards. They each have their own root cause and fix.
 
 ## Issue 1 — 45 s GOPs after ~17 min of continuous encoding
 
@@ -59,7 +63,31 @@ edges so the HLS muxer cuts cleanly on each forced IDR. Tight VBV
 is the secondary factor that lets the encoder defer big I-frames on
 dense scenes.
 
-## Issue 2 — A/V seam after a user seek
+## Issue 2 — Subtitle drift on cold spawn + A/V seam on seek-resume
+
+These look like two bugs but share a single root cause: the fmp4
+muxer's default timestamp policy doesn't preserve source PTS. The fix
+is the same on every spawn — only the post-`-i` `-ss` differs between
+cold and seek paths.
+
+### 2a — Subtitle cues drift on cold spawn (T = 0)
+
+**Symptom.** On Android (native ExoPlayer), external subtitle cues
+sit a few hundred ms to a few seconds out of sync from playback start.
+Web/Shaka clients shift the cue track to compensate so the bug is
+visible only on receivers that trust the manifest timestamps verbatim.
+
+**Root cause.** Without `-copyts`, FFmpeg applies
+`-avoid_negative_ts auto` on the fmp4 muxer and rebases every stream
+to start at zero — but each stream rebases relative to its own first
+sample. MKV containers routinely carry a small audio `start_time`
+offset (codec priming for AAC/AC-3) and emit subtitles in source PTS;
+after the muxer's rebase, `tfdt = 0` on segment 0 means "first audio
+sample", which is offset from `t = 0` in source time. External
+subtitle cues, still timed in source PTS, end up shifted by exactly
+that offset on receivers that don't compensate.
+
+### 2b — Video lags audio after a user seek
 
 **Symptom.** After seeking to `T`, video shows content from a few
 seconds before `T` while audio is correctly anchored at `T`.
@@ -72,19 +100,25 @@ lands on that earliest frame instead of on `T`. Video `tfdt` ends up
 several seconds behind audio `tfdt` (audio still snaps to the
 audio-frame boundary `≤ T`, drift bounded to ±21–40 ms).
 
-**Fix — seek-resume FFmpeg args.** For a resume at content time `T`
-(`startSegment > 0`):
+### Fix — preserve source PTS on every spawn
+
+For every FFmpeg spawn (cold start and seek-resume alike):
 
 ```
--ss T                       # before -i — fast demuxer seek to keyframe ≤ T
+-ss T                       # before -i, only when T > 0 — demuxer seek to keyframe ≤ T
 -i input.mkv
 -copyts                     # propagate source PTS end-to-end
 -muxdelay 0 -muxpreload 0   # no priming edit-list on the first IDR
--ss T                       # after -i — drop decoded frames < T before encoder
+-ss T                       # after -i, only when T > 0 — drop decoded frames < T
 -force_key_frames "expr:gte(t, T + n_forced*SEG)"
 ```
 
-The double `-ss` is intentional and not redundant:
+The three muxer flags are unconditional on every spawn — they're what
+keeps `tfdt` in source time and subtitle cues aligned. The two `-ss`
+flags are seek-resume-only (`startSegment > 0`); cold spawns leave
+them out and `-copyts` is enough on its own.
+
+The double `-ss` on seek-resume is intentional and not redundant:
 
 - The first `-ss T` is the demuxer-side seek (jumps quickly to the
   keyframe `≤ T`).
@@ -98,9 +132,10 @@ The double `-ss` is intentional and not redundant:
   lands at `T`. Video `tfdt = T`, audio `tfdt ≈ T` (audio is packet-
   snapped at the demuxer; the drift is bounded to ±21 ms for AAC,
   ±32 ms for AC-3, ±40 ms for DTS — imperceptible).
-- `-force_key_frames` anchors at `seekSeconds` instead of `0`: with
-  `-copyts` the encoder's `t` variable is in source time, so the
-  expression has to acknowledge that.
+- `-force_key_frames` anchors at `T` instead of `0`: with `-copyts`
+  the encoder's `t` variable is in source time, so the expression has
+  to acknowledge that. Cold spawns use `T = 0` and the expression
+  degenerates to the natural `n_forced*SEG` grid.
 
 This works for `-c:a copy` and re-encode audio alike — `-copyts` is
 codec-agnostic. `-af atrim` would have been a sample-accurate audio
@@ -108,12 +143,44 @@ trim but is incompatible with `-c:a copy` ("Filtering and streamcopy
 cannot be used together"); the demuxer-snap drift on copy audio is
 small enough to not need active correction.
 
+## Issue 3 — HLS segment grid drifts off the playlist's EXTINF cadence
+
+**Symptom.** Cold-spawn segments don't line up with the playlist:
+`segment_001.m4s` covers ~3 s but the player's reported `tfdt` jumps
+by ~6 s between segments 0 and 1, then settles. The subtitle drift in
+Issue 2a still happens even with `-copyts` if this one is left in.
+
+**Root cause.** `-hls_init_time 1` asked the muxer to emit a short
+first segment (1 s) before falling into the regular `-hls_time` grid,
+but the encoder's `-keyint_min = fps × SEG` (here 72 frames at 24 fps)
+forbids any IDR within 3 s of the previous one. With no IDR available
+at `t = 1 s`, the muxer waited for the next IDR at `t = 3 s` and made
+seg 0 cover 3 s — but the playlist still announced `EXTINF=1`. The
+mismatch propagated through subsequent segments until the muxer
+synced up. Receivers that trust the playlist timestamps misaligned
+subtitle cues during the resync window.
+
+**Fix.** Drop `-hls_init_time` entirely. The VOD playlist generated by
+`streaming.controller.ts` already emits a uniform `SEG_DURATION` grid
+(`buildVodPlaylist`), so the muxer producing the same grid is exactly
+what we want. The encoder's `-g = -keyint_min = fps × SEG` plus the
+`force_key_frames` expression then guarantee an IDR at every grid
+tick, and the muxer cuts cleanly on each one.
+
 ## Things to NOT do
 
+- Drop `-copyts -muxdelay 0 -muxpreload 0`. They're unconditional on
+  every spawn; without them the fmp4 muxer's default
+  `-avoid_negative_ts auto` rebases the timeline to 0 and external
+  subtitle cues drift on Android.
 - Pair `-avoid_negative_ts make_zero` with `-output_ts_offset T`. They
   cancel each other on the fmp4 muxer (the offset is applied, then
   `make_zero` zeroes every timestamp), and the HLS muxer pools samples
   until the next encoder-natural keyframe.
+- Re-introduce `-hls_init_time`. The encoder's `keyint_min` keeps IDRs
+  on the `SEG`-second grid, so a short first segment is impossible to
+  honour and the muxer silently lies about segment durations until it
+  resyncs (Issue 3).
 - Drop `-forced_idr 1`. HLS needs a guaranteed IDR at every segment
   boundary; without `forced_idr` the SDK will skip some of them.
 - Turn `-adaptive_i` back on. The scene-cut placement races with the
