@@ -12,7 +12,7 @@ import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
-import { TorznabService } from '../indexers/torznab.service';
+import { TorznabService, TorznabRelease } from '../indexers/torznab.service';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
 import { MediaService } from '../media/media.service';
@@ -27,9 +27,13 @@ import {
   ThumbnailService,
   buildSpriteLabel,
 } from '../streaming/thumbnail.service';
-import { AutoGrabPipelineService } from '../media/auto-grab-pipeline.service';
+import {
+  AutoGrabPipelineService,
+  AutoGrabScoringContext,
+} from '../media/auto-grab-pipeline.service';
 import { MarkersService } from '../markers/markers.service';
 import { rankFromQualityString } from '../media/release-rejection.helper';
+import { parseSeasonEpisode } from '../media/release-episode.parser';
 
 // Note: scoring/profile/blocklist/quality-definition wiring lives in
 // AutoGrabPipelineService. This file only orchestrates the high-level
@@ -710,12 +714,10 @@ export class SchedulerService implements OnModuleInit {
 
     // Full candidates (with profiles + files) so RSS reuses the exact same
     // missing/upgrade pipeline as SearchMissing: title match → classify →
-    // score → autoGrabAndRecord. The previous flow short-circuited all of
-    // this, so it grabbed below-cutoff releases, ignored profiles, and
-    // never wrote `torrentHash` / `grabSource` onto the DownloadHistory
-    // — which left rows unlinkable in Activities and bypassed the
-    // stalled/seed cleaners.
-    const candidates = await this.mediaRepo
+    // score → autoGrabAndRecord. Series candidates also include seasons +
+    // episodes so we can match a release against the right `(season, ep)`
+    // and apply the season-pack-first priority logic below.
+    const movieCandidates = await this.mediaRepo
       .createQueryBuilder('m')
       .leftJoinAndSelect('m.qualityProfile', 'qp')
       .leftJoinAndSelect('m.languageProfile', 'lp')
@@ -723,6 +725,16 @@ export class SchedulerService implements OnModuleInit {
       .where('m.monitored = true')
       .andWhere('m.type = :type', { type: MediaType.MOVIE })
       .andWhere('(f.id IS NULL OR qp."upgradeAllowed" = true)')
+      .getMany();
+
+    const seriesCandidates = await this.mediaRepo
+      .createQueryBuilder('m')
+      .leftJoinAndSelect('m.qualityProfile', 'qp')
+      .leftJoinAndSelect('m.languageProfile', 'lp')
+      .leftJoinAndSelect('m.seasons', 's')
+      .leftJoinAndSelect('s.episodes', 'e')
+      .where('m.monitored = true')
+      .andWhere('m.type = :type', { type: MediaType.SERIES })
       .getMany();
 
     const clients = await this.clientRepo.find({ where: { enabled: true } });
@@ -754,45 +766,115 @@ export class SchedulerService implements OnModuleInit {
       });
       try {
         const results = await this.torznab.rssSearch(indexer);
-        for (const release of results) {
-          const lowerTitle = release.title.toLowerCase();
-          // Title-substring match, plus year guard when known — without
-          // the year filter, short common titles ("Up", "It", "Heat",
-          // "Cars") matched dozens of unrelated releases.
-          const match = candidates.find((m) => {
-            if (!lowerTitle.includes(m.title.toLowerCase())) return false;
-            if (!m.year) return true;
-            return release.title.includes(String(m.year));
-          });
-          if (!match) continue;
-
-          if (
-            release.publishDate &&
-            this.isDelayed(match, release.publishDate, delayProfiles)
-          ) {
+        // Phase 1: within this feed pull, season packs win over individual
+        // episodes of the same season. Sort packs first; track packs we
+        // hand to autoGrab so subsequent same-season episodes are skipped.
+        const sorted = [...results].sort((a, b) => {
+          const pa = parseSeasonEpisode(a.title);
+          const pb = parseSeasonEpisode(b.title);
+          if (pa.isFullSeason !== pb.isFullSeason)
+            return pa.isFullSeason ? -1 : 1;
+          const da = a.publishDate ? new Date(a.publishDate).getTime() : 0;
+          const db = b.publishDate ? new Date(b.publishDate).getTime() : 0;
+          return db - da;
+        });
+        const packTriedThisPull = new Set<string>();
+        for (const release of sorted) {
+          const parsed = parseSeasonEpisode(release.title);
+          const movieMatch = this.matchMovieRelease(release, movieCandidates);
+          if (movieMatch) {
+            if (this.releaseTooFresh(release, movieMatch, delayProfiles))
+              continue;
+            await this.grabRssRelease({
+              media: movieMatch,
+              files: movieMatch.files ?? [],
+              release,
+              qbitClient,
+              scoring,
+              mediaType: 'movie',
+              label: movieMatch.title,
+              runtimeMinutes: movieMatch.runtime ?? 0,
+              extraPendingCheck: async () => {
+                const pending = await this.historyRepo.findOne({
+                  where: { media: { id: movieMatch.id }, status: 'grabbed' },
+                });
+                return !!pending;
+              },
+            });
             continue;
           }
 
-          await this.autoGrab.tryAutoGrab({
-            media: match,
-            files: match.files ?? [],
-            releases: [release],
+          // Series — require a recognisable season; no year guard (shows
+          // span multiple years).
+          if (parsed.season == null) continue;
+          const seriesMatch = this.matchSeriesRelease(release, seriesCandidates);
+          if (!seriesMatch) continue;
+          const season = seriesMatch.seasons?.find(
+            (s) => s.seasonNumber === parsed.season,
+          );
+          if (!season) continue;
+          const packKey = `${seriesMatch.id}:${parsed.season}`;
+
+          if (parsed.isFullSeason) {
+            const wanted = (season.episodes ?? []).some(
+              (e) => e.monitored && !e.hasFile,
+            );
+            if (!wanted) continue;
+            packTriedThisPull.add(packKey);
+            await this.grabRssRelease({
+              media: seriesMatch,
+              files: [],
+              release,
+              qbitClient,
+              scoring,
+              mediaType: 'series',
+              label: `${seriesMatch.title} S${String(parsed.season).padStart(2, '0')}`,
+              runtimeMinutes: seriesMatch.runtime ?? 30,
+              extraPendingCheck: () =>
+                this.hasRecentSeasonPackGrab(seriesMatch.id, parsed.season!),
+            });
+            continue;
+          }
+
+          if (parsed.episode == null) continue;
+          const ep = (season.episodes ?? []).find(
+            (e) => e.episodeNumber === parsed.episode,
+          );
+          if (!ep || !ep.monitored || ep.hasFile) continue;
+          // Intra-pull Phase 1: a pack for this season was already handed
+          // off above; skip the individual episode.
+          if (packTriedThisPull.has(packKey)) continue;
+          // Phase 2: give a pack time to appear before grabbing a single
+          // episode. The DelayProfile's torrentDelay (hours) is the
+          // grace window measured against the release's publishDate.
+          if (this.releaseTooFresh(release, seriesMatch, delayProfiles))
+            continue;
+          const epLabel = `S${String(parsed.season).padStart(2, '0')}E${String(parsed.episode).padStart(2, '0')}`;
+          await this.grabRssRelease({
+            media: seriesMatch,
+            files: [],
+            release,
             qbitClient,
             scoring,
-            mediaType: 'movie',
-            label: match.title,
-            runtimeMinutes: match.runtime ?? 0,
-            pendingCheck: async () => {
-              const pending = await this.historyRepo.findOne({
-                where: { media: { id: match.id }, status: 'grabbed' },
-              });
-              if (pending) return true;
-              // Same source-title already in history — RSS-specific dedupe
-              // because the same release can re-appear across feed polls.
-              const alreadyGrabbed = await this.historyRepo.findOne({
-                where: { media: { id: match.id }, sourceTitle: release.title },
-              });
-              return !!alreadyGrabbed;
+            mediaType: 'series',
+            label: `${seriesMatch.title} ${epLabel}`,
+            runtimeMinutes: seriesMatch.runtime ?? 30,
+            extraPendingCheck: async () => {
+              // Cross-pull Phase 2: a pack was already grabbed for this
+              // season in a previous pull — the episode is now redundant.
+              if (
+                await this.hasRecentSeasonPackGrab(seriesMatch.id, parsed.season!)
+              )
+                return true;
+              const epDup = await this.historyRepo
+                .createQueryBuilder('h')
+                .where('h.mediaId = :mediaId', { mediaId: seriesMatch.id })
+                .andWhere('h.status = :status', { status: 'grabbed' })
+                .andWhere('h.sourceTitle ILIKE :pattern', {
+                  pattern: `%${epLabel}%`,
+                })
+                .getOne();
+              return !!epDup;
             },
           });
         }
@@ -1009,6 +1091,109 @@ export class SchedulerService implements OnModuleInit {
     );
 
     await this.rescanMediaList(candidates, 'RescanMissingFiles');
+  }
+
+  /** Substring + year guard. Short common titles ("Up", "It", "Heat",
+   *  "Cars") otherwise match dozens of unrelated releases. */
+  private matchMovieRelease(
+    release: TorznabRelease,
+    candidates: Media[],
+  ): Media | undefined {
+    const lower = release.title.toLowerCase();
+    return candidates.find((m) => {
+      if (!lower.includes(m.title.toLowerCase())) return false;
+      if (!m.year) return true;
+      return release.title.includes(String(m.year));
+    });
+  }
+
+  /** Substring match only — series air-year mismatch is common across the
+   *  release scene (multi-season shows). The caller has already required
+   *  a recognisable season in the release title. */
+  private matchSeriesRelease(
+    release: TorznabRelease,
+    candidates: Media[],
+  ): Media | undefined {
+    const lower = release.title.toLowerCase();
+    return candidates.find((m) => lower.includes(m.title.toLowerCase()));
+  }
+
+  private releaseTooFresh(
+    release: TorznabRelease,
+    media: Media,
+    delayProfiles: DelayProfile[],
+  ): boolean {
+    return (
+      !!release.publishDate &&
+      this.isDelayed(media, release.publishDate, delayProfiles)
+    );
+  }
+
+  /** RSS auto-grab wrapper — fills in fields shared by every release in
+   *  the feed loop (expectedTitle from alt-titles, source-title dedup)
+   *  and forwards the rest to {@link AutoGrabPipelineService.tryAutoGrab}. */
+  private async grabRssRelease(args: {
+    media: Media;
+    files: { quality?: string | null }[];
+    release: TorznabRelease;
+    qbitClient: DownloadClient;
+    scoring: AutoGrabScoringContext;
+    mediaType: 'movie' | 'series';
+    label: string;
+    runtimeMinutes: number;
+    /** Extra grab-dedup logic on top of the same-source-title check. */
+    extraPendingCheck?: () => Promise<boolean>;
+  }): Promise<boolean> {
+    return this.autoGrab.tryAutoGrab({
+      media: args.media,
+      files: args.files,
+      releases: [args.release],
+      qbitClient: args.qbitClient,
+      scoring: args.scoring,
+      mediaType: args.mediaType,
+      label: args.label,
+      expectedTitle: [
+        args.media.title,
+        ...(args.media.alternativeTitles ?? []),
+      ],
+      runtimeMinutes: args.runtimeMinutes,
+      pendingCheck: async () => {
+        // Same release in history — happens because the same item
+        // re-appears across feed polls.
+        const dup = await this.historyRepo.findOne({
+          where: {
+            media: { id: args.media.id },
+            sourceTitle: args.release.title,
+          },
+        });
+        if (dup) return true;
+        return args.extraPendingCheck ? args.extraPendingCheck() : false;
+      },
+    });
+  }
+
+  /**
+   * RSS Phase-2 helper: true when a season-pack release for
+   * `(mediaId, seasonNumber)` was already grabbed within the last 24h.
+   * Parses each recent history row's `sourceTitle` so we don't need a
+   * dedicated `pending_release` table — the source-title itself is the
+   * source of truth for what was grabbed.
+   */
+  private async hasRecentSeasonPackGrab(
+    mediaId: number,
+    seasonNumber: number,
+  ): Promise<boolean> {
+    const since = new Date(Date.now() - 24 * 3_600_000);
+    const recent = await this.historyRepo
+      .createQueryBuilder('h')
+      .where('h.mediaId = :mediaId', { mediaId })
+      .andWhere('h.status = :status', { status: 'grabbed' })
+      .andWhere('h.createdAt >= :since', { since })
+      .getMany();
+    return recent.some((r) => {
+      const p = parseSeasonEpisode(r.sourceTitle ?? '');
+      return p.isFullSeason && p.season === seasonNumber;
+    });
   }
 
   private isDelayed(
