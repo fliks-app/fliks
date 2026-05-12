@@ -3,7 +3,6 @@ import { SettingsService } from '../settings/settings.service';
 
 export interface StreamingSettings {
   segmentDuration: number;
-  initTime: number;
   qsvPreset:
     | 'veryfast'
     | 'faster'
@@ -17,7 +16,6 @@ export interface StreamingSettings {
 
 const KEYS = [
   'streaming_segment_duration',
-  'streaming_init_time',
   'streaming_qsv_preset',
   'streaming_qsv_low_power',
 ] as const;
@@ -51,10 +49,9 @@ export class StreamingSettingsCache implements OnModuleInit {
 
   private async load(): Promise<StreamingSettings> {
     const values = await Promise.all(KEYS.map((k) => this.settings.get(k)));
-    const [duration, initTime, qsvPreset, qsvLowPower] = values;
+    const [duration, qsvPreset, qsvLowPower] = values;
     return {
       segmentDuration: parseFloat(duration ?? '3') || 3,
-      initTime: parseFloat(initTime ?? '1') || 1,
       qsvPreset: (qsvPreset ?? 'faster') as StreamingSettings['qsvPreset'],
       qsvLowPower: qsvLowPower === 'true',
     };

@@ -19,7 +19,6 @@ export class StreamingSettingsComponent implements OnInit {
   readonly saving = signal(false);
 
   readonly segmentDuration = signal('3');
-  readonly initTime = signal('1');
   readonly qsvPreset = signal('faster');
   readonly qsvLowPower = signal(false);
 
@@ -27,7 +26,6 @@ export class StreamingSettingsComponent implements OnInit {
     try {
       const all = await this.api.getAll();
       this.segmentDuration.set(all['streaming_segment_duration'] ?? '3');
-      this.initTime.set(all['streaming_init_time'] ?? '1');
       this.qsvPreset.set(all['streaming_qsv_preset'] ?? 'faster');
       this.qsvLowPower.set(all['streaming_qsv_low_power'] === 'true');
     } catch { /* interceptor */ }
@@ -39,7 +37,6 @@ export class StreamingSettingsComponent implements OnInit {
     try {
       await this.api.setBulk({
         streaming_segment_duration: this.segmentDuration(),
-        streaming_init_time: this.initTime(),
         streaming_qsv_preset: this.qsvPreset(),
         streaming_qsv_low_power: String(this.qsvLowPower()),
       });

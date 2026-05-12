@@ -16,7 +16,7 @@ import {
   SESSION_TIMEOUT_MS,
   getSegmentDuration,
   segmentIndexToSeconds,
-  setSegmentDurations as applySegmentDurations,
+  setSegmentDuration as applySegmentDuration,
 } from './constants';
 import { getLadderForDevice } from './profiles';
 import {
@@ -113,9 +113,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return this.detectedHwAccel;
   }
 
-  /** Update segment durations from admin streaming settings. */
-  setSegmentDurations(segDuration: number, initTime: number) {
-    applySegmentDurations(segDuration, initTime);
+  /** Update segment duration from admin streaming settings. */
+  setSegmentDuration(segDuration: number) {
+    applySegmentDuration(segDuration);
   }
 
   getSegmentDuration(): number {
