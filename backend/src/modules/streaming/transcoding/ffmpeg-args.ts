@@ -102,30 +102,36 @@ export function buildFfmpegArgs(
   const fps = sourceFps && sourceFps > 0 ? sourceFps : 24;
   const gopSize = Math.max(1, Math.round(SEGMENT_DURATION * fps));
 
-  // Hybrid seek for mid-file resumes (see big block below `-i`). Decompose
-  // the absolute resume time T into a fast IDR-snap input-seek (`preSeek`)
-  // followed by a sample-accurate output-seek (`postSeek`) of a few seconds.
-  const PRE_SEEK_MARGIN_SECONDS = 2;
+  // Resume point for mid-file seek (`startSegment > 0`). Seek to T,
+  // then `-copyts` (set after `-i` below) threads source PTS through
+  // to the muxer so the first segment lands at tfdt = T × timescale.
   const seekSeconds = startSegment > 0 ? segmentIndexToSeconds(startSegment) : 0;
-  const preSeek = Math.max(0, seekSeconds - PRE_SEEK_MARGIN_SECONDS);
-  const postSeek = seekSeconds - preSeek;
 
-  // Keyframes at: 0, INIT_TIME, INIT_TIME+SEG, INIT_TIME+2*SEG, ...
-  // Lets -hls_init_time actually cut segment 0 short (needs a keyframe at
-  // INIT_TIME). When INIT_TIME >= SEGMENT_DURATION, collapses to regular
-  // fixed-GOP behaviour.
-  // On resume (start>0) the encoder sees internal t starting at `postSeek`
-  // (not 0), so the IDR anchors are shifted by postSeek to keep HLS segment
-  // boundaries on multiples of SEGMENT_DURATION from the resume point.
+  // Keyframes at: 0, INIT_TIME, INIT_TIME+SEG, INIT_TIME+2*SEG, …
+  // Lets `-hls_init_time` actually cut segment 0 short (needs a keyframe
+  // at INIT_TIME); collapses to a regular fixed-GOP cadence when
+  // INIT_TIME ≥ SEGMENT_DURATION. On a seek-resume we use `-copyts` so
+  // the encoder's `t` is in source time — the expression anchors at
+  // `seekSeconds` and IDRs land on the same grid the HLS muxer expects.
   const forceKeyframesExpr =
     startSegment > 0
-      ? `expr:gte(t,${postSeek}+n_forced*${SEGMENT_DURATION})`
+      ? `expr:gte(t,${seekSeconds}+n_forced*${SEGMENT_DURATION})`
       : `expr:if(eq(n_forced,0),gte(t,0),gte(t,${INIT_TIME}+(n_forced-1)*${SEGMENT_DURATION}))`;
-  // adaptive_i/adaptive_b let QSV pick I/B placement per scene complexity —
-  // measurable quality win on dense / fast-motion content, no perf cost.
-  // QSV BRC drift on long continuous runs is handled separately by
-  // SEGMENT_ROTATION_INTERVAL_SECONDS respawning the encoder periodically.
-  const qsvExtra: string[] = ['-adaptive_i', '1', '-adaptive_b', '1'];
+  // Closed-GOP, deterministic IDR placement on h264_qsv:
+  //  - `-forced_idr 1` : every `force_key_frames` tick lands as a real
+  //    IDR (without it, qsvenc emits some as plain I, breaking HLS
+  //    segment cuts).
+  //  - `-adaptive_i 0` : scene-cut detection off — its placement fights
+  //    with the forced-IDR cadence we want.
+  //  - `-bf 0 -b_strategy 0` : no B-frames, no reordering across
+  //    segment edges → HLS muxer can cut cleanly on each forced IDR.
+  // See `docs/streaming/encoder-stability.md` for the full rationale.
+  const qsvExtra: string[] = [
+    '-forced_idr', '1',
+    '-adaptive_i', '0',
+    '-bf', '0',
+    '-b_strategy', '0',
+  ];
   if (qsvOptions.lowPower) {
     qsvExtra.push('-low_power', '1');
   }
@@ -145,37 +151,13 @@ export function buildFfmpegArgs(
   }
 
   if (startSegment > 0) {
-    // Hybrid seek to keep audio/video sample-aligned across encoder
-    // respawns (SEGMENT_ROTATION_INTERVAL_SECONDS).
-    //
-    // The naive `-ss T -i input` (input-seek only) drifts: FFmpeg snaps
-    // each stream independently to its own frame boundary (~21 ms for
-    // AAC, ~32 ms for AC-3, up to ~40 ms for DTS) and then
-    // `-avoid_negative_ts make_zero` shifts audio by the per-stream
-    // snap delta while leaving video at 0 — every respawn injects a
-    // fresh, randomly-signed delta of A/V skew.
-    //
-    //  1. `-ss preSeek` before `-i` does the cheap demuxer seek + the
-    //     decode-and-discard pass implied by accurate_seek (the default),
-    //     leaving internal PTS = 0 at exact source time preSeek for both
-    //     streams.
-    //  2. `-ss postSeek` after `-i` does an output seek that operates in
-    //     the decoded domain. Re-encoded audio is trimmed sample-accurately
-    //     (not packet-snapped) so its first sample lines up with the first
-    //     video frame at internal t = postSeek = source time T.
-    //  3. `-output_ts_offset preSeek` (placed AFTER `-i` — it's an
-    //     OPT_OUTPUT option per FFmpeg, see fftools/ffmpeg_opt.c) shifts
-    //     the muxer-side PTS so the first emitted PTS = postSeek +
-    //     preSeek = T, matching the playlist's expected tfdt for seg-K.
-    //     Placed before `-i` it lives in the input option group and can
-    //     get silently dropped or re-shifted by the muxer's
-    //     `avoid_negative_ts auto`, causing a PRE_SEEK_MARGIN_SECONDS
-    //     overlap with the previous segment (= a 2 s video repeat at
-    //     every rotation seam on Chromecast).
-    //
-    // Cost: PRE_SEEK_MARGIN_SECONDS of extra HW/CPU decode every
-    // SEGMENT_ROTATION_INTERVAL_SECONDS — negligible.
-    args.push('-ss', String(preSeek));
+    // Single input-seek to T. The demuxer snaps each stream to its own
+    // frame boundary ≤ T (≤ 21 ms for AAC, 32 ms for AC-3, 40 ms for
+    // DTS); `-copyts` (set after `-i` below) threads the source PTS
+    // straight through to the muxer so the first emitted segment's
+    // tfdt = seekSeconds × timescale and the player picks up the
+    // playlist boundary cleanly.
+    args.push('-ss', String(seekSeconds));
   }
 
   // parseBitrateToBps handles both "8M" and "200k" correctly. Using parseInt()*1e6
@@ -201,13 +183,15 @@ export function buildFfmpegArgs(
       : 'ultrafast'
     : encoderPreset;
   const earlyNvencPreset = early ? 'p1' : 'p4';
-  // QSV rate-control: stock = 2x init / 4x bufsize. Early = 0.5x / 1x so the
-  // encoder doesn't hold back frames waiting for the buffer to pre-fill.
+  // QSV rate-control: tight VBV (bufsize = bitrate × 1) so the BRC has a
+  // short horizon and can't defer big I-frames. Early uses 0.5× / 1× so
+  // the encoder doesn't hold back frames waiting for the buffer to fill.
+  // Recommended by Intel media-delivery quality.rst for HLS streaming.
   const qsvRcInitOccupancy = Math.max(
     1,
-    early ? Math.round(bitrateNum * 0.5) : bitrateNum * 2,
+    early ? Math.round(bitrateNum * 0.5) : bitrateNum,
   );
-  const qsvBufsize = early ? bitrateNum : bitrateNum * 4;
+  const qsvBufsize = bitrateNum;
   // libx264 -bufsize is expressed in Mbits. Stock = 2x bitrate, early = 1x.
   const libx264BufsizeMb = `${Math.max(1, parseInt(profile.videoBitrate) * (early ? 1 : 2))}M`;
 
@@ -266,30 +250,16 @@ export function buildFfmpegArgs(
   args.push('-i', inputPath);
 
   if (startSegment > 0) {
-    // Output-seek companion to the input-seek above; trims the decoded
-    // PRE_SEEK_MARGIN_SECONDS prelude on the video side (the AAC encoder
-    // ignores this on the audio side — see the `-af atrim` below).
-    // `-output_ts_offset` is also placed here (after `-i`) because it's
-    // an OPT_OUTPUT option in FFmpeg — see the comment block above.
-    if (postSeek > 0) {
-      args.push('-ss', String(postSeek));
-      // Sample-accurate audio trim. `-ss` after `-i` does NOT reliably
-      // drop the pre-seek prelude for an AAC / AC-3 / EAC-3 re-encode:
-      // the encoder receives the full decoded stream starting at the
-      // input-seek point (internal_t = 0) and emits packets from
-      // PTS = 0, which after `output_ts_offset = preSeek` lands at
-      // tfdt = preSeek instead of preSeek + postSeek. On a Chromecast
-      // (which doesn't honour fMP4 `edts/elst` for priming) that
-      // surfaces as the new segment overlapping the previous one's
-      // last PRE_SEEK_MARGIN_SECONDS of audio — a 2 s "echo" at every
-      // rotation seam. `atrim` runs in the filter graph (before the
-      // encoder), so the prelude is dropped sample-accurately; we
-      // intentionally skip `asetpts` so the first kept sample keeps
-      // PTS = postSeek and `output_ts_offset` lifts it to the
-      // expected boundary.
-      args.push('-af', `atrim=start=${postSeek}`);
-    }
-    args.push('-output_ts_offset', String(preSeek));
+    // Seek-resume timestamp wiring (see docs/streaming/encoder-stability.md):
+    //  - `-copyts` keeps source PTS end-to-end → tfdt = seekSeconds.
+    //  - `-muxdelay/-muxpreload 0` stops the fmp4 muxer from inserting
+    //    a priming edit list when CTS offsets show up on the IDR.
+    //  - `-ss seekSeconds` after `-i` drops decoded video frames before
+    //    seekSeconds, so the encoder's mandatory first IDR lands at T
+    //    instead of on the source keyframe ≤ T. Audio keeps its
+    //    ±21–40 ms packet-snap drift (intrinsic to demuxer seek).
+    args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
+    args.push('-ss', String(seekSeconds));
   }
 
   // Video encoding
@@ -559,31 +529,22 @@ export function buildAudioOnlyFfmpegArgs(
     args.push('-analyzeduration', '1000000', '-probesize', '1000000');
   }
 
-  // Hybrid seek (same rationale as buildFfmpegArgs): input-seek for the
-  // fast IDR snap, output-seek for sample-accurate trim. Keeps this
-  // audio rendition aligned with the video output across encoder respawns.
-  const PRE_SEEK_MARGIN_SECONDS = 2;
+  // Single input-seek to T + `-copyts` to propagate source PTS straight
+  // through to the muxer (tfdt = T × timescale). See `buildFfmpegArgs`
+  // for the long explanation of why the previous
+  // `-avoid_negative_ts make_zero` + `-output_ts_offset` pair zeroed
+  // tfdt instead of lifting it.
   const seekSeconds = startSegment > 0 ? segmentIndexToSeconds(startSegment) : 0;
-  const preSeek = Math.max(0, seekSeconds - PRE_SEEK_MARGIN_SECONDS);
-  const postSeek = seekSeconds - preSeek;
 
   if (startSegment > 0) {
-    args.push('-ss', String(preSeek));
+    args.push('-ss', String(seekSeconds));
   }
 
   args.push('-i', inputPath);
 
   if (startSegment > 0) {
-    // `-ss postSeek` + `-output_ts_offset preSeek` placed after `-i` —
-    // both are OPT_OUTPUT options. `atrim` runs in the audio filter
-    // graph and is what actually drops the pre-seek prelude before
-    // the AAC encoder sees it — `-ss` post-`-i` is unreliable here
-    // (see the comment block in `buildFfmpegArgs`).
-    if (postSeek > 0) {
-      args.push('-ss', String(postSeek));
-      args.push('-af', `atrim=start=${postSeek}`);
-    }
-    args.push('-output_ts_offset', String(preSeek));
+    args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
+    args.push('-ss', String(seekSeconds));
   }
 
   args.push('-map', `0:a:${audioStreamIndex}`);
@@ -633,14 +594,24 @@ export function buildRemuxArgs(
     args.push('-analyzeduration', '1000000', '-probesize', '1000000');
   }
 
+  const remuxSeekSeconds =
+    startSegment > 0 ? segmentIndexToSeconds(startSegment) : 0;
   if (startSegment > 0) {
-    const seekSeconds = segmentIndexToSeconds(startSegment);
-    args.push('-ss', String(seekSeconds));
-    args.push('-output_ts_offset', String(seekSeconds));
-    args.push('-avoid_negative_ts', 'make_zero');
+    args.push('-ss', String(remuxSeekSeconds));
   }
 
   args.push('-i', inputPath);
+
+  if (startSegment > 0) {
+    // Same `-copyts` pattern as the transcode path: propagate source
+    // PTS through to the muxer so seg-N's tfdt = seekSeconds, instead
+    // of the previous `output_ts_offset + avoid_negative_ts make_zero`
+    // pair that cancelled to tfdt = 0. The output-seek `-ss` after
+    // `-i` drops decoded frames < seekSeconds (HW-decode + copy paths
+    // need it).
+    args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
+    args.push('-ss', String(remuxSeekSeconds));
+  }
 
   const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
   if (videoOnly && !userPickedAudio) {

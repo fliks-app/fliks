@@ -135,21 +135,4 @@ export interface TranscodeSession {
    *  change, etc.) so the close handler doesn't log a spurious "exited
    *  WITHOUT producing first segment" warning. */
   intentionallyKilled?: boolean;
-  /** Original input path — kept on the session so the rotation worker
-   *  can re-spawn ffmpeg without re-resolving the media file. */
-  absolutePath?: string;
-  /** Spawn-time SessionContext — kept on the session so the rotation
-   *  worker can re-spawn with the same audio map / tonemap / crop. */
-  ctx?: SessionContext;
-  /** Number of segments the current ffmpeg has written since spawn.
-   *  Driven by the post-write fs watcher. Used to schedule a periodic
-   *  kill+respawn (see `SEGMENT_ROTATION_INTERVAL_SECONDS`) — QSV's BRC
-   *  accumulates state over long runs and eventually emits a 45 s GOP
-   *  that overruns the playlist's EXTINF slot; rotating every ~10 min
-   *  of content resets the encoder before that drift hits. */
-  segmentsProduced?: number;
-  /** Set true once a rotation has been scheduled for this session, so
-   *  subsequent segment writes don't re-fire the rotation logic while
-   *  the previous one is still draining. */
-  rotationScheduled?: boolean;
 }
