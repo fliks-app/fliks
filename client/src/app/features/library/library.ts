@@ -21,19 +21,46 @@ import { StreamingApiService } from '../../core/services/api/streaming-api.servi
 import { ProfilesService, QualityProfile } from '../../core/services/api/profiles.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
+import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { FocusMemoryService } from '../../core/services/focus-memory.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
-import { LucideSearch, LucideSlidersHorizontal } from '@lucide/angular';
+import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown } from '@lucide/angular';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
+/** Top-bar tab — `all` is the existing library grid (label = library name),
+ *  `suggestions` / `genres` are placeholders for upcoming views. */
+export type LibraryViewMode = 'all' | 'suggestions' | 'genres';
+export type SortOrder = 'ASC' | 'DESC';
+type FilterMonitored = '' | 'true' | 'false';
+
+/** Natural default order per sort field. Title reads A→Z; the three
+ *  date / rating fields lead with the most recent / best value because
+ *  that's what users actually want to see first. Applied whenever the
+ *  user switches `sortBy` — they can still flip with the ↑/↓ button. */
+const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
+  title: 'ASC',
+  year: 'DESC',
+  added: 'DESC',
+  rating: 'DESC',
+};
+
 @Component({
   selector: 'app-library',
-  imports: [MediaCardComponent, FormsModule, TranslateModule, LucideSearch, LucideSlidersHorizontal],
+  imports: [
+    MediaCardComponent,
+    DropdownMenuComponent,
+    FormsModule,
+    TranslateModule,
+    LucideSearch,
+    LucideSlidersHorizontal,
+    LucideArrowUp,
+    LucideArrowDown,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library.html',
 })
@@ -65,8 +92,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
   readonly loading = signal(false);
   readonly searchQuery = signal('');
   readonly sortBy = signal('title');
-  readonly filterMonitored = signal<'' | 'true' | 'false'>('');
+  readonly sortOrder = signal<SortOrder>('ASC');
+  readonly filterMonitored = signal<FilterMonitored>('');
   readonly filterStatus = signal('');
+  readonly viewMode = signal<LibraryViewMode>('all');
 
   readonly monitoredCount = computed(() => this.list.all().filter((m) => m.monitored).length);
   readonly movieFileCount = computed(() =>
@@ -88,9 +117,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
   readonly hasSeries = computed(() => this.totalSeries() > 0);
 
   readonly alphabet = ALPHABET;
-  readonly filtersOpen = signal(false);
   readonly hasActiveFilters = computed(() =>
-    this.filterMonitored() !== '' || this.filterStatus() !== '' || this.sortBy() !== 'title',
+    this.filterMonitored() !== '' || this.filterStatus() !== '',
   );
 
   @ViewChild('sentinel') set sentinelRef(ref: ElementRef<HTMLElement> | undefined) {
@@ -102,7 +130,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   readonly bulkMode = signal(false);
   readonly bulkSaving = signal(false);
   readonly bulkQualityProfileId = signal<number | null>(null);
-  readonly bulkMonitored = signal<'' | 'true' | 'false'>('');
+  readonly bulkMonitored = signal<FilterMonitored>('');
   readonly qualityProfiles = signal<QualityProfile[]>([]);
 
   private allLibraries: LibrarySummary[] = [];
@@ -163,10 +191,16 @@ export class LibraryComponent implements OnInit, OnDestroy {
       const stored = this.loadFilters(lib.name);
       this.searchQuery.set(qp.get('q') ?? stored['q'] ?? '');
       this.filterMonitored.set(
-        (qp.get('monitored') ?? stored['monitored'] ?? '') as '' | 'true' | 'false',
+        (qp.get('monitored') ?? stored['monitored'] ?? '') as FilterMonitored,
       );
       this.filterStatus.set(qp.get('status') ?? stored['status'] ?? '');
       this.sortBy.set(qp.get('sortBy') ?? stored['sortBy'] ?? 'title');
+      this.sortOrder.set(
+        (qp.get('sortOrder') ?? stored['sortOrder'] ?? 'ASC') as SortOrder,
+      );
+      this.viewMode.set(
+        (qp.get('view') ?? stored['view'] ?? 'all') as LibraryViewMode,
+      );
 
       this.scrollMemory.activate(scrollKey);
       this.list.trackScroll('media');
@@ -251,6 +285,25 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.load(this.library()?.id);
   }
 
+  toggleSortOrder() {
+    this.sortOrder.update((o) => (o === 'ASC' ? 'DESC' : 'ASC'));
+    this.onFilterChange();
+  }
+
+  onSortByChange(field: string) {
+    this.sortBy.set(field);
+    // Snap to the field's natural order so the leading items are the
+    // ones the user typically wants (newest / best first). The arrow
+    // button still lets them flip after the fact.
+    this.sortOrder.set(NATURAL_ORDER_BY_SORT[field] ?? 'ASC');
+    this.onFilterChange();
+  }
+
+  setViewMode(mode: LibraryViewMode) {
+    this.viewMode.set(mode);
+    this.syncQueryParams();
+  }
+
   toggleSelect(id: number) {
     this.selectedIds.update((set) => {
       const next = new Set(set);
@@ -312,6 +365,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (this.filterMonitored()) params['monitored'] = this.filterMonitored();
     if (this.filterStatus()) params['status'] = this.filterStatus();
     if (this.sortBy() !== 'title') params['sortBy'] = this.sortBy();
+    if (this.sortOrder() !== 'ASC') params['sortOrder'] = this.sortOrder();
+    if (this.viewMode() !== 'all') params['view'] = this.viewMode();
     void this.router.navigate([], { queryParams: params, replaceUrl: true });
     this.saveFilters();
   }
@@ -326,6 +381,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (this.filterMonitored()) data['monitored'] = this.filterMonitored();
     if (this.filterStatus()) data['status'] = this.filterStatus();
     if (this.sortBy() !== 'title') data['sortBy'] = this.sortBy();
+    if (this.sortOrder() !== 'ASC') data['sortOrder'] = this.sortOrder();
+    if (this.viewMode() !== 'all') data['view'] = this.viewMode();
     localStorage.setItem(this.storageKey, JSON.stringify(data));
   }
 
@@ -348,6 +405,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
           libraryId,
           q: this.searchQuery() || undefined,
           sortBy: this.sortBy(),
+          sortOrder: this.sortOrder(),
           monitored: monitored ? monitored === 'true' : undefined,
           missing: fs === 'missing' ? true : fs === 'downloaded' ? false : undefined,
           cutoffUnmet: fs === 'cutoffUnmet' ? true : undefined,

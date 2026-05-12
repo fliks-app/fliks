@@ -462,9 +462,9 @@
     "filter_missing": "Manquants",
     "filter_cutoff_unmet": "Cutoff non atteint",
     "sort_title": "Titre",
-    "sort_year": "Année",
-    "sort_added": "Ajouté",
-    "sort_rating": "Note",
+    "sort_year": "Date de sortie",
+    "sort_added": "Date d'ajout",
+    "sort_rating": "Note TMDB",
     "bulk_edit": "Édition groupée",
     "bulk_selected": "{{count}} sélectionné(s)",
     "bulk_apply": "Appliquer",
@@ -472,7 +472,17 @@
     "bulk_select_all": "Tout sélectionner",
     "bulk_deselect": "Tout désélectionner",
     "bulk_quality_profile": "Profil de qualité",
-    "bulk_monitored": "Surveillance"
+    "bulk_monitored": "Surveillance",
+    "view_suggestions": "Suggestions",
+    "view_genres": "Genres",
+    "element_count": "{{count}} éléments",
+    "order_asc": "Tri croissant",
+    "order_desc": "Tri décroissant",
+    "filter_button": "Filtres",
+    "filter_disabled": "Désactivé",
+    "filter_monitoring_label": "Surveillance",
+    "filter_status_label": "Statut",
+    "coming_soon": "Bientôt disponible"
   },
   "movies": {
     "title": "Films"
