@@ -109,15 +109,18 @@
 <div
   class="absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-opacity duration-300 pt-12
          [--ctrl-px:1rem] [--ctrl-pb:0.5rem]
-         sm:[--ctrl-px:2rem] sm:[--ctrl-pb:2.5rem]
+         sm:[--ctrl-px:2rem] sm:[--ctrl-pb:1rem]
          lg:[--ctrl-px:2.5rem] lg:[--ctrl-pb:1rem]"
   style="padding-left: max(var(--ctrl-px), env(safe-area-inset-left)); padding-right: max(var(--ctrl-px), env(safe-area-inset-right)); padding-bottom: max(var(--ctrl-pb), env(safe-area-inset-bottom));"
   [class.opacity-0]="!visible()"
   [class.pointer-events-none]="!visible()"
 >
-  <!-- Episode + Title + Mobile action buttons row -->
-  <div class="flex items-end justify-between mb-1.5 gap-2">
-    <div class="min-w-0 flex-1">
+  <!-- Episode + Title + Mobile action buttons row. The row itself emits
+       tapOverlay so the empty gap between the title and the right-aligned
+       action buttons doubles as a "close controls" hit zone; the buttons
+       stop propagation so their own taps don't also dismiss. -->
+  <div class="flex items-end justify-between mb-1.5 gap-2" (click)="tapOverlay.emit()">
+    <div class="min-w-0 shrink">
       @if (episodeTitle()) {
         <div class="text-white/60 font-semibold truncate text-base sm:text-lg">{{ episodeTitle() }}</div>
       }
@@ -126,7 +129,7 @@
 
     <!-- Mobile: action buttons aligned right -->
     @if (isMobileTouch()) {
-      <div class="flex items-center gap-0.5 shrink-0">
+      <div class="flex items-center gap-0.5 shrink-0" (click)="$event.stopPropagation()">
         @if (hasNextEpisode()) {
           <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" (click)="nextEpisode.emit()">
             <svg lucideSkipForward class="h-5 w-5"></svg>

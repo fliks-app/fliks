@@ -187,7 +187,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // Component-owned signals (not delegated)
   readonly playbackRate = signal(1);
-  readonly controlsVisible = signal(true);
+  /** Controls start visible on browser (pointer present, the user
+   *  expects to see the affordances immediately) and hidden on native
+   *  (touch / TV — the user taps / moves the remote to reveal them).
+   *  The auto-hide timer that runs during playback toggles this back
+   *  to false after inactivity regardless of the initial state. */
+  readonly controlsVisible = signal(!Capacitor.isNativePlatform());
   readonly inPipMode = signal(false);
   private readonly isLandscape = signal(screen.orientation?.type?.startsWith('landscape') ?? false);
   readonly statsVisible = signal(false);
