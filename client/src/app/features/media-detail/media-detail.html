@@ -45,7 +45,6 @@
           [dateLabel]="episodeDateLabel()"
           [runtime]="episodeDisplayRuntime()"
           [overview]="ep.overview ?? null"
-          [directors]="directors()"
           [monitored]="ep.monitored"
           [fanartUrl]="ep.stillUrl ?? m.fanartUrl ?? null"
           [posterUrl]="ep.stillUrl ?? m.fanartUrl ?? null"
@@ -101,7 +100,7 @@
 
         @if (episodeActiveFile(); as sf) {
           <div class="divider my-6"></div>
-          <app-media-file-info [file]="sf" />
+          <app-media-file-info [file]="sf" [mediaPath]="m.path ?? null" />
         }
       </div>
 
@@ -116,13 +115,11 @@
           [runtime]="m.runtime"
           [overview]="m.overview"
           [genres]="m.genres ?? []"
-          [directors]="directors()"
           [resumeEpisodeLabel]="resumeEpisodeLabel()"
           [resumeEpisodeId]="nextPlayEpisodeId()"
           [resumeMediaFileId]="nextPlayMediaFileId()"
           [status]="m.status"
           [monitored]="m.monitored"
-          [path]="m.path ?? null"
           [libraryName]="m.library?.name ?? null"
           [qualityProfileName]="m.qualityProfile?.name ?? null"
           [languageProfileName]="m.languageProfile?.name ?? null"
@@ -158,6 +155,10 @@
           (editSubtitles)="openSubtitles()"
         />
 
+        @if (m.type === 'movie') {
+          <app-media-info-extra [media]="m" [directors]="directors()" />
+        }
+
         @if (m.type === 'movie' && cast().length) {
           <div class="divider my-6"></div>
           <ng-container *ngTemplateOutlet="castCrewBlock" />
@@ -175,7 +176,7 @@
 
         @if (activeFile(); as af) {
           <div class="divider my-6"></div>
-          <app-media-file-info [file]="af" />
+          <app-media-file-info [file]="af" [mediaPath]="m.path ?? null" />
         }
 
         @if (m.type === 'series' && m.seasons?.length) {
@@ -203,6 +204,10 @@
             (toggleEpisodeWatched)="onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
             (setSeasonProvider)="setSeasonProvider($event.season, $event.provider)"
           />
+        }
+
+        @if (m.type === 'series') {
+          <app-media-info-extra [media]="m" [directors]="directors()" />
         }
 
         @if (m.type === 'series' && cast().length) {
