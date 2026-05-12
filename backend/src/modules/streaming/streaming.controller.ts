@@ -52,10 +52,8 @@ function withTimestampMap(vtt: string | Buffer): string {
   return text.replace(/^(WEBVTT[^\n]*)\n/, `$1\n${VTT_TIMESTAMP_MAP}\n`);
 }
 
-/** Generate a VOD HLS playlist for a given duration and segment URL pattern. */
-/** Default segment + init durations — overridden by admin streaming settings. */
+/** Default segment duration — overridden by admin streaming settings. */
 let SEG_DURATION = 3;
-let INIT_TIME = 1;
 
 /** Pick the right HLS segment Content-Type. fMP4 (.m4s / .mp4) → video/mp4,
  *  MPEG-TS (.ts, used for Chromecast sessions) → video/MP2T. */
@@ -63,23 +61,24 @@ function segmentContentType(segment: string): string {
   return segment.endsWith('.ts') ? 'video/MP2T' : 'video/mp4';
 }
 
+/** Generate a VOD HLS playlist for a given duration and segment URL pattern.
+ *  Uniform segment grid: each segment is SEG_DURATION seconds, seg-N covers
+ *  `[N*SEG, (N+1)*SEG)`. The EXTINF values mirror what FFmpeg actually emits
+ *  so Shaka's presentation timeline stays aligned with the moof PTS the
+ *  segments carry. */
 function buildVodPlaylist(
   duration: number,
   segmentUrl: (index: string) => string,
   initUrl?: string,
 ): string {
-  // FFmpeg `-hls_init_time` shortens segment 0 to ~INIT_TIME so the first
-  // frame ships sooner; remaining segments are SEG_DURATION. The EXTINF
-  // values below mirror that layout so Shaka's presentation timeline stays
-  // aligned with the moof PTS the segments actually carry.
-  const useShortInit = INIT_TIME > 0 && INIT_TIME < SEG_DURATION;
   // Subtract small epsilon before ceil to avoid phantom last segment when
   // ffprobe duration has floating-point imprecision (e.g. 120.001 → ceil
   // produces 41 segments but FFmpeg only writes 40).
   const epsilon = 0.05;
-  const tail = Math.max(0, duration - (useShortInit ? INIT_TIME : 0) - epsilon);
-  const tailCount = Math.ceil(tail / SEG_DURATION);
-  const segCount = Math.max(1, (useShortInit ? 1 : 0) + tailCount);
+  const segCount = Math.max(
+    1,
+    Math.ceil(Math.max(0, duration - epsilon) / SEG_DURATION),
+  );
   const lines = [
     '#EXTM3U',
     '#EXT-X-VERSION:7',
@@ -92,20 +91,8 @@ function buildVodPlaylist(
     lines.push(`#EXT-X-MAP:URI="${initUrl}"`);
   }
   for (let i = 0; i < segCount; i++) {
-    let segStart: number;
-    let segLen: number;
-    if (useShortInit) {
-      if (i === 0) {
-        segStart = 0;
-        segLen = Math.min(INIT_TIME, duration);
-      } else {
-        segStart = INIT_TIME + (i - 1) * SEG_DURATION;
-        segLen = Math.min(SEG_DURATION, duration - segStart);
-      }
-    } else {
-      segStart = i * SEG_DURATION;
-      segLen = Math.min(SEG_DURATION, duration - segStart);
-    }
+    const segStart = i * SEG_DURATION;
+    const segLen = Math.min(SEG_DURATION, duration - segStart);
     if (segLen <= 0) break;
     lines.push(`#EXTINF:${segLen.toFixed(3)},`);
     lines.push(segmentUrl(String(i).padStart(4, '0')));
@@ -439,17 +426,10 @@ export class StreamingController {
       mediaFileId,
       !!deviceProfile.useTs,
     );
-    this.activeStreamTracker.setStreamingDurations(
-      ss.segmentDuration,
-      ss.initTime,
-    );
+    this.activeStreamTracker.setStreamingDuration(ss.segmentDuration);
     // Update module-level constants used by buildVodPlaylist and transcoding
     SEG_DURATION = ss.segmentDuration;
-    INIT_TIME = ss.initTime;
-    this.transcodingService.setSegmentDurations(
-      ss.segmentDuration,
-      ss.initTime,
-    );
+    this.transcodingService.setSegmentDuration(ss.segmentDuration);
 
     // Persist encoder preset + QSV advanced options for downstream sessions.
     this.activeStreamTracker.setEncoderPreset(mediaFileId, ss.qsvPreset);

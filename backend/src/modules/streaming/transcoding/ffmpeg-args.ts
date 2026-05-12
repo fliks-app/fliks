@@ -1,7 +1,6 @@
 import { Logger } from '@nestjs/common';
 import * as path from 'path';
 import {
-  getInitTime,
   getSegmentDuration,
   segmentIndexToSeconds,
 } from './constants';
@@ -82,7 +81,6 @@ export function buildFfmpegArgs(
   const segExt = useTs ? 'ts' : 'm4s';
 
   const SEGMENT_DURATION = getSegmentDuration();
-  const INIT_TIME = getInitTime();
 
   // Audio output args derived from the stream-builder decision. No
   // re-derivation here — we just emit what we were told. Safe fallback to
@@ -107,16 +105,11 @@ export function buildFfmpegArgs(
   // to the muxer so the first segment lands at tfdt = T × timescale.
   const seekSeconds = startSegment > 0 ? segmentIndexToSeconds(startSegment) : 0;
 
-  // Keyframes at: 0, INIT_TIME, INIT_TIME+SEG, INIT_TIME+2*SEG, …
-  // Lets `-hls_init_time` actually cut segment 0 short (needs a keyframe
-  // at INIT_TIME); collapses to a regular fixed-GOP cadence when
-  // INIT_TIME ≥ SEGMENT_DURATION. On a seek-resume we use `-copyts` so
-  // the encoder's `t` is in source time — the expression anchors at
-  // `seekSeconds` and IDRs land on the same grid the HLS muxer expects.
-  const forceKeyframesExpr =
-    startSegment > 0
-      ? `expr:gte(t,${seekSeconds}+n_forced*${SEGMENT_DURATION})`
-      : `expr:if(eq(n_forced,0),gte(t,0),gte(t,${INIT_TIME}+(n_forced-1)*${SEGMENT_DURATION}))`;
+  // Force an IDR every `SEGMENT_DURATION` seconds so the HLS muxer can
+  // cut segments on a uniform grid. On a seek-resume we use `-copyts`
+  // so the encoder's `t` is in source time — the expression anchors at
+  // `seekSeconds` and IDRs land on the same grid as before the seek.
+  const forceKeyframesExpr = `expr:gte(t,${seekSeconds}+n_forced*${SEGMENT_DURATION})`;
   // Closed-GOP, deterministic IDR placement on h264_qsv:
   //  - `-forced_idr 1` : every `force_key_frames` tick lands as a real
   //    IDR (without it, qsvenc emits some as plain I, breaking HLS
@@ -249,16 +242,24 @@ export function buildFfmpegArgs(
 
   args.push('-i', inputPath);
 
+  // Preserve source PTS end-to-end on every spawn (see
+  // docs/streaming/encoder-stability.md). Required so subtitle cues —
+  // timed in source PTS by external sidecar / extraction — line up
+  // with the muxed segments; without it the fmp4 muxer's default
+  // `avoid_negative_ts auto` shifts the timeline whenever the source
+  // has an audio `start_time` offset (common on MKV to compensate
+  // for codec priming), breaking subtitle alignment and creating
+  // hard-to-track A/V skew on some receivers.
+  args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
+
   if (startSegment > 0) {
-    // Seek-resume timestamp wiring (see docs/streaming/encoder-stability.md):
-    //  - `-copyts` keeps source PTS end-to-end → tfdt = seekSeconds.
-    //  - `-muxdelay/-muxpreload 0` stops the fmp4 muxer from inserting
-    //    a priming edit list when CTS offsets show up on the IDR.
-    //  - `-ss seekSeconds` after `-i` drops decoded video frames before
-    //    seekSeconds, so the encoder's mandatory first IDR lands at T
-    //    instead of on the source keyframe ≤ T. Audio keeps its
-    //    ±21–40 ms packet-snap drift (intrinsic to demuxer seek).
-    args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
+    // Output-seek after `-i`: with `-copyts` it operates in source-time
+    // and drops decoded video frames before `seekSeconds`, so the
+    // encoder's mandatory first IDR lands at T instead of on the
+    // source keyframe ≤ T (the HW-decode path's `accurate_seek`
+    // discard pass doesn't always trim frames on VAAPI surfaces).
+    // Audio keeps its ±21–40 ms packet-snap drift (intrinsic to
+    // demuxer seek on a packetised stream).
     args.push('-ss', String(seekSeconds));
   }
 
@@ -457,7 +458,6 @@ export function buildFfmpegArgs(
     args.push(
       '-f', 'hls',
       '-hls_time', String(SEGMENT_DURATION),
-      '-hls_init_time', String(INIT_TIME),
       '-hls_list_size', '0',
       '-start_number', String(startSegment),
       '-hls_segment_type', segType,
@@ -485,7 +485,6 @@ export function buildFfmpegArgs(
     args.push(
       '-f', 'hls',
       '-hls_time', String(SEGMENT_DURATION),
-      '-hls_init_time', String(INIT_TIME),
       '-hls_list_size', '0',
       '-start_number', String(startSegment),
       '-hls_segment_type', segType,
@@ -516,7 +515,6 @@ export function buildAudioOnlyFfmpegArgs(
   const segType = useTs ? 'mpegts' : 'fmp4';
   const segExt = useTs ? 'ts' : 'm4s';
   const SEGMENT_DURATION = getSegmentDuration();
-  const INIT_TIME = getInitTime();
 
   const args = ['-hide_banner', '-loglevel', 'warning'];
   if (trustedStreamInfo) {
@@ -529,11 +527,6 @@ export function buildAudioOnlyFfmpegArgs(
     args.push('-analyzeduration', '1000000', '-probesize', '1000000');
   }
 
-  // Single input-seek to T + `-copyts` to propagate source PTS straight
-  // through to the muxer (tfdt = T × timescale). See `buildFfmpegArgs`
-  // for the long explanation of why the previous
-  // `-avoid_negative_ts make_zero` + `-output_ts_offset` pair zeroed
-  // tfdt instead of lifting it.
   const seekSeconds = startSegment > 0 ? segmentIndexToSeconds(startSegment) : 0;
 
   if (startSegment > 0) {
@@ -542,8 +535,12 @@ export function buildAudioOnlyFfmpegArgs(
 
   args.push('-i', inputPath);
 
+  // Preserve source PTS end-to-end on every spawn (see
+  // `buildFfmpegArgs` for the full rationale) so audio renditions stay
+  // anchored to the same timeline as the main video output.
+  args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
+
   if (startSegment > 0) {
-    args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
     args.push('-ss', String(seekSeconds));
   }
 
@@ -554,7 +551,6 @@ export function buildAudioOnlyFfmpegArgs(
   args.push(
     '-f', 'hls',
     '-hls_time', String(SEGMENT_DURATION),
-    '-hls_init_time', String(INIT_TIME),
     '-hls_list_size', '0',
     '-start_number', String(startSegment),
     '-hls_segment_type', segType,
@@ -583,7 +579,6 @@ export function buildRemuxArgs(
   log?: Logger,
 ): string[] {
   const SEGMENT_DURATION = getSegmentDuration();
-  const INIT_TIME = getInitTime();
 
   const args = ['-hide_banner', '-loglevel', 'warning'];
   if (trustedStreamInfo) {
@@ -602,14 +597,13 @@ export function buildRemuxArgs(
 
   args.push('-i', inputPath);
 
+  // Preserve source PTS end-to-end on every spawn (see
+  // `buildFfmpegArgs` for the full rationale).
+  args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
+
   if (startSegment > 0) {
-    // Same `-copyts` pattern as the transcode path: propagate source
-    // PTS through to the muxer so seg-N's tfdt = seekSeconds, instead
-    // of the previous `output_ts_offset + avoid_negative_ts make_zero`
-    // pair that cancelled to tfdt = 0. The output-seek `-ss` after
-    // `-i` drops decoded frames < seekSeconds (HW-decode + copy paths
-    // need it).
-    args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
+    // Output-seek after `-i`: drops decoded frames < seekSeconds with
+    // `-copyts` operating in source-time.
     args.push('-ss', String(remuxSeekSeconds));
   }
 
@@ -636,7 +630,6 @@ export function buildRemuxArgs(
   args.push(
     '-f', 'hls',
     '-hls_time', String(SEGMENT_DURATION),
-    '-hls_init_time', String(INIT_TIME),
     '-hls_list_size', '0',
     '-start_number', String(startSegment),
     '-hls_segment_type', 'fmp4',
