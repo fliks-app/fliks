@@ -418,6 +418,44 @@ export class MediaService {
     return Object.fromEntries(rows.map((r) => [r.libraryId, r.count]));
   }
 
+  /**
+   * Aggregate distinct genres across the accessible libraries, with the
+   * total item count + up to 4 sample posters per genre (used by the
+   * library Genres tab to render a mosaic when posters are available).
+   * Skips media with null / empty `posterUrl` for the sample collection
+   * — they wouldn't render anything useful in the mosaic.
+   */
+  async getGenres(
+    accessibleLibraryIds: number[],
+  ): Promise<{ genre: string; count: number; posters: string[] }[]> {
+    if (accessibleLibraryIds.length === 0) return [];
+    // jsonb_array_elements_text unrolls the `media.genres` array so we
+    // can GROUP BY genre. The lateral join lets us aggregate poster
+    // URLs in the same pass; LIMIT 4 inside the array_agg keeps payload
+    // small without a per-group subquery.
+    const rows: { genre: string; count: number; posters: string[] }[] =
+      await this.mediaRepo.query(
+        `
+        SELECT g.genre,
+               COUNT(*)::int AS count,
+               COALESCE(
+                 (ARRAY_AGG(m."posterUrl" ORDER BY m.id)
+                  FILTER (WHERE m."posterUrl" IS NOT NULL))[1:4],
+                 ARRAY[]::text[]
+               ) AS posters
+        FROM media m
+        CROSS JOIN LATERAL jsonb_array_elements_text(m.genres) AS g(genre)
+        WHERE m."libraryId" = ANY($1)
+          AND m.genres IS NOT NULL
+          AND m.genres::text != '[]'
+        GROUP BY g.genre
+        ORDER BY g.genre ASC
+        `,
+        [accessibleLibraryIds],
+      );
+    return rows;
+  }
+
   async findAll(
     query: SearchMediaDto,
     userId?: number,

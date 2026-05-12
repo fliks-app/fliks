@@ -119,6 +119,25 @@ export class MediaController {
     return APP_QUALITIES;
   }
 
+  /** Distinct genres present in a library, each with item count + the
+   *  poster URLs of up to 4 sample items (rendered as a mosaic on the
+   *  library Genres tab). When `libraryId` is omitted the user's whole
+   *  accessible scope is aggregated. */
+  @Get('genres')
+  @CheckPolicies((ability) => ability.can(Action.Read, Media))
+  async genres(
+    @CurrentUser() user: User,
+    @Query('libraryId') libraryIdRaw?: string,
+  ) {
+    const accessible = await this.libraries.getAccessibleLibraryIds(user);
+    let libraryIds = accessible;
+    const libraryId = libraryIdRaw ? parseInt(libraryIdRaw, 10) : null;
+    if (libraryId && Number.isFinite(libraryId)) {
+      libraryIds = accessible.includes(libraryId) ? [libraryId] : [];
+    }
+    return this.mediaService.getGenres(libraryIds);
+  }
+
   @Get('calendar')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
   async calendar(@Query() query: CalendarQueryDto, @CurrentUser() user: User) {

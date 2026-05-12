@@ -16,7 +16,7 @@ import { ActivatedRoute, NavigationStart, Router } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { MediaService, Media } from '../../core/services/api/media.service';
+import { MediaService, Media, GenreSummary } from '../../core/services/api/media.service';
 import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { ProfilesService, QualityProfile } from '../../core/services/api/profiles.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
@@ -33,7 +33,9 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
-import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown } from '@lucide/angular';
+import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown, LucideFolder, LucideX } from '@lucide/angular';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { ImgFadeInDirective } from '../../shared/directives/img-fade-in.directive';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
@@ -66,6 +68,10 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     LucideSlidersHorizontal,
     LucideArrowUp,
     LucideArrowDown,
+    LucideFolder,
+    LucideX,
+    ResolveUrlPipe,
+    ImgFadeInDirective,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library.html',
@@ -79,7 +85,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly focusMemory = inject(FocusMemoryService);
-  private readonly navbar = inject(NavbarService);
+  readonly navbar = inject(NavbarService);
   private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
   private readonly translate = inject(TranslateService);
@@ -88,6 +94,11 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private navStartSub?: Subscription;
   private attachedSub?: Subscription;
   private detachedSub?: Subscription;
+  private queryParamSub?: Subscription;
+  /** Set while a state-driven `syncQueryParams` is being applied to the
+   *  URL, so the `queryParamMap` subscription that fires right after
+   *  can ignore the round-trip instead of re-applying our own write. */
+  private skipQueryParamSync = false;
 
   /** Resolved library (null while loading or if not found). */
   readonly library = signal<LibrarySummary | null>(null);
@@ -109,6 +120,14 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** History-based recommendations, scoped to the active library. */
   readonly suggestionsRecommendations = signal<RecommendationItem[]>([]);
   readonly suggestionsLoading = signal(false);
+
+  // ── Genres view ─────────────────────────────────────────────────────
+  /** Distinct genres in the library + sample posters for the mosaic. */
+  readonly genresList = signal<GenreSummary[]>([]);
+  readonly genresLoading = signal(false);
+  /** When set, the `all` grid is filtered to this genre via the API's
+   *  `genre=` param. Cleared with the chip's × button. */
+  readonly selectedGenre = signal<string>('');
 
   readonly monitoredCount = computed(() => this.list.all().filter((m) => m.monitored).length);
   readonly movieFileCount = computed(() =>
@@ -214,6 +233,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.viewMode.set(
         (qp.get('view') ?? stored['view'] ?? 'all') as LibraryViewMode,
       );
+      this.selectedGenre.set(qp.get('genre') ?? stored['genre'] ?? '');
 
       this.scrollMemory.activate(scrollKey);
       this.list.trackScroll('media');
@@ -224,6 +244,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
         // back-nav with the persisted mode. Fetch the suggestions data
         // alongside the regular grid so the panel isn't empty.
         void this.loadSuggestions();
+      } else if (this.viewMode() === 'genres') {
+        void this.loadGenres();
       }
       this.scrollMemory.restore(scrollKey, this.injector);
       if (this.tv.isTv()) {
@@ -243,10 +265,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.scrollMemory.activate(scrollKey);
       this.navbar.setPageTitle(lib.name);
       void this.load(lib.id, true);
-      // Re-fire suggestions when we're on that tab so the SWR cache
-      // has a chance to bring in fresh data on a back-navigation.
+      // Re-fire suggestions / genres when we're on that tab so the SWR
+      // cache has a chance to bring in fresh data on a back-navigation.
       if (this.viewMode() === 'suggestions') {
         void this.loadSuggestions();
+      } else if (this.viewMode() === 'genres') {
+        void this.loadGenres();
       }
       this.scrollMemory.restoreSticky(scrollKey);
       if (this.tv.isTv()) {
@@ -259,6 +283,30 @@ export class LibraryComponent implements OnInit, OnDestroy {
       const lib = this.library();
       if (lib) this.scrollMemory.deactivateIf(`library-${lib.id}`);
     });
+
+    // Re-apply state on browser back/forward (same route, queryParams
+    // change). Initial load + state-driven `syncQueryParams` writes are
+    // skipped via the `skipQueryParamSync` flag so we don't recurse.
+    this.queryParamSub = this.route.queryParamMap.subscribe((qp) => {
+      if (this.skipQueryParamSync) {
+        this.skipQueryParamSync = false;
+        return;
+      }
+      if (!this.library()) return;
+      this.searchQuery.set(qp.get('q') ?? '');
+      this.filterMonitored.set((qp.get('monitored') ?? '') as FilterMonitored);
+      this.filterStatus.set(qp.get('status') ?? '');
+      this.sortBy.set(qp.get('sortBy') ?? 'title');
+      this.sortOrder.set((qp.get('sortOrder') ?? 'ASC') as SortOrder);
+      this.viewMode.set((qp.get('view') ?? 'all') as LibraryViewMode);
+      this.selectedGenre.set(qp.get('genre') ?? '');
+      const lib = this.library();
+      if (lib) {
+        void this.load(lib.id, true);
+        if (this.viewMode() === 'genres') void this.loadGenres();
+        else if (this.viewMode() === 'suggestions') void this.loadSuggestions();
+      }
+    });
   }
 
   ngOnDestroy() {
@@ -268,6 +316,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.navStartSub?.unsubscribe();
     this.attachedSub?.unsubscribe();
     this.detachedSub?.unsubscribe();
+    this.queryParamSub?.unsubscribe();
   }
 
   private applyDefaultFocus(libraryId: number) {
@@ -324,10 +373,47 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   setViewMode(mode: LibraryViewMode) {
+    if (this.viewMode() === mode) return;
     this.viewMode.set(mode);
-    this.syncQueryParams();
+    // Push a history entry on tab switch so browser back walks through
+    // the previously-active tabs (Films / Suggestions / Genres). Same
+    // pattern as Plex / Jellyseerr web.
+    this.syncQueryParams(true);
     if (mode === 'suggestions') {
       void this.loadSuggestions();
+    } else if (mode === 'genres') {
+      void this.loadGenres();
+    }
+  }
+
+  /** Click handler on a genre card — set the genre filter and pivot
+   *  back to the main `all` grid where it's actually applied. */
+  pickGenre(genre: string) {
+    this.selectedGenre.set(genre);
+    this.viewMode.set('all');
+    // Push a real history entry so the browser back button returns
+    // to the Genres list instead of the page-before-library.
+    this.syncQueryParams(true);
+    void this.load(this.library()?.id);
+  }
+
+  clearSelectedGenre() {
+    this.selectedGenre.set('');
+    this.syncQueryParams();
+    void this.load(this.library()?.id);
+  }
+
+  /** Fetches the genres aggregate (count + sample posters) for the
+   *  current library. Same SWR pattern as `loadSuggestions`. */
+  private async loadGenres(): Promise<void> {
+    const lib = this.library();
+    if (!lib) return;
+    this.genresLoading.set(true);
+    try {
+      const rows = await this.mediaService.getGenres(lib.id).catch(() => null);
+      if (rows) this.genresList.set(rows);
+    } finally {
+      this.genresLoading.set(false);
     }
   }
 
@@ -410,7 +496,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
     }
   }
 
-  private syncQueryParams() {
+  /** Reflect the current state in the URL. `push` adds a real history
+   *  entry instead of replacing — used for the genres-list → genre-filter
+   *  transition so the browser back button returns to the Genres list. */
+  private syncQueryParams(push = false) {
     const params: Record<string, string> = {};
     if (this.searchQuery()) params['q'] = this.searchQuery();
     if (this.filterMonitored()) params['monitored'] = this.filterMonitored();
@@ -418,7 +507,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (this.sortBy() !== 'title') params['sortBy'] = this.sortBy();
     if (this.sortOrder() !== 'ASC') params['sortOrder'] = this.sortOrder();
     if (this.viewMode() !== 'all') params['view'] = this.viewMode();
-    void this.router.navigate([], { queryParams: params, replaceUrl: true });
+    if (this.selectedGenre()) params['genre'] = this.selectedGenre();
+    this.skipQueryParamSync = true;
+    void this.router.navigate([], { queryParams: params, replaceUrl: !push });
     this.saveFilters();
   }
 
@@ -434,6 +525,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (this.sortBy() !== 'title') data['sortBy'] = this.sortBy();
     if (this.sortOrder() !== 'ASC') data['sortOrder'] = this.sortOrder();
     if (this.viewMode() !== 'all') data['view'] = this.viewMode();
+    if (this.selectedGenre()) data['genre'] = this.selectedGenre();
     localStorage.setItem(this.storageKey, JSON.stringify(data));
   }
 
@@ -457,6 +549,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
           q: this.searchQuery() || undefined,
           sortBy: this.sortBy(),
           sortOrder: this.sortOrder(),
+          genre: this.selectedGenre() || undefined,
           monitored: monitored ? monitored === 'true' : undefined,
           missing: fs === 'missing' ? true : fs === 'downloaded' ? false : undefined,
           cutoffUnmet: fs === 'cutoffUnmet' ? true : undefined,
