@@ -710,6 +710,11 @@ export class MediaService {
         'qualityProfile',
         'languageProfile',
         'library',
+        // Eager on the entity, but relationLoadStrategy 'query' above
+        // skips eager auto-load — list it explicitly so the detail
+        // endpoint exposes the extended TMDB fields (originalLanguage,
+        // productionCountries, productionCompanies, tagline, …).
+        'metadata',
       ],
     });
     if (!media) {

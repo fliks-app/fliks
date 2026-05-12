@@ -16,7 +16,7 @@
       <p class="text-base-content/70 mt-0.5">{{ episodeLabel() }}</p>
     }
 
-    <!-- Metadata: rating, date, runtime -->
+    <!-- Metadata: rating, date, runtime, library badge -->
     <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-2 text-base-content/60">
       @if (rating()) {
         <span class="flex items-center gap-0.5 text-warning font-semibold">
@@ -26,70 +26,20 @@
       }
       @if (dateLabel()) { <span>{{ dateLabel() }}</span> }
       @if (runtime()) { <span>{{ runtime() }}min</span> }
+      @if (libraryName()) {
+        <span class="badge badge-primary badge-outline">{{ libraryName() }}</span>
+      }
     </div>
 
-    <!-- Stream info: video (or file select) / audio / subtitles (hidden on series overview) -->
-    @if (selectedFileId() && (mediaType() !== 'series' || episodeId())) {
-      <div class="flex flex-col gap-y-1 mt-3">
-        <div class="flex items-center gap-x-4">
-          <span class="text-base-content/50">{{ 'media_info.video' | translate }}</span>
-          @if (multipleFiles()) {
-            <select class="select select-bordered select-sm w-fit" [ngModel]="selectedFileId()" (ngModelChange)="selectedFileIdChange.emit($event)">
-              @for (f of files(); track f.id) {
-                <option [ngValue]="f.id">{{ fileLabel(f) }}</option>
-              }
-            </select>
-          } @else if (videoLabel()) {
-            <span>{{ videoLabel() }}</span>
-          }
-        </div>
-        @if (audioTracks().length) {
-          <div class="flex items-center gap-x-4">
-            <span class="text-base-content/50">{{ 'media_info.audio' | translate }}</span>
-            @if (audioTracks().length === 1) {
-              <span>{{ audioTracks()[0].label }}</span>
-            } @else {
-              <select class="select select-bordered select-sm w-fit" [ngModel]="selectedAudioIndex()" (ngModelChange)="onAudioChange($event)">
-                @for (t of audioTracks(); track t.index) {
-                  <option [ngValue]="t.index">{{ t.label }}</option>
-                }
-              </select>
-            }
-          </div>
-        }
-        @if (subtitles().length) {
-          <div class="flex items-center gap-x-4">
-            <span class="text-base-content/50">{{ 'media_info.subtitles' | translate }}</span>
-            @if (subtitles().length === 1) {
-              <span>{{ subtitles()[0].label }}</span>
-            } @else {
-              <select class="select select-bordered select-sm w-fit" [ngModel]="selectedSubtitleId()" (ngModelChange)="onSubtitleChange($event)">
-                <option [ngValue]="null">{{ 'player.off' | translate }}</option>
-                @for (s of subtitles(); track s.id) {
-                  <option [ngValue]="s.id">{{ s.label }}</option>
-                }
-              </select>
-            }
-          </div>
-        }
-      </div>
-    }
+    <ng-container *ngTemplateOutlet="streamInfoBlock"></ng-container>
 
-    <!-- Library info + genres -->
-    @if (path() || qualityProfileName() || languageProfileName() || tags().length || genres().length) {
+    <!-- Tags (library badge moved up; genres moved to media-info-extra). -->
+    @if (tags().length) {
       <div class="flex flex-wrap gap-x-6 gap-y-2 mt-4">
-        @if (tags().length) {
-          <div class="flex flex-col">
-            <span class="text-base-content/40 text-sm">{{ 'media_detail.tags_label' | translate }}</span>
-            <span>{{ tags().join(', ') }}</span>
-          </div>
-        }
-        @if (genres().length) {
-          <div class="flex flex-col">
-            <span class="text-base-content/40 text-sm">{{ 'media_info.genres' | translate }}</span>
-            <span>{{ genres().join(', ') }}</span>
-          </div>
-        }
+        <div class="flex flex-col">
+          <span class="text-base-content/40 text-sm">{{ 'media_detail.tags_label' | translate }}</span>
+          <span>{{ tags().join(', ') }}</span>
+        </div>
       </div>
     }
 
@@ -99,7 +49,7 @@
 
     <!-- Play buttons (mobile) -->
     @if (selectedFileId() || resumeMediaFileId()) {
-      <div appTvRow class="flex gap-2" [class.mt-4]="!resumeEpisodeLabel()" [class.mt-2]="resumeEpisodeLabel()">
+      <div appTvRow class="flex gap-2 mb-2" [class.mt-6]="!resumeEpisodeLabel()" [class.mt-4]="resumeEpisodeLabel()">
         <button class="btn btn-primary flex-1 gap-2" (click)="play(false)">
           <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
           @if (resumeLabel()) {
@@ -172,11 +122,6 @@
     @if (overview()) {
       <p class="mt-4 text-base-content/80 leading-relaxed line-clamp-4">{{ overview() }}</p>
     }
-    @if (directors().length) {
-      <p class="mt-2 text-base-content/50">
-        {{ 'media_info.directors' | translate }} {{ directors().join(', ') }}
-      </p>
-    }
 
   </div>
 </div>
@@ -243,9 +188,8 @@
         <p class="text-base-content/70 mt-1 text-lg">{{ episodeLabel() }}</p>
       }
 
-      <!-- Metadata row: status, rating, date, runtime, end time -->
+      <!-- Metadata row: rating, date, runtime, end time, library badge -->
       <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-base-content/60">
-        @if (status()) { <span class="badge badge-neutral">{{ status() }}</span> }
         @if (!monitored()) { <span class="badge badge-ghost">{{ 'media_detail.unmonitored' | translate }}</span> }
         @if (rating()) {
           <span class="flex items-center gap-1 text-warning font-semibold">
@@ -258,70 +202,17 @@
         @if (endTimeLabel() && selectedFileId()) {
           <span>{{ 'media_info.ends_at' | translate:{ time: endTimeLabel() } }}</span>
         }
+        @if (libraryName()) {
+          <span class="badge badge-primary badge-outline">{{ libraryName() }}</span>
+        }
       </div>
 
-      <!-- Stream info: Video (or file select) / Audio / Subtitles (hidden on series overview) -->
-      @if (selectedFileId() && (mediaType() !== 'series' || episodeId())) {
-        <div class="flex flex-col gap-y-1.5 mt-3">
-          <div class="flex items-center gap-2">
-            <span class="text-base-content/50 font-medium">{{ 'media_info.video' | translate }}</span>
-            @if (multipleFiles()) {
-              <select class="select select-bordered select-sm w-fit" [ngModel]="selectedFileId()" (ngModelChange)="selectedFileIdChange.emit($event)">
-                @for (f of files(); track f.id) {
-                  <option [ngValue]="f.id">{{ fileLabel(f) }}</option>
-                }
-              </select>
-            } @else if (videoLabel()) {
-              <span>{{ videoLabel() }}</span>
-            }
-          </div>
-          @if (audioTracks().length) {
-            <div class="flex items-center gap-2">
-              <span class="text-base-content/50 font-medium">{{ 'media_info.audio' | translate }}</span>
-              @if (audioTracks().length === 1) {
-                <span>{{ audioTracks()[0].label }}</span>
-              } @else {
-                <select class="select select-bordered select-sm w-fit" [ngModel]="selectedAudioIndex()" (ngModelChange)="onAudioChange($event)">
-                  @for (t of audioTracks(); track t.index) {
-                    <option [ngValue]="t.index">{{ t.label }}</option>
-                  }
-                </select>
-              }
-            </div>
-          }
-          @if (subtitles().length) {
-            <div class="flex items-center gap-2">
-              <span class="text-base-content/50 font-medium">{{ 'media_info.subtitles' | translate }}</span>
-              @if (subtitles().length === 1) {
-                <span>{{ subtitles()[0].label }}</span>
-              } @else {
-                <select class="select select-bordered select-sm w-fit" [ngModel]="selectedSubtitleId()" (ngModelChange)="onSubtitleChange($event)">
-                  <option [ngValue]="null">{{ 'player.off' | translate }}</option>
-                  @for (s of subtitles(); track s.id) {
-                    <option [ngValue]="s.id">{{ s.label }}</option>
-                  }
-                </select>
-              }
-            </div>
-          }
-        </div>
-      }
+      <ng-container *ngTemplateOutlet="streamInfoBlock"></ng-container>
 
-      <!-- Library info + genres -->
-      @if (libraryName() || path() || qualityProfileName() || languageProfileName() || tags().length || genres().length) {
+      <!-- Quality / language profiles + tags (library badge moved up next to
+           end-time; genres moved to the media-info-extra panel). -->
+      @if (qualityProfileName() || languageProfileName() || tags().length) {
         <div class="flex flex-wrap gap-x-8 gap-y-2 mt-4">
-          @if (libraryName()) {
-            <div class="flex flex-col">
-              <span class="text-base-content/40 text-sm">{{ 'media_detail.library_label' | translate }}</span>
-              <span class="badge badge-primary badge-outline">{{ libraryName() }}</span>
-            </div>
-          }
-          @if (path()) {
-            <div class="flex flex-col">
-              <span class="text-base-content/40 text-sm">{{ 'media_detail.path_label' | translate }}</span>
-              <span class="font-mono">{{ path() }}</span>
-            </div>
-          }
           @if (qualityProfileName()) {
             <div class="flex flex-col">
               <span class="text-base-content/40 text-sm">{{ 'media_detail.quality_profile_label' | translate }}</span>
@@ -340,12 +231,6 @@
               <span>{{ tags().join(', ') }}</span>
             </div>
           }
-          @if (genres().length) {
-            <div class="flex flex-col">
-              <span class="text-base-content/40 text-sm">{{ 'media_info.genres' | translate }}</span>
-              <span>{{ genres().join(', ') }}</span>
-            </div>
-          }
         </div>
       }
 
@@ -354,7 +239,7 @@
       }
 
       <!-- Action buttons -->
-      <div appTvRow class="flex flex-wrap items-center gap-2" [class.mt-4]="!resumeEpisodeLabel()" [class.mt-2]="resumeEpisodeLabel()">
+      <div appTvRow class="flex flex-wrap items-center gap-2 mb-2" [class.mt-6]="!resumeEpisodeLabel()" [class.mt-4]="resumeEpisodeLabel()">
         @if (selectedFileId() || resumeMediaFileId()) {
           <button class="btn btn-primary btn gap-1" autofocus (click)="play(false)">
             <svg lucidePlay class="h-4 w-4" fill="currentColor"></svg>
@@ -421,15 +306,61 @@
       @if (overview()) {
         <p class="mt-4 text-base-content/90 leading-relaxed whitespace-pre-line">{{ overview() }}</p>
       }
-      @if (directors().length) {
-        <p class="mt-2 text-base-content/50">
-          {{ 'media_info.directors' | translate }} {{ directors().join(', ') }}
-        </p>
-      }
 
     </div>
   </div>
 </div>
+
+<!-- Shared between mobile + desktop: Video (or file select) / Audio / Subtitles
+     (hidden on series overview). Single source of truth so we don't drift
+     when iterating on the layout. -->
+<ng-template #streamInfoBlock>
+  @if (selectedFileId() && (mediaType() !== 'series' || episodeId())) {
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-5">
+      <div class="flex items-center gap-2">
+        <span class="text-base-content/50">{{ 'media_info.video' | translate }}</span>
+        @if (multipleFiles()) {
+          <select class="select select-bordered select-sm w-fit" [ngModel]="selectedFileId()" (ngModelChange)="selectedFileIdChange.emit($event)">
+            @for (f of files(); track f.id) {
+              <option [ngValue]="f.id">{{ fileLabel(f) }}</option>
+            }
+          </select>
+        } @else if (videoLabel()) {
+          <span>{{ videoLabel() }}</span>
+        }
+      </div>
+      @if (audioTracks().length) {
+        <div class="flex items-center gap-2">
+          <span class="text-base-content/50">{{ 'media_info.audio' | translate }}</span>
+          @if (audioTracks().length === 1) {
+            <span>{{ audioTracks()[0].label }}</span>
+          } @else {
+            <select class="select select-bordered select-sm w-fit" [ngModel]="selectedAudioIndex()" (ngModelChange)="onAudioChange($event)">
+              @for (t of audioTracks(); track t.index) {
+                <option [ngValue]="t.index">{{ t.label }}</option>
+              }
+            </select>
+          }
+        </div>
+      }
+      @if (subtitles().length) {
+        <div class="flex items-center gap-2">
+          <span class="text-base-content/50">{{ 'media_info.subtitles' | translate }}</span>
+          @if (subtitles().length === 1) {
+            <span>{{ subtitles()[0].label }}</span>
+          } @else {
+            <select class="select select-bordered select-sm w-fit" [ngModel]="selectedSubtitleId()" (ngModelChange)="onSubtitleChange($event)">
+              <option [ngValue]="null">{{ 'player.off' | translate }}</option>
+              @for (s of subtitles(); track s.id) {
+                <option [ngValue]="s.id">{{ s.label }}</option>
+              }
+            </select>
+          }
+        </div>
+      }
+    </div>
+  }
+</ng-template>
 
 <!-- Items projected into both mobile + desktop dropdown-menus. -->
 <ng-template #moreMenuItems>

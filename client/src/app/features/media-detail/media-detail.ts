@@ -32,6 +32,7 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { StreamingApiService, MediaResumeInfo } from '../../core/services/api/streaming-api.service';
 import { MarkersApiService } from '../../core/services/api/markers-api.service';
 import { MediaInfoHeaderComponent } from '../../shared/components/media-info-header/media-info-header';
+import { MediaInfoExtraComponent } from '../../shared/components/media-info-extra/media-info-extra';
 import { SubtitlesModalComponent } from '../../shared/components/subtitles-modal/subtitles-modal';
 import { MediaFileInfoComponent } from '../../shared/components/media-file-info';
 import { MediaDetailSeasonsComponent } from './components/media-detail-seasons/media-detail-seasons.component';
@@ -72,6 +73,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
   imports: [
     TranslateModule,
     MediaInfoHeaderComponent,
+    MediaInfoExtraComponent,
     SubtitlesModalComponent,
     MediaFileInfoComponent,
     MediaDetailSeasonsComponent,

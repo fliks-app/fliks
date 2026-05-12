@@ -103,7 +103,6 @@ export class MediaInfoHeaderComponent {
   readonly dateLabel = input<string | null>(null);
   readonly runtime = input<number | null>(null);
   readonly overview = input<string | null>(null);
-  readonly directors = input<string[]>([]);
   readonly genres = input<string[]>([]);
   /** For series: label of the episode to resume (e.g. "S01:E03 - Title") */
   readonly resumeEpisodeLabel = input<string | null>(null);
@@ -112,7 +111,6 @@ export class MediaInfoHeaderComponent {
   readonly resumeMediaFileId = input<number | undefined>(undefined);
   readonly status = input<string | null>(null);
   readonly monitored = input(true);
-  readonly path = input<string | null>(null);
   readonly libraryName = input<string | null>(null);
   readonly qualityProfileName = input<string | null>(null);
   readonly languageProfileName = input<string | null>(null);

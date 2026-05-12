@@ -27,9 +27,22 @@ type FileInput = {
 })
 export class MediaFileInfoComponent {
   readonly file = input.required<FileInput | null>();
+  /** Absolute folder path of the parent media (rootFolder + folderName).
+   *  Concatenated with `file.relativePath` so the panel exposes the
+   *  full disk path instead of a basename-like fragment. */
+  readonly mediaPath = input<string | null>(null);
 
   readonly videoStream = computed(() => this.file()?.streamInfo?.video[0] ?? null);
   readonly audioStreams = computed(() => this.file()?.streamInfo?.audio ?? []);
+
+  readonly fullPath = computed(() => {
+    const f = this.file();
+    if (!f?.relativePath) return '';
+    const base = this.mediaPath();
+    if (!base) return f.relativePath;
+    const sep = base.endsWith('/') ? '' : '/';
+    return `${base}${sep}${f.relativePath}`;
+  });
 
   /** Container bitrate from ffprobe, or estimated from file size and duration. */
   readonly originalFileBitrate = computed(() => {

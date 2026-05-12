@@ -1,14 +1,22 @@
 import {
   ApplicationConfig,
   isDevMode,
+  LOCALE_ID,
   provideBrowserGlobalErrorListeners,
   provideZonelessChangeDetection,
 } from '@angular/core';
+import { registerLocaleData } from '@angular/common';
+import localeFr from '@angular/common/locales/fr';
 import { Capacitor } from '@capacitor/core';
 import { provideServiceWorker } from '@angular/service-worker';
 import { provideRouter, RouteReuseStrategy, withInMemoryScrolling, withViewTransitions } from '@angular/router';
 import { HttpBackend, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
+
+// Register French CLDR data so DatePipe / DecimalPipe / CurrencyPipe / etc.
+// honour the French locale instead of the Angular default ('en-US'). Done
+// once at module load — the registration is idempotent on Angular's side.
+registerLocaleData(localeFr);
 import { routes } from './app.routes';
 import { serverUrlInterceptor } from './core/interceptors/server-url.interceptor';
 import { credentialsInterceptor } from './core/interceptors/credentials.interceptor';
@@ -21,6 +29,7 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideZonelessChangeDetection(),
+    { provide: LOCALE_ID, useValue: 'fr' },
     provideRouter(
       routes,
       withInMemoryScrolling({ scrollPositionRestoration: 'top' }),

@@ -99,6 +99,18 @@ export interface Media {
   sizeOnDisk?: number;
   episodeStats?: { totalEpisodes: number; downloadedEpisodes: number };
   preferredProvider?: 'tmdb' | 'tvdb' | null;
+  imdbId?: string | null;
+  metadata?: MediaMetadataBrief | null;
+}
+
+/** Extended TMDB fields rendered in the media-detail info panel. */
+export interface MediaMetadataBrief {
+  budget: number | null;
+  revenue: number | null;
+  tagline: string | null;
+  originalLanguage: string | null;
+  productionCountries: string[] | null;
+  productionCompanies: string[] | null;
 }
 
 export interface MediaCastEntry {

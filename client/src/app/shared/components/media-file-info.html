@@ -4,8 +4,8 @@
 
     <!-- File info from DB (always available) -->
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-1 text-sm">
-      @if (f.relativePath) {
-        <div class="col-span-full"><span class="text-base-content/50">{{ 'file_info.path' | translate }} :&nbsp;</span><span class="font-medium break-all">{{ f.relativePath }}</span></div>
+      @if (fullPath()) {
+        <div class="col-span-full"><span class="text-base-content/50">{{ 'file_info.path' | translate }} :&nbsp;</span><span class="font-medium break-all">{{ fullPath() }}</span></div>
       }
       @if (f.quality) {
         <div><span class="text-base-content/50">{{ 'file_info.quality' | translate }} :&nbsp;</span><span class="font-medium">{{ f.quality }}</span></div>
