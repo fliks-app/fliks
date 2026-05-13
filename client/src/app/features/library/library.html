@@ -6,7 +6,7 @@
   }
 
   <!-- View tabs (own row, centered like the reference) -->
-  <nav class="flex items-center gap-1 mt-2">
+  <nav class="flex items-center gap-1 mt-2 overflow-x-auto">
     <button
       type="button"
       class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
@@ -430,33 +430,14 @@
            (when posters are available) or a folder icon, with the
            genre name below. Click → pivot to `all` with the genre
            filter applied. -->
-      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 gap-3 sm:gap-4">
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 tv:grid-cols-6 gap-3 sm:gap-4">
         @for (g of genresList(); track g.genre) {
-          <button
-            type="button"
-            class="group flex flex-col items-stretch gap-2 text-left focus:outline-none"
-            (click)="pickGenre(g.genre)"
-          >
-            <div class="aspect-square rounded-xl overflow-hidden bg-base-300 ring-1 ring-base-300 group-hover:ring-primary group-focus-visible:ring-primary group-focus-visible:ring-2 transition-colors">
-              @if (g.posters.length >= 4) {
-                <div class="grid grid-cols-2 grid-rows-2 w-full h-full">
-                  @for (p of g.posters.slice(0, 4); track p) {
-                    <img appImgFadeIn [src]="p | resolveUrl:'thumb'" alt="" loading="lazy" class="w-full h-full object-cover" />
-                  }
-                </div>
-              } @else if (g.posters.length > 0) {
-                <img appImgFadeIn [src]="g.posters[0] | resolveUrl:'medium'" alt="" loading="lazy" class="w-full h-full object-cover" />
-              } @else {
-                <div class="w-full h-full flex items-center justify-center text-base-content/30">
-                  <svg lucideFolder class="w-12 h-12" [strokeWidth]="1.5"></svg>
-                </div>
-              }
-            </div>
-            <div class="text-sm">
-              <div class="font-medium truncate group-hover:text-primary transition-colors">{{ g.genre }}</div>
-              <div class="text-xs text-base-content/50">{{ g.count }}</div>
-            </div>
-          </button>
+          <app-mosaic-card
+            [posters]="g.posters"
+            [label]="g.genre"
+            [count]="g.count"
+            (clicked)="pickGenre(g.genre)"
+          />
         }
       </div>
     }
@@ -472,33 +453,14 @@
         <p class="text-lg">{{ 'library.collections_empty' | translate }}</p>
       </div>
     } @else {
-      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 tv:grid-cols-6 gap-3 sm:gap-4">
         @for (c of collectionsList(); track c.id) {
-          <button
-            type="button"
-            class="group flex flex-col gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
-            (click)="pickCollection(c.id)"
-          >
-            <div class="aspect-square rounded-xl overflow-hidden bg-base-300 ring-1 ring-base-300 group-hover:ring-primary group-focus-visible:ring-primary group-focus-visible:ring-2 transition-colors">
-              @if (c.posters.length >= 4) {
-                <div class="grid grid-cols-2 grid-rows-2 w-full h-full">
-                  @for (p of c.posters.slice(0, 4); track p) {
-                    <img appImgFadeIn [src]="p | resolveUrl:'thumb'" alt="" loading="lazy" class="w-full h-full object-cover" />
-                  }
-                </div>
-              } @else if (c.posters.length > 0) {
-                <img appImgFadeIn [src]="c.posters[0] | resolveUrl:'medium'" alt="" loading="lazy" class="w-full h-full object-cover" />
-              } @else {
-                <div class="w-full h-full flex items-center justify-center text-base-content/30">
-                  <svg lucideFilm class="w-12 h-12" [strokeWidth]="1.5"></svg>
-                </div>
-              }
-            </div>
-            <div class="text-sm">
-              <div class="font-medium truncate group-hover:text-primary transition-colors">{{ c.name }}</div>
-              <div class="text-xs text-base-content/50">{{ c.count }}</div>
-            </div>
-          </button>
+          <app-mosaic-card
+            [posters]="c.posters"
+            [label]="c.name"
+            [count]="c.count"
+            (clicked)="pickCollection(c.id)"
+          />
         }
       </div>
     }

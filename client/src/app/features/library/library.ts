@@ -33,7 +33,8 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
-import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown, LucideFolder, LucideX, LucideFilm } from '@lucide/angular';
+import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown, LucideX, LucideFilm } from '@lucide/angular';
+import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ImgFadeInDirective } from '../../shared/directives/img-fade-in.directive';
 
@@ -68,9 +69,9 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     LucideSlidersHorizontal,
     LucideArrowUp,
     LucideArrowDown,
-    LucideFolder,
     LucideFilm,
     LucideX,
+    MosaicCardComponent,
     ResolveUrlPipe,
     ImgFadeInDirective,
   ],

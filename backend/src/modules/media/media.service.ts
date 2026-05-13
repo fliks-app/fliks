@@ -476,6 +476,7 @@ export class MediaService {
           AND m."tmdbCollectionId" IS NOT NULL
           AND m."tmdbCollectionName" IS NOT NULL
         GROUP BY m."tmdbCollectionId", m."tmdbCollectionName"
+        HAVING COUNT(*) >= 2
         ORDER BY m."tmdbCollectionName" ASC
         `,
         [accessibleLibraryIds],
