@@ -121,7 +121,7 @@ import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats
       transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh)));
     }
     .player-video.controls-visible::-webkit-media-text-track-display {
-      transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh) - 10vh));
+      transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh) - 15vh));
     }
   `],
 })
@@ -1490,7 +1490,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    */
   private applyNativeSubtitleStyle() {
     const s = this.playerSettings.get();
-    const extraMargin = this.controlsVisible() ? 5 : 0;
+    const extraMargin = this.controlsVisible() ? 10 : 0;
     (this.engine as NativeEngine).setSubtitleStyle({
       size: s.subtitleSize,
       color: s.subtitleColor,
