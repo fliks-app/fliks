@@ -1,6 +1,6 @@
 <dialog #dialog class="modal">
   <div class="modal-box w-[95%] max-w-7xl my-8 max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden p-0">
-    <div class="px-6 pt-6 pb-3 shrink-0">
+    <div class="px-4 pt-4 sm:px-6 sm:pt-6 shrink-0">
       <div class="flex items-center justify-between mb-3">
         <h3 class="text-lg font-bold">{{ title() }}</h3>
         <form method="dialog">
@@ -8,18 +8,8 @@
         </form>
       </div>
 
-      @if (showSearch()) {
-        <input
-          type="text"
-          class="input input-bordered input-sm w-full"
-          [placeholder]="'media_detail.custom_search_placeholder' | translate"
-          [ngModel]="customSearchQuery()"
-          (ngModelChange)="customSearchQueryChange.emit($event)"
-        />
-      }
-
       @if (showGrabBest() && canGrab()) {
-        <div class="flex flex-wrap items-center gap-2" [class.mt-2]="showSearch()">
+        <div class="flex flex-wrap items-center gap-2">
           <button
             type="button"
             class="btn btn-primary btn-xs"
@@ -35,7 +25,7 @@
       }
     </div>
 
-    <div class="flex-1 overflow-y-auto px-6">
+    <div class="flex-1 overflow-y-auto px-4 sm:px-6">
       @if (loading()) {
         <div class="flex justify-center py-8">
           <span class="loading loading-spinner loading-lg"></span>
@@ -57,7 +47,7 @@
       }
     </div>
 
-    <div class="modal-action px-6 pb-4 pt-2 shrink-0">
+    <div class="modal-action px-4 pb-4 sm:px-6 shrink-0">
       <form method="dialog">
         <button class="btn btn-sm">{{ 'common.close' | translate }}</button>
       </form>

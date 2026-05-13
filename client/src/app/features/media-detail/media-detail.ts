@@ -432,7 +432,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly notFound = signal(false);
   readonly expectedKind = signal<MediaType>('movie');
 
-  readonly customSearchQuery = signal('');
 
   readonly releases = signal<MovieRelease[]>([]);
   readonly releasesLoading = signal(false);
@@ -778,7 +777,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.releasesSearched.set(false);
     this.movieReleasesModal()?.showModal();
     try {
-      const rows = await this.mediaService.getMovieReleases(m.id, this.customSearchQuery());
+      const rows = await this.mediaService.getMovieReleases(m.id, );
       this.releases.set(rows);
       this.releasesSearched.set(true);
     } catch (err: unknown) {
@@ -1147,7 +1146,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.epReleasesLoading.set(true);
     this.episodeReleasesModal()?.showModal();
     try {
-      const rows = await this.mediaService.getEpisodeReleases(mediaId, episodeId, this.customSearchQuery());
+      const rows = await this.mediaService.getEpisodeReleases(mediaId, episodeId, );
       this.epReleases.set(rows);
       this.epReleasesSearched.set(true);
     } catch (err: unknown) {
@@ -1198,7 +1197,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.seasonReleasesLoading.set(true);
     this.seasonReleasesModal()?.showModal();
     try {
-      const rows = await this.mediaService.getSeasonReleases(mediaId, season.id, this.customSearchQuery());
+      const rows = await this.mediaService.getSeasonReleases(mediaId, season.id, );
       this.seasonReleases.set(rows);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };

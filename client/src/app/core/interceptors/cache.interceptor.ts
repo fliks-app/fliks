@@ -32,6 +32,13 @@ const EXCLUDED_PREFIXES = [
   '/api/playback/media/',
 ];
 
+// Release search endpoints are always live (hit external indexers) — never cache.
+const EXCLUDED_PATTERNS = [
+  /\/api\/media\/\d+\/(releases|upgrade-releases)/,
+  /\/api\/media\/\d+\/seasons\/\d+\/releases/,
+  /\/api\/media\/\d+\/episodes\/\d+\/releases/,
+];
+
 const DETAIL_PATTERN = /^\/api\/media\/\d+$/;
 const TTL_LIST = 5 * 60_000;
 const TTL_DETAIL = 60 * 60_000;
@@ -144,6 +151,7 @@ async function invalidatePrefix(prefix: string): Promise<void> {
 
 function isCacheable(url: string): boolean {
   if (EXCLUDED_PREFIXES.some((p) => url.startsWith(p))) return false;
+  if (EXCLUDED_PATTERNS.some((r) => r.test(url))) return false;
   return CACHEABLE_PREFIXES.some((p) => url.startsWith(p));
 }
 

@@ -702,10 +702,10 @@
       "QUALITY_NOT_ALLOWED": "Qualité hors profil",
       "LANGUAGE_NOT_ALLOWED": "Langue hors profil",
       "BLOCKLISTED": "Release bloquée",
-      "SIZE_TOO_LOW": "Taille trop faible ({{actual}} MB < {{min}} MB)",
-      "SIZE_TOO_HIGH": "Taille trop élevée ({{actual}} MB > {{max}} MB)",
-      "SIZE_NOT_PREFERRED": "Taille éloignée du recommandé ({{actual}} MB ≠ {{preferred}} MB)",
-      "MIN_SEEDERS": "Seeders insuffisants ({{actual}} < {{min}})",
+      "SIZE_TOO_LOW": "Taille trop faible\n({{actual}} MB < {{min}} MB)",
+      "SIZE_TOO_HIGH": "Taille trop élevée\n({{actual}} MB > {{max}} MB)",
+      "SIZE_NOT_PREFERRED": "Taille éloignée du recommandé\n({{actual}} MB ≠ {{preferred}} MB)",
+      "MIN_SEEDERS": "Seeders insuffisants\n({{actual}} < {{min}})",
       "TITLE_MISMATCH": "Titre ne correspond pas au média"
     }
   },

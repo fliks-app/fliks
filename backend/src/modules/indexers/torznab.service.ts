@@ -160,10 +160,110 @@ export class TorznabService {
   constructor(
     @InjectRepository(IndexerStat)
     private readonly statRepo: Repository<IndexerStat>,
+    @InjectRepository(Indexer)
+    private readonly indexerRepo: Repository<Indexer>,
   ) {}
 
   /**
-   * Appelle `t=caps` pour valider l’URL et la clé API sans indexer persisté.
+   * Call t=caps and persist the results on the indexer row.
+   * Also resets capsSearchFallback so a reconfigured indexer gets a clean slate.
+   * Called by IndexersService after create/update.
+   */
+  async refreshCaps(indexer: Indexer): Promise<void> {
+    const settings = indexer.settings as { baseUrl?: string; apiKey?: string };
+    const baseUrl = String(settings.baseUrl || '').replace(/\/$/, '');
+    const apiKey = String(settings.apiKey || '');
+    if (!baseUrl) return;
+
+    let capsMovieSearch = false;
+    let capsTvSearch = false;
+
+    try {
+      const res = await axios.get<string>(
+        `${baseUrl}?t=caps&apikey=${encodeURIComponent(apiKey)}`,
+        {
+          timeout: 10_000,
+          responseType: 'text',
+          headers: { 'User-Agent': 'Fliks/1.0' },
+          validateStatus: () => true,
+        },
+      );
+      const body = typeof res.data === 'string' ? res.data : String(res.data);
+      capsMovieSearch = /<movie-search\s[^>]*available="yes"/i.test(body);
+      capsTvSearch = /<tv-search\s[^>]*available="yes"/i.test(body);
+      this.log.log(
+        `[${indexer.name}] caps refreshed — movieSearch=${capsMovieSearch}, tvSearch=${capsTvSearch}`,
+      );
+    } catch (e) {
+      this.log.warn(`[${indexer.name}] caps fetch failed: ${(e as Error).message}`);
+    }
+
+    await this.indexerRepo.update(indexer.id, {
+      capsMovieSearch,
+      capsTvSearch,
+      capsSearchFallback: false,
+    });
+    indexer.capsMovieSearch = capsMovieSearch;
+    indexer.capsTvSearch = capsTvSearch;
+    indexer.capsSearchFallback = false;
+  }
+
+  /** Execute a Torznab search URL. Returns results and the Torznab error message if any. */
+  private async execSearch(
+    url: string,
+    queryType: string,
+    indexer: Indexer,
+  ): Promise<{ results: TorznabRelease[]; torznabError: string | null }> {
+    const start = Date.now();
+    try {
+      const res = await axios.get<string>(url, {
+        timeout: 90_000,
+        responseType: 'text',
+        headers: { 'User-Agent': 'Fliks/1.0' },
+        validateStatus: (s) => s >= 200 && s < 400,
+      });
+      const body = typeof res.data === 'string' ? res.data : String(res.data);
+      if (/<error\s+code=/i.test(body)) {
+        const m = body.match(/description="([^"]*)"/i);
+        const msg = m?.[1]?.trim() || 'Torznab error';
+        void this.statRepo.save(
+          this.statRepo.create({ indexer, queryType, responseTimeMs: Date.now() - start, resultCount: 0, errorMessage: msg }),
+        );
+        return { results: [], torznabError: msg };
+      }
+      const results = parseTorznabItems(body, indexer);
+      void this.statRepo.save(
+        this.statRepo.create({ indexer, queryType, responseTimeMs: Date.now() - start, resultCount: results.length, errorMessage: null }),
+      );
+      return { results, torznabError: null };
+    } catch (e) {
+      const msg = (e as Error).message;
+      void this.statRepo.save(
+        this.statRepo.create({ indexer, queryType, responseTimeMs: Date.now() - start, resultCount: 0, errorMessage: msg }),
+      );
+      return { results: [], torznabError: msg };
+    }
+  }
+
+  /** If caps claimed typed-search support but it failed, retry with t=search.
+   *  On success, persist capsSearchFallback=true so future calls skip the caps check. */
+  private async retryWithSearchFallback(
+    indexer: Indexer,
+    fallbackUrl: string,
+    queryType: string,
+  ): Promise<TorznabRelease[]> {
+    const { results, torznabError } = await this.execSearch(fallbackUrl, queryType, indexer);
+    if (torznabError) return []; // indexer unavailable, don't save
+    this.log.log(
+      `[${indexer.name}] t=search fallback succeeded — saving capsSearchFallback=true`,
+    );
+    void this.indexerRepo.update(indexer.id, { capsSearchFallback: true });
+    indexer.capsSearchFallback = true; // update in-memory so subsequent calls in same batch see it
+    return results;
+  }
+
+  /**
+   * Appelle `t=caps` pour valider l'URL et la clé API sans indexer persisté.
    */
   async testConnection(
     baseUrl: string,
@@ -263,50 +363,29 @@ export class TorznabService {
     const apiKey = String(settings.apiKey || '');
     if (!baseUrl) return [];
 
-    const url = `${baseUrl}?${buildTorznabQuery({
-      t: 'tvsearch',
+    const useTvSearch = indexer.capsTvSearch && !indexer.capsSearchFallback;
+    const typedUrl = `${baseUrl}?${buildTorznabQuery({
+      t: useTvSearch ? 'tvsearch' : 'search',
       q: showTitle,
-      season,
+      season: useTvSearch ? season : undefined,
       cat: '5000',
       apiKey,
-      tvdbId: externalIds?.tvdbId,
-      imdbId: externalIds?.imdbId,
+      tvdbId: useTvSearch ? externalIds?.tvdbId : undefined,
+      imdbId: useTvSearch ? externalIds?.imdbId : undefined,
     })}`;
-    const start = Date.now();
-    try {
-      const res = await axios.get<string>(url, {
-        timeout: 90_000,
-        responseType: 'text',
-        headers: { 'User-Agent': 'Fliks/1.0' },
-        validateStatus: (s) => s >= 200 && s < 400,
-      });
-      const body = typeof res.data === 'string' ? res.data : String(res.data);
-      const results = parseTorznabItems(body, indexer);
-      void this.statRepo.save(
-        this.statRepo.create({
-          indexer,
-          queryType: 'season',
-          responseTimeMs: Date.now() - start,
-          resultCount: results.length,
-          errorMessage: null,
-        }),
+
+    const { results, torznabError } = await this.execSearch(typedUrl, 'season', indexer);
+    if (!torznabError) return results;
+
+    if (useTvSearch) {
+      this.log.warn(`[${indexer.name}] tvsearch failed (${torznabError}), falling back to t=search`);
+      return this.retryWithSearchFallback(
+        indexer,
+        `${baseUrl}?${buildTorznabQuery({ t: 'search', q: showTitle, cat: '5000', apiKey })}`,
+        'season',
       );
-      return results;
-    } catch (e) {
-      void this.statRepo.save(
-        this.statRepo.create({
-          indexer,
-          queryType: 'season',
-          responseTimeMs: Date.now() - start,
-          resultCount: 0,
-          errorMessage: (e as Error).message,
-        }),
-      );
-      this.log.warn(
-        `Torznab season pack search failed for "${indexer.name}": ${(e as Error).message}`,
-      );
-      return [];
     }
+    return [];
   }
 
   async searchSeries(
@@ -325,51 +404,30 @@ export class TorznabService {
     const apiKey = String(settings.apiKey || '');
     if (!baseUrl) return [];
 
-    const url = `${baseUrl}?${buildTorznabQuery({
-      t: 'tvsearch',
+    const useTvSearch = indexer.capsTvSearch && !indexer.capsSearchFallback;
+    const typedUrl = `${baseUrl}?${buildTorznabQuery({
+      t: useTvSearch ? 'tvsearch' : 'search',
       q: showTitle,
-      season,
-      ep: episode,
+      season: useTvSearch ? season : undefined,
+      ep: useTvSearch ? episode : undefined,
       cat: '5000',
       apiKey,
-      tvdbId: externalIds?.tvdbId,
-      imdbId: externalIds?.imdbId,
+      tvdbId: useTvSearch ? externalIds?.tvdbId : undefined,
+      imdbId: useTvSearch ? externalIds?.imdbId : undefined,
     })}`;
-    const start = Date.now();
-    try {
-      const res = await axios.get<string>(url, {
-        timeout: 90_000,
-        responseType: 'text',
-        headers: { 'User-Agent': 'Fliks/1.0' },
-        validateStatus: (s) => s >= 200 && s < 400,
-      });
-      const body = typeof res.data === 'string' ? res.data : String(res.data);
-      const results = parseTorznabItems(body, indexer);
-      void this.statRepo.save(
-        this.statRepo.create({
-          indexer,
-          queryType: 'tvsearch',
-          responseTimeMs: Date.now() - start,
-          resultCount: results.length,
-          errorMessage: null,
-        }),
+
+    const { results, torznabError } = await this.execSearch(typedUrl, 'tvsearch', indexer);
+    if (!torznabError) return results;
+
+    if (useTvSearch) {
+      this.log.warn(`[${indexer.name}] tvsearch failed (${torznabError}), falling back to t=search`);
+      return this.retryWithSearchFallback(
+        indexer,
+        `${baseUrl}?${buildTorznabQuery({ t: 'search', q: showTitle, cat: '5000', apiKey })}`,
+        'tvsearch',
       );
-      return results;
-    } catch (e) {
-      void this.statRepo.save(
-        this.statRepo.create({
-          indexer,
-          queryType: 'tvsearch',
-          responseTimeMs: Date.now() - start,
-          resultCount: 0,
-          errorMessage: (e as Error).message,
-        }),
-      );
-      this.log.warn(
-        `Torznab tvsearch failed for "${indexer.name}": ${(e as Error).message}`,
-      );
-      return [];
     }
+    return [];
   }
 
   async searchMovie(
@@ -377,9 +435,19 @@ export class TorznabService {
     query: string,
     externalIds?: { imdbId?: string | null; tmdbId?: number | null },
   ): Promise<TorznabRelease[]> {
-    if (!indexer.enabled || !indexer.enableSearch) return [];
+    if (!indexer.enabled) {
+      this.log.debug(`[${indexer.name}] skipped — indexer disabled`);
+      return [];
+    }
+    if (!indexer.enableSearch) {
+      this.log.debug(`[${indexer.name}] skipped — search disabled`);
+      return [];
+    }
     const impl = (indexer.implementation || '').toLowerCase();
-    if (!impl.includes('torznab')) return [];
+    if (!impl.includes('torznab')) {
+      this.log.debug(`[${indexer.name}] skipped — implementation "${indexer.implementation}" is not Torznab`);
+      return [];
+    }
 
     const settings = indexer.settings as { baseUrl?: string; apiKey?: string };
     const baseUrl = String(settings.baseUrl || '').replace(/\/$/, '');
@@ -389,52 +457,40 @@ export class TorznabService {
       return [];
     }
 
-    // `t=movie` is the spec'd endpoint for imdbid/tmdbid filtering. Fall back
-    // to the generic `t=search&cat=2000` when no external IDs are available
-    // so q=-only trackers stay reachable.
-    const useMovieSearch = !!(externalIds?.imdbId || externalIds?.tmdbId);
-    const url = `${baseUrl}?${buildTorznabQuery({
+    const useMovieSearch =
+      indexer.capsMovieSearch &&
+      !indexer.capsSearchFallback &&
+      !!(externalIds?.imdbId || externalIds?.tmdbId);
+
+    const typedUrl = `${baseUrl}?${buildTorznabQuery({
       t: useMovieSearch ? 'movie' : 'search',
       q: query,
       cat: '2000',
       apiKey,
-      imdbId: externalIds?.imdbId,
-      tmdbId: externalIds?.tmdbId,
+      imdbId: useMovieSearch ? externalIds?.imdbId : undefined,
+      tmdbId: useMovieSearch ? externalIds?.tmdbId : undefined,
     })}`;
-    const start = Date.now();
-    try {
-      const res = await axios.get<string>(url, {
-        timeout: 90_000,
-        responseType: 'text',
-        headers: { 'User-Agent': 'Fliks/1.0' },
-        validateStatus: (s) => s >= 200 && s < 400,
-      });
-      const body = typeof res.data === 'string' ? res.data : String(res.data);
-      const results = parseTorznabItems(body, indexer);
-      void this.statRepo.save(
-        this.statRepo.create({
-          indexer,
-          queryType: 'search',
-          responseTimeMs: Date.now() - start,
-          resultCount: results.length,
-          errorMessage: null,
-        }),
+
+    const { results, torznabError } = await this.execSearch(typedUrl, 'search', indexer);
+    if (!torznabError) {
+      this.log.log(
+        `[${indexer.name}] search "${query}" → ${results.length} result(s)`,
       );
       return results;
-    } catch (e) {
-      void this.statRepo.save(
-        this.statRepo.create({
-          indexer,
-          queryType: 'search',
-          responseTimeMs: Date.now() - start,
-          resultCount: 0,
-          errorMessage: (e as Error).message,
-        }),
-      );
-      this.log.warn(
-        `Torznab search failed for "${indexer.name}": ${(e as Error).message}`,
-      );
-      return [];
     }
+
+    if (useMovieSearch) {
+      this.log.warn(
+        `[${indexer.name}] t=movie failed (${torznabError}), falling back to t=search`,
+      );
+      return this.retryWithSearchFallback(
+        indexer,
+        `${baseUrl}?${buildTorznabQuery({ t: 'search', q: query, cat: '2000', apiKey })}`,
+        'search',
+      );
+    }
+
+    this.log.warn(`[${indexer.name}] search failed: ${torznabError}`);
+    return [];
   }
 }

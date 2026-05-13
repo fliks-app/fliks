@@ -47,7 +47,9 @@ export class IndexersService {
       enabled: dto.enabled ?? true,
     });
 
-    return this.indexerRepo.save(row);
+    const saved = await this.indexerRepo.save(row);
+    void this.torznab.refreshCaps(saved);
+    return saved;
   }
 
   findAll(): Promise<Indexer[]> {
@@ -75,7 +77,9 @@ export class IndexersService {
     if (dto.settings !== undefined)
       ix.settings = this.sanitizeSettings(dto.settings);
 
-    return this.indexerRepo.save(ix);
+    const saved = await this.indexerRepo.save(ix);
+    void this.torznab.refreshCaps(saved);
+    return saved;
   }
 
   async remove(id: number): Promise<void> {

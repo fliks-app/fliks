@@ -47,7 +47,7 @@
          passes through it during scroll. -->
     <div
       class="flex flex-wrap items-center gap-2"
-      [class.pr-6]="sortBy() === 'title' && sortOrder() === 'ASC'"
+      [class.pr-4]="sortBy() === 'title' && sortOrder() === 'ASC'"
     >
       <span class="text-sm text-base-content/70 mr-1">
         {{ 'library.element_count' | translate:{ count: list.total() } }}
@@ -222,7 +222,9 @@
         </div>
       }
       <div class="flex gap-1">
-        <div class="flex-1 min-w-0 pr-1 lg:pr-2 grid content-start grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4">
+        <div class="flex-1 min-w-0 grid content-start grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4"
+          [class.pr-4]="sortBy() === 'title' && sortOrder() === 'ASC'"
+          [class.pr-2]="sortBy() !== 'title' || sortOrder() !== 'ASC'">
           @for (item of list.visible(); track item.id) {
             @if (bulkMode()) {
               <div
@@ -257,7 +259,7 @@
              Fixed keeps it nailed to the right side at vertical center
              regardless of how many items the grid holds. -->
         @if (sortBy() === 'title' && sortOrder() === 'ASC') {
-          <nav class="fixed top-1/2 right-1 lg:right-2 -translate-y-1/2 z-20 flex flex-col items-center gap-0 select-none tv:pt-20">
+          <nav class="fixed top-1/2 right-2 -translate-y-1/2 z-20 flex flex-col items-center gap-0 select-none tv:pt-20">
             @for (letter of alphabet; track letter) {
               <button
                 type="button"

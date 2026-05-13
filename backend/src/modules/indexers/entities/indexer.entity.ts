@@ -23,4 +23,17 @@ export class Indexer extends BaseEntity {
 
   @Column({ default: true })
   enabled: boolean;
+
+  // Populated by refreshCaps() on create/update; reset when the indexer is saved.
+  @Column({ default: false })
+  capsMovieSearch: boolean;
+
+  @Column({ default: false })
+  capsTvSearch: boolean;
+
+  /** Set to true at runtime when caps claimed support but the typed query
+   *  returned a Torznab error and a t=search retry succeeded. Reset to false
+   *  on every indexer save so a reconfiguration gets a clean slate. */
+  @Column({ default: false })
+  capsSearchFallback: boolean;
 }
