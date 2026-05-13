@@ -12,12 +12,20 @@ export class BlocklistService {
   constructor(
     @InjectRepository(BlocklistEntry)
     private readonly repo: Repository<BlocklistEntry>,
+    @InjectRepository(Indexer)
+    private readonly indexerRepo: Repository<Indexer>,
   ) {}
 
-  create(dto: CreateBlocklistEntryDto): Promise<BlocklistEntry> {
+  async create(dto: CreateBlocklistEntryDto): Promise<BlocklistEntry> {
     const { indexerId, mediaId, userId, ...rest } = dto;
+    let indexerName = rest.indexerName;
+    if (indexerId && !indexerName) {
+      const ix = await this.indexerRepo.findOne({ where: { id: indexerId } });
+      indexerName = ix?.name ?? undefined;
+    }
     const row = this.repo.create({
       ...rest,
+      indexerName,
       indexer: indexerId ? ({ id: indexerId } as Indexer) : null,
       media: mediaId ? ({ id: mediaId } as Media) : null,
       user: userId ? ({ id: userId } as User) : null,

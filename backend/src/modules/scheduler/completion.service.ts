@@ -223,6 +223,7 @@ export class CompletionService {
             sourceTitle: history.sourceTitle,
             quality: history.quality,
             mediaId: history.mediaId,
+            indexerId: history.indexerId ?? undefined,
             note: `Auto-blocklist: import failed — ${(e as Error).message}`,
           });
           this.log.log(`Import: auto-blocklisted "${history.sourceTitle}"`);
@@ -812,6 +813,7 @@ export class CompletionService {
           sourceTitle: history.sourceTitle ?? t.name,
           quality: history.quality ?? undefined,
           mediaId: history.mediaId ?? undefined,
+          indexerId: history.indexerId ?? undefined,
           note: `Auto-blocklist: stalled torrent (profile=${profile.key})`,
         });
 
