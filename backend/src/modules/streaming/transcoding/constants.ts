@@ -1,5 +1,4 @@
 export const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30min HLS session timeout
-export const MAX_SESSIONS = 4;
 /** Max gap (in segments) between FFmpeg frontier and requested segment before restarting. */
 export const SEEK_WAIT_THRESHOLD = 15;
 

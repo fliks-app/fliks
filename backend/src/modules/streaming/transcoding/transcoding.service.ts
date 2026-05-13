@@ -11,7 +11,6 @@ import * as path from 'path';
 import { TRANSCODE_DIR } from '../../../common/constants/paths';
 
 import {
-  MAX_SESSIONS,
   SEEK_WAIT_THRESHOLD,
   SESSION_TIMEOUT_MS,
   getSegmentDuration,
@@ -343,13 +342,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           key, mediaFileId, quality, absolutePath, dir, restartAt, ctx,
         );
       }
-    }
-
-    const videoSessionCount = Array.from(this.sessions.values()).filter(
-      (s) => !s.isAudioOnly,
-    ).length;
-    if (videoSessionCount >= MAX_SESSIONS) {
-      this.evictOldestSession();
     }
 
     const ladder = getLadderForDevice(ctx?.deviceType);
@@ -976,10 +968,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    if (this.sessions.size >= MAX_SESSIONS) {
-      this.evictOldestSession();
-    }
-
     const sessionDir = path.join(this.cachePath, key, 'remux');
     await fsp.mkdir(sessionDir, { recursive: true });
 
@@ -1113,21 +1101,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         this.sessions.delete(id);
         this.gracefulKill(session);
       }
-    }
-  }
-
-  private evictOldestSession() {
-    let oldest: TranscodeSession | null = null;
-    for (const session of this.sessions.values()) {
-      if (session.isAudioOnly) continue;
-      if (!oldest || session.lastAccess < oldest.lastAccess) {
-        oldest = session;
-      }
-    }
-    if (oldest) {
-      this.log.log(`Evicting session: ${oldest.id}`);
-      this.sessions.delete(oldest.id);
-      this.gracefulKill(oldest);
     }
   }
 
