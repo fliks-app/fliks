@@ -83,6 +83,7 @@
     [fillScreen]="fillScreen()"
     (speedChange)="onSpeedChange($event)"
     (back)="onBack()"
+    [pipAvailable]="pipAvailable()"
     [castAvailable]="castService.isAvailable()"
     [castConnected]="castService.isConnected()"
     [castConnecting]="castService.connecting()"

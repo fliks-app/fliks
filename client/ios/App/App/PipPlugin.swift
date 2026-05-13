@@ -17,12 +17,17 @@ public class PipPlugin: CAPPlugin, CAPBridgedPlugin, AVPictureInPictureControlle
     public let identifier = "PipPlugin"
     public let jsName = "Pip"
     public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "isAvailable", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "enter", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setAutoEnter", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "updatePlaybackState", returnType: CAPPluginReturnPromise),
     ]
 
     private var pipController: AVPictureInPictureController?
+
+    @objc func isAvailable(_ call: CAPPluginCall) {
+        call.resolve(["available": AVPictureInPictureController.isPictureInPictureSupported()])
+    }
 
     @objc func enter(_ call: CAPPluginCall) {
         DispatchQueue.main.async { [weak self] in

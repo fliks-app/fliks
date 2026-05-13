@@ -149,6 +149,7 @@ export class PlayerControlsComponent {
   readonly activeQualityId = input('auto');
   readonly availableAudioTracks = input<{ id: string; label: string }[]>([]);
   readonly activeAudioTrackId = input<string | null>(null);
+  readonly pipAvailable = input(true);
   readonly castAvailable = input(false);
   readonly castConnected = input(false);
   readonly castConnecting = input(false);
