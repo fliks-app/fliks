@@ -826,6 +826,13 @@ export class CompletionService {
           (history.grabSource === 'auto' || allowManualRestart);
         if (shouldRestart && history.mediaId) {
           mediaToResearch.add(history.mediaId);
+          this.log.log(
+            `StalledCleanup: "${history.sourceTitle ?? t.name}" blocklisted — auto-restart queued for media #${history.mediaId}`,
+          );
+        } else if (!shouldRestart) {
+          this.log.log(
+            `StalledCleanup: "${history.sourceTitle ?? t.name}" blocklisted — no auto-restart (autoRestart=${profile.autoRestart}, grabSource=${history.grabSource})`,
+          );
         }
       }
     }
@@ -836,7 +843,8 @@ export class CompletionService {
       );
       // Insert command directly to avoid circular dep with SchedulerService.
       await this.dataSource.query(
-        `INSERT INTO commands (name, status, trigger, body) VALUES ('SearchMissing', 'queued', 'scheduled', '{}')`,
+        `INSERT INTO commands (name, status, trigger, body) VALUES ('SearchMissing', 'queued', 'scheduled', $1)`,
+        [JSON.stringify({ mediaIds: Array.from(mediaToResearch) })],
       );
     }
   }
