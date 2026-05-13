@@ -184,6 +184,8 @@ export class TvdbProvider implements IMetadataProvider {
       })),
       keywords: (m.tagOptions ?? []).map((t) => t.name),
       alternativeTitles: dedupeAliases(m.aliases, m.name),
+      tmdbCollectionId: null,
+      tmdbCollectionName: null,
     };
   }
 
@@ -245,6 +247,8 @@ export class TvdbProvider implements IMetadataProvider {
       })),
       keywords: (s.tagOptions ?? []).map((t) => t.name),
       alternativeTitles: dedupeAliases(s.aliases, s.name),
+      tmdbCollectionId: null,
+      tmdbCollectionName: null,
     };
   }
 

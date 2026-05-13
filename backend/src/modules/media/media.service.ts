@@ -456,6 +456,33 @@ export class MediaService {
     return rows;
   }
 
+  async getCollections(
+    accessibleLibraryIds: number[],
+  ): Promise<{ id: number; name: string; count: number; posters: string[] }[]> {
+    if (accessibleLibraryIds.length === 0) return [];
+    const rows: { id: number; name: string; count: number; posters: string[] }[] =
+      await this.mediaRepo.query(
+        `
+        SELECT m."tmdbCollectionId"   AS id,
+               m."tmdbCollectionName" AS name,
+               COUNT(*)::int          AS count,
+               COALESCE(
+                 (ARRAY_AGG(m."posterUrl" ORDER BY m.id)
+                  FILTER (WHERE m."posterUrl" IS NOT NULL))[1:4],
+                 ARRAY[]::text[]
+               ) AS posters
+        FROM media m
+        WHERE m."libraryId" = ANY($1)
+          AND m."tmdbCollectionId" IS NOT NULL
+          AND m."tmdbCollectionName" IS NOT NULL
+        GROUP BY m."tmdbCollectionId", m."tmdbCollectionName"
+        ORDER BY m."tmdbCollectionName" ASC
+        `,
+        [accessibleLibraryIds],
+      );
+    return rows;
+  }
+
   async findAll(
     query: SearchMediaDto,
     userId?: number,
@@ -1470,6 +1497,11 @@ export class MediaService {
         genre: JSON.stringify([query.genre]),
       });
     }
+    if (query.collectionId) {
+      qb.andWhere('media.tmdbCollectionId = :collectionId', {
+        collectionId: query.collectionId,
+      });
+    }
     if (query.qualityProfileId) {
       qb.andWhere('media.qualityProfileId = :qpId', {
         qpId: query.qualityProfileId,
@@ -1798,6 +1830,8 @@ export class MediaService {
       physicalRelease: details.physicalRelease
         ? details.physicalRelease.slice(0, 10)
         : undefined,
+      tmdbCollectionId: details.tmdbCollectionId ?? null,
+      tmdbCollectionName: details.tmdbCollectionName ?? null,
     };
   }
 

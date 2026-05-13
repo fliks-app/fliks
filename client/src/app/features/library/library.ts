@@ -16,7 +16,7 @@ import { ActivatedRoute, NavigationStart, Router } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { MediaService, Media, GenreSummary } from '../../core/services/api/media.service';
+import { MediaService, Media, GenreSummary, CollectionSummary } from '../../core/services/api/media.service';
 import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { ProfilesService, QualityProfile } from '../../core/services/api/profiles.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
@@ -33,7 +33,7 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
-import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown, LucideFolder, LucideX } from '@lucide/angular';
+import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown, LucideFolder, LucideX, LucideFilm } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ImgFadeInDirective } from '../../shared/directives/img-fade-in.directive';
 
@@ -41,7 +41,7 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 /** Top-bar tab — `all` is the existing library grid (label = library name),
  *  `suggestions` / `genres` are placeholders for upcoming views. */
-export type LibraryViewMode = 'all' | 'suggestions' | 'genres';
+export type LibraryViewMode = 'all' | 'suggestions' | 'genres' | 'collections';
 export type SortOrder = 'ASC' | 'DESC';
 type FilterMonitored = '' | 'true' | 'false';
 
@@ -69,6 +69,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     LucideArrowUp,
     LucideArrowDown,
     LucideFolder,
+    LucideFilm,
     LucideX,
     ResolveUrlPipe,
     ImgFadeInDirective,
@@ -128,6 +129,11 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** When set, the `all` grid is filtered to this genre via the API's
    *  `genre=` param. Cleared with the chip's × button. */
   readonly selectedGenre = signal<string>('');
+
+  // ── Collections view ────────────────────────────────────────────────
+  readonly collectionsList = signal<CollectionSummary[]>([]);
+  readonly collectionsLoading = signal(false);
+  readonly selectedCollectionId = signal<number | null>(null);
 
   readonly monitoredCount = computed(() => this.list.all().filter((m) => m.monitored).length);
   readonly movieFileCount = computed(() =>
@@ -234,6 +240,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
         (qp.get('view') ?? stored['view'] ?? 'all') as LibraryViewMode,
       );
       this.selectedGenre.set(qp.get('genre') ?? stored['genre'] ?? '');
+      const storedColl = qp.get('collectionId') ?? stored['collectionId'];
+      this.selectedCollectionId.set(storedColl ? Number(storedColl) : null);
 
       this.scrollMemory.activate(scrollKey);
       this.list.trackScroll('media');
@@ -246,6 +254,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
         void this.loadSuggestions();
       } else if (this.viewMode() === 'genres') {
         void this.loadGenres();
+      } else if (this.viewMode() === 'collections') {
+        void this.loadCollections();
       }
       this.scrollMemory.restore(scrollKey, this.injector);
       if (this.tv.isTv()) {
@@ -300,10 +310,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.sortOrder.set((qp.get('sortOrder') ?? 'ASC') as SortOrder);
       this.viewMode.set((qp.get('view') ?? 'all') as LibraryViewMode);
       this.selectedGenre.set(qp.get('genre') ?? '');
+      const collId = qp.get('collectionId');
+      this.selectedCollectionId.set(collId ? Number(collId) : null);
       const lib = this.library();
       if (lib) {
         void this.load(lib.id, true);
         if (this.viewMode() === 'genres') void this.loadGenres();
+        else if (this.viewMode() === 'collections') void this.loadCollections();
         else if (this.viewMode() === 'suggestions') void this.loadSuggestions();
       }
     });
@@ -383,6 +396,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
       void this.loadSuggestions();
     } else if (mode === 'genres') {
       void this.loadGenres();
+    } else if (mode === 'collections') {
+      void this.loadCollections();
     }
   }
 
@@ -401,6 +416,31 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.selectedGenre.set('');
     this.syncQueryParams();
     void this.load(this.library()?.id);
+  }
+
+  pickCollection(id: number) {
+    this.selectedCollectionId.set(id);
+    this.viewMode.set('all');
+    this.syncQueryParams(true);
+    void this.load(this.library()?.id);
+  }
+
+  clearSelectedCollection() {
+    this.selectedCollectionId.set(null);
+    this.syncQueryParams();
+    void this.load(this.library()?.id);
+  }
+
+  private async loadCollections(): Promise<void> {
+    const lib = this.library();
+    if (!lib) return;
+    this.collectionsLoading.set(true);
+    try {
+      const rows = await this.mediaService.getCollections(lib.id).catch(() => null);
+      if (rows) this.collectionsList.set(rows);
+    } finally {
+      this.collectionsLoading.set(false);
+    }
   }
 
   /** Fetches the genres aggregate (count + sample posters) for the
@@ -508,6 +548,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (this.sortOrder() !== 'ASC') params['sortOrder'] = this.sortOrder();
     if (this.viewMode() !== 'all') params['view'] = this.viewMode();
     if (this.selectedGenre()) params['genre'] = this.selectedGenre();
+    if (this.selectedCollectionId()) params['collectionId'] = String(this.selectedCollectionId());
     this.skipQueryParamSync = true;
     void this.router.navigate([], { queryParams: params, replaceUrl: !push });
     this.saveFilters();
@@ -526,6 +567,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (this.sortOrder() !== 'ASC') data['sortOrder'] = this.sortOrder();
     if (this.viewMode() !== 'all') data['view'] = this.viewMode();
     if (this.selectedGenre()) data['genre'] = this.selectedGenre();
+    if (this.selectedCollectionId()) data['collectionId'] = String(this.selectedCollectionId());
     localStorage.setItem(this.storageKey, JSON.stringify(data));
   }
 
@@ -550,6 +592,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
           sortBy: this.sortBy(),
           sortOrder: this.sortOrder(),
           genre: this.selectedGenre() || undefined,
+          collectionId: this.selectedCollectionId() ?? undefined,
           monitored: monitored ? monitored === 'true' : undefined,
           missing: fs === 'missing' ? true : fs === 'downloaded' ? false : undefined,
           cutoffUnmet: fs === 'cutoffUnmet' ? true : undefined,

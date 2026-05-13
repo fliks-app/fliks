@@ -37,6 +37,16 @@
     >
       {{ 'library.view_genres' | translate }}
     </button>
+    <button
+      type="button"
+      class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
+      [class.bg-base-300]="viewMode() === 'collections'"
+      [class.text-base-content/70]="viewMode() !== 'collections'"
+      [class.hover:bg-base-200]="viewMode() !== 'collections'"
+      (click)="setViewMode('collections')"
+    >
+      {{ 'library.view_collections' | translate }}
+    </button>
   </nav>
 
   @if (viewMode() === 'all') {
@@ -61,6 +71,19 @@
             class="hover:bg-primary/20 rounded-full p-0.5"
             [attr.aria-label]="'library.clear_genre' | translate"
             (click)="clearSelectedGenre()"
+          >
+            <svg lucideX class="h-3 w-3"></svg>
+          </button>
+        </span>
+      }
+      @if (selectedCollectionId()) {
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/15 text-primary text-sm">
+          <span class="font-medium">{{ collectionsList().find(c => c.id === selectedCollectionId())?.name ?? ('library.collection' | translate) }}</span>
+          <button
+            type="button"
+            class="hover:bg-primary/20 rounded-full p-0.5"
+            [attr.aria-label]="'library.clear_collection' | translate"
+            (click)="clearSelectedCollection()"
           >
             <svg lucideX class="h-3 w-3"></svg>
           </button>
@@ -437,9 +460,47 @@
         }
       </div>
     }
-  } @else {
-    <div class="text-center py-24 text-base-content/50">
-      <p class="text-lg">{{ 'library.coming_soon' | translate }}</p>
-    </div>
+  } @else if (viewMode() === 'collections') {
+    <p class="text-sm text-base-content/50 mb-4">
+      {{ 'library.collections_count' | translate:{ count: collectionsList().length } }}
+    </p>
+    @if (collectionsLoading() && !collectionsList().length) {
+      <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>
+    } @else if (!collectionsList().length) {
+      <div class="flex flex-col items-center justify-center py-16 gap-3 text-base-content/40">
+        <svg lucideFilm class="w-12 h-12" [strokeWidth]="1.5"></svg>
+        <p class="text-lg">{{ 'library.collections_empty' | translate }}</p>
+      </div>
+    } @else {
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+        @for (c of collectionsList(); track c.id) {
+          <button
+            type="button"
+            class="group flex flex-col gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
+            (click)="pickCollection(c.id)"
+          >
+            <div class="aspect-square rounded-xl overflow-hidden bg-base-300 ring-1 ring-base-300 group-hover:ring-primary group-focus-visible:ring-primary group-focus-visible:ring-2 transition-colors">
+              @if (c.posters.length >= 4) {
+                <div class="grid grid-cols-2 grid-rows-2 w-full h-full">
+                  @for (p of c.posters.slice(0, 4); track p) {
+                    <img appImgFadeIn [src]="p | resolveUrl:'thumb'" alt="" loading="lazy" class="w-full h-full object-cover" />
+                  }
+                </div>
+              } @else if (c.posters.length > 0) {
+                <img appImgFadeIn [src]="c.posters[0] | resolveUrl:'medium'" alt="" loading="lazy" class="w-full h-full object-cover" />
+              } @else {
+                <div class="w-full h-full flex items-center justify-center text-base-content/30">
+                  <svg lucideFilm class="w-12 h-12" [strokeWidth]="1.5"></svg>
+                </div>
+              }
+            </div>
+            <div class="text-sm">
+              <div class="font-medium truncate group-hover:text-primary transition-colors">{{ c.name }}</div>
+              <div class="text-xs text-base-content/50">{{ c.count }}</div>
+            </div>
+          </button>
+        }
+      </div>
+    }
   }
 </div>

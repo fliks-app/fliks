@@ -38,6 +38,11 @@ export class SearchMediaDto {
   @IsNumber()
   @IsOptional()
   @Type(() => Number)
+  collectionId?: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Type(() => Number)
   qualityProfileId?: number;
 
   @IsNumber()

@@ -40,6 +40,8 @@ export interface MetadataDetails extends MetadataSearchResult {
    *  localised name (e.g. "A Very Secret Service" for "Au service de la
    *  France") that the strict title-mismatch filter would otherwise drop. */
   alternativeTitles: string[];
+  tmdbCollectionId: number | null;
+  tmdbCollectionName: string | null;
 }
 
 export interface MetadataCastItem {

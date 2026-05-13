@@ -182,6 +182,8 @@ export class TmdbProvider implements IMetadataProvider {
       })),
       keywords: (data.keywords?.keywords ?? []).map((k) => k.name),
       alternativeTitles: extractAlternativeTitles(data, 'movie'),
+      tmdbCollectionId: data.belongs_to_collection?.id ?? null,
+      tmdbCollectionName: data.belongs_to_collection?.name ?? null,
     };
   }
 
@@ -258,6 +260,8 @@ export class TmdbProvider implements IMetadataProvider {
       })),
       keywords: (data.keywords?.results ?? []).map((k) => k.name),
       alternativeTitles: extractAlternativeTitles(data, 'series'),
+      tmdbCollectionId: null,
+      tmdbCollectionName: null,
     };
   }
 

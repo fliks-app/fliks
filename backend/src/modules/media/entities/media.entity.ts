@@ -130,6 +130,12 @@ export class Media extends BaseEntity {
   genres: string[];
 
   @Column({ nullable: true })
+  tmdbCollectionId: number | null;
+
+  @Column({ nullable: true })
+  tmdbCollectionName: string | null;
+
+  @Column({ nullable: true })
   runtime: number;
 
   @Column({ type: 'date', nullable: true })

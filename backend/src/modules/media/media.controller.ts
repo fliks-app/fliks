@@ -138,6 +138,21 @@ export class MediaController {
     return this.mediaService.getGenres(libraryIds);
   }
 
+  @Get('collections')
+  @CheckPolicies((ability) => ability.can(Action.Read, Media))
+  async collections(
+    @CurrentUser() user: User,
+    @Query('libraryId') libraryIdRaw?: string,
+  ) {
+    const accessible = await this.libraries.getAccessibleLibraryIds(user);
+    let libraryIds = accessible;
+    const libraryId = libraryIdRaw ? parseInt(libraryIdRaw, 10) : null;
+    if (libraryId && Number.isFinite(libraryId)) {
+      libraryIds = accessible.includes(libraryId) ? [libraryId] : [];
+    }
+    return this.mediaService.getCollections(libraryIds);
+  }
+
   @Get('calendar')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
   async calendar(@Query() query: CalendarQueryDto, @CurrentUser() user: User) {
