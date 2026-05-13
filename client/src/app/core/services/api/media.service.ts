@@ -157,6 +157,13 @@ export interface GenreSummary {
   posters: string[];
 }
 
+export interface CollectionSummary {
+  id: number;
+  name: string;
+  count: number;
+  posters: string[];
+}
+
 export interface SearchParams {
   q?: string;
   type?: MediaType;
@@ -248,6 +255,15 @@ export class MediaService {
       : {};
     return firstValueFrom(
       this.http.get<GenreSummary[]>('/api/media/genres', params),
+    );
+  }
+
+  getCollections(libraryId?: number) {
+    const params = libraryId
+      ? { params: { libraryId: String(libraryId) } }
+      : {};
+    return firstValueFrom(
+      this.http.get<CollectionSummary[]>('/api/media/collections', params),
     );
   }
 

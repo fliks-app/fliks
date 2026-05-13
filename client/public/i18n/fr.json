@@ -486,7 +486,12 @@
     "suggestions_empty": "Pas encore de suggestions",
     "suggestions_empty_hint": "Regardez quelques films / séries pour alimenter les recommandations basées sur votre historique.",
     "genres_empty": "Aucun genre dans cette bibliothèque",
-    "clear_genre": "Effacer le filtre genre"
+    "clear_genre": "Effacer le filtre genre",
+    "view_collections": "Collections",
+    "collections_count": "{{count}} collection(s)",
+    "collections_empty": "Aucune collection TMDB trouvée dans cette bibliothèque",
+    "collection": "Collection",
+    "clear_collection": "Effacer le filtre collection"
   },
   "movies": {
     "title": "Films"
