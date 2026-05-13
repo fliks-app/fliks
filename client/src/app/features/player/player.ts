@@ -1770,6 +1770,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // rotation, leaving the player UI oversized. Force a layout recalc.
     window.scrollTo(0, 0);
     document.documentElement.style.setProperty('--vh', `${window.innerHeight}px`);
+    // Native subtitle bottom margin is a % of video height — reapply after
+    // orientation change so the value is recalculated against the new dimensions.
+    if (this.isNativeEngine() && this.engine) {
+      this.applyNativeSubtitleStyle();
+    }
   };
 
   onCloseStats() {
