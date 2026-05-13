@@ -383,7 +383,7 @@
       @else { <svg lucideDownload class="h-5 w-5 shrink-0 opacity-80"></svg> }
       <span class="flex-1">{{ 'media_detail.grab_best' | translate }}</span>
     </button>
-    <button type="button" [disabled]="releasesLoading()" class="dropdown-item text-white" (click)="loadReleases.emit()">
+    <button type="button" class="dropdown-item text-white" (click)="loadReleases.emit()">
       @if (releasesLoading()) { <span class="loading loading-spinner loading-sm"></span> }
       @else { <svg lucideSearch class="h-5 w-5 shrink-0 opacity-80"></svg> }
       <span class="flex-1">{{ 'media_detail.search_releases' | translate }}</span>

@@ -230,9 +230,6 @@
         [grabBusy]="grabBusy()"
         [grabState]="grabState()"
         [canGrab]="canGrab()"
-        [showSearch]="true"
-        [customSearchQuery]="customSearchQuery()"
-        (customSearchQueryChange)="customSearchQuery.set($event)"
         grabPrefix="r"
         (grab)="grabRelease($event.release, $event.index)"
       />

@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  inject,
   input,
   output,
   viewChild,
@@ -10,6 +11,7 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { MovieRelease } from '../../../../core/services/api/media.service';
 import { ReleasesTableComponent } from '../releases-table/releases-table.component';
+import { DismissableStackService } from '../../../../core/services/dismissable-stack.service';
 
 @Component({
   selector: 'app-releases-modal',
@@ -30,11 +32,6 @@ export class ReleasesModalComponent {
   readonly grabPrefix = input('r');
   readonly showCfScore = input(true);
 
-  /** Show a custom search input (movie releases). */
-  readonly showSearch = input(false);
-  readonly customSearchQuery = input('');
-  readonly customSearchQueryChange = output<string>();
-
   /** Show a "Grab Best" button (episode releases). */
   readonly showGrabBest = input(false);
   readonly grabBestDisabled = input(false);
@@ -43,9 +40,15 @@ export class ReleasesModalComponent {
 
   readonly grab = output<{ release: MovieRelease; index: number }>();
 
+  private readonly dismissStack = inject(DismissableStackService);
   private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly closeCallback = () => this.dialogEl()?.nativeElement.close();
 
   showModal() {
-    this.dialogEl()?.nativeElement.showModal();
+    const el = this.dialogEl()?.nativeElement;
+    if (!el || el.open) return;
+    el.showModal();
+    this.dismissStack.push(this.closeCallback);
+    el.addEventListener('close', () => this.dismissStack.remove(this.closeCallback), { once: true });
   }
 }
