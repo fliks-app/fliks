@@ -6,6 +6,7 @@ import {
   input,
 } from '@angular/core';
 import { DatePipe, CurrencyPipe } from '@angular/common';
+import { Router } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Media } from '../../../core/services/api/media.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
@@ -25,6 +26,7 @@ import { localizeLanguage } from '../../../core/utils/language.utils';
 })
 export class MediaInfoExtraComponent {
   private readonly translate = inject(TranslateService);
+  private readonly router = inject(Router);
 
   readonly media = input.required<Media>();
   /** Director names. Sourced from `Media.crew` filtered by job — kept as a
@@ -74,7 +76,13 @@ export class MediaInfoExtraComponent {
 
   readonly revenue = computed(() => this.media().metadata?.revenue ?? null);
 
-  readonly genres = computed(() => (this.media().genres ?? []).join(', '));
+  readonly genres = computed(() => this.media().genres ?? []);
+
+  navigateToGenre(genre: string) {
+    const libraryName = this.media().library?.name;
+    if (!libraryName) return;
+    void this.router.navigate(['/libraries', libraryName], { queryParams: { genre } });
+  }
 
   /** True when at least one row has content — keeps the parent template
    *  from rendering an empty wrapper / divider. */
@@ -91,7 +99,7 @@ export class MediaInfoExtraComponent {
       this.tagline() ||
       this.budget() ||
       this.revenue() ||
-      this.genres() ||
+      this.genres().length > 0 ||
       this.directorsLabel()
     );
   });
