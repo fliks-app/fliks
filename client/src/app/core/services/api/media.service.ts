@@ -171,6 +171,7 @@ export interface SearchParams {
   monitored?: boolean;
   year?: number;
   genre?: string;
+  collectionId?: number;
   sortBy?: string;
   sortOrder?: 'ASC' | 'DESC';
   page?: number;

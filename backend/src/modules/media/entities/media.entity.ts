@@ -129,10 +129,10 @@ export class Media extends BaseEntity {
   @Column({ type: 'jsonb', nullable: true })
   genres: string[];
 
-  @Column({ nullable: true })
+  @Column({ type: 'integer', nullable: true })
   tmdbCollectionId: number | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   tmdbCollectionName: string | null;
 
   @Column({ nullable: true })
