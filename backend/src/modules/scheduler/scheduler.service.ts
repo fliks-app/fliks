@@ -300,13 +300,20 @@ export class SchedulerService implements OnModuleInit {
   }
 
   private async dispatchCommand(name: string, cmdId: number): Promise<void> {
+    const cmd = await this.commandRepo.findOne({ where: { id: cmdId } });
+    const body = cmd?.body ?? {};
     await this.commandRepo.update(cmdId, {
       status: 'running',
       startedOn: new Date(),
     });
     this.eventsService.emit({ type: 'command.started', name });
     try {
-      if (name === 'SearchMissing') await this.doSearchMissing();
+      if (name === 'SearchMissing') {
+        const mediaIds = Array.isArray(body['mediaIds'])
+          ? (body['mediaIds'] as number[])
+          : undefined;
+        await this.doSearchMissing(mediaIds);
+      }
       else if (name === 'RefreshMetadata') await this.doRefreshMetadata();
       else if (name === 'RssSync') await this.doRssSync();
       else if (name === 'ImportCompleted')
@@ -352,7 +359,10 @@ export class SchedulerService implements OnModuleInit {
     }
   }
 
-  private async doSearchMissing(): Promise<void> {
+  private async doSearchMissing(mediaIds?: number[]): Promise<void> {
+    if (mediaIds?.length) {
+      this.log.log(`SearchMissing: targeted restart for media IDs [${mediaIds.join(', ')}]`);
+    }
     const indexers = await this.indexerRepo.find({
       where: { enabled: true },
       order: { priority: 'ASC' },
@@ -374,23 +384,27 @@ export class SchedulerService implements OnModuleInit {
       throw new Error(`Download client unreachable — ${connCheck.message}`);
     }
 
-    await this.searchMissingMovies(indexers, qbitClient);
-    await this.searchMissingEpisodes(indexers, qbitClient);
+    await this.searchMissingMovies(indexers, qbitClient, mediaIds);
+    await this.searchMissingEpisodes(indexers, qbitClient, mediaIds);
   }
 
   private async searchMissingMovies(
     indexers: Indexer[],
     qbitClient: DownloadClient,
+    mediaIds?: number[],
   ): Promise<void> {
-    const candidates = await this.mediaRepo
+    const qb = this.mediaRepo
       .createQueryBuilder('m')
       .leftJoinAndSelect('m.qualityProfile', 'qp')
       .leftJoinAndSelect('m.languageProfile', 'lp')
       .leftJoinAndSelect('m.files', 'f')
       .where('m.monitored = true')
       .andWhere('m.type = :type', { type: MediaType.MOVIE })
-      .andWhere('(f.id IS NULL OR qp."upgradeAllowed" = true)')
-      .getMany();
+      .andWhere('(f.id IS NULL OR qp."upgradeAllowed" = true)');
+    if (mediaIds?.length) {
+      qb.andWhere('m.id IN (:...mediaIds)', { mediaIds });
+    }
+    const candidates = await qb.getMany();
 
     if (!candidates.length) return;
 
@@ -453,11 +467,12 @@ export class SchedulerService implements OnModuleInit {
   private async searchMissingEpisodes(
     indexers: Indexer[],
     qbitClient: DownloadClient,
+    mediaIds?: number[],
   ): Promise<void> {
     const today = new Date().toISOString().slice(0, 10);
     const scoring = await this.autoGrab.buildScoringContext(indexers);
 
-    const episodes = await this.episodeRepo
+    const qb = this.episodeRepo
       .createQueryBuilder('ep')
       .innerJoin('ep.season', 'season')
       .innerJoin('season.media', 'media')
@@ -469,7 +484,11 @@ export class SchedulerService implements OnModuleInit {
       .andWhere('ep.monitored = true')
       .andWhere('ep.airDate IS NOT NULL')
       .andWhere('ep.airDate <= :today', { today })
-      .andWhere('(ep.hasFile = false OR qp."upgradeAllowed" = true)')
+      .andWhere('(ep.hasFile = false OR qp."upgradeAllowed" = true)');
+    if (mediaIds?.length) {
+      qb.andWhere('media.id IN (:...mediaIds)', { mediaIds });
+    }
+    const episodes = await qb
       .select([
         'ep.id',
         'ep.episodeNumber',
