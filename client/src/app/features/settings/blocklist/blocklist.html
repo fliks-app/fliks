@@ -32,6 +32,7 @@
             <th>{{ 'settings.blocklist.col_title' | translate }}</th>
             <th>{{ 'settings.blocklist.col_indexer' | translate }}</th>
             <th>{{ 'settings.blocklist.col_quality' | translate }}</th>
+            <th>{{ 'settings.blocklist.col_note' | translate }}</th>
             <th>{{ 'settings.blocklist.col_date' | translate }}</th>
             <th class="text-end w-24"></th>
           </tr>
@@ -42,6 +43,7 @@
               <td class="font-medium max-w-xs truncate">{{ entry.sourceTitle }}</td>
               <td class="text-sm text-base-content/70">{{ entry.indexerName ?? '—' }}</td>
               <td class="text-sm">{{ entry.quality ?? '—' }}</td>
+              <td class="text-sm text-base-content/60">{{ entry.note ?? '—' }}</td>
               <td class="text-sm text-base-content/60 tabular-nums">
                 {{ entry.createdAt | date:'dd/MM/yyyy' }}
               </td>

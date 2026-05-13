@@ -1188,7 +1188,8 @@
       "col_title": "Titre de la release",
       "col_indexer": "Indexer",
       "col_quality": "Qualité",
-      "col_date": "Date"
+      "col_date": "Date",
+      "col_note": "Raison"
     },
     "notifications": {
       "title": "Notifications",
