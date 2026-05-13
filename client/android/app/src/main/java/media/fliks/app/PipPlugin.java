@@ -1,14 +1,17 @@
 package media.fliks.app;
 
+import android.app.AppOpsManager;
 import android.app.PendingIntent;
 import android.app.PictureInPictureParams;
 import android.app.RemoteAction;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Icon;
 import android.os.Build;
 import android.util.Rational;
 
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -27,6 +30,24 @@ public class PipPlugin extends Plugin {
     static final String ACTION_TOGGLE_PLAYBACK = "media.fliks.app.PIP_TOGGLE_PLAYBACK";
     private boolean autoEnterEnabled = false;
     private boolean isPlaying = false;
+
+    @PluginMethod()
+    public void isAvailable(PluginCall call) {
+        JSObject result = new JSObject();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O
+                || !getActivity().getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
+            result.put("available", false);
+            call.resolve(result);
+            return;
+        }
+        AppOpsManager appOps = (AppOpsManager) getContext().getSystemService(Context.APP_OPS_SERVICE);
+        int mode = appOps.checkOpNoThrow(
+                AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
+                android.os.Process.myUid(),
+                getContext().getPackageName());
+        result.put("available", mode == AppOpsManager.MODE_ALLOWED);
+        call.resolve(result);
+    }
 
     @PluginMethod()
     public void enter(PluginCall call) {

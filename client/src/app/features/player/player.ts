@@ -58,6 +58,7 @@ interface ImmersivePlugin {
 const Immersive = registerPlugin<ImmersivePlugin>('Immersive');
 
 interface PipPlugin {
+  isAvailable(): Promise<{ available: boolean }>;
   enter(): Promise<void>;
   setAutoEnter(options: { enabled: boolean }): Promise<void>;
   updatePlaybackState(options: { playing: boolean }): Promise<void>;
@@ -194,6 +195,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  to false after inactivity regardless of the initial state. */
   readonly controlsVisible = signal(!Capacitor.isNativePlatform());
   readonly inPipMode = signal(false);
+  readonly pipAvailable = signal(true);
   private readonly isLandscape = signal(screen.orientation?.type?.startsWith('landscape') ?? false);
   readonly statsVisible = signal(false);
   readonly fillScreen = signal(false);
@@ -884,6 +886,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     // PiP mode change listener (native Android)
     if (this.isNative) {
+      Pip.isAvailable().then(({ available }) => this.pipAvailable.set(available)).catch(() => this.pipAvailable.set(false));
       window.addEventListener('pipModeChanged', this.onPipModeChanged as EventListener);
       window.addEventListener('pipAction', this.onPipAction as EventListener);
       Pip.setAutoEnter({ enabled: true }).catch(() => {});
