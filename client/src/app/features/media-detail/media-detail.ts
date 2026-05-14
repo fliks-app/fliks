@@ -1303,22 +1303,31 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!fileId) return;
 
     const prev = this.watchedEpisodeIds();
-    const next = new Set(prev);
-    if (watched) next.add(episode.id);
-    else next.delete(episode.id);
-    this.watchedEpisodeIds.set(next);
-
-    if (watched) {
-      const nextProgress = { ...this.episodeProgress() };
-      delete nextProgress[episode.id];
-      this.episodeProgress.set(nextProgress);
-    }
+    this.applyEpisodeWatchedLocal(episode.id, watched);
 
     try {
       await this.streamingApi.toggleWatched(mediaId, fileId, episode.id);
     } catch {
       this.watchedEpisodeIds.set(prev);
     }
+  }
+
+  /** Mirror the header's single-episode toggle: it has already called the API,
+   *  we just need to refresh local watched/progress state so the surrounding
+   *  scroller cards ("Plus de saison X", season panel) reflect the change. */
+  onEpisodeWatchedToggledFromHeader(payload: { episodeId: number; watched: boolean }) {
+    this.applyEpisodeWatchedLocal(payload.episodeId, payload.watched);
+  }
+
+  private applyEpisodeWatchedLocal(episodeId: number, watched: boolean): void {
+    const next = new Set(this.watchedEpisodeIds());
+    if (watched) next.add(episodeId);
+    else next.delete(episodeId);
+    this.watchedEpisodeIds.set(next);
+
+    const nextProgress = { ...this.episodeProgress() };
+    delete nextProgress[episodeId];
+    this.episodeProgress.set(nextProgress);
   }
 
   onSeriesWatchedToggled(payload: { watched: boolean }) {

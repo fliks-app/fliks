@@ -67,6 +67,7 @@
           (grabBest)="grabEpisodeBest(m.id, ep.id)"
           (rescanFiles)="rescanFiles()"
           (editSubtitles)="openSubtitles()"
+          (episodeWatchedToggled)="onEpisodeWatchedToggledFromHeader($event)"
         />
 
         @if (currentSeasonEpisodes().length > 1) {

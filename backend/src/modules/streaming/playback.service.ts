@@ -56,6 +56,11 @@ export interface MediaResumeInfo {
  */
 const RESUME_FROM_START_UNDER_SECONDS = 10;
 
+/** Postgres foreign-key violation. Library refresh can drop the parent media
+ *  row mid-session; cascade clears existing playback_states, then a beacon
+ *  arrives for that mediaId and the fresh INSERT trips this FK. */
+const PG_FK_VIOLATION = '23503';
+
 @Injectable()
 export class PlaybackService implements OnModuleInit {
   private readonly log = new Logger(PlaybackService.name);
@@ -247,7 +252,7 @@ export class PlaybackService implements OnModuleInit {
       mediaFileId: number;
       episodeId?: number;
     },
-  ): Promise<PlaybackState> {
+  ): Promise<PlaybackState | null> {
     if (!mediaId || !body.mediaFileId) {
       throw new BadRequestException('mediaId and mediaFileId are required');
     }
@@ -278,7 +283,12 @@ export class PlaybackService implements OnModuleInit {
       });
     }
 
-    return this.repo.save(state);
+    try {
+      return await this.repo.save(state);
+    } catch (err) {
+      if ((err as { code?: string })?.code === PG_FK_VIOLATION) return null;
+      throw err;
+    }
   }
 
   /**
