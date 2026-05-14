@@ -92,7 +92,7 @@ actor PostgresManager {
             arguments: [
                 "-D", dataDir.path,
                 "-l", logFile.path,
-                "-o", "-p \(port)",
+                "-o", "-p \(port) -c dynamic_library_path=\(libDir.appendingPathComponent("postgresql").path)",
                 "start",
             ],
             environment: pgEnv,

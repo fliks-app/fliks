@@ -15,6 +15,7 @@ actor NodeManager {
     private var process: Process?
     private var stdoutPipe: Pipe?
     private var stderrPipe: Pipe?
+    private var logFileHandle: FileHandle?
     private var isIntentionallyStopping = false
     private var restartDelay: TimeInterval = 1
 
@@ -46,12 +47,23 @@ actor NodeManager {
         self.stdoutPipe = stdout
         self.stderrPipe = stderr
 
-        // Stream stderr to os_log for diagnostics.
-        stderr.fileHandleForReading.readabilityHandler = { [logger] handle in
-            let data = handle.availableData
-            guard !data.isEmpty, let line = String(data: data, encoding: .utf8) else { return }
-            logger.info("node: \(line)")
+        // Write backend logs to daily file + os_log.
+        try? Paths.ensureDirectory(Paths.logsDir)
+        let logHandle = Self.openLogFile(Paths.logsDir)
+        self.logFileHandle = logHandle
+
+        let handleOutput = { [logger] (pipe: Pipe) in
+            pipe.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                guard !data.isEmpty else { return }
+                logHandle?.write(data)
+                if let line = String(data: data, encoding: .utf8) {
+                    logger.info("node: \(line)")
+                }
+            }
         }
+        handleOutput(stdout)
+        handleOutput(stderr)
 
         // Crash recovery handler.
         let intentionalCheck = { @Sendable [weak self] in
@@ -99,6 +111,8 @@ actor NodeManager {
         self.process = nil
         self.stdoutPipe = nil
         self.stderrPipe = nil
+        self.logFileHandle?.closeFile()
+        self.logFileHandle = nil
     }
 
     var isRunning: Bool {
@@ -106,6 +120,28 @@ actor NodeManager {
     }
 
     // MARK: - Private
+
+    /// Open (or create) the daily backend log file for appending.
+    /// File name: `backend-2026-05-15.log`
+    private static func openLogFile(_ baseDir: URL) -> FileHandle? {
+        let fm = FileManager.default
+        let dateStr = Self.dayFormatter.string(from: Date())
+        let url = baseDir.appendingPathComponent("backend-\(dateStr).log")
+        if !fm.fileExists(atPath: url.path) {
+            fm.createFile(atPath: url.path, contents: nil)
+        }
+        let handle = try? FileHandle(forWritingTo: url)
+        handle?.seekToEndOfFile()
+        let header = "\n--- Fliks backend started at \(ISO8601DateFormatter().string(from: Date())) ---\n"
+        handle?.write(header.data(using: .utf8) ?? Data())
+        return handle
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
 
     /// Create symlinks in the data directory so the backend finds its code
     /// while using a writable cwd for images/backups/thumbnails.
