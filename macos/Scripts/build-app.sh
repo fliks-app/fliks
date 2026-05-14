@@ -117,8 +117,20 @@ for pgbin in "$RESOURCES/postgres/bin/"*; do
 done
 
 # Copy share directory (timezone data, SQL scripts needed by initdb).
-cp -R "$PG_PREFIX/share/postgresql@18/"* "$RESOURCES/postgres/share/" 2>/dev/null || \
-    cp -R "$PG_PREFIX/share/"* "$RESOURCES/postgres/share/" 2>/dev/null || true
+# Preserve the postgresql/ subdirectory so initdb -L finds it.
+mkdir -p "$RESOURCES/postgres/share/postgresql"
+cp -R "$PG_PREFIX/share/postgresql@18/"* "$RESOURCES/postgres/share/postgresql/" 2>/dev/null || \
+    cp -R "$PG_PREFIX/share/postgresql/"* "$RESOURCES/postgres/share/postgresql/" 2>/dev/null || true
+
+# Copy extension libraries (pg_trgm, plpgsql, etc.) so $libdir resolves
+# to our bundled versions — not the host's Homebrew (which may be a
+# different PG minor version with ABI-incompatible symbols).
+PG_EXTLIB="$PG_PREFIX/lib/postgresql"
+if [ -d "$PG_EXTLIB" ]; then
+    mkdir -p "$RESOURCES/postgres/lib/postgresql"
+    cp "$PG_EXTLIB"/*.dylib "$RESOURCES/postgres/lib/postgresql/" 2>/dev/null || true
+    echo "    [copy] $(ls "$RESOURCES/postgres/lib/postgresql/"*.dylib 2>/dev/null | wc -l | tr -d ' ') extension libraries"
+fi
 
 # Bundle Homebrew dylib dependencies for postgres binaries.
 bash "$SCRIPTS_DIR/bundle-dylibs.sh" "$RESOURCES/postgres/bin" "$RESOURCES/postgres/lib"
