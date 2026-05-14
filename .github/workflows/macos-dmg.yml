@@ -59,8 +59,13 @@ jobs:
         run: xcodegen generate
 
       # ── Build .app + bundle resources + dylibs ──
+      # API keys are baked into Info.plist via Xcode build settings,
+      # then read at runtime by BuildConfig.swift.
       - name: Build Fliks.app
         working-directory: macos
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          TVDB_API_KEY: ${{ secrets.TVDB_API_KEY }}
         run: ./Scripts/build-app.sh --skip-web
 
       # ── Create DMG ──
