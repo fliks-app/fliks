@@ -112,21 +112,36 @@ actor PostgresManager {
     func createDatabaseIfNeeded() async throws {
         logger.info("Ensuring 'fliks' database exists...")
 
-        let result = try await ProcessRunner.run(
-            executable: binDir.appendingPathComponent("createdb"),
+        // Check if database exists first to avoid ERROR log on restarts.
+        let check = try await ProcessRunner.run(
+            executable: binDir.appendingPathComponent("psql"),
             arguments: [
                 "-h", "localhost",
                 "-p", String(port),
                 "-U", "fliks",
-                "fliks",
+                "-d", "postgres",
+                "-tAc", "SELECT 1 FROM pg_database WHERE datname = 'fliks'",
             ],
             environment: pgEnv,
             timeout: 10
         )
 
-        // Exit code 1 with "already exists" is fine.
-        if !result.succeeded && !result.stderr.contains("already exists") {
-            throw PostgresError.createDBFailed(result.stderr)
+        if check.stdout.trimmingCharacters(in: .whitespacesAndNewlines) != "1" {
+            let result = try await ProcessRunner.run(
+                executable: binDir.appendingPathComponent("createdb"),
+                arguments: [
+                    "-h", "localhost",
+                    "-p", String(port),
+                    "-U", "fliks",
+                    "fliks",
+                ],
+                environment: pgEnv,
+                timeout: 10
+            )
+
+            if !result.succeeded {
+                throw PostgresError.createDBFailed(result.stderr)
+            }
         }
 
         // Ensure pg_trgm extension (the backend also does this, but belt-and-suspenders).
