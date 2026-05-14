@@ -47,10 +47,9 @@ actor NodeManager {
         self.stdoutPipe = stdout
         self.stderrPipe = stderr
 
-        // Write backend logs to file + os_log.
-        let logFile = Paths.logsDir.appendingPathComponent("backend.log")
+        // Write backend logs to daily file + os_log.
         try? Paths.ensureDirectory(Paths.logsDir)
-        let logHandle = Self.openLogFile(logFile)
+        let logHandle = Self.openLogFile(Paths.logsDir)
         self.logFileHandle = logHandle
 
         let handleOutput = { [logger] (pipe: Pipe) in
@@ -122,19 +121,27 @@ actor NodeManager {
 
     // MARK: - Private
 
-    /// Open (or create) the backend log file for appending.
-    private static func openLogFile(_ url: URL) -> FileHandle? {
+    /// Open (or create) the daily backend log file for appending.
+    /// File name: `backend-2026-05-15.log`
+    private static func openLogFile(_ baseDir: URL) -> FileHandle? {
         let fm = FileManager.default
+        let dateStr = Self.dayFormatter.string(from: Date())
+        let url = baseDir.appendingPathComponent("backend-\(dateStr).log")
         if !fm.fileExists(atPath: url.path) {
             fm.createFile(atPath: url.path, contents: nil)
         }
         let handle = try? FileHandle(forWritingTo: url)
         handle?.seekToEndOfFile()
-        // Write a separator on each launch.
         let header = "\n--- Fliks backend started at \(ISO8601DateFormatter().string(from: Date())) ---\n"
         handle?.write(header.data(using: .utf8) ?? Data())
         return handle
     }
+
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
 
     /// Create symlinks in the data directory so the backend finds its code
     /// while using a writable cwd for images/backups/thumbnails.
