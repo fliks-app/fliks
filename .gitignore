@@ -47,7 +47,7 @@ Thumbs.db
 client/android/app/fliks-upload.jks
 volumes/*
 /backend/images/
-scripts/
+/scripts/
 logos/
 plans/
 /docs/

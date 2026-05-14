@@ -1,0 +1,359 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		04AEE0B9D61C9D615F2FC4B2 /* NodeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56CD20EE1EC96C1A4B892D90 /* NodeManager.swift */; };
+		104F45E5738E3150737FBAAF /* ConfigStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40C10B954E0EB9D66C53747 /* ConfigStore.swift */; };
+		3685F8FE18738266C476C9C6 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7422312B1F5D7671E9744038 /* MenuBarView.swift */; };
+		3BA40AEEC5D78AF15B1FEF18 /* PostgresManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6EFDD9703C108943A23BE27 /* PostgresManager.swift */; };
+		98A9A12AB18BD5FC9B012A00 /* ServerState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D571CEB9FF05926A3DD18E2 /* ServerState.swift */; };
+		A60EC33352704F96FE6929C7 /* ProcessRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 567B1538157A619F556157A7 /* ProcessRunner.swift */; };
+		B81065FF67224F21CE062F02 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3B64ACCDF1778C8B2C04AEE /* AppState.swift */; };
+		E02781C772245807E83D4217 /* FliksApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 876492917F627B6B7525246D /* FliksApp.swift */; };
+		E7CDA4573E9535F526647CC2 /* Paths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46CF836D217191625BFC2462 /* Paths.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		46CF836D217191625BFC2462 /* Paths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Paths.swift; sourceTree = "<group>"; };
+		567B1538157A619F556157A7 /* ProcessRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessRunner.swift; sourceTree = "<group>"; };
+		56CD20EE1EC96C1A4B892D90 /* NodeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeManager.swift; sourceTree = "<group>"; };
+		7422312B1F5D7671E9744038 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
+		7D571CEB9FF05926A3DD18E2 /* ServerState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerState.swift; sourceTree = "<group>"; };
+		876492917F627B6B7525246D /* FliksApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FliksApp.swift; sourceTree = "<group>"; };
+		A40C10B954E0EB9D66C53747 /* ConfigStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigStore.swift; sourceTree = "<group>"; };
+		B6EFDD9703C108943A23BE27 /* PostgresManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostgresManager.swift; sourceTree = "<group>"; };
+		E3B64ACCDF1778C8B2C04AEE /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		EE372A3138A37BDCE39B1584 /* Fliks.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Fliks.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		3AD99303E4A4882D52537BBE /* MenuBar */ = {
+			isa = PBXGroup;
+			children = (
+				7422312B1F5D7671E9744038 /* MenuBarView.swift */,
+			);
+			path = MenuBar;
+			sourceTree = "<group>";
+		};
+		3FB0C8B39A2D233FD9605189 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				A40C10B954E0EB9D66C53747 /* ConfigStore.swift */,
+				56CD20EE1EC96C1A4B892D90 /* NodeManager.swift */,
+				B6EFDD9703C108943A23BE27 /* PostgresManager.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		5BCC2CE72855F9DAA59E057A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				EE372A3138A37BDCE39B1584 /* Fliks.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		5EDB86BA3D552CB161DD5E2E /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				46CF836D217191625BFC2462 /* Paths.swift */,
+				567B1538157A619F556157A7 /* ProcessRunner.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		CC31106B5243F868D85A2AAC /* Fliks */ = {
+			isa = PBXGroup;
+			children = (
+				F672A24E3291904CA0F0EF07 /* App */,
+				3AD99303E4A4882D52537BBE /* MenuBar */,
+				3FB0C8B39A2D233FD9605189 /* Services */,
+				E2B8241A11531F4213C19328 /* State */,
+				5EDB86BA3D552CB161DD5E2E /* Utilities */,
+			);
+			path = Fliks;
+			sourceTree = "<group>";
+		};
+		E2B8241A11531F4213C19328 /* State */ = {
+			isa = PBXGroup;
+			children = (
+				E3B64ACCDF1778C8B2C04AEE /* AppState.swift */,
+				7D571CEB9FF05926A3DD18E2 /* ServerState.swift */,
+			);
+			path = State;
+			sourceTree = "<group>";
+		};
+		EE38DCFB58557311F9B3C447 = {
+			isa = PBXGroup;
+			children = (
+				CC31106B5243F868D85A2AAC /* Fliks */,
+				5BCC2CE72855F9DAA59E057A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		F672A24E3291904CA0F0EF07 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				876492917F627B6B7525246D /* FliksApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		D7AF79D068DCF1819C905CF2 /* Fliks */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 27764660E64E514EB59DB478 /* Build configuration list for PBXNativeTarget "Fliks" */;
+			buildPhases = (
+				CC492CB1B529A9B365C2911E /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Fliks;
+			packageProductDependencies = (
+			);
+			productName = Fliks;
+			productReference = EE372A3138A37BDCE39B1584 /* Fliks.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A0D6CAB1104CF5DDB3EB1FF8 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					D7AF79D068DCF1819C905CF2 = {
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 15A8BCEE8BB9E1C6B99BF5CD /* Build configuration list for PBXProject "Fliks" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = EE38DCFB58557311F9B3C447;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 5BCC2CE72855F9DAA59E057A /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D7AF79D068DCF1819C905CF2 /* Fliks */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		CC492CB1B529A9B365C2911E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B81065FF67224F21CE062F02 /* AppState.swift in Sources */,
+				104F45E5738E3150737FBAAF /* ConfigStore.swift in Sources */,
+				E02781C772245807E83D4217 /* FliksApp.swift in Sources */,
+				3685F8FE18738266C476C9C6 /* MenuBarView.swift in Sources */,
+				04AEE0B9D61C9D615F2FC4B2 /* NodeManager.swift in Sources */,
+				E7CDA4573E9535F526647CC2 /* Paths.swift in Sources */,
+				3BA40AEEC5D78AF15B1FEF18 /* PostgresManager.swift in Sources */,
+				A60EC33352704F96FE6929C7 /* ProcessRunner.swift in Sources */,
+				98A9A12AB18BD5FC9B012A00 /* ServerState.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		29B3598A976B74DA95A439CA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.10;
+			};
+			name = Debug;
+		};
+		301BE0F9EFDB521A284DB8FA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.10;
+			};
+			name = Release;
+		};
+		4B99F85C5B02BD84FDB8D938 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CODE_SIGN_ENTITLEMENTS = Fliks/Fliks.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				INFOPLIST_FILE = Fliks/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.fliks.macos;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		6824ECAC361CA579F75D3064 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CODE_SIGN_ENTITLEMENTS = Fliks/Fliks.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				INFOPLIST_FILE = Fliks/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.fliks.macos;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		15A8BCEE8BB9E1C6B99BF5CD /* Build configuration list for PBXProject "Fliks" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				29B3598A976B74DA95A439CA /* Debug */,
+				301BE0F9EFDB521A284DB8FA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		27764660E64E514EB59DB478 /* Build configuration list for PBXNativeTarget "Fliks" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4B99F85C5B02BD84FDB8D938 /* Debug */,
+				6824ECAC361CA579F75D3064 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A0D6CAB1104CF5DDB3EB1FF8 /* Project object */;
+}
