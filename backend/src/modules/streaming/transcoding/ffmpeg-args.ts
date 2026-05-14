@@ -242,12 +242,20 @@ export function buildFfmpegArgs(
     }
   } else if (effectiveHwAccel === 'videotoolbox') {
     // VideoToolbox = Apple Media Engine (h264/hevc encode+decode ASIC).
-    // No `-hwaccel_output_format` — let ffmpeg implicitly hwdownload to
-    // CPU buffers after decode. Stock libswscale `scale` filter doesn't
-    // accept VT surfaces, and the encoder takes CPU YUV input and
-    // re-uploads internally. No /dev/dri probing — the framework picks
-    // the host's Media Engine automatically on macOS.
-    args.push('-hwaccel', 'videotoolbox', '-noautorotate');
+    // Two modes:
+    //   1. Tonemap (no burn-in/crop): keep VT surfaces, use scale_vt for
+    //      hardware HDR→SDR tonemap via Metal — full GPU pipeline.
+    //   2. Everything else: download to CPU buffers for software filters
+    //      (crop, burn-in, scale), then re-upload via the encoder.
+    if (tonemap && !burnIn?.filter && !crop) {
+      args.push(
+        '-hwaccel', 'videotoolbox',
+        '-hwaccel_output_format', 'videotoolbox_vld',
+        '-noautorotate',
+      );
+    } else {
+      args.push('-hwaccel', 'videotoolbox', '-noautorotate');
+    }
   }
 
   args.push('-i', inputPath);
@@ -430,23 +438,38 @@ export function buildFfmpegArgs(
       // No `-preset` knob (VT doesn't expose presets); `-realtime 1`
       // tells the encoder to favour latency over efficiency on early
       // ramp-up frames.
-      //
-      // VT decode outputs CPU buffers (no `-hwaccel_output_format`), so
-      // all CPU-side filters work in-place: zscale tonemap, subtitle
-      // burn-in, crop, scale. The encoder re-uploads to Metal/IOSurface
-      // internally.
-      args.push(
-        '-c:v', 'h264_videotoolbox',
-        '-profile:v', 'high', '-level', '4.0',
-        ...(early ? ['-realtime', '1'] : []),
-        '-b:v', profile.videoBitrate,
-        '-maxrate', profile.videoBitrate,
-        '-vf',
-        `${cpuCropPrefix}${tonemapCpu}scale=${w}:-2:flags=lanczos,format=yuv420p${burnInFilter}`,
-        '-g', String(gopSize),
-        '-keyint_min', String(gopSize),
-        '-force_key_frames', forceKeyframesExpr,
-      );
+      if (tonemap && !burnIn?.filter && !crop) {
+        // Full GPU pipeline: VT decode → scale_vt (Metal tonemap + resize)
+        // → VT encode. HDR→SDR via color_transfer/primaries/matrix=bt709.
+        // No CPU round-trip — everything stays on Metal/IOSurface.
+        args.push(
+          '-c:v', 'h264_videotoolbox',
+          '-profile:v', 'high', '-level', '4.0',
+          ...(early ? ['-realtime', '1'] : []),
+          '-b:v', profile.videoBitrate,
+          '-maxrate', profile.videoBitrate,
+          '-vf',
+          `scale_vt=w=${w}:h=-2:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709`,
+          '-g', String(gopSize),
+          '-keyint_min', String(gopSize),
+          '-force_key_frames', forceKeyframesExpr,
+        );
+      } else {
+        // CPU path: VT decode → CPU buffers → software filters (crop,
+        // burn-in, scale) → VT encode (re-uploads internally).
+        args.push(
+          '-c:v', 'h264_videotoolbox',
+          '-profile:v', 'high', '-level', '4.0',
+          ...(early ? ['-realtime', '1'] : []),
+          '-b:v', profile.videoBitrate,
+          '-maxrate', profile.videoBitrate,
+          '-vf',
+          `${cpuCropPrefix}scale=${w}:-2:flags=lanczos,format=yuv420p${burnInFilter}`,
+          '-g', String(gopSize),
+          '-keyint_min', String(gopSize),
+          '-force_key_frames', forceKeyframesExpr,
+        );
+      }
       break;
     default:
       args.push(
