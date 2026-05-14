@@ -1,6 +1,7 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, inject } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
+import { DeviceService } from './device.service';
 
 const STORAGE_KEY = 'fliks_server_url';
 const KNOWN_SERVERS_KEY = 'fliks_known_servers';
@@ -22,10 +23,16 @@ export class ServerConfigService {
   private readonly _serverUrl = signal('');
   private readonly _knownServers = signal<KnownServer[]>([]);
 
+  private readonly device = inject(DeviceService);
+
   readonly serverUrl = this._serverUrl.asReadonly();
   readonly knownServers = this._knownServers.asReadonly();
   readonly isConfigured = computed(() => this._serverUrl().length > 0);
   readonly isNative = Capacitor.isNativePlatform();
+  /** Standalone bundles (Capacitor native or Smart TV) ship without a host
+   * backend and need an explicit server URL. Web builds are served by the
+   * backend and use relative `/api` URLs. */
+  readonly requiresServerUrl = computed(() => this.isNative || this.device.isTv());
 
   async load(): Promise<void> {
     await Promise.all([this.loadActiveUrl(), this.loadKnownServers()]);
@@ -103,7 +110,7 @@ export class ServerConfigService {
   }
 
   resolveUrl(path: string): string {
-    if (!this.isNative || !this._serverUrl()) return path;
+    if (!this.requiresServerUrl() || !this._serverUrl()) return path;
     // Absolute URLs (e.g. raw TMDB images) must not be re-prefixed with the
     // server host — would produce https://server/https://image.tmdb.org/...
     if (/^https?:\/\//i.test(path)) return path;

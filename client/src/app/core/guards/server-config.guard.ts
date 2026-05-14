@@ -6,7 +6,7 @@ export const serverConfigGuard: CanActivateFn = async () => {
   const config = inject(ServerConfigService);
   const router = inject(Router);
 
-  if (!config.isNative) return true;
+  if (!config.requiresServerUrl()) return true;
 
   await config.load();
   if (config.isConfigured()) return true;

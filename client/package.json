@@ -17,6 +17,8 @@
     "cap:build": "npm run build && npx cap sync android",
     "cap:build:ios": "npm run build && npx cap sync ios",
     "tizen:build": "ng build --configuration tizen && node tizen/build-wgt.mjs",
+    "tizen:deploy": "sdb connect $TV_IP && sdb install dist/Fliks-$(node -p \"require('./package.json').version\").wgt",
+    "tizen:build:deploy": "npm run tizen:build && npm run tizen:deploy",
     "webos:build": "ng build --configuration webos && node webos/build-ipk.mjs"
   },
   "packageManager": "npm@10.8.2",
