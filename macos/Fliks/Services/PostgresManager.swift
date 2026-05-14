@@ -168,7 +168,7 @@ actor PostgresManager {
     func isReady() async -> Bool {
         guard let result = try? await ProcessRunner.run(
             executable: binDir.appendingPathComponent("pg_isready"),
-            arguments: ["-h", "localhost", "-p", String(port)],
+            arguments: ["-h", "localhost", "-p", String(port), "-U", "fliks"],
             environment: pgEnv,
             timeout: 5
         ) else {
