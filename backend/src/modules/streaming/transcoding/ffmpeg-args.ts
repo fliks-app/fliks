@@ -289,10 +289,11 @@ export function buildFfmpegArgs(
       ? ',tonemap_vaapi=format=nv12:t=bt709:p=bt709:m=bt709'
       : '';
   // CPU tonemap chain: HDR (PQ/HLG BT.2020) → SDR (BT.709).
-  // Uses format + colorspace + tonemap (no zscale dependency — zimg/libzimg
-  // is not available in stock Homebrew FFmpeg on macOS).
+  // convert to float → tonemap → back to yuv420p. The `tonemap` filter
+  // handles PQ/HLG linearisation internally. No zscale/libzimg dependency
+  // (not available in stock Homebrew FFmpeg on macOS).
   const tonemapCpu = tonemap
-    ? `format=gbrpf32le,tonemap=mobius:desat=0,colorspace=all=bt709:iall=bt2020:trc=bt709:itrc=smpte2084:format=yuv420p,`
+    ? `format=gbrpf32le,tonemap=mobius:desat=0,format=yuv420p,`
     : '';
 
   // For HW paths with crop: hwdownload to CPU, crop, then hwupload back.
