@@ -9,15 +9,13 @@ enum ServerState: Equatable {
     case stopping
     case error(String)
 
-    /// SF Symbol name for the menu bar icon.
-    var iconName: String {
+    /// Menu bar icon opacity — dims when not running, full when active.
+    var menuBarOpacity: Double {
         switch self {
-        case .stopped:           return "film"
-        case .startingPostgres,
-             .startingBackend:   return "film.circle"
-        case .running:           return "film.fill"
-        case .stopping:          return "film.circle"
-        case .error:             return "exclamationmark.triangle.fill"
+        case .running:                            return 1.0
+        case .startingPostgres, .startingBackend,
+             .stopping:                           return 0.5
+        case .stopped, .error:                    return 0.3
         }
     }
 

@@ -8,8 +8,11 @@ struct FliksApp: App {
         MenuBarExtra {
             MenuBarView(appState: appState)
         } label: {
-            Image(systemName: appState.serverState.iconName)
-                .renderingMode(.template)
+            Image("MenuBarIcon")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 18, height: 18)
+                .opacity(appState.serverState.menuBarOpacity)
         }
     }
 }

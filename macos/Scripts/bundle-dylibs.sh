@@ -27,9 +27,17 @@ mark_processed() {
 }
 
 # Returns non-system dylib dependencies of a binary.
+# Handles both absolute Homebrew paths and @loader_path/@rpath references.
 get_brew_deps() {
     otool -L "$1" 2>/dev/null \
         | awk '/\/opt\/homebrew\// { print $1 }' \
+        | sort -u
+}
+
+# Returns @loader_path dependency references (unresolved — caller resolves).
+get_loader_path_deps() {
+    otool -L "$1" 2>/dev/null \
+        | awk '/@loader_path\// { print $1 }' \
         | sort -u
 }
 
@@ -69,6 +77,20 @@ bundle_one() {
         dep_name="$(basename "$dep")"
         install_name_tool -change "$dep" "@loader_path/$dep_name" "$LIB_DIR/$dylib_name" 2>/dev/null || true
         bundle_one "$dep"
+    done
+
+    # Also handle @loader_path references — these point to sibling dylibs
+    # at the original Homebrew location. We need to resolve them, copy the
+    # target, and the reference is already correct (@loader_path/name).
+    local orig_dir
+    orig_dir="$(dirname "$dylib_path")"
+    for ref in $(get_loader_path_deps "$LIB_DIR/$dylib_name"); do
+        dep_name="$(basename "$ref")"
+        # The actual file is relative to the ORIGINAL location, not LIB_DIR.
+        local resolved="${ref/@loader_path/$orig_dir}"
+        if [ -f "$resolved" ] && [ ! -f "$LIB_DIR/$dep_name" ]; then
+            bundle_one "$resolved"
+        fi
     done
 }
 

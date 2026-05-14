@@ -9,12 +9,14 @@
 /* Begin PBXBuildFile section */
 		04AEE0B9D61C9D615F2FC4B2 /* NodeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56CD20EE1EC96C1A4B892D90 /* NodeManager.swift */; };
 		104F45E5738E3150737FBAAF /* ConfigStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40C10B954E0EB9D66C53747 /* ConfigStore.swift */; };
+		20E73B390732CBE1AFBB97B2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7F7DEBE793CEBCD07C904545 /* Assets.xcassets */; };
 		3685F8FE18738266C476C9C6 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7422312B1F5D7671E9744038 /* MenuBarView.swift */; };
 		3BA40AEEC5D78AF15B1FEF18 /* PostgresManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6EFDD9703C108943A23BE27 /* PostgresManager.swift */; };
 		98A9A12AB18BD5FC9B012A00 /* ServerState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D571CEB9FF05926A3DD18E2 /* ServerState.swift */; };
 		A60EC33352704F96FE6929C7 /* ProcessRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 567B1538157A619F556157A7 /* ProcessRunner.swift */; };
 		B81065FF67224F21CE062F02 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3B64ACCDF1778C8B2C04AEE /* AppState.swift */; };
 		E02781C772245807E83D4217 /* FliksApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 876492917F627B6B7525246D /* FliksApp.swift */; };
+		E49066D96C308619EE7B78E1 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 9636D1AEAE72470DD3F15BCD /* AppIcon.icns */; };
 		E7CDA4573E9535F526647CC2 /* Paths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46CF836D217191625BFC2462 /* Paths.swift */; };
 /* End PBXBuildFile section */
 
@@ -24,7 +26,9 @@
 		56CD20EE1EC96C1A4B892D90 /* NodeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeManager.swift; sourceTree = "<group>"; };
 		7422312B1F5D7671E9744038 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
 		7D571CEB9FF05926A3DD18E2 /* ServerState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerState.swift; sourceTree = "<group>"; };
+		7F7DEBE793CEBCD07C904545 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		876492917F627B6B7525246D /* FliksApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FliksApp.swift; sourceTree = "<group>"; };
+		9636D1AEAE72470DD3F15BCD /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		A40C10B954E0EB9D66C53747 /* ConfigStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigStore.swift; sourceTree = "<group>"; };
 		B6EFDD9703C108943A23BE27 /* PostgresManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostgresManager.swift; sourceTree = "<group>"; };
 		E3B64ACCDF1778C8B2C04AEE /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
@@ -32,6 +36,15 @@
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		2F294D628FAC32639FC71C72 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				9636D1AEAE72470DD3F15BCD /* AppIcon.icns */,
+				7F7DEBE793CEBCD07C904545 /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		3AD99303E4A4882D52537BBE /* MenuBar */ = {
 			isa = PBXGroup;
 			children = (
@@ -72,6 +85,7 @@
 			children = (
 				F672A24E3291904CA0F0EF07 /* App */,
 				3AD99303E4A4882D52537BBE /* MenuBar */,
+				2F294D628FAC32639FC71C72 /* Resources */,
 				3FB0C8B39A2D233FD9605189 /* Services */,
 				E2B8241A11531F4213C19328 /* State */,
 				5EDB86BA3D552CB161DD5E2E /* Utilities */,
@@ -112,6 +126,7 @@
 			buildConfigurationList = 27764660E64E514EB59DB478 /* Build configuration list for PBXNativeTarget "Fliks" */;
 			buildPhases = (
 				CC492CB1B529A9B365C2911E /* Sources */,
+				CC63D6252B8C413BCF7C0BC5 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -156,6 +171,18 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		CC63D6252B8C413BCF7C0BC5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E49066D96C308619EE7B78E1 /* AppIcon.icns in Resources */,
+				20E73B390732CBE1AFBB97B2 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		CC492CB1B529A9B365C2911E /* Sources */ = {
