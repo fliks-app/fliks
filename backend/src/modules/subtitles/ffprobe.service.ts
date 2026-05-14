@@ -252,13 +252,7 @@ export class FfprobeService {
           colorSpace: s.color_space,
           colorTransfer: s.color_transfer,
           colorPrimaries: s.color_primaries,
-          hdrFormat: this.deriveHdrFormat(
-            s.color_transfer,
-            s.color_primaries,
-            s.bits_per_raw_sample ? Number(s.bits_per_raw_sample) : undefined,
-            s.pix_fmt,
-            s.profile,
-          ),
+          hdrFormat: this.deriveHdrFormat(s.color_transfer, s.color_primaries),
         }));
 
       const audio: AudioStreamInfo[] = streams
@@ -330,17 +324,12 @@ export class FfprobeService {
   private deriveHdrFormat(
     colorTransfer?: string,
     colorPrimaries?: string,
-    bitDepth?: number,
-    pixelFormat?: string,
-    profile?: string,
   ): HdrFormat | undefined {
+    // HDR is defined by the transfer curve, not the bit depth. An 8-bit PQ
+    // file is mis-encoded but still needs the HDR pipeline (or tone-mapping):
+    // played as SDR, the PQ values render as gamma 2.2 and the picture goes
+    // dark/washed. Match Jellyfin/Plex: classify by transfer function alone.
     if (!colorTransfer) return undefined;
-    // Determine if 10-bit from bitDepth, pixel format, or codec profile
-    const is10bit =
-      (bitDepth && bitDepth >= 10) ||
-      (pixelFormat && /10le|10be|p010/.test(pixelFormat)) ||
-      (profile && /main 10|main10/i.test(profile));
-    if (!is10bit) return undefined;
     const isBt2020 = colorPrimaries === 'bt2020';
     if (colorTransfer === 'smpte2084' && isBt2020) return 'HDR10';
     if (colorTransfer === 'arib-std-b67' && isBt2020) return 'HLG';
