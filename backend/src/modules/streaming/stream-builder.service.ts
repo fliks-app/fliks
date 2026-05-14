@@ -276,10 +276,12 @@ export class StreamBuilderService {
       });
     }
     // Compute effective HW accel (same logic as transcoding/ffmpeg-args.ts buildFfmpegArgs):
-    // - Burn-in forces CPU
+    // - Burn-in forces CPU for QSV/VAAPI/NVENC (filters need HW surfaces),
+    //   but NOT for VideoToolbox — VT decode outputs CPU buffers, so
+    //   subtitle filters work in-place.
     // - QSV + crop falls back to VAAPI (fixed-size pool constraint)
     let effectiveHwAccel = this.transcodingService.getDetectedHwAccel();
-    if (needsBurnIn) {
+    if (needsBurnIn && effectiveHwAccel !== 'videotoolbox') {
       effectiveHwAccel = 'none';
     } else if (effectiveHwAccel === 'qsv' && needsCrop) {
       effectiveHwAccel = 'vaapi';
