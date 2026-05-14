@@ -73,10 +73,12 @@ jobs:
           context: .
           file: Dockerfile
           push: true
-          # amd64 only for now — TrueNAS SCALE is x86, the ARM hosts
-          # (Pi 5, Apple Silicon containers, ARM NAS) come in a follow-up
-          # once the image is proven on amd64.
-          platforms: linux/amd64
+          # Multi-arch: amd64 covers TrueNAS SCALE / generic x86 servers,
+          # arm64 covers Apple Silicon Docker Desktop (M1+), ARM NAS, Pi 5.
+          # HW transcode accel (QSV/VAAPI/NVENC) is x86-Linux only — arm64
+          # users fall back to libx264 CPU encoding (no Metal/VideoToolbox
+          # passthrough from container to host on Docker Desktop).
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
