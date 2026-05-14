@@ -444,7 +444,7 @@ export function buildFfmpegArgs(
         // No CPU round-trip — everything stays on Metal/IOSurface.
         args.push(
           '-c:v', 'h264_videotoolbox',
-          '-profile:v', 'high', '-level', '4.0',
+          '-profile:v', 'high',
           ...(early ? ['-realtime', '1'] : []),
           '-b:v', profile.videoBitrate,
           '-maxrate', profile.videoBitrate,
@@ -459,7 +459,7 @@ export function buildFfmpegArgs(
         // burn-in, scale) → VT encode (re-uploads internally).
         args.push(
           '-c:v', 'h264_videotoolbox',
-          '-profile:v', 'high', '-level', '4.0',
+          '-profile:v', 'high',
           ...(early ? ['-realtime', '1'] : []),
           '-b:v', profile.videoBitrate,
           '-maxrate', profile.videoBitrate,
