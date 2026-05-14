@@ -197,7 +197,7 @@ struct BackendEnvironment {
         let nodeBin = Paths.nodeBinary.deletingLastPathComponent().path
         let systemPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-        return [
+        var env: [String: String] = [
             "NODE_ENV": "production",
             "PORT": String(port),
             "DB_HOST": "localhost",
@@ -210,6 +210,10 @@ struct BackendEnvironment {
             "PATH": "\(ffmpegBin):\(nodeBin):\(systemPath)",
             "UV_THREADPOOL_SIZE": "16",
         ]
+        // API keys baked at build time via SWIFT_ACTIVE_COMPILATION_CONDITIONS.
+        env["TMDB_API_KEY"] = BuildConfig.tmdbApiKey
+        env["TVDB_API_KEY"] = BuildConfig.tvdbApiKey
+        return env
     }
 }
 
