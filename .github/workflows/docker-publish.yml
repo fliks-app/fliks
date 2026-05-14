@@ -14,6 +14,11 @@ on:
     branches: [main]
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Custom tag to publish (e.g. "test", "preview-foo"). Builds from the branch you trigger the workflow on.'
+        required: false
+        default: 'test'
 
 permissions:
   contents: read
@@ -51,8 +56,12 @@ jobs:
             type=semver,pattern={{major}}
             # Branch pushes (main → :main, useful for downstream smoke tests)
             type=ref,event=branch
-            # Manual / ad-hoc runs
+            # Manual / ad-hoc runs — always include the sha tag for
+            # traceability + a custom tag from the workflow input (defaults
+            # to "test"). The custom tag is what you pull from TrueNAS /
+            # staging to validate a branch before merging to main.
             type=raw,value=manual-{{sha}},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '' }}
             # `:latest` only on tag pushes — never on a main commit, so a
             # broken main never overrides a stable tag for users tracking
             # `:latest`.
