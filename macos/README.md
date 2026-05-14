@@ -72,6 +72,30 @@ Then launch:
 open "$(find ~/Library/Developer/Xcode/DerivedData/Fliks-*/Build/Products/Debug -name 'Fliks.app' -type d | head -1)"
 ```
 
+## Release build (DMG)
+
+To create a self-contained, distributable DMG:
+
+```bash
+./Scripts/build-app.sh
+./Scripts/make-dmg.sh
+```
+
+This will:
+1. Build client + backend
+2. Build the Swift app (Release)
+3. Copy PostgreSQL, FFmpeg, Node.js into the app bundle
+4. Recursively bundle all dylib dependencies (`bundle-dylibs.sh`)
+5. Code sign everything
+6. Create `build/Fliks-<version>-arm64.dmg` with drag-to-Applications layout
+
+Use `--skip-web` to skip rebuilding client/backend if unchanged:
+
+```bash
+./Scripts/build-app.sh --skip-web
+./Scripts/make-dmg.sh
+```
+
 ## What happens on launch
 
 1. **PostgreSQL 18** initializes (first run only) and starts on port **5433**
@@ -126,6 +150,8 @@ macos/
 │       └── ProcessRunner.swift         # Async Process wrapper
 ├── Scripts/
 │   ├── fetch-vendored.sh              # Download arm64 binaries
-│   └── build-app.sh                   # Full release build pipeline
+│   ├── build-app.sh                   # Full release build pipeline
+│   ├── bundle-dylibs.sh               # Recursive dylib relocation
+│   └── make-dmg.sh                    # Create distributable DMG
 └── project.yml                        # XcodeGen spec (generates .xcodeproj)
 ```
