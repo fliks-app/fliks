@@ -21,6 +21,10 @@ RUN npm run build
 # --- Stage 3: Production runtime ---
 FROM ubuntu:24.04
 
+# Populated by Docker buildx with the target platform's arch (amd64,
+# arm64, ...). Used below to skip x86-only packages on arm64 builds.
+ARG TARGETARCH
+
 # Install Node.js 24
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
   && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
@@ -28,7 +32,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
   && apt-get purge -y curl gnupg \
   && rm -rf /var/lib/apt/lists/*
 
-# Install runtime dependencies + Intel GPU drivers + FFmpeg
+# Install runtime dependencies + FFmpeg. Intel GPU stack and the alass
+# binary are amd64-only — on arm64 (Apple Silicon Docker, ARM NAS, Pi)
+# the image falls back to CPU transcoding (libx264) and subtitle sync
+# via ffsubsync alone. ffmpeg apt package is arch-aware on both.
 RUN apt-get update && apt-get install -y --no-install-recommends \
   bash \
   postgresql-client \
@@ -38,19 +45,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   python3-venv \
   ffmpeg \
   libchromaprint-tools \
-  intel-media-va-driver-non-free \
-  intel-opencl-icd \
-  libmfx-gen1.2 \
-  libvpl2 \
-  vainfo \
   wget \
   ca-certificates \
   gcc \
   python3-dev \
   libc6-dev \
+  && if [ "$TARGETARCH" = "amd64" ]; then \
+       apt-get install -y --no-install-recommends \
+         intel-media-va-driver-non-free \
+         intel-opencl-icd \
+         libmfx-gen1.2 \
+         libvpl2 \
+         vainfo; \
+     fi \
   && python3 -m pip install --no-cache-dir --break-system-packages ffsubsync \
-  && wget -q -O /usr/local/bin/alass https://github.com/kaegi/alass/releases/download/v2.0.0/alass-linux64 \
-  && chmod +x /usr/local/bin/alass \
+  && if [ "$TARGETARCH" = "amd64" ]; then \
+       wget -q -O /usr/local/bin/alass https://github.com/kaegi/alass/releases/download/v2.0.0/alass-linux64 \
+       && chmod +x /usr/local/bin/alass; \
+     fi \
   && apt-get purge -y wget gcc python3-dev libc6-dev \
   && apt-get autoremove -y \
   && rm -rf /var/lib/apt/lists/*

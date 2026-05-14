@@ -79,6 +79,12 @@ services:
   #   fliks:
   #     devices:
   #       - /dev/dri:/dev/dri
+  #
+  # ARM hosts (Apple Silicon Docker Desktop, Pi 5, ARM NAS): the image
+  # is published for linux/arm64 too — Docker pulls the right variant
+  # automatically. No HW transcode there (the Intel GPU stack ships only
+  # in the amd64 image, and Metal/VideoToolbox aren't reachable from a
+  # Linux container), so streams fall back to libx264 CPU encoding.
 
 volumes:
   fliks_pgdata:
