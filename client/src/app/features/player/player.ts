@@ -656,7 +656,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // Await playback-info (kicked off in parallel with media load above)
         this.playbackInfo = await playbackInfoPromise!;
         const pi = this.playbackInfo;
-        this.isHdrContent.set(!!pi.source?.hdrFormat);
+        this.isHdrContent.set(!!pi.source?.hdrFormat && !pi.tonemapping);
         this.introMarker.set(pi.markers?.intro ?? null);
         this.outroMarker.set(pi.markers?.outro ?? null);
         this.chapters.set(pi.chapters ?? []);
