@@ -238,6 +238,14 @@ export function buildFfmpegArgs(
         '-noautorotate',
       );
     }
+  } else if (effectiveHwAccel === 'videotoolbox') {
+    // VideoToolbox = Apple Media Engine (h264/hevc encode+decode ASIC).
+    // No `-hwaccel_output_format` — let ffmpeg implicitly hwdownload to
+    // CPU buffers after decode. Stock libswscale `scale` filter doesn't
+    // accept VT surfaces, and the encoder takes CPU YUV input and
+    // re-uploads internally. No /dev/dri probing — the framework picks
+    // the host's Media Engine automatically on macOS.
+    args.push('-hwaccel', 'videotoolbox', '-noautorotate');
   }
 
   args.push('-i', inputPath);
@@ -404,6 +412,41 @@ export function buildFfmpegArgs(
           '-maxrate', profile.videoBitrate,
           '-vf',
           `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=nv12`,
+          '-g', String(gopSize),
+          '-keyint_min', String(gopSize),
+          '-force_key_frames', forceKeyframesExpr,
+        );
+      }
+      break;
+    case 'videotoolbox':
+      // h264_videotoolbox driven by Apple's Media Engine — h264 high
+      // profile L4.0 on Apple Silicon transcodes 4K @ 60fps comfortably.
+      // No `-preset` knob (VT doesn't expose presets), `-realtime 1`
+      // tells the encoder to favour latency over efficiency on the early
+      // ramp-up frames.
+      if (tonemap) {
+        // VT has no in-API tonemap filter — drop to CPU surfaces, apply
+        // zscale + tonemap on CPU, then re-encode via VT (the framework
+        // copies the CPU buffer into a Metal/IOSurface for the encoder).
+        args.push(
+          '-c:v', 'h264_videotoolbox',
+          ...(early ? ['-realtime', '1'] : []),
+          '-b:v', profile.videoBitrate,
+          '-maxrate', profile.videoBitrate,
+          '-vf',
+          `${cpuCropPrefix}${tonemapCpu}scale=${w}:-2:flags=lanczos,format=yuv420p`,
+          '-g', String(gopSize),
+          '-keyint_min', String(gopSize),
+          '-force_key_frames', forceKeyframesExpr,
+        );
+      } else {
+        args.push(
+          '-c:v', 'h264_videotoolbox',
+          ...(early ? ['-realtime', '1'] : []),
+          '-b:v', profile.videoBitrate,
+          '-maxrate', profile.videoBitrate,
+          '-vf',
+          `${cpuCropPrefix}scale=${w}:-2:flags=lanczos,format=yuv420p`,
           '-g', String(gopSize),
           '-keyint_min', String(gopSize),
           '-force_key_frames', forceKeyframesExpr,

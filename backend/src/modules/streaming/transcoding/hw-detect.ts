@@ -6,9 +6,23 @@ import type { HwAccelType } from './types';
 const execFileAsync = promisify(execFile);
 
 export async function detectHwAccel(log: Logger): Promise<HwAccelType> {
-  // Priority: QSV (Intel optimized) > VAAPI (generic Linux) > NVENC (NVIDIA) > none
-  // QSV is derived from VAAPI on Linux for better compatibility
-  const tests: { type: HwAccelType; args: string[] }[] = [
+  // Priority: macOS first (VideoToolbox is the only HW path there), then
+  // Linux x86 stack (QSV → VAAPI → NVENC), then CPU fallback.
+  const isMac = process.platform === 'darwin';
+  const tests: { type: HwAccelType; args: string[] }[] = isMac
+    ? [
+        {
+          type: 'videotoolbox',
+          args: [
+            '-hide_banner', '-loglevel', 'error',
+            '-f', 'lavfi', '-i', 'color=black:s=64x64:d=0.1',
+            '-c:v', 'h264_videotoolbox',
+            '-frames:v', '1',
+            '-f', 'null', '-',
+          ],
+        },
+      ]
+    : [
     {
       type: 'qsv',
       args: [
@@ -47,7 +61,7 @@ export async function detectHwAccel(log: Logger): Promise<HwAccelType> {
         '-f', 'null', '-',
       ],
     },
-  ];
+      ];
 
   for (const test of tests) {
     try {

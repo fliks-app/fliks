@@ -10,7 +10,7 @@ export interface TranscodeProfile {
 
 export type DeviceType = 'mobile' | 'desktop';
 
-export type HwAccelType = 'vaapi' | 'nvenc' | 'qsv' | 'none';
+export type HwAccelType = 'vaapi' | 'nvenc' | 'qsv' | 'videotoolbox' | 'none';
 
 export interface BurnInSubtitle {
   /** FFmpeg -vf filter string (e.g. "subtitles='/path/to/sub.srt'") or null for image-based */
