@@ -166,6 +166,9 @@ export class MediaInfoHeaderComponent {
   readonly editSubtitles = output<void>();
   /** Emitted after a series-level bulk watched toggle. Parent should refresh its episode watched list. */
   readonly seriesWatchedToggled = output<{ watched: boolean }>();
+  /** Emitted after a single-episode watched toggle so the parent can refresh
+   *  watched/progress state on the surrounding scroller cards. */
+  readonly episodeWatchedToggled = output<{ episodeId: number; watched: boolean }>();
 
   // ── Internal state ──
 
@@ -288,10 +291,11 @@ export class MediaInfoHeaderComponent {
     const fileId = this.selectedFileId();
     if (!fileId) return;
     try {
+      const episodeId = this.episodeId();
       const completed = await this.playable.toggleWatched(
         mediaId,
         fileId,
-        this.episodeId(),
+        episodeId,
       );
       this.watched.set(completed);
       // Backend resets positionSeconds to 0 when marking as watched — mirror
@@ -299,6 +303,9 @@ export class MediaInfoHeaderComponent {
       if (completed) {
         this.resumePositionSeconds.set(null);
         this.durationSeconds.set(null);
+      }
+      if (episodeId) {
+        this.episodeWatchedToggled.emit({ episodeId, watched: completed });
       }
     } catch { /* ignore */ }
   }
