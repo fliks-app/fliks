@@ -158,9 +158,11 @@ export function buildFfmpegArgs(
   const bitrateNum = parseBitrateToBps(profile.videoBitrate);
 
   // Force pipeline adjustments when HW accel can't handle required filters:
-  // - Subtitle burn-in is always CPU-only
-  // - QSV can't crop (fixed-size pool constraint), fallback to VAAPI encode which supports hwdownload/hwupload
-  const effectiveHwAccel: HwAccelType = burnIn?.filter
+  // - Subtitle burn-in forces CPU for QSV/VAAPI/NVENC (filters need CPU surfaces)
+  //   but NOT for VideoToolbox — VT decode already outputs CPU buffers, so
+  //   libswscale filters (including subtitle overlay) work in-place.
+  // - QSV can't crop (fixed-size pool constraint), fallback to VAAPI encode
+  const effectiveHwAccel: HwAccelType = burnIn?.filter && hwAccel !== 'videotoolbox'
     ? 'none'
     : hwAccel === 'qsv' && crop
       ? 'vaapi'
@@ -238,6 +240,14 @@ export function buildFfmpegArgs(
         '-noautorotate',
       );
     }
+  } else if (effectiveHwAccel === 'videotoolbox') {
+    // VideoToolbox = Apple Media Engine (h264/hevc encode+decode ASIC).
+    // No `-hwaccel_output_format` — let ffmpeg implicitly hwdownload to
+    // CPU buffers after decode. Stock libswscale `scale` filter doesn't
+    // accept VT surfaces, and the encoder takes CPU YUV input and
+    // re-uploads internally. No /dev/dri probing — the framework picks
+    // the host's Media Engine automatically on macOS.
+    args.push('-hwaccel', 'videotoolbox', '-noautorotate');
   }
 
   args.push('-i', inputPath);
@@ -409,6 +419,30 @@ export function buildFfmpegArgs(
           '-force_key_frames', forceKeyframesExpr,
         );
       }
+      break;
+    case 'videotoolbox':
+      // h264_videotoolbox driven by Apple's Media Engine — H.264 High
+      // profile L4.0 on Apple Silicon transcodes 4K @ 60 fps comfortably.
+      // No `-preset` knob (VT doesn't expose presets); `-realtime 1`
+      // tells the encoder to favour latency over efficiency on early
+      // ramp-up frames.
+      //
+      // VT decode outputs CPU buffers (no `-hwaccel_output_format`), so
+      // all CPU-side filters work in-place: zscale tonemap, subtitle
+      // burn-in, crop, scale. The encoder re-uploads to Metal/IOSurface
+      // internally.
+      args.push(
+        '-c:v', 'h264_videotoolbox',
+        '-profile:v', 'high', '-level', '4.0',
+        ...(early ? ['-realtime', '1'] : []),
+        '-b:v', profile.videoBitrate,
+        '-maxrate', profile.videoBitrate,
+        '-vf',
+        `${cpuCropPrefix}${tonemapCpu}scale=${w}:-2:flags=lanczos,format=yuv420p${burnInFilter}`,
+        '-g', String(gopSize),
+        '-keyint_min', String(gopSize),
+        '-force_key_frames', forceKeyframesExpr,
+      );
       break;
     default:
       args.push(

@@ -28,7 +28,7 @@ import { BackupService } from './backup.service';
 import { LogBufferService } from './log-buffer.service';
 import { EventsService } from './events.service';
 import { Observable } from 'rxjs';
-import { TranscodingService } from '../streaming/transcoding';
+import { HW_ACCEL_LABEL, type HwAccelType, TranscodingService } from '../streaming/transcoding';
 import { ActiveStreamTracker } from '../streaming/active-stream-tracker.service';
 import { PlaybackService } from '../streaming/playback.service';
 import { MediaFile } from '../media/entities/media-file.entity';
@@ -391,10 +391,7 @@ export class SystemController {
       const audioPlan = this.activeStreamTracker.getAudioPlan(s.mediaFileId);
 
       if (s.mode === 'transcode') {
-        videoPlaybackMode =
-          hwAccel !== 'none'
-            ? `Transcodage (${hwAccel.toUpperCase()})`
-            : 'Transcodage (CPU)';
+        videoPlaybackMode = `Transcodage (${HW_ACCEL_LABEL[hwAccel as HwAccelType] ?? hwAccel.toUpperCase()})`;
         outputContainer = 'HLS';
         const profile = { '1080p': 8, '720p': 4, '480p': 2 }[s.quality];
         outputBitrate = profile ? profile * 1_000_000 : null;

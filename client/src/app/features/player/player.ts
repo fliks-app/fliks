@@ -449,7 +449,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (effectiveVideoCopy) {
       videoPlaybackMode = 'Direct playback';
     } else {
-      videoPlaybackMode = hw !== 'none' ? `Transcoding (${hw.toUpperCase()})` : 'Transcoding (CPU)';
+      const hwLabel: Record<string, string> = { qsv: 'QSV', vaapi: 'VAAPI', nvenc: 'NVENC', videotoolbox: 'Apple VT', none: 'CPU' };
+      videoPlaybackMode = `Transcoding (${hwLabel[hw] ?? hw.toUpperCase()})`;
     }
     if (playingHeight && src?.height && playingHeight < src.height) {
       videoPlaybackMode += ` \u2192 ${playingWidth}x${playingHeight}`;

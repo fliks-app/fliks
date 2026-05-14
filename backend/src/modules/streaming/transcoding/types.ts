@@ -10,7 +10,17 @@ export interface TranscodeProfile {
 
 export type DeviceType = 'mobile' | 'desktop';
 
-export type HwAccelType = 'vaapi' | 'nvenc' | 'qsv' | 'none';
+export type HwAccelType = 'vaapi' | 'nvenc' | 'qsv' | 'videotoolbox' | 'none';
+
+/** Short human-readable label for each HW accel type (used in admin
+ *  dashboard and player stats overlay). */
+export const HW_ACCEL_LABEL: Record<HwAccelType, string> = {
+  qsv: 'QSV',
+  vaapi: 'VAAPI',
+  nvenc: 'NVENC',
+  videotoolbox: 'Apple VT',
+  none: 'CPU',
+};
 
 export interface BurnInSubtitle {
   /** FFmpeg -vf filter string (e.g. "subtitles='/path/to/sub.srt'") or null for image-based */

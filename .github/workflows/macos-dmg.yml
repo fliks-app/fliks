@@ -1,0 +1,94 @@
+# Builds a self-contained Fliks.app and packages it as a DMG,
+# then uploads it as a GitHub Release asset.
+#
+# Triggers:
+#   - release tag `v*` (from release-please) → attaches DMG to the release
+#   - manual workflow_dispatch               → uploads artifact for testing
+name: Build macOS DMG
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-dmg:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Node.js for building client + backend ──
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            backend/package-lock.json
+
+      # ── Homebrew dependencies ──
+      - name: Install Homebrew dependencies
+        run: brew install postgresql@18 ffmpeg xcodegen create-dmg
+
+      # ── Fetch vendored Node.js 24 (arm64) ──
+      - name: Fetch vendored binaries
+        working-directory: macos
+        run: ./Scripts/fetch-vendored.sh
+
+      # ── Build Angular client ──
+      - name: Build client
+        working-directory: client
+        run: |
+          npm ci
+          npx ng build --configuration=production
+
+      # ── Build NestJS backend ──
+      - name: Build backend
+        working-directory: backend
+        run: |
+          npm ci
+          npm run build
+          npm ci --omit=dev
+
+      # ── Generate Xcode project ──
+      - name: Generate Xcode project
+        working-directory: macos
+        run: xcodegen generate
+
+      # ── Build .app + bundle resources + dylibs ──
+      - name: Build Fliks.app
+        working-directory: macos
+        run: ./Scripts/build-app.sh --skip-web
+
+      # ── Create DMG ──
+      - name: Create DMG
+        working-directory: macos
+        run: ./Scripts/make-dmg.sh
+
+      # ── Extract version for artifact naming ──
+      - name: Get version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Upload DMG as artifact (always) ──
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fliks-${{ steps.version.outputs.version }}-arm64.dmg
+          path: macos/build/Fliks-*.dmg
+          if-no-files-found: error
+
+      # ── Attach DMG to GitHub Release (tag pushes only) ──
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: macos/build/Fliks-*.dmg

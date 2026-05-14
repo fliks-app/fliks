@@ -47,7 +47,7 @@ Thumbs.db
 client/android/app/fliks-upload.jks
 volumes/*
 /backend/images/
-scripts/
+/scripts/
 logos/
 plans/
 /docs/
@@ -55,3 +55,10 @@ docker-compose.yml
 docker-compose.prod.yml
 
 release/
+
+# macOS native app — vendored binaries and build artifacts
+macos/Vendored/
+macos/build/
+macos/.build/
+macos/*.xcodeproj/xcuserdata/
+macos/*.xcodeproj/project.xcworkspace/xcuserdata/
