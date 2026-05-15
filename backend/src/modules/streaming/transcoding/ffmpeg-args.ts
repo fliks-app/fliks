@@ -695,12 +695,19 @@ export function buildRemuxArgs(
     }
   }
 
-  // HEVC sources MUST be tagged `hvc1` for Apple HLS — FFmpeg defaults
-  // to `hev1`, which AVPlayer rejects with error -12927. The flag is a
-  // no-op for non-HEVC codecs (mov muxer ignores tag overrides that
-  // don't match the codec).
+  // HEVC sources need two flags for Apple HLS conformance:
+  //   1. `-tag:v hvc1` — tag the track as `hvc1` (parameter sets in
+  //      moov). FFmpeg defaults to `hev1` (parameter sets in mdat),
+  //      which AVPlayer rejects.
+  //   2. `-bsf:v hevc_mp4toannexb` — convert NAL units from mp4-style
+  //      length-prefixed (how MKV / MP4 sources store them) to annex-B
+  //      start-code prefixed (what the HLS fmp4 muxer expects when
+  //      writing parameter sets to the sample description). Without
+  //      this, even with `-tag:v hvc1` the segments are malformed and
+  //      AVPlayer fails with -12927 on the first segment fetch.
+  // Mirrors Jellyfin's HEVC HLS remux pipeline.
   if (sourceVideoCodec === 'hevc') {
-    args.push('-tag:v', 'hvc1');
+    args.push('-tag:v', 'hvc1', '-bsf:v', 'hevc_mp4toannexb');
   }
 
   args.push(
