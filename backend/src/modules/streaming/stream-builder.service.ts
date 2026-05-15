@@ -98,7 +98,16 @@ export class StreamBuilderService {
     // HDR detection
     const isSourceHdr = !!source.hdrFormat;
     const clientSupportsHdr = profile.supportsHdr === true;
-    const needsTonemapping = isSourceHdr && !clientSupportsHdr;
+    // HDR pass-through (no tone-mapping, no re-encode) only works when the
+    // source video stream is HEVC — that's the codec iOS / Android players
+    // can decode in HDR. Non-HEVC HDR (rare: AVC Main10 HDR) cannot be
+    // remuxed into a player-recognised HDR variant, so it must be tone-mapped
+    // even when the client claims HDR support. Without this, FFmpeg's
+    // transcode runs with `tonemap=false` on an HDR source and emits H.264
+    // with leaking BT.2020/PQ metadata → AVPlayer rejects with -12927.
+    const canPassThroughHdr =
+      isSourceHdr && clientSupportsHdr && sourceVideoCodec === 'hevc';
+    const needsTonemapping = isSourceHdr && !canPassThroughHdr;
     const needsBurnIn = !!burnInSubtitleId;
     const needsCrop = !!v?.crop;
 

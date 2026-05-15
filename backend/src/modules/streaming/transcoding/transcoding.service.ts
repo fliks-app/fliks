@@ -249,6 +249,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     defaultAudioIndex = 0,
     deviceType: DeviceType = 'desktop',
     outputAudioCodec: 'aac' | 'ac3' | 'eac3' = 'aac',
+    hdrPassThrough?: {
+      hdrFormat: 'HDR10' | 'HLG';
+      videoBitRateBps?: number;
+      audioBitRateBps?: number;
+    },
   ): string {
     return generateMasterPlaylist(
       mediaFileId,
@@ -262,6 +267,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       defaultAudioIndex,
       deviceType,
       outputAudioCodec,
+      hdrPassThrough,
     );
   }
 

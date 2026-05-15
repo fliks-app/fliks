@@ -609,6 +609,21 @@ export class StreamingController {
 
     const includeRemux = firstQueryString(req.query, 'remux') === '1';
     const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
+    // HDR pass-through is only meaningful on DirectStream (remux) requests.
+    // Triggered when the source video stream is HEVC + HDR. Non-HEVC HDR
+    // can't be passed through (the HLS spec only standardises hvc1/dvh1
+    // codec strings for HDR), so stream-builder forces tone-mapping for
+    // those in needsTonemapping — they never reach this branch.
+    const sourceVideoCodec = (v?.codec ?? '').toLowerCase();
+    const sourceHdrFormat = v?.hdrFormat as 'HDR10' | 'HLG' | undefined;
+    const hdrPassThrough =
+      includeRemux && sourceHdrFormat && sourceVideoCodec === 'hevc'
+        ? {
+            hdrFormat: sourceHdrFormat,
+            videoBitRateBps: v?.bitRate ?? undefined,
+            audioBitRateBps: si?.audio?.[0]?.bitRate ?? undefined,
+          }
+        : undefined;
     const audioStreams: { language?: string; title?: string }[] =
       si?.audio ?? [];
     // Multi-audio is exposed via separate EXT-X-MEDIA renditions so the
@@ -640,6 +655,7 @@ export class StreamingController {
       deviceType,
       (this.activeStreamTracker.getAudioPlan(mediaFileId)?.codec ?? 'aac') as
         | 'aac' | 'ac3' | 'eac3',
+      hdrPassThrough,
     );
 
     this.activeStreamTracker.setAudioStreamCount(

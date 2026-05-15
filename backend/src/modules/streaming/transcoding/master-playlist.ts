@@ -33,9 +33,54 @@ export function generateMasterPlaylist(
    *  append. Recognised values: `'aac'` (AAC-LC), `'ac3'` (Dolby Digital),
    *  `'eac3'` (Dolby Digital Plus). Defaults to AAC for legacy callers. */
   outputAudioCodec: 'aac' | 'ac3' | 'eac3' = 'aac',
+  /** When set, the master advertises a single HEVC HDR variant pointing at
+   *  the `remux/index.m3u8` path instead of the H.264 transcode ladder.
+   *  The remux session does `-c:v copy` so the HDR metadata (BT.2020/PQ
+   *  or HLG transfer) reaches the player intact. iOS AVPlayer / ExoPlayer
+   *  use the `VIDEO-RANGE` attribute + `hvc1.*` codec string to dispatch
+   *  to the HDR rendering path. */
+  hdrPassThrough?: {
+    hdrFormat: 'HDR10' | 'HLG';
+    videoBitRateBps?: number;
+    audioBitRateBps?: number;
+  },
 ): string {
   const multiAudio = audioStreams && audioStreams.length > 1;
   const lines = ['#EXTM3U'];
+
+  const audioCodecMap = { aac: 'mp4a.40.2', ac3: 'ac-3', eac3: 'ec-3' };
+  const audioCodec = audioCodecMap[outputAudioCodec] ?? 'mp4a.40.2';
+
+  // HDR pass-through path — taken when stream-builder selected
+  // DirectStream and the source is HEVC HDR. The H.264 transcode ladder
+  // is intentionally omitted: every rung would have to tone-map back to
+  // SDR (defeating the point), and ABR-downgrading mid-stream from a
+  // HEVC HDR variant to an H.264 SDR one isn't seamless on AVPlayer.
+  // Multi-audio is also skipped here — the remux session muxes
+  // video+audio as a single stream; switching audio tracks goes through
+  // a backend reload with a different `audioStreamIndex`, not the HLS
+  // EXT-X-MEDIA mechanism.
+  if (hdrPassThrough) {
+    const w = sourceWidth;
+    const h = sourceHeight;
+    const videoCodec = hevcMain10CodecStringForHeight(h);
+    const range = hdrPassThrough.hdrFormat === 'HLG' ? 'HLG' : 'PQ';
+    // Remux carries the source video bitrate verbatim; audio is either
+    // copied or re-encoded but its bandwidth contribution is small either
+    // way. Fall back to source-total when we don't have a per-stream
+    // breakdown.
+    const v = hdrPassThrough.videoBitRateBps ?? sourceBitrate ?? 0;
+    const a = hdrPassThrough.audioBitRateBps ?? 0;
+    const avg = v + a;
+    // Pass-through is near-CBR (we don't re-encode), so peak ≈ nominal.
+    // A small 10% pad still gives AVPlayer ABR a stable read.
+    const bw = Math.round(avg * 1.1);
+    lines.push(
+      `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},VIDEO-RANGE=${range},NAME="hdr",CODECS="${videoCodec},${audioCodec}"`,
+      `/api/stream/${mediaFileId}/remux/index.m3u8${tokenParam}`,
+    );
+    return lines.join('\n');
+  }
 
   // Multi-audio: declare alternate audio renditions via EXT-X-MEDIA
   if (multiAudio) {
@@ -63,8 +108,6 @@ export function generateMasterPlaylist(
   // (L4.0) for every rung makes iOS AVPlayer reject 4K segments whose
   // bitstream signals L5.x — visible as decoder reinit / frame freeze.
   const audioAttr = multiAudio ? ',AUDIO="audio"' : '';
-  const audioCodecMap = { aac: 'mp4a.40.2', ac3: 'ac-3', eac3: 'ec-3' };
-  const audioCodec = audioCodecMap[outputAudioCodec] ?? 'mp4a.40.2';
 
   // The HLS master never advertises the `/remux/` variant — it proved
   // unreliable on ExoPlayer (Android), which would ABR-downgrade from the
@@ -109,6 +152,19 @@ export function generateMasterPlaylist(
     );
   }
   return lines.join('\n');
+}
+
+/** HEVC Main10 codec string for an HDR pass-through variant. Format:
+ *  `hvc1.{profile_space}.{profile_idc}{compat}.L{level_idc}.{constraints}`.
+ *  Profile_space=2, profile_idc=4 = Main10 (the only HEVC profile with
+ *  10-bit support, which HDR10 / HLG require). Levels picked to cover
+ *  60 fps at the rung resolution so AVPlayer doesn't reject the variant
+ *  on a level mismatch with the actual SPS. */
+function hevcMain10CodecStringForHeight(height: number): string {
+  if (height >= 2160) return 'hvc1.2.4.L153.B0'; // L5.1 — 4K60
+  if (height >= 1080) return 'hvc1.2.4.L123.B0'; // L4.1 — 1080p60
+  if (height >= 720)  return 'hvc1.2.4.L120.B0'; // L4.0 — 720p60
+  return 'hvc1.2.4.L93.B0';                       // L3.1 — up to 720p30
 }
 
 /** H.264 codec string per rung. Levels picked to cover 60 fps at the rung
