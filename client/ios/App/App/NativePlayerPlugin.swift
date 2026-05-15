@@ -51,6 +51,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var timeObserver: Any?
     private var statusObserver: NSKeyValueObservation?
     private var rateObserver: NSKeyValueObservation?
+    private var firstFrameObserver: NSKeyValueObservation?
+    private var firstFrameEmitted = false
     private var savedBrightness: CGFloat?
 
     /// Exposed for PipPlugin to access the player layer.
@@ -176,6 +178,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
             // Clean up previous player
             self.removeObservers()
+            self.firstFrameEmitted = false
             self.player?.pause()
 
             // Create AVURLAsset with custom headers
@@ -190,10 +193,30 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 "AVURLAssetHTTPHeaderFieldsKey": assetHeaders,
             ])
 
-            let playerItem = AVPlayerItem(asset: asset)
-            // Start with high bitrate preference so AVPlayer picks the best rendition immediately
-            playerItem.preferredPeakBitRate = 100_000_000  // 100 Mbps — effectively no limit
+            // Preload `playable`/`tracks`/`duration` so `.readyToPlay` fires
+            // without a second round-trip after the asset header arrives.
+            let playerItem = AVPlayerItem(
+                asset: asset,
+                automaticallyLoadedAssetKeys: ["playable", "tracks", "duration"]
+            )
+            // Cap ABR to the device's native resolution. The backend transcodes
+            // a fresh FFmpeg session per rung — each ABR switch warms a new
+            // pipeline and starves segments (visible as multi-second freezes
+            // with audio continuing). Locking to one rung at load avoids the
+            // thrash; `setMaxResolution` from the engine overrides this later
+            // when the user picks a quality.
+            let screen = UIScreen.main
+            playerItem.preferredMaximumResolution = CGSize(
+                width: screen.bounds.width * screen.scale,
+                height: screen.bounds.height * screen.scale
+            )
+            playerItem.preferredPeakBitRate = Self.peakBitRateForHeight(
+                Int(screen.bounds.height * screen.scale)
+            )
             let player = AVPlayer(playerItem: playerItem)
+            // Don't second-guess AVPlayer's prebuffer — let it wait until it
+            // has enough video to play without immediate stall.
+            player.automaticallyWaitsToMinimizeStalling = true
             self.player = player
 
             // Setup player layer
@@ -558,6 +581,21 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             }
         }
 
+        // First-frame painted — flip the Angular fanart/spinner off.
+        // `AVPlayerLayer.isReadyForDisplay` is the canonical signal that
+        // the layer has decoded + composited a frame to the surface;
+        // mirrors ExoPlayer's `onRenderedFirstFrame` on Android.
+        // `initial: .new` fires once synchronously, so we gate on
+        // `firstFrameEmitted` to skip the pre-load `false` value and emit
+        // only on the actual flip to `true`.
+        if let layer = playerLayer {
+            firstFrameObserver = layer.observe(\.isReadyForDisplay, options: [.new]) { [weak self] layer, _ in
+                guard let self = self, layer.isReadyForDisplay, !self.firstFrameEmitted else { return }
+                self.firstFrameEmitted = true
+                self.emitFirstFrame()
+            }
+        }
+
         // Buffering detection
         NotificationCenter.default.addObserver(
             self,
@@ -590,6 +628,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         statusObserver?.invalidate()
         statusObserver = nil
+        firstFrameObserver?.invalidate()
+        firstFrameObserver = nil
         rateObserver?.invalidate()
         rateObserver = nil
         NotificationCenter.default.removeObserver(self)
@@ -661,6 +701,13 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func emitStateChanged(_ state: String) {
         let js = "window.dispatchEvent(new CustomEvent('nativePlayerStateChanged', { detail: { state: '\(state)' } }));"
+        DispatchQueue.main.async { [weak self] in
+            self?.bridge?.webView?.evaluateJavaScript(js)
+        }
+    }
+
+    private func emitFirstFrame() {
+        let js = "window.dispatchEvent(new CustomEvent('nativePlayerFirstFrame'));"
         DispatchQueue.main.async { [weak self] in
             self?.bridge?.webView?.evaluateJavaScript(js)
         }
