@@ -565,12 +565,39 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 self?.emitStateChanged("playing")
                 self?.emitTracksChanged()
             case .failed:
-                let msg = item.error?.localizedDescription ?? "Playback failed"
-                self?.emitError(code: -1, message: msg)
+                let nsError = item.error as NSError?
+                let msg = nsError?.localizedDescription ?? "Playback failed"
+                let code = nsError?.code ?? -1
+                // Dump the AVPlayerItem error log to the console — each
+                // entry carries the exact failing URI (which segment),
+                // errorStatusCode, and errorComment (Apple's own
+                // description). With raw -12927 we're blind; with this
+                // we see WHY AVPlayer rejected the variant.
+                var details: [String] = []
+                if let log = item.errorLog() {
+                    for entry in log.events {
+                        details.append(
+                            "[\(entry.errorDomain) \(entry.errorStatusCode)] \(entry.errorComment ?? "—") uri=\(entry.uri ?? "—")"
+                        )
+                    }
+                }
+                self?.emitError(code: code, message: msg + (details.isEmpty ? "" : "\n" + details.joined(separator: "\n")))
             default:
                 break
             }
         }
+
+        // AVPlayerItem error log — fires on every recoverable / fatal
+        // network or codec event during playback. More verbose than the
+        // single `.status == .failed` emit above (which only fires once,
+        // and with a single error). This catches per-segment failures,
+        // codec validation hiccups, and ABR-related rejections.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleNewErrorLogEntry(_:)),
+            name: AVPlayerItem.newErrorLogEntryNotification,
+            object: player.currentItem
+        )
 
         // Rate changes (play/pause detection)
         rateObserver = player.observe(\.rate) { [weak self] player, _ in
@@ -615,6 +642,20 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc private func playerStalled() {
         emitStateChanged("buffering")
+    }
+
+    @objc private func handleNewErrorLogEntry(_ notification: Notification) {
+        guard let item = notification.object as? AVPlayerItem,
+              let log = item.errorLog(),
+              let entry = log.events.last else { return }
+        let msg = "[\(entry.errorDomain) \(entry.errorStatusCode)] \(entry.errorComment ?? "—") uri=\(entry.uri ?? "—")"
+        // Dump to JS console so it shows up in Safari Web Inspector / app
+        // log, AND emit as a soft error event for the UI to surface.
+        let escaped = msg.replacingOccurrences(of: "'", with: "\\'")
+        let js = "console.warn('[NativePlayer] errorLog:', '\(escaped)');"
+        DispatchQueue.main.async { [weak self] in
+            self?.bridge?.webView?.evaluateJavaScript(js)
+        }
     }
 
     @objc private func playerDidFinishPlaying() {

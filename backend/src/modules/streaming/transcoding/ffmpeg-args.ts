@@ -695,19 +695,24 @@ export function buildRemuxArgs(
     }
   }
 
-  // HEVC sources need two flags for Apple HLS conformance:
-  //   1. `-tag:v hvc1` — tag the track as `hvc1` (parameter sets in
-  //      moov). FFmpeg defaults to `hev1` (parameter sets in mdat),
-  //      which AVPlayer rejects.
-  //   2. `-bsf:v hevc_mp4toannexb` — convert NAL units from mp4-style
-  //      length-prefixed (how MKV / MP4 sources store them) to annex-B
-  //      start-code prefixed (what the HLS fmp4 muxer expects when
-  //      writing parameter sets to the sample description). Without
-  //      this, even with `-tag:v hvc1` the segments are malformed and
-  //      AVPlayer fails with -12927 on the first segment fetch.
-  // Mirrors Jellyfin's HEVC HLS remux pipeline.
+  // HEVC needs Apple HLS conformance:
+  //   - `-tag:v hvc1` writes parameter sets to the moov sample
+  //     description; FFmpeg defaults to `hev1` (parameter sets inline
+  //     in mdat) which AVPlayer rejects on HLS.
+  //   - `-bsf:v hevc_mp4toannexb` converts NAL units from mp4-style
+  //     length-prefixed to annex-B start-code form, which is what the
+  //     fmp4 muxer expects when emitting parameter sets to moov.
+  //   - `-max_muxing_queue_size 2048` doubles the default per-stream
+  //     packet buffer. HEVC GOPs (12-16 frames between IDRs) plus
+  //     non-AAC audio inter-frame intervals (TrueHD, DTS) can
+  //     overflow the default 1024-packet queue and crash the mux
+  //     with "Too many packets buffered for output stream".
   if (sourceVideoCodec === 'hevc') {
-    args.push('-tag:v', 'hvc1', '-bsf:v', 'hevc_mp4toannexb');
+    args.push(
+      '-tag:v', 'hvc1',
+      '-bsf:v', 'hevc_mp4toannexb',
+      '-max_muxing_queue_size', '2048',
+    );
   }
 
   args.push(
