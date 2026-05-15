@@ -21,6 +21,7 @@
 		F1000001AAAA000000000004 /* ImmersivePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000014 /* ImmersivePlugin.swift */; };
 		F1000001AAAA000000000005 /* PipPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000015 /* PipPlugin.swift */; };
 		F1000001AAAA000000000006 /* CastPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000016 /* CastPlugin.swift */; };
+		F1000001AAAA000000000007 /* AudioCapabilitiesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -41,6 +42,7 @@
 		F1000001AAAA000000000014 /* ImmersivePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImmersivePlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000015 /* PipPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000016 /* CastPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastPlugin.swift; sourceTree = "<group>"; };
+		F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCapabilitiesPlugin.swift; sourceTree = "<group>"; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -93,6 +95,7 @@
 				F1000001AAAA000000000014 /* ImmersivePlugin.swift */,
 				F1000001AAAA000000000015 /* PipPlugin.swift */,
 				F1000001AAAA000000000016 /* CastPlugin.swift */,
+				F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -248,6 +251,7 @@
 				F1000001AAAA000000000004 /* ImmersivePlugin.swift in Sources */,
 				F1000001AAAA000000000005 /* PipPlugin.swift in Sources */,
 				F1000001AAAA000000000006 /* CastPlugin.swift in Sources */,
+				F1000001AAAA000000000007 /* AudioCapabilitiesPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

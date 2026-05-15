@@ -489,6 +489,21 @@ export function buildFfmpegArgs(
       break;
   }
 
+  // Force SDR color signaling in the H.264 VUI when the pipeline tone-maps
+  // an HDR source. Without these flags, h264_videotoolbox (and to a lesser
+  // extent libx264 / h264_nvenc) inherits the source's BT.2020/PQ metadata
+  // and emits a bitstream whose VUI claims HDR even though the pixel data
+  // is now BT.709 SDR. iOS AVPlayer fails the variant with error -12927
+  // because the declared color volume doesn't match the HLS SDR rung.
+  if (tonemap) {
+    args.push(
+      '-color_primaries', 'bt709',
+      '-color_trc', 'bt709',
+      '-colorspace', 'bt709',
+      '-color_range', 'tv',
+    );
+  }
+
   // ── Audio mapping + HLS output ──
   // Always use var_stream_map for multi-audio, even when the user has
   // picked a specific track — otherwise switching audio would require a

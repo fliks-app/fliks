@@ -58,12 +58,13 @@ export function generateMasterPlaylist(
   // skip fetching seg 0 purely to probe codecs (TS has no init segment) —
   // otherwise a user resuming mid-file wastes a transcode pass at seg 0
   // before the real seek-aware session starts at their resume position.
-  // Video is always H.264 High @ L4.0. Audio codec depends on the path
-  // chosen in stream-builder.
+  // Video codec string is per-rung: H.264 High profile with a level high
+  // enough for the rung's resolution at 60 fps. A single `avc1.640028`
+  // (L4.0) for every rung makes iOS AVPlayer reject 4K segments whose
+  // bitstream signals L5.x — visible as decoder reinit / frame freeze.
   const audioAttr = multiAudio ? ',AUDIO="audio"' : '';
   const audioCodecMap = { aac: 'mp4a.40.2', ac3: 'ac-3', eac3: 'ec-3' };
   const audioCodec = audioCodecMap[outputAudioCodec] ?? 'mp4a.40.2';
-  const transcodeCodecs = `,CODECS="avc1.640028,${audioCodec}"`;
 
   // The HLS master never advertises the `/remux/` variant — it proved
   // unreliable on ExoPlayer (Android), which would ABR-downgrade from the
@@ -89,15 +90,37 @@ export function generateMasterPlaylist(
   }
 
   for (const p of profiles) {
-    const bw =
+    const avg =
       parseBitrateToBps(p.videoBitrate) + parseBitrateToBps(p.audioBitrate);
+    // BANDWIDTH must reflect the peak segment bitrate (HLS spec). With
+    // `-maxrate == -b:v` the encoder is near-CBR but VBV bursts still
+    // push individual segments ~30% above nominal. Declaring BANDWIDTH
+    // ~1.5× nominal gives AVPlayer ABR a stable hysteresis margin and
+    // stops it from down-/up-shifting on every VBV spike.
+    const bw = Math.round(avg * 1.5);
     const w = Math.min(p.maxWidth, sourceWidth);
     const rawH = (w * sourceHeight) / sourceWidth;
     const h = Math.floor(rawH / 16) * 16 || 16;
+    const videoCodec = h264CodecStringForHeight(p.maxHeight);
+    const codecsAttr = `,CODECS="${videoCodec},${audioCodec}"`;
     lines.push(
-      `#EXT-X-STREAM-INF:BANDWIDTH=${bw},RESOLUTION=${w}x${h},NAME="${p.name}"${transcodeCodecs}${audioAttr}`,
+      `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},NAME="${p.name}"${codecsAttr}${audioAttr}`,
       `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
     );
   }
   return lines.join('\n');
+}
+
+/** H.264 codec string per rung. Levels picked to cover 60 fps at the rung
+ *  resolution, so the actual encoder output never signals a higher level
+ *  than the master playlist advertises (which would force iOS AVPlayer to
+ *  reinitialise the decoder mid-stream → frame freeze). */
+function h264CodecStringForHeight(height: number): string {
+  if (height >= 2160) return 'avc1.640034'; // High @ L5.2 — 4K60
+  if (height >= 1080) return 'avc1.64002a'; // High @ L4.2 — 1080p60 + headroom
+  if (height >= 720)  return 'avc1.640020'; // High @ L3.2 — 720p60
+  if (height >= 480)  return 'avc1.64001f'; // High @ L3.1 — 480p60
+  if (height >= 360)  return 'avc1.64001e'; // High @ L3.0 — 360p30
+  if (height >= 240)  return 'avc1.640015'; // High @ L2.1 — 240p60
+  return 'avc1.64000d';                      // High @ L1.3 — 144p
 }
