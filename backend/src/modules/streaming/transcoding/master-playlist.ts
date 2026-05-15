@@ -95,31 +95,18 @@ export function generateMasterPlaylist(
     }
     const hdrAudioAttr = multiAudio ? ',AUDIO="audio"' : '';
 
-    // Top rung: remux (-c:v copy) at source resolution. Zero re-encode
-    // cost, perfect quality, native HDR. Always present.
-    {
-      const topVideoCodec = hevcMain10CodecStringForHeight(sourceHeight);
-      const v = hdrPassThrough.videoBitRateBps ?? sourceBitrate ?? 0;
-      const a = hdrPassThrough.audioBitRateBps ?? 0;
-      const avg = v + a;
-      const bw = Math.round(avg * 1.1);
-      lines.push(
-        `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${sourceWidth}x${sourceHeight},VIDEO-RANGE=${range},NAME="original-hdr",CODECS="${topVideoCodec},${audioCodec}"${hdrAudioAttr}`,
-        `/api/stream/${mediaFileId}/remux/index.m3u8${tokenParam}`,
-      );
-    }
-
-    // Lower-resolution HEVC HDR transcode rungs. Gated on
-    // `canEncodeHevcHdr`: when the backend hwAccel doesn't have a
-    // hevc_qsv Main10 encoder wired, emitting these rungs hands
-    // ExoPlayer / AVPlayer a manifest claim it can't fulfil — they
-    // request the variant, get H.264 segments (libx264 fallback) that
-    // contradict the `hvc1.*` CODECS string, and crash on chunk load.
-    // The top remux rung above stays — it's `-c:v copy` and works on
-    // every hwAccel.
+    // HEVC HDR rungs are pure transcodes (hevc_qsv Main10 with forced
+    // 3-second keyframes), gated on `canEncodeHevcHdr`. The former
+    // top "remux" pass-through was dropped: `-c:v copy` cuts on
+    // existing source IDRs (variable durations) which mis-aligns with
+    // the synthetic uniform-3s VOD playlist, and ExoPlayer's buffer
+    // scheduler drifts behind audio. A transcode at ~28 Mbps Main10
+    // is visually transparent and gives perfectly uniform segments.
+    // Includes the source-resolution rung if there's an HDR profile
+    // at or below source height.
     if (canEncodeHevcHdr) {
       const hdrLadder = getHdrLadderForDevice(deviceType).filter(
-        (p) => p.maxHeight < sourceHeight,
+        (p) => p.maxHeight <= sourceHeight,
       );
       for (const p of hdrLadder) {
         const avg =

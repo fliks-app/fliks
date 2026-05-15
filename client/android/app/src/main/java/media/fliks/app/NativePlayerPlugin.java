@@ -5,7 +5,7 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
-import android.view.TextureView;
+import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -63,7 +63,7 @@ public class NativePlayerPlugin extends Plugin {
     private String pendingSubtitleTrackId = null;
     /** Pending video height to force. -1 = none, 0 = auto (clear override). */
     private int pendingVideoHeight = -1;
-    private TextureView textureView;
+    private SurfaceView surfaceView;
     private SubtitleView subtitleView;
     private DefaultHttpDataSource.Factory httpFactory;
     private String currentHlsUrl;
@@ -78,7 +78,7 @@ public class NativePlayerPlugin extends Plugin {
     @PluginMethod()
     public void create(PluginCall call) {
         mainHandler.post(() -> {
-            if (textureView != null) {
+            if (surfaceView != null) {
                 call.resolve();
                 return;
             }
@@ -88,20 +88,23 @@ public class NativePlayerPlugin extends Plugin {
             wrapper.setBackgroundColor(Color.BLACK);
 
             // AspectRatioFrameLayout maintains video aspect ratio.
-            // alpha=0 until ExoPlayer reports first frame rendered — without it
-            // the very first decoded frame paints to TextureView at MATCH_PARENT
-            // (full screen, ignoring video aspect) for one frame, before
-            // onVideoSizeChanged fires. That single-frame flash is what users
-            // see on portrait Android as a "stretched first frame".
-            // alpha (vs setVisibility INVISIBLE) keeps the TextureView's Surface
-            // alive — INVISIBLE can interfere with the surface lifecycle and
-            // prevent onRenderedFirstFrame from ever firing.
+            // SurfaceView (vs TextureView): the HW composer pushes the decoded
+            // buffer straight to the panel, preserving HDR10/HLG metadata. With
+            // TextureView the GPU composes the buffer as an SDR texture and the
+            // HDR signal is lost — visible as a black screen for HEVC HDR
+            // playback on devices that strict-reject mis-tagged buffers
+            // (Samsung S25 etc.).
+            //
+            // SurfaceView starts out black before the first buffer is committed
+            // (its backing surface is BLACK by default), so the alpha-0 trick
+            // that hid the TextureView "stretched first frame" flash isn't
+            // needed — the AspectRatioFrameLayout sizes the SurfaceView to the
+            // video aspect via onVideoSizeChanged before any frame is shown.
             aspectFrame = new AspectRatioFrameLayout(getContext());
             aspectFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
-            aspectFrame.setAlpha(0f);
 
-            textureView = new TextureView(getContext());
-            aspectFrame.addView(textureView, new FrameLayout.LayoutParams(
+            surfaceView = new SurfaceView(getContext());
+            aspectFrame.addView(surfaceView, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -167,7 +170,7 @@ public class NativePlayerPlugin extends Plugin {
                 if (parent != null) parent.removeView(wrapper);
                 wrapper = null;
                 aspectFrame = null;
-                textureView = null;
+                surfaceView = null;
             }
             subtitleConfigs.clear();
             // Allow screen to sleep again
@@ -200,10 +203,6 @@ public class NativePlayerPlugin extends Plugin {
 
         mainHandler.post(() -> {
             if (player != null) player.release();
-            // Hide again for the new media — waits for the next first-frame
-            // callback so the previous video's last frame doesn't sit on the
-            // surface during the new media's loading phase either.
-            if (aspectFrame != null) aspectFrame.setAlpha(0f);
 
             // HTTP data source with auth headers
             Map<String, String> headerMap = new HashMap<>();
@@ -277,7 +276,7 @@ public class NativePlayerPlugin extends Plugin {
                             .setUsage(C.USAGE_MEDIA)
                             .build(),
                     /* handleAudioFocus= */ true);
-            if (textureView != null) player.setVideoTextureView(textureView);
+            if (surfaceView != null) player.setVideoSurfaceView(surfaceView);
 
             player.addListener(new Player.Listener() {
                 @Override
@@ -329,7 +328,6 @@ public class NativePlayerPlugin extends Plugin {
                 }
 
                 @Override public void onRenderedFirstFrame() {
-                    if (aspectFrame != null) aspectFrame.setAlpha(1f);
                     emitFirstFrame();
                 }
 
@@ -579,7 +577,19 @@ public class NativePlayerPlugin extends Plugin {
         int width = call.getInt("width", 0);
         int height = call.getInt("height", 0);
         mainHandler.post(() -> {
-            if (player == null) { call.reject("Player not initialized"); return; }
+            if (player == null) {
+                // Called from JS before load() has built the ExoPlayer instance
+                // (player.ts pins a saved quality between createNativeEngine and
+                // engine.load to keep the bandwidth-probe phase off the wrong
+                // variant). Queue the height — onTracksChanged consumes
+                // pendingVideoHeight once load() runs and tracks resolve, so the
+                // pin still applies on the first track-selection pass. Resolve
+                // (not reject) — the caller doesn't await, and rejecting here
+                // surfaces as an "Uncaught (in promise)" console error.
+                pendingVideoHeight = height > 0 ? height : -1;
+                call.resolve();
+                return;
+            }
 
             if (width <= 0 || height <= 0) {
                 // Auto: clear manual override → ExoPlayer re-runs adaptive selection.

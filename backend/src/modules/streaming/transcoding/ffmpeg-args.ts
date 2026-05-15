@@ -716,11 +716,15 @@ export function buildRemuxArgs(
   // `buildFfmpegArgs` for the full rationale).
   args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
 
-  if (startSegment > 0) {
-    // Output-seek after `-i`: drops decoded frames < seekSeconds with
-    // `-copyts` operating in source-time.
-    args.push('-ss', String(remuxSeekSeconds));
-  }
+  // No output-side `-ss` here. The transcode path needs it because
+  // `-ss <T> -i input` with HW decode (VAAPI) doesn't reliably drop the
+  // [last_keyframe ≤ T, T) frame range before the encoder's mandatory
+  // first IDR (see `encoder-stability.md` issue 2b). Remux is `-c:v copy`
+  // — no decode → no frame range to drop, and `-ss` at the output side
+  // turns into a packet-level PTS filter that breaks the GOP (drops
+  // non-keyframe packets that depend on the last source keyframe). The
+  // pre-`-i` seek above lands on the source IDR cleanly via demuxer
+  // index lookup; that's all remux needs.
 
   const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
   if (videoOnly && !userPickedAudio) {

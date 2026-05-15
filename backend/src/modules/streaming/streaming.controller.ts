@@ -238,17 +238,15 @@ export class StreamingController {
       );
       if (existing && existing.process.exitCode === null) return;
       const ctx = this.buildSessionContext(req, resolved, mediaFileId);
-      // 'remux'/'original' are mapped to the top transcode profile in the
-      // master playlist — do the same mapping here so the pre-spawned
-      // session matches the variant the player is about to request.
-      let targetQuality = startQuality;
-      if (startQuality === 'remux' || startQuality === 'original') {
-        const sourceW =
-          this.activeStreamTracker.getSourceWidth(mediaFileId) || 0;
-        const ladder = getLadderForDevice(deviceType);
-        const top = ladder.find((p) => p.maxWidth <= sourceW) ?? ladder[0];
-        targetQuality = top.name;
-      }
+
+      // Prewarm only runs for transcode rungs. Plain `remux` / `original`
+      // pseudo-qualities map onto the top profile of the device ladder
+      // (HDR top rung is now a transcode, not a copy pass-through), so
+      // the same transcode prewarm applies.
+      const targetQuality =
+        startQuality === 'remux' || startQuality === 'original'
+          ? getLadderForDevice(deviceType)[0].name
+          : startQuality;
       const startSegment = Math.max(0, secondsToSegmentIndex(effectiveStartAt));
 
       // Spawn early en PARALLÈLE de main (fire-and-forget). hlsSegment
@@ -982,14 +980,14 @@ export class StreamingController {
     // var_stream_map writes per-variant under `<idx>/` with init_<idx>.mp4.
     // The remux session is video-only on multi-audio sources but does NOT
     // use var_stream_map (single output, init.mp4 + seg-N.m4s flat) —
-    // forcing init_0.mp4 there serves a 404 and crashes ExoPlayer via the
-    // Media3 fallback-options bug.
+    // forcing init_0.mp4 there serves a 404.
     const usesVarStreamMapLayout = multiAudio && quality !== 'remux';
     const initName = useTs
       ? undefined
       : usesVarStreamMapLayout
         ? 'init_0.mp4'
         : 'init.mp4';
+
     const playlist = buildVodPlaylist(
       duration,
       (seg) => `${basePath}/seg-${seg}.${segExt}${tokenParam}`,
@@ -1043,7 +1041,18 @@ export class StreamingController {
     // would block on the main session's HDR-tonemap+seek cold-start
     // (~3s on 4K HDR), gating Shaka's first-frame render on the slowest
     // path even though seg-0 was already served from early.
-    if (segment.startsWith('init') && existing) {
+    //
+    // The `quality` gate is load-bearing: when a prewarm session is running
+    // on a different quality (e.g. 2160p H.264 prewarmed before the player
+    // picked the remux variant), the wrong-layout init file (`0/init_0.mp4`
+    // for var_stream_map vs flat `init.mp4` for remux) never appears, and
+    // `getSegmentPath` waits the full 60s timeout before the slow path can
+    // kill the old session and spawn the right one — a hard 60s stall to
+    // first frame.
+    const sessionQualityMatches =
+      existing != null &&
+      (quality === 'remux' ? !!existing.remux : existing.quality === quality);
+    if (segment.startsWith('init') && existing && sessionQualityMatches) {
       const ma = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
       // Same caveat as the segment path: remux video-only doesn't use
       // var_stream_map, so the `0/` prefix would 404 on the init lookup.
@@ -1085,7 +1094,7 @@ export class StreamingController {
     // (exitCode !== null) still have valid segments in cache — don't skip them.
     if (existing && existing.quality === quality) {
       const varStreamMap = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
-      const segName = varStreamMap ? `0/${segment}` : segment;
+      const segName = varStreamMap && quality !== 'remux' ? `0/${segment}` : segment;
       const segPath = `${existing.cachePath}/${segName}`;
       if (fs.existsSync(segPath)) {
         existing.lastAccess = Date.now();
@@ -1173,9 +1182,8 @@ export class StreamingController {
           );
 
     // With var_stream_map (fMP4 + multi-audio), video segments are in
-    // subdirectory "0/". The remux session is video-only on multi-audio
-    // sources but does NOT use var_stream_map (flat layout), so the `0/`
-    // prefix would 404.
+    // subdirectory "0/". The remux session keeps a flat layout (no
+    // var_stream_map), so the `0/` prefix would 404 there.
     const varStreamMap = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
     const usesVarStreamMapLayout = varStreamMap && quality !== 'remux';
     const segName = usesVarStreamMapLayout ? `0/${segment}` : segment;

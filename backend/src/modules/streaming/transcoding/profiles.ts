@@ -76,14 +76,21 @@ export const MOBILE_PROFILES: TranscodeProfile[] = [
  *  so the file size matches what users expect from the rung label.
  *  Audio bitrates unchanged from the SDR ladder. */
 export const DESKTOP_HDR_PROFILES: TranscodeProfile[] = [
-  { name: '2160p-hdr', maxWidth: 3840, maxHeight: 2160, videoBitrate: '14M', audioBitrate: '192k' },
+  // 2160p-hdr replaces the former HEVC HDR "remux" pass-through at the
+  // top of the HDR ladder. Pure `-c:v copy` is incompatible with the
+  // synthetic uniform-3s VOD playlist (segments cut at every source
+  // IDR → variable durations 1–10 s+), and re-encode forces predictable
+  // 3 s segments via `-force_key_frames`. 28 Mbps HEVC Main10 is
+  // visually transparent vs typical 50–80 Mbps source 4K HDR — the
+  // re-encode preserves HDR10/HLG signaling end-to-end.
+  { name: '2160p-hdr', maxWidth: 3840, maxHeight: 2160, videoBitrate: '28M', audioBitrate: '192k' },
   { name: '1080p-hdr', maxWidth: 1920, maxHeight: 1080, videoBitrate: '5500k', audioBitrate: '192k' },
   { name: '720p-hdr',  maxWidth: 1280, maxHeight: 720,  videoBitrate: '2800k', audioBitrate: '128k' },
   { name: '480p-hdr',  maxWidth: 854,  maxHeight: 480,  videoBitrate: '1400k', audioBitrate: '96k' },
 ];
 
 export const MOBILE_HDR_PROFILES: TranscodeProfile[] = [
-  { name: '2160p-hdr', maxWidth: 3840, maxHeight: 2160, videoBitrate: '6M',    audioBitrate: '192k' },
+  { name: '2160p-hdr', maxWidth: 3840, maxHeight: 2160, videoBitrate: '12M',   audioBitrate: '192k' },
   { name: '1080p-hdr', maxWidth: 1920, maxHeight: 1080, videoBitrate: '2200k', audioBitrate: '192k' },
   { name: '720p-hdr',  maxWidth: 1280, maxHeight: 720,  videoBitrate: '1100k', audioBitrate: '128k' },
   { name: '480p-hdr',  maxWidth: 854,  maxHeight: 480,  videoBitrate: '600k',  audioBitrate: '96k' },

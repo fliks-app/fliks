@@ -275,9 +275,13 @@ export class StreamBuilderService {
               ),
             },
         outputContainer: 'hls',
-        hwAccel: canCopyAudio
-          ? 'none'
-          : this.transcodingService.getDetectedHwAccel(),
+        // Report the backend's detected hwAccel even on the remux path:
+        // the stats overlay binds this to the active *quality* (remux →
+        // "Direct playback" / transcode rung → "Transcoding (<HW>)"). A
+        // hard-coded 'none' here surfaced as "Transcoding (CPU)" as soon
+        // as the user switched to a transcoded rung (e.g. 1080p-hdr via
+        // hevc_qsv main10), since the field is stale for the new session.
+        hwAccel: this.transcodingService.getDetectedHwAccel(),
         tonemapping: false,
         remuxMasterBandwidthBps: remuxBw > 0 ? remuxBw : undefined,
         transcodeBitrateByQuality,
