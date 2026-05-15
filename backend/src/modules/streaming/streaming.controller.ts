@@ -393,6 +393,9 @@ export class StreamingController {
       audioStreamRaw != null ? parseInt(audioStreamRaw, 10) : undefined;
 
     const ss = await this.getStreamingSettings();
+    // Push the global HEVC HDR toggle to the tracker before evaluate —
+    // stream-builder reads it synchronously to decide useHdrLadder.
+    this.activeStreamTracker.setHevcHdrEnabled(ss.hevcHdrEnabled);
 
     const result = this.streamBuilder.evaluate(
       resolved,

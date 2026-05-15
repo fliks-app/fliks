@@ -110,16 +110,16 @@ export class StreamBuilderService {
     //   - Client claims HDR support (browser-device-profile sourced from
     //     `AVPlayer.eligibleForHDRPlayback` on iOS, MediaCapabilities on
     //     web/Android).
-    //   - HEVC encoding is enabled. The `FLIKS_DISABLE_HEVC_HDR` env
-    //     escape hatch falls back to H.264 SDR tonemap on every rung
-    //     for deployments whose HW path can't sustain hevc_qsv (older
-    //     Intel iGPUs, no Main10 encoder available).
-    const hevcDisabled = process.env.FLIKS_DISABLE_HEVC_HDR === '1';
+    //   - HEVC encoding is enabled in admin streaming settings. The
+    //     toggle falls back to H.264 SDR tonemap on every rung for
+    //     deployments whose HW path can't sustain hevc_qsv Main10
+    //     (older Intel iGPUs, no Main10 encoder available).
+    const hevcEnabled = this.activeStreamTracker.getHevcHdrEnabled();
     const useHdrLadder =
       isSourceHdr &&
       clientSupportsHdr &&
       sourceVideoCodec === 'hevc' &&
-      !hevcDisabled;
+      hevcEnabled;
     // Tone-map iff the source is HDR and we're not routing through the
     // HDR ladder. Anything that re-encodes via H.264 needs the tonemap
     // filter or AVPlayer rejects with -12927 (mismatched VUI vs codec).
