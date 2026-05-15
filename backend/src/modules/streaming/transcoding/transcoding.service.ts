@@ -255,6 +255,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       audioBitRateBps?: number;
     },
   ): string {
+    // Only the QSV branch in ffmpeg-args has `hevc_qsv Main10` wired —
+    // every other hwAccel hits libx264 for HEVC HDR profile names and
+    // produces H.264 segments that contradict the master's `hvc1.*`
+    // CODECS string. Skip the lower-res transcode rungs on non-QSV
+    // backends so we don't hand the player a manifest claim we can't
+    // fulfil. The top remux rung stays — `-c:v copy` works everywhere.
+    const canEncodeHevcHdr = this.detectedHwAccel === 'qsv';
     return generateMasterPlaylist(
       mediaFileId,
       sourceWidth,
@@ -268,6 +275,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       deviceType,
       outputAudioCodec,
       hdrPassThrough,
+      canEncodeHevcHdr,
     );
   }
 

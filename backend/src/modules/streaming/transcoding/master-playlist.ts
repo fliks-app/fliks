@@ -48,6 +48,14 @@ export function generateMasterPlaylist(
     videoBitRateBps?: number;
     audioBitRateBps?: number;
   },
+  /** True when the backend can actually emit HEVC Main10 segments — only
+   *  the QSV path has `hevc_qsv Main10` wired (ffmpeg-args.ts). Other
+   *  hwAccels (VAAPI, NVENC, VideoToolbox, CPU) fall through to libx264
+   *  and produce H.264 segments that contradict the master's `hvc1.*`
+   *  CODECS string, which trips a Media3 fallback-options crash on
+   *  ExoPlayer. When false, only the remux pass-through rung is emitted
+   *  — that path is `-c:v copy` and works regardless of hwAccel. */
+  canEncodeHevcHdr = false,
 ): string {
   const multiAudio = audioStreams && audioStreams.length > 1;
   const lines = ['#EXTM3U'];
@@ -101,24 +109,31 @@ export function generateMasterPlaylist(
       );
     }
 
-    // Lower-resolution HEVC HDR transcode rungs. Filter to those strictly
-    // below the source — emitting a transcode rung at source resolution
-    // would duplicate the remux rung above with worse quality.
-    const hdrLadder = getHdrLadderForDevice(deviceType).filter(
-      (p) => p.maxHeight < sourceHeight,
-    );
-    for (const p of hdrLadder) {
-      const avg =
-        parseBitrateToBps(p.videoBitrate) + parseBitrateToBps(p.audioBitrate);
-      const bw = Math.round(avg * 1.5);
-      const w = Math.min(p.maxWidth, sourceWidth);
-      const rawH = (w * sourceHeight) / sourceWidth;
-      const h = Math.floor(rawH / 16) * 16 || 16;
-      const videoCodec = hevcMain10CodecStringForHeight(p.maxHeight);
-      lines.push(
-        `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},VIDEO-RANGE=${range},NAME="${p.name}",CODECS="${videoCodec},${audioCodec}"${hdrAudioAttr}`,
-        `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
+    // Lower-resolution HEVC HDR transcode rungs. Gated on
+    // `canEncodeHevcHdr`: when the backend hwAccel doesn't have a
+    // hevc_qsv Main10 encoder wired, emitting these rungs hands
+    // ExoPlayer / AVPlayer a manifest claim it can't fulfil — they
+    // request the variant, get H.264 segments (libx264 fallback) that
+    // contradict the `hvc1.*` CODECS string, and crash on chunk load.
+    // The top remux rung above stays — it's `-c:v copy` and works on
+    // every hwAccel.
+    if (canEncodeHevcHdr) {
+      const hdrLadder = getHdrLadderForDevice(deviceType).filter(
+        (p) => p.maxHeight < sourceHeight,
       );
+      for (const p of hdrLadder) {
+        const avg =
+          parseBitrateToBps(p.videoBitrate) + parseBitrateToBps(p.audioBitrate);
+        const bw = Math.round(avg * 1.5);
+        const w = Math.min(p.maxWidth, sourceWidth);
+        const rawH = (w * sourceHeight) / sourceWidth;
+        const h = Math.floor(rawH / 16) * 16 || 16;
+        const videoCodec = hevcMain10CodecStringForHeight(p.maxHeight);
+        lines.push(
+          `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},VIDEO-RANGE=${range},NAME="${p.name}",CODECS="${videoCodec},${audioCodec}"${hdrAudioAttr}`,
+          `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
+        );
+      }
     }
     return lines.join('\n');
   }
