@@ -1,4 +1,8 @@
-import { getLadderForDevice, parseBitrateToBps } from './profiles';
+import {
+  getHdrLadderForDevice,
+  getLadderForDevice,
+  parseBitrateToBps,
+} from './profiles';
 import type { DeviceType, TranscodeProfile } from './types';
 
 /**
@@ -51,34 +55,71 @@ export function generateMasterPlaylist(
   const audioCodecMap = { aac: 'mp4a.40.2', ac3: 'ac-3', eac3: 'ec-3' };
   const audioCodec = audioCodecMap[outputAudioCodec] ?? 'mp4a.40.2';
 
-  // HDR pass-through path — taken when stream-builder selected
-  // DirectStream and the source is HEVC HDR. The H.264 transcode ladder
-  // is intentionally omitted: every rung would have to tone-map back to
-  // SDR (defeating the point), and ABR-downgrading mid-stream from a
-  // HEVC HDR variant to an H.264 SDR one isn't seamless on AVPlayer.
-  // Multi-audio is also skipped here — the remux session muxes
-  // video+audio as a single stream; switching audio tracks goes through
-  // a backend reload with a different `audioStreamIndex`, not the HLS
-  // EXT-X-MEDIA mechanism.
+  // HDR pass-through path — emitted when the source is HEVC HDR and
+  // the client claims HDR support. Outputs a full HEVC HDR ladder
+  // (one remux rung at source resolution + HEVC HDR transcode rungs
+  // below) so the user can switch resolution while keeping HDR
+  // signaling (BT.2020/PQ or HLG). The H.264 SDR ladder is omitted in
+  // this branch — mixing SDR and HDR rungs in one master playlist
+  // confuses AVPlayer's ABR and triggers display-mode flips. Clients
+  // that want SDR explicitly disable HDR client-side (which flips
+  // `clientSupportsHdr` to false and re-routes to the SDR ladder).
   if (hdrPassThrough) {
-    const w = sourceWidth;
-    const h = sourceHeight;
-    const videoCodec = hevcMain10CodecStringForHeight(h);
     const range = hdrPassThrough.hdrFormat === 'HLG' ? 'HLG' : 'PQ';
-    // Remux carries the source video bitrate verbatim; audio is either
-    // copied or re-encoded but its bandwidth contribution is small either
-    // way. Fall back to source-total when we don't have a per-stream
-    // breakdown.
-    const v = hdrPassThrough.videoBitRateBps ?? sourceBitrate ?? 0;
-    const a = hdrPassThrough.audioBitRateBps ?? 0;
-    const avg = v + a;
-    // Pass-through is near-CBR (we don't re-encode), so peak ≈ nominal.
-    // A small 10% pad still gives AVPlayer ABR a stable read.
-    const bw = Math.round(avg * 1.1);
-    lines.push(
-      `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},VIDEO-RANGE=${range},NAME="hdr",CODECS="${videoCodec},${audioCodec}"`,
-      `/api/stream/${mediaFileId}/remux/index.m3u8${tokenParam}`,
+
+    // Multi-audio: each HEVC HDR variant references the shared audio
+    // group via AUDIO="audio". Audio is served from /audio/<i>/ as
+    // standalone AAC renditions, same wiring as the SDR ladder.
+    if (multiAudio) {
+      const pickedIdx =
+        defaultAudioIndex >= 0 && defaultAudioIndex < audioStreams!.length
+          ? defaultAudioIndex
+          : 0;
+      for (let i = 0; i < audioStreams!.length; i++) {
+        const a = audioStreams![i];
+        const lang = a.language || 'und';
+        const name = a.title || lang;
+        const isDefault = i === pickedIdx ? 'YES' : 'NO';
+        lines.push(
+          `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${name}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
+        );
+      }
+    }
+    const hdrAudioAttr = multiAudio ? ',AUDIO="audio"' : '';
+
+    // Top rung: remux (-c:v copy) at source resolution. Zero re-encode
+    // cost, perfect quality, native HDR. Always present.
+    {
+      const topVideoCodec = hevcMain10CodecStringForHeight(sourceHeight);
+      const v = hdrPassThrough.videoBitRateBps ?? sourceBitrate ?? 0;
+      const a = hdrPassThrough.audioBitRateBps ?? 0;
+      const avg = v + a;
+      const bw = Math.round(avg * 1.1);
+      lines.push(
+        `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${sourceWidth}x${sourceHeight},VIDEO-RANGE=${range},NAME="original-hdr",CODECS="${topVideoCodec},${audioCodec}"${hdrAudioAttr}`,
+        `/api/stream/${mediaFileId}/remux/index.m3u8${tokenParam}`,
+      );
+    }
+
+    // Lower-resolution HEVC HDR transcode rungs. Filter to those strictly
+    // below the source — emitting a transcode rung at source resolution
+    // would duplicate the remux rung above with worse quality.
+    const hdrLadder = getHdrLadderForDevice(deviceType).filter(
+      (p) => p.maxHeight < sourceHeight,
     );
+    for (const p of hdrLadder) {
+      const avg =
+        parseBitrateToBps(p.videoBitrate) + parseBitrateToBps(p.audioBitrate);
+      const bw = Math.round(avg * 1.5);
+      const w = Math.min(p.maxWidth, sourceWidth);
+      const rawH = (w * sourceHeight) / sourceWidth;
+      const h = Math.floor(rawH / 16) * 16 || 16;
+      const videoCodec = hevcMain10CodecStringForHeight(p.maxHeight);
+      lines.push(
+        `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},VIDEO-RANGE=${range},NAME="${p.name}",CODECS="${videoCodec},${audioCodec}"${hdrAudioAttr}`,
+        `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
+      );
+    }
     return lines.join('\n');
   }
 

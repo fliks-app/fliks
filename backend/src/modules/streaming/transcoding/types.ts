@@ -119,6 +119,15 @@ export interface SessionContext {
    * HLS variants written with the default `hev1` codec tag.
    */
   sourceVideoCodec?: string;
+  /**
+   * Source has HDR transfer characteristics (HDR10 / HLG / DV). The
+   * session-wide `tonemap` flag follows the pass-through decision —
+   * false when canPassThroughHdr is true (HDR client + HEVC source) —
+   * but every quality lock that maps to a transcode rung still needs
+   * tone-mapping because we only re-encode to H.264 SDR. Spawners OR
+   * this with `tonemap` when picking a non-remux quality.
+   */
+  isSourceHdr?: boolean;
 }
 
 export interface TranscodeSession {

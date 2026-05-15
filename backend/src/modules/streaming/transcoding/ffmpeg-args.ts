@@ -4,7 +4,7 @@ import {
   getSegmentDuration,
   segmentIndexToSeconds,
 } from './constants';
-import { parseBitrateToBps } from './profiles';
+import { isHdrProfile, parseBitrateToBps } from './profiles';
 import type {
   BurnInSubtitle,
   HwAccelType,
@@ -309,10 +309,39 @@ export function buildFfmpegArgs(
     ? `hwdownload,format=nv12,${cropStr},hwupload=derive_device=vaapi,`
     : '';
 
+  const isHdrOutput = isHdrProfile(profile.name);
+
   switch (effectiveHwAccel) {
     case 'qsv':
       // Note: QSV + crop is forced to CPU via effectiveHwAccel (fixed-size pool constraint)
-      if (tonemapVaapi) {
+      if (isHdrOutput) {
+        // HEVC HDR pass-through transcode: VAAPI decode → VAAPI scale
+        // keeping p010le (10-bit, HDR pixels preserved) → hwmap qsv →
+        // hevc_qsv Main10 encode. Color signaling propagates from the
+        // input AVFrame metadata; `-color_*` flags are belt-and-suspenders
+        // so encoders that ignore the AVFrame still emit a correct SPS
+        // VUI. Output is tagged `hvc1` later in the HLS muxer args.
+        args.push(
+          '-c:v', 'hevc_qsv',
+          '-profile:v', 'main10',
+          '-preset', earlyPreset,
+          ...qsvExtra,
+          '-mbbrc', '1',
+          '-b:v', String(bitrateNum),
+          '-maxrate', String(bitrateNum + 1),
+          '-rc_init_occupancy', String(qsvRcInitOccupancy),
+          '-bufsize', String(qsvBufsize),
+          '-vf',
+          `scale_vaapi=w=${w}:h=-16:format=p010le:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
+          '-g', String(gopSize),
+          '-keyint_min', String(gopSize),
+          '-force_key_frames', forceKeyframesExpr,
+          '-color_primaries', 'bt2020',
+          '-color_trc', 'smpte2084',
+          '-colorspace', 'bt2020nc',
+          '-tag:v', 'hvc1',
+        );
+      } else if (tonemapVaapi) {
         // VAAPI decode → VAAPI scale → VAAPI tonemap → QSV encode (no OpenCL hop)
         args.push(
           '-c:v', 'h264_qsv',
@@ -487,6 +516,24 @@ export function buildFfmpegArgs(
         '-sc_threshold:v:0', '0',
       );
       break;
+  }
+
+  // When tone-mapping HDR → SDR on the H.264 path, force the SPS VUI to
+  // BT.709 limited range. The pixel data is genuinely SDR after the
+  // tonemap filter, but some encoder paths (notably h264_qsv) carry the
+  // source's BT.2020/PQ color tags through from input AVFrame metadata
+  // into the SPS, producing a bitstream that signals HDR with SDR
+  // pixels. iOS AVPlayer rejects this combination with -12927; other
+  // players tolerate it but render with wrong color. These flags are
+  // a no-op when tone-mapping isn't active (the AVFrame already has
+  // BT.709 tags on SDR sources).
+  if (tonemap && !isHdrOutput) {
+    args.push(
+      '-color_primaries', 'bt709',
+      '-color_trc', 'bt709',
+      '-colorspace', 'bt709',
+      '-color_range', 'tv',
+    );
   }
 
   // ── Audio mapping + HLS output ──

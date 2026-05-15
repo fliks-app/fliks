@@ -24,6 +24,7 @@ import { SubtitleStreamService } from './subtitle-stream.service';
 import {
   TranscodingService,
   PROFILES,
+  DESKTOP_HDR_PROFILES,
   SessionContext,
   getLadderForDevice,
 } from './transcoding';
@@ -37,7 +38,11 @@ import { MarkersService } from '../markers/markers.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 import { StreamingSettingsCache } from './streaming-settings-cache.service';
 
-const VALID_QUALITIES = new Set([...PROFILES.map((p) => p.name), 'remux']);
+const VALID_QUALITIES = new Set([
+  ...PROFILES.map((p) => p.name),
+  ...DESKTOP_HDR_PROFILES.map((p) => p.name),
+  'remux',
+]);
 
 /**
  * Inject HLS X-TIMESTAMP-MAP header so the player aligns VTT cues to the
@@ -186,6 +191,7 @@ export class StreamingController {
       // switches stay coherent with what playback-info promised.
       audioPlan: this.activeStreamTracker.getAudioPlan(mediaFileId) ?? undefined,
       sourceVideoCodec: (si?.video?.[0]?.codec ?? '').toLowerCase() || undefined,
+      isSourceHdr: !!si?.video?.[0]?.hdrFormat,
     };
   }
 
@@ -610,15 +616,13 @@ export class StreamingController {
 
     const includeRemux = firstQueryString(req.query, 'remux') === '1';
     const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
-    // HDR pass-through is only meaningful on DirectStream (remux) requests.
-    // Triggered when the source video stream is HEVC + HDR. Non-HEVC HDR
-    // can't be passed through (the HLS spec only standardises hvc1/dvh1
-    // codec strings for HDR), so stream-builder forces tone-mapping for
-    // those in needsTonemapping — they never reach this branch.
-    const sourceVideoCodec = (v?.codec ?? '').toLowerCase();
+    // HDR ladder eligibility — decided by stream-builder at playback-info
+    // time and cached in the tracker. Independent from `includeRemux`:
+    // even a /master.m3u8 without `?remux=1` should emit the HDR ladder
+    // when the source + client combination warrant it.
     const sourceHdrFormat = v?.hdrFormat as 'HDR10' | 'HLG' | undefined;
     const hdrPassThrough =
-      includeRemux && sourceHdrFormat && sourceVideoCodec === 'hevc'
+      this.activeStreamTracker.getHdrLadder(mediaFileId) && sourceHdrFormat
         ? {
             hdrFormat: sourceHdrFormat,
             videoBitRateBps: v?.bitRate ?? undefined,

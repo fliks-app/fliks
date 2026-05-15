@@ -5,6 +5,7 @@ import {
   QualityOption,
   TranscodeReason,
 } from './dto/playback-info.dto';
+import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { ResolvedFile } from './streaming.service';
 import {
   DeviceType,
@@ -29,7 +30,10 @@ import {
 export class StreamBuilderService {
   private readonly log = new Logger(StreamBuilderService.name);
 
-  constructor(private readonly transcodingService: TranscodingService) {}
+  constructor(
+    private readonly transcodingService: TranscodingService,
+    private readonly activeStreamTracker: ActiveStreamTracker,
+  ) {}
 
   /**
    * Evaluate a media file against a device profile and return the playback decision.
@@ -98,16 +102,29 @@ export class StreamBuilderService {
     // HDR detection
     const isSourceHdr = !!source.hdrFormat;
     const clientSupportsHdr = profile.supportsHdr === true;
-    // HDR pass-through (no tone-mapping, no re-encode) only works when the
-    // source video stream is HEVC — that's the codec iOS / Android players
-    // can decode in HDR. Non-HEVC HDR (rare: AVC Main10 HDR) cannot be
-    // remuxed into a player-recognised HDR variant, so it must be tone-mapped
-    // even when the client claims HDR support. Without this, FFmpeg's
-    // transcode runs with `tonemap=false` on an HDR source and emits H.264
-    // with leaking BT.2020/PQ metadata → AVPlayer rejects with -12927.
-    const canPassThroughHdr =
-      isSourceHdr && clientSupportsHdr && sourceVideoCodec === 'hevc';
-    const needsTonemapping = isSourceHdr && !canPassThroughHdr;
+    // HEVC HDR ladder eligibility. Triggers a separate master.m3u8 path
+    // (HEVC Main10 transcodes + remux at source resolution, all carrying
+    // BT.2020/PQ in their VUI) instead of the H.264 SDR ladder. Gated by:
+    //   - Source video codec is HEVC (only codec we can pass through /
+    //     re-encode while preserving HDR signaling in HLS).
+    //   - Client claims HDR support (browser-device-profile sourced from
+    //     `AVPlayer.eligibleForHDRPlayback` on iOS, MediaCapabilities on
+    //     web/Android).
+    //   - HEVC encoding is enabled. The `FLIKS_DISABLE_HEVC_HDR` env
+    //     escape hatch falls back to H.264 SDR tonemap on every rung
+    //     for deployments whose HW path can't sustain hevc_qsv (older
+    //     Intel iGPUs, no Main10 encoder available).
+    const hevcDisabled = process.env.FLIKS_DISABLE_HEVC_HDR === '1';
+    const useHdrLadder =
+      isSourceHdr &&
+      clientSupportsHdr &&
+      sourceVideoCodec === 'hevc' &&
+      !hevcDisabled;
+    // Tone-map iff the source is HDR and we're not routing through the
+    // HDR ladder. Anything that re-encodes via H.264 needs the tonemap
+    // filter or AVPlayer rejects with -12927 (mismatched VUI vs codec).
+    const needsTonemapping = isSourceHdr && !useHdrLadder;
+    this.activeStreamTracker.setHdrLadder(resolved.mediaFile.id, useHdrLadder);
     const needsBurnIn = !!burnInSubtitleId;
     const needsCrop = !!v?.crop;
 

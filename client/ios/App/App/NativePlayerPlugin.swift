@@ -173,6 +173,39 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let startTime = call.getDouble("startTime") ?? 0
         let headers = call.getObject("headers") ?? [:]
 
+        // Trace what URL the engine is asking us to load — confirms in
+        // console which playback path stream-builder picked (DirectPlay
+        // raw / DirectStream remux master / Transcode master).
+        let safeUrl = urlString.replacingOccurrences(of: "'", with: "\\'")
+        let logJs = "console.warn('[NativePlayer] load', '\(safeUrl)', 'startTime=\(startTime)');"
+        DispatchQueue.main.async { [weak self] in
+            self?.bridge?.webView?.evaluateJavaScript(logJs)
+        }
+
+        // Diagnostic: when the URL points at an HLS master playlist, fetch
+        // it ourselves and dump the body to console BEFORE handing it to
+        // AVPlayer. The exact CODECS / BANDWIDTH / VIDEO-RANGE values that
+        // AVPlayer is about to validate. Crucial when -12927 fires with an
+        // empty errorLog — AVPlayer rejected something at variant
+        // selection and we need to see what.
+        if urlString.contains(".m3u8") {
+            var req = URLRequest(url: url)
+            for (k, v) in headers {
+                if let s = v as? String { req.setValue(s, forHTTPHeaderField: k) }
+            }
+            URLSession.shared.dataTask(with: req) { [weak self] data, _, _ in
+                guard let body = data.flatMap({ String(data: $0, encoding: .utf8) }) else { return }
+                let escaped = body
+                    .replacingOccurrences(of: "\\", with: "\\\\")
+                    .replacingOccurrences(of: "'", with: "\\'")
+                    .replacingOccurrences(of: "\n", with: "\\n")
+                let dumpJs = "console.warn('[NativePlayer] manifest:\\n' + '\(escaped)');"
+                DispatchQueue.main.async {
+                    self?.bridge?.webView?.evaluateJavaScript(dumpJs)
+                }
+            }.resume()
+        }
+
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
 
@@ -199,20 +232,17 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 asset: asset,
                 automaticallyLoadedAssetKeys: ["playable", "tracks", "duration"]
             )
-            // Cap ABR to the device's native resolution. The backend transcodes
-            // a fresh FFmpeg session per rung — each ABR switch warms a new
-            // pipeline and starves segments (visible as multi-second freezes
-            // with audio continuing). Locking to one rung at load avoids the
-            // thrash; `setMaxResolution` from the engine overrides this later
-            // when the user picks a quality.
-            let screen = UIScreen.main
-            playerItem.preferredMaximumResolution = CGSize(
-                width: screen.bounds.width * screen.scale,
-                height: screen.bounds.height * screen.scale
-            )
-            playerItem.preferredPeakBitRate = Self.peakBitRateForHeight(
-                Int(screen.bounds.height * screen.scale)
-            )
+            // No initial bitrate / resolution caps. We used to clamp these
+            // to the device's native screen to fight per-rung FFmpeg
+            // session thrash, but the cap also silently rejected the
+            // single-variant HDR pass-through manifest when the source
+            // resolution (e.g. 3840×2160) exceeded the screen native size
+            // (e.g. 1290×2796 on iPhone 15 Pro Max). AVPlayer had no
+            // lower variant to fall back to, errored out with CoreMedia
+            // -12927, and the errorLog stayed empty because the failure
+            // happened at variant selection — before any segment fetch.
+            // ABR runs freely; `setMaxResolution` from the engine still
+            // applies a cap when the user explicitly picks a quality.
             let player = AVPlayer(playerItem: playerItem)
             // Don't second-guess AVPlayer's prebuffer — let it wait until it
             // has enough video to play without immediate stall.
@@ -767,7 +797,13 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func emitError(code: Int, message: String) {
         let safeMsg = message.replacingOccurrences(of: "'", with: "\\'")
-        let js = "window.dispatchEvent(new CustomEvent('nativePlayerError', { detail: { code: \(code), message: '\(safeMsg)' } }));"
+        // Always log to console.error so the failure is visible in Safari
+        // Web Inspector regardless of whether the Angular layer surfaces
+        // the dispatched event.
+        let js = """
+        console.error('[NativePlayer] error', \(code), '\(safeMsg)');
+        window.dispatchEvent(new CustomEvent('nativePlayerError', { detail: { code: \(code), message: '\(safeMsg)' } }));
+        """
         DispatchQueue.main.async { [weak self] in
             self?.bridge?.webView?.evaluateJavaScript(js)
         }

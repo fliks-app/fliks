@@ -17,7 +17,7 @@ import {
   segmentIndexToSeconds,
   setSegmentDuration as applySegmentDuration,
 } from './constants';
-import { getLadderForDevice } from './profiles';
+import { getHdrLadderForDevice, getLadderForDevice, isHdrProfile } from './profiles';
 import {
   buildAudioOnlyFfmpegArgs,
   buildFfmpegArgs,
@@ -350,7 +350,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const ladder = getLadderForDevice(ctx?.deviceType);
+    const ladder = isHdrProfile(quality)
+      ? getHdrLadderForDevice(ctx?.deviceType)
+      : getLadderForDevice(ctx?.deviceType);
     const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
     const sessionDir = path.join(this.cachePath, key, quality);
     const dirExisted = existsSync(sessionDir);
@@ -403,7 +405,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const ctxAudioStreams = ctx?.audioStreams;
     const useVarStreamMap =
       isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
-    const ladder = getLadderForDevice(ctx?.deviceType);
+    const ladder = isHdrProfile(quality)
+      ? getHdrLadderForDevice(ctx?.deviceType)
+      : getLadderForDevice(ctx?.deviceType);
     const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
 
     await session.ready;
@@ -498,7 +502,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         await this.killAndClean(existing.process, existing.cachePath);
       }
 
-      const ladder = getLadderForDevice(ctx?.deviceType);
+      const ladder = isHdrProfile(quality)
+        ? getHdrLadderForDevice(ctx?.deviceType)
+        : getLadderForDevice(ctx?.deviceType);
       const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
       const sessionDir = path.join(this.cachePath, id, quality);
       const dirExisted = existsSync(sessionDir);
@@ -834,7 +840,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     startSegment: number,
     ctx?: SessionContext,
   ): TranscodeSession {
-    const ladder = getLadderForDevice(ctx?.deviceType);
+    const ladder = isHdrProfile(quality)
+      ? getHdrLadderForDevice(ctx?.deviceType)
+      : getLadderForDevice(ctx?.deviceType);
     const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
     const session = this.startFfmpeg(
       sessionId,

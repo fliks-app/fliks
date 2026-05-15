@@ -87,6 +87,20 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.tonemappingCache.get(mediaFileId) ?? false;
   }
 
+  /** HDR ladder eligibility — set at playback-info by stream-builder
+   *  (`isSourceHdr && clientSupportsHdr && sourceVideoCodec==='hevc'
+   *  && !FLIKS_DISABLE_HEVC_HDR`). Read at master.m3u8 time so the
+   *  playlist can emit the HEVC HDR ladder instead of the H.264 SDR
+   *  ladder. Default false keeps the existing behaviour for callers
+   *  that never reach playback-info (e.g. legacy direct URLs). */
+  private readonly hdrLadderCache = new Map<number, boolean>();
+  setHdrLadder(mediaFileId: number, value: boolean) {
+    this.hdrLadderCache.set(mediaFileId, value);
+  }
+  getHdrLadder(mediaFileId: number): boolean {
+    return this.hdrLadderCache.get(mediaFileId) ?? false;
+  }
+
   setBurnIn(mediaFileId: number, info: BurnInSubtitle | undefined) {
     if (info) {
       this.burnInCache.set(mediaFileId, info);
