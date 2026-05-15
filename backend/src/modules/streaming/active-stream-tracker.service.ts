@@ -87,6 +87,20 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.tonemappingCache.get(mediaFileId) ?? false;
   }
 
+  /** HDR ladder eligibility — set at playback-info by stream-builder
+   *  (`isSourceHdr && clientSupportsHdr && sourceVideoCodec==='hevc'
+   *  && !FLIKS_DISABLE_HEVC_HDR`). Read at master.m3u8 time so the
+   *  playlist can emit the HEVC HDR ladder instead of the H.264 SDR
+   *  ladder. Default false keeps the existing behaviour for callers
+   *  that never reach playback-info (e.g. legacy direct URLs). */
+  private readonly hdrLadderCache = new Map<number, boolean>();
+  setHdrLadder(mediaFileId: number, value: boolean) {
+    this.hdrLadderCache.set(mediaFileId, value);
+  }
+  getHdrLadder(mediaFileId: number): boolean {
+    return this.hdrLadderCache.get(mediaFileId) ?? false;
+  }
+
   setBurnIn(mediaFileId: number, info: BurnInSubtitle | undefined) {
     if (info) {
       this.burnInCache.set(mediaFileId, info);
@@ -187,6 +201,17 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
   }
   getQsvOptions(): { lowPower: boolean } {
     return { lowPower: this.qsvLowPowerCache };
+  }
+
+  /** Global HEVC HDR encoder toggle, driven by admin streaming settings.
+   *  When false, stream-builder tone-maps HDR sources to H.264 SDR
+   *  instead of routing them through the HEVC HDR ladder. */
+  private hevcHdrEnabledCache = true;
+  setHevcHdrEnabled(value: boolean) {
+    this.hevcHdrEnabledCache = value;
+  }
+  getHevcHdrEnabled(): boolean {
+    return this.hevcHdrEnabledCache;
   }
 
   // ── Source-vs-client compat captured at playback-info time, read at

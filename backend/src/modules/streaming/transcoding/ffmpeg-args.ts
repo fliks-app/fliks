@@ -4,7 +4,7 @@ import {
   getSegmentDuration,
   segmentIndexToSeconds,
 } from './constants';
-import { parseBitrateToBps } from './profiles';
+import { isHdrProfile, parseBitrateToBps } from './profiles';
 import type {
   BurnInSubtitle,
   HwAccelType,
@@ -309,10 +309,39 @@ export function buildFfmpegArgs(
     ? `hwdownload,format=nv12,${cropStr},hwupload=derive_device=vaapi,`
     : '';
 
+  const isHdrOutput = isHdrProfile(profile.name);
+
   switch (effectiveHwAccel) {
     case 'qsv':
       // Note: QSV + crop is forced to CPU via effectiveHwAccel (fixed-size pool constraint)
-      if (tonemapVaapi) {
+      if (isHdrOutput) {
+        // HEVC HDR pass-through transcode: VAAPI decode → VAAPI scale
+        // keeping p010le (10-bit, HDR pixels preserved) → hwmap qsv →
+        // hevc_qsv Main10 encode. Color signaling propagates from the
+        // input AVFrame metadata; `-color_*` flags are belt-and-suspenders
+        // so encoders that ignore the AVFrame still emit a correct SPS
+        // VUI. Output is tagged `hvc1` later in the HLS muxer args.
+        args.push(
+          '-c:v', 'hevc_qsv',
+          '-profile:v', 'main10',
+          '-preset', earlyPreset,
+          ...qsvExtra,
+          '-mbbrc', '1',
+          '-b:v', String(bitrateNum),
+          '-maxrate', String(bitrateNum + 1),
+          '-rc_init_occupancy', String(qsvRcInitOccupancy),
+          '-bufsize', String(qsvBufsize),
+          '-vf',
+          `scale_vaapi=w=${w}:h=-16:format=p010le:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
+          '-g', String(gopSize),
+          '-keyint_min', String(gopSize),
+          '-force_key_frames', forceKeyframesExpr,
+          '-color_primaries', 'bt2020',
+          '-color_trc', 'smpte2084',
+          '-colorspace', 'bt2020nc',
+          '-tag:v', 'hvc1',
+        );
+      } else if (tonemapVaapi) {
         // VAAPI decode → VAAPI scale → VAAPI tonemap → QSV encode (no OpenCL hop)
         args.push(
           '-c:v', 'h264_qsv',
@@ -489,13 +518,16 @@ export function buildFfmpegArgs(
       break;
   }
 
-  // Force SDR color signaling in the H.264 VUI when the pipeline tone-maps
-  // an HDR source. Without these flags, h264_videotoolbox (and to a lesser
-  // extent libx264 / h264_nvenc) inherits the source's BT.2020/PQ metadata
-  // and emits a bitstream whose VUI claims HDR even though the pixel data
-  // is now BT.709 SDR. iOS AVPlayer fails the variant with error -12927
-  // because the declared color volume doesn't match the HLS SDR rung.
-  if (tonemap) {
+  // When tone-mapping HDR → SDR on the H.264 path, force the SPS VUI to
+  // BT.709 limited range. The pixel data is genuinely SDR after the
+  // tonemap filter, but some encoder paths (notably h264_qsv) carry the
+  // source's BT.2020/PQ color tags through from input AVFrame metadata
+  // into the SPS, producing a bitstream that signals HDR with SDR
+  // pixels. iOS AVPlayer rejects this combination with -12927; other
+  // players tolerate it but render with wrong color. These flags are
+  // a no-op when tone-mapping isn't active (the AVFrame already has
+  // BT.709 tags on SDR sources).
+  if (tonemap && !isHdrOutput) {
     args.push(
       '-color_primaries', 'bt709',
       '-color_trc', 'bt709',
@@ -653,6 +685,13 @@ export function buildRemuxArgs(
   trustedStreamInfo = false,
   audioStreamIndex?: number,
   log?: Logger,
+  /** Source video codec (ffprobe `codec_name`, lowercased). Drives the
+   *  `-tag:v hvc1` flag for HEVC inputs — FFmpeg's mov muxer otherwise
+   *  defaults to `hev1`, which Apple HLS rejects: the spec requires
+   *  parameter sets in the moov sample description (`hvc1`), not inline
+   *  in the bitstream (`hev1`). Without this, iOS AVPlayer fails the
+   *  variant with error -12927 on the first segment fetch. */
+  sourceVideoCodec?: string,
 ): string[] {
   const SEGMENT_DURATION = getSegmentDuration();
 
@@ -677,11 +716,15 @@ export function buildRemuxArgs(
   // `buildFfmpegArgs` for the full rationale).
   args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
 
-  if (startSegment > 0) {
-    // Output-seek after `-i`: drops decoded frames < seekSeconds with
-    // `-copyts` operating in source-time.
-    args.push('-ss', String(remuxSeekSeconds));
-  }
+  // No output-side `-ss` here. The transcode path needs it because
+  // `-ss <T> -i input` with HW decode (VAAPI) doesn't reliably drop the
+  // [last_keyframe ≤ T, T) frame range before the encoder's mandatory
+  // first IDR (see `encoder-stability.md` issue 2b). Remux is `-c:v copy`
+  // — no decode → no frame range to drop, and `-ss` at the output side
+  // turns into a packet-level PTS filter that breaks the GOP (drops
+  // non-keyframe packets that depend on the last source keyframe). The
+  // pre-`-i` seek above lands on the source IDR cleanly via demuxer
+  // index lookup; that's all remux needs.
 
   const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
   if (videoOnly && !userPickedAudio) {
@@ -701,6 +744,26 @@ export function buildRemuxArgs(
     } else {
       args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
     }
+  }
+
+  // HEVC needs Apple HLS conformance:
+  //   - `-tag:v hvc1` writes parameter sets to the moov sample
+  //     description; FFmpeg defaults to `hev1` (parameter sets inline
+  //     in mdat) which AVPlayer rejects on HLS.
+  //   - `-bsf:v hevc_mp4toannexb` converts NAL units from mp4-style
+  //     length-prefixed to annex-B start-code form, which is what the
+  //     fmp4 muxer expects when emitting parameter sets to moov.
+  //   - `-max_muxing_queue_size 2048` doubles the default per-stream
+  //     packet buffer. HEVC GOPs (12-16 frames between IDRs) plus
+  //     non-AAC audio inter-frame intervals (TrueHD, DTS) can
+  //     overflow the default 1024-packet queue and crash the mux
+  //     with "Too many packets buffered for output stream".
+  if (sourceVideoCodec === 'hevc') {
+    args.push(
+      '-tag:v', 'hvc1',
+      '-bsf:v', 'hevc_mp4toannexb',
+      '-max_muxing_queue_size', '2048',
+    );
   }
 
   args.push(

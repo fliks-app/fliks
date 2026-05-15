@@ -32,6 +32,17 @@
       <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.qsv_preset_help' | translate }}</span></label>
     </div>
 
+    <!-- HDR encoding -->
+    <div class="divider">{{ 'settings.streaming.hdr_section' | translate }}</div>
+
+    <div class="form-control">
+      <label class="label cursor-pointer justify-start gap-3">
+        <input type="checkbox" class="toggle" [ngModel]="hevcHdrEnabled()" (ngModelChange)="hevcHdrEnabled.set($event)" />
+        <span class="label-text font-medium">{{ 'settings.streaming.hevc_hdr_enabled' | translate }}</span>
+      </label>
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.hevc_hdr_enabled_help' | translate }}</span></label>
+    </div>
+
     <!-- QSV advanced options (Intel Quick Sync only) -->
     <div class="divider">{{ 'settings.streaming.qsv_advanced' | translate }}</div>
 

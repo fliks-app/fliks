@@ -68,9 +68,51 @@ export const MOBILE_PROFILES: TranscodeProfile[] = [
   { name: '144p',  maxWidth: 256,  maxHeight: 144,  videoBitrate: '150k',  audioBitrate: '48k' },
 ];
 
+/** HEVC HDR ladder — used when the source is HEVC HDR and the client
+ *  declares HDR support. Names are suffixed `-hdr` so the URL routing,
+ *  session cache keys, and admin dashboard can tell SDR and HDR rungs
+ *  apart without ambiguity. Bitrates are roughly 70% of the H.264 SDR
+ *  ladder — HEVC is ~30% more efficient at equivalent visual quality,
+ *  so the file size matches what users expect from the rung label.
+ *  Audio bitrates unchanged from the SDR ladder. */
+export const DESKTOP_HDR_PROFILES: TranscodeProfile[] = [
+  // 2160p-hdr replaces the former HEVC HDR "remux" pass-through at the
+  // top of the HDR ladder. Pure `-c:v copy` is incompatible with the
+  // synthetic uniform-3s VOD playlist (segments cut at every source
+  // IDR → variable durations 1–10 s+), and re-encode forces predictable
+  // 3 s segments via `-force_key_frames`. 28 Mbps HEVC Main10 is
+  // visually transparent vs typical 50–80 Mbps source 4K HDR — the
+  // re-encode preserves HDR10/HLG signaling end-to-end.
+  { name: '2160p-hdr', maxWidth: 3840, maxHeight: 2160, videoBitrate: '28M', audioBitrate: '192k' },
+  { name: '1080p-hdr', maxWidth: 1920, maxHeight: 1080, videoBitrate: '5500k', audioBitrate: '192k' },
+  { name: '720p-hdr',  maxWidth: 1280, maxHeight: 720,  videoBitrate: '2800k', audioBitrate: '128k' },
+  { name: '480p-hdr',  maxWidth: 854,  maxHeight: 480,  videoBitrate: '1400k', audioBitrate: '96k' },
+];
+
+export const MOBILE_HDR_PROFILES: TranscodeProfile[] = [
+  { name: '2160p-hdr', maxWidth: 3840, maxHeight: 2160, videoBitrate: '12M',   audioBitrate: '192k' },
+  { name: '1080p-hdr', maxWidth: 1920, maxHeight: 1080, videoBitrate: '2200k', audioBitrate: '192k' },
+  { name: '720p-hdr',  maxWidth: 1280, maxHeight: 720,  videoBitrate: '1100k', audioBitrate: '128k' },
+  { name: '480p-hdr',  maxWidth: 854,  maxHeight: 480,  videoBitrate: '600k',  audioBitrate: '96k' },
+];
+
 export function getLadderForDevice(deviceType: DeviceType | undefined): TranscodeProfile[] {
   if (deviceType === 'mobile') return MOBILE_PROFILES;
   return DESKTOP_PROFILES;
+}
+
+/** HDR-preserving ladder. Stops at 480p — below that, HDR's visual
+ *  benefit is moot and the encode cost isn't justified. */
+export function getHdrLadderForDevice(deviceType: DeviceType | undefined): TranscodeProfile[] {
+  if (deviceType === 'mobile') return MOBILE_HDR_PROFILES;
+  return DESKTOP_HDR_PROFILES;
+}
+
+/** True when a profile name belongs to the HEVC HDR ladder. Drives the
+ *  encoder dispatch in ffmpeg-args (hevc_qsv Main10) and the CODECS
+ *  string emission in master-playlist (hvc1.* + VIDEO-RANGE=PQ). */
+export function isHdrProfile(name: string): boolean {
+  return name.endsWith('-hdr');
 }
 
 /** Backward-compatible alias — most callers want the desktop ladder. */

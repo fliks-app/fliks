@@ -5,6 +5,7 @@ import {
   QualityOption,
   TranscodeReason,
 } from './dto/playback-info.dto';
+import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { ResolvedFile } from './streaming.service';
 import {
   DeviceType,
@@ -29,7 +30,10 @@ import {
 export class StreamBuilderService {
   private readonly log = new Logger(StreamBuilderService.name);
 
-  constructor(private readonly transcodingService: TranscodingService) {}
+  constructor(
+    private readonly transcodingService: TranscodingService,
+    private readonly activeStreamTracker: ActiveStreamTracker,
+  ) {}
 
   /**
    * Evaluate a media file against a device profile and return the playback decision.
@@ -98,7 +102,29 @@ export class StreamBuilderService {
     // HDR detection
     const isSourceHdr = !!source.hdrFormat;
     const clientSupportsHdr = profile.supportsHdr === true;
-    const needsTonemapping = isSourceHdr && !clientSupportsHdr;
+    // HEVC HDR ladder eligibility. Triggers a separate master.m3u8 path
+    // (HEVC Main10 transcodes + remux at source resolution, all carrying
+    // BT.2020/PQ in their VUI) instead of the H.264 SDR ladder. Gated by:
+    //   - Source video codec is HEVC (only codec we can pass through /
+    //     re-encode while preserving HDR signaling in HLS).
+    //   - Client claims HDR support (browser-device-profile sourced from
+    //     `AVPlayer.eligibleForHDRPlayback` on iOS, MediaCapabilities on
+    //     web/Android).
+    //   - HEVC encoding is enabled in admin streaming settings. The
+    //     toggle falls back to H.264 SDR tonemap on every rung for
+    //     deployments whose HW path can't sustain hevc_qsv Main10
+    //     (older Intel iGPUs, no Main10 encoder available).
+    const hevcEnabled = this.activeStreamTracker.getHevcHdrEnabled();
+    const useHdrLadder =
+      isSourceHdr &&
+      clientSupportsHdr &&
+      sourceVideoCodec === 'hevc' &&
+      hevcEnabled;
+    // Tone-map iff the source is HDR and we're not routing through the
+    // HDR ladder. Anything that re-encodes via H.264 needs the tonemap
+    // filter or AVPlayer rejects with -12927 (mismatched VUI vs codec).
+    const needsTonemapping = isSourceHdr && !useHdrLadder;
+    this.activeStreamTracker.setHdrLadder(resolved.mediaFile.id, useHdrLadder);
     const needsBurnIn = !!burnInSubtitleId;
     const needsCrop = !!v?.crop;
 
@@ -249,9 +275,13 @@ export class StreamBuilderService {
               ),
             },
         outputContainer: 'hls',
-        hwAccel: canCopyAudio
-          ? 'none'
-          : this.transcodingService.getDetectedHwAccel(),
+        // Report the backend's detected hwAccel even on the remux path:
+        // the stats overlay binds this to the active *quality* (remux →
+        // "Direct playback" / transcode rung → "Transcoding (<HW>)"). A
+        // hard-coded 'none' here surfaced as "Transcoding (CPU)" as soon
+        // as the user switched to a transcoded rung (e.g. 1080p-hdr via
+        // hevc_qsv main10), since the field is stale for the new session.
+        hwAccel: this.transcodingService.getDetectedHwAccel(),
         tonemapping: false,
         remuxMasterBandwidthBps: remuxBw > 0 ? remuxBw : undefined,
         transcodeBitrateByQuality,

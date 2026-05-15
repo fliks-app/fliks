@@ -24,6 +24,7 @@ import { SubtitleStreamService } from './subtitle-stream.service';
 import {
   TranscodingService,
   PROFILES,
+  DESKTOP_HDR_PROFILES,
   SessionContext,
   getLadderForDevice,
 } from './transcoding';
@@ -37,7 +38,11 @@ import { MarkersService } from '../markers/markers.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 import { StreamingSettingsCache } from './streaming-settings-cache.service';
 
-const VALID_QUALITIES = new Set([...PROFILES.map((p) => p.name), 'remux']);
+const VALID_QUALITIES = new Set([
+  ...PROFILES.map((p) => p.name),
+  ...DESKTOP_HDR_PROFILES.map((p) => p.name),
+  'remux',
+]);
 
 /**
  * Inject HLS X-TIMESTAMP-MAP header so the player aligns VTT cues to the
@@ -185,6 +190,8 @@ export class StreamingController {
       // in the tracker, threaded through here so respawns / quality
       // switches stay coherent with what playback-info promised.
       audioPlan: this.activeStreamTracker.getAudioPlan(mediaFileId) ?? undefined,
+      sourceVideoCodec: (si?.video?.[0]?.codec ?? '').toLowerCase() || undefined,
+      isSourceHdr: !!si?.video?.[0]?.hdrFormat,
     };
   }
 
@@ -231,17 +238,15 @@ export class StreamingController {
       );
       if (existing && existing.process.exitCode === null) return;
       const ctx = this.buildSessionContext(req, resolved, mediaFileId);
-      // 'remux'/'original' are mapped to the top transcode profile in the
-      // master playlist — do the same mapping here so the pre-spawned
-      // session matches the variant the player is about to request.
-      let targetQuality = startQuality;
-      if (startQuality === 'remux' || startQuality === 'original') {
-        const sourceW =
-          this.activeStreamTracker.getSourceWidth(mediaFileId) || 0;
-        const ladder = getLadderForDevice(deviceType);
-        const top = ladder.find((p) => p.maxWidth <= sourceW) ?? ladder[0];
-        targetQuality = top.name;
-      }
+
+      // Prewarm only runs for transcode rungs. Plain `remux` / `original`
+      // pseudo-qualities map onto the top profile of the device ladder
+      // (HDR top rung is now a transcode, not a copy pass-through), so
+      // the same transcode prewarm applies.
+      const targetQuality =
+        startQuality === 'remux' || startQuality === 'original'
+          ? getLadderForDevice(deviceType)[0].name
+          : startQuality;
       const startSegment = Math.max(0, secondsToSegmentIndex(effectiveStartAt));
 
       // Spawn early en PARALLÈLE de main (fire-and-forget). hlsSegment
@@ -386,6 +391,9 @@ export class StreamingController {
       audioStreamRaw != null ? parseInt(audioStreamRaw, 10) : undefined;
 
     const ss = await this.getStreamingSettings();
+    // Push the global HEVC HDR toggle to the tracker before evaluate —
+    // stream-builder reads it synchronously to decide useHdrLadder.
+    this.activeStreamTracker.setHevcHdrEnabled(ss.hevcHdrEnabled);
 
     const result = this.streamBuilder.evaluate(
       resolved,
@@ -609,6 +617,19 @@ export class StreamingController {
 
     const includeRemux = firstQueryString(req.query, 'remux') === '1';
     const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
+    // HDR ladder eligibility — decided by stream-builder at playback-info
+    // time and cached in the tracker. Independent from `includeRemux`:
+    // even a /master.m3u8 without `?remux=1` should emit the HDR ladder
+    // when the source + client combination warrant it.
+    const sourceHdrFormat = v?.hdrFormat as 'HDR10' | 'HLG' | undefined;
+    const hdrPassThrough =
+      this.activeStreamTracker.getHdrLadder(mediaFileId) && sourceHdrFormat
+        ? {
+            hdrFormat: sourceHdrFormat,
+            videoBitRateBps: v?.bitRate ?? undefined,
+            audioBitRateBps: si?.audio?.[0]?.bitRate ?? undefined,
+          }
+        : undefined;
     const audioStreams: { language?: string; title?: string }[] =
       si?.audio ?? [];
     // Multi-audio is exposed via separate EXT-X-MEDIA renditions so the
@@ -640,6 +661,7 @@ export class StreamingController {
       deviceType,
       (this.activeStreamTracker.getAudioPlan(mediaFileId)?.codec ?? 'aac') as
         | 'aac' | 'ac3' | 'eac3',
+      hdrPassThrough,
     );
 
     this.activeStreamTracker.setAudioStreamCount(
@@ -955,11 +977,17 @@ export class StreamingController {
     // Cast sessions use MPEG-TS segments (no init segment) to avoid the
     // fMP4 priming desync the Cast receiver doesn't compensate for.
     const segExt = useTs ? 'ts' : 'm4s';
+    // var_stream_map writes per-variant under `<idx>/` with init_<idx>.mp4.
+    // The remux session is video-only on multi-audio sources but does NOT
+    // use var_stream_map (single output, init.mp4 + seg-N.m4s flat) —
+    // forcing init_0.mp4 there serves a 404.
+    const usesVarStreamMapLayout = multiAudio && quality !== 'remux';
     const initName = useTs
       ? undefined
-      : multiAudio
+      : usesVarStreamMapLayout
         ? 'init_0.mp4'
         : 'init.mp4';
+
     const playlist = buildVodPlaylist(
       duration,
       (seg) => `${basePath}/seg-${seg}.${segExt}${tokenParam}`,
@@ -1013,9 +1041,22 @@ export class StreamingController {
     // would block on the main session's HDR-tonemap+seek cold-start
     // (~3s on 4K HDR), gating Shaka's first-frame render on the slowest
     // path even though seg-0 was already served from early.
-    if (segment.startsWith('init') && existing) {
+    //
+    // The `quality` gate is load-bearing: when a prewarm session is running
+    // on a different quality (e.g. 2160p H.264 prewarmed before the player
+    // picked the remux variant), the wrong-layout init file (`0/init_0.mp4`
+    // for var_stream_map vs flat `init.mp4` for remux) never appears, and
+    // `getSegmentPath` waits the full 60s timeout before the slow path can
+    // kill the old session and spawn the right one — a hard 60s stall to
+    // first frame.
+    const sessionQualityMatches =
+      existing != null &&
+      (quality === 'remux' ? !!existing.remux : existing.quality === quality);
+    if (segment.startsWith('init') && existing && sessionQualityMatches) {
       const ma = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
-      const initFile = ma ? `0/${segment}` : segment;
+      // Same caveat as the segment path: remux video-only doesn't use
+      // var_stream_map, so the `0/` prefix would 404 on the init lookup.
+      const initFile = ma && quality !== 'remux' ? `0/${segment}` : segment;
       const earlySession = this.transcodingService.getExistingEarlySession(
         mediaFileId,
         req.user?.id,
@@ -1053,7 +1094,7 @@ export class StreamingController {
     // (exitCode !== null) still have valid segments in cache — don't skip them.
     if (existing && existing.quality === quality) {
       const varStreamMap = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
-      const segName = varStreamMap ? `0/${segment}` : segment;
+      const segName = varStreamMap && quality !== 'remux' ? `0/${segment}` : segment;
       const segPath = `${existing.cachePath}/${segName}`;
       if (fs.existsSync(segPath)) {
         existing.lastAccess = Date.now();
@@ -1140,9 +1181,12 @@ export class StreamingController {
             ctx,
           );
 
-    // With var_stream_map (fMP4 + multi-audio), video segments are in subdirectory "0/"
+    // With var_stream_map (fMP4 + multi-audio), video segments are in
+    // subdirectory "0/". The remux session keeps a flat layout (no
+    // var_stream_map), so the `0/` prefix would 404 there.
     const varStreamMap = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
-    const segName = varStreamMap ? `0/${segment}` : segment;
+    const usesVarStreamMapLayout = varStreamMap && quality !== 'remux';
+    const segName = usesVarStreamMapLayout ? `0/${segment}` : segment;
 
     const segPath = await this.transcodingService.getSegmentPath(
       session,

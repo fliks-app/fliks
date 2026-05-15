@@ -17,7 +17,7 @@ import {
   segmentIndexToSeconds,
   setSegmentDuration as applySegmentDuration,
 } from './constants';
-import { getLadderForDevice } from './profiles';
+import { getHdrLadderForDevice, getLadderForDevice, isHdrProfile } from './profiles';
 import {
   buildAudioOnlyFfmpegArgs,
   buildFfmpegArgs,
@@ -249,7 +249,19 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     defaultAudioIndex = 0,
     deviceType: DeviceType = 'desktop',
     outputAudioCodec: 'aac' | 'ac3' | 'eac3' = 'aac',
+    hdrPassThrough?: {
+      hdrFormat: 'HDR10' | 'HLG';
+      videoBitRateBps?: number;
+      audioBitRateBps?: number;
+    },
   ): string {
+    // Only the QSV branch in ffmpeg-args has `hevc_qsv Main10` wired —
+    // every other hwAccel hits libx264 for HEVC HDR profile names and
+    // produces H.264 segments that contradict the master's `hvc1.*`
+    // CODECS string. Skip the lower-res transcode rungs on non-QSV
+    // backends so we don't hand the player a manifest claim we can't
+    // fulfil. The top remux rung stays — `-c:v copy` works everywhere.
+    const canEncodeHevcHdr = this.detectedHwAccel === 'qsv';
     return generateMasterPlaylist(
       mediaFileId,
       sourceWidth,
@@ -262,6 +274,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       defaultAudioIndex,
       deviceType,
       outputAudioCodec,
+      hdrPassThrough,
+      canEncodeHevcHdr,
     );
   }
 
@@ -344,7 +358,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const ladder = getLadderForDevice(ctx?.deviceType);
+    const ladder = isHdrProfile(quality)
+      ? getHdrLadderForDevice(ctx?.deviceType)
+      : getLadderForDevice(ctx?.deviceType);
     const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
     const sessionDir = path.join(this.cachePath, key, quality);
     const dirExisted = existsSync(sessionDir);
@@ -397,7 +413,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const ctxAudioStreams = ctx?.audioStreams;
     const useVarStreamMap =
       isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
-    const ladder = getLadderForDevice(ctx?.deviceType);
+    const ladder = isHdrProfile(quality)
+      ? getHdrLadderForDevice(ctx?.deviceType)
+      : getLadderForDevice(ctx?.deviceType);
     const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
 
     await session.ready;
@@ -492,7 +510,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         await this.killAndClean(existing.process, existing.cachePath);
       }
 
-      const ladder = getLadderForDevice(ctx?.deviceType);
+      const ladder = isHdrProfile(quality)
+        ? getHdrLadderForDevice(ctx?.deviceType)
+        : getLadderForDevice(ctx?.deviceType);
       const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
       const sessionDir = path.join(this.cachePath, id, quality);
       const dirExisted = existsSync(sessionDir);
@@ -828,7 +848,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     startSegment: number,
     ctx?: SessionContext,
   ): TranscodeSession {
-    const ladder = getLadderForDevice(ctx?.deviceType);
+    const ladder = isHdrProfile(quality)
+      ? getHdrLadderForDevice(ctx?.deviceType)
+      : getLadderForDevice(ctx?.deviceType);
     const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
     const session = this.startFfmpeg(
       sessionId,
@@ -982,6 +1004,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ctx?.trustedStreamInfo,
       ctx?.audioStreamIndex,
       this.log,
+      ctx?.sourceVideoCodec,
     );
 
     const session = this.spawnFfmpegSession({
