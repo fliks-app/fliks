@@ -111,6 +111,14 @@ export interface SessionContext {
    * rest of the pipeline are unchanged.
    */
   useTs?: boolean;
+  /**
+   * Source video codec (ffprobe `codec_name`, lowercased). Threaded
+   * through so the remux path can tag HEVC tracks with `hvc1` instead
+   * of FFmpeg's default `hev1` — Apple HLS strictly requires `hvc1`
+   * (parameter sets in moov, not mdat), and iOS AVPlayer rejects HEVC
+   * HLS variants written with the default `hev1` codec tag.
+   */
+  sourceVideoCodec?: string;
 }
 
 export interface TranscodeSession {

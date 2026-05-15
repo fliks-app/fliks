@@ -185,6 +185,7 @@ export class StreamingController {
       // in the tracker, threaded through here so respawns / quality
       // switches stay coherent with what playback-info promised.
       audioPlan: this.activeStreamTracker.getAudioPlan(mediaFileId) ?? undefined,
+      sourceVideoCodec: (si?.video?.[0]?.codec ?? '').toLowerCase() || undefined,
     };
   }
 

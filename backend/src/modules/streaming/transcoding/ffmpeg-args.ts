@@ -638,6 +638,13 @@ export function buildRemuxArgs(
   trustedStreamInfo = false,
   audioStreamIndex?: number,
   log?: Logger,
+  /** Source video codec (ffprobe `codec_name`, lowercased). Drives the
+   *  `-tag:v hvc1` flag for HEVC inputs — FFmpeg's mov muxer otherwise
+   *  defaults to `hev1`, which Apple HLS rejects: the spec requires
+   *  parameter sets in the moov sample description (`hvc1`), not inline
+   *  in the bitstream (`hev1`). Without this, iOS AVPlayer fails the
+   *  variant with error -12927 on the first segment fetch. */
+  sourceVideoCodec?: string,
 ): string[] {
   const SEGMENT_DURATION = getSegmentDuration();
 
@@ -686,6 +693,14 @@ export function buildRemuxArgs(
     } else {
       args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
     }
+  }
+
+  // HEVC sources MUST be tagged `hvc1` for Apple HLS — FFmpeg defaults
+  // to `hev1`, which AVPlayer rejects with error -12927. The flag is a
+  // no-op for non-HEVC codecs (mov muxer ignores tag overrides that
+  // don't match the codec).
+  if (sourceVideoCodec === 'hevc') {
+    args.push('-tag:v', 'hvc1');
   }
 
   args.push(
