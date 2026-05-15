@@ -979,9 +979,15 @@ export class StreamingController {
     // Cast sessions use MPEG-TS segments (no init segment) to avoid the
     // fMP4 priming desync the Cast receiver doesn't compensate for.
     const segExt = useTs ? 'ts' : 'm4s';
+    // var_stream_map writes per-variant under `<idx>/` with init_<idx>.mp4.
+    // The remux session is video-only on multi-audio sources but does NOT
+    // use var_stream_map (single output, init.mp4 + seg-N.m4s flat) —
+    // forcing init_0.mp4 there serves a 404 and crashes ExoPlayer via the
+    // Media3 fallback-options bug.
+    const usesVarStreamMapLayout = multiAudio && quality !== 'remux';
     const initName = useTs
       ? undefined
-      : multiAudio
+      : usesVarStreamMapLayout
         ? 'init_0.mp4'
         : 'init.mp4';
     const playlist = buildVodPlaylist(
@@ -1039,7 +1045,9 @@ export class StreamingController {
     // path even though seg-0 was already served from early.
     if (segment.startsWith('init') && existing) {
       const ma = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
-      const initFile = ma ? `0/${segment}` : segment;
+      // Same caveat as the segment path: remux video-only doesn't use
+      // var_stream_map, so the `0/` prefix would 404 on the init lookup.
+      const initFile = ma && quality !== 'remux' ? `0/${segment}` : segment;
       const earlySession = this.transcodingService.getExistingEarlySession(
         mediaFileId,
         req.user?.id,
@@ -1164,9 +1172,13 @@ export class StreamingController {
             ctx,
           );
 
-    // With var_stream_map (fMP4 + multi-audio), video segments are in subdirectory "0/"
+    // With var_stream_map (fMP4 + multi-audio), video segments are in
+    // subdirectory "0/". The remux session is video-only on multi-audio
+    // sources but does NOT use var_stream_map (flat layout), so the `0/`
+    // prefix would 404.
     const varStreamMap = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
-    const segName = varStreamMap ? `0/${segment}` : segment;
+    const usesVarStreamMapLayout = varStreamMap && quality !== 'remux';
+    const segName = usesVarStreamMapLayout ? `0/${segment}` : segment;
 
     const segPath = await this.transcodingService.getSegmentPath(
       session,
