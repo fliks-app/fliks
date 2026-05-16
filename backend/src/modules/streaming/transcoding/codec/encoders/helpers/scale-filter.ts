@@ -13,5 +13,5 @@
  *  escaped one is fragile across ffmpeg builds — real video sources
  *  are always large enough that mod-16 is non-zero. */
 export function scaleMod16Height(targetWidth: number): string {
-  return `trunc(ih*${targetWidth}/iw/16)*16`;
+  return `ceil(ih*${targetWidth}/iw/16)*16`;
 }

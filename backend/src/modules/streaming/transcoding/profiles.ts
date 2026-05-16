@@ -131,8 +131,12 @@ export function profileFitsSource(
 
 /** Compute output dimensions for a profile against a source. Width is
  *  capped at the source (no upscale); height follows the source aspect
- *  ratio, snapped down to a multiple of 16 so HW encoders that require
- *  mod-16 luma dimensions don't reject the variant. */
+ *  ratio, snapped UP to a multiple of 16. The HW filters we ship
+ *  (`scale_vaapi=h=-16` etc.) round up too, so master, HW and CPU all
+ *  agree on the same target — without that, the master advertises one
+ *  height and the bitstream carries another (a 16-px drift on theatrical
+ *  4K masters like 3840×2024), and the player allocates a video surface
+ *  that no longer matches the decoded frame. */
 export function profileResolution(
   p: { maxWidth: number },
   sourceWidth: number,
@@ -140,7 +144,7 @@ export function profileResolution(
 ): { width: number; height: number } {
   const width = Math.min(p.maxWidth, sourceWidth);
   const rawH = (width * sourceHeight) / sourceWidth;
-  const height = Math.floor(rawH / 16) * 16 || 16;
+  const height = Math.ceil(rawH / 16) * 16 || 16;
   return { width, height };
 }
 
