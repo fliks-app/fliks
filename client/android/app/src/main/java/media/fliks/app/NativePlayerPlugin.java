@@ -592,18 +592,33 @@ public class NativePlayerPlugin extends Plugin {
             }
 
             if (width <= 0 || height <= 0) {
-                // Auto: clear manual override → ExoPlayer re-runs adaptive selection.
+                // Auto: clear manual override and the soft size cap → ExoPlayer
+                // re-runs adaptive selection across every advertised variant.
                 pendingVideoHeight = -1;
                 player.setTrackSelectionParameters(
                         player.getTrackSelectionParameters().buildUpon()
                                 .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                                .clearVideoSizeConstraints()
                                 .build());
                 call.resolve();
                 return;
             }
 
-            // Manual override on the video group disables ABR for that track type.
-            // Store height for onTracksChanged if variants aren't available yet.
+            // Set a soft cap on max video size FIRST. This filters out
+            // higher-than-target variants from ExoPlayer's initial track
+            // selection — without it the player starts fetching the top
+            // rung from the master and only honours the override after
+            // onTracksChanged fires, costing a wasted ffmpeg session
+            // (visible in the backend log as 'Quality change [X]:
+            // 2160p-hdr → 1080p-hdr, killing old session').
+            player.setTrackSelectionParameters(
+                    player.getTrackSelectionParameters().buildUpon()
+                            .setMaxVideoSize(width, height)
+                            .build());
+            // Then pin to the exact variant once it's known (onTracksChanged).
+            // The override is a manual pick, not just a cap, so a 2160p
+            // variant with height 2016 (cinema 4K) doesn't sneak in when
+            // the user picked 1080p.
             if (!applyVideoOverrideByHeight(height)) {
                 pendingVideoHeight = height;
             } else {

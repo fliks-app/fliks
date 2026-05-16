@@ -256,7 +256,16 @@ export class StreamingController {
       // avoids the spawn-then-kill dance; the player's first segment
       // fetch starts ffmpeg synchronously at the correct rung.
       if (startQuality === 'remux' || startQuality === 'original') return;
-      const targetQuality = startQuality;
+      // When the HDR ladder is in effect, the master only publishes
+      // `*-hdr` rungs. The frontend's saved quality is height-based
+      // (`1080p`), so translate to the HDR equivalent so prewarm
+      // doesn't spawn a doomed SDR session that the player will
+      // immediately kill and replace with the matching HDR rung.
+      const targetQuality =
+        this.activeStreamTracker.getHdrLadder(mediaFileId) &&
+        !startQuality.endsWith('-hdr')
+          ? `${startQuality}-hdr`
+          : startQuality;
       const startSegment = Math.max(0, secondsToSegmentIndex(effectiveStartAt));
 
       // Spawn early en PARALLÈLE de main (fire-and-forget). hlsSegment
