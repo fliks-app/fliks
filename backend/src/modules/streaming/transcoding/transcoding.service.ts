@@ -40,7 +40,6 @@ import {
 import {
   fileExists,
   firstMissingSegment,
-  isSegmentStable,
   segmentNearby,
 } from './segment-utils';
 import { audioSessionKey, earlySessionKey, sessionKey } from './session-key';
@@ -460,10 +459,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   /**
    * Verify HW accel didn't crash on spawn; fall back to CPU if it did.
    *
-   * Runs OUTSIDE the session-creation lock — awaits session.ready + up to 5s
-   * of polling which would otherwise block every concurrent segment request
-   * on this key (seen as 10s Shaka timeouts during pre-start of big 4K/HDR
-   * sources where the first segment takes 15-30s to appear).
+   * Runs OUTSIDE the session-creation lock — `session.ready` is the
+   * coordination point: `spawnFfmpegSession` resolves it either when
+   * seg-0 lands on disk (happy path) or when the ffmpeg process closes
+   * (crash safety net). After the await, a non-zero exitCode with no
+   * segment on disk means the HW path failed — kill it and respawn on
+   * CPU.
    */
   private async verifyHwAccelOrFallback(
     session: TranscodeSession,
@@ -497,11 +498,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
       return false;
     };
-    for (let i = 0; i < 10; i++) {
-      if (session.process.exitCode !== null) break;
-      if (await segExists()) break;
-      await new Promise((r) => setTimeout(r, 500));
-    }
     const crashed = session.process.exitCode !== null && !(await segExists());
     if (!crashed) return session;
 
@@ -672,8 +668,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    * Get a segment file path, waiting if it's being generated.
    *
    * Uses fs.watch (inotify on Linux) so we react within milliseconds of
-   * ffmpeg writing the segment. Without `temp_file`, ffmpeg writes segments
-   * incrementally so we verify size-stability (50ms re-stat) before serving.
+   * ffmpeg's atomic rename. `-hls_flags +temp_file` (set by
+   * `ffmpeg-args.ts`) makes ffmpeg write each segment to `*.tmp` and
+   * rename to the final name once flushed, so seeing the final name on
+   * disk is sufficient — no size-stability poll needed.
    */
   async getSegmentPath(
     session: TranscodeSession,
@@ -682,17 +680,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ): Promise<string | null> {
     const segPath = path.join(session.cachePath, segmentName);
 
-    if (existsSync(segPath)) {
-      const stable = await isSegmentStable(segPath);
-      if (stable) return segPath;
-    }
+    if (existsSync(segPath)) return segPath;
 
     if (segmentName.includes('init')) {
       await session.ready;
-      if (existsSync(segPath)) {
-        const stable = await isSegmentStable(segPath);
-        if (stable) return segPath;
-      }
+      if (existsSync(segPath)) return segPath;
     }
 
     const dir = path.dirname(segPath);
@@ -713,26 +705,26 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         resolve(val);
       };
 
-      const tryServe = async () => {
-        if (settled || !existsSync(segPath)) return;
-        if (await isSegmentStable(segPath)) finish(segPath);
+      const tryServe = () => {
+        if (settled) return;
+        if (existsSync(segPath)) finish(segPath);
       };
 
       try {
         watcher = watch(dir, { persistent: false }, (_event, filename) => {
-          if (filename === name) void tryServe();
+          if (filename === name) tryServe();
         });
       } catch {
         // Directory doesn't exist yet — exitTimer covers it.
       }
 
-      void tryServe();
+      tryServe();
 
       exitTimer = setInterval(() => {
         if (session.process.exitCode !== null && !existsSync(segPath)) {
           finish(null);
         } else {
-          void tryServe();
+          tryServe();
         }
       }, 500);
 
