@@ -101,9 +101,14 @@ export class BrowserDeviceProfileService {
     const containers: string[] = [];
     if (this.testType(video, hasMSE, 'video/mp4')) containers.push('mp4', 'm4v', 'mov');
     if (this.testType(video, hasMSE, 'video/webm')) containers.push('webm');
-    // MKV: browsers can NOT play MKV containers directly. Do NOT add 'mkv' here.
-    // MKV files with supported codecs will be handled via DirectStream (remux to HLS)
-    // by the StreamBuilder, which checks video/audio codec support independently.
+    // MKV: browsers can NOT play MKV containers directly via MSE, but
+    // Capacitor native paths use ExoPlayer (Android) / AVPlayer (iOS),
+    // both of which demux MKV in their own pipelines. Advertising MKV
+    // support unlocks the DirectPlay path on native — the backend
+    // streams the source file untouched instead of remuxing to HLS.
+    if (Capacitor.isNativePlatform()) {
+      containers.push('mkv', 'matroska');
+    }
 
     // --- Detect supported video codecs ---
     const videoCodecs: string[] = [];
