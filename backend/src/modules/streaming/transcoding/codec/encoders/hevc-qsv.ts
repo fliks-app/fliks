@@ -14,9 +14,9 @@ export const hevcQsv: EncoderDescriptor = {
   supportsHdrMetadata: () => false,
   codecString: (target: EncoderTarget) => hevcMainCodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, preset, qsv } = input;
+    const { target, preset, qsv, filters } = input;
     const w = target.width;
-    return [
+    const common = [
       '-c:v', 'hevc_qsv',
       '-preset', preset,
       ...qsv.extra,
@@ -25,12 +25,40 @@ export const hevcQsv: EncoderDescriptor = {
       '-maxrate', String(target.videoBitrateBps + 1),
       '-rc_init_occupancy', String(qsv.rcInitOccupancy),
       '-bufsize', String(qsv.bufsize),
-      '-vf',
-      `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
+    ];
+    const trailing = [
       '-g', String(target.gopSize),
       '-keyint_min', String(target.gopSize),
       '-force_key_frames', input.forceKeyframesExpr,
       '-tag:v', 'hvc1',
+    ];
+
+    // Match h264-qsv's tonemap dispatch: HDR source going to this SDR
+    // descriptor needs an explicit HDR→SDR filter in the VAAPI scale
+    // chain. Without it the encoder sees nv12 pixels that still carry
+    // PQ luminance, then the BT.709 SPS tags injected downstream by
+    // the orchestrator turn the output into washed-out greys.
+    if (filters.tonemapVaapi) {
+      return [
+        ...common,
+        '-vf',
+        `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapVaapi},hwmap=derive_device=qsv,format=qsv`,
+        ...trailing,
+      ];
+    }
+    if (filters.tonemapOpencl) {
+      return [
+        ...common,
+        '-vf',
+        `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
+        ...trailing,
+      ];
+    }
+    return [
+      ...common,
+      '-vf',
+      `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
+      ...trailing,
     ];
   },
 };
