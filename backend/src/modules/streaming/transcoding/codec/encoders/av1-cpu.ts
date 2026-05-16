@@ -1,5 +1,6 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { av1CodecString } from '../codec-strings';
+import { hdrColorArgs } from './helpers/hdr-variants';
 
 /** Maps a named ffmpeg preset onto the SVT-AV1 integer preset namespace
  *  (`0` slowest / highest-quality, `13` fastest). Values picked to match
@@ -75,9 +76,7 @@ export const av1CpuHdr10: EncoderDescriptor = {
       '-g', String(target.gopSize),
       '-keyint_min', String(target.gopSize),
       '-force_key_frames', input.forceKeyframesExpr,
-      '-color_primaries', 'bt2020',
-      '-color_trc', 'smpte2084',
-      '-colorspace', 'bt2020nc',
+      ...hdrColorArgs('HDR10'),
     ];
   },
 };
@@ -111,9 +110,7 @@ export const av1CpuHlg: EncoderDescriptor = {
       '-g', String(target.gopSize),
       '-keyint_min', String(target.gopSize),
       '-force_key_frames', input.forceKeyframesExpr,
-      '-color_primaries', 'bt2020',
-      '-color_trc', 'arib-std-b67',
-      '-colorspace', 'bt2020nc',
+      ...hdrColorArgs('HLG'),
     ];
   },
 };

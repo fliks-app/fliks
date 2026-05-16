@@ -5,6 +5,7 @@ import {
   segmentIndexToSeconds,
 } from './constants';
 import { isHdrProfile, parseBitrateToBps } from './profiles';
+import { requestedHwAccelFor } from './hw-detect';
 import type {
   BurnInSubtitle,
   HwAccelType,
@@ -166,16 +167,10 @@ export function buildFfmpegArgs(
   // would give 200 Mbps for "200k" (it drops the suffix and multiplies as if M).
   const bitrateNum = parseBitrateToBps(profile.videoBitrate);
 
-  // Force pipeline adjustments when HW accel can't handle required filters:
-  // - Subtitle burn-in forces CPU for QSV/VAAPI/NVENC (filters need CPU surfaces)
-  //   but NOT for VideoToolbox — VT decode already outputs CPU buffers, so
-  //   libswscale filters (including subtitle overlay) work in-place.
-  // - QSV can't crop (fixed-size pool constraint), fallback to VAAPI encode
-  const requestedHwAccel: HwAccelType = burnIn?.filter && hwAccel !== 'videotoolbox'
-    ? 'none'
-    : hwAccel === 'qsv' && crop
-      ? 'vaapi'
-      : hwAccel;
+  const requestedHwAccel = requestedHwAccelFor(hwAccel, {
+    burnIn: !!burnIn?.filter,
+    crop: !!crop,
+  });
 
   // Resolve the actual encoder before setting up the input pipeline.
   // The registry can downgrade to CPU when a HW encoder failed its

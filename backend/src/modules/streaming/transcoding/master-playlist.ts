@@ -2,6 +2,8 @@ import {
   getHdrLadderForDevice,
   getLadderForDevice,
   parseBitrateToBps,
+  profileFitsSource,
+  profileResolution,
 } from './profiles';
 import type { DeviceType, TranscodeProfile } from './types';
 import type { CodecVariant } from './codec/types';
@@ -18,8 +20,8 @@ export function getAvailableProfiles(
   sourceHeight: number,
   deviceType: DeviceType = 'desktop',
 ): TranscodeProfile[] {
-  return getLadderForDevice(deviceType).filter(
-    (p) => p.maxWidth <= sourceWidth || p.maxHeight <= sourceHeight,
+  return getLadderForDevice(deviceType).filter((p) =>
+    profileFitsSource(p, sourceWidth, sourceHeight),
   );
 }
 
@@ -117,20 +119,18 @@ export function generateMasterPlaylist(
     // Includes the source-resolution rung if there's an HDR profile
     // at or below source height.
     if (canEncodeHevcHdr) {
-      // Width OR height keeps cinema-aspect sources (e.g. 3840×2024 IMAX
-      // bluray) on the 2160p-hdr rung. A pure `maxHeight <= sourceHeight`
-      // check drops 2160p-hdr for any source whose vertical resolution
-      // falls below 2160 — which is most theatrical 4K masters.
-      const hdrLadder = getHdrLadderForDevice(deviceType).filter(
-        (p) => p.maxWidth <= sourceWidth || p.maxHeight <= sourceHeight,
+      const hdrLadder = getHdrLadderForDevice(deviceType).filter((p) =>
+        profileFitsSource(p, sourceWidth, sourceHeight),
       );
       for (const p of hdrLadder) {
         const avg =
           parseBitrateToBps(p.videoBitrate) + parseBitrateToBps(p.audioBitrate);
         const bw = Math.round(avg * 1.5);
-        const w = Math.min(p.maxWidth, sourceWidth);
-        const rawH = (w * sourceHeight) / sourceWidth;
-        const h = Math.floor(rawH / 16) * 16 || 16;
+        const { width: w, height: h } = profileResolution(
+          p,
+          sourceWidth,
+          sourceHeight,
+        );
         const videoCodec = hevcMain10CodecStringForHeight(p.maxHeight);
         lines.push(
           `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},VIDEO-RANGE=${range},NAME="${p.name}",CODECS="${videoCodec},${audioCodec}"${hdrAudioAttr}`,
@@ -200,9 +200,11 @@ export function generateMasterPlaylist(
     // ~1.5× nominal gives AVPlayer ABR a stable hysteresis margin and
     // stops it from down-/up-shifting on every VBV spike.
     const bw = Math.round(avg * 1.5);
-    const w = Math.min(p.maxWidth, sourceWidth);
-    const rawH = (w * sourceHeight) / sourceWidth;
-    const h = Math.floor(rawH / 16) * 16 || 16;
+    const { width: w, height: h } = profileResolution(
+      p,
+      sourceWidth,
+      sourceHeight,
+    );
     const target = {
       width: w,
       height: p.maxHeight,

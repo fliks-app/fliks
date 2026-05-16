@@ -28,6 +28,7 @@ import {
   SessionContext,
   getHdrLadderForDevice,
   getLadderForDevice,
+  profileFitsSource,
 } from './transcoding';
 import { secondsToSegmentIndex } from './transcoding/constants';
 import { ThumbnailService } from './thumbnail.service';
@@ -336,7 +337,7 @@ export class StreamingController {
 
     const qualities: { key: string; label: string; estimatedSize: number }[] = [];
     for (const p of PROFILES) {
-      if (p.maxWidth > sourceWidth && p.maxHeight > sourceHeight) continue;
+      if (!profileFitsSource(p, sourceWidth, sourceHeight)) continue;
       const videoBps = this.parseBitrateString(p.videoBitrate);
       const audioBps = this.parseBitrateString(p.audioBitrate);
       const duration = (info as any)?.durationSeconds ?? 0;

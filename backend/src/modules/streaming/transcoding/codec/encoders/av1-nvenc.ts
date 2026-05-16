@@ -1,5 +1,6 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { av1CodecString } from '../codec-strings';
+import { hdrColorArgs } from './helpers/hdr-variants';
 
 /** NVIDIA NVENC AV1 encoder — Ada Lovelace (RTX 4000 series) and later.
  *  Pascal, Turing and Ampere don't ship the AV1 encode unit, so
@@ -77,9 +78,7 @@ export const av1NvencHdr10: EncoderDescriptor = {
       '-g', String(target.gopSize),
       '-keyint_min', String(target.gopSize),
       '-force_key_frames', input.forceKeyframesExpr,
-      '-color_primaries', 'bt2020',
-      '-color_trc', 'smpte2084',
-      '-colorspace', 'bt2020nc',
+      ...hdrColorArgs('HDR10'),
       '-master_display',
       'G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1)',
       '-max_cll', '1000,400',
@@ -112,9 +111,7 @@ export const av1NvencHlg: EncoderDescriptor = {
       '-g', String(target.gopSize),
       '-keyint_min', String(target.gopSize),
       '-force_key_frames', input.forceKeyframesExpr,
-      '-color_primaries', 'bt2020',
-      '-color_trc', 'arib-std-b67',
-      '-colorspace', 'bt2020nc',
+      ...hdrColorArgs('HLG'),
     ];
   },
 };

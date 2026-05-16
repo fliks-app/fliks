@@ -12,8 +12,11 @@ import {
   ORIGINAL_SEPARATE_RATIO,
   TranscodeProfile,
   TranscodingService,
+  encoderRegistry,
   getLadderForDevice,
   parseBitrateToBps,
+  profileFitsSource,
+  requestedHwAccelFor,
 } from './transcoding';
 import { pickPrimaryVariant } from './transcoding/codec/selector';
 import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
@@ -332,17 +335,17 @@ export class StreamBuilderService {
         message: `HDR → SDR (tone mapping ${source.hdrFormat})`,
       });
     }
-    // Compute effective HW accel (same logic as transcoding/ffmpeg-args.ts buildFfmpegArgs):
-    // - Burn-in forces CPU for QSV/VAAPI/NVENC (filters need HW surfaces),
-    //   but NOT for VideoToolbox — VT decode outputs CPU buffers, so
-    //   subtitle filters work in-place.
-    // - QSV + crop falls back to VAAPI (fixed-size pool constraint)
-    let effectiveHwAccel = this.transcodingService.getDetectedHwAccel();
-    if (needsBurnIn && effectiveHwAccel !== 'videotoolbox') {
-      effectiveHwAccel = 'none';
-    } else if (effectiveHwAccel === 'qsv' && needsCrop) {
-      effectiveHwAccel = 'vaapi';
-    }
+    // Mirror the ffmpeg-args dispatch: same pipeline rule, same registry
+    // resolve. Picks up the registry's runtime fallback (e.g. h264_vaapi
+    // disabled → libx264) so the stats overlay reports the actual encoder
+    // that will run, not the host's nominal HW accel.
+    const requestedHwAccel = requestedHwAccelFor(
+      this.transcodingService.getDetectedHwAccel(),
+      { burnIn: needsBurnIn, crop: needsCrop },
+    );
+    const effectiveHwAccel =
+      encoderRegistry.resolve(selectedVariant, requestedHwAccel)?.hwAccel ??
+      'none';
 
     // Audio output decision — single source of truth for ffmpeg-args and
     // the master playlist. Three paths:
@@ -470,8 +473,8 @@ export class StreamBuilderService {
       source.formatBitRate ??
       (source.videoBitRate ?? 0) + (source.audioBitRate ?? 0);
 
-    const available = ladder.filter(
-      (p) => p.maxWidth <= sourceW || p.maxHeight <= sourceH,
+    const available = ladder.filter((p) =>
+      profileFitsSource(p, sourceW, sourceH),
     );
     if (!available.length) available.push(ladder[ladder.length - 1]);
     // Ladder is ordered top→bottom, so available[0] is the source-resolution rung.

@@ -1,5 +1,6 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
+import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
 
 /** Apple VideoToolbox HEVC SDR encoder — Mac 2017+ (T2 / Apple Silicon).
  *  VT decode emits CPU-backed buffers, so the filter chain mirrors the
@@ -95,12 +96,7 @@ export const hevcVideotoolboxHdr10: EncoderDescriptor = {
       String(target.gopSize),
       '-force_key_frames',
       input.forceKeyframesExpr,
-      '-color_primaries',
-      'bt2020',
-      '-color_trc',
-      'smpte2084',
-      '-colorspace',
-      'bt2020nc',
+      ...hdrColorArgs('HDR10'),
       '-tag:v',
       'hvc1',
     ];
@@ -108,17 +104,7 @@ export const hevcVideotoolboxHdr10: EncoderDescriptor = {
 };
 
 /** VT HEVC Main10 HLG variant — same silent-fallback caveat as HDR10. */
-export const hevcVideotoolboxHlg: EncoderDescriptor = {
-  id: 'hevc_videotoolbox_hlg',
-  hwAccel: 'videotoolbox',
-  variant: { codec: 'hevc', bitDepth: 10, hdr: 'HLG' },
-  supports: () => true,
-  supportsHdrMetadata: () => false,
-  codecString: (target: EncoderTarget) => hevcMain10CodecString(target),
-  buildArgs(input: EncoderInput): string[] {
-    const args = hevcVideotoolboxHdr10.buildArgs(input);
-    const tIdx = args.indexOf('-color_trc');
-    if (tIdx !== -1) args[tIdx + 1] = 'arib-std-b67';
-    return args;
-  },
-};
+export const hevcVideotoolboxHlg: EncoderDescriptor = hlgFromHdr10(
+  'hevc_videotoolbox_hlg',
+  hevcVideotoolboxHdr10,
+);

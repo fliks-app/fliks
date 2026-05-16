@@ -1,5 +1,6 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { av1CodecString } from '../codec-strings';
+import { hdrColorArgs } from './helpers/hdr-variants';
 
 /** AMD VAAPI AV1 encoder — RDNA3 (RX 7000) and Ryzen 7000/8000 APUs on
  *  Mesa 23.3+. No `-preset` knob (the VAAPI driver picks rate control
@@ -77,9 +78,7 @@ export const av1VaapiHdr10: EncoderDescriptor = {
       '-g', String(target.gopSize),
       '-keyint_min', String(target.gopSize),
       '-force_key_frames', input.forceKeyframesExpr,
-      '-color_primaries', 'bt2020',
-      '-color_trc', 'smpte2084',
-      '-colorspace', 'bt2020nc',
+      ...hdrColorArgs('HDR10'),
     ];
   },
 };

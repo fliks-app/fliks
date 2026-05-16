@@ -1,5 +1,6 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
+import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
 
 /** NVIDIA NVENC HEVC SDR encoder — Maxwell 2nd gen (GM20x) and later.
  *  Tonemap path round-trips via CPU because mainline FFmpeg still has no
@@ -98,12 +99,7 @@ export const hevcNvencHdr10: EncoderDescriptor = {
       String(target.gopSize),
       '-force_key_frames',
       input.forceKeyframesExpr,
-      '-color_primaries',
-      'bt2020',
-      '-color_trc',
-      'smpte2084',
-      '-colorspace',
-      'bt2020nc',
+      ...hdrColorArgs('HDR10'),
       '-tag:v',
       'hvc1',
     ];
@@ -112,17 +108,7 @@ export const hevcNvencHdr10: EncoderDescriptor = {
 
 /** NVENC HEVC Main10 HLG variant — identical to HDR10 with `arib-std-b67`
  *  for the transfer tag. */
-export const hevcNvencHlg: EncoderDescriptor = {
-  id: 'hevc_nvenc_hlg',
-  hwAccel: 'nvenc',
-  variant: { codec: 'hevc', bitDepth: 10, hdr: 'HLG' },
-  supports: () => true,
-  supportsHdrMetadata: () => true,
-  codecString: (target: EncoderTarget) => hevcMain10CodecString(target),
-  buildArgs(input: EncoderInput): string[] {
-    const args = hevcNvencHdr10.buildArgs(input);
-    const tIdx = args.indexOf('-color_trc');
-    if (tIdx !== -1) args[tIdx + 1] = 'arib-std-b67';
-    return args;
-  },
-};
+export const hevcNvencHlg: EncoderDescriptor = hlgFromHdr10(
+  'hevc_nvenc_hlg',
+  hevcNvencHdr10,
+);

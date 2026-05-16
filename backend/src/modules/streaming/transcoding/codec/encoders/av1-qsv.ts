@@ -1,5 +1,6 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { av1CodecString } from '../codec-strings';
+import { hdrColorArgs } from './helpers/hdr-variants';
 
 /** Intel QSV AV1 encoder — Arc (DG2) and Meteor Lake iGPU and above on
  *  Linux 6.2+. Same VAAPI-decode → scale_vaapi → hwmap-to-qsv chain as
@@ -87,9 +88,7 @@ export const av1QsvHdr10: EncoderDescriptor = {
       '-g', String(target.gopSize),
       '-keyint_min', String(target.gopSize),
       '-force_key_frames', input.forceKeyframesExpr,
-      '-color_primaries', 'bt2020',
-      '-color_trc', 'smpte2084',
-      '-colorspace', 'bt2020nc',
+      ...hdrColorArgs('HDR10'),
     ];
   },
 };

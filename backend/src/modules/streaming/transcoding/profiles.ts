@@ -115,6 +115,35 @@ export function isHdrProfile(name: string): boolean {
   return name.endsWith('-hdr');
 }
 
+/** True when a profile is small enough to encode on the source — either
+ *  axis fitting is enough so cinema-aspect 4K (e.g. 3840×2024 IMAX)
+ *  still gets the 2160p ladder rung. A strict `maxHeight <= sourceHeight`
+ *  check drops the top rung for any source whose vertical resolution
+ *  falls below the profile's category label, which is wrong for most
+ *  theatrical 4K masters. */
+export function profileFitsSource(
+  p: { maxWidth: number; maxHeight: number },
+  sourceWidth: number,
+  sourceHeight: number,
+): boolean {
+  return p.maxWidth <= sourceWidth || p.maxHeight <= sourceHeight;
+}
+
+/** Compute output dimensions for a profile against a source. Width is
+ *  capped at the source (no upscale); height follows the source aspect
+ *  ratio, snapped down to a multiple of 16 so HW encoders that require
+ *  mod-16 luma dimensions don't reject the variant. */
+export function profileResolution(
+  p: { maxWidth: number },
+  sourceWidth: number,
+  sourceHeight: number,
+): { width: number; height: number } {
+  const width = Math.min(p.maxWidth, sourceWidth);
+  const rawH = (width * sourceHeight) / sourceWidth;
+  const height = Math.floor(rawH / 16) * 16 || 16;
+  return { width, height };
+}
+
 /** Backward-compatible alias — most callers want the desktop ladder. */
 export const PROFILES = DESKTOP_PROFILES;
 

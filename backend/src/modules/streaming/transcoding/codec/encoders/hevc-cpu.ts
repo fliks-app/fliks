@@ -1,5 +1,6 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
+import { hdrColorArgs } from './helpers/hdr-variants';
 
 /** Universal libx265 HEVC SDR fallback. Same thread cap as libx264 (4):
  *  first-segment latency stays bounded because the frame thread pool
@@ -104,12 +105,7 @@ export const hevcCpuHdr10: EncoderDescriptor = {
       input.forceKeyframesExpr,
       '-x265-params',
       x265Params,
-      '-color_primaries',
-      'bt2020',
-      '-color_trc',
-      'smpte2084',
-      '-colorspace',
-      'bt2020nc',
+      ...hdrColorArgs('HDR10'),
       '-tag:v',
       'hvc1',
     ];
@@ -158,12 +154,7 @@ export const hevcCpuHlg: EncoderDescriptor = {
       input.forceKeyframesExpr,
       '-x265-params',
       x265Params,
-      '-color_primaries',
-      'bt2020',
-      '-color_trc',
-      'arib-std-b67',
-      '-colorspace',
-      'bt2020nc',
+      ...hdrColorArgs('HLG'),
       '-tag:v',
       'hvc1',
     ];

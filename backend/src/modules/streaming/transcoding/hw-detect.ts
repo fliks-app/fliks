@@ -75,3 +75,25 @@ export async function detectHwAccel(log: Logger): Promise<HwAccelType> {
 
   return 'none';
 }
+
+/** Map the host-detected hwAccel onto the slice the orchestrator should
+ *  ask the encoder registry for, applying the two pipeline-level
+ *  filtering constraints:
+ *
+ *  - Subtitle burn-in needs CPU surfaces for libass — force `'none'`
+ *    on QSV / VAAPI / NVENC. VideoToolbox decode already lands in CPU
+ *    buffers so libass works in-place.
+ *  - QSV cannot crop (the fixed-size frame pool can't accept variable
+ *    output from CPU `crop`) — fall back to VAAPI for the encode.
+ *
+ *  Centralised here so `ffmpeg-args` and `stream-builder` (the stats
+ *  overlay path) can't drift on the rule. The registry still has the
+ *  final say at resolve time. */
+export function requestedHwAccelFor(
+  detected: HwAccelType,
+  needs: { burnIn: boolean; crop: boolean },
+): HwAccelType {
+  if (needs.burnIn && detected !== 'videotoolbox') return 'none';
+  if (detected === 'qsv' && needs.crop) return 'vaapi';
+  return detected;
+}
