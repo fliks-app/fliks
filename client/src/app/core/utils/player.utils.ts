@@ -1,6 +1,34 @@
 import type { TranslateService } from '@ngx-translate/core';
 import { localizeLanguage } from './language.utils';
 
+/** Pixel widths backing each ladder rung id (must match the backend
+ *  `PROFILES` table). Used by NativeEngine + quality-manager to set
+ *  ExoPlayer's max-resolution constraint; ExoPlayer matches tracks by
+ *  exact width × height, so a 1px mismatch silently picks the wrong
+ *  rung.
+ *
+ *  `original` is intentionally absent — call sites that need it pass a
+ *  sentinel resolution directly (the source dimensions, or 99999 when
+ *  the source isn't known yet). */
+export const PROFILE_WIDTHS: Record<string, number> = {
+  '2160p': 3840,
+  '1080p': 1920,
+  '720p': 1280,
+  '480p': 854,
+  '360p': 640,
+  '240p': 426,
+  '144p': 256,
+};
+
+/** Resolve a quality id (`'1080p'`, `'1080p-hdr'`, `'original'`, …) to
+ *  the rung width. Strips an `-hdr` suffix because HDR rungs share the
+ *  resolution of their SDR sibling. Returns `undefined` for unknown ids
+ *  so the caller can apply its own fallback. */
+export function widthForProfile(id: string): number | undefined {
+  const base = id.replace(/-hdr$/, '');
+  return PROFILE_WIDTHS[base];
+}
+
 /** Format seconds to h:mm:ss or m:ss. */
 export function formatTime(seconds: number): string {
   if (!seconds || !isFinite(seconds)) return '0:00';

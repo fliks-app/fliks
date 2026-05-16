@@ -56,6 +56,44 @@ export type EngineEventMap = {
 
 export type EngineEvent = keyof EngineEventMap;
 
+export type EngineEventHandler<E extends EngineEvent> = (
+  data: EngineEventMap[E],
+) => void;
+
+// ---------------------------------------------------------------------------
+// Base class — shared event bus
+// ---------------------------------------------------------------------------
+
+/** Common event-bus plumbing for every PlaybackEngine. Subclasses
+ *  inherit on/off and call `this.emit(event, data)` from their own
+ *  bridge code (video element listeners, Capacitor window events, Cast
+ *  polling). Keeps the typed handler map identical across engines so
+ *  divergence on event semantics can't sneak in by accident. */
+export abstract class AbstractPlaybackEngine {
+  private handlers = new Map<EngineEvent, Set<EngineEventHandler<any>>>();
+
+  on<E extends EngineEvent>(event: E, handler: EngineEventHandler<E>): void {
+    if (!this.handlers.has(event)) this.handlers.set(event, new Set());
+    this.handlers.get(event)!.add(handler);
+  }
+
+  off<E extends EngineEvent>(event: E, handler: EngineEventHandler<E>): void {
+    this.handlers.get(event)?.delete(handler);
+  }
+
+  protected emit<E extends EngineEvent>(
+    event: E,
+    data: EngineEventMap[E],
+  ): void {
+    const set = this.handlers.get(event);
+    if (set) for (const h of set) h(data);
+  }
+
+  protected clearHandlers(): void {
+    this.handlers.clear();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Interface
 // ---------------------------------------------------------------------------

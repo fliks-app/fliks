@@ -8,6 +8,7 @@ import {
   SeasonDetails,
   PersonDetails,
   PersonCombinedCredits,
+  PersonCreditItem,
   ExternalIdResult,
 } from '../interfaces/metadata-provider.interface';
 import type {
@@ -376,24 +377,24 @@ export class TvdbProvider implements IMetadataProvider {
     );
     const chars = data.data?.characters ?? [];
 
-    const cast = chars
+    const cast: PersonCreditItem[] = chars
       .filter((c) => c.peopleType === 'Actor' || c.peopleType === 'Guest Star')
       .map((c) => ({
         externalId: c.seriesId ?? c.movieId ?? 0,
         title: '',
-        mediaType: (c.movieId ? 'movie' : 'series') as 'movie' | 'series',
+        mediaType: c.movieId ? 'movie' : 'series',
         character: c.name,
         posterUrl: c.image ?? null,
         releaseDate: null,
         rating: 0,
       }));
 
-    const crew = chars
+    const crew: PersonCreditItem[] = chars
       .filter((c) => c.peopleType !== 'Actor' && c.peopleType !== 'Guest Star')
       .map((c) => ({
         externalId: c.seriesId ?? c.movieId ?? 0,
         title: '',
-        mediaType: (c.movieId ? 'movie' : 'series') as 'movie' | 'series',
+        mediaType: c.movieId ? 'movie' : 'series',
         job: c.peopleType,
         department: c.peopleType,
         posterUrl: c.image ?? null,

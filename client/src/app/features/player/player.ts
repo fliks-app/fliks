@@ -33,7 +33,7 @@ import { CastSettingsService } from '../../core/services/cast-settings.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 import { NavbarService } from '../../core/services/navbar.service';
-import { formatAudioLabel, parseAudioIndex, SpriteMetadata } from '../../core/utils/player.utils';
+import { formatAudioLabel, parseAudioIndex, SpriteMetadata, widthForProfile } from '../../core/utils/player.utils';
 import {
   PlayerSettingsService, normalizeLang,
   SUBTITLE_SIZE_MAP, SUBTITLE_COLOR_MAP, SUBTITLE_SHADOW_MAP, SUBTITLE_BG_MAP,
@@ -738,12 +738,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
                 w = this.playbackInfo?.source?.width ?? 3840;
                 h = this.playbackInfo?.source?.height ?? 2160;
               } else {
-                const PROFILE_WIDTHS: Record<string, number> = {
-                  '2160p': 3840, '1080p': 1920, '720p': 1280, '480p': 854,
-                  '360p': 640, '240p': 426, '144p': 256,
-                };
-                const baseId = savedQualityId.replace(/-hdr$/, '');
-                w = PROFILE_WIDTHS[baseId] ?? 1920;
+                w = widthForProfile(savedQualityId) ?? 1920;
                 h = this.qualityManager.availableQualities()
                   .find(q => q.id === savedQualityId)?.height ?? 1080;
               }

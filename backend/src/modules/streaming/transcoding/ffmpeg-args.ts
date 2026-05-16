@@ -1,18 +1,16 @@
 import { Logger } from '@nestjs/common';
 import * as path from 'path';
-import {
-  getSegmentDuration,
-  segmentIndexToSeconds,
-} from './constants';
+import { getSegmentDuration, segmentIndexToSeconds } from './constants';
 import { isHdrProfile, parseBitrateToBps } from './profiles';
 import { requestedHwAccelFor } from './hw-detect';
-import type {
-  BurnInSubtitle,
-  HwAccelType,
-  TranscodeProfile,
-} from './types';
+import type { BurnInSubtitle, HwAccelType, TranscodeProfile } from './types';
 import { encoderRegistry } from './codec/encoders';
-import type { BitDepth, CodecVariant, EncoderInput, VideoCodec } from './codec/types';
+import type {
+  BitDepth,
+  CodecVariant,
+  EncoderInput,
+  VideoCodec,
+} from './codec/types';
 import { decoderRegistry, findQsvNativeDecoder } from './codec/decoders';
 import { isDecoderEnabled } from './codec/decoder-probe';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
@@ -30,9 +28,11 @@ export interface BuildFfmpegArgsOptions {
   crop?: { width: number; height: number; x: number; y: number };
   videoOnly?: boolean;
   audioStreams?: { language?: string; title?: string }[];
-  /** Output codec variant. When set, drives the encoder lookup via
-   *  `encoderRegistry`. When omitted (legacy callers), the variant is
-   *  inferred from `isHdrProfile(profile.name)` + `hwAccel === 'qsv'`. */
+  /** Output codec variant. Drives the encoder lookup via
+   *  `encoderRegistry`. Required: a missing variant means the caller
+   *  lost the master-playlist variant for this session, which would
+   *  silently emit segments that contradict the manifest's CODECS
+   *  string and trip MSE's chunk-demuxer. */
   videoVariant?: CodecVariant;
   /** Source video codec from ffprobe (`'h264'`, `'hevc'`, `'av1'`, plus
    *  aliases `'avc1'`, `'hev1'`, `'av01'`). Drives decoder selection
@@ -125,7 +125,8 @@ export function buildFfmpegArgs(
   // Resume point for mid-file seek (`startSegment > 0`). Seek to T,
   // then `-copyts` (set after `-i` below) threads source PTS through
   // to the muxer so the first segment lands at tfdt = T × timescale.
-  const seekSeconds = startSegment > 0 ? segmentIndexToSeconds(startSegment) : 0;
+  const seekSeconds =
+    startSegment > 0 ? segmentIndexToSeconds(startSegment) : 0;
 
   // Force an IDR every `SEGMENT_DURATION` seconds so the HLS muxer can
   // cut segments on a uniform grid. On a seek-resume we use `-copyts`
@@ -142,10 +143,14 @@ export function buildFfmpegArgs(
   //    segment edges → HLS muxer can cut cleanly on each forced IDR.
   // See `docs/streaming/encoder-stability.md` for the full rationale.
   const qsvExtra: string[] = [
-    '-forced_idr', '1',
-    '-adaptive_i', '0',
-    '-bf', '0',
-    '-b_strategy', '0',
+    '-forced_idr',
+    '1',
+    '-adaptive_i',
+    '0',
+    '-bf',
+    '0',
+    '-b_strategy',
+    '0',
   ];
   if (qsvOptions.lowPower) {
     qsvExtra.push('-low_power', '1');
@@ -163,7 +168,9 @@ export function buildFfmpegArgs(
   } else {
     // Keep the no-cache fallback at LOG — cold-start scans are expected
     // only on rescan / import races, so each one is worth surfacing.
-    log.log('Probe: no cached streamInfo — running full FFmpeg scan (1s / 1MB)');
+    log.log(
+      'Probe: no cached streamInfo — running full FFmpeg scan (1s / 1MB)',
+    );
     args.push('-analyzeduration', '1000000', '-probesize', '1000000');
   }
 
@@ -200,9 +207,7 @@ export function buildFfmpegArgs(
     hwAccel === 'qsv' &&
     !burnIn?.filter &&
     normalisedSourceCodecPreflight != null &&
-    isDecoderEnabled(
-      `${normalisedSourceCodecPreflight}_qsv_native_decode`,
-    );
+    isDecoderEnabled(`${normalisedSourceCodecPreflight}_qsv_native_decode`);
   const qsvNativeAvailable =
     hasUsableQsvNativeDecoder &&
     !!crop &&
@@ -224,12 +229,21 @@ export function buildFfmpegArgs(
   // CPU encoder receives HW surfaces and the filter chain blows up
   // with `Function not implemented` / `Impossible to convert between
   // the formats supported by the filter`.
-  const isHdrOutput = isHdrProfile(profile.name);
-  const variant: CodecVariant =
-    videoVariant ??
-    (isHdrOutput && requestedHwAccel === 'qsv'
-      ? { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' }
-      : { codec: 'h264', bitDepth: 8, hdr: null });
+  //
+  // `videoVariant` is required: callers must thread it from the
+  // ActiveStreamTracker so the segment bitstream matches the master
+  // playlist's CODECS string. Heuristic inference (profile name +
+  // hwAccel) silently produced HEVC when the manifest claimed H.264
+  // (or vice-versa) on cache misses — MSE then rejected the segments.
+  // Fail fast so the player retries after the next playback-info call
+  // repopulates the variant tracker.
+  if (!videoVariant) {
+    throw new Error(
+      `buildFfmpegArgs: missing videoVariant for profile "${profile.name}" — caller must pass it from ActiveStreamTracker`,
+    );
+  }
+  const variant: CodecVariant = videoVariant;
+  const isHdrOutput = variant.hdr !== null;
   const encoder = encoderRegistry.resolve(variant, requestedHwAccel);
   if (!encoder) {
     throw new Error(
@@ -278,8 +292,7 @@ export function buildFfmpegArgs(
   // usable' and the encoder crashes with exit=218. tonemap_vaapi has
   // no such dependency and runs end-to-end inside VAAPI / QSV.
   const useVaapiTonemap =
-    tonemap &&
-    (effectiveHwAccel === 'vaapi' || effectiveHwAccel === 'qsv');
+    tonemap && (effectiveHwAccel === 'vaapi' || effectiveHwAccel === 'qsv');
 
   // Resolve the decoder via the same registry pattern as the encoder.
   // The decoder picks how the source is brought into memory (HW device
@@ -292,9 +305,7 @@ export function buildFfmpegArgs(
   // The default qsv decoder emits VAAPI surfaces — kept as the safe
   // baseline for every other QSV path.
   const decoder: ReturnType<typeof decoderRegistry.resolve> =
-    qsvNativeAvailable &&
-    effectiveHwAccel === 'qsv' &&
-    normalisedSourceCodec
+    qsvNativeAvailable && effectiveHwAccel === 'qsv' && normalisedSourceCodec
       ? (findQsvNativeDecoder(normalisedSourceCodec) ??
         decoderRegistry.resolve(
           {
@@ -425,10 +436,14 @@ export function buildFfmpegArgs(
   // BT.709 tags on SDR sources).
   if (tonemap && !isHdrOutput) {
     args.push(
-      '-color_primaries', 'bt709',
-      '-color_trc', 'bt709',
-      '-colorspace', 'bt709',
-      '-color_range', 'tv',
+      '-color_primaries',
+      'bt709',
+      '-color_trc',
+      'bt709',
+      '-colorspace',
+      'bt709',
+      '-color_range',
+      'tv',
     );
   }
 
@@ -439,8 +454,7 @@ export function buildFfmpegArgs(
   // client-side via EXT-X-MEDIA. The picked track is signalled via
   // DEFAULT=YES in the master.m3u8 (see streaming.controller.ts).
   const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
-  const useVarStreamMap =
-    videoOnly && audioStreams && audioStreams.length > 1;
+  const useVarStreamMap = videoOnly && audioStreams && audioStreams.length > 1;
 
   if (useVarStreamMap) {
     // Single FFmpeg process for video + all audio renditions (perfect sync).
@@ -460,15 +474,23 @@ export function buildFfmpegArgs(
     }
 
     args.push(
-      '-f', 'hls',
-      '-hls_time', String(SEGMENT_DURATION),
-      '-hls_list_size', '0',
-      '-start_number', String(startSegment),
-      '-hls_segment_type', segType,
+      '-f',
+      'hls',
+      '-hls_time',
+      String(SEGMENT_DURATION),
+      '-hls_list_size',
+      '0',
+      '-start_number',
+      String(startSegment),
+      '-hls_segment_type',
+      segType,
       ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init_%v.mp4']),
-      '-hls_flags', 'independent_segments',
-      '-var_stream_map', varParts.join(' '),
-      '-hls_segment_filename', path.join(outputDir, '%v', `seg-%04d.${segExt}`),
+      '-hls_flags',
+      'independent_segments',
+      '-var_stream_map',
+      varParts.join(' '),
+      '-hls_segment_filename',
+      path.join(outputDir, '%v', `seg-%04d.${segExt}`),
       path.join(outputDir, '%v', 'index.m3u8'),
     );
   } else {
@@ -487,14 +509,21 @@ export function buildFfmpegArgs(
     args.push(...audioArgs);
 
     args.push(
-      '-f', 'hls',
-      '-hls_time', String(SEGMENT_DURATION),
-      '-hls_list_size', '0',
-      '-start_number', String(startSegment),
-      '-hls_segment_type', segType,
+      '-f',
+      'hls',
+      '-hls_time',
+      String(SEGMENT_DURATION),
+      '-hls_list_size',
+      '0',
+      '-start_number',
+      String(startSegment),
+      '-hls_segment_type',
+      segType,
       ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init.mp4']),
-      '-hls_segment_filename', path.join(outputDir, `seg-%04d.${segExt}`),
-      '-hls_flags', 'independent_segments',
+      '-hls_segment_filename',
+      path.join(outputDir, `seg-%04d.${segExt}`),
+      '-hls_flags',
+      'independent_segments',
       path.join(outputDir, 'index.m3u8'),
     );
   }
@@ -522,7 +551,9 @@ export function buildAudioOnlyFfmpegArgs(
 
   const args = ['-hide_banner', '-loglevel', 'warning'];
   if (trustedStreamInfo) {
-    log.debug?.('Probe [audio-only]: using cached streamInfo (0s / 200KB scan)');
+    log.debug?.(
+      'Probe [audio-only]: using cached streamInfo (0s / 200KB scan)',
+    );
     args.push('-analyzeduration', '0', '-probesize', '200000');
   } else {
     log.log(
@@ -531,7 +562,8 @@ export function buildAudioOnlyFfmpegArgs(
     args.push('-analyzeduration', '1000000', '-probesize', '1000000');
   }
 
-  const seekSeconds = startSegment > 0 ? segmentIndexToSeconds(startSegment) : 0;
+  const seekSeconds =
+    startSegment > 0 ? segmentIndexToSeconds(startSegment) : 0;
 
   if (startSegment > 0) {
     args.push('-ss', String(seekSeconds));
@@ -553,14 +585,21 @@ export function buildAudioOnlyFfmpegArgs(
   args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
 
   args.push(
-    '-f', 'hls',
-    '-hls_time', String(SEGMENT_DURATION),
-    '-hls_list_size', '0',
-    '-start_number', String(startSegment),
-    '-hls_segment_type', segType,
+    '-f',
+    'hls',
+    '-hls_time',
+    String(SEGMENT_DURATION),
+    '-hls_list_size',
+    '0',
+    '-start_number',
+    String(startSegment),
+    '-hls_segment_type',
+    segType,
     ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init.mp4']),
-    '-hls_segment_filename', path.join(outputDir, `seg-%04d.${segExt}`),
-    '-hls_flags', 'independent_segments',
+    '-hls_segment_filename',
+    path.join(outputDir, `seg-%04d.${segExt}`),
+    '-hls_flags',
+    'independent_segments',
     path.join(outputDir, 'index.m3u8'),
   );
 
@@ -596,7 +635,9 @@ export function buildRemuxArgs(
     log?.log('Probe [remux]: using cached streamInfo (0s / 200KB scan)');
     args.push('-analyzeduration', '0', '-probesize', '200000');
   } else {
-    log?.log('Probe [remux]: no cached streamInfo — running full FFmpeg scan (1s / 1MB)');
+    log?.log(
+      'Probe [remux]: no cached streamInfo — running full FFmpeg scan (1s / 1MB)',
+    );
     args.push('-analyzeduration', '1000000', '-probesize', '1000000');
   }
 
@@ -627,7 +668,14 @@ export function buildRemuxArgs(
     // Video-only remux for var_stream_map (audio served separately).
     args.push('-map', '0:v:0', '-c:v', 'copy', '-an');
   } else if (userPickedAudio) {
-    args.push('-map', '0:v:0', '-map', `0:a:${audioStreamIndex}`, '-c:v', 'copy');
+    args.push(
+      '-map',
+      '0:v:0',
+      '-map',
+      `0:a:${audioStreamIndex}`,
+      '-c:v',
+      'copy',
+    );
     if (copyAudio) {
       args.push('-c:a', 'copy');
     } else {
@@ -656,24 +704,34 @@ export function buildRemuxArgs(
   //     with "Too many packets buffered for output stream".
   if (sourceVideoCodec === 'hevc') {
     args.push(
-      '-tag:v', 'hvc1',
-      '-bsf:v', 'hevc_mp4toannexb',
-      '-max_muxing_queue_size', '2048',
+      '-tag:v',
+      'hvc1',
+      '-bsf:v',
+      'hevc_mp4toannexb',
+      '-max_muxing_queue_size',
+      '2048',
     );
   }
 
   args.push(
-    '-f', 'hls',
-    '-hls_time', String(SEGMENT_DURATION),
-    '-hls_list_size', '0',
-    '-start_number', String(startSegment),
-    '-hls_segment_type', 'fmp4',
-    '-hls_fmp4_init_filename', 'init.mp4',
-    '-hls_segment_filename', path.join(outputDir, 'seg-%04d.m4s'),
-    '-hls_flags', 'independent_segments',
+    '-f',
+    'hls',
+    '-hls_time',
+    String(SEGMENT_DURATION),
+    '-hls_list_size',
+    '0',
+    '-start_number',
+    String(startSegment),
+    '-hls_segment_type',
+    'fmp4',
+    '-hls_fmp4_init_filename',
+    'init.mp4',
+    '-hls_segment_filename',
+    path.join(outputDir, 'seg-%04d.m4s'),
+    '-hls_flags',
+    'independent_segments',
     path.join(outputDir, 'index.m3u8'),
   );
 
   return args;
 }
-

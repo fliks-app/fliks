@@ -1,5 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import type { PlaybackEngine } from './playback-engine/playback-engine';
+import { widthForProfile } from '../utils/player.utils';
 
 export interface QualityOption {
   id: string;      // 'auto' | 'original' | '2160p' | '1080p' | '720p' | '480p' | ...
@@ -181,14 +182,14 @@ export class QualityManagerService {
     const allTracks = engine.getVariantTracks();
 
     if (!allTracks.length) {
-      // No variant tracks (native player) — use profile maxWidth to set resolution constraint.
-      // Must match backend PROFILES exactly to avoid off-by-one with ExoPlayer track selection.
-      const PROFILE_WIDTHS: Record<string, number> = {
-        '2160p': 3840, '1080p': 1920, '720p': 1280, '480p': 854,
-        '360p': 640, '240p': 426, '144p': 256, 'original': 99999,
-      };
-      const w = PROFILE_WIDTHS[option.id] ?? Math.round(option.height * 16 / 9);
-      const h = option.id === 'original' ? 99999 : option.height;
+      // No variant tracks (native player) — use profile maxWidth to set
+      // resolution constraint. Must match backend PROFILES exactly to
+      // avoid off-by-one with ExoPlayer track selection.
+      const isOriginal = option.id === 'original';
+      const w = isOriginal
+        ? 99999
+        : (widthForProfile(option.id) ?? Math.round(option.height * 16 / 9));
+      const h = isOriginal ? 99999 : option.height;
       engine.selectVariantTrack({ height: h, width: w }, true);
       return;
     }

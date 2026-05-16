@@ -1,9 +1,8 @@
-import type {
-  PlaybackEngine,
-  AudioTrack,
-  EngineStats,
-  EngineEvent,
-  EngineEventMap,
+import {
+  AbstractPlaybackEngine,
+  type PlaybackEngine,
+  type AudioTrack,
+  type EngineStats,
 } from './playback-engine';
 
 /**
@@ -15,18 +14,19 @@ import type {
  * Since Cast doesn't expose a rich event model like Shaka or ExoPlayer,
  * we poll the CastService signals every second to emit engine events.
  */
-export class CastEngine implements PlaybackEngine {
+export class CastEngine extends AbstractPlaybackEngine implements PlaybackEngine {
   private _volume = 1;
   private _muted = false;
   private _playbackRate = 1;
 
-  private handlers = new Map<string, Set<Function>>();
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private castService: any, // CastService
     private castPlayerService: any, // CastPlayerService
-  ) {}
+  ) {
+    super();
+  }
 
   // ── Lifecycle ──
 
@@ -150,30 +150,6 @@ export class CastEngine implements PlaybackEngine {
 
   getStats(): EngineStats {
     return { droppedFrames: 0 };
-  }
-
-  // ── Events ──
-
-  on<E extends EngineEvent>(
-    event: E,
-    handler: (data: EngineEventMap[E]) => void,
-  ): void {
-    if (!this.handlers.has(event)) this.handlers.set(event, new Set());
-    this.handlers.get(event)!.add(handler);
-  }
-
-  off<E extends EngineEvent>(
-    event: E,
-    handler: (data: EngineEventMap[E]) => void,
-  ): void {
-    this.handlers.get(event)?.delete(handler);
-  }
-
-  private emit<E extends EngineEvent>(
-    event: E,
-    data: EngineEventMap[E],
-  ): void {
-    this.handlers.get(event)?.forEach((fn) => fn(data));
   }
 
   // ── Polling ──

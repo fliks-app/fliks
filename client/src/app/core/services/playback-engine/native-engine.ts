@@ -1,12 +1,11 @@
 import { Capacitor } from '@capacitor/core';
 import { NativePlayer } from '../../plugins/native-player.plugin';
-import type {
-  PlaybackEngine,
-  AudioTrack,
-  EngineStats,
-  PlaybackState,
-  EngineEvent,
-  EngineEventMap,
+import {
+  AbstractPlaybackEngine,
+  type PlaybackEngine,
+  type AudioTrack,
+  type EngineStats,
+  type PlaybackState,
 } from './playback-engine';
 
 interface VttCue {
@@ -21,7 +20,7 @@ interface VttCue {
  *
  * The native player renders behind the WebView — the Angular UI sits on top.
  */
-export class NativeEngine implements PlaybackEngine {
+export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngine {
   private _currentTime = 0;
   private _duration = 0;
   private _buffered = 0;
@@ -33,7 +32,6 @@ export class NativeEngine implements PlaybackEngine {
   private _audioTracks: AudioTrack[] = [];
   private _variantTracks: any[] = [];
 
-  private handlers = new Map<string, Set<Function>>();
   private listeners: Array<{ event: string; fn: EventListener }> = [];
   private positionPoll: ReturnType<typeof setInterval> | null = null;
 
@@ -291,30 +289,6 @@ export class NativeEngine implements PlaybackEngine {
       // Auto mode: remove resolution constraints
       NativePlayer.setMaxResolution({ width: 0, height: 0 });
     }
-  }
-
-  // ── Events ──
-
-  on<E extends EngineEvent>(
-    event: E,
-    handler: (data: EngineEventMap[E]) => void,
-  ): void {
-    if (!this.handlers.has(event)) this.handlers.set(event, new Set());
-    this.handlers.get(event)!.add(handler);
-  }
-
-  off<E extends EngineEvent>(
-    event: E,
-    handler: (data: EngineEventMap[E]) => void,
-  ): void {
-    this.handlers.get(event)?.delete(handler);
-  }
-
-  private emit<E extends EngineEvent>(
-    event: E,
-    data: EngineEventMap[E],
-  ): void {
-    this.handlers.get(event)?.forEach((fn) => fn(data));
   }
 
   // ── Window event bridge ──
