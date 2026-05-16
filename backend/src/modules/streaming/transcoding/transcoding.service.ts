@@ -24,6 +24,8 @@ import {
   buildRemuxArgs,
 } from './ffmpeg-args';
 import { detectHwAccel } from './hw-detect';
+import { ALL_DESCRIPTORS } from './codec/encoders';
+import { runEncoderProbes } from './codec/encoder-probe';
 import { generateMasterPlaylist, getAvailableProfiles } from './master-playlist';
 import {
   fileExists,
@@ -78,6 +80,14 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     this.detectedHwAccel = await detectHwAccel(this.log);
     this.log.log(`Hardware acceleration: ${this.detectedHwAccel}`);
+
+    // Probe every compiled-in encoder. Each runs a single black-frame
+    // ffmpeg encode; the descriptors that fail to open are blacklisted
+    // in the runtime registry gate. Runs async — module init doesn't
+    // wait for it, but the codec selector defaults to "every encoder
+    // usable" until the probe completes (the runtime fallback layer
+    // catches stragglers).
+    void runEncoderProbes(ALL_DESCRIPTORS, this.log);
 
     this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 30_000);
   }

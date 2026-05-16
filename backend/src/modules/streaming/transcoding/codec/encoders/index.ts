@@ -5,6 +5,7 @@ import type {
   HdrFormat,
 } from '../types';
 import type { HwAccelType } from '../../types';
+import { isEncoderEnabled } from '../encoder-probe';
 import { h264Qsv } from './h264-qsv';
 import { h264Vaapi } from './h264-vaapi';
 import { h264Nvenc } from './h264-nvenc';
@@ -64,6 +65,15 @@ const DESCRIPTORS: readonly EncoderDescriptor[] = [
   h264Cpu,
 ];
 
+/** Gate combining the build-time `supports()` check and the runtime
+ *  one-frame probe result. An encoder is only usable when both pass. */
+function isUsable(d: EncoderDescriptor, variant: CodecVariant): boolean {
+  if (!d.supports()) return false;
+  if (variant.hdr && !d.supportsHdrMetadata()) return false;
+  if (!isEncoderEnabled(d.id)) return false;
+  return true;
+}
+
 class StaticRegistry implements EncoderRegistry {
   resolve(
     variant: CodecVariant,
@@ -73,8 +83,7 @@ class StaticRegistry implements EncoderRegistry {
     for (const d of DESCRIPTORS) {
       if (d.hwAccel !== hwAccel) continue;
       if (!variantMatches(d.variant, variant)) continue;
-      if (!d.supports()) continue;
-      if (variant.hdr && !d.supportsHdrMetadata()) continue;
+      if (!isUsable(d, variant)) continue;
       return d;
     }
     // Pass 2: CPU fallback for the same variant.
@@ -82,7 +91,7 @@ class StaticRegistry implements EncoderRegistry {
       for (const d of DESCRIPTORS) {
         if (d.hwAccel !== 'none') continue;
         if (!variantMatches(d.variant, variant)) continue;
-        if (!d.supports()) continue;
+        if (!isUsable(d, variant)) continue;
         return d;
       }
     }
@@ -95,8 +104,7 @@ class StaticRegistry implements EncoderRegistry {
     for (const d of DESCRIPTORS) {
       if (d.hwAccel !== hwAccel) continue;
       if (!variantMatches(d.variant, variant)) continue;
-      if (!d.supports()) continue;
-      if (variant.hdr && !d.supportsHdrMetadata()) continue;
+      if (!isUsable(d, variant)) continue;
       out.push(d);
     }
     // Then CPU fallback (if it can produce this variant).
@@ -104,13 +112,18 @@ class StaticRegistry implements EncoderRegistry {
       for (const d of DESCRIPTORS) {
         if (d.hwAccel !== 'none') continue;
         if (!variantMatches(d.variant, variant)) continue;
-        if (!d.supports()) continue;
+        if (!isUsable(d, variant)) continue;
         out.push(d);
       }
     }
     return out;
   }
 }
+
+/** Full list of compiled-in encoder descriptors. Exposed so the
+ *  startup probe layer can iterate every encoder and run its
+ *  one-frame test. */
+export const ALL_DESCRIPTORS = DESCRIPTORS;
 
 /** Strict identity check on the variant tuple. `null` HDR matches only
  *  `null` HDR — SDR rungs never resolve to HDR descriptors and vice
