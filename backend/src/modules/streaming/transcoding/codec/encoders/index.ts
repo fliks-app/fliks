@@ -11,19 +11,56 @@ import { h264Nvenc } from './h264-nvenc';
 import { h264Videotoolbox } from './h264-videotoolbox';
 import { h264Cpu } from './h264-cpu';
 import { hevcQsvHdr10, hevcQsvHlg } from './hevc-qsv';
+import { hevcVaapi, hevcVaapiHdr10, hevcVaapiHlg } from './hevc-vaapi';
+import { hevcNvenc, hevcNvencHdr10, hevcNvencHlg } from './hevc-nvenc';
+import {
+  hevcVideotoolbox,
+  hevcVideotoolboxHdr10,
+  hevcVideotoolboxHlg,
+} from './hevc-videotoolbox';
+import { hevcCpu, hevcCpuHdr10, hevcCpuHlg } from './hevc-cpu';
+import { av1Qsv, av1QsvHdr10 } from './av1-qsv';
+import { av1Vaapi, av1VaapiHdr10 } from './av1-vaapi';
+import { av1Nvenc, av1NvencHdr10, av1NvencHlg } from './av1-nvenc';
+import { av1Cpu, av1CpuHdr10, av1CpuHlg } from './av1-cpu';
 
 /** Static registry of every encoder descriptor compiled in. The order
  *  matters: when multiple descriptors match a `(variant, hwAccel)` query
  *  the registry returns the first one in iteration order, so HW-accelerated
  *  entries come before CPU fallbacks. */
 const DESCRIPTORS: readonly EncoderDescriptor[] = [
+  // HEVC HW
+  hevcQsvHdr10,
+  hevcQsvHlg,
+  hevcVaapi,
+  hevcVaapiHdr10,
+  hevcVaapiHlg,
+  hevcNvenc,
+  hevcNvencHdr10,
+  hevcNvencHlg,
+  hevcVideotoolbox,
+  hevcVideotoolboxHdr10,
+  hevcVideotoolboxHlg,
+  // AV1 HW
+  av1Qsv,
+  av1QsvHdr10,
+  av1Vaapi,
+  av1VaapiHdr10,
+  av1Nvenc,
+  av1NvencHdr10,
+  av1NvencHlg,
+  // H.264 HW
   h264Qsv,
   h264Vaapi,
   h264Nvenc,
   h264Videotoolbox,
-  hevcQsvHdr10,
-  hevcQsvHlg,
   // CPU fallback last — `candidates()` returns it as a last resort.
+  hevcCpu,
+  hevcCpuHdr10,
+  hevcCpuHlg,
+  av1Cpu,
+  av1CpuHdr10,
+  av1CpuHlg,
   h264Cpu,
 ];
 
