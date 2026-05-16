@@ -118,7 +118,16 @@ async function probeOne(
   // build (verified locally), so it stays on the CPU-input fast path;
   // we keep that variant minimal to avoid spuriously failing setups
   // that lack a QSV device file but ship the encoder binary.
+  //
+  // VAAPI input format note: convert through nv12 / p010le (the native
+  // VAAPI surface formats) before hwupload. Going from yuv420p directly
+  // produces a VAAPI surface whose internal layout h264_vaapi rejects
+  // with 'internal encoding error 24' at 320x180 specifically, even
+  // when the same combo succeeds at 1920x1080 — a probe false negative
+  // we chased for an hour. nv12 / p010le sidestep the small-frame
+  // layout quirk entirely.
   const isVaapi = d.hwAccel === 'vaapi';
+  const vaapiSurfaceFmt = d.variant.bitDepth === 10 ? 'p010le' : 'nv12';
   const inputArgs = isVaapi
     ? [
         '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
@@ -131,7 +140,7 @@ async function probeOne(
         '-i', `nullsrc=size=320x180:rate=30,format=${pixFmt}`,
       ];
   const filterArgs = isVaapi
-    ? ['-vf', `format=${pixFmt},hwupload`]
+    ? ['-vf', `format=${vaapiSurfaceFmt},hwupload`]
     : [];
   const args = [
     '-hide_banner',
