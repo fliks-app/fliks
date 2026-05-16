@@ -105,23 +105,19 @@ export class StreamBuilderService {
     const isSourceHdr = !!source.hdrFormat;
     const clientSupportsHdr = profile.supportsHdr === true;
     // HEVC HDR ladder eligibility. Triggers a separate master.m3u8 path
-    // (HEVC Main10 transcodes + remux at source resolution, all carrying
-    // BT.2020/PQ in their VUI) instead of the H.264 SDR ladder. Gated by:
-    //   - Source video codec is HEVC (only codec we can pass through /
-    //     re-encode while preserving HDR signaling in HLS).
+    // (HEVC Main10 transcodes carrying BT.2020/PQ in their VUI) instead
+    // of the H.264 SDR ladder. Gated by:
+    //   - Source video codec is HEVC (only codec we re-encode while
+    //     preserving HDR signaling in HLS).
     //   - Client claims HDR support (browser-device-profile sourced from
     //     `AVPlayer.eligibleForHDRPlayback` on iOS, MediaCapabilities on
     //     web/Android).
-    //   - HEVC encoding is enabled in admin streaming settings. The
-    //     toggle falls back to H.264 SDR tonemap on every rung for
-    //     deployments whose HW path can't sustain hevc_qsv Main10
-    //     (older Intel iGPUs, no Main10 encoder available).
-    const hevcEnabled = this.activeStreamTracker.getHevcHdrEnabled();
+    // Encoder availability is checked downstream by the codec selector
+    // via `encoderRegistry.resolve()` — deployments without a working
+    // hevc_qsv Main10 path automatically fall back to libx265 (or to
+    // H.264 SDR if the source isn't HEVC).
     const useHdrLadder =
-      isSourceHdr &&
-      clientSupportsHdr &&
-      sourceVideoCodec === 'hevc' &&
-      hevcEnabled;
+      isSourceHdr && clientSupportsHdr && sourceVideoCodec === 'hevc';
     // Tone-map iff the source is HDR and we're not routing through the
     // HDR ladder. Anything that re-encodes via H.264 needs the tonemap
     // filter or AVPlayer rejects with -12927 (mismatched VUI vs codec).

@@ -217,17 +217,6 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return { lowPower: this.qsvLowPowerCache };
   }
 
-  /** Global HEVC HDR encoder toggle, driven by admin streaming settings.
-   *  When false, stream-builder tone-maps HDR sources to H.264 SDR
-   *  instead of routing them through the HEVC HDR ladder. */
-  private hevcHdrEnabledCache = true;
-  setHevcHdrEnabled(value: boolean) {
-    this.hevcHdrEnabledCache = value;
-  }
-  getHevcHdrEnabled(): boolean {
-    return this.hevcHdrEnabledCache;
-  }
-
   // ── Source-vs-client compat captured at playback-info time, read at
   //    master.m3u8 time to decide whether to emit a smart-remux variant ──
   private readonly canCopyVideoCache = new Map<number, boolean>();
