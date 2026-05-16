@@ -170,11 +170,12 @@ export function buildFfmpegArgs(
   // - Subtitle burn-in forces CPU for QSV/VAAPI/NVENC (filters need CPU surfaces)
   //   but NOT for VideoToolbox — VT decode already outputs CPU buffers, so
   //   libswscale filters (including subtitle overlay) work in-place.
-  // QSV cropping is handled in-pipeline via hwdownload → CPU crop → hwupload,
-  // so it no longer needs to fall back to VAAPI just to apply a crop filter.
+  // - QSV can't crop (fixed-size pool constraint), fallback to VAAPI encode
   const requestedHwAccel: HwAccelType = burnIn?.filter && hwAccel !== 'videotoolbox'
     ? 'none'
-    : hwAccel;
+    : hwAccel === 'qsv' && crop
+      ? 'vaapi'
+      : hwAccel;
 
   // Resolve the actual encoder before setting up the input pipeline.
   // The registry can downgrade to CPU when a HW encoder failed its
@@ -340,11 +341,6 @@ export function buildFfmpegArgs(
   const hwCropPrefix = cropStr
     ? `hwdownload,format=nv12,${cropStr},hwupload=derive_device=vaapi,`
     : '';
-  // 10-bit variant for HDR pipelines — keeps p010le precision through the
-  // round-trip; nv12 would silently truncate to 8 bits.
-  const hwCropPrefix10 = cropStr
-    ? `hwdownload,format=p010le,${cropStr},hwupload=derive_device=vaapi,`
-    : '';
 
   const variant = variantForResolve;
   const encoder = resolvedEncoder;
@@ -380,7 +376,6 @@ export function buildFfmpegArgs(
       cropStr,
       cpuCropPrefix,
       hwCropPrefix,
-      hwCropPrefix10,
       burnInFilter,
       tonemapVaapi,
       tonemapOpencl,

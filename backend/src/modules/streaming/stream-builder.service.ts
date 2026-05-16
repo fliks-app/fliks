@@ -336,12 +336,12 @@ export class StreamBuilderService {
     // - Burn-in forces CPU for QSV/VAAPI/NVENC (filters need HW surfaces),
     //   but NOT for VideoToolbox — VT decode outputs CPU buffers, so
     //   subtitle filters work in-place.
-    // QSV cropping is handled in-pipeline via hwdownload → CPU crop →
-    // hwupload, so it stays on QSV instead of falling back to VAAPI.
-    void needsCrop;
+    // - QSV + crop falls back to VAAPI (fixed-size pool constraint)
     let effectiveHwAccel = this.transcodingService.getDetectedHwAccel();
     if (needsBurnIn && effectiveHwAccel !== 'videotoolbox') {
       effectiveHwAccel = 'none';
+    } else if (effectiveHwAccel === 'qsv' && needsCrop) {
+      effectiveHwAccel = 'vaapi';
     }
 
     // Audio output decision — single source of truth for ffmpeg-args and

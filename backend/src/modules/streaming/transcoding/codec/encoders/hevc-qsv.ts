@@ -42,7 +42,7 @@ export const hevcQsv: EncoderDescriptor = {
       return [
         ...common,
         '-vf',
-        `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapVaapi},hwmap=derive_device=qsv,format=qsv`,
+        `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapVaapi},hwmap=derive_device=qsv,format=qsv`,
         ...trailing,
       ];
     }
@@ -50,14 +50,14 @@ export const hevcQsv: EncoderDescriptor = {
       return [
         ...common,
         '-vf',
-        `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
+        `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
         ...trailing,
       ];
     }
     return [
       ...common,
       '-vf',
-      `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
+      `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
       ...trailing,
     ];
   },
@@ -76,7 +76,7 @@ export const hevcQsvHdr10: EncoderDescriptor = {
   supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => hevcMain10CodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, preset, qsv, filters } = input;
+    const { target, preset, qsv } = input;
     const w = target.width;
     return [
       '-c:v', 'hevc_qsv',
@@ -89,7 +89,7 @@ export const hevcQsvHdr10: EncoderDescriptor = {
       '-rc_init_occupancy', String(qsv.rcInitOccupancy),
       '-bufsize', String(qsv.bufsize),
       '-vf',
-      `${filters.hwCropPrefix10}scale_vaapi=w=${w}:h=-16:format=p010le:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
+      `scale_vaapi=w=${w}:h=-16:format=p010le:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
       '-g', String(target.gopSize),
       '-keyint_min', String(target.gopSize),
       '-force_key_frames', input.forceKeyframesExpr,
