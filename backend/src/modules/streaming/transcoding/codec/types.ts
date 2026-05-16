@@ -55,14 +55,52 @@ export interface EncoderInput {
   variant: CodecVariant;
   target: EncoderTarget;
   /** Encoder preset hint (`veryfast`, `faster`, `fast`, `medium`, `slow`).
-   *  Each encoder maps it onto its own preset namespace. */
+   *  Each encoder maps it onto its own preset namespace (NVENC `p1..p7`,
+   *  VAAPI ignores presets entirely). The orchestrator passes the
+   *  early-session-adjusted preset already — encoders don't second-guess. */
   preset: string;
-  /** Mid-file resume position (source seconds). Encoders may use it to
-   *  derive `force_key_frames` offsets. 0 = fresh play. */
+  /** NVENC-specific preset (`p1..p7`). Orchestrator pre-resolves it
+   *  separately because libx264 / x265 / qsv / vt all share the named
+   *  preset namespace but NVENC uses numbers. */
+  nvencPreset: string;
+  /** Mid-file resume position (source seconds). 0 = fresh play. */
   seekSeconds: number;
   /** True for the early-warm shadow session (small `-t 4` window, runs
    *  parallel to the main session to serve seg-0 fast). */
   early: boolean;
+  /** `force_key_frames` expression — pre-formatted by the orchestrator
+   *  so every encoder anchors IDRs on the same uniform grid. */
+  forceKeyframesExpr: string;
+  /** QSV-specific rate-control knobs. Other encoders ignore. */
+  qsv: {
+    /** Encoder flags: `-forced_idr 1 -adaptive_i 0 -bf 0 -b_strategy 0`,
+     *  plus `-low_power 1` when enabled in admin settings. */
+    extra: string[];
+    /** `-rc_init_occupancy` in bits. */
+    rcInitOccupancy: number;
+    /** `-bufsize` in bits. */
+    bufsize: number;
+  };
+  /** libx264 `-bufsize` in megabits (formatted string, e.g. `"16M"`). */
+  libx264BufsizeMb: string;
+  /** Filter snippets the encoder may need to splice into its `-vf` chain.
+   *  Each is either empty `""` or starts with `,` to chain after a prior
+   *  filter (e.g. `cpuCropPrefix` is `"crop=W:H:X:Y,"`). */
+  filters: {
+    cropStr: string;
+    cpuCropPrefix: string;
+    hwCropPrefix: string;
+    burnInFilter: string;
+    tonemapVaapi: string;
+    tonemapOpencl: string;
+    tonemapCpu: string;
+  };
+  /** True when the orchestrator is applying an HDR→SDR tonemap pass.
+   *  Encoders use this to force BT.709 color tags on the SPS VUI so the
+   *  bitstream doesn't carry source HDR tags through with SDR pixels. */
+  tonemap: boolean;
+  hasBurnIn: boolean;
+  hasCrop: boolean;
 }
 
 /** A single encoder binding — one ffmpeg encoder × one platform × one
