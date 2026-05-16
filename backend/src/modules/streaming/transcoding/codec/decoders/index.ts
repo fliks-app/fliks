@@ -87,27 +87,6 @@ class StaticDecoderRegistry implements DecoderRegistry {
     // codecs, so this branch never falls through.
     return cpuDecoder;
   }
-
-  candidates(
-    source: DecoderSourceInfo,
-    preferredHwAccel: HwAccelType,
-  ): DecoderDescriptor[] {
-    const out: DecoderDescriptor[] = [];
-    for (const d of DESCRIPTORS) {
-      if (d.hwAccel !== preferredHwAccel) continue;
-      if (!isUsable(d, source)) continue;
-      out.push(d);
-    }
-    if (preferredHwAccel !== 'none') {
-      for (const d of DESCRIPTORS) {
-        if (d.hwAccel === 'none' || d.hwAccel === preferredHwAccel) continue;
-        if (!isUsable(d, source)) continue;
-        out.push(d);
-      }
-    }
-    if (isUsable(cpuDecoder, source)) out.push(cpuDecoder);
-    return out;
-  }
 }
 
 /** Full list of compiled-in decoder descriptors, plus the qsv-native

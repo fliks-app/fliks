@@ -15,8 +15,8 @@ import { encoderRegistry } from './codec/encoders';
 import type { BitDepth, CodecVariant, EncoderInput, VideoCodec } from './codec/types';
 import { decoderRegistry, findQsvNativeDecoder } from './codec/decoders';
 import { isDecoderEnabled } from './codec/decoder-probe';
-import { surfaceBridge } from './codec/decoders/bridge';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
+import { normaliseSourceCodec } from './codec/normalise';
 
 export interface BuildFfmpegArgsOptions {
   inputPath: string;
@@ -283,10 +283,9 @@ export function buildFfmpegArgs(
 
   // Resolve the decoder via the same registry pattern as the encoder.
   // The decoder picks how the source is brought into memory (HW device
-  // init + `-hwaccel`); the encoder's hwAccel decides where the frame
-  // needs to land for encode. `surfaceBridge` computes the filter
-  // snippet that reshapes the decoder's output surface into the
-  // encoder's expected one — empty when both stay on the same device.
+  // init + `-hwaccel`); the encoder's `hwAccel` + `inputSurface` decide
+  // where the frame needs to land for encode (qsv-native + vpp_qsv,
+  // vaapi + scale_vaapi, CPU + hwdownload).
   const normalisedSourceCodec = normalisedSourceCodecPreflight;
   // Opt into the qsv-native decoder when the qsv crop path is in use
   // (pre-flighted above so requestedHwAccelFor could keep us on QSV).
@@ -372,16 +371,6 @@ export function buildFfmpegArgs(
     ? `hwdownload,format=nv12,${cropStr},hwupload=derive_device=vaapi,`
     : '';
 
-  // Decoder→encoder surface bridge. Empty when both stay on the same
-  // device (qsv→qsv, vaapi→vaapi, cuda→cuda). Otherwise emits the
-  // hwdownload / hwupload / hwmap snippet the encoder splices in front
-  // of its `-vf` chain.
-  const surfaceBridgeFilter = surfaceBridge(
-    decoder.outputSurface,
-    encoder.hwAccel,
-    variant.bitDepth,
-  );
-
   const encoderInput: EncoderInput = {
     source: {
       width: 0,
@@ -413,7 +402,6 @@ export function buildFfmpegArgs(
       cropStr,
       cpuCropPrefix,
       hwCropPrefix,
-      surfaceBridge: surfaceBridgeFilter,
       burnInFilter,
       tonemapVaapi,
       tonemapOpencl,
@@ -689,26 +677,3 @@ export function buildRemuxArgs(
   return args;
 }
 
-/** ffprobe codec name → `VideoCodec` union. Aliases (`hvc1`/`hev1` for
- *  HEVC, `avc1` for H.264, `av01` for AV1) collapse to the canonical
- *  form. Returns null on unknown codecs so the decoder registry can
- *  fall back to CPU decode. */
-function normaliseSourceCodec(name: string | undefined): VideoCodec | null {
-  if (!name) return null;
-  switch (name.toLowerCase()) {
-    case 'h264':
-    case 'avc':
-    case 'avc1':
-      return 'h264';
-    case 'hevc':
-    case 'h265':
-    case 'hvc1':
-    case 'hev1':
-      return 'hevc';
-    case 'av1':
-    case 'av01':
-      return 'av1';
-    default:
-      return null;
-  }
-}

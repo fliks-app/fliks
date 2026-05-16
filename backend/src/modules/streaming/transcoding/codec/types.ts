@@ -90,15 +90,6 @@ export interface EncoderInput {
     cropStr: string;
     cpuCropPrefix: string;
     hwCropPrefix: string;
-    /** Bridge filter between the decoder's output surface and the
-     *  encoder's input surface. Either `''` (decoder and encoder share
-     *  the same device → zero-copy) or a short ffmpeg snippet ending
-     *  with a comma — e.g. `'hwdownload,format=nv12,'` (HW→CPU),
-     *  `'format=nv12,hwupload,'` (CPU→HW), `'hwmap=derive_device=qsv,
-     *  format=qsv,'` (VAAPI↔QSV). Encoders splice it at the very start
-     *  of their `-vf` chain so every downstream filter sees the right
-     *  surface. */
-    surfaceBridge: string;
     burnInFilter: string;
     tonemapVaapi: string;
     tonemapOpencl: string;
@@ -150,8 +141,4 @@ export interface EncoderRegistry {
    *  on `hwAccel`. Returns `null` when no descriptor matches — caller
    *  must drop the rung or fall back to a different variant. */
   resolve(variant: CodecVariant, hwAccel: HwAccelType): EncoderDescriptor | null;
-  /** Every descriptor that can produce `variant`, ordered by preference
-   *  (HW first, CPU fallback last). Used by the runtime fallback path
-   *  when a HW encoder fails at session-spawn time. */
-  candidates(variant: CodecVariant, hwAccel: HwAccelType): EncoderDescriptor[];
 }
