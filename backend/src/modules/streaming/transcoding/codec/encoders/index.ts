@@ -99,26 +99,6 @@ class StaticRegistry implements EncoderRegistry {
     return null;
   }
 
-  candidates(variant: CodecVariant, hwAccel: HwAccelType): EncoderDescriptor[] {
-    const out: EncoderDescriptor[] = [];
-    // HW first, in declared order.
-    for (const d of DESCRIPTORS) {
-      if (d.hwAccel !== hwAccel) continue;
-      if (!variantMatches(d.variant, variant)) continue;
-      if (!isUsable(d, variant)) continue;
-      out.push(d);
-    }
-    // Then CPU fallback (if it can produce this variant).
-    if (hwAccel !== 'none') {
-      for (const d of DESCRIPTORS) {
-        if (d.hwAccel !== 'none') continue;
-        if (!variantMatches(d.variant, variant)) continue;
-        if (!isUsable(d, variant)) continue;
-        out.push(d);
-      }
-    }
-    return out;
-  }
 }
 
 /** Full list of compiled-in encoder descriptors. Exposed so the

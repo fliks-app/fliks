@@ -20,6 +20,7 @@ import {
 } from './transcoding';
 import { isDecoderEnabled } from './transcoding/codec/decoder-probe';
 import { isVppQsvTonemapEnabled } from './transcoding/codec/vpp-qsv-probe';
+import { normaliseSourceCodec } from './transcoding/codec/normalise';
 import { pickPrimaryVariant } from './transcoding/codec/selector';
 import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
 
@@ -145,7 +146,7 @@ export class StreamBuilderService {
         width: source.width ?? 0,
         height: source.height ?? 0,
         hdr: (source.hdrFormat as CodecVariant['hdr']) ?? null,
-        codec: normaliseCodec(source.videoCodec),
+        codec: normaliseSourceCodec(source.videoCodec) ?? undefined,
       },
       profile,
       detectedHwAccel,
@@ -343,7 +344,7 @@ export class StreamBuilderService {
     // reports the actual encoder that will run, not the host's nominal
     // HW accel.
     const detectedHw = this.transcodingService.getDetectedHwAccel();
-    const normalisedSourceCodecForDecode = normaliseCodec(sourceVideoCodec);
+    const normalisedSourceCodecForDecode = normaliseSourceCodec(sourceVideoCodec);
     const hasUsableQsvNativeDecoderForReport =
       detectedHw === 'qsv' &&
       !needsBurnIn &&
@@ -714,27 +715,3 @@ export class StreamBuilderService {
   }
 }
 
-/** ffprobe-form codec name → `VideoCodec` union. Aliases (`h265`/`hvc1`/
- *  `hev1` for HEVC, `avc1`/`avc` for H.264, `av01` for AV1) all collapse
- *  to the canonical codec. Returns undefined when the source codec
- *  isn't in our encoder universe (Theora, VP9, etc.) so the selector
- *  falls through to the efficiency ranking. */
-function normaliseCodec(name: string | undefined): VideoCodec | undefined {
-  if (!name) return undefined;
-  switch (name.toLowerCase()) {
-    case 'h264':
-    case 'avc':
-    case 'avc1':
-      return 'h264';
-    case 'hevc':
-    case 'h265':
-    case 'hvc1':
-    case 'hev1':
-      return 'hevc';
-    case 'av1':
-    case 'av01':
-      return 'av1';
-    default:
-      return undefined;
-  }
-}

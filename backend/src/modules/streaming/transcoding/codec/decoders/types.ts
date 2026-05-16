@@ -65,10 +65,4 @@ export interface DecoderRegistry {
     source: DecoderSourceInfo,
     preferredHwAccel: HwAccelType,
   ): DecoderDescriptor;
-  /** All decoders that could decode `source` on this host, ordered by
-   *  preference (same-family first, then other HW, CPU last). */
-  candidates(
-    source: DecoderSourceInfo,
-    preferredHwAccel: HwAccelType,
-  ): DecoderDescriptor[];
 }
