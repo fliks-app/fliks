@@ -2232,6 +2232,7 @@ export class MediaService {
             streamInfo.durationSeconds,
             v.width,
             v.height,
+            !!v.hdrFormat,
           );
           if (crop) v.crop = crop;
         } catch (err) {
@@ -2550,6 +2551,7 @@ export class MediaService {
               streamInfo.durationSeconds,
               v.width,
               v.height,
+              !!v.hdrFormat,
             );
             if (crop) v.crop = crop;
           } catch (err) {
@@ -2697,6 +2699,7 @@ export class MediaService {
               streamInfo.durationSeconds,
               v.width,
               v.height,
+              !!v.hdrFormat,
             );
             if (crop) v.crop = crop;
           } catch (err) {

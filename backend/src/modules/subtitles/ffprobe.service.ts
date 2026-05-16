@@ -358,76 +358,91 @@ export class FfprobeService {
     durationSeconds?: number,
     originalWidth?: number,
     originalHeight?: number,
+    isHdr = false,
   ): Promise<CropInfo | null> {
     const label = path.basename(videoPath);
     this.logger.log(
-      `cropdetect started for "${label}" (${originalWidth}x${originalHeight})`,
+      `cropdetect started for "${label}" (${originalWidth}x${originalHeight}, hdr=${isHdr})`,
     );
     try {
-      // Sample 6 timestamps spread across the file (5–80%) and scan 8 s
-      // per sample with `cropdetect=skip=24` so each pass discards the
-      // first 24 frames before measuring — those are usually fades or
-      // partly-black transitions that mask the true frame edges.
-      // Three samples were too few: animated 4K Blurays like Arcane mix
-      // full-frame action with cinema-aspect dialogue scenes, and a
-      // 3-sample run regularly hit only full-frame moments and reported
-      // 'no crop needed' on a clearly letterboxed source.
+      // Sample 6 timestamps spread across the file (5–80%) — animated 4K
+      // Blurays like Arcane mix full-frame action with cinema-aspect
+      // dialogue scenes, and a tight 3-sample run repeatedly hit only
+      // full-frame moments and reported 'no crop needed' on a clearly
+      // letterboxed source. Six samples in parallel finish faster than
+      // three sequential, so the wider coverage is free.
       const dur = durationSeconds ?? 600;
       const fractions = [0.05, 0.15, 0.3, 0.45, 0.6, 0.8];
       const timestamps = fractions.map((f) => Math.floor(dur * f));
 
-      // Pick the LARGEST crop observed across samples (the tightest box
-      // that still fits content), not the most common one. A scene with
-      // a small overlay can falsely shrink the detected crop on one
-      // sample; the largest crop is the union of content regions, which
-      // is what we want to keep visible at playback.
+      // limit (cropdetect threshold for "this pixel is black"):
+      //   - SDR encodes black around luma 16 (BT.709 narrow range), so
+      //     limit=24 is the legacy default and works.
+      //   - HDR (PQ / HLG) encodes black around luma 50–70 — limit=24
+      //     misses every 4K HDR Bluray we touched. limit=64 catches the
+      //     letterbox but on SDR it pulls in low-luma scene content
+      //     ('most of a dim scene is below 64') and falsely shrinks the
+      //     crop. Pick per-source so neither side gets the wrong default.
+      const limit = isHdr ? 64 : 24;
+
+      // skip=24 drops the first 24 frames per pass so fades / transition
+      // black don't shift the detected edges. round=16 keeps the result
+      // mod-16 to match HW encoder constraints.
+      const cropFilter = `cropdetect=limit=${limit}:round=16:reset=0:skip=24`;
+
+      const sampleResults = await Promise.all(
+        timestamps.map(async (ss) => {
+          try {
+            const { stderr } = await execFileAsync(
+              'ffmpeg',
+              [
+                '-ss',
+                String(Math.floor(ss)),
+                '-i',
+                videoPath,
+                '-t',
+                '5',
+                '-vf',
+                cropFilter,
+                '-an',
+                '-f',
+                'null',
+                '-',
+              ],
+              { timeout: 30_000 },
+            );
+            const lines = stderr.split('\n');
+            for (let i = lines.length - 1; i >= 0; i--) {
+              const m = lines[i].match(/crop=(\d+):(\d+):(\d+):(\d+)/);
+              if (m) {
+                return {
+                  ss,
+                  w: parseInt(m[1], 10),
+                  h: parseInt(m[2], 10),
+                  x: parseInt(m[3], 10),
+                  y: parseInt(m[4], 10),
+                };
+              }
+            }
+            return null;
+          } catch {
+            return null;
+          }
+        }),
+      );
+
+      // Aggregate: pick the LARGEST crop observed (the loosest box that
+      // still fits content). A small overlay on one sample can falsely
+      // shrink the detected crop, but the largest area is the union of
+      // content regions across scenes — what we actually want visible.
       let bestCrop: { w: number; h: number; x: number; y: number } | null =
         null;
       const seenSamples: string[] = [];
-
-      for (const ss of timestamps) {
-        try {
-          const { stderr } = await execFileAsync(
-            'ffmpeg',
-            [
-              '-ss',
-              String(Math.floor(ss)),
-              '-i',
-              videoPath,
-              '-t',
-              '8',
-              '-vf',
-              // limit=64: HDR sources encode black around luma 50–70 in
-              // the PQ curve (vs ~16 in SDR BT.709), so the legacy
-              // limit=24 missed every 4K HDR Bluray we touched. 64
-              // catches HDR letterbox without crossing into dark-scene
-              // false positives that a 96+ threshold would trip.
-              'cropdetect=limit=64:round=16:reset=0:skip=24',
-              '-an',
-              '-f',
-              'null',
-              '-',
-            ],
-            { timeout: 30_000 },
-          );
-
-          const lines = stderr.split('\n');
-          for (let i = lines.length - 1; i >= 0; i--) {
-            const m = lines[i].match(/crop=(\d+):(\d+):(\d+):(\d+)/);
-            if (m) {
-              const w = parseInt(m[1], 10);
-              const h = parseInt(m[2], 10);
-              const x = parseInt(m[3], 10);
-              const y = parseInt(m[4], 10);
-              seenSamples.push(`@${ss}s=${w}:${h}:${x}:${y}`);
-              if (!bestCrop || w * h > bestCrop.w * bestCrop.h) {
-                bestCrop = { w, h, x, y };
-              }
-              break;
-            }
-          }
-        } catch {
-          // Individual sample failed, continue
+      for (const r of sampleResults) {
+        if (!r) continue;
+        seenSamples.push(`@${r.ss}s=${r.w}:${r.h}:${r.x}:${r.y}`);
+        if (!bestCrop || r.w * r.h > bestCrop.w * bestCrop.h) {
+          bestCrop = { w: r.w, h: r.h, x: r.x, y: r.y };
         }
       }
 
