@@ -185,21 +185,18 @@ export function buildFfmpegArgs(
   // with `Function not implemented` / `Impossible to convert between
   // the formats supported by the filter`.
   const isHdrOutput = isHdrProfile(profile.name);
-  const variantForResolve: CodecVariant =
+  const variant: CodecVariant =
     videoVariant ??
     (isHdrOutput && requestedHwAccel === 'qsv'
       ? { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' }
       : { codec: 'h264', bitDepth: 8, hdr: null });
-  const resolvedEncoder = encoderRegistry.resolve(
-    variantForResolve,
-    requestedHwAccel,
-  );
-  if (!resolvedEncoder) {
+  const encoder = encoderRegistry.resolve(variant, requestedHwAccel);
+  if (!encoder) {
     throw new Error(
-      `No encoder for variant ${JSON.stringify(variantForResolve)} on ${requestedHwAccel}`,
+      `No encoder for variant ${JSON.stringify(variant)} on ${requestedHwAccel}`,
     );
   }
-  const effectiveHwAccel: HwAccelType = resolvedEncoder.hwAccel;
+  const effectiveHwAccel: HwAccelType = encoder.hwAccel;
 
   // Early sessions live ~1s before Shaka jumps to the main session — visual
   // quality on those warm-up frames is throwaway, so bias every knob towards
@@ -341,9 +338,6 @@ export function buildFfmpegArgs(
   const hwCropPrefix = cropStr
     ? `hwdownload,format=nv12,${cropStr},hwupload=derive_device=vaapi,`
     : '';
-
-  const variant = variantForResolve;
-  const encoder = resolvedEncoder;
 
   const encoderInput: EncoderInput = {
     source: {
