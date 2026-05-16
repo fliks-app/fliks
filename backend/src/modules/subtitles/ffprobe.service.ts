@@ -364,15 +364,26 @@ export class FfprobeService {
       `cropdetect started for "${label}" (${originalWidth}x${originalHeight})`,
     );
     try {
-      // Sample at 3 different timestamps to avoid false positives (dark scenes, credits)
+      // Sample 6 timestamps spread across the file (5–80%) and scan 8 s
+      // per sample with `cropdetect=skip=24` so each pass discards the
+      // first 24 frames before measuring — those are usually fades or
+      // partly-black transitions that mask the true frame edges.
+      // Three samples were too few: animated 4K Blurays like Arcane mix
+      // full-frame action with cinema-aspect dialogue scenes, and a
+      // 3-sample run regularly hit only full-frame moments and reported
+      // 'no crop needed' on a clearly letterboxed source.
       const dur = durationSeconds ?? 600;
-      const timestamps = [
-        Math.min(60, dur * 0.1), // 10% or 60s
-        Math.min(300, dur * 0.3), // 30% or 300s
-        Math.min(600, dur * 0.5), // 50% or 600s
-      ];
+      const fractions = [0.05, 0.15, 0.3, 0.45, 0.6, 0.8];
+      const timestamps = fractions.map((f) => Math.floor(dur * f));
 
-      const cropCounts = new Map<string, number>();
+      // Pick the LARGEST crop observed across samples (the tightest box
+      // that still fits content), not the most common one. A scene with
+      // a small overlay can falsely shrink the detected crop on one
+      // sample; the largest crop is the union of content regions, which
+      // is what we want to keep visible at playback.
+      let bestCrop: { w: number; h: number; x: number; y: number } | null =
+        null;
+      const seenSamples: string[] = [];
 
       for (const ss of timestamps) {
         try {
@@ -384,9 +395,9 @@ export class FfprobeService {
               '-i',
               videoPath,
               '-t',
-              '3',
+              '8',
               '-vf',
-              'cropdetect=24:16:0',
+              'cropdetect=limit=24:round=16:reset=0:skip=24',
               '-an',
               '-f',
               'null',
@@ -395,13 +406,18 @@ export class FfprobeService {
             { timeout: 30_000 },
           );
 
-          // Parse last crop= line
           const lines = stderr.split('\n');
           for (let i = lines.length - 1; i >= 0; i--) {
             const m = lines[i].match(/crop=(\d+):(\d+):(\d+):(\d+)/);
             if (m) {
-              const key = `${m[1]}:${m[2]}:${m[3]}:${m[4]}`;
-              cropCounts.set(key, (cropCounts.get(key) ?? 0) + 1);
+              const w = parseInt(m[1], 10);
+              const h = parseInt(m[2], 10);
+              const x = parseInt(m[3], 10);
+              const y = parseInt(m[4], 10);
+              seenSamples.push(`@${ss}s=${w}:${h}:${x}:${y}`);
+              if (!bestCrop || w * h > bestCrop.w * bestCrop.h) {
+                bestCrop = { w, h, x, y };
+              }
               break;
             }
           }
@@ -410,21 +426,11 @@ export class FfprobeService {
         }
       }
 
-      if (!cropCounts.size) return null;
-
-      // Pick the most common crop value
-      let bestCrop = '';
-      let bestCount = 0;
-      for (const [crop, count] of cropCounts) {
-        if (count > bestCount) {
-          bestCrop = crop;
-          bestCount = count;
-        }
-      }
-
-      const parts = bestCrop.split(':').map(Number);
-      if (parts.length !== 4) return null;
-      const [w, h, x, y] = parts;
+      if (!bestCrop) return null;
+      const { w, h, x, y } = bestCrop;
+      this.logger.debug(
+        `cropdetect "${label}" samples: ${seenSamples.join(', ')}`,
+      );
 
       // Only crop if bars are significant (> 40px total removed on at least one axis)
       const totalVerticalCrop = originalHeight ? originalHeight - h : y * 2;
