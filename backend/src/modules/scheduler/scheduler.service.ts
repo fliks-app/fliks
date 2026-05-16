@@ -313,8 +313,7 @@ export class SchedulerService implements OnModuleInit {
           ? (body['mediaIds'] as number[])
           : undefined;
         await this.doSearchMissing(mediaIds);
-      }
-      else if (name === 'RefreshMetadata') await this.doRefreshMetadata();
+      } else if (name === 'RefreshMetadata') await this.doRefreshMetadata();
       else if (name === 'RssSync') await this.doRssSync();
       else if (name === 'ImportCompleted')
         await this.completion.processCompleted();
@@ -361,7 +360,9 @@ export class SchedulerService implements OnModuleInit {
 
   private async doSearchMissing(mediaIds?: number[]): Promise<void> {
     if (mediaIds?.length) {
-      this.log.log(`SearchMissing: targeted restart for media IDs [${mediaIds.join(', ')}]`);
+      this.log.log(
+        `SearchMissing: targeted restart for media IDs [${mediaIds.join(', ')}]`,
+      );
     }
     const indexers = await this.indexerRepo.find({
       where: { enabled: true },
@@ -575,7 +576,9 @@ export class SchedulerService implements OnModuleInit {
             .createQueryBuilder('h')
             .where('h.mediaId = :mediaId', { mediaId: media.id })
             .andWhere('h.status = :status', { status: 'grabbed' })
-            .andWhere(`h.sourceTitle ILIKE :pattern`, { pattern: `%${epLabel}%` })
+            .andWhere(`h.sourceTitle ILIKE :pattern`, {
+              pattern: `%${epLabel}%`,
+            })
             .getOne();
           return !!pending;
         },
@@ -826,7 +829,10 @@ export class SchedulerService implements OnModuleInit {
           // Series — require a recognisable season; no year guard (shows
           // span multiple years).
           if (parsed.season == null) continue;
-          const seriesMatch = this.matchSeriesRelease(release, seriesCandidates);
+          const seriesMatch = this.matchSeriesRelease(
+            release,
+            seriesCandidates,
+          );
           if (!seriesMatch) continue;
           const season = seriesMatch.seasons?.find(
             (s) => s.seasonNumber === parsed.season,
@@ -882,7 +888,10 @@ export class SchedulerService implements OnModuleInit {
               // Cross-pull Phase 2: a pack was already grabbed for this
               // season in a previous pull — the episode is now redundant.
               if (
-                await this.hasRecentSeasonPackGrab(seriesMatch.id, parsed.season!)
+                await this.hasRecentSeasonPackGrab(
+                  seriesMatch.id,
+                  parsed.season!,
+                )
               )
                 return true;
               const epDup = await this.historyRepo
@@ -1227,7 +1236,6 @@ export class SchedulerService implements OnModuleInit {
     const ageHours = (Date.now() - new Date(publishDate).getTime()) / 3_600_000;
     return ageHours < profile.torrentDelay;
   }
-
 
   private isAvailable(media: Media, today: string): boolean {
     switch (media.minimumAvailability) {

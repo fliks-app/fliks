@@ -460,9 +460,13 @@ export class MediaService {
     accessibleLibraryIds: number[],
   ): Promise<{ id: number; name: string; count: number; posters: string[] }[]> {
     if (accessibleLibraryIds.length === 0) return [];
-    const rows: { id: number; name: string; count: number; posters: string[] }[] =
-      await this.mediaRepo.query(
-        `
+    const rows: {
+      id: number;
+      name: string;
+      count: number;
+      posters: string[];
+    }[] = await this.mediaRepo.query(
+      `
         SELECT m."tmdbCollectionId"   AS id,
                m."tmdbCollectionName" AS name,
                COUNT(*)::int          AS count,
@@ -479,8 +483,8 @@ export class MediaService {
         HAVING COUNT(*) >= 2
         ORDER BY m."tmdbCollectionName" ASC
         `,
-        [accessibleLibraryIds],
-      );
+      [accessibleLibraryIds],
+    );
     return rows;
   }
 
@@ -624,9 +628,7 @@ export class MediaService {
         if (cq) cutoffByMedia.set(m.id, cq.rank);
       }
       const seriesIds = enriched
-        .filter(
-          (m) => m.type === MediaType.SERIES && cutoffByMedia.has(m.id),
-        )
+        .filter((m) => m.type === MediaType.SERIES && cutoffByMedia.has(m.id))
         .map((m) => m.id);
       const epBestByMedia = new Map<number, Map<number, number>>();
       if (seriesIds.length) {
@@ -875,7 +877,9 @@ export class MediaService {
     if (dto.languageProfileId !== undefined) {
       if (dto.languageProfileId !== null) {
         await this.profiles.findOneLanguageProfile(dto.languageProfileId);
-        patch.languageProfile = { id: dto.languageProfileId } as LanguageProfile;
+        patch.languageProfile = {
+          id: dto.languageProfileId,
+        } as LanguageProfile;
       } else {
         patch.languageProfile = null;
       }
@@ -1386,7 +1390,11 @@ export class MediaService {
     );
 
     // 1. Partition into INSERTs and UPDATEs in a single pass.
-    type UpdateJob = { id: number; updates: Partial<Episode>; stillUrl?: string | null };
+    type UpdateJob = {
+      id: number;
+      updates: Partial<Episode>;
+      stillUrl?: string | null;
+    };
     type InsertEntry = (typeof sd.episodes)[number];
     const updateJobs: UpdateJob[] = [];
     const inserts: InsertEntry[] = [];
@@ -1429,7 +1437,11 @@ export class MediaService {
     // 3. Parallelize UPDATEs + still downloads (concurrency 8). On a long
     //    season (~20 ep × 2 image variants) this collapses ~40 sequential
     //    HTTPs into ~5 batches.
-    type Job = { id: number; updates?: Partial<Episode>; stillUrl?: string | null };
+    type Job = {
+      id: number;
+      updates?: Partial<Episode>;
+      stillUrl?: string | null;
+    };
     const jobs: Job[] = [
       ...updateJobs,
       ...insertedRows.map((row, i) => ({
@@ -1967,7 +1979,11 @@ export class MediaService {
       // persons (concurrency 8). Each job: download avatar (best-effort),
       // then UPDATE the row with whatever fields actually changed. This is
       // the dominant cost on series with large casts.
-      type PersonJob = { id: number; updates: Partial<Person>; avatarUrl: string | null };
+      type PersonJob = {
+        id: number;
+        updates: Partial<Person>;
+        avatarUrl: string | null;
+      };
       const jobs: PersonJob[] = [];
       for (const p of inserted) {
         const credit = allCredits.find((c) => c.externalId === p.tmdbId);
@@ -2114,9 +2130,7 @@ export class MediaService {
         : {}),
       ...(libraryId ? { library: { id: libraryId } as Library } : {}),
       ...(folderName ? { folderName } : {}),
-      ...(addedByUserId
-        ? { addedBy: { id: addedByUserId } as User }
-        : {}),
+      ...(addedByUserId ? { addedBy: { id: addedByUserId } as User } : {}),
     });
     const saved = await this.mediaRepo.save(row);
     await this.downloadMediaImages(saved.id, details);
@@ -2150,9 +2164,7 @@ export class MediaService {
         : {}),
       ...(libraryId ? { library: { id: libraryId } as Library } : {}),
       ...(folderName ? { folderName } : {}),
-      ...(addedByUserId
-        ? { addedBy: { id: addedByUserId } as User }
-        : {}),
+      ...(addedByUserId ? { addedBy: { id: addedByUserId } as User } : {}),
     });
     const saved = await this.mediaRepo.save(row);
     await this.downloadMediaImages(saved.id, details);
@@ -2300,7 +2312,10 @@ export class MediaService {
     '.flv',
   ]);
 
-  async rescanFiles(mediaId: number, options?: { skipWarmup?: boolean }): Promise<{
+  async rescanFiles(
+    mediaId: number,
+    options?: { skipWarmup?: boolean },
+  ): Promise<{
     added: number;
     removed: number;
     updated: number;
@@ -2554,7 +2569,10 @@ export class MediaService {
               err instanceof Error ? err.stack : err,
             );
           }
-        } else if (sizeUnchanged && (dbFile.streamInfo as any)?.video?.[0]?.crop) {
+        } else if (
+          sizeUnchanged &&
+          (dbFile.streamInfo as any)?.video?.[0]?.crop
+        ) {
           // Preserve existing crop from previous scan
           streamInfo.video[0].crop = (dbFile.streamInfo as any).video[0].crop;
         }

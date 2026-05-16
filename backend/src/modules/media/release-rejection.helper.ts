@@ -127,10 +127,34 @@ export function buildIndexerMinSeeders(
  */
 const TITLE_STOPWORDS = new Set([
   // FR
-  'a', 'au', 'aux', 'de', 'des', 'du', 'la', 'le', 'les', 'l',
-  'un', 'une', 'et', 'ou', 'en', 'd', 's',
+  'a',
+  'au',
+  'aux',
+  'de',
+  'des',
+  'du',
+  'la',
+  'le',
+  'les',
+  'l',
+  'un',
+  'une',
+  'et',
+  'ou',
+  'en',
+  'd',
+  's',
   // EN
-  'the', 'an', 'of', 'and', 'or', 'in', 'on', 'at', 'to', 'for',
+  'the',
+  'an',
+  'of',
+  'and',
+  'or',
+  'in',
+  'on',
+  'at',
+  'to',
+  'for',
 ]);
 
 /** Normalize a title for matching: lowercase, strip accents, replace any
@@ -210,8 +234,11 @@ export function computeRejections(opts: {
 }): ReleaseRejection[] {
   const out: ReleaseRejection[] = [];
 
-  if (opts.expectedTitle && opts.releaseTitle &&
-      !titleMatchesExpectation(opts.releaseTitle, opts.expectedTitle)) {
+  if (
+    opts.expectedTitle &&
+    opts.releaseTitle &&
+    !titleMatchesExpectation(opts.releaseTitle, opts.expectedTitle)
+  ) {
     out.push({ code: 'TITLE_MISMATCH' });
   }
 

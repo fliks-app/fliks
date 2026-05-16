@@ -45,7 +45,9 @@ export class PlaybackController {
     if (libraryId && Number.isFinite(libraryId)) {
       libraryIds = accessible.includes(libraryId) ? [libraryId] : [];
     }
-    const limit = limitRaw ? Math.min(50, Math.max(1, parseInt(limitRaw, 10) || 15)) : undefined;
+    const limit = limitRaw
+      ? Math.min(50, Math.max(1, parseInt(limitRaw, 10) || 15))
+      : undefined;
     return this.recommendationService.getRecommendations(
       user.id,
       libraryIds,

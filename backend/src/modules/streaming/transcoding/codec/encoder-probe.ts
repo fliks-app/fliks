@@ -91,10 +91,7 @@ export async function runEncoderProbes(
   );
 }
 
-async function probeOne(
-  d: EncoderDescriptor,
-  _log: Logger,
-): Promise<boolean> {
+async function probeOne(d: EncoderDescriptor, _log: Logger): Promise<boolean> {
   // Synthetic minimal input: a 320×180 black frame at the descriptor's
   // expected pixel layout. The encoder is invoked with the same arg
   // slice it would emit in production, just shortened to 1 frame.
@@ -130,15 +127,16 @@ async function probeOne(
   const vaapiSurfaceFmt = d.variant.bitDepth === 10 ? 'p010le' : 'nv12';
   const inputArgs = isVaapi
     ? [
-        '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
-        '-filter_hw_device', 'va',
-        '-f', 'lavfi',
-        '-i', `nullsrc=size=320x180:rate=30,format=${pixFmt}`,
+        '-init_hw_device',
+        'vaapi=va:/dev/dri/renderD128',
+        '-filter_hw_device',
+        'va',
+        '-f',
+        'lavfi',
+        '-i',
+        `nullsrc=size=320x180:rate=30,format=${pixFmt}`,
       ]
-    : [
-        '-f', 'lavfi',
-        '-i', `nullsrc=size=320x180:rate=30,format=${pixFmt}`,
-      ];
+    : ['-f', 'lavfi', '-i', `nullsrc=size=320x180:rate=30,format=${pixFmt}`];
   const filterArgs = isVaapi
     ? ['-vf', `format=${vaapiSurfaceFmt},hwupload`]
     : [];

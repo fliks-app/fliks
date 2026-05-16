@@ -227,12 +227,7 @@ export class StreamBuilderService {
         outputContainer: sourceContainer,
         hwAccel: 'none',
         tonemapping: false,
-        qualities: this.buildQualityList(
-          source,
-          'DirectPlay',
-          true,
-          ladder,
-        ),
+        qualities: this.buildQualityList(source, 'DirectPlay', true, ladder),
         source,
       };
     }
@@ -303,9 +298,7 @@ export class StreamBuilderService {
           : {
               mode: 'transcode',
               codec: 'aac',
-              bitrateBps: parseBitrateToBps(
-                ladder[0]?.audioBitrate ?? '192k',
-              ),
+              bitrateBps: parseBitrateToBps(ladder[0]?.audioBitrate ?? '192k'),
             },
         outputContainer: 'hls',
         // Report the backend's detected hwAccel even on the remux path:
@@ -318,12 +311,7 @@ export class StreamBuilderService {
         tonemapping: false,
         remuxMasterBandwidthBps: remuxBw > 0 ? remuxBw : undefined,
         transcodeBitrateByQuality,
-        qualities: this.buildQualityList(
-          source,
-          'DirectStream',
-          true,
-          ladder,
-        ),
+        qualities: this.buildQualityList(source, 'DirectStream', true, ladder),
         source,
       };
     }
@@ -344,14 +332,13 @@ export class StreamBuilderService {
     // reports the actual encoder that will run, not the host's nominal
     // HW accel.
     const detectedHw = this.transcodingService.getDetectedHwAccel();
-    const normalisedSourceCodecForDecode = normaliseSourceCodec(sourceVideoCodec);
+    const normalisedSourceCodecForDecode =
+      normaliseSourceCodec(sourceVideoCodec);
     const hasUsableQsvNativeDecoderForReport =
       detectedHw === 'qsv' &&
       !needsBurnIn &&
       normalisedSourceCodecForDecode != null &&
-      isDecoderEnabled(
-        `${normalisedSourceCodecForDecode}_qsv_native_decode`,
-      );
+      isDecoderEnabled(`${normalisedSourceCodecForDecode}_qsv_native_decode`);
     const qsvNativeAvailableForReport =
       hasUsableQsvNativeDecoderForReport &&
       needsCrop &&
@@ -414,9 +401,7 @@ export class StreamBuilderService {
     // When the surround path is what saved us, don't keep claiming the
     // source codec is incompatible — the user actually gets surround.
     if (surroundPossible && !srcCompatible) {
-      const idx = reasons.findIndex(
-        (r) => r.flag === 'AudioCodecNotSupported',
-      );
+      const idx = reasons.findIndex((r) => r.flag === 'AudioCodecNotSupported');
       if (idx >= 0) reasons.splice(idx, 1);
     }
 
@@ -457,12 +442,7 @@ export class StreamBuilderService {
       hwAccel: effectiveHwAccel,
       tonemapping: needsTonemapping,
       transcodeBitrateByQuality,
-      qualities: this.buildQualityList(
-        source,
-        'Transcode',
-        false,
-        ladder,
-      ),
+      qualities: this.buildQualityList(source, 'Transcode', false, ladder),
       source,
     };
   }
@@ -714,4 +694,3 @@ export class StreamBuilderService {
     };
   }
 }
-

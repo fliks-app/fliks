@@ -31,7 +31,10 @@ export class MediaFile extends BaseEntity {
   @Column()
   relativePath: string;
 
-  @Column({ type: 'bigint', transformer: { to: (v: number) => v, from: (v: string) => Number(v) } })
+  @Column({
+    type: 'bigint',
+    transformer: { to: (v: number) => v, from: (v: string) => Number(v) },
+  })
   size: number;
 
   @Column()

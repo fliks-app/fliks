@@ -21,15 +21,22 @@ export const av1Nvenc: EncoderDescriptor = {
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
     const common = [
-      '-c:v', 'av1_nvenc',
-      '-preset', nvencPreset,
-      '-b:v', bitrate,
-      '-maxrate', bitrate,
+      '-c:v',
+      'av1_nvenc',
+      '-preset',
+      nvencPreset,
+      '-b:v',
+      bitrate,
+      '-maxrate',
+      bitrate,
     ];
     const trailing = [
-      '-g', String(target.gopSize),
-      '-keyint_min', String(target.gopSize),
-      '-force_key_frames', input.forceKeyframesExpr,
+      '-g',
+      String(target.gopSize),
+      '-keyint_min',
+      String(target.gopSize),
+      '-force_key_frames',
+      input.forceKeyframesExpr,
     ];
 
     if (tonemap) {
@@ -69,20 +76,29 @@ export const av1NvencHdr10: EncoderDescriptor = {
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
     return [
-      '-c:v', 'av1_nvenc',
-      '-pix_fmt', 'p010le',
-      '-preset', nvencPreset,
-      '-b:v', bitrate,
-      '-maxrate', bitrate,
+      '-c:v',
+      'av1_nvenc',
+      '-pix_fmt',
+      'p010le',
+      '-preset',
+      nvencPreset,
+      '-b:v',
+      bitrate,
+      '-maxrate',
+      bitrate,
       '-vf',
       `scale_cuda=w=${w}:h=-2:format=p010le`,
-      '-g', String(target.gopSize),
-      '-keyint_min', String(target.gopSize),
-      '-force_key_frames', input.forceKeyframesExpr,
+      '-g',
+      String(target.gopSize),
+      '-keyint_min',
+      String(target.gopSize),
+      '-force_key_frames',
+      input.forceKeyframesExpr,
       ...hdrColorArgs('HDR10'),
       '-master_display',
       'G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1)',
-      '-max_cll', '1000,400',
+      '-max_cll',
+      '1000,400',
     ];
   },
 };
@@ -102,16 +118,24 @@ export const av1NvencHlg: EncoderDescriptor = {
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
     return [
-      '-c:v', 'av1_nvenc',
-      '-pix_fmt', 'p010le',
-      '-preset', nvencPreset,
-      '-b:v', bitrate,
-      '-maxrate', bitrate,
+      '-c:v',
+      'av1_nvenc',
+      '-pix_fmt',
+      'p010le',
+      '-preset',
+      nvencPreset,
+      '-b:v',
+      bitrate,
+      '-maxrate',
+      bitrate,
       '-vf',
       `scale_cuda=w=${w}:h=-2:format=p010le`,
-      '-g', String(target.gopSize),
-      '-keyint_min', String(target.gopSize),
-      '-force_key_frames', input.forceKeyframesExpr,
+      '-g',
+      String(target.gopSize),
+      '-keyint_min',
+      String(target.gopSize),
+      '-force_key_frames',
+      input.forceKeyframesExpr,
       ...hdrColorArgs('HLG'),
     ];
   },

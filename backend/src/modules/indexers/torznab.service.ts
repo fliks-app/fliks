@@ -195,7 +195,9 @@ export class TorznabService {
         `[${indexer.name}] caps refreshed — movieSearch=${capsMovieSearch}, tvSearch=${capsTvSearch}`,
       );
     } catch (e) {
-      this.log.warn(`[${indexer.name}] caps fetch failed: ${(e as Error).message}`);
+      this.log.warn(
+        `[${indexer.name}] caps fetch failed: ${(e as Error).message}`,
+      );
     }
 
     await this.indexerRepo.update(indexer.id, {
@@ -227,19 +229,37 @@ export class TorznabService {
         const m = body.match(/description="([^"]*)"/i);
         const msg = m?.[1]?.trim() || 'Torznab error';
         void this.statRepo.save(
-          this.statRepo.create({ indexer, queryType, responseTimeMs: Date.now() - start, resultCount: 0, errorMessage: msg }),
+          this.statRepo.create({
+            indexer,
+            queryType,
+            responseTimeMs: Date.now() - start,
+            resultCount: 0,
+            errorMessage: msg,
+          }),
         );
         return { results: [], torznabError: msg };
       }
       const results = parseTorznabItems(body, indexer);
       void this.statRepo.save(
-        this.statRepo.create({ indexer, queryType, responseTimeMs: Date.now() - start, resultCount: results.length, errorMessage: null }),
+        this.statRepo.create({
+          indexer,
+          queryType,
+          responseTimeMs: Date.now() - start,
+          resultCount: results.length,
+          errorMessage: null,
+        }),
       );
       return { results, torznabError: null };
     } catch (e) {
       const msg = (e as Error).message;
       void this.statRepo.save(
-        this.statRepo.create({ indexer, queryType, responseTimeMs: Date.now() - start, resultCount: 0, errorMessage: msg }),
+        this.statRepo.create({
+          indexer,
+          queryType,
+          responseTimeMs: Date.now() - start,
+          resultCount: 0,
+          errorMessage: msg,
+        }),
       );
       return { results: [], torznabError: msg };
     }
@@ -252,7 +272,11 @@ export class TorznabService {
     fallbackUrl: string,
     queryType: string,
   ): Promise<TorznabRelease[]> {
-    const { results, torznabError } = await this.execSearch(fallbackUrl, queryType, indexer);
+    const { results, torznabError } = await this.execSearch(
+      fallbackUrl,
+      queryType,
+      indexer,
+    );
     if (torznabError) return []; // indexer unavailable, don't save
     this.log.log(
       `[${indexer.name}] t=search fallback succeeded — saving capsSearchFallback=true`,
@@ -374,11 +398,17 @@ export class TorznabService {
       imdbId: useTvSearch ? externalIds?.imdbId : undefined,
     })}`;
 
-    const { results, torznabError } = await this.execSearch(typedUrl, 'season', indexer);
+    const { results, torznabError } = await this.execSearch(
+      typedUrl,
+      'season',
+      indexer,
+    );
     if (!torznabError) return results;
 
     if (useTvSearch) {
-      this.log.warn(`[${indexer.name}] tvsearch failed (${torznabError}), falling back to t=search`);
+      this.log.warn(
+        `[${indexer.name}] tvsearch failed (${torznabError}), falling back to t=search`,
+      );
       return this.retryWithSearchFallback(
         indexer,
         `${baseUrl}?${buildTorznabQuery({ t: 'search', q: showTitle, cat: '5000', apiKey })}`,
@@ -416,11 +446,17 @@ export class TorznabService {
       imdbId: useTvSearch ? externalIds?.imdbId : undefined,
     })}`;
 
-    const { results, torznabError } = await this.execSearch(typedUrl, 'tvsearch', indexer);
+    const { results, torznabError } = await this.execSearch(
+      typedUrl,
+      'tvsearch',
+      indexer,
+    );
     if (!torznabError) return results;
 
     if (useTvSearch) {
-      this.log.warn(`[${indexer.name}] tvsearch failed (${torznabError}), falling back to t=search`);
+      this.log.warn(
+        `[${indexer.name}] tvsearch failed (${torznabError}), falling back to t=search`,
+      );
       return this.retryWithSearchFallback(
         indexer,
         `${baseUrl}?${buildTorznabQuery({ t: 'search', q: showTitle, cat: '5000', apiKey })}`,
@@ -445,7 +481,9 @@ export class TorznabService {
     }
     const impl = (indexer.implementation || '').toLowerCase();
     if (!impl.includes('torznab')) {
-      this.log.debug(`[${indexer.name}] skipped — implementation "${indexer.implementation}" is not Torznab`);
+      this.log.debug(
+        `[${indexer.name}] skipped — implementation "${indexer.implementation}" is not Torznab`,
+      );
       return [];
     }
 
@@ -471,7 +509,11 @@ export class TorznabService {
       tmdbId: useMovieSearch ? externalIds?.tmdbId : undefined,
     })}`;
 
-    const { results, torznabError } = await this.execSearch(typedUrl, 'search', indexer);
+    const { results, torznabError } = await this.execSearch(
+      typedUrl,
+      'search',
+      indexer,
+    );
     if (!torznabError) {
       this.log.log(
         `[${indexer.name}] search "${query}" → ${results.length} result(s)`,

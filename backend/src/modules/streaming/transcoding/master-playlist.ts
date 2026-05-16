@@ -7,10 +7,7 @@ import {
 } from './profiles';
 import type { DeviceType, TranscodeProfile } from './types';
 import type { CodecVariant } from './codec/types';
-import {
-  h264CodecString,
-  hevcMainCodecString,
-} from './codec/codec-strings';
+import { h264CodecString, hevcMainCodecString } from './codec/codec-strings';
 
 /**
  * Get available quality profiles for a given source resolution + device class.
@@ -94,11 +91,11 @@ export function generateMasterPlaylist(
     // standalone AAC renditions, same wiring as the SDR ladder.
     if (multiAudio) {
       const pickedIdx =
-        defaultAudioIndex >= 0 && defaultAudioIndex < audioStreams!.length
+        defaultAudioIndex >= 0 && defaultAudioIndex < audioStreams.length
           ? defaultAudioIndex
           : 0;
-      for (let i = 0; i < audioStreams!.length; i++) {
-        const a = audioStreams![i];
+      for (let i = 0; i < audioStreams.length; i++) {
+        const a = audioStreams[i];
         const lang = a.language || 'und';
         const name = a.title || lang;
         const isDefault = i === pickedIdx ? 'YES' : 'NO';
@@ -234,8 +231,8 @@ export function generateMasterPlaylist(
 function hevcMain10CodecStringForHeight(height: number): string {
   if (height >= 2160) return 'hvc1.2.4.L153.B0'; // L5.1 — 4K60
   if (height >= 1080) return 'hvc1.2.4.L123.B0'; // L4.1 — 1080p60
-  if (height >= 720)  return 'hvc1.2.4.L120.B0'; // L4.0 — 720p60
-  return 'hvc1.2.4.L93.B0';                       // L3.1 — up to 720p30
+  if (height >= 720) return 'hvc1.2.4.L120.B0'; // L4.0 — 720p60
+  return 'hvc1.2.4.L93.B0'; // L3.1 — up to 720p30
 }
 
 /** H.264 codec string per rung. Levels picked to cover 60 fps at the rung
@@ -245,9 +242,9 @@ function hevcMain10CodecStringForHeight(height: number): string {
 function h264CodecStringForHeight(height: number): string {
   if (height >= 2160) return 'avc1.640034'; // High @ L5.2 — 4K60
   if (height >= 1080) return 'avc1.64002a'; // High @ L4.2 — 1080p60 + headroom
-  if (height >= 720)  return 'avc1.640020'; // High @ L3.2 — 720p60
-  if (height >= 480)  return 'avc1.64001f'; // High @ L3.1 — 480p60
-  if (height >= 360)  return 'avc1.64001e'; // High @ L3.0 — 360p30
-  if (height >= 240)  return 'avc1.640015'; // High @ L2.1 — 240p60
-  return 'avc1.64000d';                      // High @ L1.3 — 144p
+  if (height >= 720) return 'avc1.640020'; // High @ L3.2 — 720p60
+  if (height >= 480) return 'avc1.64001f'; // High @ L3.1 — 480p60
+  if (height >= 360) return 'avc1.64001e'; // High @ L3.0 — 360p30
+  if (height >= 240) return 'avc1.640015'; // High @ L2.1 — 240p60
+  return 'avc1.64000d'; // High @ L1.3 — 144p
 }

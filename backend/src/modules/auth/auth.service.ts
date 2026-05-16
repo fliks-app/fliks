@@ -181,12 +181,18 @@ export class AuthService {
    * id, username, avatar — never any sensitive field. Caller is
    * unauthenticated.
    */
-  async publicUserList(): Promise<{ id: number; username: string; avatar: string | null }[]> {
+  async publicUserList(): Promise<
+    { id: number; username: string; avatar: string | null }[]
+  > {
     const users = await this.userRepo.find({
       where: { enabled: true },
       select: ['id', 'username', 'avatar'],
       order: { username: 'ASC' },
     });
-    return users.map((u) => ({ id: u.id, username: u.username, avatar: u.avatar ?? null }));
+    return users.map((u) => ({
+      id: u.id,
+      username: u.username,
+      avatar: u.avatar ?? null,
+    }));
   }
 }

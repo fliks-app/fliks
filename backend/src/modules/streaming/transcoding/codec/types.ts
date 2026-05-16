@@ -140,5 +140,8 @@ export interface EncoderRegistry {
   /** Pick the highest-preference descriptor able to produce `variant`
    *  on `hwAccel`. Returns `null` when no descriptor matches — caller
    *  must drop the rung or fall back to a different variant. */
-  resolve(variant: CodecVariant, hwAccel: HwAccelType): EncoderDescriptor | null;
+  resolve(
+    variant: CodecVariant,
+    hwAccel: HwAccelType,
+  ): EncoderDescriptor | null;
 }

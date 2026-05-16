@@ -119,7 +119,9 @@ export interface TmdbMovieDetailsResponse {
   credits?: { cast?: TmdbCastMember[]; crew?: TmdbCrewMember[] };
   videos?: { results?: TmdbVideo[] };
   keywords?: { keywords?: TmdbKeyword[] };
-  alternative_titles?: { titles?: { iso_3166_1?: string; title: string; type?: string }[] };
+  alternative_titles?: {
+    titles?: { iso_3166_1?: string; title: string; type?: string }[];
+  };
 }
 
 export interface TmdbTvDetailsResponse {
@@ -145,7 +147,9 @@ export interface TmdbTvDetailsResponse {
   credits?: { cast?: TmdbCastMember[]; crew?: TmdbCrewMember[] };
   videos?: { results?: TmdbVideo[] };
   keywords?: { results?: TmdbKeyword[] };
-  alternative_titles?: { results?: { iso_3166_1?: string; title: string; type?: string }[] };
+  alternative_titles?: {
+    results?: { iso_3166_1?: string; title: string; type?: string }[];
+  };
 }
 
 export interface TmdbTvSeasonStub {

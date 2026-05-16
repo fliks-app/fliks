@@ -176,12 +176,16 @@ export class MovieDownloadService {
     }
     const customTitle = customQuery?.trim();
     const query = customTitle || this.searchQueryForMedia(media);
-    this.log.log(`[searchMovieReleases] "${media.title}" — query="${query}", indexers=[${indexers.map((i) => i.name).join(', ')}]`);
+    this.log.log(
+      `[searchMovieReleases] "${media.title}" — query="${query}", indexers=[${indexers.map((i) => i.name).join(', ')}]`,
+    );
     const batches = await Promise.all(
       indexers.map((ix) => this.searchIndexer(ix, query, media)),
     );
     const flat = batches.flat();
-    this.log.log(`[searchMovieReleases] "${media.title}" — ${flat.length} raw result(s) across ${indexers.length} indexer(s)`);
+    this.log.log(
+      `[searchMovieReleases] "${media.title}" — ${flat.length} raw result(s) across ${indexers.length} indexer(s)`,
+    );
 
     const rows = await this.buildMovieReleaseRows(
       flat,
@@ -192,10 +196,16 @@ export class MovieDownloadService {
       customTitle || [media.title, ...(media.alternativeTitles ?? [])],
     );
     const accepted = rows.filter((r) => r.rejections.length === 0).length;
-    this.log.log(`[searchMovieReleases] "${media.title}" — ${rows.length} scored, ${accepted} accepted, ${rows.length - accepted} rejected`);
+    this.log.log(
+      `[searchMovieReleases] "${media.title}" — ${rows.length} scored, ${accepted} accepted, ${rows.length - accepted} rejected`,
+    );
     if (accepted === 0 && rows.length > 0) {
-      const sample = rows.slice(0, 5).map((r) => `"${r.title}" [${r.rejections.join(', ')}]`);
-      this.log.warn(`[searchMovieReleases] all releases rejected — sample: ${sample.join(' | ')}`);
+      const sample = rows
+        .slice(0, 5)
+        .map((r) => `"${r.title}" [${r.rejections.join(', ')}]`);
+      this.log.warn(
+        `[searchMovieReleases] all releases rejected — sample: ${sample.join(' | ')}`,
+      );
     }
 
     return sortReleasesByRelevance(rows);

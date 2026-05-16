@@ -18,7 +18,11 @@ export class SettingsService {
 
   private notifyChange(key: string): void {
     for (const l of this.changeListeners) {
-      try { l(key); } catch { /* listener errors must not break writes */ }
+      try {
+        l(key);
+      } catch {
+        /* listener errors must not break writes */
+      }
     }
   }
 

@@ -43,7 +43,9 @@ export class UsersStatsService {
     };
   }
 
-  private async aggregatePlayback(userId: number): Promise<UserStatsDto['playback']> {
+  private async aggregatePlayback(
+    userId: number,
+  ): Promise<UserStatsDto['playback']> {
     // One pass for the four COUNT/SUM aggregates, joined to media for the
     // type filter (movie vs series). Distinct on mediaId / episodeId so a
     // user with multiple PlaybackState rows for the same media (e.g. one per
@@ -79,7 +81,9 @@ export class UsersStatsService {
       }>();
 
     return {
-      totalWatchTimeSeconds: Math.round(Number(totals?.totalWatchTimeSeconds ?? 0)),
+      totalWatchTimeSeconds: Math.round(
+        Number(totals?.totalWatchTimeSeconds ?? 0),
+      ),
       moviesWatched: Number(totals?.moviesWatched ?? 0),
       seriesStarted: Number(totals?.seriesStarted ?? 0),
       episodesWatched: Number(totals?.episodesWatched ?? 0),
@@ -104,5 +108,4 @@ export class UsersStatsService {
       declined: byStatus.get(RequestStatus.DECLINED) ?? 0,
     };
   }
-
 }

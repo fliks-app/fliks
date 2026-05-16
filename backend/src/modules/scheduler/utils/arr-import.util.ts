@@ -42,7 +42,8 @@ export function applyPathMapping(
   if (!fullArrPath?.trim() || !mappings.length) return null;
   const full = normalizePath(fullArrPath);
   const sorted = [...mappings].sort(
-    (a, b) => normalizePath(b.remotePath).length - normalizePath(a.remotePath).length,
+    (a, b) =>
+      normalizePath(b.remotePath).length - normalizePath(a.remotePath).length,
   );
   for (const m of sorted) {
     const remote = normalizePath(m.remotePath);

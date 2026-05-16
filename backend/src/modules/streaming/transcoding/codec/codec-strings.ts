@@ -40,7 +40,10 @@ export function hevcMain10CodecString(target: EncoderTarget): string {
 /** AV1 — `av01.<profile>.<level><tier>.<bit_depth>` (simplified form;
  *  Apple/Android both accept this short form for HLS). Profile 0 = Main,
  *  tier `M` = Main, level = `level_idc * 30`. */
-export function av1CodecString(target: EncoderTarget, bitDepth: 8 | 10): string {
+export function av1CodecString(
+  target: EncoderTarget,
+  bitDepth: 8 | 10,
+): string {
   return `av01.0.${av1Level(target)}M.${String(bitDepth).padStart(2, '0')}`;
 }
 
@@ -48,10 +51,7 @@ export function av1CodecString(target: EncoderTarget, bitDepth: 8 | 10): string 
  *  in moov), never `dvhe`. Profile and level pulled from the source's DV
  *  RPU sidedata when present. Listed for completeness — we don't transcode
  *  to DV, only pass through on DirectPlay. */
-export function dolbyVisionCodecString(
-  profile: number,
-  level: number,
-): string {
+export function dolbyVisionCodecString(profile: number, level: number): string {
   return `dvh1.${pad2(profile)}.${pad2(level)}`;
 }
 

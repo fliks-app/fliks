@@ -287,7 +287,10 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
     const intros = await this.detector.detectSeasonIntros(seasonId, onProgress);
     let outrosDetected = 0;
     try {
-      const outros = await this.detector.detectSeasonOutros(seasonId, onProgress);
+      const outros = await this.detector.detectSeasonOutros(
+        seasonId,
+        onProgress,
+      );
       outrosDetected = outros.outrosDetected;
     } catch (err) {
       this.log.warn(
@@ -318,13 +321,26 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
     this.events.emit({ type: 'command.started', name: 'IntroDetection' });
 
     const onProgress = (current: number, total: number, message: string) => {
-      this.events.emit({ type: 'task.progress', command: 'IntroDetection', current, total, message });
+      this.events.emit({
+        type: 'task.progress',
+        command: 'IntroDetection',
+        current,
+        total,
+        message,
+      });
     };
 
     try {
       const result = await this.detectIntrosAndOutros(seasonId, onProgress);
-      await this.commandRepo.update(cmdId, { status: 'completed', endedOn: new Date() });
-      this.events.emit({ type: 'command.completed', name: 'IntroDetection', status: 'completed' });
+      await this.commandRepo.update(cmdId, {
+        status: 'completed',
+        endedOn: new Date(),
+      });
+      this.events.emit({
+        type: 'command.completed',
+        name: 'IntroDetection',
+        status: 'completed',
+      });
       this.events.emit({
         type: 'markers.season.completed',
         mediaId,
@@ -336,8 +352,15 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
       this.log.error(
         `IntroDetection failed for season #${seasonId}: ${(err as Error).message}`,
       );
-      await this.commandRepo.update(cmdId, { status: 'failed', endedOn: new Date() });
-      this.events.emit({ type: 'command.completed', name: 'IntroDetection', status: 'failed' });
+      await this.commandRepo.update(cmdId, {
+        status: 'failed',
+        endedOn: new Date(),
+      });
+      this.events.emit({
+        type: 'command.completed',
+        name: 'IntroDetection',
+        status: 'failed',
+      });
     } finally {
       this.inFlight.delete(seasonId);
     }
