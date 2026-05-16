@@ -397,7 +397,12 @@ export class FfprobeService {
               '-t',
               '8',
               '-vf',
-              'cropdetect=limit=24:round=16:reset=0:skip=24',
+              // limit=64: HDR sources encode black around luma 50–70 in
+              // the PQ curve (vs ~16 in SDR BT.709), so the legacy
+              // limit=24 missed every 4K HDR Bluray we touched. 64
+              // catches HDR letterbox without crossing into dark-scene
+              // false positives that a 96+ threshold would trip.
+              'cropdetect=limit=64:round=16:reset=0:skip=24',
               '-an',
               '-f',
               'null',
