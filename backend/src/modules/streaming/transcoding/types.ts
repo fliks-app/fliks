@@ -130,11 +130,11 @@ export interface SessionContext {
   isSourceHdr?: boolean;
   /**
    * Output video format the player asked for, picked by stream-builder
-   * via the codec selector + quirks DB. When set, ffmpeg-args resolves
-   * the matching encoder descriptor from `encoderRegistry`; when null,
-   * it falls back to the legacy `profile.name`-driven inference (H.264
-   * SDR or HEVC HDR10 on QSV). Phases 0-4 left this optional so the
-   * orchestrator could be wired up progressively.
+   * via the codec selector + quirks DB. Threaded through every session
+   * spawn so `ffmpeg-args` resolves the matching encoder descriptor
+   * from `encoderRegistry`. Required for transcode/remux spawns —
+   * `buildFfmpegArgs` throws when absent so the segment can't silently
+   * contradict the master playlist's CODECS string.
    */
   videoVariant?: import('./codec/types').CodecVariant;
 }

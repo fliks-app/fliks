@@ -4,6 +4,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { environment } from '../../../environments/environment';
 import { CastSettingsService, CastSubtitleStyle } from './cast-settings.service';
 import { ToastService } from './toast.service';
+import { CAST_SUBTITLE_SIZE_SCALE } from '../utils/subtitle-presets';
 
 /** Custom Cast message namespace shared between the Fliks receiver and
  *  every sender. Used today for receiver → sender error forwarding;
@@ -510,15 +511,15 @@ export class CastService implements OnDestroy {
   }
 }
 
-// Preset → Cast value tables. Colours follow Cast Web SDK's wire
-// format `#RRGGBBAA` (alpha last). Native plugins receive the same
-// presets and translate to their platform's int / UIColor form.
-const SUB_SIZE_SCALE: Record<string, number> = {
-  small: 0.7,
-  normal: 0.85,
-  large: 1.1,
-  xlarge: 1.4,
-};
+// Cast Web SDK wire format mappings. The size-scale table is
+// **intentionally smaller** than the Native one (see
+// `utils/subtitle-presets.ts`) — Cast receivers render at a larger
+// base size, so the same `'normal'` preset would look oversized at
+// 1.0. Colour and edge tables stay local because Cast uses
+// `#RRGGBBAA` (alpha last) while the native side uses `#RRGGBB` and
+// Android-format `#AARRGGBB`. Centralising those would force a
+// runtime byte-shuffle for no readability gain.
+const SUB_SIZE_SCALE = CAST_SUBTITLE_SIZE_SCALE;
 
 const SUB_FG_COLOR: Record<string, string> = {
   white: '#FFFFFFFF',

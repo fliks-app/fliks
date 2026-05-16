@@ -107,26 +107,30 @@ async function probeOne(d: EncoderDescriptor, _log: Logger): Promise<boolean> {
         'bt2020nc',
       ]
     : [];
-  // VAAPI encoders only accept HW surfaces — feeding them lavfi CPU
-  // frames raises the exact `Function not implemented` filter error
-  // production hits. Set up the same `-init_hw_device vaapi` + `hwupload`
-  // bridge the runtime path uses so the probe exercises a representative
-  // pipeline. QSV's wrapper auto-converts CPU input on this ffmpeg
-  // build (verified locally), so it stays on the CPU-input fast path;
-  // we keep that variant minimal to avoid spuriously failing setups
-  // that lack a QSV device file but ship the encoder binary.
+  // HW encoders only accept HW surfaces. Feed them through the same
+  // device-init chain the runtime path uses so the probe exercises a
+  // representative pipeline:
   //
-  // VAAPI input format note: convert through nv12 / p010le (the native
-  // VAAPI surface formats) before hwupload. Going from yuv420p directly
-  // produces a VAAPI surface whose internal layout h264_vaapi rejects
-  // with 'internal encoding error 24' at 320x180 specifically, even
-  // when the same combo succeeds at 1920x1080 — a probe false negative
-  // we chased for an hour. nv12 / p010le sidestep the small-frame
-  // layout quirk entirely.
-  const isVaapi = d.hwAccel === 'vaapi';
-  const vaapiSurfaceFmt = d.variant.bitDepth === 10 ? 'p010le' : 'nv12';
-  const inputArgs = isVaapi
-    ? [
+  //  - VAAPI: `-init_hw_device vaapi=va ... -vf format=NV12,hwupload`.
+  //    Format step matters — `yuv420p,hwupload` produces a VAAPI
+  //    surface whose internal layout h264_vaapi rejects with
+  //    'internal encoding error 24' at 320x180 specifically (probe
+  //    false-negative we hit). nv12 / p010le sidestep the small-frame
+  //    layout quirk.
+  //  - QSV: same `vaapi=va` + `qsv=qs@va` chain as `decoders/qsv.ts`
+  //    runtime decode, then `hwupload=extra_hw_frames=64,format=qsv`.
+  //    Earlier versions fed lavfi CPU input directly relying on
+  //    ffmpeg's auto-conversion; that produced false-positive PASSes
+  //    on hosts where the auto-converter is missing in the build,
+  //    only to crash at first real session.
+  //  - CPU (`'none'`): plain lavfi input — no device.
+  const surfaceFmt = d.variant.bitDepth === 10 ? 'p010le' : 'nv12';
+  const lavfi = `nullsrc=size=320x180:rate=30,format=${pixFmt}`;
+  let inputArgs: string[];
+  let filterArgs: string[];
+  switch (d.hwAccel) {
+    case 'vaapi':
+      inputArgs = [
         '-init_hw_device',
         'vaapi=va:/dev/dri/renderD128',
         '-filter_hw_device',
@@ -134,12 +138,32 @@ async function probeOne(d: EncoderDescriptor, _log: Logger): Promise<boolean> {
         '-f',
         'lavfi',
         '-i',
-        `nullsrc=size=320x180:rate=30,format=${pixFmt}`,
-      ]
-    : ['-f', 'lavfi', '-i', `nullsrc=size=320x180:rate=30,format=${pixFmt}`];
-  const filterArgs = isVaapi
-    ? ['-vf', `format=${vaapiSurfaceFmt},hwupload`]
-    : [];
+        lavfi,
+      ];
+      filterArgs = ['-vf', `format=${surfaceFmt},hwupload`];
+      break;
+    case 'qsv':
+      inputArgs = [
+        '-init_hw_device',
+        'vaapi=va:/dev/dri/renderD128',
+        '-init_hw_device',
+        'qsv=qs@va',
+        '-filter_hw_device',
+        'qs',
+        '-f',
+        'lavfi',
+        '-i',
+        lavfi,
+      ];
+      filterArgs = [
+        '-vf',
+        `format=${surfaceFmt},hwupload=extra_hw_frames=64,format=qsv`,
+      ];
+      break;
+    default:
+      inputArgs = ['-f', 'lavfi', '-i', lavfi];
+      filterArgs = [];
+  }
   const args = [
     '-hide_banner',
     '-loglevel',

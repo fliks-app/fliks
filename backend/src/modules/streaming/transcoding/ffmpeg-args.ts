@@ -383,13 +383,6 @@ export function buildFfmpegArgs(
     : '';
 
   const encoderInput: EncoderInput = {
-    source: {
-      width: 0,
-      height: 0,
-      hdr: null,
-      bitDepth: 8,
-      codecName: '',
-    },
     variant,
     target: {
       width: w,

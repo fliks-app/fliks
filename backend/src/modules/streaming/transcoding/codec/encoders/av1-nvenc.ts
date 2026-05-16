@@ -72,9 +72,12 @@ export const av1NvencHdr10: EncoderDescriptor = {
   supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => av1CodecString(target, 10),
   buildArgs(input: EncoderInput): string[] {
-    const { target, nvencPreset } = input;
+    const { target, nvencPreset, filters, hasCrop } = input;
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
+    const nvCropFilter = hasCrop
+      ? `hwdownload,format=p010le,${filters.cropStr},hwupload_cuda,`
+      : '';
     return [
       '-c:v',
       'av1_nvenc',
@@ -87,7 +90,7 @@ export const av1NvencHdr10: EncoderDescriptor = {
       '-maxrate',
       bitrate,
       '-vf',
-      `scale_cuda=w=${w}:h=-2:format=p010le`,
+      `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=p010le`,
       '-g',
       String(target.gopSize),
       '-keyint_min',
@@ -114,9 +117,12 @@ export const av1NvencHlg: EncoderDescriptor = {
   supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => av1CodecString(target, 10),
   buildArgs(input: EncoderInput): string[] {
-    const { target, nvencPreset } = input;
+    const { target, nvencPreset, filters, hasCrop } = input;
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
+    const nvCropFilter = hasCrop
+      ? `hwdownload,format=p010le,${filters.cropStr},hwupload_cuda,`
+      : '';
     return [
       '-c:v',
       'av1_nvenc',
@@ -129,7 +135,7 @@ export const av1NvencHlg: EncoderDescriptor = {
       '-maxrate',
       bitrate,
       '-vf',
-      `scale_cuda=w=${w}:h=-2:format=p010le`,
+      `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=p010le`,
       '-g',
       String(target.gopSize),
       '-keyint_min',

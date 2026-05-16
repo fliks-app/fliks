@@ -198,10 +198,12 @@ export class StreamingController {
         (si?.video?.[0]?.codec ?? '').toLowerCase() || undefined,
       isSourceHdr: !!si?.video?.[0]?.hdrFormat,
       // Variant chosen by stream-builder's codec selector at
-      // playback-info time. Threads through every session spawn so
-      // ffmpeg-args resolves the matching encoder descriptor. Absent
-      // for callers that never reach playback-info (legacy direct
-      // URLs) — buildFfmpegArgs falls back to profile-name inference.
+      // playback-info time, threaded through every session spawn so
+      // ffmpeg-args resolves the matching encoder descriptor.
+      // ActiveStreamTracker holds it after a successful playback-info;
+      // a segment request that arrives before playback-info has populated
+      // the tracker hits `buildFfmpegArgs`'s explicit throw, which surfaces
+      // as a 5xx the player retries after the next playback-info call.
       videoVariant: this.activeStreamTracker.getVideoVariant(mediaFileId),
     };
   }

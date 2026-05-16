@@ -110,8 +110,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // Probe whether the iGPU's fixed-function HDR tone-mapping unit
     // is wired up. Only the upstream `vpp_qsv tonemap=1` path uses
     // it; gates the single-pass HDR→SDR chain in the QSV encoder
-    // filter helpers.
-    void runVppQsvTonemapProbe(this.log);
+    // filter helpers. Skipped on non-Intel hosts so AMD / NVIDIA / macOS
+    // boots don't burn ~30s on two doomed ffmpeg sub-processes (each
+    // probe times out at 15s on hosts without the qsv encoder).
+    if (this.detectedHwAccel === 'qsv') {
+      void runVppQsvTonemapProbe(this.log);
+    }
 
     this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 30_000);
   }
