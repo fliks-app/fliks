@@ -36,7 +36,7 @@ export const h264Qsv: EncoderDescriptor = {
       return [
         ...common,
         '-vf',
-        `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapVaapi},hwmap=derive_device=qsv,format=qsv`,
+        `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapVaapi},hwmap=derive_device=qsv,format=qsv`,
         ...trailing,
       ];
     }
@@ -45,7 +45,7 @@ export const h264Qsv: EncoderDescriptor = {
       return [
         ...common,
         '-vf',
-        `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
+        `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
         ...trailing,
       ];
     }
@@ -55,7 +55,7 @@ export const h264Qsv: EncoderDescriptor = {
     return [
       ...common,
       '-vf',
-      `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
+      `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
       ...trailing,
     ];
   },

@@ -89,7 +89,13 @@ export interface EncoderInput {
   filters: {
     cropStr: string;
     cpuCropPrefix: string;
+    /** HW crop bridge for 8-bit pipelines: `hwdownload,format=nv12,
+     *  crop=…,hwupload=derive_device=vaapi,`. */
     hwCropPrefix: string;
+    /** HW crop bridge for 10-bit pipelines (HDR variants): same shape
+     *  as `hwCropPrefix` but with `format=p010le` so precision survives
+     *  the round-trip. Empty when no crop is needed. */
+    hwCropPrefix10: string;
     burnInFilter: string;
     tonemapVaapi: string;
     tonemapOpencl: string;
