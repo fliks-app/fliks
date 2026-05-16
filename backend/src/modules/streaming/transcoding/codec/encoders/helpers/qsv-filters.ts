@@ -19,13 +19,19 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
   if (input.inputSurface === 'qsv') {
     // crop_qsv + scale_qsv in one filter. `vpp_qsv` is the libavfilter
     // wrapper over Intel VPP and accepts both crop region and output
-    // size in a single pass. When there's no crop, the c{w,h,x,y}
-    // options default to the full input and `vpp_qsv` is a pure scale.
-    const cropOpts = hasCrop && filters.cropStr
-      ? // filters.cropStr is `crop=W:H:X:Y` — destructure into vpp_qsv params.
-        cropStrToVppArgs(filters.cropStr)
+    // size in a single pass. Unlike software `scale=W:-2`, vpp_qsv
+    // requires explicit integer h — compute it from the crop's aspect
+    // (or the rung's profile maxHeight when there's no crop) snapped
+    // to mod-2 so the encoder doesn't reject odd luma height.
+    const cropArgs =
+      hasCrop && filters.cropStr ? parseCropStr(filters.cropStr) : null;
+    const targetH = cropArgs
+      ? snapEven(Math.round((w * cropArgs.h) / cropArgs.w))
+      : target.height;
+    const cropOpts = cropArgs
+      ? `cw=${cropArgs.w}:ch=${cropArgs.h}:cx=${cropArgs.x}:cy=${cropArgs.y}:`
       : '';
-    return `vpp_qsv=${cropOpts}w=${w}:h=-2:format=nv12`;
+    return `vpp_qsv=${cropOpts}w=${w}:h=${targetH}:format=nv12`;
   }
   if (filters.tonemapVaapi) {
     return `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapVaapi},hwmap=derive_device=qsv,format=qsv`;
@@ -36,11 +42,19 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
   return `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`;
 }
 
-/** Turn `'crop=W:H:X:Y'` into the `cw=W:ch=H:cx=X:cy=Y:` prefix that
- *  `vpp_qsv` accepts. */
-function cropStrToVppArgs(cropStr: string): string {
+function parseCropStr(
+  cropStr: string,
+): { w: number; h: number; x: number; y: number } | null {
   const m = cropStr.match(/^crop=(\d+):(\d+):(\d+):(\d+)$/);
-  if (!m) return '';
-  const [, cw, ch, cx, cy] = m;
-  return `cw=${cw}:ch=${ch}:cx=${cx}:cy=${cy}:`;
+  if (!m) return null;
+  return {
+    w: parseInt(m[1], 10),
+    h: parseInt(m[2], 10),
+    x: parseInt(m[3], 10),
+    y: parseInt(m[4], 10),
+  };
+}
+
+function snapEven(n: number): number {
+  return n - (n % 2);
 }
