@@ -13,10 +13,10 @@ export const hevcVideotoolbox: EncoderDescriptor = {
   supportsHdrMetadata: () => false,
   codecString: (target: EncoderTarget) => hevcMainCodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, early, filters } = input;
+    const { target, early, filters, tonemap, hasBurnIn, hasCrop } = input;
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
-    return [
+    const common = [
       '-c:v',
       'hevc_videotoolbox',
       '-profile:v',
@@ -26,8 +26,8 @@ export const hevcVideotoolbox: EncoderDescriptor = {
       bitrate,
       '-maxrate',
       bitrate,
-      '-vf',
-      `${filters.cpuCropPrefix}scale=${w}:-2:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
+    ];
+    const trailing = [
       '-g',
       String(target.gopSize),
       '-keyint_min',
@@ -36,6 +36,24 @@ export const hevcVideotoolbox: EncoderDescriptor = {
       input.forceKeyframesExpr,
       '-tag:v',
       'hvc1',
+    ];
+
+    if (tonemap && !hasBurnIn && !hasCrop) {
+      // Full Metal pipeline: scale_vt does HDR→SDR tonemap on the
+      // Apple Media Engine. Avoids CPU round-trip when burn-in /
+      // crop aren't requested.
+      return [
+        ...common,
+        '-vf',
+        `scale_vt=w=${w}:h=-2:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709`,
+        ...trailing,
+      ];
+    }
+    return [
+      ...common,
+      '-vf',
+      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:-2:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
+      ...trailing,
     ];
   },
 };
