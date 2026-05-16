@@ -4,6 +4,11 @@ import {
   parseBitrateToBps,
 } from './profiles';
 import type { DeviceType, TranscodeProfile } from './types';
+import type { CodecVariant } from './codec/types';
+import {
+  h264CodecString,
+  hevcMainCodecString,
+} from './codec/codec-strings';
 
 /**
  * Get available quality profiles for a given source resolution + device class.
@@ -56,6 +61,13 @@ export function generateMasterPlaylist(
    *  ExoPlayer. When false, only the remux pass-through rung is emitted
    *  — that path is `-c:v copy` and works regardless of hwAccel. */
   canEncodeHevcHdr = false,
+  /** SDR-ladder output codec, picked by the codec selector. When the
+   *  selector promoted HEVC (source codec match, or efficiency
+   *  ranking on HEVC-capable clients), every SDR rung emits a
+   *  `hvc1.*` CODECS string instead of `avc1.*` so MSE doesn't reject
+   *  the appended segments. Absent for legacy callers that haven't
+   *  threaded the variant through — falls back to H.264 codec strings. */
+  sdrVariant?: CodecVariant,
 ): string {
   const multiAudio = audioStreams && audioStreams.length > 1;
   const lines = ['#EXTM3U'];
@@ -187,7 +199,17 @@ export function generateMasterPlaylist(
     const w = Math.min(p.maxWidth, sourceWidth);
     const rawH = (w * sourceHeight) / sourceWidth;
     const h = Math.floor(rawH / 16) * 16 || 16;
-    const videoCodec = h264CodecStringForHeight(p.maxHeight);
+    const target = {
+      width: w,
+      height: p.maxHeight,
+      videoBitrateBps: 0,
+      gopSize: 0,
+      frameRate: 24,
+    };
+    const videoCodec =
+      sdrVariant?.codec === 'hevc'
+        ? hevcMainCodecString(target)
+        : h264CodecString(target);
     const codecsAttr = `,CODECS="${videoCodec},${audioCodec}"`;
     lines.push(
       `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},NAME="${p.name}"${codecsAttr}${audioAttr}`,

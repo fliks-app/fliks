@@ -264,6 +264,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       videoBitRateBps?: number;
       audioBitRateBps?: number;
     },
+    sdrVariant?: import('./codec/types').CodecVariant,
   ): string {
     // Only the QSV branch in ffmpeg-args has `hevc_qsv Main10` wired —
     // every other hwAccel hits libx264 for HEVC HDR profile names and
@@ -286,6 +287,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       outputAudioCodec,
       hdrPassThrough,
       canEncodeHevcHdr,
+      sdrVariant,
     );
   }
 

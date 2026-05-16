@@ -651,6 +651,7 @@ export class StreamingController {
         : this.activeStreamTracker.getDeviceType(mediaFileId);
     this.activeStreamTracker.setDeviceType(mediaFileId, deviceType);
 
+    const sdrVariant = this.activeStreamTracker.getVideoVariant(mediaFileId);
     const playlist = this.transcodingService.generateMasterPlaylist(
       mediaFileId,
       w,
@@ -665,6 +666,9 @@ export class StreamingController {
       (this.activeStreamTracker.getAudioPlan(mediaFileId)?.codec ?? 'aac') as
         | 'aac' | 'ac3' | 'eac3',
       hdrPassThrough,
+      // Only the SDR ladder branch consumes this — the HDR branch
+      // already drives its codec strings from `hdrPassThrough`.
+      sdrVariant && sdrVariant.hdr == null ? sdrVariant : undefined,
     );
 
     this.activeStreamTracker.setAudioStreamCount(
