@@ -26,6 +26,8 @@ import {
 import { detectHwAccel } from './hw-detect';
 import { ALL_DESCRIPTORS } from './codec/encoders';
 import { runEncoderProbes } from './codec/encoder-probe';
+import { ALL_DECODERS } from './codec/decoders';
+import { runDecoderProbes } from './codec/decoder-probe';
 import { generateMasterPlaylist, getAvailableProfiles } from './master-playlist';
 import {
   fileExists,
@@ -88,6 +90,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // usable" until the probe completes (the runtime fallback layer
     // catches stragglers).
     void runEncoderProbes(ALL_DESCRIPTORS, this.log);
+    // Same one-frame validation pass on the decoder side: synthesise a
+    // tiny bitstream per codec, hand it to each descriptor under its
+    // real `-hwaccel ...` setup, drop the frame to /dev/null. Both
+    // probes fire fire-and-forget — by the time a transcode session
+    // actually runs, both maps are populated.
+    void runDecoderProbes(ALL_DECODERS, this.log);
 
     this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 30_000);
   }
@@ -573,6 +581,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           early: true,
           useTs: ctx?.useTs ?? false,
           videoVariant: ctx?.videoVariant,
+          sourceVideoCodec: ctx?.sourceVideoCodec,
+          sourceBitDepth: ctx?.isSourceHdr ? 10 : 8,
         },
         this.log,
       );

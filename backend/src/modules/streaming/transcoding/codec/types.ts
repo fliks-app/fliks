@@ -90,6 +90,15 @@ export interface EncoderInput {
     cropStr: string;
     cpuCropPrefix: string;
     hwCropPrefix: string;
+    /** Bridge filter between the decoder's output surface and the
+     *  encoder's input surface. Either `''` (decoder and encoder share
+     *  the same device → zero-copy) or a short ffmpeg snippet ending
+     *  with a comma — e.g. `'hwdownload,format=nv12,'` (HW→CPU),
+     *  `'format=nv12,hwupload,'` (CPU→HW), `'hwmap=derive_device=qsv,
+     *  format=qsv,'` (VAAPI↔QSV). Encoders splice it at the very start
+     *  of their `-vf` chain so every downstream filter sees the right
+     *  surface. */
+    surfaceBridge: string;
     burnInFilter: string;
     tonemapVaapi: string;
     tonemapOpencl: string;
@@ -101,6 +110,12 @@ export interface EncoderInput {
   tonemap: boolean;
   hasBurnIn: boolean;
   hasCrop: boolean;
+  /** Surface format on the decoder's output side. Encoders use it to
+   *  pick the right scale / crop filter: when a QSV encoder receives
+   *  QSV surfaces from a qsv-native decoder it can use `vpp_qsv` for
+   *  both crop and scale; when it receives VAAPI surfaces (default
+   *  Linux path) it stays on the `scale_vaapi → hwmap=qsv` chain. */
+  inputSurface: import('./decoders/types').SurfaceFormat;
 }
 
 /** A single encoder binding — one ffmpeg encoder × one platform × one

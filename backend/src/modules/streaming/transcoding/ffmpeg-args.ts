@@ -12,7 +12,10 @@ import type {
   TranscodeProfile,
 } from './types';
 import { encoderRegistry } from './codec/encoders';
-import type { CodecVariant, EncoderInput } from './codec/types';
+import type { BitDepth, CodecVariant, EncoderInput, VideoCodec } from './codec/types';
+import { decoderRegistry, findQsvNativeDecoder } from './codec/decoders';
+import { isDecoderEnabled } from './codec/decoder-probe';
+import { surfaceBridge } from './codec/decoders/bridge';
 
 export interface BuildFfmpegArgsOptions {
   inputPath: string;
@@ -30,6 +33,14 @@ export interface BuildFfmpegArgsOptions {
    *  `encoderRegistry`. When omitted (legacy callers), the variant is
    *  inferred from `isHdrProfile(profile.name)` + `hwAccel === 'qsv'`. */
   videoVariant?: CodecVariant;
+  /** Source video codec from ffprobe (`'h264'`, `'hevc'`, `'av1'`, plus
+   *  aliases `'avc1'`, `'hev1'`, `'av01'`). Drives decoder selection
+   *  via `decoderRegistry`. Falls back to CPU decode when omitted or
+   *  unknown. */
+  sourceVideoCodec?: string;
+  /** Source bit depth (8 or 10). 10-bit HDR sources need a decoder
+   *  that can handle p010le surfaces. Defaults to 8 when omitted. */
+  sourceBitDepth?: BitDepth;
   /** Audio output decision — see {@link SessionContext.audioPlan}. When
    *  omitted, ffmpeg-args falls back to AAC stereo at the profile bitrate
    *  (safe default that plays everywhere). */
@@ -79,6 +90,8 @@ export function buildFfmpegArgs(
     early = false,
     useTs = false,
     videoVariant,
+    sourceVideoCodec,
+    sourceBitDepth = 8,
   } = opts;
 
   // Segment container choice. Cast → MPEG-TS (fixes the priming desync
@@ -167,9 +180,24 @@ export function buildFfmpegArgs(
   // would give 200 Mbps for "200k" (it drops the suffix and multiplies as if M).
   const bitrateNum = parseBitrateToBps(profile.videoBitrate);
 
+  // Pre-flight: is the qsv-native crop path actually available for this
+  // source? Drives `qsvCanCrop` below so we don't bounce off QSV onto
+  // VAAPI when we *can* stay on QSV with vpp_qsv.
+  const normalisedSourceCodecPreflight = normaliseSourceCodec(sourceVideoCodec);
+  const qsvNativeAvailable =
+    hwAccel === 'qsv' &&
+    !!crop &&
+    !tonemap &&
+    !burnIn?.filter &&
+    normalisedSourceCodecPreflight != null &&
+    isDecoderEnabled(
+      `${normalisedSourceCodecPreflight}_qsv_native_decode`,
+    );
+
   const requestedHwAccel = requestedHwAccelFor(hwAccel, {
     burnIn: !!burnIn?.filter,
     crop: !!crop,
+    qsvCanCrop: qsvNativeAvailable,
   });
 
   // Resolve the actual encoder before setting up the input pipeline.
@@ -238,63 +266,44 @@ export function buildFfmpegArgs(
     (effectiveHwAccel === 'vaapi' ||
       (early && effectiveHwAccel === 'qsv'));
 
-  // Hardware acceleration input decoding
-  if (effectiveHwAccel === 'qsv') {
-    // Linux approach: decode with VAAPI (native), scale with VAAPI,
-    // then map to QSV surfaces for encoding. More compatible than pure QSV pipeline.
-    args.push(
-      '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
-      '-init_hw_device', 'qsv=qs@va',
-    );
-    if (tonemap && !useVaapiTonemap) {
-      args.push('-init_hw_device', 'opencl=ocl:0.0', '-filter_hw_device', 'ocl');
-    }
-    args.push(
-      '-hwaccel', 'vaapi',
-      '-hwaccel_output_format', 'vaapi',
-      '-hwaccel_device', 'va',
-      '-extra_hw_frames', '32',
-      '-noautorotate',
-    );
-  } else if (effectiveHwAccel === 'vaapi') {
-    args.push('-init_hw_device', 'vaapi=va:/dev/dri/renderD128');
-    if (tonemap && !useVaapiTonemap) {
-      args.push('-init_hw_device', 'opencl=ocl:0.0', '-filter_hw_device', 'ocl');
-    }
-    args.push(
-      '-hwaccel', 'vaapi',
-      '-hwaccel_output_format', 'vaapi',
-      '-hwaccel_device', 'va',
-      '-extra_hw_frames', '32',
-      '-noautorotate',
-    );
-  } else if (effectiveHwAccel === 'nvenc') {
-    if (tonemap) {
-      // For tone mapping, don't force cuda output format — allows hwdownload to CPU
-      args.push('-hwaccel', 'cuda', '-noautorotate');
-    } else {
-      args.push(
-        '-hwaccel', 'cuda',
-        '-hwaccel_output_format', 'cuda',
-        '-noautorotate',
-      );
-    }
-  } else if (effectiveHwAccel === 'videotoolbox') {
-    // VideoToolbox = Apple Media Engine (h264/hevc encode+decode ASIC).
-    // Two modes:
-    //   1. Tonemap (no burn-in/crop): keep VT surfaces, use scale_vt for
-    //      hardware HDR→SDR tonemap via Metal — full GPU pipeline.
-    //   2. Everything else: download to CPU buffers for software filters
-    //      (crop, burn-in, scale), then re-upload via the encoder.
-    if (tonemap && !burnIn?.filter && !crop) {
-      args.push(
-        '-hwaccel', 'videotoolbox',
-        '-hwaccel_output_format', 'videotoolbox_vld',
-        '-noautorotate',
-      );
-    } else {
-      args.push('-hwaccel', 'videotoolbox', '-noautorotate');
-    }
+  // Resolve the decoder via the same registry pattern as the encoder.
+  // The decoder picks how the source is brought into memory (HW device
+  // init + `-hwaccel`); the encoder's hwAccel decides where the frame
+  // needs to land for encode. `surfaceBridge` computes the filter
+  // snippet that reshapes the decoder's output surface into the
+  // encoder's expected one — empty when both stay on the same device.
+  const normalisedSourceCodec = normalisedSourceCodecPreflight;
+  // Opt into the qsv-native decoder when the qsv crop path is in use
+  // (pre-flighted above so requestedHwAccelFor could keep us on QSV).
+  // The default qsv decoder emits VAAPI surfaces — kept as the safe
+  // baseline for every other QSV path.
+  const decoder: ReturnType<typeof decoderRegistry.resolve> =
+    qsvNativeAvailable &&
+    effectiveHwAccel === 'qsv' &&
+    normalisedSourceCodec
+      ? (findQsvNativeDecoder(normalisedSourceCodec) ??
+        decoderRegistry.resolve(
+          {
+            codec: normalisedSourceCodec,
+            bitDepth: sourceBitDepth,
+          },
+          effectiveHwAccel,
+        ))
+      : decoderRegistry.resolve(
+          {
+            codec: normalisedSourceCodec ?? 'h264',
+            bitDepth: sourceBitDepth,
+          },
+          effectiveHwAccel,
+        );
+  args.push(...decoder.buildInputArgs());
+
+  // OpenCL device init for the tonemap_opencl filter chain. Only needed
+  // when (a) we're tonemapping HDR→SDR AND (b) the VAAPI in-place
+  // tonemap fallback isn't active AND (c) the decoder's output sits on
+  // VAAPI surfaces — the only path that uses the opencl bridge today.
+  if (tonemap && !useVaapiTonemap && decoder.outputSurface === 'vaapi') {
+    args.push('-init_hw_device', 'opencl=ocl:0.0', '-filter_hw_device', 'ocl');
   }
 
   args.push('-i', inputPath);
@@ -348,6 +357,16 @@ export function buildFfmpegArgs(
     ? `hwdownload,format=nv12,${cropStr},hwupload=derive_device=vaapi,`
     : '';
 
+  // Decoder→encoder surface bridge. Empty when both stay on the same
+  // device (qsv→qsv, vaapi→vaapi, cuda→cuda). Otherwise emits the
+  // hwdownload / hwupload / hwmap snippet the encoder splices in front
+  // of its `-vf` chain.
+  const surfaceBridgeFilter = surfaceBridge(
+    decoder.outputSurface,
+    encoder.hwAccel,
+    variant.bitDepth,
+  );
+
   const encoderInput: EncoderInput = {
     source: {
       width: 0,
@@ -379,6 +398,7 @@ export function buildFfmpegArgs(
       cropStr,
       cpuCropPrefix,
       hwCropPrefix,
+      surfaceBridge: surfaceBridgeFilter,
       burnInFilter,
       tonemapVaapi,
       tonemapOpencl,
@@ -387,6 +407,7 @@ export function buildFfmpegArgs(
     tonemap,
     hasBurnIn: !!burnIn?.filter,
     hasCrop: !!crop,
+    inputSurface: decoder.outputSurface,
   };
   args.push(...encoder.buildArgs(encoderInput));
 
@@ -651,4 +672,28 @@ export function buildRemuxArgs(
   );
 
   return args;
+}
+
+/** ffprobe codec name → `VideoCodec` union. Aliases (`hvc1`/`hev1` for
+ *  HEVC, `avc1` for H.264, `av01` for AV1) collapse to the canonical
+ *  form. Returns null on unknown codecs so the decoder registry can
+ *  fall back to CPU decode. */
+function normaliseSourceCodec(name: string | undefined): VideoCodec | null {
+  if (!name) return null;
+  switch (name.toLowerCase()) {
+    case 'h264':
+    case 'avc':
+    case 'avc1':
+      return 'h264';
+    case 'hevc':
+    case 'h265':
+    case 'hvc1':
+    case 'hev1':
+      return 'hevc';
+    case 'av1':
+    case 'av01':
+      return 'av1';
+    default:
+      return null;
+  }
 }
