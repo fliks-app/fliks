@@ -194,10 +194,21 @@ export function buildFfmpegArgs(
       `${normalisedSourceCodecPreflight}_qsv_native_decode`,
     );
 
+  // QSV can also handle crop + tonemap via the legacy vaapi-decode
+  // path: hwCropPrefix downloads to CPU, hwupload back to vaapi, then
+  // scale_vaapi+tonemap_vaapi+hwmap to qsv produces a fixed-size pool
+  // that the qsv encoder accepts. The qsv encoder filter chain
+  // prepends hwCropPrefix when it's present, so we only need to keep
+  // the orchestrator on QSV (don't bounce to VAAPI). Burn-in still
+  // forces CPU because libass subtitles need software surfaces.
+  const qsvCanCrop =
+    qsvNativeAvailable ||
+    (hwAccel === 'qsv' && !!crop && !!tonemap && !burnIn?.filter);
+
   const requestedHwAccel = requestedHwAccelFor(hwAccel, {
     burnIn: !!burnIn?.filter,
     crop: !!crop,
-    qsvCanCrop: qsvNativeAvailable,
+    qsvCanCrop,
   });
 
   // Resolve the actual encoder before setting up the input pipeline.

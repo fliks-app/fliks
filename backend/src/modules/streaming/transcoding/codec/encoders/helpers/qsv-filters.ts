@@ -33,13 +33,19 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
       : '';
     return `vpp_qsv=${cropOpts}w=${w}:h=${targetH}:format=nv12`;
   }
+  // hwCropPrefix = 'hwdownload,format=nv12,crop=…,hwupload=vaapi,' when
+  // a crop is needed and we're on the vaapi-input path. Prepending it
+  // lets scale_vaapi rebuild a fresh fixed-size pool from the cropped
+  // CPU frames — the QSV hwmap downstream then accepts the surfaces
+  // (the 'fixed-size pool' rejection only fires when the pool changes
+  // size mid-chain, which scale_vaapi avoids by reallocating).
   if (filters.tonemapVaapi) {
-    return `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapVaapi},hwmap=derive_device=qsv,format=qsv`;
+    return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapVaapi},hwmap=derive_device=qsv,format=qsv`;
   }
   if (filters.tonemapOpencl) {
-    return `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`;
+    return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`;
   }
-  return `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`;
+  return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`;
 }
 
 function parseCropStr(

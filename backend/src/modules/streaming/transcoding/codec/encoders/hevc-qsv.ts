@@ -54,7 +54,7 @@ export const hevcQsvHdr10: EncoderDescriptor = {
   supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => hevcMain10CodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, preset, qsv } = input;
+    const { target, preset, qsv, filters, hasCrop, inputSurface } = input;
     const w = target.width;
     return [
       '-c:v', 'hevc_qsv',
@@ -67,7 +67,7 @@ export const hevcQsvHdr10: EncoderDescriptor = {
       '-rc_init_occupancy', String(qsv.rcInitOccupancy),
       '-bufsize', String(qsv.bufsize),
       '-vf',
-      `scale_vaapi=w=${w}:h=-16:format=p010le:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
+      hevcQsvHdr10FilterChain({ w, target, filters, hasCrop, inputSurface }),
       '-g', String(target.gopSize),
       '-keyint_min', String(target.gopSize),
       '-force_key_frames', input.forceKeyframesExpr,
@@ -76,6 +76,37 @@ export const hevcQsvHdr10: EncoderDescriptor = {
     ];
   },
 };
+
+/** Filter chain for the 10-bit HDR hevc_qsv encode. Two branches:
+ *  - `inputSurface='qsv'` (qsv-native decoder, e.g. for HDR + crop):
+ *    use `vpp_qsv` which handles crop + scale on the QSV device, p010le
+ *    output. Requires explicit integer height — derived from the crop
+ *    aspect.
+ *  - default (vaapi decoder output): scale_vaapi + hwmap to qsv as
+ *    before. */
+function hevcQsvHdr10FilterChain(args: {
+  w: number;
+  target: EncoderInput['target'];
+  filters: EncoderInput['filters'];
+  hasCrop: boolean;
+  inputSurface: EncoderInput['inputSurface'];
+}): string {
+  const { w, target, filters, hasCrop, inputSurface } = args;
+  if (inputSurface === 'qsv') {
+    const cropMatch =
+      hasCrop && filters.cropStr.match(/^crop=(\d+):(\d+):(\d+):(\d+)$/);
+    const cropOpts = cropMatch
+      ? `cw=${cropMatch[1]}:ch=${cropMatch[2]}:cx=${cropMatch[3]}:cy=${cropMatch[4]}:`
+      : '';
+    const targetH = cropMatch
+      ? Math.round((w * parseInt(cropMatch[2], 10)) / parseInt(cropMatch[1], 10)) -
+        (Math.round((w * parseInt(cropMatch[2], 10)) / parseInt(cropMatch[1], 10)) %
+          2)
+      : target.height;
+    return `vpp_qsv=${cropOpts}w=${w}:h=${targetH}:format=p010le`;
+  }
+  return `scale_vaapi=w=${w}:h=-16:format=p010le:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`;
+}
 
 /** Same encoder, HLG variant — only difference is the SPS VUI tag. */
 export const hevcQsvHlg: EncoderDescriptor = hlgFromHdr10(
