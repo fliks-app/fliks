@@ -2532,16 +2532,17 @@ export class MediaService {
       const cropAlreadyRecorded =
         (dbFile.streamInfo as { video?: { crop?: unknown }[] } | undefined)
           ?.video?.[0]?.crop != null;
+      const shouldRunCropDetect = !sizeUnchanged || !cropAlreadyRecorded;
       dbFile.size = diskSize;
       let streamInfo: Awaited<
         ReturnType<FfprobeService['detectMediaFileInfo']>
       >;
       try {
         streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
-        if (
-          streamInfo?.video?.[0] &&
-          (!sizeUnchanged || !cropAlreadyRecorded)
-        ) {
+        if (streamInfo?.video?.[0] && shouldRunCropDetect) {
+          this.log.log(
+            `Rescan: running detectCrop for "${normPath}" (sizeUnchanged=${sizeUnchanged}, cropAlreadyRecorded=${cropAlreadyRecorded})`,
+          );
           try {
             const v = streamInfo.video[0];
             const crop = await this.ffprobe.detectCrop(
@@ -2579,7 +2580,7 @@ export class MediaService {
         await this.mediaFileRepo.save(dbFile);
         updated++;
         this.log.log(
-          `Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${qualityName}${sizeUnchanged ? ', skipped crop' : ''})`,
+          `Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${qualityName}${!shouldRunCropDetect ? ', skipped crop' : ''})`,
         );
         if (!options?.skipWarmup) {
           void this.subtitleStream.warmupCache(
