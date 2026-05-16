@@ -213,7 +213,14 @@ export function buildFfmpegArgs(
   );
   const qsvBufsize = bitrateNum;
   // libx264 -bufsize is expressed in Mbits. Stock = 2x bitrate, early = 1x.
-  const libx264BufsizeMb = `${Math.max(1, parseInt(profile.videoBitrate) * (early ? 1 : 2))}M`;
+  // parseInt() drops ffmpeg's 'k'/'M' suffix silently — `parseInt('1500k')`
+  // gives 1500, then ×2 + 'M' yields "3000M" = 3 Gbits and ffmpeg rejects
+  // it as out-of-range. Derive Mbits from bitrateNum (already parsed via
+  // parseBitrateToBps) so the multiplier sees real units.
+  const libx264BufsizeMb = `${Math.max(
+    1,
+    Math.ceil((bitrateNum * (early ? 1 : 2)) / 1_000_000),
+  )}M`;
 
   // tonemap_vaapi keeps the pipeline inside VAAPI (1 device transition, no
   // OpenCL kernel compile) — saves ~300-500ms cold-start on HDR. Quality is
