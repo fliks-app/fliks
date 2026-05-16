@@ -437,7 +437,7 @@ export class FfprobeService {
       const totalHorizontalCrop = originalWidth ? originalWidth - w : x * 2;
       if (totalVerticalCrop < 40 && totalHorizontalCrop < 40) {
         this.logger.log(
-          `cropdetect "${label}": no crop needed (detected ${bestCrop}, total crop: ${totalVerticalCrop}v/${totalHorizontalCrop}h)`,
+          `cropdetect "${label}": no crop needed (detected ${w}:${h}:${x}:${y}, total crop: ${totalVerticalCrop}v/${totalHorizontalCrop}h)`,
         );
         return null;
       }
