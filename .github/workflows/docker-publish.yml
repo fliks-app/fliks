@@ -3,6 +3,17 @@
 #   - every push to main               → `main` tag for downstream tests
 #   - manual workflow_dispatch         → `manual-<sha>` tag, ad-hoc rebuilds
 #
+# Build topology:
+#   - Releases (`v*` tag) and `main` pushes: matrix on linux/amd64 +
+#     linux/arm64, each on its native runner (no QEMU emulation). Two
+#     parallel single-arch builds → merge job combines digests into one
+#     multi-arch manifest.
+#   - workflow_dispatch (test images): amd64 only — most ad-hoc test
+#     deployments are TrueNAS SCALE / generic x86 servers, and an arm64
+#     build under emulation used to add ~3 min per iteration. The matrix
+#     degenerates to one element; the merge job still runs and creates a
+#     single-platform manifest with the requested tag.
+#
 # First push leaves the package private — flip it to Public once via
 # https://github.com/orgs/fliks-app/packages → fliks → settings →
 # Change visibility. After that, TrueNAS users (and anyone else) can
@@ -29,10 +40,88 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push:
+  setup:
     runs-on: ubuntu-latest
+    outputs:
+      platforms: ${{ steps.set.outputs.platforms }}
+    steps:
+      - id: set
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo 'platforms=[{"platform":"linux/amd64","runner":"ubuntu-latest"}]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'platforms=[{"platform":"linux/amd64","runner":"ubuntu-latest"},{"platform":"linux/arm64","runner":"ubuntu-24.04-arm"}]' >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.setup.outputs.platforms) }}
+    runs-on: ${{ matrix.target.runner }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Sanitize platform for cache key
+        id: sanitize
+        run: echo "tag=$(echo '${{ matrix.target.platform }}' | tr '/' '-')" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: ${{ matrix.target.platform }}
+          # push-by-digest: each matrix job pushes its single-arch image
+          # under a content-addressable digest only (no human tag). The
+          # merge job stitches the digests into a multi-arch manifest and
+          # applies the actual tags.
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          build-args: |
+            TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
+            TVDB_API_KEY=${{ secrets.TVDB_API_KEY }}
+          # Per-platform cache scope: amd64 and arm64 caches never share
+          # layers (different base manifest + apt arch), so a single
+          # `gha` scope just causes cross-eviction.
+          cache-from: type=gha,scope=${{ steps.sanitize.outputs.tag }}
+          cache-to: type=gha,mode=max,scope=${{ steps.sanitize.outputs.tag }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ steps.sanitize.outputs.tag }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -50,39 +139,20 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # Tag pushes (release-please's v1.2.3 produces all of these)
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            # Branch pushes (main → :main, useful for downstream smoke tests)
             type=ref,event=branch
-            # Manual / ad-hoc runs — always include the sha tag for
-            # traceability + a custom tag from the workflow input (defaults
-            # to "test"). The custom tag is what you pull from TrueNAS /
-            # staging to validate a branch before merging to main.
             type=raw,value=manual-{{sha}},enable=${{ github.event_name == 'workflow_dispatch' }}
             type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '' }}
-            # `:latest` only on tag pushes — never on a main commit, so a
-            # broken main never overrides a stable tag for users tracking
-            # `:latest`.
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          push: true
-          # Multi-arch: amd64 covers TrueNAS SCALE / generic x86 servers,
-          # arm64 covers Apple Silicon Docker Desktop (M1+), ARM NAS, Pi 5.
-          # HW transcode accel (QSV/VAAPI/NVENC) is x86-Linux only — arm64
-          # users fall back to libx264 CPU encoding (no Metal/VideoToolbox
-          # passthrough from container to host on Docker Desktop).
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
-            TVDB_API_KEY=${{ secrets.TVDB_API_KEY }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Create manifest and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
