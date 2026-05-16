@@ -16,6 +16,7 @@ import type { BitDepth, CodecVariant, EncoderInput, VideoCodec } from './codec/t
 import { decoderRegistry, findQsvNativeDecoder } from './codec/decoders';
 import { isDecoderEnabled } from './codec/decoder-probe';
 import { surfaceBridge } from './codec/decoders/bridge';
+import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
 
 export interface BuildFfmpegArgsOptions {
   inputPath: string;
@@ -180,27 +181,32 @@ export function buildFfmpegArgs(
   // would give 200 Mbps for "200k" (it drops the suffix and multiplies as if M).
   const bitrateNum = parseBitrateToBps(profile.videoBitrate);
 
-  // Pre-flight: is the qsv-native crop path actually available for this
-  // source? Drives `qsvCanCrop` below so we don't bounce off QSV onto
-  // VAAPI when we *can* stay on QSV with vpp_qsv.
+  // Pre-flight: can we keep the whole pipeline on QSV (decode + filter
+  // + encode without bouncing through VAAPI)?
+  //
+  // Three sub-cases, all gated on `hwAccel === 'qsv'`, no burn-in
+  // (libass needs CPU buffers) and a known source codec:
+  //
+  //   a. crop + !tonemap → qsv-native decoder + vpp_qsv crop/scale.
+  //   b. tonemap + vpp_qsv tonemap probed enabled → qsv-native decoder
+  //      + vpp_qsv with `tonemap=1` (single-pass HDR→SDR on the iGPU
+  //      VPP, no hwmap, no opencl bridge). Available on Tiger Lake and
+  //      later; the boot probe in `vpp-qsv-probe.ts` is the gate.
+  //   c. crop + tonemap on older gens → still goes through the legacy
+  //      vaapi-decode chain (scale_vaapi+tonemap_vaapi+hwmap=qsv), so
+  //      we can stay on the QSV encoder via the hwCropPrefix splice.
   const normalisedSourceCodecPreflight = normaliseSourceCodec(sourceVideoCodec);
-  const qsvNativeAvailable =
+  const hasUsableQsvNativeDecoder =
     hwAccel === 'qsv' &&
-    !!crop &&
-    !tonemap &&
     !burnIn?.filter &&
     normalisedSourceCodecPreflight != null &&
     isDecoderEnabled(
       `${normalisedSourceCodecPreflight}_qsv_native_decode`,
     );
-
-  // QSV can also handle crop + tonemap via the legacy vaapi-decode
-  // path: hwCropPrefix downloads to CPU, hwupload back to vaapi, then
-  // scale_vaapi+tonemap_vaapi+hwmap to qsv produces a fixed-size pool
-  // that the qsv encoder accepts. The qsv encoder filter chain
-  // prepends hwCropPrefix when it's present, so we only need to keep
-  // the orchestrator on QSV (don't bounce to VAAPI). Burn-in still
-  // forces CPU because libass subtitles need software surfaces.
+  const qsvNativeAvailable =
+    hasUsableQsvNativeDecoder &&
+    !!crop &&
+    (!tonemap || isVppQsvTonemapEnabled());
   const qsvCanCrop =
     qsvNativeAvailable ||
     (hwAccel === 'qsv' && !!crop && !!tonemap && !burnIn?.filter);

@@ -19,6 +19,7 @@ import {
   requestedHwAccelFor,
 } from './transcoding';
 import { isDecoderEnabled } from './transcoding/codec/decoder-probe';
+import { isVppQsvTonemapEnabled } from './transcoding/codec/vpp-qsv-probe';
 import { pickPrimaryVariant } from './transcoding/codec/selector';
 import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
 
@@ -343,15 +344,17 @@ export class StreamBuilderService {
     // HW accel.
     const detectedHw = this.transcodingService.getDetectedHwAccel();
     const normalisedSourceCodecForDecode = normaliseCodec(sourceVideoCodec);
-    const qsvNativeAvailableForReport =
+    const hasUsableQsvNativeDecoderForReport =
       detectedHw === 'qsv' &&
-      needsCrop &&
-      !needsTonemapping &&
       !needsBurnIn &&
       normalisedSourceCodecForDecode != null &&
       isDecoderEnabled(
         `${normalisedSourceCodecForDecode}_qsv_native_decode`,
       );
+    const qsvNativeAvailableForReport =
+      hasUsableQsvNativeDecoderForReport &&
+      needsCrop &&
+      (!needsTonemapping || isVppQsvTonemapEnabled());
     const qsvCanCropForReport =
       qsvNativeAvailableForReport ||
       (detectedHw === 'qsv' && needsCrop && needsTonemapping && !needsBurnIn);

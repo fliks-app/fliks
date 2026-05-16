@@ -14,12 +14,13 @@ import type { EncoderInput } from '../../types';
  *  because libva exposes more scaling-quality knobs (`extra_hw_frames`,
  *  native nv12 output) on every gen we care about. */
 export function qsvScaleFilter8bit(input: EncoderInput): string {
-  const { target, filters, hasCrop } = input;
+  const { target, filters, hasCrop, tonemap } = input;
   const w = target.width;
   if (input.inputSurface === 'qsv') {
-    // crop_qsv + scale_qsv in one filter. `vpp_qsv` is the libavfilter
-    // wrapper over Intel VPP and accepts both crop region and output
-    // size in a single pass. Unlike software `scale=W:-2`, vpp_qsv
+    // Single-pass `vpp_qsv` on the QSV device — combines crop, scale,
+    // format conversion AND fixed-function HDR tone-mapping (when the
+    // host's iGPU has the VPP HDR LUT, gated by the boot probe in
+    // `vpp-qsv-probe.ts`). Unlike software `scale=W:-2`, vpp_qsv
     // requires explicit integer h — compute it from the crop's aspect
     // (or the rung's profile maxHeight when there's no crop) snapped
     // to mod-2 so the encoder doesn't reject odd luma height.
@@ -31,7 +32,8 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
     const cropOpts = cropArgs
       ? `cw=${cropArgs.w}:ch=${cropArgs.h}:cx=${cropArgs.x}:cy=${cropArgs.y}:`
       : '';
-    return `vpp_qsv=${cropOpts}w=${w}:h=${targetH}:format=nv12`;
+    const tonemapOpt = tonemap ? 'tonemap=1:' : '';
+    return `vpp_qsv=${tonemapOpt}${cropOpts}w=${w}:h=${targetH}:format=nv12`;
   }
   // hwCropPrefix = 'hwdownload,format=nv12,crop=…,hwupload=vaapi,' when
   // a crop is needed and we're on the vaapi-input path. Prepending it

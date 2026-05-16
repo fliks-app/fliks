@@ -28,6 +28,7 @@ import { ALL_DESCRIPTORS } from './codec/encoders';
 import { runEncoderProbes } from './codec/encoder-probe';
 import { ALL_DECODERS } from './codec/decoders';
 import { runDecoderProbes } from './codec/decoder-probe';
+import { runVppQsvTonemapProbe } from './codec/vpp-qsv-probe';
 import { generateMasterPlaylist, getAvailableProfiles } from './master-playlist';
 import {
   fileExists,
@@ -96,6 +97,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // probes fire fire-and-forget — by the time a transcode session
     // actually runs, both maps are populated.
     void runDecoderProbes(ALL_DECODERS, this.log);
+    // Probe whether the iGPU's fixed-function HDR tone-mapping unit
+    // is wired up. Only the upstream `vpp_qsv tonemap=1` path uses
+    // it; gates the single-pass HDR→SDR chain in the QSV encoder
+    // filter helpers.
+    void runVppQsvTonemapProbe(this.log);
 
     this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 30_000);
   }
