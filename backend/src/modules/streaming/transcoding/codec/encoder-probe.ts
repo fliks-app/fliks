@@ -32,34 +32,61 @@ export function isEncoderEnabled(descriptorId: string): boolean {
   return probeResult.get(descriptorId) ?? false;
 }
 
-/** Spawn one tiny ffmpeg per descriptor in parallel. Probe args are
- *  derived from each descriptor's `buildArgs()` so we exercise the
- *  exact encoder + pixel format + filter the runtime path uses (modulo
- *  the lavfi source and the 1-frame `-frames:v 1 -f null -` sink). */
+/** Probe one tiny ffmpeg per descriptor. HW-accel descriptors run
+ *  serially within their family because driver state on the iGPU /
+ *  dGPU is shared — 20+ concurrent VAAPI contexts trip 'internal
+ *  encoding error 24' even when each context, taken alone, encodes
+ *  cleanly. CPU descriptors run in parallel (no shared state).
+ *  Probe args are derived from each descriptor's `buildArgs()` so we
+ *  exercise the exact encoder + pixel format + filter the runtime
+ *  path uses (modulo the lavfi source and the `-f null -` sink). */
 export async function runEncoderProbes(
   descriptors: readonly EncoderDescriptor[],
   log: Logger,
 ): Promise<void> {
   const t0 = Date.now();
-  const results = await Promise.allSettled(
-    descriptors.map(async (d) => {
-      // Static gate first — no point probing what hw-detect already
-      // says is absent.
-      if (!d.supports()) {
-        probeResult.set(d.id, false);
-        return { id: d.id, ok: false, reason: 'supports()=false' };
-      }
-      const ok = await probeOne(d, log);
-      probeResult.set(d.id, ok);
-      return { id: d.id, ok, reason: ok ? 'ok' : 'probe-failed' };
-    }),
-  );
+
+  const cpuDescriptors: EncoderDescriptor[] = [];
+  const hwGroups = new Map<string, EncoderDescriptor[]>();
+  for (const d of descriptors) {
+    if (d.hwAccel === 'none') {
+      cpuDescriptors.push(d);
+    } else {
+      const bucket = hwGroups.get(d.hwAccel) ?? [];
+      bucket.push(d);
+      hwGroups.set(d.hwAccel, bucket);
+    }
+  }
+
+  const runOne = async (
+    d: EncoderDescriptor,
+  ): Promise<{ id: string; ok: boolean }> => {
+    if (!d.supports()) {
+      probeResult.set(d.id, false);
+      return { id: d.id, ok: false };
+    }
+    const ok = await probeOne(d, log);
+    probeResult.set(d.id, ok);
+    return { id: d.id, ok };
+  };
+
+  const cpuTask = Promise.all(cpuDescriptors.map(runOne));
+
+  const hwTasks = Array.from(hwGroups.values()).map(async (group) => {
+    const out: { id: string; ok: boolean }[] = [];
+    for (const d of group) out.push(await runOne(d));
+    return out;
+  });
+
+  const settled = (
+    await Promise.all([cpuTask, ...hwTasks])
+  ).flat();
+
   probedOnce = true;
   const enabled: string[] = [];
   const disabled: string[] = [];
-  for (const r of results) {
-    if (r.status !== 'fulfilled') continue;
-    (r.value.ok ? enabled : disabled).push(r.value.id);
+  for (const r of settled) {
+    (r.ok ? enabled : disabled).push(r.id);
   }
   log.log(
     `[encoder-probe] ${enabled.length}/${descriptors.length} enabled (${Date.now() - t0}ms): ${enabled.join(',')}${disabled.length ? ` | disabled: ${disabled.join(',')}` : ''}`,
