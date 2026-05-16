@@ -18,6 +18,7 @@ import {
   profileFitsSource,
   requestedHwAccelFor,
 } from './transcoding';
+import { isDecoderEnabled } from './transcoding/codec/decoder-probe';
 import { pickPrimaryVariant } from './transcoding/codec/selector';
 import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
 
@@ -336,13 +337,29 @@ export class StreamBuilderService {
       });
     }
     // Mirror the ffmpeg-args dispatch: same pipeline rule, same registry
-    // resolve. Picks up the registry's runtime fallback (e.g. h264_vaapi
-    // disabled → libx264) so the stats overlay reports the actual encoder
-    // that will run, not the host's nominal HW accel.
-    const requestedHwAccel = requestedHwAccelFor(
-      this.transcodingService.getDetectedHwAccel(),
-      { burnIn: needsBurnIn, crop: needsCrop },
-    );
+    // resolve, same qsvCanCrop hint. Picks up the registry's runtime
+    // fallback (e.g. h264_vaapi disabled → libx264) so the stats overlay
+    // reports the actual encoder that will run, not the host's nominal
+    // HW accel.
+    const detectedHw = this.transcodingService.getDetectedHwAccel();
+    const normalisedSourceCodecForDecode = normaliseCodec(sourceVideoCodec);
+    const qsvNativeAvailableForReport =
+      detectedHw === 'qsv' &&
+      needsCrop &&
+      !needsTonemapping &&
+      !needsBurnIn &&
+      normalisedSourceCodecForDecode != null &&
+      isDecoderEnabled(
+        `${normalisedSourceCodecForDecode}_qsv_native_decode`,
+      );
+    const qsvCanCropForReport =
+      qsvNativeAvailableForReport ||
+      (detectedHw === 'qsv' && needsCrop && needsTonemapping && !needsBurnIn);
+    const requestedHwAccel = requestedHwAccelFor(detectedHw, {
+      burnIn: needsBurnIn,
+      crop: needsCrop,
+      qsvCanCrop: qsvCanCropForReport,
+    });
     const effectiveHwAccel =
       encoderRegistry.resolve(selectedVariant, requestedHwAccel)?.hwAccel ??
       'none';
