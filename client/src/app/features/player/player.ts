@@ -715,18 +715,27 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           } else {
             // HLS transcode/remux — apply quality constraint before load to
             // stop ExoPlayer from picking 4K on a phone (slow transcode →
-            // A/V desync). Auto / original: no constraint, ExoPlayer
-            // picks the top rung the master advertises.
+            // A/V desync). `auto`: no constraint, ExoPlayer's ABR picks
+            // adaptively. `original`: pin to source dimensions so ABR
+            // can't downgrade (the user explicitly forced top quality).
+            // Specific rung: pin to that rung's width/height.
             const savedQualityId = this.activeQualityId();
-            if (savedQualityId !== 'auto' && savedQualityId !== 'original') {
-              const PROFILE_WIDTHS: Record<string, number> = {
-                '2160p': 3840, '1080p': 1920, '720p': 1280, '480p': 854,
-                '360p': 640, '240p': 426, '144p': 256,
-              };
-              const baseId = savedQualityId.replace(/-hdr$/, '');
-              const w = PROFILE_WIDTHS[baseId] ?? 1920;
-              const h = this.qualityManager.availableQualities()
-                .find(q => q.id === savedQualityId)?.height ?? 1080;
+            if (savedQualityId !== 'auto') {
+              let w: number;
+              let h: number;
+              if (savedQualityId === 'original') {
+                w = this.playbackInfo?.source?.width ?? 3840;
+                h = this.playbackInfo?.source?.height ?? 2160;
+              } else {
+                const PROFILE_WIDTHS: Record<string, number> = {
+                  '2160p': 3840, '1080p': 1920, '720p': 1280, '480p': 854,
+                  '360p': 640, '240p': 426, '144p': 256,
+                };
+                const baseId = savedQualityId.replace(/-hdr$/, '');
+                w = PROFILE_WIDTHS[baseId] ?? 1920;
+                h = this.qualityManager.availableQualities()
+                  .find(q => q.id === savedQualityId)?.height ?? 1080;
+              }
               (this.engine as NativeEngine).selectVariantTrack({ width: w, height: h });
             }
             const nativeStartQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
