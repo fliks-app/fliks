@@ -143,9 +143,11 @@ export function buildFfmpegArgs(
   // headers and stops. Otherwise fall back to a balanced 1s/1MB budget.
   // Default FFmpeg is 5s/5MB which burns 3-5s on cold start of large 4K MKVs.
   if (trustedStreamInfo) {
-    log.log('Probe: using cached streamInfo (0s / 200KB scan)');
+    log.debug?.('Probe: using cached streamInfo (0s / 200KB scan)');
     args.push('-analyzeduration', '0', '-probesize', '200000');
   } else {
+    // Keep the no-cache fallback at LOG — cold-start scans are expected
+    // only on rescan / import races, so each one is worth surfacing.
     log.log('Probe: no cached streamInfo — running full FFmpeg scan (1s / 1MB)');
     args.push('-analyzeduration', '1000000', '-probesize', '1000000');
   }
@@ -484,7 +486,7 @@ export function buildAudioOnlyFfmpegArgs(
 
   const args = ['-hide_banner', '-loglevel', 'warning'];
   if (trustedStreamInfo) {
-    log.log('Probe [audio-only]: using cached streamInfo (0s / 200KB scan)');
+    log.debug?.('Probe [audio-only]: using cached streamInfo (0s / 200KB scan)');
     args.push('-analyzeduration', '0', '-probesize', '200000');
   } else {
     log.log(

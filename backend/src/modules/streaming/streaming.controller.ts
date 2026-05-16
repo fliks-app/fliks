@@ -26,6 +26,7 @@ import {
   PROFILES,
   DESKTOP_HDR_PROFILES,
   SessionContext,
+  getHdrLadderForDevice,
   getLadderForDevice,
 } from './transcoding';
 import { secondsToSegmentIndex } from './transcoding/constants';
@@ -246,12 +247,22 @@ export class StreamingController {
       const ctx = this.buildSessionContext(req, resolved, mediaFileId);
 
       // Prewarm only runs for transcode rungs. Plain `remux` / `original`
-      // pseudo-qualities map onto the top profile of the device ladder
-      // (HDR top rung is now a transcode, not a copy pass-through), so
-      // the same transcode prewarm applies.
+      // pseudo-qualities map onto the top profile of the device ladder.
+      // For HDR sources on HDR clients the master emits the HDR ladder
+      // (`<height>p-hdr` rung names), so the prewarm has to match —
+      // otherwise it spawns the top SDR rung (`2160p`), the player
+      // immediately asks for `1080p-hdr` (or whatever it picked from
+      // the master), and the orchestrator kills + respawns. The
+      // `useHdrLadder` decision was already cached by stream-builder
+      // at playback-info time.
+      const useHdrLadder =
+        this.activeStreamTracker.getHdrLadder(mediaFileId);
+      const ladderTop = useHdrLadder
+        ? getHdrLadderForDevice(deviceType)[0].name
+        : getLadderForDevice(deviceType)[0].name;
       const targetQuality =
         startQuality === 'remux' || startQuality === 'original'
-          ? getLadderForDevice(deviceType)[0].name
+          ? ladderTop
           : startQuality;
       const startSegment = Math.max(0, secondsToSegmentIndex(effectiveStartAt));
 

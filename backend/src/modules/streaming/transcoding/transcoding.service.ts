@@ -348,6 +348,15 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         this.log.log(
           `Quality change [${key}]: ${existing.quality} → ${quality}, killing old session`,
         );
+        // Inherit the killed session's seek position when the caller
+        // didn't pass one (init.mp4 requests arrive without a segment
+        // hint → requestedSegment=0). Without this, the new quality
+        // session spawns at ss=0 and gets killed seconds later by the
+        // first segment fetch which triggers a seek restart at the
+        // real position.
+        if (requestedSegment === 0 && existing.startSegment) {
+          requestedSegment = existing.startSegment;
+        }
         this.sessions.delete(key);
         existing.intentionallyKilled = true;
         await this.killProcess(existing.process);
@@ -708,7 +717,21 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const { resolve: readyResolve, promise: readyPromise } =
       this.createDeferred();
 
-    this.log.log(`FFmpeg start [${id}]: ffmpeg ${args.join(' ')}`);
+    // Compact one-liner at LOG level — quality + encoder + seek + start_number
+    // is what the operator needs in normal operation. Full ffmpeg command at
+    // DEBUG for diagnostics; enable with LOG_LEVEL=debug to inspect filters
+    // and rate-control knobs.
+    const encoderIdx = args.indexOf('-c:v');
+    const encoder = encoderIdx >= 0 ? args[encoderIdx + 1] : '?';
+    const ssIdx = args.lastIndexOf('-ss');
+    const ss = ssIdx >= 0 ? args[ssIdx + 1] : '0';
+    const startNumberIdx = args.indexOf('-start_number');
+    const startNumber =
+      startNumberIdx >= 0 ? args[startNumberIdx + 1] : String(startSegment);
+    this.log.log(
+      `FFmpeg start [${id}] ${quality} ${encoder} ss=${ss} start_number=${startNumber}`,
+    );
+    this.log.debug?.(`FFmpeg full command [${id}]: ffmpeg ${args.join(' ')}`);
 
     const proc = spawn('ffmpeg', args, {
       stdio: ['ignore', 'ignore', 'pipe'],
