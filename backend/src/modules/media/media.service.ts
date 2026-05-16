@@ -2523,15 +2523,25 @@ export class MediaService {
       }
 
       // Always re-probe streamInfo (fast, ~1s) to pick up schema changes.
-      // Skip detectCrop (~5-10s) if file size is unchanged — crop doesn't change.
+      // Skip detectCrop (~5-10s) if file size is unchanged AND crop has
+      // already been recorded — both conditions guard against the same
+      // expensive scan, but skipping when crop is missing leaves files
+      // imported before detectCrop existed (or after a failed probe)
+      // stuck without crop metadata forever. Backfill in that case.
       const sizeUnchanged = dbFile.size === diskSize;
+      const cropAlreadyRecorded =
+        (dbFile.streamInfo as { video?: { crop?: unknown }[] } | undefined)
+          ?.video?.[0]?.crop != null;
       dbFile.size = diskSize;
       let streamInfo: Awaited<
         ReturnType<FfprobeService['detectMediaFileInfo']>
       >;
       try {
         streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
-        if (streamInfo?.video?.[0] && !sizeUnchanged) {
+        if (
+          streamInfo?.video?.[0] &&
+          (!sizeUnchanged || !cropAlreadyRecorded)
+        ) {
           try {
             const v = streamInfo.video[0];
             const crop = await this.ffprobe.detectCrop(
