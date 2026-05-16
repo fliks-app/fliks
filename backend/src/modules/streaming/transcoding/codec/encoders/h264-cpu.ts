@@ -21,6 +21,13 @@ export const h264Cpu: EncoderDescriptor = {
       '-c:v', 'libx264',
       '-threads:v', '4',
       '-preset', preset,
+      // Force High profile so the SPS in the early session's init.mp4
+      // matches the steady-state session's segments. `-tune zerolatency`
+      // and any preset >= veryfast keep CABAC on, but pin the profile
+      // anyway — defensive against future preset tweaks. The master
+      // playlist advertises `avc1.6400xx` (High), so a bitstream that
+      // signalled Constrained Baseline would trip MSE on append.
+      '-profile:v', 'high',
       ...(early ? ['-tune', 'zerolatency'] : []),
       '-b:v', bitrate,
       '-maxrate', bitrate,

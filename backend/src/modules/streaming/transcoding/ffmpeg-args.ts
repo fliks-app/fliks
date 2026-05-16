@@ -195,13 +195,12 @@ export function buildFfmpegArgs(
 
   // Early sessions live ~1s before Shaka jumps to the main session — visual
   // quality on those warm-up frames is throwaway, so bias every knob towards
-  // ramp-up speed. Per-encoder mapping since 'ultrafast' is libx264-only,
-  // QSV stops at 'veryfast', NVENC uses p1..p7, VAAPI ignores -preset.
-  const earlyPreset = early
-    ? effectiveHwAccel === 'qsv'
-      ? 'veryfast'
-      : 'ultrafast'
-    : encoderPreset;
+  // ramp-up speed. `veryfast` everywhere keeps the H.264 profile consistent
+  // with the steady-state session (`faster` → High); the libx264 `ultrafast`
+  // preset implies `--no-cabac` which downgrades the bitstream to Constrained
+  // Baseline and produces an SPS that doesn't match the High SPS in the
+  // main session's init.mp4 — player concatenates the two and corrupts.
+  const earlyPreset = early ? 'veryfast' : encoderPreset;
   const earlyNvencPreset = early ? 'p1' : 'p4';
   // QSV rate-control: tight VBV (bufsize = bitrate × 1) so the BRC has a
   // short horizon and can't defer big I-frames. Early uses 0.5× / 1× so
