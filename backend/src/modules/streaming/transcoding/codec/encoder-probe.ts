@@ -85,22 +85,37 @@ async function probeOne(
         'bt2020nc',
       ]
     : [];
-  // We bypass the descriptor's buildArgs because it expects HW input
-  // surfaces; instead build a minimal CPU-source encode command that
-  // targets the same `-c:v` and pixel format. The probe verifies the
-  // encoder binary is present and accepts our flags — full HW pipeline
-  // validation happens at first session spawn (errors caught by the
-  // runtime fallback layer).
+  // VAAPI encoders only accept HW surfaces — feeding them lavfi CPU
+  // frames raises the exact `Function not implemented` filter error
+  // production hits. Set up the same `-init_hw_device vaapi` + `hwupload`
+  // bridge the runtime path uses so the probe exercises a representative
+  // pipeline. QSV's wrapper auto-converts CPU input on this ffmpeg
+  // build (verified locally), so it stays on the CPU-input fast path;
+  // we keep that variant minimal to avoid spuriously failing setups
+  // that lack a QSV device file but ship the encoder binary.
+  const isVaapi = d.hwAccel === 'vaapi';
+  const inputArgs = isVaapi
+    ? [
+        '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
+        '-filter_hw_device', 'va',
+        '-f', 'lavfi',
+        '-i', `nullsrc=size=320x180:rate=30,format=${pixFmt}`,
+      ]
+    : [
+        '-f', 'lavfi',
+        '-i', `nullsrc=size=320x180:rate=30,format=${pixFmt}`,
+      ];
+  const filterArgs = isVaapi
+    ? ['-vf', `format=${pixFmt},hwupload`]
+    : [];
   const args = [
     '-hide_banner',
     '-loglevel',
     'error',
-    '-f',
-    'lavfi',
-    '-i',
-    `nullsrc=size=320x180:rate=30,format=${pixFmt}`,
+    ...inputArgs,
     '-frames:v',
     '1',
+    ...filterArgs,
     '-c:v',
     encoderName(d),
     ...colorTags,

@@ -171,11 +171,35 @@ export function buildFfmpegArgs(
   //   but NOT for VideoToolbox — VT decode already outputs CPU buffers, so
   //   libswscale filters (including subtitle overlay) work in-place.
   // - QSV can't crop (fixed-size pool constraint), fallback to VAAPI encode
-  const effectiveHwAccel: HwAccelType = burnIn?.filter && hwAccel !== 'videotoolbox'
+  const requestedHwAccel: HwAccelType = burnIn?.filter && hwAccel !== 'videotoolbox'
     ? 'none'
     : hwAccel === 'qsv' && crop
       ? 'vaapi'
       : hwAccel;
+
+  // Resolve the actual encoder before setting up the input pipeline.
+  // The registry can downgrade to CPU when a HW encoder failed its
+  // boot-time probe (e.g. h264_vaapi on a renderD node that exposes
+  // only video-proc entrypoints). If we keep the HW input setup the
+  // CPU encoder receives HW surfaces and the filter chain blows up
+  // with `Function not implemented` / `Impossible to convert between
+  // the formats supported by the filter`.
+  const isHdrOutput = isHdrProfile(profile.name);
+  const variantForResolve: CodecVariant =
+    videoVariant ??
+    (isHdrOutput && requestedHwAccel === 'qsv'
+      ? { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' }
+      : { codec: 'h264', bitDepth: 8, hdr: null });
+  const resolvedEncoder = encoderRegistry.resolve(
+    variantForResolve,
+    requestedHwAccel,
+  );
+  if (!resolvedEncoder) {
+    throw new Error(
+      `No encoder for variant ${JSON.stringify(variantForResolve)} on ${requestedHwAccel}`,
+    );
+  }
+  const effectiveHwAccel: HwAccelType = resolvedEncoder.hwAccel;
 
   // Early sessions live ~1s before Shaka jumps to the main session — visual
   // quality on those warm-up frames is throwaway, so bias every knob towards
@@ -318,23 +342,8 @@ export function buildFfmpegArgs(
     ? `hwdownload,format=nv12,${cropStr},hwupload=derive_device=vaapi,`
     : '';
 
-  const isHdrOutput = isHdrProfile(profile.name);
-
-  // Variant resolution. Callers that have already chosen via the codec
-  // selector pass it explicitly; legacy callers fall back to the
-  // pre-refactor inference (HEVC HDR10 only on QSV, H.264 SDR elsewhere).
-  const variant: CodecVariant =
-    videoVariant ??
-    (isHdrOutput && effectiveHwAccel === 'qsv'
-      ? { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' }
-      : { codec: 'h264', bitDepth: 8, hdr: null });
-
-  const encoder = encoderRegistry.resolve(variant, effectiveHwAccel);
-  if (!encoder) {
-    throw new Error(
-      `No encoder for variant ${JSON.stringify(variant)} on ${effectiveHwAccel}`,
-    );
-  }
+  const variant = variantForResolve;
+  const encoder = resolvedEncoder;
 
   const encoderInput: EncoderInput = {
     source: {
