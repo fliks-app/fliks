@@ -717,10 +717,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const { resolve: readyResolve, promise: readyPromise } =
       this.createDeferred();
 
-    // Compact one-liner at LOG level — quality + encoder + seek + start_number
-    // is what the operator needs in normal operation. Full ffmpeg command at
-    // DEBUG for diagnostics; enable with LOG_LEVEL=debug to inspect filters
-    // and rate-control knobs.
+    // Compact one-liner — quality + encoder + seek + start_number is what
+    // the operator needs in normal operation. Full ffmpeg command was at
+    // DEBUG previously but Nest's dev logger emits debug by default,
+    // which defeated the noise reduction. If full command is needed,
+    // grep the ffmpeg process tree (`ps aux | grep ffmpeg`) or
+    // re-derive from the descriptor + ctx.
     const encoderIdx = args.indexOf('-c:v');
     const encoder = encoderIdx >= 0 ? args[encoderIdx + 1] : '?';
     const ssIdx = args.lastIndexOf('-ss');
@@ -731,7 +733,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     this.log.log(
       `FFmpeg start [${id}] ${quality} ${encoder} ss=${ss} start_number=${startNumber}`,
     );
-    this.log.debug?.(`FFmpeg full command [${id}]: ffmpeg ${args.join(' ')}`);
 
     const proc = spawn('ffmpeg', args, {
       stdio: ['ignore', 'ignore', 'pipe'],

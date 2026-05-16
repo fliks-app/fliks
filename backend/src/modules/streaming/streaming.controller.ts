@@ -246,24 +246,16 @@ export class StreamingController {
       if (existing && existing.process.exitCode === null) return;
       const ctx = this.buildSessionContext(req, resolved, mediaFileId);
 
-      // Prewarm only runs for transcode rungs. Plain `remux` / `original`
-      // pseudo-qualities map onto the top profile of the device ladder.
-      // For HDR sources on HDR clients the master emits the HDR ladder
-      // (`<height>p-hdr` rung names), so the prewarm has to match —
-      // otherwise it spawns the top SDR rung (`2160p`), the player
-      // immediately asks for `1080p-hdr` (or whatever it picked from
-      // the master), and the orchestrator kills + respawns. The
-      // `useHdrLadder` decision was already cached by stream-builder
-      // at playback-info time.
-      const useHdrLadder =
-        this.activeStreamTracker.getHdrLadder(mediaFileId);
-      const ladderTop = useHdrLadder
-        ? getHdrLadderForDevice(deviceType)[0].name
-        : getLadderForDevice(deviceType)[0].name;
-      const targetQuality =
-        startQuality === 'remux' || startQuality === 'original'
-          ? ladderTop
-          : startQuality;
+      // `remux` / `original` resolve to the player's actual rung only
+      // after the manifest loads — Shaka filters variants whose
+      // CODECS string the browser can't decode (HEVC Main10 L5.1 is
+      // commonly filtered on web), so the top rung we'd guess from
+      // the device ladder is often not what the player ends up
+      // requesting. Skipping the prewarm for these pseudo-labels
+      // avoids the spawn-then-kill dance; the player's first segment
+      // fetch starts ffmpeg synchronously at the correct rung.
+      if (startQuality === 'remux' || startQuality === 'original') return;
+      const targetQuality = startQuality;
       const startSegment = Math.max(0, secondsToSegmentIndex(effectiveStartAt));
 
       // Spawn early en PARALLÈLE de main (fire-and-forget). hlsSegment
