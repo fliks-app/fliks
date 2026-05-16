@@ -98,9 +98,20 @@ import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats
       cursor: none;
     }
     .player-video {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       object-fit: contain;
+      /* Override Tailwind preflight's `max-width: 100%; height: auto`
+       * for <video>: it leaves the element at its intrinsic size when
+       * the container grows beyond the decoded frame's natural width,
+       * which surfaces as black bars on all four sides instead of
+       * letterboxing on the short axis only. The !important here only
+       * has to beat preflight (specificity 0,0,0 via :where) so it's
+       * cheap. */
+      max-width: none !important;
+      max-height: none !important;
     }
     /* Dim controls when HDR max brightness is active.
        Uses opacity on the direct child — safe for layout since controls are already
