@@ -11,7 +11,7 @@ import { h264Vaapi } from './h264-vaapi';
 import { h264Nvenc } from './h264-nvenc';
 import { h264Videotoolbox } from './h264-videotoolbox';
 import { h264Cpu } from './h264-cpu';
-import { hevcQsvHdr10, hevcQsvHlg } from './hevc-qsv';
+import { hevcQsv, hevcQsvHdr10, hevcQsvHlg } from './hevc-qsv';
 import { hevcVaapi, hevcVaapiHdr10, hevcVaapiHlg } from './hevc-vaapi';
 import { hevcNvenc, hevcNvencHdr10, hevcNvencHlg } from './hevc-nvenc';
 import {
@@ -31,6 +31,7 @@ import { av1Cpu, av1CpuHdr10, av1CpuHlg } from './av1-cpu';
  *  entries come before CPU fallbacks. */
 const DESCRIPTORS: readonly EncoderDescriptor[] = [
   // HEVC HW
+  hevcQsv,
   hevcQsvHdr10,
   hevcQsvHlg,
   hevcVaapi,

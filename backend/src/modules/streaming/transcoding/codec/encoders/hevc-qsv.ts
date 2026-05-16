@@ -1,5 +1,39 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
-import { hevcMain10CodecString } from '../codec-strings';
+import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
+
+/** Intel QSV HEVC Main 8-bit encoder — Skylake gen6 and above. Native
+ *  HW path for HEVC SDR sources; avoids the libx265 CPU round-trip the
+ *  registry would otherwise pick as fallback when this descriptor is
+ *  absent. Same VAAPI-decode → scale_vaapi → hwmap → hevc_qsv chain
+ *  as h264_qsv, only the encoder and codec string differ. */
+export const hevcQsv: EncoderDescriptor = {
+  id: 'hevc_qsv',
+  hwAccel: 'qsv',
+  variant: { codec: 'hevc', bitDepth: 8, hdr: null },
+  supports: () => true,
+  supportsHdrMetadata: () => false,
+  codecString: (target: EncoderTarget) => hevcMainCodecString(target),
+  buildArgs(input: EncoderInput): string[] {
+    const { target, preset, qsv } = input;
+    const w = target.width;
+    return [
+      '-c:v', 'hevc_qsv',
+      '-preset', preset,
+      ...qsv.extra,
+      '-mbbrc', '1',
+      '-b:v', String(target.videoBitrateBps),
+      '-maxrate', String(target.videoBitrateBps + 1),
+      '-rc_init_occupancy', String(qsv.rcInitOccupancy),
+      '-bufsize', String(qsv.bufsize),
+      '-vf',
+      `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
+      '-g', String(target.gopSize),
+      '-keyint_min', String(target.gopSize),
+      '-force_key_frames', input.forceKeyframesExpr,
+      '-tag:v', 'hvc1',
+    ];
+  },
+};
 
 /** Intel QSV HEVC Main10 encoder — Kaby Lake gen7 and above. The only
  *  HW HEVC path with reliable HDR10 / HLG metadata propagation on
