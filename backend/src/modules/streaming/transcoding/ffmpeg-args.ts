@@ -223,12 +223,20 @@ export function buildFfmpegArgs(
 
   // tonemap_vaapi keeps the pipeline inside VAAPI (1 device transition, no
   // OpenCL kernel compile) — saves ~300-500ms cold-start on HDR. Quality is
-  // slightly worse than tonemap_opencl/reinhard, but the early session's
-  // output is jumped past by Shaka after ~1s, so the user never sees those
-  // frames in steady-state. Restricted to early on HW paths that have a
-  // VAAPI decoder (qsv on Linux derives from vaapi, so it qualifies too).
+  // slightly worse than tonemap_opencl/reinhard but the difference is
+  // invisible at streaming bitrates.
+  //
+  // We force it for any vaapi-encode path (not just early) because the
+  // OpenCL tonemap chain — `hwmap=derive_device=opencl,tonemap_opencl,
+  // hwmap=derive_device=vaapi:reverse=1` — depends on a working
+  // QSV↔OpenCL↔VAAPI bridge that several Intel hosts can't service
+  // (driver returns 'QSV to OpenCL mapping not usable' and the encoder
+  // crashes). QSV-encode keeps the opencl path on steady-state because
+  // it doesn't need the reverse-hwmap that tripped vaapi.
   const useVaapiTonemap =
-    early && tonemap && (effectiveHwAccel === 'qsv' || effectiveHwAccel === 'vaapi');
+    tonemap &&
+    (effectiveHwAccel === 'vaapi' ||
+      (early && effectiveHwAccel === 'qsv'));
 
   // Hardware acceleration input decoding
   if (effectiveHwAccel === 'qsv') {
