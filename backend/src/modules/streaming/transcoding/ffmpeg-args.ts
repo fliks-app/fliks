@@ -479,7 +479,7 @@ export function buildFfmpegArgs(
       segType,
       ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init_%v.mp4']),
       '-hls_flags',
-      'independent_segments',
+      'independent_segments+temp_file',
       '-var_stream_map',
       varParts.join(' '),
       '-hls_segment_filename',
@@ -516,7 +516,7 @@ export function buildFfmpegArgs(
       '-hls_segment_filename',
       path.join(outputDir, `seg-%04d.${segExt}`),
       '-hls_flags',
-      'independent_segments',
+      'independent_segments+temp_file',
       path.join(outputDir, 'index.m3u8'),
     );
   }
@@ -592,7 +592,7 @@ export function buildAudioOnlyFfmpegArgs(
     '-hls_segment_filename',
     path.join(outputDir, `seg-%04d.${segExt}`),
     '-hls_flags',
-    'independent_segments',
+    'independent_segments+temp_file',
     path.join(outputDir, 'index.m3u8'),
   );
 
@@ -722,7 +722,7 @@ export function buildRemuxArgs(
     '-hls_segment_filename',
     path.join(outputDir, 'seg-%04d.m4s'),
     '-hls_flags',
-    'independent_segments',
+    'independent_segments+temp_file',
     path.join(outputDir, 'index.m3u8'),
   );
 
