@@ -14,7 +14,11 @@ import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service'
     AuthModule,
   ],
   controllers: [DownloadClientsController],
-  providers: [QbittorrentService, DownloadClientsService, TorrentHistoryMatcher],
+  providers: [
+    QbittorrentService,
+    DownloadClientsService,
+    TorrentHistoryMatcher,
+  ],
   exports: [TypeOrmModule, QbittorrentService, TorrentHistoryMatcher],
 })
 export class DownloadClientsModule {}

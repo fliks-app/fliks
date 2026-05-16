@@ -38,10 +38,7 @@ export function pickVariants(
   const efficiencyOrder: VideoCodec[] = ['av1', 'hevc', 'h264'];
   const codecOrder: VideoCodec[] =
     source.codec && clientSupports(clientCodecs, source.codec)
-      ? [
-          source.codec,
-          ...efficiencyOrder.filter((c) => c !== source.codec),
-        ]
+      ? [source.codec, ...efficiencyOrder.filter((c) => c !== source.codec)]
       : efficiencyOrder;
 
   // HDR path — only meaningful when source is HDR AND client supports

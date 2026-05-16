@@ -574,9 +574,12 @@ export class SubtitleStreamService {
     try {
       await new Promise<void>((resolve, reject) => {
         // Low priority — this is a background warmup batch, not a live request.
-        const proc = process.platform === 'linux'
-          ? spawn('ionice', ['-c3', 'nice', '-n19', 'ffmpeg', ...args], { stdio: ['ignore', 'ignore', 'pipe'] })
-          : spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+        const proc =
+          process.platform === 'linux'
+            ? spawn('ionice', ['-c3', 'nice', '-n19', 'ffmpeg', ...args], {
+                stdio: ['ignore', 'ignore', 'pipe'],
+              })
+            : spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
         let stderrTail = '';
         proc.stderr?.on('data', (chunk: Buffer) => {
           stderrTail = (stderrTail + chunk.toString()).slice(-2000);

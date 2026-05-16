@@ -140,7 +140,6 @@ export class StreamingController {
     return this.streamingSettingsCache.get();
   }
 
-
   private buildSessionContext(
     req: Request,
     resolved: ResolvedFile,
@@ -152,7 +151,10 @@ export class StreamingController {
     // (e.g. after backend restart, Shaka may replay cached manifest segments
     // without re-fetching master.m3u8).
     const audioCount = si?.audio?.length ?? 0;
-    if (audioCount > 0 && this.activeStreamTracker.getAudioStreamCount(mediaFileId) === 0) {
+    if (
+      audioCount > 0 &&
+      this.activeStreamTracker.getAudioStreamCount(mediaFileId) === 0
+    ) {
       this.activeStreamTracker.setAudioStreamCount(mediaFileId, audioCount);
     }
     return {
@@ -171,8 +173,7 @@ export class StreamingController {
       // Multi-audio: produce video-only segments and let ffmpeg's var_stream_map
       // emit one audio rendition per track (subdirs 1..N) so Shaka can switch
       // client-side via EXT-X-MEDIA.
-      videoOnly:
-        this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1,
+      videoOnly: this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1,
       audioStreams:
         this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1
           ? ((si?.audio as { language?: string; title?: string }[]) ?? [])
@@ -191,8 +192,10 @@ export class StreamingController {
       // Canonical audio decision — computed once in stream-builder, lives
       // in the tracker, threaded through here so respawns / quality
       // switches stay coherent with what playback-info promised.
-      audioPlan: this.activeStreamTracker.getAudioPlan(mediaFileId) ?? undefined,
-      sourceVideoCodec: (si?.video?.[0]?.codec ?? '').toLowerCase() || undefined,
+      audioPlan:
+        this.activeStreamTracker.getAudioPlan(mediaFileId) ?? undefined,
+      sourceVideoCodec:
+        (si?.video?.[0]?.codec ?? '').toLowerCase() || undefined,
       isSourceHdr: !!si?.video?.[0]?.hdrFormat,
       // Variant chosen by stream-builder's codec selector at
       // playback-info time. Threads through every session spawn so
@@ -336,7 +339,10 @@ export class StreamingController {
     @Req() req: Request,
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
   ) {
-    const resolved = await this.streamingService.resolveFile(mediaFileId, req.user as User);
+    const resolved = await this.streamingService.resolveFile(
+      mediaFileId,
+      req.user as User,
+    );
     const info = resolved.mediaFile.streamInfo;
     const fileSize = resolved.size;
     const video = (info as any)?.video?.[0];
@@ -344,7 +350,8 @@ export class StreamingController {
     const sourceHeight = video?.height ?? 1080;
     const sourceBitrate = (info as any)?.formatBitRate ?? 0;
 
-    const qualities: { key: string; label: string; estimatedSize: number }[] = [];
+    const qualities: { key: string; label: string; estimatedSize: number }[] =
+      [];
     for (const p of PROFILES) {
       if (!profileFitsSource(p, sourceWidth, sourceHeight)) continue;
       const videoBps = this.parseBitrateString(p.videoBitrate);
@@ -353,7 +360,9 @@ export class StreamingController {
       const estimated =
         duration > 0
           ? Math.floor(((videoBps + audioBps) * duration) / 8)
-          : Math.floor(fileSize * (videoBps / Math.max(sourceBitrate, videoBps)));
+          : Math.floor(
+              fileSize * (videoBps / Math.max(sourceBitrate, videoBps)),
+            );
       const sizeLabel =
         estimated >= 1e9
           ? `${(estimated / 1e9).toFixed(1)} GB`
@@ -446,10 +455,7 @@ export class StreamingController {
       mediaFileId,
       deviceProfile.deviceType ?? 'desktop',
     );
-    this.activeStreamTracker.setUseTs(
-      mediaFileId,
-      !!deviceProfile.useTs,
-    );
+    this.activeStreamTracker.setUseTs(mediaFileId, !!deviceProfile.useTs);
     this.activeStreamTracker.setStreamingDuration(ss.segmentDuration);
     // Update module-level constants used by buildVodPlaylist and transcoding
     SEG_DURATION = ss.segmentDuration;
@@ -490,8 +496,7 @@ export class StreamingController {
     if (result.playMethod !== 'DirectPlay') {
       const startQuality = firstQueryString(req.query, 'startQuality');
       const startAtRaw = firstQueryString(req.query, 'startAt');
-      const startAt =
-        startAtRaw != null ? parseFloat(startAtRaw) : undefined;
+      const startAt = startAtRaw != null ? parseFloat(startAtRaw) : undefined;
       // Await prewarm before responding so the session is registered in the
       // map when the frontend's subsequent master.m3u8/seg-0 requests
       // arrive — prevents a race where hlsSegment would spawn a duplicate
@@ -677,7 +682,9 @@ export class StreamingController {
       pickedIdx ?? 0,
       deviceType,
       (this.activeStreamTracker.getAudioPlan(mediaFileId)?.codec ?? 'aac') as
-        | 'aac' | 'ac3' | 'eac3',
+        | 'aac'
+        | 'ac3'
+        | 'eac3',
       hdrPassThrough,
       // Only the SDR ladder branch consumes this — the HDR branch
       // already drives its codec strings from `hdrPassThrough`.
@@ -688,10 +695,7 @@ export class StreamingController {
       mediaFileId,
       audioStreams.length,
     );
-    this.activeStreamTracker.setUseExtXMedia(
-      mediaFileId,
-      useExtXMedia,
-    );
+    this.activeStreamTracker.setUseExtXMedia(mediaFileId, useExtXMedia);
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -702,8 +706,7 @@ export class StreamingController {
     // play, not resume). Usually a no-op when playback-info already
     // pre-warmed the session; acts as a safety net otherwise.
     const startAtRaw = firstQueryString(req.query, 'startAt');
-    const startAt =
-      startAtRaw != null ? parseFloat(startAtRaw) : undefined;
+    const startAt = startAtRaw != null ? parseFloat(startAtRaw) : undefined;
     void this.prewarmTranscodeSession(
       mediaFileId,
       resolved,
@@ -802,9 +805,7 @@ export class StreamingController {
     const playlist = buildVodPlaylist(
       duration,
       (seg) => `${basePath}/seg-${seg}.${segExt}${tokenParam}`,
-      useTs
-        ? undefined
-        : `${basePath}/init_${audioIndex + 1}.mp4${tokenParam}`,
+      useTs ? undefined : `${basePath}/init_${audioIndex + 1}.mp4${tokenParam}`,
     );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -1124,8 +1125,10 @@ export class StreamingController {
     // serve it without any DB query or session management. Completed sessions
     // (exitCode !== null) still have valid segments in cache — don't skip them.
     if (existing && existing.quality === quality) {
-      const varStreamMap = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
-      const segName = varStreamMap && quality !== 'remux' ? `0/${segment}` : segment;
+      const varStreamMap =
+        this.activeStreamTracker.getUseExtXMedia(mediaFileId);
+      const segName =
+        varStreamMap && quality !== 'remux' ? `0/${segment}` : segment;
       const segPath = `${existing.cachePath}/${segName}`;
       if (fs.existsSync(segPath)) {
         existing.lastAccess = Date.now();

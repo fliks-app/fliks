@@ -17,15 +17,22 @@ export const h264Nvenc: EncoderDescriptor = {
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
     const common = [
-      '-c:v', 'h264_nvenc',
-      '-preset', nvencPreset,
-      '-b:v', bitrate,
-      '-maxrate', bitrate,
+      '-c:v',
+      'h264_nvenc',
+      '-preset',
+      nvencPreset,
+      '-b:v',
+      bitrate,
+      '-maxrate',
+      bitrate,
     ];
     const trailing = [
-      '-g', String(target.gopSize),
-      '-keyint_min', String(target.gopSize),
-      '-force_key_frames', input.forceKeyframesExpr,
+      '-g',
+      String(target.gopSize),
+      '-keyint_min',
+      String(target.gopSize),
+      '-force_key_frames',
+      input.forceKeyframesExpr,
     ];
 
     if (tonemap) {

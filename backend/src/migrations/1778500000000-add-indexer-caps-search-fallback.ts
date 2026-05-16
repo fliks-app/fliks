@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddIndexerCapsSearchFallback1778500000000
-  implements MigrationInterface
-{
+export class AddIndexerCapsSearchFallback1778500000000 implements MigrationInterface {
   name = 'AddIndexerCapsSearchFallback1778500000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

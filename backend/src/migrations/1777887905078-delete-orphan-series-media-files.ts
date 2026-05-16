@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class DeleteOrphanSeriesMediaFiles1777887905078
-  implements MigrationInterface
-{
+export class DeleteOrphanSeriesMediaFiles1777887905078 implements MigrationInterface {
   name = 'DeleteOrphanSeriesMediaFiles1777887905078';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

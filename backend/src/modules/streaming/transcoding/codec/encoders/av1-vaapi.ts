@@ -17,15 +17,14 @@ export const av1Vaapi: EncoderDescriptor = {
     const { target, filters } = input;
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
-    const common = [
-      '-c:v', 'av1_vaapi',
-      '-b:v', bitrate,
-      '-maxrate', bitrate,
-    ];
+    const common = ['-c:v', 'av1_vaapi', '-b:v', bitrate, '-maxrate', bitrate];
     const trailing = [
-      '-g', String(target.gopSize),
-      '-keyint_min', String(target.gopSize),
-      '-force_key_frames', input.forceKeyframesExpr,
+      '-g',
+      String(target.gopSize),
+      '-keyint_min',
+      String(target.gopSize),
+      '-force_key_frames',
+      input.forceKeyframesExpr,
     ];
 
     if (filters.tonemapVaapi) {
@@ -70,14 +69,20 @@ export const av1VaapiHdr10: EncoderDescriptor = {
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
     return [
-      '-c:v', 'av1_vaapi',
-      '-b:v', bitrate,
-      '-maxrate', bitrate,
+      '-c:v',
+      'av1_vaapi',
+      '-b:v',
+      bitrate,
+      '-maxrate',
+      bitrate,
       '-vf',
       `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-16:format=p010le`,
-      '-g', String(target.gopSize),
-      '-keyint_min', String(target.gopSize),
-      '-force_key_frames', input.forceKeyframesExpr,
+      '-g',
+      String(target.gopSize),
+      '-keyint_min',
+      String(target.gopSize),
+      '-force_key_frames',
+      input.forceKeyframesExpr,
       ...hdrColorArgs('HDR10'),
     ];
   },

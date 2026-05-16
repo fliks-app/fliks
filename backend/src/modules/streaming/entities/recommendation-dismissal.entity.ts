@@ -11,7 +11,9 @@ import { BaseEntity } from '../../../common/entities/base.entity';
  * idempotent — repeated calls are no-ops.
  */
 @Entity('recommendation_dismissals')
-@Index('UQ_recommendation_dismissals_user_media', ['userId', 'mediaId'], { unique: true })
+@Index('UQ_recommendation_dismissals_user_media', ['userId', 'mediaId'], {
+  unique: true,
+})
 export class RecommendationDismissal extends BaseEntity {
   @Column()
   @Index()

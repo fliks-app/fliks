@@ -60,16 +60,19 @@ export class ImageService {
     id: number,
     variant?: MediaImageVariant,
   ): Promise<string | null> {
-    const sizes = TMDB_SIZE_MAP[sizeMapKey(type, variant)] ?? { full: 'original' };
+    const sizes = TMDB_SIZE_MAP[sizeMapKey(type, variant)] ?? {
+      full: 'original',
+    };
     const isTmdb = TMDB_HOST.test(remoteUrl);
 
     const fullDest = this.getDiskPath(type, id, variant, 'full');
     fs.mkdirSync(path.dirname(fullDest), { recursive: true });
 
     try {
-      const fullUrl = isTmdb && sizes.full
-        ? (tmdbUrlAtSize(remoteUrl, sizes.full) ?? remoteUrl)
-        : remoteUrl;
+      const fullUrl =
+        isTmdb && sizes.full
+          ? (tmdbUrlAtSize(remoteUrl, sizes.full) ?? remoteUrl)
+          : remoteUrl;
       const res = await axios.get(fullUrl, {
         responseType: 'arraybuffer',
         timeout: 15000,
@@ -85,9 +88,7 @@ export class ImageService {
       // GETs on the TMDB CDN and each adds non-trivial latency. Best-effort:
       // a failure on one variant doesn't fail the whole call (the `full`
       // file is already on disk and the controller falls back to it).
-      const variantJobs = (
-        Object.entries(sizes) as [ImageSize, string][]
-      )
+      const variantJobs = (Object.entries(sizes) as [ImageSize, string][])
         .filter(([size]) => size !== 'full')
         .map(([size, tmdbSize]) => ({
           size,

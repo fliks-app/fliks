@@ -16,11 +16,11 @@ export function buildLadderForVariant(
   const heights = availableHeights(deviceType, source.height);
 
   const rungs: LadderRung[] = heights.map((height) => {
-    const { videoBps, audioBps, width: rungWidth } = bitrateForRung(
-      deviceType,
-      variant,
-      height,
-    );
+    const {
+      videoBps,
+      audioBps,
+      width: rungWidth,
+    } = bitrateForRung(deviceType, variant, height);
     const w = Math.min(rungWidth, source.width);
     const h = Math.floor((w * source.height) / source.width / 16) * 16 || 16;
     return {

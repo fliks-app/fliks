@@ -28,7 +28,11 @@ import { BackupService } from './backup.service';
 import { LogBufferService } from './log-buffer.service';
 import { EventsService } from './events.service';
 import { Observable } from 'rxjs';
-import { HW_ACCEL_LABEL, type HwAccelType, TranscodingService } from '../streaming/transcoding';
+import {
+  HW_ACCEL_LABEL,
+  type HwAccelType,
+  TranscodingService,
+} from '../streaming/transcoding';
 import { ActiveStreamTracker } from '../streaming/active-stream-tracker.service';
 import { PlaybackService } from '../streaming/playback.service';
 import { MediaFile } from '../media/entities/media-file.entity';
@@ -364,10 +368,7 @@ export class SystemController {
       let episodeId: number | null = null;
       if (s.userId && mf?.mediaId) {
         try {
-          const ps = await this.playbackService.getState(
-            s.userId,
-            mf.mediaId,
-          );
+          const ps = await this.playbackService.getState(s.userId, mf.mediaId);
           if (ps) {
             positionSeconds = ps.positionSeconds;
             if (ps.durationSeconds > 0) durationSeconds = ps.durationSeconds;
@@ -391,7 +392,7 @@ export class SystemController {
       const audioPlan = this.activeStreamTracker.getAudioPlan(s.mediaFileId);
 
       if (s.mode === 'transcode') {
-        videoPlaybackMode = `Transcodage (${HW_ACCEL_LABEL[hwAccel as HwAccelType] ?? hwAccel.toUpperCase()})`;
+        videoPlaybackMode = `Transcodage (${HW_ACCEL_LABEL[hwAccel] ?? hwAccel.toUpperCase()})`;
         outputContainer = 'HLS';
         const profile = { '1080p': 8, '720p': 4, '480p': 2 }[s.quality];
         outputBitrate = profile ? profile * 1_000_000 : null;

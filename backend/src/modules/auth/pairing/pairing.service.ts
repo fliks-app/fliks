@@ -12,7 +12,10 @@ import { randomUUID } from 'crypto';
 import { AuthService } from '../auth.service';
 import { User } from '../../users/entities/user.entity';
 import { EventsService } from '../../scheduler/events.service';
-import { PairingRequest, PairingStatus } from './entities/pairing-request.entity';
+import {
+  PairingRequest,
+  PairingStatus,
+} from './entities/pairing-request.entity';
 
 const PAIRING_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const MAX_PENDING_PER_DEVICE = 3;
@@ -52,12 +55,18 @@ export class PairingService {
     deviceId: string,
     deviceName: string,
   ): Promise<{ pairingId: string; expiresIn: number }> {
-    const user = await this.userRepo.findOne({ where: { id: userId, enabled: true } });
+    const user = await this.userRepo.findOne({
+      where: { id: userId, enabled: true },
+    });
     if (!user) throw new NotFoundException('User not found');
 
-    const pending = await this.repo.count({ where: { deviceId, status: 'pending' } });
+    const pending = await this.repo.count({
+      where: { deviceId, status: 'pending' },
+    });
     if (pending >= MAX_PENDING_PER_DEVICE) {
-      throw new BadRequestException('Too many pending requests for this device');
+      throw new BadRequestException(
+        'Too many pending requests for this device',
+      );
     }
 
     const now = Date.now();
@@ -106,7 +115,11 @@ export class PairingService {
       await this.repo.save(req);
     }
 
-    if (req.status === 'approved' && req.deviceId === deviceId && req.accessToken) {
+    if (
+      req.status === 'approved' &&
+      req.deviceId === deviceId &&
+      req.accessToken
+    ) {
       const token = req.accessToken;
       req.accessToken = null; // single-use
       await this.repo.save(req);
@@ -171,7 +184,10 @@ export class PairingService {
     }
   }
 
-  private async fetchOwnedByUser(publicId: string, userId: number): Promise<PairingRequest> {
+  private async fetchOwnedByUser(
+    publicId: string,
+    userId: number,
+  ): Promise<PairingRequest> {
     const req = await this.repo.findOne({ where: { publicId } });
     if (!req) throw new NotFoundException('Pairing request not found');
     if (req.userId !== userId) {

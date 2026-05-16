@@ -56,14 +56,19 @@ export class PairingController {
     @Res({ passthrough: true }) res: Response,
   ) {
     if (!pairingId) throw new BadRequestException('Missing pairingId');
-    if (!deviceId) throw new BadRequestException(`Missing ${DEVICE_ID_HEADER} header`);
+    if (!deviceId)
+      throw new BadRequestException(`Missing ${DEVICE_ID_HEADER} header`);
     const result = await this.pairing.status(pairingId, deviceId);
     // When the token ships back, set the auth cookie too — same flow as
     // POST /auth/login. Native clients use the JSON token via Bearer; web
     // clients need the cookie so the next /auth/me succeeds without help.
     if (result.accessToken) {
       const maxAgeMs = this.authService.getAccessCookieMaxAgeMs();
-      res.cookie(ACCESS_TOKEN_COOKIE, result.accessToken, cookieOpts(req, maxAgeMs));
+      res.cookie(
+        ACCESS_TOKEN_COOKIE,
+        result.accessToken,
+        cookieOpts(req, maxAgeMs),
+      );
     }
     return result;
   }

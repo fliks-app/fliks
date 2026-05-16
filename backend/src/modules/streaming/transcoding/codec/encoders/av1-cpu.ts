@@ -10,12 +10,17 @@ import { scaleMod16Height } from './helpers/scale-filter';
  *  steady-state default, `slow` reserves CPU for VOD style packing. */
 function svtAv1Preset(preset: string): string {
   switch (preset) {
-    case 'veryfast': return '10';
-    case 'faster': return '9';
-    case 'fast': return '7';
-    case 'slow': return '3';
+    case 'veryfast':
+      return '10';
+    case 'faster':
+      return '9';
+    case 'fast':
+      return '7';
+    case 'slow':
+      return '3';
     case 'medium':
-    default: return '5';
+    default:
+      return '5';
   }
 }
 
@@ -36,15 +41,22 @@ export const av1Cpu: EncoderDescriptor = {
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
     return [
-      '-c:v', 'libsvtav1',
-      '-preset', svtAv1Preset(preset),
-      '-b:v', bitrate,
-      '-maxrate', bitrate,
+      '-c:v',
+      'libsvtav1',
+      '-preset',
+      svtAv1Preset(preset),
+      '-b:v',
+      bitrate,
+      '-maxrate',
+      bitrate,
       '-vf',
       `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
-      '-g', String(target.gopSize),
-      '-keyint_min', String(target.gopSize),
-      '-force_key_frames', input.forceKeyframesExpr,
+      '-g',
+      String(target.gopSize),
+      '-keyint_min',
+      String(target.gopSize),
+      '-force_key_frames',
+      input.forceKeyframesExpr,
     ];
   },
 };
@@ -65,18 +77,26 @@ export const av1CpuHdr10: EncoderDescriptor = {
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
     return [
-      '-c:v', 'libsvtav1',
-      '-pix_fmt', 'yuv420p10le',
-      '-preset', svtAv1Preset(preset),
-      '-b:v', bitrate,
-      '-maxrate', bitrate,
+      '-c:v',
+      'libsvtav1',
+      '-pix_fmt',
+      'yuv420p10le',
+      '-preset',
+      svtAv1Preset(preset),
+      '-b:v',
+      bitrate,
+      '-maxrate',
+      bitrate,
       '-svtav1-params',
       'enable-hdr=1:mastering-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1):content-light=1000,400',
       '-vf',
       `${filters.cpuCropPrefix}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p10le`,
-      '-g', String(target.gopSize),
-      '-keyint_min', String(target.gopSize),
-      '-force_key_frames', input.forceKeyframesExpr,
+      '-g',
+      String(target.gopSize),
+      '-keyint_min',
+      String(target.gopSize),
+      '-force_key_frames',
+      input.forceKeyframesExpr,
       ...hdrColorArgs('HDR10'),
     ];
   },
@@ -99,18 +119,26 @@ export const av1CpuHlg: EncoderDescriptor = {
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
     return [
-      '-c:v', 'libsvtav1',
-      '-pix_fmt', 'yuv420p10le',
-      '-preset', svtAv1Preset(preset),
-      '-b:v', bitrate,
-      '-maxrate', bitrate,
+      '-c:v',
+      'libsvtav1',
+      '-pix_fmt',
+      'yuv420p10le',
+      '-preset',
+      svtAv1Preset(preset),
+      '-b:v',
+      bitrate,
+      '-maxrate',
+      bitrate,
       '-svtav1-params',
       'color-primaries=9:transfer-characteristics=18:matrix-coefficients=9',
       '-vf',
       `${filters.cpuCropPrefix}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p10le`,
-      '-g', String(target.gopSize),
-      '-keyint_min', String(target.gopSize),
-      '-force_key_frames', input.forceKeyframesExpr,
+      '-g',
+      String(target.gopSize),
+      '-keyint_min',
+      String(target.gopSize),
+      '-force_key_frames',
+      input.forceKeyframesExpr,
       ...hdrColorArgs('HLG'),
     ];
   },

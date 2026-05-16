@@ -6,9 +6,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * every media (mirror of the quality-profile rule). Seed the default
  * profile if none exists, then attribute it to every orphan media row.
  */
-export class BackfillMediaLanguageProfile1778300000000
-  implements MigrationInterface
-{
+export class BackfillMediaLanguageProfile1778300000000 implements MigrationInterface {
   name = 'BackfillMediaLanguageProfile1778300000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

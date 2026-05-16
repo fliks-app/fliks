@@ -199,7 +199,7 @@ export class MetadataProvidersController {
     const tvdbMap = new Map(
       existing
         .filter((m) => m.tvdbId)
-        .map((m) => [m.tvdbId!, { id: m.id, type: m.type }]),
+        .map((m) => [m.tvdbId, { id: m.id, type: m.type }]),
     );
 
     return results.map((r) => {

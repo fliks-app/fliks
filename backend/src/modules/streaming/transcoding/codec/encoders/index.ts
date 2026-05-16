@@ -98,7 +98,6 @@ class StaticRegistry implements EncoderRegistry {
     }
     return null;
   }
-
 }
 
 /** Full list of compiled-in encoder descriptors. Exposed so the

@@ -38,7 +38,13 @@ import { getJwtSecret } from '../../common/utils/jwt-secret';
     }),
   ],
   controllers: [AuthController, PairingController],
-  providers: [AuthService, JwtStrategy, CaslAbilityFactory, PoliciesGuard, PairingService],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    CaslAbilityFactory,
+    PoliciesGuard,
+    PairingService,
+  ],
   exports: [AuthService, CaslAbilityFactory, PoliciesGuard, JwtModule],
 })
 export class AuthModule {}
