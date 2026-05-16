@@ -1,10 +1,9 @@
 /**
  * Unified playback engine interface.
- * Implementations: ShakaEngine (web), NativeEngine (Android/iOS), CastEngine (Chromecast).
- *
- * The engine abstracts the video player so the UI (player.ts) doesn't need
- * to know whether Shaka Player, ExoPlayer/AVPlayer, or the Cast SDK is doing
- * the actual work.
+ * Implementations: ShakaEngine (web) and NativeEngine (Android/iOS).
+ * Cast bypasses this abstraction — CastPlayerService talks to the
+ * Chromecast SDK directly because the receiver-side API doesn't fit
+ * the Shaka/ExoPlayer event shape.
  */
 
 // ---------------------------------------------------------------------------

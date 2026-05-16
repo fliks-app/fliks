@@ -7,6 +7,12 @@ import {
   type EngineStats,
   type PlaybackState,
 } from './playback-engine';
+import {
+  NATIVE_SUBTITLE_SIZE_SCALE,
+  SUBTITLE_FG_HEX,
+  SUBTITLE_BG_ARGB,
+  SUBTITLE_EDGE_KEY,
+} from '../../utils/subtitle-presets';
 
 interface VttCue {
   start: number;
@@ -107,24 +113,11 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     background: string;
     bottomMargin: number;
   }): void {
-    const sizeMap: Record<string, number> = {
-      small: 0.7, normal: 1.0, large: 1.3, xlarge: 1.6,
-    };
-    const colorMap: Record<string, string> = {
-      white: '#FFFFFF', yellow: '#FFFF00', green: '#00FF00', cyan: '#00FFFF',
-    };
-    const bgMap: Record<string, string> = {
-      transparent: 'transparent', semi: '#80000000', black: '#E6000000',
-    };
-    const edgeMap: Record<string, string> = {
-      none: 'none', drop: 'drop_shadow', outline: 'outline', raised: 'raised',
-    };
-
     this._subtitleStyle = {
-      fontScale: sizeMap[settings.size] ?? 1.0,
-      foregroundColor: colorMap[settings.color] ?? '#FFFFFF',
-      backgroundColor: bgMap[settings.background] ?? 'transparent',
-      edgeType: edgeMap[settings.shadow] ?? 'drop_shadow',
+      fontScale: NATIVE_SUBTITLE_SIZE_SCALE[settings.size] ?? 1.0,
+      foregroundColor: SUBTITLE_FG_HEX[settings.color] ?? '#FFFFFF',
+      backgroundColor: SUBTITLE_BG_ARGB[settings.background] ?? 'transparent',
+      edgeType: SUBTITLE_EDGE_KEY[settings.shadow] ?? 'drop_shadow',
       bottomMarginPercent: settings.bottomMargin,
     };
 
@@ -188,6 +181,12 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     NativePlayer.setPlaybackRate({ rate });
   }
 
+  // Volume + muted are intentionally local-only. Native playback uses
+  // the system volume slider on Android / iOS, so the in-app slider is
+  // hidden under `isMobileTouch()` in `player-controls.html`. The
+  // setters exist to satisfy the PlaybackEngine contract uniformly with
+  // ShakaEngine, but they don't reach the native player — the host OS
+  // is the source of truth for output level.
   get volume(): number { return this._volume; }
   set volume(v: number) { this._volume = v; }
   get muted(): boolean { return this._muted; }

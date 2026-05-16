@@ -234,17 +234,3 @@ function hevcMain10CodecStringForHeight(height: number): string {
   if (height >= 720) return 'hvc1.2.4.L120.B0'; // L4.0 — 720p60
   return 'hvc1.2.4.L93.B0'; // L3.1 — up to 720p30
 }
-
-/** H.264 codec string per rung. Levels picked to cover 60 fps at the rung
- *  resolution, so the actual encoder output never signals a higher level
- *  than the master playlist advertises (which would force iOS AVPlayer to
- *  reinitialise the decoder mid-stream → frame freeze). */
-function h264CodecStringForHeight(height: number): string {
-  if (height >= 2160) return 'avc1.640034'; // High @ L5.2 — 4K60
-  if (height >= 1080) return 'avc1.64002a'; // High @ L4.2 — 1080p60 + headroom
-  if (height >= 720) return 'avc1.640020'; // High @ L3.2 — 720p60
-  if (height >= 480) return 'avc1.64001f'; // High @ L3.1 — 480p60
-  if (height >= 360) return 'avc1.64001e'; // High @ L3.0 — 360p30
-  if (height >= 240) return 'avc1.640015'; // High @ L2.1 — 240p60
-  return 'avc1.64000d'; // High @ L1.3 — 144p
-}

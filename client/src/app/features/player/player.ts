@@ -44,7 +44,6 @@ import { PlaybackEngine } from '../../core/services/playback-engine/playback-eng
 import { ShakaEngine } from '../../core/services/playback-engine/shaka-engine';
 import { NativePlayer } from '../../core/plugins/native-player.plugin';
 import { NativeEngine } from '../../core/services/playback-engine/native-engine';
-import { CastEngine } from '../../core/services/playback-engine/cast-engine';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { TrackManagerService, SubtitleOption } from '../../core/services/track-manager.service';
 import { QualityManagerService, findVariantByProfileName, findBestVariantForHeight } from '../../core/services/quality-manager.service';
@@ -166,7 +165,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly videoEl = viewChild<ElementRef<HTMLVideoElement>>('videoElement');
   private readonly containerEl = viewChild<ElementRef<HTMLDivElement>>('playerContainer');
 
-  /** Current playback engine (ShakaEngine | NativeEngine | CastEngine). */
+  /** Active engine (Shaka for web HLS, Native for Android/iOS). Cast
+   *  bypasses the engine abstraction and is driven by `castPlayerService`
+   *  + `castService` directly. */
   private engine: PlaybackEngine | null = null;
   readonly isNativeEngine = signal(false);
 

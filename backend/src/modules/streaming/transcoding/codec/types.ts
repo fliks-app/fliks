@@ -23,19 +23,6 @@ export interface CodecVariant {
   hdr: HdrFormat | null;
 }
 
-/** Minimal source-side info the encoder needs to set up scale filters,
- *  color tags and seek geometry. Populated from ffprobe streamInfo. */
-export interface EncoderSourceInfo {
-  width: number;
-  height: number;
-  frameRate?: number;
-  hdr: HdrFormat | null;
-  /** Source bit depth (driven by sourceVideoCodec + ffprobe `bits_per_raw_sample`). */
-  bitDepth: BitDepth;
-  /** ffprobe `codec_name` (lowercased). Drives bsf choice and decode path. */
-  codecName: string;
-}
-
 /** Output target for a single rung — resolution + bitrate + GOP cadence. */
 export interface EncoderTarget {
   width: number;
@@ -51,7 +38,6 @@ export interface EncoderTarget {
 
 /** Per-spawn inputs to an encoder's args builder. Common across encoders. */
 export interface EncoderInput {
-  source: EncoderSourceInfo;
   variant: CodecVariant;
   target: EncoderTarget;
   /** Encoder preset hint (`veryfast`, `faster`, `fast`, `medium`, `slow`).
