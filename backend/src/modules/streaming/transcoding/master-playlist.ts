@@ -117,8 +117,12 @@ export function generateMasterPlaylist(
     // Includes the source-resolution rung if there's an HDR profile
     // at or below source height.
     if (canEncodeHevcHdr) {
+      // Width OR height keeps cinema-aspect sources (e.g. 3840×2024 IMAX
+      // bluray) on the 2160p-hdr rung. A pure `maxHeight <= sourceHeight`
+      // check drops 2160p-hdr for any source whose vertical resolution
+      // falls below 2160 — which is most theatrical 4K masters.
       const hdrLadder = getHdrLadderForDevice(deviceType).filter(
-        (p) => p.maxHeight <= sourceHeight,
+        (p) => p.maxWidth <= sourceWidth || p.maxHeight <= sourceHeight,
       );
       for (const p of hdrLadder) {
         const avg =
