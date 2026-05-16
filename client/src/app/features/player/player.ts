@@ -103,9 +103,9 @@ import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats
       width: 100%;
       height: 100%;
       object-fit: contain;
-      /* Override Tailwind preflight's `max-width: 100%; height: auto`
-       * for <video>: it leaves the element at its intrinsic size when
-       * the container grows beyond the decoded frame's natural width,
+      /* Override Tailwind preflight's max-width:100%/height:auto for
+       * video: it leaves the element at its intrinsic size when the
+       * container grows beyond the decoded frame's natural width,
        * which surfaces as black bars on all four sides instead of
        * letterboxing on the short axis only. The !important here only
        * has to beat preflight (specificity 0,0,0 via :where) so it's
