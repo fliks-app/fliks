@@ -47,15 +47,9 @@ export async function runEncoderProbes(
   const t0 = Date.now();
 
   const cpuDescriptors: EncoderDescriptor[] = [];
-  const hwGroups = new Map<string, EncoderDescriptor[]>();
+  const hwDescriptors: EncoderDescriptor[] = [];
   for (const d of descriptors) {
-    if (d.hwAccel === 'none') {
-      cpuDescriptors.push(d);
-    } else {
-      const bucket = hwGroups.get(d.hwAccel) ?? [];
-      bucket.push(d);
-      hwGroups.set(d.hwAccel, bucket);
-    }
+    (d.hwAccel === 'none' ? cpuDescriptors : hwDescriptors).push(d);
   }
 
   const runOne = async (
@@ -70,17 +64,21 @@ export async function runEncoderProbes(
     return { id: d.id, ok };
   };
 
+  // CPU probes in parallel (no shared state). Every HW probe runs
+  // strictly serially after the previous one finishes — QSV and VAAPI
+  // are nominally different `hwAccel`s but on Linux Intel they share
+  // a single iGPU device, and running them in parallel families still
+  // produced the 'internal encoding error 24' false negatives we were
+  // chasing.
   const cpuTask = Promise.all(cpuDescriptors.map(runOne));
 
-  const hwTasks = Array.from(hwGroups.values()).map(async (group) => {
+  const hwTask = (async () => {
     const out: { id: string; ok: boolean }[] = [];
-    for (const d of group) out.push(await runOne(d));
+    for (const d of hwDescriptors) out.push(await runOne(d));
     return out;
-  });
+  })();
 
-  const settled = (
-    await Promise.all([cpuTask, ...hwTasks])
-  ).flat();
+  const settled = (await Promise.all([cpuTask, hwTask])).flat();
 
   probedOnce = true;
   const enabled: string[] = [];
