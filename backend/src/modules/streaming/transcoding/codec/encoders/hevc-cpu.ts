@@ -1,6 +1,7 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
 import { hdrColorArgs } from './helpers/hdr-variants';
+import { scaleMod16Height } from './helpers/scale-filter';
 
 /** Universal libx265 HEVC SDR fallback. Same thread cap as libx264 (4):
  *  first-segment latency stays bounded because the frame thread pool
@@ -30,7 +31,7 @@ export const hevcCpu: EncoderDescriptor = {
       '-maxrate',
       bitrate,
       '-vf',
-      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:-2:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
+      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
       '-g',
       String(target.gopSize),
       '-keyint_min',
@@ -96,7 +97,7 @@ export const hevcCpuHdr10: EncoderDescriptor = {
       '-maxrate',
       bitrate,
       '-vf',
-      `${filters.cpuCropPrefix}scale=${w}:-2:flags=lanczos,format=yuv420p10le${filters.burnInFilter}`,
+      `${filters.cpuCropPrefix}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p10le${filters.burnInFilter}`,
       '-g',
       String(target.gopSize),
       '-keyint_min',
@@ -145,7 +146,7 @@ export const hevcCpuHlg: EncoderDescriptor = {
       '-maxrate',
       bitrate,
       '-vf',
-      `${filters.cpuCropPrefix}scale=${w}:-2:flags=lanczos,format=yuv420p10le${filters.burnInFilter}`,
+      `${filters.cpuCropPrefix}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p10le${filters.burnInFilter}`,
       '-g',
       String(target.gopSize),
       '-keyint_min',

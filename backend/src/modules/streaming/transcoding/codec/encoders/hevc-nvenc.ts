@@ -1,6 +1,7 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
 import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
+import { scaleMod16Height } from './helpers/scale-filter';
 
 /** NVIDIA NVENC HEVC SDR encoder — Maxwell 2nd gen (GM20x) and later.
  *  Tonemap path round-trips via CPU because mainline FFmpeg still has no
@@ -43,7 +44,7 @@ export const hevcNvenc: EncoderDescriptor = {
       return [
         ...common,
         '-vf',
-        `hwdownload,format=p010le,${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:-2`,
+        `hwdownload,format=p010le,${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleMod16Height(w)}`,
         ...trailing,
       ];
     }

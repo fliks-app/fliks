@@ -1,6 +1,7 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { av1CodecString } from '../codec-strings';
 import { hdrColorArgs } from './helpers/hdr-variants';
+import { scaleMod16Height } from './helpers/scale-filter';
 
 /** Maps a named ffmpeg preset onto the SVT-AV1 integer preset namespace
  *  (`0` slowest / highest-quality, `13` fastest). Values picked to match
@@ -40,7 +41,7 @@ export const av1Cpu: EncoderDescriptor = {
       '-b:v', bitrate,
       '-maxrate', bitrate,
       '-vf',
-      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:-2:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
+      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
       '-g', String(target.gopSize),
       '-keyint_min', String(target.gopSize),
       '-force_key_frames', input.forceKeyframesExpr,
@@ -72,7 +73,7 @@ export const av1CpuHdr10: EncoderDescriptor = {
       '-svtav1-params',
       'enable-hdr=1:mastering-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1):content-light=1000,400',
       '-vf',
-      `${filters.cpuCropPrefix}scale=${w}:-2:flags=lanczos,format=yuv420p10le`,
+      `${filters.cpuCropPrefix}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p10le`,
       '-g', String(target.gopSize),
       '-keyint_min', String(target.gopSize),
       '-force_key_frames', input.forceKeyframesExpr,
@@ -106,7 +107,7 @@ export const av1CpuHlg: EncoderDescriptor = {
       '-svtav1-params',
       'color-primaries=9:transfer-characteristics=18:matrix-coefficients=9',
       '-vf',
-      `${filters.cpuCropPrefix}scale=${w}:-2:flags=lanczos,format=yuv420p10le`,
+      `${filters.cpuCropPrefix}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p10le`,
       '-g', String(target.gopSize),
       '-keyint_min', String(target.gopSize),
       '-force_key_frames', input.forceKeyframesExpr,

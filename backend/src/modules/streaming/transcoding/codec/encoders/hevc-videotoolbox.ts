@@ -1,6 +1,7 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
 import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
+import { scaleMod16Height } from './helpers/scale-filter';
 
 /** Apple VideoToolbox HEVC SDR encoder — Mac 2017+ (T2 / Apple Silicon).
  *  VT decode emits CPU-backed buffers, so the filter chain mirrors the
@@ -53,7 +54,7 @@ export const hevcVideotoolbox: EncoderDescriptor = {
     return [
       ...common,
       '-vf',
-      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:-2:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
+      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
       ...trailing,
     ];
   },
@@ -89,7 +90,7 @@ export const hevcVideotoolboxHdr10: EncoderDescriptor = {
       '-maxrate',
       bitrate,
       '-vf',
-      `${filters.cpuCropPrefix}scale=${w}:-2:flags=lanczos,format=p010le`,
+      `${filters.cpuCropPrefix}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=p010le`,
       '-g',
       String(target.gopSize),
       '-keyint_min',

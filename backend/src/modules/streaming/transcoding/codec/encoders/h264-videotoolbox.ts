@@ -1,5 +1,6 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { h264CodecString } from '../codec-strings';
+import { scaleMod16Height } from './helpers/scale-filter';
 
 /** Apple VideoToolbox H.264 encoder — Mac 2011+ and all Apple Silicon.
  *  Two paths: full Metal pipeline with `scale_vt` HDR tonemap (no CPU
@@ -51,7 +52,7 @@ export const h264Videotoolbox: EncoderDescriptor = {
     return [
       ...common,
       '-vf',
-      `${filters.cpuCropPrefix}scale=${w}:-2:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
+      `${filters.cpuCropPrefix}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
       ...trailing,
     ];
   },

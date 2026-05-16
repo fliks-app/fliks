@@ -1,5 +1,6 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { h264CodecString } from '../codec-strings';
+import { scaleMod16Height } from './helpers/scale-filter';
 
 /** Universal libx264 fallback. Threads capped at 4 so seg-0 ships
  *  before a long `(threads-1)` frame pre-buffer fills (CPU encoders
@@ -36,7 +37,7 @@ export const h264Cpu: EncoderDescriptor = {
       '-maxrate', bitrate,
       '-bufsize', libx264BufsizeMb,
       '-vf',
-      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:-2:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
+      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
       '-force_key_frames', input.forceKeyframesExpr,
       '-sc_threshold:v:0', '0',
     ];
