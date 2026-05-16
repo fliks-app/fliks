@@ -265,17 +265,15 @@ export function buildFfmpegArgs(
   // slightly worse than tonemap_opencl/reinhard but the difference is
   // invisible at streaming bitrates.
   //
-  // We force it for any vaapi-encode path (not just early) because the
-  // OpenCL tonemap chain — `hwmap=derive_device=opencl,tonemap_opencl,
-  // hwmap=derive_device=vaapi:reverse=1` — depends on a working
-  // QSV↔OpenCL↔VAAPI bridge that several Intel hosts can't service
-  // (driver returns 'QSV to OpenCL mapping not usable' and the encoder
-  // crashes). QSV-encode keeps the opencl path on steady-state because
-  // it doesn't need the reverse-hwmap that tripped vaapi.
+  // Force it on every QSV/VAAPI tonemap path. The OpenCL chain
+  // (`hwmap=derive_device=opencl,tonemap_opencl,hwmap=...,format=qsv`)
+  // depends on a working QSV↔OpenCL bridge that several Intel hosts
+  // can't service — the driver returns 'QSV to OpenCL mapping not
+  // usable' and the encoder crashes with exit=218. tonemap_vaapi has
+  // no such dependency and runs end-to-end inside VAAPI / QSV.
   const useVaapiTonemap =
     tonemap &&
-    (effectiveHwAccel === 'vaapi' ||
-      (early && effectiveHwAccel === 'qsv'));
+    (effectiveHwAccel === 'vaapi' || effectiveHwAccel === 'qsv');
 
   // Resolve the decoder via the same registry pattern as the encoder.
   // The decoder picks how the source is brought into memory (HW device
