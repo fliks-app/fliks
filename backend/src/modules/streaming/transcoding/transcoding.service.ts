@@ -17,19 +17,26 @@ import {
   segmentIndexToSeconds,
   setSegmentDuration as applySegmentDuration,
 } from './constants';
-import { getHdrLadderForDevice, getLadderForDevice, isHdrProfile } from './profiles';
+import {
+  getHdrLadderForDevice,
+  getLadderForDevice,
+  isHdrProfile,
+} from './profiles';
 import {
   buildAudioOnlyFfmpegArgs,
   buildFfmpegArgs,
   buildRemuxArgs,
 } from './ffmpeg-args';
 import { detectHwAccel } from './hw-detect';
-import { ALL_DESCRIPTORS } from './codec/encoders';
+import { ALL_DESCRIPTORS, encoderRegistry } from './codec/encoders';
 import { runEncoderProbes } from './codec/encoder-probe';
 import { ALL_DECODERS } from './codec/decoders';
 import { runDecoderProbes } from './codec/decoder-probe';
 import { runVppQsvTonemapProbe } from './codec/vpp-qsv-probe';
-import { generateMasterPlaylist, getAvailableProfiles } from './master-playlist';
+import {
+  generateMasterPlaylist,
+  getAvailableProfiles,
+} from './master-playlist';
 import {
   fileExists,
   firstMissingSegment,
@@ -70,7 +77,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       if (entries.length) {
         await Promise.all(
           entries.map((e) =>
-            fsp.rm(path.join(this.cachePath, e), { recursive: true, force: true }),
+            fsp.rm(path.join(this.cachePath, e), {
+              recursive: true,
+              force: true,
+            }),
           ),
         );
         this.log.log(
@@ -233,7 +243,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       let maxSeg = -1;
       for (const dir of dirs) {
         let files: string[];
-        try { files = await fsp.readdir(dir); } catch { continue; }
+        try {
+          files = await fsp.readdir(dir);
+        } catch {
+          continue;
+        }
         for (const f of files) {
           const m = f.match(/^seg-(\d+)\.m4s$/);
           if (m) {
@@ -280,13 +294,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     },
     sdrVariant?: import('./codec/types').CodecVariant,
   ): string {
-    // Only the QSV branch in ffmpeg-args has `hevc_qsv Main10` wired —
-    // every other hwAccel hits libx264 for HEVC HDR profile names and
-    // produces H.264 segments that contradict the master's `hvc1.*`
-    // CODECS string. Skip the lower-res transcode rungs on non-QSV
-    // backends so we don't hand the player a manifest claim we can't
-    // fulfil. The top remux rung stays — `-c:v copy` works everywhere.
-    const canEncodeHevcHdr = this.detectedHwAccel === 'qsv';
+    // Ask the encoder registry whether any HEVC Main10 HDR10 encoder is
+    // probed-OK on the detected hwAccel (or CPU fallback). When false,
+    // the manifest skips lower-res HEVC HDR rungs so we don't advertise
+    // `hvc1.*` segments we can't actually produce — the top remux rung
+    // stays because `-c:v copy` works regardless of the encoder probe
+    // matrix. Pre-registry this was hard-coded to `qsv` and ignored
+    // libx265 + hevc_vaapi_main10, leaving valid HDR rungs off the
+    // manifest on AMD/CPU-only hosts.
+    const canEncodeHevcHdr = !!encoderRegistry.resolve(
+      { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' },
+      this.detectedHwAccel,
+    );
     return generateMasterPlaylist(
       mediaFileId,
       sourceWidth,
@@ -376,19 +395,28 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         await this.killProcess(existing.process);
       } else {
         const resolved = await this.resolveExistingSession(
-          key, existing, requestedSegment, qualityMatch,
+          key,
+          existing,
+          requestedSegment,
+          qualityMatch,
         );
         if (resolved) return resolved;
         const restartAt = existing.startSegment ?? requestedSegment;
         const dir = path.join(this.cachePath, key, quality);
         await fsp.mkdir(dir, { recursive: true });
         if (useVarStreamMap) {
-          for (let i = 0; i <= ctxAudioStreams!.length; i++) {
+          for (let i = 0; i <= ctxAudioStreams.length; i++) {
             await fsp.mkdir(path.join(dir, String(i)), { recursive: true });
           }
         }
         return this.startSeekSession(
-          key, mediaFileId, quality, absolutePath, dir, restartAt, ctx,
+          key,
+          mediaFileId,
+          quality,
+          absolutePath,
+          dir,
+          restartAt,
+          ctx,
         );
       }
     }
@@ -405,7 +433,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     );
 
     if (useVarStreamMap) {
-      for (let i = 0; i <= ctxAudioStreams!.length; i++) {
+      for (let i = 0; i <= ctxAudioStreams.length; i++) {
         await fsp.mkdir(path.join(sessionDir, String(i)), { recursive: true });
       }
     }
@@ -458,8 +486,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const segExts = ['.m4s', '.ts'];
     const segExists = async () => {
       for (const ext of segExts) {
-        if (await fileExists(path.join(sessionDir, `seg-${segNum}${ext}`))) return true;
-        if (await fileExists(path.join(sessionDir, '0', `seg-${segNum}${ext}`))) return true;
+        if (await fileExists(path.join(sessionDir, `seg-${segNum}${ext}`)))
+          return true;
+        if (await fileExists(path.join(sessionDir, '0', `seg-${segNum}${ext}`)))
+          return true;
       }
       return false;
     };
@@ -468,8 +498,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       if (await segExists()) break;
       await new Promise((r) => setTimeout(r, 500));
     }
-    const crashed =
-      session.process.exitCode !== null && !(await segExists());
+    const crashed = session.process.exitCode !== null && !(await segExists());
     if (!crashed) return session;
 
     return this.withLock(key, async () => {
@@ -483,8 +512,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       await this.killAndClean(session.process, sessionDir);
       await fsp.mkdir(sessionDir, { recursive: true });
       if (useVarStreamMap) {
-        for (let i = 0; i <= ctxAudioStreams!.length; i++) {
-          await fsp.mkdir(path.join(sessionDir, String(i)), { recursive: true });
+        for (let i = 0; i <= ctxAudioStreams.length; i++) {
+          await fsp.mkdir(path.join(sessionDir, String(i)), {
+            recursive: true,
+          });
         }
       }
       const cpuSession = this.startFfmpeg(
@@ -562,7 +593,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
       if (useVarStreamMap) {
         for (let i = 0; i <= ctxAudioStreams.length; i++) {
-          await fsp.mkdir(path.join(sessionDir, String(i)), { recursive: true });
+          await fsp.mkdir(path.join(sessionDir, String(i)), {
+            recursive: true,
+          });
         }
       }
 
@@ -804,7 +837,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         readyResolve();
       }
       if (code && code !== 0 && code !== 255) {
-        this.log.error(`FFmpeg [${id}] exited ${code}:\n${stderr.slice(-2000)}`);
+        this.log.error(
+          `FFmpeg [${id}] exited ${code}:\n${stderr.slice(-2000)}`,
+        );
       } else if (!firstSegProduced && !session.intentionallyKilled) {
         this.log.warn(
           `FFmpeg [${id}] exited code=${code} WITHOUT producing first segment ${firstSegName}\nstderr:\n${stderr.slice(-2000)}`,
@@ -955,26 +990,31 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
     await Promise.all(promises);
-    const parentDir = path.join(this.cachePath, key);
-    if (!this.sessions.has(key)) {
+    // Parent-dir rm is serialised under the same per-key lock as
+    // getOrCreate to close a race: without the lock, a new session
+    // could enter getOrCreate between the `has(key)` probe below and
+    // the (previously async, fire-and-forget) rm completing, and the
+    // recursive rm would then wipe the new session's fresh segments.
+    // The lock makes "either rm the parent OR start a new session"
+    // atomic per key.
+    await this.removeParentDirIfIdle(key);
+    await this.removeParentDirIfIdle(earlyKey);
+  }
+
+  private async removeParentDirIfIdle(key: string): Promise<void> {
+    await this.withLock(key, async () => {
+      if (this.sessions.has(key)) {
+        const parentDir = path.join(this.cachePath, key);
+        this.log.log(
+          `[disk] skip rm parent ${parentDir} — session ${key} replaced`,
+        );
+        return;
+      }
+      const parentDir = path.join(this.cachePath, key);
       const existed = existsSync(parentDir);
       this.log.log(`[disk] rm parent ${parentDir} (existed=${existed})`);
-      fsp.rm(parentDir, { recursive: true, force: true }).catch(() => {});
-    } else {
-      this.log.log(
-        `[disk] skip rm parent ${parentDir} — session ${key} replaced`,
-      );
-    }
-    const earlyParentDir = path.join(this.cachePath, earlyKey);
-    if (!this.sessions.has(earlyKey)) {
-      const existed = existsSync(earlyParentDir);
-      this.log.log(`[disk] rm parent ${earlyParentDir} (existed=${existed})`);
-      fsp.rm(earlyParentDir, { recursive: true, force: true }).catch(() => {});
-    } else {
-      this.log.log(
-        `[disk] skip rm parent ${earlyParentDir} — session ${earlyKey} replaced`,
-      );
-    }
+      await fsp.rm(parentDir, { recursive: true, force: true }).catch(() => {});
+    });
   }
 
   /** Kill a session by its map key (used by admin dashboard). */
@@ -1039,7 +1079,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         await this.killAndClean(existing.process, existing.cachePath);
       } else {
         const resolved = await this.resolveExistingSession(
-          key, existing, requestedSegment, qualityMatch,
+          key,
+          existing,
+          requestedSegment,
+          qualityMatch,
         );
         if (resolved) return resolved;
         requestedSegment = existing.startSegment ?? requestedSegment;
@@ -1170,7 +1213,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return session;
   }
 
-
   private cleanupStaleSessions() {
     const now = Date.now();
     for (const [id, session] of this.sessions) {
@@ -1227,9 +1269,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ): Promise<void> {
     await this.killProcess(proc, false);
     if (sessionId && this.sessions.has(sessionId)) {
-      this.log.log(
-        `[disk] skip rm ${dirPath} — session ${sessionId} replaced`,
-      );
+      this.log.log(`[disk] skip rm ${dirPath} — session ${sessionId} replaced`);
       return;
     }
     await fsp.rm(dirPath, { recursive: true, force: true });

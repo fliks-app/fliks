@@ -1,14 +1,11 @@
 import shaka from 'shaka-player';
 import {
+  AbstractPlaybackEngine,
   AudioTrack,
-  EngineEvent,
-  EngineEventMap,
   EngineStats,
   PlaybackEngine,
   PlaybackState,
 } from './playback-engine';
-
-type Handler<E extends EngineEvent> = (data: EngineEventMap[E]) => void;
 
 /**
  * Shaka Player implementation of the PlaybackEngine interface.
@@ -18,13 +15,10 @@ type Handler<E extends EngineEvent> = (data: EngineEventMap[E]) => void;
  *
  * This is a plain TypeScript class with NO Angular dependencies.
  */
-export class ShakaEngine implements PlaybackEngine {
+export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngine {
 
   private player: shaka.Player | null = null;
   private video: HTMLVideoElement | null = null;
-
-  /** Per-event listener maps for the unified event system. */
-  private listeners = new Map<EngineEvent, Set<Handler<any>>>();
 
   /** Refs kept so we can removeEventListener on destroy. */
   private videoListeners: Array<{ event: string; handler: EventListener }> = [];
@@ -102,7 +96,7 @@ export class ShakaEngine implements PlaybackEngine {
     }
 
     this.video = null;
-    this.listeners.clear();
+    this.clearHandlers();
   }
 
   async load(url: string, startTime?: number, mimeType?: string, _headers?: Record<string, string>): Promise<void> {
@@ -273,28 +267,6 @@ export class ShakaEngine implements PlaybackEngine {
           }
         : undefined,
     };
-  }
-
-  // ─── Events ────────────────────────────────────────────────────────
-
-  on<E extends EngineEvent>(event: E, handler: Handler<E>): void {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
-    }
-    this.listeners.get(event)!.add(handler);
-  }
-
-  off<E extends EngineEvent>(event: E, handler: Handler<E>): void {
-    this.listeners.get(event)?.delete(handler);
-  }
-
-  private emit<E extends EngineEvent>(event: E, data: EngineEventMap[E]): void {
-    const handlers = this.listeners.get(event);
-    if (handlers) {
-      for (const h of handlers) {
-        h(data);
-      }
-    }
   }
 
   // ─── Internal: bridge native events ────────────────────────────────

@@ -50,6 +50,30 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
   return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`;
 }
 
+/** Build the `-vf` value for a 10-bit QSV encode (hevc_qsv main10,
+ *  av1_qsv hdr10). Same shape as {@link qsvScaleFilter8bit} but the
+ *  HW surfaces stay in `p010le` and there are no tonemap branches —
+ *  the encoder is producing HDR, so a tonemap would defeat the
+ *  bitstream's HDR signaling. Tonemap-to-SDR HDR sources never reach
+ *  a 10-bit HDR encoder; the registry routes them to an SDR rung
+ *  with the matching 8-bit descriptor. */
+export function qsvScaleFilter10bit(input: EncoderInput): string {
+  const { target, filters, hasCrop } = input;
+  const w = target.width;
+  if (input.inputSurface === 'qsv') {
+    const cropArgs =
+      hasCrop && filters.cropStr ? parseCropStr(filters.cropStr) : null;
+    const targetH = cropArgs
+      ? snapEven(Math.round((w * cropArgs.h) / cropArgs.w))
+      : target.height;
+    const cropOpts = cropArgs
+      ? `cw=${cropArgs.w}:ch=${cropArgs.h}:cx=${cropArgs.x}:cy=${cropArgs.y}:`
+      : '';
+    return `vpp_qsv=${cropOpts}w=${w}:h=${targetH}:format=p010le`;
+  }
+  return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-16:format=p010le:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`;
+}
+
 function parseCropStr(
   cropStr: string,
 ): { w: number; h: number; x: number; y: number } | null {
