@@ -862,7 +862,18 @@ export class StreamingController {
         sourceH,
         deviceType,
       );
-      const quality = (profiles[0] ?? PROFILES[PROFILES.length - 1]).name;
+      const baseQuality = (profiles[0] ?? PROFILES[PROFILES.length - 1]).name;
+      // Audio route can race ahead of the seek-restart's video session
+      // being registered: it sees no session, falls into this branch
+      // and spawns a brand-new one at the SDR top rung — which then
+      // kills the in-flight HDR session via `getOrCreateSession`'s
+      // quality-change path. Translate to the HDR rung when the master
+      // is publishing the HDR ladder so the spawned session matches.
+      const quality =
+        this.activeStreamTracker.getHdrLadder(mediaFileId) &&
+        !baseQuality.endsWith('-hdr')
+          ? `${baseQuality}-hdr`
+          : baseQuality;
       videoSession = await this.transcodingService.getOrCreateSession(
         mediaFileId,
         quality,
