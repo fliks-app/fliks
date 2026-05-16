@@ -68,7 +68,7 @@ export async function runEncoderProbes(
 
 async function probeOne(
   d: EncoderDescriptor,
-  log: Logger,
+  _log: Logger,
 ): Promise<boolean> {
   // Synthetic minimal input: a 320×180 black frame at the descriptor's
   // expected pixel layout. The encoder is invoked with the same arg
@@ -111,9 +111,11 @@ async function probeOne(
   try {
     await execFileAsync('ffmpeg', args, { timeout: 10_000 });
     return true;
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    log.warn(`[encoder-probe] ${d.id} failed: ${msg.split('\n')[0]}`);
+  } catch {
+    // The disabled list in the summary log already names every failed
+    // descriptor; suppressing the per-failure WARN here keeps boot
+    // logs quiet on hosts where most HW paths aren't present (e.g.
+    // a QSV-only deployment legitimately fails 18+ probes).
     return false;
   }
 }
