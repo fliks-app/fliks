@@ -89,7 +89,9 @@ function clientSupports(set: Set<string>, codec: VideoCodec): boolean {
     case 'h264':
       return set.has('h264') || set.has('avc1');
     case 'hevc':
-      return set.has('hevc') || set.has('h265') || set.has('hvc1') || set.has('hev1');
+      return (
+        set.has('hevc') || set.has('h265') || set.has('hvc1') || set.has('hev1')
+      );
     case 'av1':
       return set.has('av1') || set.has('av01');
   }

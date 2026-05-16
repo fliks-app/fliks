@@ -551,6 +551,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           trustedStreamInfo: ctx?.trustedStreamInfo,
           early: true,
           useTs: ctx?.useTs ?? false,
+          videoVariant: ctx?.videoVariant,
         },
         this.log,
       );
@@ -817,6 +818,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         sourceFps: ctx?.sourceFps,
         trustedStreamInfo: ctx?.trustedStreamInfo,
         useTs: ctx?.useTs ?? false,
+        videoVariant: ctx?.videoVariant,
       },
       this.log,
     );

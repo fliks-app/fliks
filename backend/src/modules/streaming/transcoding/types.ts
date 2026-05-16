@@ -128,6 +128,15 @@ export interface SessionContext {
    * this with `tonemap` when picking a non-remux quality.
    */
   isSourceHdr?: boolean;
+  /**
+   * Output video format the player asked for, picked by stream-builder
+   * via the codec selector + quirks DB. When set, ffmpeg-args resolves
+   * the matching encoder descriptor from `encoderRegistry`; when null,
+   * it falls back to the legacy `profile.name`-driven inference (H.264
+   * SDR or HEVC HDR10 on QSV). Phases 0-4 left this optional so the
+   * orchestrator could be wired up progressively.
+   */
+  videoVariant?: import('./codec/types').CodecVariant;
 }
 
 export interface TranscodeSession {

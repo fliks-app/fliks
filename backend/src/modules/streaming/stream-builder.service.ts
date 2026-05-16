@@ -15,6 +15,8 @@ import {
   getLadderForDevice,
   parseBitrateToBps,
 } from './transcoding';
+import { pickPrimaryVariant } from './transcoding/codec/selector';
+import type { CodecVariant } from './transcoding/codec/types';
 
 /**
  * Decides how a media file should be played: DirectPlay, DirectStream (remux), or Transcode.
@@ -125,6 +127,32 @@ export class StreamBuilderService {
     // filter or AVPlayer rejects with -12927 (mismatched VUI vs codec).
     const needsTonemapping = isSourceHdr && !useHdrLadder;
     this.activeStreamTracker.setHdrLadder(resolved.mediaFile.id, useHdrLadder);
+
+    // Codec selector: picks the variant the encoder pipeline will produce
+    // when the playback path lands on transcode. The result is stored in
+    // the tracker so the controller can thread it into every later
+    // session spawn via SessionContext.videoVariant. Today only the
+    // first-ranked variant is emitted (single codec per master); the
+    // remainder is kept in diagnostics. Source HDR + HEVC source still
+    // routes through `useHdrLadder` for backward compat — the selector's
+    // job here is to give the encoder layer an explicit variant target
+    // rather than rely on profile-name inference.
+    const detectedHwAccel = this.transcodingService.getDetectedHwAccel();
+    const userAgent = ''; // UA-driven quirks plumbed via a later patch
+    const selectedVariant = pickPrimaryVariant(
+      {
+        width: source.width ?? 0,
+        height: source.height ?? 0,
+        hdr: (source.hdrFormat as CodecVariant['hdr']) ?? null,
+      },
+      profile,
+      detectedHwAccel,
+      userAgent,
+    );
+    this.activeStreamTracker.setVideoVariant(
+      resolved.mediaFile.id,
+      selectedVariant,
+    );
     const needsBurnIn = !!burnInSubtitleId;
     const needsCrop = !!v?.crop;
 

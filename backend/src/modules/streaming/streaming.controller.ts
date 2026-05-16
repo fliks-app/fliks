@@ -192,6 +192,12 @@ export class StreamingController {
       audioPlan: this.activeStreamTracker.getAudioPlan(mediaFileId) ?? undefined,
       sourceVideoCodec: (si?.video?.[0]?.codec ?? '').toLowerCase() || undefined,
       isSourceHdr: !!si?.video?.[0]?.hdrFormat,
+      // Variant chosen by stream-builder's codec selector at
+      // playback-info time. Threads through every session spawn so
+      // ffmpeg-args resolves the matching encoder descriptor. Absent
+      // for callers that never reach playback-info (legacy direct
+      // URLs) — buildFfmpegArgs falls back to profile-name inference.
+      videoVariant: this.activeStreamTracker.getVideoVariant(mediaFileId),
     };
   }
 

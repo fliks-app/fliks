@@ -25,6 +25,10 @@ export interface BuildFfmpegArgsOptions {
   crop?: { width: number; height: number; x: number; y: number };
   videoOnly?: boolean;
   audioStreams?: { language?: string; title?: string }[];
+  /** Output codec variant. When set, drives the encoder lookup via
+   *  `encoderRegistry`. When omitted (legacy callers), the variant is
+   *  inferred from `isHdrProfile(profile.name)` + `hwAccel === 'qsv'`. */
+  videoVariant?: CodecVariant;
   /** Audio output decision — see {@link SessionContext.audioPlan}. When
    *  omitted, ffmpeg-args falls back to AAC stereo at the profile bitrate
    *  (safe default that plays everywhere). */
@@ -73,6 +77,7 @@ export function buildFfmpegArgs(
     trustedStreamInfo = false,
     early = false,
     useTs = false,
+    videoVariant,
   } = opts;
 
   // Segment container choice. Cast → MPEG-TS (fixes the priming desync
@@ -313,13 +318,14 @@ export function buildFfmpegArgs(
 
   const isHdrOutput = isHdrProfile(profile.name);
 
-  // Pick the codec variant we're producing on this rung. Today only two
-  // variants are wired: HEVC Main10 HDR10 (for `-hdr` profiles on QSV)
-  // and H.264 8-bit SDR everywhere else. Phases 2+ extend this with
-  // HEVC SDR cross-platform and AV1.
-  const variant: CodecVariant = isHdrOutput && effectiveHwAccel === 'qsv'
-    ? { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' }
-    : { codec: 'h264', bitDepth: 8, hdr: null };
+  // Variant resolution. Callers that have already chosen via the codec
+  // selector pass it explicitly; legacy callers fall back to the
+  // pre-refactor inference (HEVC HDR10 only on QSV, H.264 SDR elsewhere).
+  const variant: CodecVariant =
+    videoVariant ??
+    (isHdrOutput && effectiveHwAccel === 'qsv'
+      ? { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' }
+      : { codec: 'h264', bitDepth: 8, hdr: null });
 
   const encoder = encoderRegistry.resolve(variant, effectiveHwAccel);
   if (!encoder) {
