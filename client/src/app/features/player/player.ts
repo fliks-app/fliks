@@ -98,9 +98,20 @@ import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats
       cursor: none;
     }
     .player-video {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       object-fit: contain;
+      /* Override Tailwind preflight's max-width:100%/height:auto for
+       * video: it leaves the element at its intrinsic size when the
+       * container grows beyond the decoded frame's natural width,
+       * which surfaces as black bars on all four sides instead of
+       * letterboxing on the short axis only. The !important here only
+       * has to beat preflight (specificity 0,0,0 via :where) so it's
+       * cheap. */
+      max-width: none !important;
+      max-height: none !important;
     }
     /* Dim controls when HDR max brightness is active.
        Uses opacity on the direct child — safe for layout since controls are already
@@ -715,16 +726,27 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           } else {
             // HLS transcode/remux — apply quality constraint before load to
             // stop ExoPlayer from picking 4K on a phone (slow transcode →
-            // A/V desync). Auto: no constraint, ExoPlayer picks adaptively.
+            // A/V desync). `auto`: no constraint, ExoPlayer's ABR picks
+            // adaptively. `original`: pin to source dimensions so ABR
+            // can't downgrade (the user explicitly forced top quality).
+            // Specific rung: pin to that rung's width/height.
             const savedQualityId = this.activeQualityId();
             if (savedQualityId !== 'auto') {
-              const PROFILE_WIDTHS: Record<string, number> = {
-                '2160p': 3840, '1080p': 1920, '720p': 1280, '480p': 854,
-                '360p': 640, '240p': 426, '144p': 256,
-              };
-              const w = PROFILE_WIDTHS[savedQualityId] ?? 1920;
-              const h = this.qualityManager.availableQualities()
-                .find(q => q.id === savedQualityId)?.height ?? 1080;
+              let w: number;
+              let h: number;
+              if (savedQualityId === 'original') {
+                w = this.playbackInfo?.source?.width ?? 3840;
+                h = this.playbackInfo?.source?.height ?? 2160;
+              } else {
+                const PROFILE_WIDTHS: Record<string, number> = {
+                  '2160p': 3840, '1080p': 1920, '720p': 1280, '480p': 854,
+                  '360p': 640, '240p': 426, '144p': 256,
+                };
+                const baseId = savedQualityId.replace(/-hdr$/, '');
+                w = PROFILE_WIDTHS[baseId] ?? 1920;
+                h = this.qualityManager.availableQualities()
+                  .find(q => q.id === savedQualityId)?.height ?? 1080;
+              }
               (this.engine as NativeEngine).selectVariantTrack({ width: w, height: h });
             }
             const nativeStartQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;

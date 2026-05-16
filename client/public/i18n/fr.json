@@ -957,9 +957,6 @@
       "qsv_advanced": "Options avancées Intel QSV",
       "qsv_low_power": "Mode basse consommation",
       "qsv_low_power_help": "Active -low_power 1 (VDENC, Intel Gen9+). Encodage plus rapide mais qualité légèrement inférieure. À tester selon la génération du CPU.",
-      "hdr_section": "Encodage HDR",
-      "hevc_hdr_enabled": "Encodage HEVC HDR",
-      "hevc_hdr_enabled_help": "Active l'échelle HEVC Main10 (BT.2020/PQ ou HLG) pour les sources HDR sur les clients compatibles. Désactivé, les sources HDR sont tone-mappées en H.264 SDR sur toutes les résolutions. À désactiver si le HW (iGPU Intel ancien) ne supporte pas hevc_qsv Main10.",
       "default": "défaut",
       "saved": "Paramètres de streaming enregistrés"
     },

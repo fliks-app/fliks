@@ -1,5 +1,6 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import type { BurnInSubtitle } from './transcoding';
+import type { CodecVariant } from './transcoding/codec/types';
 
 export interface DirectPlaySession {
   userId: number;
@@ -99,6 +100,19 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
   }
   getHdrLadder(mediaFileId: number): boolean {
     return this.hdrLadderCache.get(mediaFileId) ?? false;
+  }
+
+  /** Output codec variant chosen by stream-builder's selector. Read by
+   *  the controller when building the SessionContext so ffmpeg-args
+   *  resolves the right encoder descriptor. Single-codec-per-master
+   *  rule: only one variant per file at a time. */
+  private readonly videoVariantCache = new Map<number, CodecVariant>();
+  setVideoVariant(mediaFileId: number, variant: CodecVariant | null) {
+    if (variant) this.videoVariantCache.set(mediaFileId, variant);
+    else this.videoVariantCache.delete(mediaFileId);
+  }
+  getVideoVariant(mediaFileId: number): CodecVariant | undefined {
+    return this.videoVariantCache.get(mediaFileId);
   }
 
   setBurnIn(mediaFileId: number, info: BurnInSubtitle | undefined) {
@@ -201,17 +215,6 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
   }
   getQsvOptions(): { lowPower: boolean } {
     return { lowPower: this.qsvLowPowerCache };
-  }
-
-  /** Global HEVC HDR encoder toggle, driven by admin streaming settings.
-   *  When false, stream-builder tone-maps HDR sources to H.264 SDR
-   *  instead of routing them through the HEVC HDR ladder. */
-  private hevcHdrEnabledCache = true;
-  setHevcHdrEnabled(value: boolean) {
-    this.hevcHdrEnabledCache = value;
-  }
-  getHevcHdrEnabled(): boolean {
-    return this.hevcHdrEnabledCache;
   }
 
   // ── Source-vs-client compat captured at playback-info time, read at

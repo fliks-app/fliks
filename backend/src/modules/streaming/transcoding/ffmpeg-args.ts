@@ -5,11 +5,18 @@ import {
   segmentIndexToSeconds,
 } from './constants';
 import { isHdrProfile, parseBitrateToBps } from './profiles';
+import { requestedHwAccelFor } from './hw-detect';
 import type {
   BurnInSubtitle,
   HwAccelType,
   TranscodeProfile,
 } from './types';
+import { encoderRegistry } from './codec/encoders';
+import type { BitDepth, CodecVariant, EncoderInput, VideoCodec } from './codec/types';
+import { decoderRegistry, findQsvNativeDecoder } from './codec/decoders';
+import { isDecoderEnabled } from './codec/decoder-probe';
+import { surfaceBridge } from './codec/decoders/bridge';
+import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
 
 export interface BuildFfmpegArgsOptions {
   inputPath: string;
@@ -23,6 +30,18 @@ export interface BuildFfmpegArgsOptions {
   crop?: { width: number; height: number; x: number; y: number };
   videoOnly?: boolean;
   audioStreams?: { language?: string; title?: string }[];
+  /** Output codec variant. When set, drives the encoder lookup via
+   *  `encoderRegistry`. When omitted (legacy callers), the variant is
+   *  inferred from `isHdrProfile(profile.name)` + `hwAccel === 'qsv'`. */
+  videoVariant?: CodecVariant;
+  /** Source video codec from ffprobe (`'h264'`, `'hevc'`, `'av1'`, plus
+   *  aliases `'avc1'`, `'hev1'`, `'av01'`). Drives decoder selection
+   *  via `decoderRegistry`. Falls back to CPU decode when omitted or
+   *  unknown. */
+  sourceVideoCodec?: string;
+  /** Source bit depth (8 or 10). 10-bit HDR sources need a decoder
+   *  that can handle p010le surfaces. Defaults to 8 when omitted. */
+  sourceBitDepth?: BitDepth;
   /** Audio output decision — see {@link SessionContext.audioPlan}. When
    *  omitted, ffmpeg-args falls back to AAC stereo at the profile bitrate
    *  (safe default that plays everywhere). */
@@ -71,6 +90,9 @@ export function buildFfmpegArgs(
     trustedStreamInfo = false,
     early = false,
     useTs = false,
+    videoVariant,
+    sourceVideoCodec,
+    sourceBitDepth = 8,
   } = opts;
 
   // Segment container choice. Cast → MPEG-TS (fixes the priming desync
@@ -136,9 +158,11 @@ export function buildFfmpegArgs(
   // headers and stops. Otherwise fall back to a balanced 1s/1MB budget.
   // Default FFmpeg is 5s/5MB which burns 3-5s on cold start of large 4K MKVs.
   if (trustedStreamInfo) {
-    log.log('Probe: using cached streamInfo (0s / 200KB scan)');
+    log.debug?.('Probe: using cached streamInfo (0s / 200KB scan)');
     args.push('-analyzeduration', '0', '-probesize', '200000');
   } else {
+    // Keep the no-cache fallback at LOG — cold-start scans are expected
+    // only on rescan / import races, so each one is worth surfacing.
     log.log('Probe: no cached streamInfo — running full FFmpeg scan (1s / 1MB)');
     args.push('-analyzeduration', '1000000', '-probesize', '1000000');
   }
@@ -157,26 +181,71 @@ export function buildFfmpegArgs(
   // would give 200 Mbps for "200k" (it drops the suffix and multiplies as if M).
   const bitrateNum = parseBitrateToBps(profile.videoBitrate);
 
-  // Force pipeline adjustments when HW accel can't handle required filters:
-  // - Subtitle burn-in forces CPU for QSV/VAAPI/NVENC (filters need CPU surfaces)
-  //   but NOT for VideoToolbox — VT decode already outputs CPU buffers, so
-  //   libswscale filters (including subtitle overlay) work in-place.
-  // - QSV can't crop (fixed-size pool constraint), fallback to VAAPI encode
-  const effectiveHwAccel: HwAccelType = burnIn?.filter && hwAccel !== 'videotoolbox'
-    ? 'none'
-    : hwAccel === 'qsv' && crop
-      ? 'vaapi'
-      : hwAccel;
+  // Pre-flight: can we keep the whole pipeline on QSV (decode + filter
+  // + encode without bouncing through VAAPI)?
+  //
+  // Three sub-cases, all gated on `hwAccel === 'qsv'`, no burn-in
+  // (libass needs CPU buffers) and a known source codec:
+  //
+  //   a. crop + !tonemap → qsv-native decoder + vpp_qsv crop/scale.
+  //   b. tonemap + vpp_qsv tonemap probed enabled → qsv-native decoder
+  //      + vpp_qsv with `tonemap=1` (single-pass HDR→SDR on the iGPU
+  //      VPP, no hwmap, no opencl bridge). Available on Tiger Lake and
+  //      later; the boot probe in `vpp-qsv-probe.ts` is the gate.
+  //   c. crop + tonemap on older gens → still goes through the legacy
+  //      vaapi-decode chain (scale_vaapi+tonemap_vaapi+hwmap=qsv), so
+  //      we can stay on the QSV encoder via the hwCropPrefix splice.
+  const normalisedSourceCodecPreflight = normaliseSourceCodec(sourceVideoCodec);
+  const hasUsableQsvNativeDecoder =
+    hwAccel === 'qsv' &&
+    !burnIn?.filter &&
+    normalisedSourceCodecPreflight != null &&
+    isDecoderEnabled(
+      `${normalisedSourceCodecPreflight}_qsv_native_decode`,
+    );
+  const qsvNativeAvailable =
+    hasUsableQsvNativeDecoder &&
+    !!crop &&
+    (!tonemap || isVppQsvTonemapEnabled());
+  const qsvCanCrop =
+    qsvNativeAvailable ||
+    (hwAccel === 'qsv' && !!crop && !!tonemap && !burnIn?.filter);
+
+  const requestedHwAccel = requestedHwAccelFor(hwAccel, {
+    burnIn: !!burnIn?.filter,
+    crop: !!crop,
+    qsvCanCrop,
+  });
+
+  // Resolve the actual encoder before setting up the input pipeline.
+  // The registry can downgrade to CPU when a HW encoder failed its
+  // boot-time probe (e.g. h264_vaapi on a renderD node that exposes
+  // only video-proc entrypoints). If we keep the HW input setup the
+  // CPU encoder receives HW surfaces and the filter chain blows up
+  // with `Function not implemented` / `Impossible to convert between
+  // the formats supported by the filter`.
+  const isHdrOutput = isHdrProfile(profile.name);
+  const variant: CodecVariant =
+    videoVariant ??
+    (isHdrOutput && requestedHwAccel === 'qsv'
+      ? { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' }
+      : { codec: 'h264', bitDepth: 8, hdr: null });
+  const encoder = encoderRegistry.resolve(variant, requestedHwAccel);
+  if (!encoder) {
+    throw new Error(
+      `No encoder for variant ${JSON.stringify(variant)} on ${requestedHwAccel}`,
+    );
+  }
+  const effectiveHwAccel: HwAccelType = encoder.hwAccel;
 
   // Early sessions live ~1s before Shaka jumps to the main session — visual
   // quality on those warm-up frames is throwaway, so bias every knob towards
-  // ramp-up speed. Per-encoder mapping since 'ultrafast' is libx264-only,
-  // QSV stops at 'veryfast', NVENC uses p1..p7, VAAPI ignores -preset.
-  const earlyPreset = early
-    ? effectiveHwAccel === 'qsv'
-      ? 'veryfast'
-      : 'ultrafast'
-    : encoderPreset;
+  // ramp-up speed. `veryfast` everywhere keeps the H.264 profile consistent
+  // with the steady-state session (`faster` → High); the libx264 `ultrafast`
+  // preset implies `--no-cabac` which downgrades the bitstream to Constrained
+  // Baseline and produces an SPS that doesn't match the High SPS in the
+  // main session's init.mp4 — player concatenates the two and corrupts.
+  const earlyPreset = early ? 'veryfast' : encoderPreset;
   const earlyNvencPreset = early ? 'p1' : 'p4';
   // QSV rate-control: tight VBV (bufsize = bitrate × 1) so the BRC has a
   // short horizon and can't defer big I-frames. Early uses 0.5× / 1× so
@@ -188,74 +257,68 @@ export function buildFfmpegArgs(
   );
   const qsvBufsize = bitrateNum;
   // libx264 -bufsize is expressed in Mbits. Stock = 2x bitrate, early = 1x.
-  const libx264BufsizeMb = `${Math.max(1, parseInt(profile.videoBitrate) * (early ? 1 : 2))}M`;
+  // parseInt() drops ffmpeg's 'k'/'M' suffix silently — `parseInt('1500k')`
+  // gives 1500, then ×2 + 'M' yields "3000M" = 3 Gbits and ffmpeg rejects
+  // it as out-of-range. Derive Mbits from bitrateNum (already parsed via
+  // parseBitrateToBps) so the multiplier sees real units.
+  const libx264BufsizeMb = `${Math.max(
+    1,
+    Math.ceil((bitrateNum * (early ? 1 : 2)) / 1_000_000),
+  )}M`;
 
   // tonemap_vaapi keeps the pipeline inside VAAPI (1 device transition, no
   // OpenCL kernel compile) — saves ~300-500ms cold-start on HDR. Quality is
-  // slightly worse than tonemap_opencl/reinhard, but the early session's
-  // output is jumped past by Shaka after ~1s, so the user never sees those
-  // frames in steady-state. Restricted to early on HW paths that have a
-  // VAAPI decoder (qsv on Linux derives from vaapi, so it qualifies too).
+  // slightly worse than tonemap_opencl/reinhard but the difference is
+  // invisible at streaming bitrates.
+  //
+  // Force it on every QSV/VAAPI tonemap path. The OpenCL chain
+  // (`hwmap=derive_device=opencl,tonemap_opencl,hwmap=...,format=qsv`)
+  // depends on a working QSV↔OpenCL bridge that several Intel hosts
+  // can't service — the driver returns 'QSV to OpenCL mapping not
+  // usable' and the encoder crashes with exit=218. tonemap_vaapi has
+  // no such dependency and runs end-to-end inside VAAPI / QSV.
   const useVaapiTonemap =
-    early && tonemap && (effectiveHwAccel === 'qsv' || effectiveHwAccel === 'vaapi');
+    tonemap &&
+    (effectiveHwAccel === 'vaapi' || effectiveHwAccel === 'qsv');
 
-  // Hardware acceleration input decoding
-  if (effectiveHwAccel === 'qsv') {
-    // Linux approach: decode with VAAPI (native), scale with VAAPI,
-    // then map to QSV surfaces for encoding. More compatible than pure QSV pipeline.
-    args.push(
-      '-init_hw_device', 'vaapi=va:/dev/dri/renderD128',
-      '-init_hw_device', 'qsv=qs@va',
-    );
-    if (tonemap && !useVaapiTonemap) {
-      args.push('-init_hw_device', 'opencl=ocl:0.0', '-filter_hw_device', 'ocl');
-    }
-    args.push(
-      '-hwaccel', 'vaapi',
-      '-hwaccel_output_format', 'vaapi',
-      '-hwaccel_device', 'va',
-      '-extra_hw_frames', '32',
-      '-noautorotate',
-    );
-  } else if (effectiveHwAccel === 'vaapi') {
-    args.push('-init_hw_device', 'vaapi=va:/dev/dri/renderD128');
-    if (tonemap && !useVaapiTonemap) {
-      args.push('-init_hw_device', 'opencl=ocl:0.0', '-filter_hw_device', 'ocl');
-    }
-    args.push(
-      '-hwaccel', 'vaapi',
-      '-hwaccel_output_format', 'vaapi',
-      '-hwaccel_device', 'va',
-      '-extra_hw_frames', '32',
-      '-noautorotate',
-    );
-  } else if (effectiveHwAccel === 'nvenc') {
-    if (tonemap) {
-      // For tone mapping, don't force cuda output format — allows hwdownload to CPU
-      args.push('-hwaccel', 'cuda', '-noautorotate');
-    } else {
-      args.push(
-        '-hwaccel', 'cuda',
-        '-hwaccel_output_format', 'cuda',
-        '-noautorotate',
-      );
-    }
-  } else if (effectiveHwAccel === 'videotoolbox') {
-    // VideoToolbox = Apple Media Engine (h264/hevc encode+decode ASIC).
-    // Two modes:
-    //   1. Tonemap (no burn-in/crop): keep VT surfaces, use scale_vt for
-    //      hardware HDR→SDR tonemap via Metal — full GPU pipeline.
-    //   2. Everything else: download to CPU buffers for software filters
-    //      (crop, burn-in, scale), then re-upload via the encoder.
-    if (tonemap && !burnIn?.filter && !crop) {
-      args.push(
-        '-hwaccel', 'videotoolbox',
-        '-hwaccel_output_format', 'videotoolbox_vld',
-        '-noautorotate',
-      );
-    } else {
-      args.push('-hwaccel', 'videotoolbox', '-noautorotate');
-    }
+  // Resolve the decoder via the same registry pattern as the encoder.
+  // The decoder picks how the source is brought into memory (HW device
+  // init + `-hwaccel`); the encoder's hwAccel decides where the frame
+  // needs to land for encode. `surfaceBridge` computes the filter
+  // snippet that reshapes the decoder's output surface into the
+  // encoder's expected one — empty when both stay on the same device.
+  const normalisedSourceCodec = normalisedSourceCodecPreflight;
+  // Opt into the qsv-native decoder when the qsv crop path is in use
+  // (pre-flighted above so requestedHwAccelFor could keep us on QSV).
+  // The default qsv decoder emits VAAPI surfaces — kept as the safe
+  // baseline for every other QSV path.
+  const decoder: ReturnType<typeof decoderRegistry.resolve> =
+    qsvNativeAvailable &&
+    effectiveHwAccel === 'qsv' &&
+    normalisedSourceCodec
+      ? (findQsvNativeDecoder(normalisedSourceCodec) ??
+        decoderRegistry.resolve(
+          {
+            codec: normalisedSourceCodec,
+            bitDepth: sourceBitDepth,
+          },
+          effectiveHwAccel,
+        ))
+      : decoderRegistry.resolve(
+          {
+            codec: normalisedSourceCodec ?? 'h264',
+            bitDepth: sourceBitDepth,
+          },
+          effectiveHwAccel,
+        );
+  args.push(...decoder.buildInputArgs());
+
+  // OpenCL device init for the tonemap_opencl filter chain. Only needed
+  // when (a) we're tonemapping HDR→SDR AND (b) the VAAPI in-place
+  // tonemap fallback isn't active AND (c) the decoder's output sits on
+  // VAAPI surfaces — the only path that uses the opencl bridge today.
+  if (tonemap && !useVaapiTonemap && decoder.outputSurface === 'vaapi') {
+    args.push('-init_hw_device', 'opencl=ocl:0.0', '-filter_hw_device', 'ocl');
   }
 
   args.push('-i', inputPath);
@@ -309,214 +372,59 @@ export function buildFfmpegArgs(
     ? `hwdownload,format=nv12,${cropStr},hwupload=derive_device=vaapi,`
     : '';
 
-  const isHdrOutput = isHdrProfile(profile.name);
+  // Decoder→encoder surface bridge. Empty when both stay on the same
+  // device (qsv→qsv, vaapi→vaapi, cuda→cuda). Otherwise emits the
+  // hwdownload / hwupload / hwmap snippet the encoder splices in front
+  // of its `-vf` chain.
+  const surfaceBridgeFilter = surfaceBridge(
+    decoder.outputSurface,
+    encoder.hwAccel,
+    variant.bitDepth,
+  );
 
-  switch (effectiveHwAccel) {
-    case 'qsv':
-      // Note: QSV + crop is forced to CPU via effectiveHwAccel (fixed-size pool constraint)
-      if (isHdrOutput) {
-        // HEVC HDR pass-through transcode: VAAPI decode → VAAPI scale
-        // keeping p010le (10-bit, HDR pixels preserved) → hwmap qsv →
-        // hevc_qsv Main10 encode. Color signaling propagates from the
-        // input AVFrame metadata; `-color_*` flags are belt-and-suspenders
-        // so encoders that ignore the AVFrame still emit a correct SPS
-        // VUI. Output is tagged `hvc1` later in the HLS muxer args.
-        args.push(
-          '-c:v', 'hevc_qsv',
-          '-profile:v', 'main10',
-          '-preset', earlyPreset,
-          ...qsvExtra,
-          '-mbbrc', '1',
-          '-b:v', String(bitrateNum),
-          '-maxrate', String(bitrateNum + 1),
-          '-rc_init_occupancy', String(qsvRcInitOccupancy),
-          '-bufsize', String(qsvBufsize),
-          '-vf',
-          `scale_vaapi=w=${w}:h=-16:format=p010le:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
-          '-g', String(gopSize),
-          '-keyint_min', String(gopSize),
-          '-force_key_frames', forceKeyframesExpr,
-          '-color_primaries', 'bt2020',
-          '-color_trc', 'smpte2084',
-          '-colorspace', 'bt2020nc',
-          '-tag:v', 'hvc1',
-        );
-      } else if (tonemapVaapi) {
-        // VAAPI decode → VAAPI scale → VAAPI tonemap → QSV encode (no OpenCL hop)
-        args.push(
-          '-c:v', 'h264_qsv',
-          '-preset', earlyPreset,
-          ...qsvExtra,
-          '-mbbrc', '1',
-          '-b:v', String(bitrateNum),
-          '-maxrate', String(bitrateNum + 1),
-          '-rc_init_occupancy', String(qsvRcInitOccupancy),
-          '-bufsize', String(qsvBufsize),
-          '-vf',
-          `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${tonemapVaapi},hwmap=derive_device=qsv,format=qsv`,
-          '-g', String(gopSize),
-          '-keyint_min', String(gopSize),
-          '-force_key_frames', forceKeyframesExpr,
-        );
-      } else if (tonemapOpencl) {
-        // VAAPI decode → VAAPI scale → OpenCL tonemap → map to QSV → QSV encode
-        args.push(
-          '-c:v', 'h264_qsv',
-          '-preset', earlyPreset,
-          ...qsvExtra,
-          '-mbbrc', '1',
-          '-b:v', String(bitrateNum),
-          '-maxrate', String(bitrateNum + 1),
-          '-rc_init_occupancy', String(qsvRcInitOccupancy),
-          '-bufsize', String(qsvBufsize),
-          '-vf',
-          `scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`,
-          '-g', String(gopSize),
-          '-keyint_min', String(gopSize),
-          '-force_key_frames', forceKeyframesExpr,
-        );
-      } else {
-        args.push(
-          '-c:v', 'h264_qsv',
-          '-preset', earlyPreset,
-          ...qsvExtra,
-          '-mbbrc', '1',
-          '-b:v', String(bitrateNum),
-          '-maxrate', String(bitrateNum + 1),
-          '-rc_init_occupancy', String(qsvRcInitOccupancy),
-          '-bufsize', String(qsvBufsize),
-          '-vf',
-          `scale_vaapi=w=${w}:h=-16:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`,
-          '-g', String(gopSize),
-          '-keyint_min', String(gopSize),
-          '-force_key_frames', forceKeyframesExpr,
-        );
-      }
-      break;
-    case 'vaapi':
-      if (tonemapVaapi) {
-        // VAAPI decode → VAAPI scale → VAAPI tonemap → VAAPI encode (single device)
-        args.push(
-          '-c:v', 'h264_vaapi',
-          '-b:v', profile.videoBitrate,
-          '-maxrate', profile.videoBitrate,
-          '-vf',
-          `${hwCropPrefix}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${tonemapVaapi}`,
-          '-g', String(gopSize),
-          '-keyint_min', String(gopSize),
-          '-force_key_frames', forceKeyframesExpr,
-        );
-      } else if (tonemapOpencl) {
-        args.push(
-          '-c:v', 'h264_vaapi',
-          '-b:v', profile.videoBitrate,
-          '-maxrate', profile.videoBitrate,
-          '-vf',
-          `${hwCropPrefix}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
-          '-g', String(gopSize),
-          '-keyint_min', String(gopSize),
-          '-force_key_frames', forceKeyframesExpr,
-        );
-      } else {
-        args.push(
-          '-c:v', 'h264_vaapi',
-          '-b:v', profile.videoBitrate,
-          '-maxrate', profile.videoBitrate,
-          '-vf',
-          `${hwCropPrefix}scale_vaapi=w=${w}:h=-16:format=nv12`,
-          '-g', String(gopSize),
-          '-keyint_min', String(gopSize),
-          '-force_key_frames', forceKeyframesExpr,
-        );
-      }
-      break;
-    case 'nvenc':
-      if (tonemap) {
-        // No native GPU tone mapping — download from GPU, tonemap on CPU, encode with NVENC
-        args.push(
-          '-c:v', 'h264_nvenc',
-          '-preset', earlyNvencPreset,
-          '-b:v', profile.videoBitrate,
-          '-maxrate', profile.videoBitrate,
-          '-vf',
-          `hwdownload,format=p010le,${cpuCropPrefix}${tonemapCpu}scale=${w}:-2`,
-          '-g', String(gopSize),
-          '-keyint_min', String(gopSize),
-          '-force_key_frames', forceKeyframesExpr,
-        );
-      } else {
-        const nvCropFilter = cropStr
-          ? `hwdownload,format=nv12,${cropStr},hwupload_cuda,`
-          : '';
-        args.push(
-          '-c:v', 'h264_nvenc',
-          '-preset', earlyNvencPreset,
-          '-b:v', profile.videoBitrate,
-          '-maxrate', profile.videoBitrate,
-          '-vf',
-          `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=nv12`,
-          '-g', String(gopSize),
-          '-keyint_min', String(gopSize),
-          '-force_key_frames', forceKeyframesExpr,
-        );
-      }
-      break;
-    case 'videotoolbox':
-      // h264_videotoolbox driven by Apple's Media Engine — H.264 High
-      // profile L4.0 on Apple Silicon transcodes 4K @ 60 fps comfortably.
-      // No `-preset` knob (VT doesn't expose presets); `-realtime 1`
-      // tells the encoder to favour latency over efficiency on early
-      // ramp-up frames.
-      if (tonemap && !burnIn?.filter && !crop) {
-        // Full GPU pipeline: VT decode → scale_vt (Metal tonemap + resize)
-        // → VT encode. HDR→SDR via color_transfer/primaries/matrix=bt709.
-        // No CPU round-trip — everything stays on Metal/IOSurface.
-        args.push(
-          '-c:v', 'h264_videotoolbox',
-          '-profile:v', 'high',
-          ...(early ? ['-realtime', '1'] : []),
-          '-b:v', profile.videoBitrate,
-          '-maxrate', profile.videoBitrate,
-          '-vf',
-          `scale_vt=w=${w}:h=-2:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709`,
-          '-g', String(gopSize),
-          '-keyint_min', String(gopSize),
-          '-force_key_frames', forceKeyframesExpr,
-        );
-      } else {
-        // CPU path: VT decode → CPU buffers → software filters (crop,
-        // burn-in, scale) → VT encode (re-uploads internally).
-        args.push(
-          '-c:v', 'h264_videotoolbox',
-          '-profile:v', 'high',
-          ...(early ? ['-realtime', '1'] : []),
-          '-b:v', profile.videoBitrate,
-          '-maxrate', profile.videoBitrate,
-          '-vf',
-          `${cpuCropPrefix}scale=${w}:-2:flags=lanczos,format=yuv420p${burnInFilter}`,
-          '-g', String(gopSize),
-          '-keyint_min', String(gopSize),
-          '-force_key_frames', forceKeyframesExpr,
-        );
-      }
-      break;
-    default:
-      args.push(
-        '-c:v', 'libx264',
-        // Cap frame-threading so segment 0 emits before a long (threads-1)-frame prebuffer.
-        '-threads:v', '4',
-        '-preset', earlyPreset,
-        ...(early ? ['-tune', 'zerolatency'] : []),
-        '-b:v', profile.videoBitrate,
-        '-maxrate', profile.videoBitrate,
-        '-bufsize', libx264BufsizeMb,
-        '-vf',
-        `${cpuCropPrefix}${tonemapCpu}scale=${w}:-2:flags=lanczos,format=yuv420p${burnInFilter}`,
-        '-force_key_frames', forceKeyframesExpr,
-        '-sc_threshold:v:0', '0',
-      );
-      break;
-  }
+  const encoderInput: EncoderInput = {
+    source: {
+      width: 0,
+      height: 0,
+      hdr: null,
+      bitDepth: 8,
+      codecName: '',
+    },
+    variant,
+    target: {
+      width: w,
+      height: profile.maxHeight,
+      videoBitrateBps: bitrateNum,
+      gopSize,
+      frameRate: fps,
+    },
+    preset: earlyPreset,
+    nvencPreset: earlyNvencPreset,
+    seekSeconds,
+    early,
+    forceKeyframesExpr,
+    qsv: {
+      extra: qsvExtra,
+      rcInitOccupancy: qsvRcInitOccupancy,
+      bufsize: qsvBufsize,
+    },
+    libx264BufsizeMb,
+    filters: {
+      cropStr,
+      cpuCropPrefix,
+      hwCropPrefix,
+      surfaceBridge: surfaceBridgeFilter,
+      burnInFilter,
+      tonemapVaapi,
+      tonemapOpencl,
+      tonemapCpu,
+    },
+    tonemap,
+    hasBurnIn: !!burnIn?.filter,
+    hasCrop: !!crop,
+    inputSurface: decoder.outputSurface,
+  };
+  args.push(...encoder.buildArgs(encoderInput));
 
   // When tone-mapping HDR → SDR on the H.264 path, force the SPS VUI to
   // BT.709 limited range. The pixel data is genuinely SDR after the
@@ -626,7 +534,7 @@ export function buildAudioOnlyFfmpegArgs(
 
   const args = ['-hide_banner', '-loglevel', 'warning'];
   if (trustedStreamInfo) {
-    log.log('Probe [audio-only]: using cached streamInfo (0s / 200KB scan)');
+    log.debug?.('Probe [audio-only]: using cached streamInfo (0s / 200KB scan)');
     args.push('-analyzeduration', '0', '-probesize', '200000');
   } else {
     log.log(
@@ -779,4 +687,28 @@ export function buildRemuxArgs(
   );
 
   return args;
+}
+
+/** ffprobe codec name → `VideoCodec` union. Aliases (`hvc1`/`hev1` for
+ *  HEVC, `avc1` for H.264, `av01` for AV1) collapse to the canonical
+ *  form. Returns null on unknown codecs so the decoder registry can
+ *  fall back to CPU decode. */
+function normaliseSourceCodec(name: string | undefined): VideoCodec | null {
+  if (!name) return null;
+  switch (name.toLowerCase()) {
+    case 'h264':
+    case 'avc':
+    case 'avc1':
+      return 'h264';
+    case 'hevc':
+    case 'h265':
+    case 'hvc1':
+    case 'hev1':
+      return 'hevc';
+    case 'av1':
+    case 'av01':
+      return 'av1';
+    default:
+      return null;
+  }
 }

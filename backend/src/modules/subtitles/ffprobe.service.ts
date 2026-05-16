@@ -328,7 +328,7 @@ export class FfprobeService {
     // HDR is defined by the transfer curve, not the bit depth. An 8-bit PQ
     // file is mis-encoded but still needs the HDR pipeline (or tone-mapping):
     // played as SDR, the PQ values render as gamma 2.2 and the picture goes
-    // dark/washed. Match Jellyfin/Plex: classify by transfer function alone.
+    // dark/washed. Classify by transfer function alone.
     if (!colorTransfer) return undefined;
     const isBt2020 = colorPrimaries === 'bt2020';
     if (colorTransfer === 'smpte2084' && isBt2020) return 'HDR10';
@@ -358,80 +358,106 @@ export class FfprobeService {
     durationSeconds?: number,
     originalWidth?: number,
     originalHeight?: number,
+    isHdr = false,
   ): Promise<CropInfo | null> {
     const label = path.basename(videoPath);
     this.logger.log(
-      `cropdetect started for "${label}" (${originalWidth}x${originalHeight})`,
+      `cropdetect started for "${label}" (${originalWidth}x${originalHeight}, hdr=${isHdr})`,
     );
     try {
-      // Sample at 3 different timestamps to avoid false positives (dark scenes, credits)
+      // Sample 6 timestamps spread across the file (5–80%) — animated 4K
+      // Blurays like Arcane mix full-frame action with cinema-aspect
+      // dialogue scenes, and a tight 3-sample run repeatedly hit only
+      // full-frame moments and reported 'no crop needed' on a clearly
+      // letterboxed source. Six samples in parallel finish faster than
+      // three sequential, so the wider coverage is free.
       const dur = durationSeconds ?? 600;
-      const timestamps = [
-        Math.min(60, dur * 0.1), // 10% or 60s
-        Math.min(300, dur * 0.3), // 30% or 300s
-        Math.min(600, dur * 0.5), // 50% or 600s
-      ];
+      const fractions = [0.05, 0.15, 0.3, 0.45, 0.6, 0.8];
+      const timestamps = fractions.map((f) => Math.floor(dur * f));
 
-      const cropCounts = new Map<string, number>();
+      // limit (cropdetect threshold for "this pixel is black"):
+      //   - SDR encodes black around luma 16 (BT.709 narrow range), so
+      //     limit=24 is the legacy default and works.
+      //   - HDR (PQ / HLG) encodes black around luma 50–70 — limit=24
+      //     misses every 4K HDR Bluray we touched. limit=64 catches the
+      //     letterbox but on SDR it pulls in low-luma scene content
+      //     ('most of a dim scene is below 64') and falsely shrinks the
+      //     crop. Pick per-source so neither side gets the wrong default.
+      const limit = isHdr ? 64 : 24;
 
-      for (const ss of timestamps) {
-        try {
-          const { stderr } = await execFileAsync(
-            'ffmpeg',
-            [
-              '-ss',
-              String(Math.floor(ss)),
-              '-i',
-              videoPath,
-              '-t',
-              '3',
-              '-vf',
-              'cropdetect=24:16:0',
-              '-an',
-              '-f',
-              'null',
-              '-',
-            ],
-            { timeout: 30_000 },
-          );
+      // skip=24 drops the first 24 frames per pass so fades / transition
+      // black don't shift the detected edges. round=16 keeps the result
+      // mod-16 to match HW encoder constraints.
+      const cropFilter = `cropdetect=limit=${limit}:round=16:reset=0:skip=24`;
 
-          // Parse last crop= line
-          const lines = stderr.split('\n');
-          for (let i = lines.length - 1; i >= 0; i--) {
-            const m = lines[i].match(/crop=(\d+):(\d+):(\d+):(\d+)/);
-            if (m) {
-              const key = `${m[1]}:${m[2]}:${m[3]}:${m[4]}`;
-              cropCounts.set(key, (cropCounts.get(key) ?? 0) + 1);
-              break;
+      const sampleResults = await Promise.all(
+        timestamps.map(async (ss) => {
+          try {
+            const { stderr } = await execFileAsync(
+              'ffmpeg',
+              [
+                '-ss',
+                String(Math.floor(ss)),
+                '-i',
+                videoPath,
+                '-t',
+                '5',
+                '-vf',
+                cropFilter,
+                '-an',
+                '-f',
+                'null',
+                '-',
+              ],
+              { timeout: 30_000 },
+            );
+            const lines = stderr.split('\n');
+            for (let i = lines.length - 1; i >= 0; i--) {
+              const m = lines[i].match(/crop=(\d+):(\d+):(\d+):(\d+)/);
+              if (m) {
+                return {
+                  ss,
+                  w: parseInt(m[1], 10),
+                  h: parseInt(m[2], 10),
+                  x: parseInt(m[3], 10),
+                  y: parseInt(m[4], 10),
+                };
+              }
             }
+            return null;
+          } catch {
+            return null;
           }
-        } catch {
-          // Individual sample failed, continue
+        }),
+      );
+
+      // Aggregate: pick the LARGEST crop observed (the loosest box that
+      // still fits content). A small overlay on one sample can falsely
+      // shrink the detected crop, but the largest area is the union of
+      // content regions across scenes — what we actually want visible.
+      let bestCrop: { w: number; h: number; x: number; y: number } | null =
+        null;
+      const seenSamples: string[] = [];
+      for (const r of sampleResults) {
+        if (!r) continue;
+        seenSamples.push(`@${r.ss}s=${r.w}:${r.h}:${r.x}:${r.y}`);
+        if (!bestCrop || r.w * r.h > bestCrop.w * bestCrop.h) {
+          bestCrop = { w: r.w, h: r.h, x: r.x, y: r.y };
         }
       }
 
-      if (!cropCounts.size) return null;
-
-      // Pick the most common crop value
-      let bestCrop = '';
-      let bestCount = 0;
-      for (const [crop, count] of cropCounts) {
-        if (count > bestCount) {
-          bestCrop = crop;
-          bestCount = count;
-        }
-      }
-
-      const parts = bestCrop.split(':').map(Number);
-      if (parts.length !== 4) return null;
-      const [w, h, x, y] = parts;
+      if (!bestCrop) return null;
+      const { w, h, x, y } = bestCrop;
+      this.logger.debug(
+        `cropdetect "${label}" samples: ${seenSamples.join(', ')}`,
+      );
 
       // Only crop if bars are significant (> 40px total removed on at least one axis)
       const totalVerticalCrop = originalHeight ? originalHeight - h : y * 2;
       const totalHorizontalCrop = originalWidth ? originalWidth - w : x * 2;
       if (totalVerticalCrop < 40 && totalHorizontalCrop < 40) {
         this.logger.log(
-          `cropdetect "${label}": no crop needed (detected ${bestCrop}, total crop: ${totalVerticalCrop}v/${totalHorizontalCrop}h)`,
+          `cropdetect "${label}": no crop needed (detected ${w}:${h}:${x}:${y}, total crop: ${totalVerticalCrop}v/${totalHorizontalCrop}h)`,
         );
         return null;
       }

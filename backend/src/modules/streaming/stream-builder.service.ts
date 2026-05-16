@@ -12,9 +12,16 @@ import {
   ORIGINAL_SEPARATE_RATIO,
   TranscodeProfile,
   TranscodingService,
+  encoderRegistry,
   getLadderForDevice,
   parseBitrateToBps,
+  profileFitsSource,
+  requestedHwAccelFor,
 } from './transcoding';
+import { isDecoderEnabled } from './transcoding/codec/decoder-probe';
+import { isVppQsvTonemapEnabled } from './transcoding/codec/vpp-qsv-probe';
+import { pickPrimaryVariant } from './transcoding/codec/selector';
+import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
 
 /**
  * Decides how a media file should be played: DirectPlay, DirectStream (remux), or Transcode.
@@ -103,28 +110,51 @@ export class StreamBuilderService {
     const isSourceHdr = !!source.hdrFormat;
     const clientSupportsHdr = profile.supportsHdr === true;
     // HEVC HDR ladder eligibility. Triggers a separate master.m3u8 path
-    // (HEVC Main10 transcodes + remux at source resolution, all carrying
-    // BT.2020/PQ in their VUI) instead of the H.264 SDR ladder. Gated by:
-    //   - Source video codec is HEVC (only codec we can pass through /
-    //     re-encode while preserving HDR signaling in HLS).
+    // (HEVC Main10 transcodes carrying BT.2020/PQ in their VUI) instead
+    // of the H.264 SDR ladder. Gated by:
+    //   - Source video codec is HEVC (only codec we re-encode while
+    //     preserving HDR signaling in HLS).
     //   - Client claims HDR support (browser-device-profile sourced from
     //     `AVPlayer.eligibleForHDRPlayback` on iOS, MediaCapabilities on
     //     web/Android).
-    //   - HEVC encoding is enabled in admin streaming settings. The
-    //     toggle falls back to H.264 SDR tonemap on every rung for
-    //     deployments whose HW path can't sustain hevc_qsv Main10
-    //     (older Intel iGPUs, no Main10 encoder available).
-    const hevcEnabled = this.activeStreamTracker.getHevcHdrEnabled();
+    // Encoder availability is checked downstream by the codec selector
+    // via `encoderRegistry.resolve()` — deployments without a working
+    // hevc_qsv Main10 path automatically fall back to libx265 (or to
+    // H.264 SDR if the source isn't HEVC).
     const useHdrLadder =
-      isSourceHdr &&
-      clientSupportsHdr &&
-      sourceVideoCodec === 'hevc' &&
-      hevcEnabled;
+      isSourceHdr && clientSupportsHdr && sourceVideoCodec === 'hevc';
     // Tone-map iff the source is HDR and we're not routing through the
     // HDR ladder. Anything that re-encodes via H.264 needs the tonemap
     // filter or AVPlayer rejects with -12927 (mismatched VUI vs codec).
     const needsTonemapping = isSourceHdr && !useHdrLadder;
     this.activeStreamTracker.setHdrLadder(resolved.mediaFile.id, useHdrLadder);
+
+    // Codec selector: picks the variant the encoder pipeline will produce
+    // when the playback path lands on transcode. The result is stored in
+    // the tracker so the controller can thread it into every later
+    // session spawn via SessionContext.videoVariant. Today only the
+    // first-ranked variant is emitted (single codec per master); the
+    // remainder is kept in diagnostics. Source HDR + HEVC source still
+    // routes through `useHdrLadder` for backward compat — the selector's
+    // job here is to give the encoder layer an explicit variant target
+    // rather than rely on profile-name inference.
+    const detectedHwAccel = this.transcodingService.getDetectedHwAccel();
+    const userAgent = ''; // UA-driven quirks plumbed via a later patch
+    const selectedVariant = pickPrimaryVariant(
+      {
+        width: source.width ?? 0,
+        height: source.height ?? 0,
+        hdr: (source.hdrFormat as CodecVariant['hdr']) ?? null,
+        codec: normaliseCodec(source.videoCodec),
+      },
+      profile,
+      detectedHwAccel,
+      userAgent,
+    );
+    this.activeStreamTracker.setVideoVariant(
+      resolved.mediaFile.id,
+      selectedVariant,
+    );
     const needsBurnIn = !!burnInSubtitleId;
     const needsCrop = !!v?.crop;
 
@@ -242,7 +272,9 @@ export class StreamBuilderService {
       const remuxBw =
         source.formatBitRate ??
         (source.videoBitRate ?? 0) + (source.audioBitRate ?? 0);
-      // Même échelle que le master.m3u8 (variantes transcodées après la ligne remux)
+      // Same scale as the master playlist's transcoded rungs — exposes
+      // a bitrate hint per quality so the stats overlay can plot the
+      // selected rung without re-deriving the bitrate ladder client-side.
       const transcodeBitrateByQuality: NonNullable<
         PlaybackInfoResponse['transcodeBitrateByQuality']
       > = {};
@@ -305,17 +337,35 @@ export class StreamBuilderService {
         message: `HDR → SDR (tone mapping ${source.hdrFormat})`,
       });
     }
-    // Compute effective HW accel (same logic as transcoding/ffmpeg-args.ts buildFfmpegArgs):
-    // - Burn-in forces CPU for QSV/VAAPI/NVENC (filters need HW surfaces),
-    //   but NOT for VideoToolbox — VT decode outputs CPU buffers, so
-    //   subtitle filters work in-place.
-    // - QSV + crop falls back to VAAPI (fixed-size pool constraint)
-    let effectiveHwAccel = this.transcodingService.getDetectedHwAccel();
-    if (needsBurnIn && effectiveHwAccel !== 'videotoolbox') {
-      effectiveHwAccel = 'none';
-    } else if (effectiveHwAccel === 'qsv' && needsCrop) {
-      effectiveHwAccel = 'vaapi';
-    }
+    // Mirror the ffmpeg-args dispatch: same pipeline rule, same registry
+    // resolve, same qsvCanCrop hint. Picks up the registry's runtime
+    // fallback (e.g. h264_vaapi disabled → libx264) so the stats overlay
+    // reports the actual encoder that will run, not the host's nominal
+    // HW accel.
+    const detectedHw = this.transcodingService.getDetectedHwAccel();
+    const normalisedSourceCodecForDecode = normaliseCodec(sourceVideoCodec);
+    const hasUsableQsvNativeDecoderForReport =
+      detectedHw === 'qsv' &&
+      !needsBurnIn &&
+      normalisedSourceCodecForDecode != null &&
+      isDecoderEnabled(
+        `${normalisedSourceCodecForDecode}_qsv_native_decode`,
+      );
+    const qsvNativeAvailableForReport =
+      hasUsableQsvNativeDecoderForReport &&
+      needsCrop &&
+      (!needsTonemapping || isVppQsvTonemapEnabled());
+    const qsvCanCropForReport =
+      qsvNativeAvailableForReport ||
+      (detectedHw === 'qsv' && needsCrop && needsTonemapping && !needsBurnIn);
+    const requestedHwAccel = requestedHwAccelFor(detectedHw, {
+      burnIn: needsBurnIn,
+      crop: needsCrop,
+      qsvCanCrop: qsvCanCropForReport,
+    });
+    const effectiveHwAccel =
+      encoderRegistry.resolve(selectedVariant, requestedHwAccel)?.hwAccel ??
+      'none';
 
     // Audio output decision — single source of truth for ffmpeg-args and
     // the master playlist. Three paths:
@@ -443,8 +493,8 @@ export class StreamBuilderService {
       source.formatBitRate ??
       (source.videoBitRate ?? 0) + (source.audioBitRate ?? 0);
 
-    const available = ladder.filter(
-      (p) => p.maxWidth <= sourceW || p.maxHeight <= sourceH,
+    const available = ladder.filter((p) =>
+      profileFitsSource(p, sourceW, sourceH),
     );
     if (!available.length) available.push(ladder[ladder.length - 1]);
     // Ladder is ordered top→bottom, so available[0] is the source-resolution rung.
@@ -661,5 +711,30 @@ export class StreamBuilderService {
       audioSupported,
       videoConditionsMet,
     };
+  }
+}
+
+/** ffprobe-form codec name → `VideoCodec` union. Aliases (`h265`/`hvc1`/
+ *  `hev1` for HEVC, `avc1`/`avc` for H.264, `av01` for AV1) all collapse
+ *  to the canonical codec. Returns undefined when the source codec
+ *  isn't in our encoder universe (Theora, VP9, etc.) so the selector
+ *  falls through to the efficiency ranking. */
+function normaliseCodec(name: string | undefined): VideoCodec | undefined {
+  if (!name) return undefined;
+  switch (name.toLowerCase()) {
+    case 'h264':
+    case 'avc':
+    case 'avc1':
+      return 'h264';
+    case 'hevc':
+    case 'h265':
+    case 'hvc1':
+    case 'hev1':
+      return 'hevc';
+    case 'av1':
+    case 'av01':
+      return 'av1';
+    default:
+      return undefined;
   }
 }

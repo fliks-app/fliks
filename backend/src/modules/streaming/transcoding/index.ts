@@ -10,7 +10,11 @@ export {
   getLadderForDevice,
   isHdrProfile,
   parseBitrateToBps,
+  profileFitsSource,
+  profileResolution,
 } from './profiles';
+export { requestedHwAccelFor } from './hw-detect';
+export { encoderRegistry } from './codec/encoders';
 export { audioSessionKey, earlySessionKey, sessionKey } from './session-key';
 export { generateMasterPlaylist, getAvailableProfiles } from './master-playlist';
 export { TranscodingService } from './transcoding.service';

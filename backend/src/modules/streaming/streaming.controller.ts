@@ -26,7 +26,9 @@ import {
   PROFILES,
   DESKTOP_HDR_PROFILES,
   SessionContext,
+  getHdrLadderForDevice,
   getLadderForDevice,
+  profileFitsSource,
 } from './transcoding';
 import { secondsToSegmentIndex } from './transcoding/constants';
 import { ThumbnailService } from './thumbnail.service';
@@ -192,6 +194,12 @@ export class StreamingController {
       audioPlan: this.activeStreamTracker.getAudioPlan(mediaFileId) ?? undefined,
       sourceVideoCodec: (si?.video?.[0]?.codec ?? '').toLowerCase() || undefined,
       isSourceHdr: !!si?.video?.[0]?.hdrFormat,
+      // Variant chosen by stream-builder's codec selector at
+      // playback-info time. Threads through every session spawn so
+      // ffmpeg-args resolves the matching encoder descriptor. Absent
+      // for callers that never reach playback-info (legacy direct
+      // URLs) — buildFfmpegArgs falls back to profile-name inference.
+      videoVariant: this.activeStreamTracker.getVideoVariant(mediaFileId),
     };
   }
 
@@ -239,13 +247,24 @@ export class StreamingController {
       if (existing && existing.process.exitCode === null) return;
       const ctx = this.buildSessionContext(req, resolved, mediaFileId);
 
-      // Prewarm only runs for transcode rungs. Plain `remux` / `original`
-      // pseudo-qualities map onto the top profile of the device ladder
-      // (HDR top rung is now a transcode, not a copy pass-through), so
-      // the same transcode prewarm applies.
+      // `remux` / `original` resolve to the player's actual rung only
+      // after the manifest loads — Shaka filters variants whose
+      // CODECS string the browser can't decode (HEVC Main10 L5.1 is
+      // commonly filtered on web), so the top rung we'd guess from
+      // the device ladder is often not what the player ends up
+      // requesting. Skipping the prewarm for these pseudo-labels
+      // avoids the spawn-then-kill dance; the player's first segment
+      // fetch starts ffmpeg synchronously at the correct rung.
+      if (startQuality === 'remux' || startQuality === 'original') return;
+      // When the HDR ladder is in effect, the master only publishes
+      // `*-hdr` rungs. The frontend's saved quality is height-based
+      // (`1080p`), so translate to the HDR equivalent so prewarm
+      // doesn't spawn a doomed SDR session that the player will
+      // immediately kill and replace with the matching HDR rung.
       const targetQuality =
-        startQuality === 'remux' || startQuality === 'original'
-          ? getLadderForDevice(deviceType)[0].name
+        this.activeStreamTracker.getHdrLadder(mediaFileId) &&
+        !startQuality.endsWith('-hdr')
+          ? `${startQuality}-hdr`
           : startQuality;
       const startSegment = Math.max(0, secondsToSegmentIndex(effectiveStartAt));
 
@@ -327,7 +346,7 @@ export class StreamingController {
 
     const qualities: { key: string; label: string; estimatedSize: number }[] = [];
     for (const p of PROFILES) {
-      if (p.maxWidth > sourceWidth && p.maxHeight > sourceHeight) continue;
+      if (!profileFitsSource(p, sourceWidth, sourceHeight)) continue;
       const videoBps = this.parseBitrateString(p.videoBitrate);
       const audioBps = this.parseBitrateString(p.audioBitrate);
       const duration = (info as any)?.durationSeconds ?? 0;
@@ -391,9 +410,6 @@ export class StreamingController {
       audioStreamRaw != null ? parseInt(audioStreamRaw, 10) : undefined;
 
     const ss = await this.getStreamingSettings();
-    // Push the global HEVC HDR toggle to the tracker before evaluate —
-    // stream-builder reads it synchronously to decide useHdrLadder.
-    this.activeStreamTracker.setHevcHdrEnabled(ss.hevcHdrEnabled);
 
     const result = this.streamBuilder.evaluate(
       resolved,
@@ -648,6 +664,7 @@ export class StreamingController {
         : this.activeStreamTracker.getDeviceType(mediaFileId);
     this.activeStreamTracker.setDeviceType(mediaFileId, deviceType);
 
+    const sdrVariant = this.activeStreamTracker.getVideoVariant(mediaFileId);
     const playlist = this.transcodingService.generateMasterPlaylist(
       mediaFileId,
       w,
@@ -662,6 +679,9 @@ export class StreamingController {
       (this.activeStreamTracker.getAudioPlan(mediaFileId)?.codec ?? 'aac') as
         | 'aac' | 'ac3' | 'eac3',
       hdrPassThrough,
+      // Only the SDR ladder branch consumes this — the HDR branch
+      // already drives its codec strings from `hdrPassThrough`.
+      sdrVariant && sdrVariant.hdr == null ? sdrVariant : undefined,
     );
 
     this.activeStreamTracker.setAudioStreamCount(
@@ -842,7 +862,18 @@ export class StreamingController {
         sourceH,
         deviceType,
       );
-      const quality = (profiles[0] ?? PROFILES[PROFILES.length - 1]).name;
+      const baseQuality = (profiles[0] ?? PROFILES[PROFILES.length - 1]).name;
+      // Audio route can race ahead of the seek-restart's video session
+      // being registered: it sees no session, falls into this branch
+      // and spawns a brand-new one at the SDR top rung — which then
+      // kills the in-flight HDR session via `getOrCreateSession`'s
+      // quality-change path. Translate to the HDR rung when the master
+      // is publishing the HDR ladder so the spawned session matches.
+      const quality =
+        this.activeStreamTracker.getHdrLadder(mediaFileId) &&
+        !baseQuality.endsWith('-hdr')
+          ? `${baseQuality}-hdr`
+          : baseQuality;
       videoSession = await this.transcodingService.getOrCreateSession(
         mediaFileId,
         quality,

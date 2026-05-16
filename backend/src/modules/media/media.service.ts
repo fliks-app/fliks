@@ -2232,6 +2232,7 @@ export class MediaService {
             streamInfo.durationSeconds,
             v.width,
             v.height,
+            !!v.hdrFormat,
           );
           if (crop) v.crop = crop;
         } catch (err) {
@@ -2523,7 +2524,12 @@ export class MediaService {
       }
 
       // Always re-probe streamInfo (fast, ~1s) to pick up schema changes.
-      // Skip detectCrop (~5-10s) if file size is unchanged — crop doesn't change.
+      // Skip detectCrop (~5-10s parallel) when the file size hasn't
+      // changed — crop is a property of the file, so unchanged bytes
+      // mean unchanged crop. Backfilling files that lack crop metadata
+      // would otherwise force every legacy rescan to do the slow probe
+      // again. Operators can force re-detection by deleting the dbFile
+      // row or temporarily breaking the size match.
       const sizeUnchanged = dbFile.size === diskSize;
       dbFile.size = diskSize;
       let streamInfo: Awaited<
@@ -2539,6 +2545,7 @@ export class MediaService {
               streamInfo.durationSeconds,
               v.width,
               v.height,
+              !!v.hdrFormat,
             );
             if (crop) v.crop = crop;
           } catch (err) {
@@ -2686,6 +2693,7 @@ export class MediaService {
               streamInfo.durationSeconds,
               v.width,
               v.height,
+              !!v.hdrFormat,
             );
             if (crop) v.crop = crop;
           } catch (err) {

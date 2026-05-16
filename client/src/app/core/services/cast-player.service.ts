@@ -112,16 +112,7 @@ export class CastPlayerService {
    *  Without cached caps (first cast to a new device, or older receiver
    *  that doesn't answer the probe), we fall back to AAC-only stereo — a
    *  Cast generation we don't recognise is safer downmixed than failing
-   *  to play.
-   *
-   *  `useTs` is conditional on the path:
-   *  - Stereo (AAC re-encode) → `useTs=true`. fMP4 + AAC suffers from the
-   *    encoder priming desync (~44 ms) because Shaka on Cast ignores the
-   *    init segment `edts/elst` atom. TS sidesteps the issue.
-   *  - Surround (AC-3 / EAC-3 re-encode) → `useTs=false`. Dolby codecs
-   *    have no encoder priming (MDCT overlap is built into the codec, not
-   *    extra lookahead) and AC-3 in TS doesn't survive the receiver's
-   *    Shaka transmuxer to fMP4 for MSE (error 4032), so fMP4 is required. */
+   *  to play. */
   private getCastDeviceProfile(): DeviceProfile {
     const cs = this.castSettings.get();
     const maxChannels = cs.audioChannels ?? 2;

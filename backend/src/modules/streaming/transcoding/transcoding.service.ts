@@ -24,6 +24,11 @@ import {
   buildRemuxArgs,
 } from './ffmpeg-args';
 import { detectHwAccel } from './hw-detect';
+import { ALL_DESCRIPTORS } from './codec/encoders';
+import { runEncoderProbes } from './codec/encoder-probe';
+import { ALL_DECODERS } from './codec/decoders';
+import { runDecoderProbes } from './codec/decoder-probe';
+import { runVppQsvTonemapProbe } from './codec/vpp-qsv-probe';
 import { generateMasterPlaylist, getAvailableProfiles } from './master-playlist';
 import {
   fileExists,
@@ -78,6 +83,25 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     this.detectedHwAccel = await detectHwAccel(this.log);
     this.log.log(`Hardware acceleration: ${this.detectedHwAccel}`);
+
+    // Probe every compiled-in encoder. Each runs a single black-frame
+    // ffmpeg encode; the descriptors that fail to open are blacklisted
+    // in the runtime registry gate. Runs async — module init doesn't
+    // wait for it, but the codec selector defaults to "every encoder
+    // usable" until the probe completes (the runtime fallback layer
+    // catches stragglers).
+    void runEncoderProbes(ALL_DESCRIPTORS, this.log);
+    // Same one-frame validation pass on the decoder side: synthesise a
+    // tiny bitstream per codec, hand it to each descriptor under its
+    // real `-hwaccel ...` setup, drop the frame to /dev/null. Both
+    // probes fire fire-and-forget — by the time a transcode session
+    // actually runs, both maps are populated.
+    void runDecoderProbes(ALL_DECODERS, this.log);
+    // Probe whether the iGPU's fixed-function HDR tone-mapping unit
+    // is wired up. Only the upstream `vpp_qsv tonemap=1` path uses
+    // it; gates the single-pass HDR→SDR chain in the QSV encoder
+    // filter helpers.
+    void runVppQsvTonemapProbe(this.log);
 
     this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 30_000);
   }
@@ -254,6 +278,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       videoBitRateBps?: number;
       audioBitRateBps?: number;
     },
+    sdrVariant?: import('./codec/types').CodecVariant,
   ): string {
     // Only the QSV branch in ffmpeg-args has `hevc_qsv Main10` wired —
     // every other hwAccel hits libx264 for HEVC HDR profile names and
@@ -276,6 +301,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       outputAudioCodec,
       hdrPassThrough,
       canEncodeHevcHdr,
+      sdrVariant,
     );
   }
 
@@ -336,6 +362,15 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         this.log.log(
           `Quality change [${key}]: ${existing.quality} → ${quality}, killing old session`,
         );
+        // Inherit the killed session's seek position when the caller
+        // didn't pass one (init.mp4 requests arrive without a segment
+        // hint → requestedSegment=0). Without this, the new quality
+        // session spawns at ss=0 and gets killed seconds later by the
+        // first segment fetch which triggers a seek restart at the
+        // real position.
+        if (requestedSegment === 0 && existing.startSegment) {
+          requestedSegment = existing.startSegment;
+        }
         this.sessions.delete(key);
         existing.intentionallyKilled = true;
         await this.killProcess(existing.process);
@@ -551,6 +586,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           trustedStreamInfo: ctx?.trustedStreamInfo,
           early: true,
           useTs: ctx?.useTs ?? false,
+          videoVariant: ctx?.videoVariant,
+          sourceVideoCodec: ctx?.sourceVideoCodec,
+          sourceBitDepth: ctx?.isSourceHdr ? 10 : 8,
         },
         this.log,
       );
@@ -695,7 +733,22 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const { resolve: readyResolve, promise: readyPromise } =
       this.createDeferred();
 
-    this.log.log(`FFmpeg start [${id}]: ffmpeg ${args.join(' ')}`);
+    // Compact one-liner — quality + encoder + seek + start_number is what
+    // the operator needs in normal operation. Full ffmpeg command was at
+    // DEBUG previously but Nest's dev logger emits debug by default,
+    // which defeated the noise reduction. If full command is needed,
+    // grep the ffmpeg process tree (`ps aux | grep ffmpeg`) or
+    // re-derive from the descriptor + ctx.
+    const encoderIdx = args.indexOf('-c:v');
+    const encoder = encoderIdx >= 0 ? args[encoderIdx + 1] : '?';
+    const ssIdx = args.lastIndexOf('-ss');
+    const ss = ssIdx >= 0 ? args[ssIdx + 1] : '0';
+    const startNumberIdx = args.indexOf('-start_number');
+    const startNumber =
+      startNumberIdx >= 0 ? args[startNumberIdx + 1] : String(startSegment);
+    this.log.log(
+      `FFmpeg start [${id}] ${quality} ${encoder} ss=${ss} start_number=${startNumber}`,
+    );
 
     const proc = spawn('ffmpeg', args, {
       stdio: ['ignore', 'ignore', 'pipe'],
@@ -817,6 +870,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         sourceFps: ctx?.sourceFps,
         trustedStreamInfo: ctx?.trustedStreamInfo,
         useTs: ctx?.useTs ?? false,
+        videoVariant: ctx?.videoVariant,
+        sourceVideoCodec: ctx?.sourceVideoCodec,
+        sourceBitDepth: ctx?.isSourceHdr ? 10 : 8,
       },
       this.log,
     );
