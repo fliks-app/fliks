@@ -242,7 +242,9 @@ export class StreamBuilderService {
       const remuxBw =
         source.formatBitRate ??
         (source.videoBitRate ?? 0) + (source.audioBitRate ?? 0);
-      // Même échelle que le master.m3u8 (variantes transcodées après la ligne remux)
+      // Same scale as the master playlist's transcoded rungs — exposes
+      // a bitrate hint per quality so the stats overlay can plot the
+      // selected rung without re-deriving the bitrate ladder client-side.
       const transcodeBitrateByQuality: NonNullable<
         PlaybackInfoResponse['transcodeBitrateByQuality']
       > = {};
