@@ -7,10 +7,11 @@
  *  master `RESOLUTION` attribute can trip MSE on append and leaves the
  *  player guessing about the pixel grid.
  *
- *  The expression preserves source aspect via `ih*W/iw` and rounds the
- *  height down to the nearest multiple of 16. `max(16, …)` guards
- *  against extremely small dummy inputs (the lavfi-based encoder probe
- *  pushes 320×180 black frames). */
+ *  Inline expression preserves source aspect via `ih*W/iw` and rounds
+ *  the height down to the nearest multiple of 16. No `max(…)` guard:
+ *  any `,` inside a filter option ends the current filter, and even an
+ *  escaped one is fragile across ffmpeg builds — real video sources
+ *  are always large enough that mod-16 is non-zero. */
 export function scaleMod16Height(targetWidth: number): string {
-  return `max(16,trunc(ih*${targetWidth}/iw/16)*16)`;
+  return `trunc(ih*${targetWidth}/iw/16)*16`;
 }
