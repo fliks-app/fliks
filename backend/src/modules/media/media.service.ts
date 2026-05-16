@@ -2524,26 +2524,20 @@ export class MediaService {
       }
 
       // Always re-probe streamInfo (fast, ~1s) to pick up schema changes.
-      // Skip detectCrop (~5-10s) if file size is unchanged AND crop has
-      // already been recorded — both conditions guard against the same
-      // expensive scan, but skipping when crop is missing leaves files
-      // imported before detectCrop existed (or after a failed probe)
-      // stuck without crop metadata forever. Backfill in that case.
+      // Skip detectCrop (~5-10s parallel) when the file size hasn't
+      // changed — crop is a property of the file, so unchanged bytes
+      // mean unchanged crop. Backfilling files that lack crop metadata
+      // would otherwise force every legacy rescan to do the slow probe
+      // again. Operators can force re-detection by deleting the dbFile
+      // row or temporarily breaking the size match.
       const sizeUnchanged = dbFile.size === diskSize;
-      const cropAlreadyRecorded =
-        (dbFile.streamInfo as { video?: { crop?: unknown }[] } | undefined)
-          ?.video?.[0]?.crop != null;
-      const shouldRunCropDetect = !sizeUnchanged || !cropAlreadyRecorded;
       dbFile.size = diskSize;
       let streamInfo: Awaited<
         ReturnType<FfprobeService['detectMediaFileInfo']>
       >;
       try {
         streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
-        if (streamInfo?.video?.[0] && shouldRunCropDetect) {
-          this.log.log(
-            `Rescan: running detectCrop for "${normPath}" (sizeUnchanged=${sizeUnchanged}, cropAlreadyRecorded=${cropAlreadyRecorded})`,
-          );
+        if (streamInfo?.video?.[0] && !sizeUnchanged) {
           try {
             const v = streamInfo.video[0];
             const crop = await this.ffprobe.detectCrop(
@@ -2582,7 +2576,7 @@ export class MediaService {
         await this.mediaFileRepo.save(dbFile);
         updated++;
         this.log.log(
-          `Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${qualityName}${!shouldRunCropDetect ? ', skipped crop' : ''})`,
+          `Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${qualityName}${sizeUnchanged ? ', skipped crop' : ''})`,
         );
         if (!options?.skipWarmup) {
           void this.subtitleStream.warmupCache(
