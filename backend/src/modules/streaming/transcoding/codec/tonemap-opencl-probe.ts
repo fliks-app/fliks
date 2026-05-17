@@ -77,11 +77,17 @@ export async function runTonemapOpenclProbe(log: Logger): Promise<void> {
       { timeout: 15_000 },
     );
 
-    // Mirror the production tonemap_opencl chain: VAAPI decode →
-    // scale_vaapi → hwmap to OpenCL → tonemap_opencl → hwmap back to
-    // QSV → h264_qsv encode. Exit 0 = libOpenCL is loadable, the
-    // platform driver registers, and the QSV↔OpenCL bridge survives a
-    // full decode→encode round-trip.
+    // Mirror the production crop+tonemap_opencl chain — the worst
+    // case our session-time filter graph emits. The extra
+    // `hwdownload → format=nv12 → crop → hwupload=vaapi → ...`
+    // prefix changes the surface formats that reach the
+    // `hwmap=qsv:reverse=1` step, and some Intel iHD driver builds
+    // accept the tonemap-only chain but fail the cropped variant
+    // with `QSV to OpenCL mapping not usable` / exit=218. Exercising
+    // the cropped chain here means a probe pass guarantees BOTH
+    // cropped and uncropped sessions can use opencl without runtime
+    // fallback churn — and a probe failure correctly disables opencl
+    // for everything (production sessions then route through vaapi).
     await execFileAsync(
       'ffmpeg',
       [
@@ -103,7 +109,7 @@ export async function runTonemapOpenclProbe(log: Logger): Promise<void> {
         '-i',
         hdrSample,
         '-vf',
-        'scale_vaapi=w=320:h=176:format=p010le,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv',
+        'hwdownload,format=nv12,crop=288:160:16:8,hwupload=derive_device=vaapi,scale_vaapi=w=288:h=160,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv',
         '-c:v',
         'h264_qsv',
         '-preset',
