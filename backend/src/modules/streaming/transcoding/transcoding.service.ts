@@ -40,7 +40,6 @@ import {
 import {
   fileExists,
   firstMissingSegment,
-  isSegmentStable,
   segmentNearby,
 } from './segment-utils';
 import { audioSessionKey, earlySessionKey, sessionKey } from './session-key';
@@ -669,13 +668,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    * Get a segment file path, waiting if it's being generated.
    *
    * Uses fs.watch (inotify on Linux) so we react within milliseconds of
-   * ffmpeg writing the segment. ffmpeg writes segments incrementally so
-   * we verify size-stability (50ms re-stat) before serving — without
-   * this the player can fetch a half-written .m4s and reject it. A
-   * previous attempt to swap this for `-hls_flags +temp_file` regressed
-   * the seek-resume path (the early session's init.mp4 rename happened
-   * late enough that the player stalled in loading), so the
-   * isSegmentStable poll is the supported readiness signal.
+   * ffmpeg's atomic rename. `-hls_flags +temp_file` (set by
+   * `ffmpeg-args.ts`) makes ffmpeg write each segment to `*.tmp` and
+   * rename to the final name once flushed, so seeing the final name on
+   * disk is sufficient — no size-stability poll needed.
    */
   async getSegmentPath(
     session: TranscodeSession,
@@ -684,17 +680,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ): Promise<string | null> {
     const segPath = path.join(session.cachePath, segmentName);
 
-    if (existsSync(segPath)) {
-      const stable = await isSegmentStable(segPath);
-      if (stable) return segPath;
-    }
+    if (existsSync(segPath)) return segPath;
 
     if (segmentName.includes('init')) {
       await session.ready;
-      if (existsSync(segPath)) {
-        const stable = await isSegmentStable(segPath);
-        if (stable) return segPath;
-      }
+      if (existsSync(segPath)) return segPath;
     }
 
     const dir = path.dirname(segPath);
@@ -715,26 +705,26 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         resolve(val);
       };
 
-      const tryServe = async () => {
-        if (settled || !existsSync(segPath)) return;
-        if (await isSegmentStable(segPath)) finish(segPath);
+      const tryServe = () => {
+        if (settled) return;
+        if (existsSync(segPath)) finish(segPath);
       };
 
       try {
         watcher = watch(dir, { persistent: false }, (_event, filename) => {
-          if (filename === name) void tryServe();
+          if (filename === name) tryServe();
         });
       } catch {
         // Directory doesn't exist yet — exitTimer covers it.
       }
 
-      void tryServe();
+      tryServe();
 
       exitTimer = setInterval(() => {
         if (session.process.exitCode !== null && !existsSync(segPath)) {
           finish(null);
         } else {
-          void tryServe();
+          tryServe();
         }
       }, 500);
 

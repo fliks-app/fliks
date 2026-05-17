@@ -4,6 +4,7 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.SurfaceView;
 import android.view.View;
@@ -31,8 +32,12 @@ import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.LoadControl;
+import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.hls.HlsMediaSource;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.exoplayer.source.LoadEventInfo;
+import androidx.media3.exoplayer.source.MediaLoadData;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import androidx.media3.ui.AspectRatioFrameLayout;
@@ -56,6 +61,8 @@ import java.util.Map;
  */
 @CapacitorPlugin(name = "NativePlayer")
 public class NativePlayerPlugin extends Plugin {
+    private static final String DIAG_TAG = "FlksPlayerDiag";
+
     private ExoPlayer player;
     private FrameLayout wrapper;
     private AspectRatioFrameLayout aspectFrame;
@@ -72,6 +79,11 @@ public class NativePlayerPlugin extends Plugin {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private Handler positionHandler;
     private Runnable positionRunnable;
+
+    /** Diagnostic state — tracks last STATE_BUFFERING entry so we can
+     *  report how long we were stuck. Reset on state transitions. */
+    private long bufferingEnteredAt = 0;
+    private String lastRequestedUri = "";
 
     // ── Lifecycle ──
 
@@ -281,6 +293,18 @@ public class NativePlayerPlugin extends Plugin {
             player.addListener(new Player.Listener() {
                 @Override
                 public void onPlaybackStateChanged(int state) {
+                    Log.d(DIAG_TAG, "[state] " + stateName(state)
+                            + " pos=" + player.getCurrentPosition()
+                            + " buf=" + player.getBufferedPosition()
+                            + " playWhenReady=" + player.getPlayWhenReady()
+                            + " isPlaying=" + player.isPlaying());
+                    if (state == Player.STATE_BUFFERING) {
+                        bufferingEnteredAt = System.currentTimeMillis();
+                    } else if (bufferingEnteredAt > 0) {
+                        long delta = System.currentTimeMillis() - bufferingEnteredAt;
+                        Log.d(DIAG_TAG, "[state] BUFFERING exited after " + delta + "ms");
+                        bufferingEnteredAt = 0;
+                    }
                     switch (state) {
                         case Player.STATE_BUFFERING: emitStateChanged("buffering"); break;
                         case Player.STATE_READY: emitStateChanged(player.getPlayWhenReady() ? "playing" : "paused"); break;
@@ -290,6 +314,9 @@ public class NativePlayerPlugin extends Plugin {
                 }
 
                 @Override public void onIsPlayingChanged(boolean isPlaying) {
+                    Log.d(DIAG_TAG, "[playing] " + isPlaying
+                            + " state=" + stateName(player.getPlaybackState())
+                            + " pos=" + player.getCurrentPosition());
                     if (isPlaying) {
                         emitStateChanged("playing");
                     } else if (player.getPlaybackState() == Player.STATE_BUFFERING) {
@@ -301,10 +328,15 @@ public class NativePlayerPlugin extends Plugin {
 
 
                 @Override public void onPlayerError(@NonNull PlaybackException error) {
+                    Log.e(DIAG_TAG, "[error] code=" + error.errorCode
+                            + " name=" + error.getErrorCodeName()
+                            + " msg=" + error.getMessage()
+                            + " lastUri=" + lastRequestedUri, error);
                     emitError(error.errorCode, error.getMessage());
                 }
 
                 @Override public void onTracksChanged(@NonNull Tracks tracks) {
+                    Log.d(DIAG_TAG, "[tracks] groups=" + tracks.getGroups().size());
                     emitTracksChanged();
                     // Apply pending subtitle selection now that tracks are ready
                     if (pendingSubtitleTrackId != null) {
@@ -328,6 +360,7 @@ public class NativePlayerPlugin extends Plugin {
                 }
 
                 @Override public void onRenderedFirstFrame() {
+                    Log.d(DIAG_TAG, "[firstFrame] pos=" + player.getCurrentPosition());
                     emitFirstFrame();
                 }
 
@@ -335,6 +368,43 @@ public class NativePlayerPlugin extends Plugin {
                     if (subtitleView != null) {
                         subtitleView.setCues(cueGroup.cues);
                     }
+                }
+            });
+
+            // Diagnostic AnalyticsListener: captures every HLS segment + manifest
+            // load so when the player gets stuck buffering we can pin down WHICH
+            // request stalled / errored. Track last requested URI on the player
+            // instance so PlayerError can include it.
+            player.addAnalyticsListener(new AnalyticsListener() {
+                @Override
+                public void onLoadStarted(@NonNull EventTime eventTime,
+                                          @NonNull LoadEventInfo loadEventInfo,
+                                          @NonNull MediaLoadData mediaLoadData) {
+                    lastRequestedUri = loadEventInfo.uri.toString();
+                    Log.d(DIAG_TAG, "[load>>] dataType=" + mediaLoadData.dataType
+                            + " uri=" + lastRequestedUri);
+                }
+
+                @Override
+                public void onLoadCompleted(@NonNull EventTime eventTime,
+                                            @NonNull LoadEventInfo loadEventInfo,
+                                            @NonNull MediaLoadData mediaLoadData) {
+                    Log.d(DIAG_TAG, "[load<<] dataType=" + mediaLoadData.dataType
+                            + " bytes=" + loadEventInfo.bytesLoaded
+                            + " elapsed=" + loadEventInfo.loadDurationMs + "ms"
+                            + " uri=" + loadEventInfo.uri);
+                }
+
+                @Override
+                public void onLoadError(@NonNull EventTime eventTime,
+                                        @NonNull LoadEventInfo loadEventInfo,
+                                        @NonNull MediaLoadData mediaLoadData,
+                                        @NonNull IOException error,
+                                        boolean wasCanceled) {
+                    Log.w(DIAG_TAG, "[load!!] dataType=" + mediaLoadData.dataType
+                            + " wasCanceled=" + wasCanceled
+                            + " uri=" + loadEventInfo.uri
+                            + " err=" + error.getMessage());
                 }
             });
 
@@ -778,6 +848,16 @@ public class NativePlayerPlugin extends Plugin {
     private String lastEmittedState = "";
     private long lastNonBufferingAt = 0;
     private static final long BUFFERING_GUARD_MS = 300;
+
+    private static String stateName(int state) {
+        switch (state) {
+            case Player.STATE_IDLE: return "IDLE";
+            case Player.STATE_BUFFERING: return "BUFFERING";
+            case Player.STATE_READY: return "READY";
+            case Player.STATE_ENDED: return "ENDED";
+            default: return "UNKNOWN(" + state + ")";
+        }
+    }
 
     private void emitStateChanged(String state) {
         // Hysteresis on BUFFERING: ExoPlayer can briefly dip below the
