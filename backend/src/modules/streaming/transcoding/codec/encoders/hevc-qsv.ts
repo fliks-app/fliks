@@ -1,5 +1,9 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
-import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
+import {
+  hevcLevelDecimal,
+  hevcMain10CodecString,
+  hevcMainCodecString,
+} from '../codec-strings';
 import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
 import { qsvScaleFilter8bit, qsvScaleFilter10bit } from './helpers/qsv-filters';
 
@@ -26,6 +30,8 @@ export const hevcQsv: EncoderDescriptor = {
     return [
       '-c:v',
       'hevc_qsv',
+      '-level:v',
+      hevcLevelDecimal(target.height),
       '-preset',
       preset,
       ...qsv.extra,
@@ -72,6 +78,8 @@ export const hevcQsvHdr10: EncoderDescriptor = {
       'hevc_qsv',
       '-profile:v',
       'main10',
+      '-level:v',
+      hevcLevelDecimal(target.height),
       '-preset',
       preset,
       ...qsv.extra,

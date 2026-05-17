@@ -91,6 +91,30 @@ function hevcLevel(height: number): string {
   return 'L93'; //                      L3.1 — up to 720p30
 }
 
+/** HEVC level as a decimal string (e.g. `"4.1"`) suitable for ffmpeg's
+ *  `-level:v` flag. Encoders left to auto-pick will choose the lowest
+ *  level that fits (e.g. L4.0 for 1080p24, L4.1 for 1080p60), drifting
+ *  away from the master playlist's declared codec string and tripping
+ *  MSE Chrome 3014 errors. Forcing the level lock-steps the bitstream
+ *  with the master. Mirrors {@link hevcLevel} thresholds. */
+export function hevcLevelDecimal(height: number): string {
+  if (height >= 2160) return '5.1';
+  if (height >= 1080) return '4.1';
+  if (height >= 720) return '4.0';
+  return '3.1';
+}
+
+/** HEVC level as an x265 `level-idc` integer (level × 10). libx265's
+ *  ffmpeg wrapper does not honour the generic `-level:v` flag, so the
+ *  same level constraint that {@link hevcLevelDecimal} feeds to the HW
+ *  encoders must be threaded through `-x265-params level-idc=…` here. */
+export function hevcLevelX265Idc(height: number): string {
+  if (height >= 2160) return '51';
+  if (height >= 1080) return '41';
+  if (height >= 720) return '40';
+  return '31';
+}
+
 /** AV1 level encoded as `<level_idc>` (decimal). Levels follow the AV1
  *  spec table A.3 (max display luma sample count per second). */
 function av1Level(target: EncoderTarget): string {

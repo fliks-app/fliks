@@ -1,5 +1,9 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
-import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
+import {
+  hevcLevelDecimal,
+  hevcMain10CodecString,
+  hevcMainCodecString,
+} from '../codec-strings';
 import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
 import { scaleMod16Height } from './helpers/scale-filter';
 
@@ -24,6 +28,8 @@ export const hevcNvenc: EncoderDescriptor = {
       nvencPreset,
       '-profile:v',
       'main',
+      '-level:v',
+      hevcLevelDecimal(target.height),
       '-b:v',
       bitrate,
       '-maxrate',
@@ -86,6 +92,8 @@ export const hevcNvencHdr10: EncoderDescriptor = {
       nvencPreset,
       '-profile:v',
       'main10',
+      '-level:v',
+      hevcLevelDecimal(target.height),
       '-pix_fmt',
       'p010le',
       '-b:v',

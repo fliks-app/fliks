@@ -1,5 +1,9 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
-import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
+import {
+  hevcLevelDecimal,
+  hevcMain10CodecString,
+  hevcMainCodecString,
+} from '../codec-strings';
 import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
 import { scaleMod16Height } from './helpers/scale-filter';
 
@@ -23,6 +27,8 @@ export const hevcVideotoolbox: EncoderDescriptor = {
       'hevc_videotoolbox',
       '-profile:v',
       'main',
+      '-level:v',
+      hevcLevelDecimal(target.height),
       ...(early ? ['-realtime', '1'] : []),
       '-b:v',
       bitrate,
@@ -82,6 +88,8 @@ export const hevcVideotoolboxHdr10: EncoderDescriptor = {
       'hevc_videotoolbox',
       '-profile:v',
       'main10',
+      '-level:v',
+      hevcLevelDecimal(target.height),
       ...(early ? ['-realtime', '1'] : []),
       '-pix_fmt',
       'p010le',
