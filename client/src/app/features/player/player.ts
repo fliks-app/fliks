@@ -480,17 +480,26 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     };
     const tonemapping =
       pi?.tonemapping && pi?.tonemapAlgo
-        ? `HDR \u2192 SDR (${tonemapLabel[pi.tonemapAlgo] ?? pi.tonemapAlgo})`
+        ? (tonemapLabel[pi.tonemapAlgo] ?? pi.tonemapAlgo)
         : pi?.tonemapping
-          ? 'HDR \u2192 SDR'
+          ? 'enabled'
           : '';
 
-    // Transcode reasons surfaced verbatim \u2014 `flag` (machine name,
-    // short) is more useful in a debug overlay than the localised
-    // `message` (long French sentence).
-    const transcodeReasons = effectiveVideoCopy
+    // Split transcode-reason flags by what they actually re-encode so
+    // each section's "Reasons" line only shows what's relevant to it.
+    // Video re-encode triggers: any `Video*` flag plus `SubtitleBurnIn`
+    // (which composites text frames into the video stream). Audio
+    // re-encode triggers: any `Audio*` flag. `Container*` is intentionally
+    // excluded \u2014 it's a packaging-level reason that already shows up in
+    // the "\u2192 HLS" line of the stream section, and it doesn't tell you
+    // anything about why this codec specifically had to change.
+    const allFlags = (pi?.transcodeReasons ?? []).map((r) => r.flag);
+    const videoTranscodeReasons = effectiveVideoCopy
       ? []
-      : (pi?.transcodeReasons ?? []).map((r) => r.flag);
+      : allFlags.filter((f) => f.startsWith('Video') || f === 'SubtitleBurnIn');
+    const audioTranscodeReasons = effectiveAudioCopy
+      ? []
+      : allFlags.filter((f) => f.startsWith('Audio'));
 
     // --- Audio ---
     const channelLabel = src?.audioChannelLayout ?? (src?.audioChannels ? `${src.audioChannels}ch` : '');
@@ -531,12 +540,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       videoProfileLine,
       videoPlaybackMode,
       tonemapping,
-      transcodeReasons,
+      videoTranscodeReasons,
       droppedFrames: engineStats?.droppedFrames ?? 0,
       audioLabel,
       audioStreamBitrate,
       audioDetailLine,
       audioPlaybackMode,
+      audioTranscodeReasons,
     };
   });
 

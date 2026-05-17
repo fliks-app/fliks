@@ -16,17 +16,20 @@ export interface PlayerStats {
    *  (after `auto` resolution + opencl-probe fallback). Empty when no
    *  tone-mapping pass runs on this session. */
   tonemapping: string;
-  /** Human-readable reasons the backend went off the DirectPlay path
-   *  (one entry per `transcodeReasons` flag — quality lock, crop,
-   *  container mismatch, audio downmix, …). Empty when the session
-   *  is DirectPlay. */
-  transcodeReasons: string[];
+  /** `transcodeReasons` flags that drive the video re-encode (any
+   *  `Video*` flag plus `SubtitleBurnIn`). Empty when the video
+   *  stream is copied. Container-level flags are excluded — they
+   *  appear in the stream section, not here. */
+  videoTranscodeReasons: string[];
   droppedFrames: number;
 
   audioLabel: string;
   audioStreamBitrate: string;
   audioDetailLine: string;
   audioPlaybackMode: string;
+  /** `transcodeReasons` flags that drive the audio re-encode (any
+   *  `Audio*` flag). Empty when the audio stream is copied. */
+  audioTranscodeReasons: string[];
 }
 
 @Component({
@@ -72,8 +75,8 @@ export interface PlayerStats {
               @if (s.tonemapping) {
                 <div class="text-white/60">Tonemapping&nbsp;&nbsp;<span class="font-semibold">{{ s.tonemapping }}</span></div>
               }
-              @if (s.transcodeReasons.length) {
-                <div class="text-white/60">Reasons&nbsp;&nbsp;<span class="font-semibold">{{ s.transcodeReasons.join(', ') }}</span></div>
+              @if (s.videoTranscodeReasons.length) {
+                <div class="text-white/60">Reasons&nbsp;&nbsp;<span class="font-semibold">{{ s.videoTranscodeReasons.join(', ') }}</span></div>
               }
               <div class="text-white/70">Dropped frames&nbsp;&nbsp;<span class="font-semibold">{{ s.droppedFrames }}</span></div>
             </div>
@@ -90,6 +93,9 @@ export interface PlayerStats {
               }
               <div class="text-white/70 text-[10px] sm:text-xs">Sample rate&nbsp;&nbsp;{{ s.audioDetailLine }}</div>
               <div class="text-white/60">&rarr; {{ s.audioPlaybackMode }}</div>
+              @if (s.audioTranscodeReasons.length) {
+                <div class="text-white/60">Reasons&nbsp;&nbsp;<span class="font-semibold">{{ s.audioTranscodeReasons.join(', ') }}</span></div>
+              }
             </div>
           </section>
         }
