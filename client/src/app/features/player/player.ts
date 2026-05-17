@@ -834,14 +834,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
               },
               manifest: {
                 retryParameters: { timeout: 30_000, maxAttempts: 5, baseDelay: 1000 },
-                // Tell Shaka the HLS-TS codec mime type upfront so it doesn't
-                // fetch seg 0 purely to probe. Matches our transcode output
-                // (H.264 High @ L4.0 + AAC-LC) + the master playlist CODECS
-                // attribute.
-                hls: {
-                  mediaPlaylistFullMimeType:
-                    'video/mp2t; codecs="avc1.640028,mp4a.40.2"',
-                },
               },
               ...(preferredLang ? { preferredAudioLanguage: preferredLang } : {}),
             });
