@@ -85,7 +85,6 @@ export class HomeComponent implements OnInit, OnDestroy {
   private attachedSub?: Subscription;
   private detachedSub?: Subscription;
 
-  readonly loading = signal(true);
   readonly libraries = signal<LibrarySummary[]>([]);
   readonly continueWatching = signal<ContinueWatchingItem[]>([]);
   readonly recentMedia = signal<Media[]>([]);
@@ -110,8 +109,9 @@ export class HomeComponent implements OnInit, OnDestroy {
   async ngOnInit() {
     this.arrivedViaBack = this.navbar.lastWasBack();
     this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
+    // Each section guards itself with `@if (().length)` so sections paint
+    // independently as their data arrives. No global loading gate.
     await this.loadAllSections();
-    this.loading.set(false);
     this.scrollMemory.restore(HomeComponent.SCROLL_KEY, this.injector);
     if (this.tv.isTv()) {
       afterNextRender(() => this.applyDefaultFocus(), { injector: this.injector });

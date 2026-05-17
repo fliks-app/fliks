@@ -26,6 +26,7 @@ import { App } from './app/app';
   const isTv =
     effectiveOverride === 'tv' ||
     /AndroidTV\/\d/.test(ua) ||
+    /Tizen |Web0S|webOS|SMART-TV/i.test(ua) ||
     (matchMedia && matchMedia('(pointer: none)').matches) ||
     /Android.*TV|BRAVIA|SHIELD|AFT[A-Z0-9]+|GoogleTV/i.test(ua);
   if (!isTv) return;

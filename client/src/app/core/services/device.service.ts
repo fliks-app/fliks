@@ -58,10 +58,21 @@ export class DeviceService {
     // 1. UA marker
     if (/AndroidTV\/\d/.test(ua)) return { input: 'dpad', formFactor: 'tv' };
 
-    // 2. No pointer at all
+    // 2. Samsung Tizen / LG webOS native browsers — UA strings published
+    // by both vendors. Tizen ships a Samsung-branded UA that always
+    // contains the literal `Tizen `; webOS uses `Web0S` (zero, not letter
+    // O) or the legacy `webOS`. Anchoring on these markers covers the
+    // smart-TV V1/V2 roadmap targets and the rare browsers shipped on
+    // home-cinema STBs (Hisense Vidaa, Vewd) that reuse the SMART-TV
+    // UA literal.
+    if (/Tizen |Web0S|webOS|SMART-TV/i.test(ua)) {
+      return { input: 'dpad', formFactor: 'tv' };
+    }
+
+    // 3. No pointer at all
     if (mm && mm('(pointer: none)').matches) return { input: 'dpad', formFactor: 'tv' };
 
-    // 3. TV-only UA sniff (best effort, only on native Android)
+    // 4. TV-only UA sniff (best effort, only on native Android)
     if (Capacitor.getPlatform() === 'android' && /Android.*TV|BRAVIA|SHIELD|AFT[A-Z0-9]+|GoogleTV/i.test(ua)) {
       return { input: 'dpad', formFactor: 'tv' };
     }

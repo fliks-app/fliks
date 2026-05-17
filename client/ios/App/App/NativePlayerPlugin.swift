@@ -184,10 +184,11 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
         // Diagnostic: when the URL points at an HLS master playlist, fetch
         // it ourselves and dump the body to console BEFORE handing it to
-        // AVPlayer. The exact CODECS / BANDWIDTH / VIDEO-RANGE values that
-        // AVPlayer is about to validate. Crucial when -12927 fires with an
-        // empty errorLog — AVPlayer rejected something at variant
-        // selection and we need to see what.
+        // AVPlayer. Captured CODECS / BANDWIDTH / VIDEO-RANGE values so
+        // we can reproduce a -12927 rejection that came back with an
+        // empty errorLog. Gated on DEBUG: in release the extra fetch
+        // adds 100ms-3s of cellular latency to every load.
+        #if DEBUG
         if urlString.contains(".m3u8") {
             var req = URLRequest(url: url)
             for (k, v) in headers {
@@ -205,6 +206,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 }
             }.resume()
         }
+        #endif
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
