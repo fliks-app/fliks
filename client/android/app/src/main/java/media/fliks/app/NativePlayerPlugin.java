@@ -372,9 +372,9 @@ public class NativePlayerPlugin extends Plugin {
             });
 
             // Diagnostic AnalyticsListener: captures every HLS segment + manifest
-            // load so when the player gets stuck buffering we can pin down WHICH
-            // request stalled / errored. Track last requested URI on the player
-            // instance so PlayerError can include it.
+            // load AND the video/audio renderer lifecycle so when the player
+            // gets stuck buffering we can pin down whether the decoder was
+            // even instantiated and which format ExoPlayer picked.
             player.addAnalyticsListener(new AnalyticsListener() {
                 @Override
                 public void onLoadStarted(@NonNull EventTime eventTime,
@@ -382,6 +382,7 @@ public class NativePlayerPlugin extends Plugin {
                                           @NonNull MediaLoadData mediaLoadData) {
                     lastRequestedUri = loadEventInfo.uri.toString();
                     Log.d(DIAG_TAG, "[load>>] dataType=" + mediaLoadData.dataType
+                            + " trackType=" + mediaLoadData.trackType
                             + " uri=" + lastRequestedUri);
                 }
 
@@ -390,6 +391,7 @@ public class NativePlayerPlugin extends Plugin {
                                             @NonNull LoadEventInfo loadEventInfo,
                                             @NonNull MediaLoadData mediaLoadData) {
                     Log.d(DIAG_TAG, "[load<<] dataType=" + mediaLoadData.dataType
+                            + " trackType=" + mediaLoadData.trackType
                             + " bytes=" + loadEventInfo.bytesLoaded
                             + " elapsed=" + loadEventInfo.loadDurationMs + "ms"
                             + " uri=" + loadEventInfo.uri);
@@ -405,6 +407,97 @@ public class NativePlayerPlugin extends Plugin {
                             + " wasCanceled=" + wasCanceled
                             + " uri=" + loadEventInfo.uri
                             + " err=" + error.getMessage());
+                }
+
+                @Override
+                public void onVideoEnabled(@NonNull EventTime eventTime,
+                                           @NonNull androidx.media3.exoplayer.DecoderCounters counters) {
+                    Log.d(DIAG_TAG, "[videoEnabled] renderer started");
+                }
+
+                @Override
+                public void onVideoDisabled(@NonNull EventTime eventTime,
+                                            @NonNull androidx.media3.exoplayer.DecoderCounters counters) {
+                    Log.d(DIAG_TAG, "[videoDisabled] dropped=" + counters.droppedBufferCount
+                            + " skipped=" + counters.skippedOutputBufferCount);
+                }
+
+                @Override
+                public void onVideoInputFormatChanged(@NonNull EventTime eventTime,
+                                                      @NonNull androidx.media3.common.Format format,
+                                                      @androidx.annotation.Nullable
+                                                      androidx.media3.exoplayer.DecoderReuseEvaluation eval) {
+                    Log.d(DIAG_TAG, "[videoFormat] codecs=" + format.codecs
+                            + " w=" + format.width + " h=" + format.height
+                            + " peakBitrate=" + format.peakBitrate
+                            + " colorInfo=" + (format.colorInfo != null ? format.colorInfo.toString() : "null")
+                            + " sampleMime=" + format.sampleMimeType);
+                }
+
+                @Override
+                public void onVideoDecoderInitialized(@NonNull EventTime eventTime,
+                                                      @NonNull String decoderName,
+                                                      long initializedTimestampMs,
+                                                      long initializationDurationMs) {
+                    Log.d(DIAG_TAG, "[videoDecoder] " + decoderName
+                            + " initMs=" + initializationDurationMs);
+                }
+
+                @Override
+                public void onVideoCodecError(@NonNull EventTime eventTime,
+                                              @NonNull Exception videoCodecError) {
+                    Log.e(DIAG_TAG, "[videoCodecError] " + videoCodecError.getClass().getSimpleName()
+                            + ": " + videoCodecError.getMessage(), videoCodecError);
+                }
+
+                @Override
+                public void onAudioEnabled(@NonNull EventTime eventTime,
+                                           @NonNull androidx.media3.exoplayer.DecoderCounters counters) {
+                    Log.d(DIAG_TAG, "[audioEnabled] renderer started");
+                }
+
+                @Override
+                public void onAudioInputFormatChanged(@NonNull EventTime eventTime,
+                                                      @NonNull androidx.media3.common.Format format,
+                                                      @androidx.annotation.Nullable
+                                                      androidx.media3.exoplayer.DecoderReuseEvaluation eval) {
+                    Log.d(DIAG_TAG, "[audioFormat] codecs=" + format.codecs
+                            + " channels=" + format.channelCount
+                            + " sampleRate=" + format.sampleRate
+                            + " sampleMime=" + format.sampleMimeType);
+                }
+
+                @Override
+                public void onAudioDecoderInitialized(@NonNull EventTime eventTime,
+                                                      @NonNull String decoderName,
+                                                      long initializedTimestampMs,
+                                                      long initializationDurationMs) {
+                    Log.d(DIAG_TAG, "[audioDecoder] " + decoderName
+                            + " initMs=" + initializationDurationMs);
+                }
+
+                @Override
+                public void onAudioCodecError(@NonNull EventTime eventTime,
+                                              @NonNull Exception audioCodecError) {
+                    Log.e(DIAG_TAG, "[audioCodecError] " + audioCodecError.getClass().getSimpleName()
+                            + ": " + audioCodecError.getMessage(), audioCodecError);
+                }
+
+                @Override
+                public void onDownstreamFormatChanged(@NonNull EventTime eventTime,
+                                                      @NonNull MediaLoadData mediaLoadData) {
+                    androidx.media3.common.Format f = mediaLoadData.trackFormat;
+                    if (f == null) return;
+                    Log.d(DIAG_TAG, "[abrPick] trackType=" + mediaLoadData.trackType
+                            + " codecs=" + f.codecs
+                            + " w=" + f.width + " h=" + f.height
+                            + " bitrate=" + f.bitrate);
+                }
+
+                @Override
+                public void onPlayWhenReadyChanged(@NonNull EventTime eventTime,
+                                                   boolean playWhenReady, int reason) {
+                    Log.d(DIAG_TAG, "[pwr] " + playWhenReady + " reason=" + reason);
                 }
             });
 
