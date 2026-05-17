@@ -6,12 +6,14 @@ export interface PlayerStats {
   containerBitrate: string;
   outputFormat: string;
   outputFps: string;
-  audioTranscodeNote: string;
 
   videoLabel: string;
   videoStreamBitrate: string;
   videoProfileLine: string;
   videoPlaybackMode: string;
+  /** Detected letterbox crop rectangle (`"WxH (offset X,Y)"`) when
+   *  the source was flagged by cropdetect. Empty when no crop. */
+  crop: string;
   /** HDR → SDR tone-mapping filter the backend actually picked
    *  (after `auto` resolution + opencl-probe fallback). Empty when no
    *  tone-mapping pass runs on this session. */
@@ -55,9 +57,6 @@ export interface PlayerStats {
               @if (s.outputFormat) {
                 <div class="text-white/60">&rarr; {{ s.outputFormat | uppercase }}@if (s.outputFps) { ({{ s.outputFps }}) }</div>
               }
-              @if (s.audioTranscodeNote) {
-                <div class="text-white/50 text-[10px] sm:text-xs">{{ s.audioTranscodeNote }}</div>
-              }
             </div>
           </section>
 
@@ -72,6 +71,9 @@ export interface PlayerStats {
               }
               <div class="text-white/70 text-[10px] sm:text-xs">{{ s.videoProfileLine }}</div>
               <div class="text-white/60">&rarr; {{ s.videoPlaybackMode }}</div>
+              @if (s.crop) {
+                <div class="text-white/60">Crop&nbsp;&nbsp;<span class="font-semibold">{{ s.crop }}</span></div>
+              }
               @if (s.tonemapping) {
                 <div class="text-white/60">Tonemapping&nbsp;&nbsp;<span class="font-semibold">{{ s.tonemapping }}</span></div>
               }

@@ -72,6 +72,7 @@ export interface PlaybackInfoResponse {
     colorSpace?: string;
     colorTransfer?: string;
     colorPrimaries?: string;
+    crop?: { width: number; height: number; x: number; y: number };
   };
   /** Episode-level skip markers — only present for series episodes. */
   markers?: {

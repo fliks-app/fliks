@@ -132,5 +132,9 @@ export interface PlaybackInfoResponse {
     colorSpace?: string;
     colorTransfer?: string;
     colorPrimaries?: string;
+    /** Detected letterbox crop region, when cropdetect found bars
+     *  big enough to remove during transcode. Surfaced so the stats
+     *  overlay can flag the active crop without re-running detect. */
+    crop?: { width: number; height: number; x: number; y: number };
   };
 }

@@ -390,8 +390,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const outputFormat = isHls ? 'HLS' : '';
     const outputFps = src?.frameRate ?? '';
 
-    const audioTranscodeNote = !effectiveAudioCopy && src?.audioCodec !== 'aac'
-      ? 'Audio transcoded to a compatible codec'
+    // Letterbox crop detected at import time (ffprobe `cropdetect`).
+    // The transcode pipeline cuts these bars on every cropped session;
+    // surfacing the rectangle in the overlay lets the user see why
+    // the output resolution doesn't match the source.
+    const cropLine = src?.crop
+      ? `${src.crop.width}x${src.crop.height} (offset ${src.crop.x},${src.crop.y})`
       : '';
 
     // --- Video label ---
@@ -534,11 +538,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       containerBitrate,
       outputFormat,
       outputFps,
-      audioTranscodeNote,
       videoLabel,
       videoStreamBitrate,
       videoProfileLine,
       videoPlaybackMode,
+      crop: cropLine,
       tonemapping,
       videoTranscodeReasons,
       droppedFrames: engineStats?.droppedFrames ?? 0,
