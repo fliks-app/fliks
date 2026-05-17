@@ -1,9 +1,5 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
-import {
-  hevcLevelDecimal,
-  hevcMain10CodecString,
-  hevcMainCodecString,
-} from '../codec-strings';
+import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
 import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
 
 /** AMD / Intel-on-Linux VAAPI HEVC SDR encoder (Main 8-bit). Same path as
@@ -25,8 +21,6 @@ export const hevcVaapi: EncoderDescriptor = {
       'hevc_vaapi',
       '-profile:v',
       '1',
-      '-level:v',
-      hevcLevelDecimal(target.height),
       '-b:v',
       bitrate,
       '-maxrate',
@@ -90,8 +84,6 @@ export const hevcVaapiHdr10: EncoderDescriptor = {
       'hevc_vaapi',
       '-profile:v',
       '2',
-      '-level:v',
-      hevcLevelDecimal(target.height),
       '-b:v',
       bitrate,
       '-maxrate',

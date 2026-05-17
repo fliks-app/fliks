@@ -1,9 +1,5 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
-import {
-  hevcLevelX265Idc,
-  hevcMain10CodecString,
-  hevcMainCodecString,
-} from '../codec-strings';
+import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
 import { hdrColorArgs } from './helpers/hdr-variants';
 import { scaleMod16Height } from './helpers/scale-filter';
 
@@ -42,8 +38,6 @@ export const hevcCpu: EncoderDescriptor = {
       String(target.gopSize),
       '-force_key_frames',
       input.forceKeyframesExpr,
-      '-x265-params',
-      `level-idc=${hevcLevelX265Idc(target.height)}:repeat-headers=1`,
       '-tag:v',
       'hvc1',
     ];
@@ -83,7 +77,6 @@ export const hevcCpuHdr10: EncoderDescriptor = {
     const x265Params = [
       'hdr-opt=1',
       'repeat-headers=1',
-      `level-idc=${hevcLevelX265Idc(target.height)}`,
       'colorprim=bt2020',
       'transfer=smpte2084',
       'colormatrix=bt2020nc',
@@ -135,7 +128,6 @@ export const hevcCpuHlg: EncoderDescriptor = {
     const bitrate = `${target.videoBitrateBps}`;
     const x265Params = [
       'repeat-headers=1',
-      `level-idc=${hevcLevelX265Idc(target.height)}`,
       'colorprim=bt2020',
       'transfer=arib-std-b67',
       'colormatrix=bt2020nc',
