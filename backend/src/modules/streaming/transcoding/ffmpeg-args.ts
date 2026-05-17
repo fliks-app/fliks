@@ -418,16 +418,30 @@ export function buildFfmpegArgs(
   };
   args.push(...encoder.buildArgs(encoderInput));
 
-  // When tone-mapping HDR → SDR on the H.264 path, force the SPS VUI to
-  // BT.709 limited range. The pixel data is genuinely SDR after the
-  // tonemap filter, but some encoder paths (notably h264_qsv) carry the
-  // source's BT.2020/PQ color tags through from input AVFrame metadata
-  // into the SPS, producing a bitstream that signals HDR with SDR
-  // pixels. iOS AVPlayer rejects this combination with -12927; other
-  // players tolerate it but render with wrong color. These flags are
-  // a no-op when tone-mapping isn't active (the AVFrame already has
-  // BT.709 tags on SDR sources).
-  if (tonemap && !isHdrOutput) {
+  // Force BT.709 limited-range SPS VUI on every SDR output.
+  //
+  // Two failure modes this prevents:
+  //
+  // 1. HDR → SDR tonemap: h264_qsv (and a few other paths) carry the
+  //    source's BT.2020/PQ tags through from AVFrame metadata into the
+  //    output SPS, producing a bitstream that signals HDR with SDR
+  //    pixels. iOS AVPlayer rejects that combination with -12927; other
+  //    players tolerate it but render with the wrong gamut / TRC.
+  //
+  // 2. Source with unsignalled colorimetry (e.g. older WEBDL H.264
+  //    masters like Arcane S2): the source SPS leaves
+  //    color_primaries/_trc/_space/_range all `unknown`. FFmpeg
+  //    propagates the unknown tags into the output SPS. Android
+  //    Media3 + the HDR-preserving SurfaceView path can refuse to
+  //    initialise MediaCodec on cold prepare when the VUI is fully
+  //    unsigned — playback stalls in BUFFERING with no decoder
+  //    allocated. A manual seek bypasses the strict initial
+  //    validation, which is why the seek "unsticks" the player.
+  //
+  // No-op when the source already carries BT.709 tags (ffmpeg accepts
+  // the redundant overrides). HDR output paths skip this so the
+  // encoder keeps the BT.2020/PQ signalling.
+  if (!isHdrOutput) {
     args.push(
       '-color_primaries',
       'bt709',

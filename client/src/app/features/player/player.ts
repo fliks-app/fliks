@@ -998,47 +998,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // separate stateChanged 'playing' hook needed — that fires on
     // STATE_READY which can precede the first frame on cold starts.
     engine.on('firstFrame', () => {
-      console.log('[Player.diag] firstFrame received pos=', engine.currentTime);
       this.state.videoStarted.set(true);
-    });
-
-    // Buffering watchdog: log a full state dump if the player is stuck
-    // buffering for more than 30 s. Tied to the engine's stateChanged
-    // event so it cancels naturally on any transition away from
-    // buffering. The dump is enough to root-cause the intermittent
-    // Android stall (last requested segment URI shows up in adb logcat
-    // under tag `FlksPlayerDiag` on the native side).
-    let bufferingWatchdog: ReturnType<typeof setTimeout> | null = null;
-    let bufferingEnteredAt = 0;
-    engine.on('stateChanged', (e) => {
-      console.log('[Player.diag] stateChanged →', e.state, 'pos=', engine.currentTime, 'paused=', engine.paused, 'buffered=', engine.buffered);
-      if (e.state === 'buffering') {
-        bufferingEnteredAt = Date.now();
-        if (bufferingWatchdog) clearTimeout(bufferingWatchdog);
-        bufferingWatchdog = setTimeout(() => {
-          console.error('[Player.watchdog] stalled — buffering 30s+', {
-            engineState: e.state,
-            currentTime: engine.currentTime,
-            duration: engine.duration,
-            buffered: engine.buffered,
-            paused: engine.paused,
-            playbackMode: this.playbackMode(),
-            hwAccel: this.state.hwAccel(),
-            quality: this.activeQualityId(),
-            isNative: this.isNativeEngine(),
-            mediaFileId: this.mediaFileId,
-          });
-        }, 30_000);
-      } else {
-        if (bufferingWatchdog) {
-          const elapsed = Date.now() - bufferingEnteredAt;
-          if (elapsed > 1000) {
-            console.log('[Player.diag] buffering cleared after', elapsed, 'ms');
-          }
-          clearTimeout(bufferingWatchdog);
-          bufferingWatchdog = null;
-        }
-      }
     });
 
     // Listen for audio tracks from native engine.

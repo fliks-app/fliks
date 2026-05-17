@@ -4,7 +4,6 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.SurfaceView;
 import android.view.View;
@@ -32,12 +31,7 @@ import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.LoadControl;
-import androidx.media3.exoplayer.analytics.AnalyticsListener;
-import androidx.media3.exoplayer.hls.HlsMediaSource;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
-import androidx.media3.exoplayer.source.LoadEventInfo;
-import androidx.media3.exoplayer.source.MediaLoadData;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import androidx.media3.ui.AspectRatioFrameLayout;
@@ -61,8 +55,6 @@ import java.util.Map;
  */
 @CapacitorPlugin(name = "NativePlayer")
 public class NativePlayerPlugin extends Plugin {
-    private static final String DIAG_TAG = "FlksPlayerDiag";
-
     private ExoPlayer player;
     private FrameLayout wrapper;
     private AspectRatioFrameLayout aspectFrame;
@@ -75,15 +67,22 @@ public class NativePlayerPlugin extends Plugin {
     private DefaultHttpDataSource.Factory httpFactory;
     private String currentHlsUrl;
     private int lastAudioTrackCount = -1;
+    // Cold-prepare bug bootstrap state. Media3 1.10.1's HLS source has
+    // a race on initial track surfacing when the variant carries EAC3
+    // (and especially EAC3-JOC Atmos) audio next to an fMP4 video
+    // track: the audio renderer enables first, the video format hasn't
+    // propagated yet when `selectTracks()` runs, so the video group
+    // is dropped from the selection and the renderer never allocates
+    // a decoder — playback stalls in BUFFERING with audio-only tracks.
+    // A user-issued seek unsticks it by forcing `selectTracks()` to
+    // re-run with the format now available; this flag arms a one-shot
+    // programmatic micro-seek in `onTracksChanged` that mimics that
+    // path when we detect the failure signature.
+    private boolean videoBootstrapDone = false;
     private final List<MediaItem.SubtitleConfiguration> subtitleConfigs = new ArrayList<>();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private Handler positionHandler;
     private Runnable positionRunnable;
-
-    /** Diagnostic state — tracks last STATE_BUFFERING entry so we can
-     *  report how long we were stuck. Reset on state transitions. */
-    private long bufferingEnteredAt = 0;
-    private String lastRequestedUri = "";
 
     // ── Lifecycle ──
 
@@ -253,10 +252,9 @@ public class NativePlayerPlugin extends Plugin {
             // Offline: CacheDataSource (cached HLS) wrapped in DefaultDataSource
             // (adds file:// support for local subtitle VTTs).
             // Online: DefaultDataSource with HTTP factory.
-            DataSource.Factory dataSourceFactory = offline
+            final DataSource.Factory dataSourceFactory = offline
                     ? new DefaultDataSource.Factory(getContext(), FlixDownloadUtil.getCacheDataSourceFactory(getContext()))
                     : new DefaultDataSource.Factory(getContext(), httpFactory);
-            DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory);
             // 500ms instead of ExoPlayer's default 2500ms — short-segment LAN HLS.
             LoadControl loadControl = new DefaultLoadControl.Builder()
                     .setBufferDurationsMs(3000, 8000, 500, 3000)
@@ -273,6 +271,17 @@ public class NativePlayerPlugin extends Plugin {
                     new DefaultRenderersFactory(getContext())
                             .setEnableAudioFloatOutput(false)
                             .setEnableDecoderFallback(true);
+            // DefaultMediaSourceFactory handles both URL autodetection
+            // (HLS for `.m3u8`, ProgressiveMediaSource for DirectPlay
+            // MP4) and the modern subtitle pipeline (parses external
+            // WebVTT to `application/x-media3-cues` via
+            // SubtitleExtractor before the TextRenderer sees them).
+            // Replicating that machinery with HlsMediaSource.Factory
+            // explicit means re-implementing internal Media3 APIs
+            // (`enableLazyLoadingWithSingleTrack` is package-private)
+            // — not worth the semantic-cleanliness trade-off.
+            DefaultMediaSourceFactory mediaSourceFactory =
+                    new DefaultMediaSourceFactory(dataSourceFactory);
             player = new ExoPlayer.Builder(getContext())
                     .setRenderersFactory(renderersFactory)
                     .setMediaSourceFactory(mediaSourceFactory)
@@ -293,18 +302,6 @@ public class NativePlayerPlugin extends Plugin {
             player.addListener(new Player.Listener() {
                 @Override
                 public void onPlaybackStateChanged(int state) {
-                    Log.d(DIAG_TAG, "[state] " + stateName(state)
-                            + " pos=" + player.getCurrentPosition()
-                            + " buf=" + player.getBufferedPosition()
-                            + " playWhenReady=" + player.getPlayWhenReady()
-                            + " isPlaying=" + player.isPlaying());
-                    if (state == Player.STATE_BUFFERING) {
-                        bufferingEnteredAt = System.currentTimeMillis();
-                    } else if (bufferingEnteredAt > 0) {
-                        long delta = System.currentTimeMillis() - bufferingEnteredAt;
-                        Log.d(DIAG_TAG, "[state] BUFFERING exited after " + delta + "ms");
-                        bufferingEnteredAt = 0;
-                    }
                     switch (state) {
                         case Player.STATE_BUFFERING: emitStateChanged("buffering"); break;
                         case Player.STATE_READY: emitStateChanged(player.getPlayWhenReady() ? "playing" : "paused"); break;
@@ -314,9 +311,6 @@ public class NativePlayerPlugin extends Plugin {
                 }
 
                 @Override public void onIsPlayingChanged(boolean isPlaying) {
-                    Log.d(DIAG_TAG, "[playing] " + isPlaying
-                            + " state=" + stateName(player.getPlaybackState())
-                            + " pos=" + player.getCurrentPosition());
                     if (isPlaying) {
                         emitStateChanged("playing");
                     } else if (player.getPlaybackState() == Player.STATE_BUFFERING) {
@@ -326,17 +320,11 @@ public class NativePlayerPlugin extends Plugin {
                     }
                 }
 
-
                 @Override public void onPlayerError(@NonNull PlaybackException error) {
-                    Log.e(DIAG_TAG, "[error] code=" + error.errorCode
-                            + " name=" + error.getErrorCodeName()
-                            + " msg=" + error.getMessage()
-                            + " lastUri=" + lastRequestedUri, error);
                     emitError(error.errorCode, error.getMessage());
                 }
 
                 @Override public void onTracksChanged(@NonNull Tracks tracks) {
-                    Log.d(DIAG_TAG, "[tracks] groups=" + tracks.getGroups().size());
                     emitTracksChanged();
                     // Apply pending subtitle selection now that tracks are ready
                     if (pendingSubtitleTrackId != null) {
@@ -350,6 +338,58 @@ public class NativePlayerPlugin extends Plugin {
                             pendingVideoHeight = -1;
                         }
                     }
+                    // Cold-prepare bootstrap. Fires at most once per load() to
+                    // recover from a Media3 1.10.1 race where every ExoPlayer
+                    // instance built after the first one in the same JVM gets
+                    // stuck: track selection completes, the audio renderer
+                    // prepares, but the video renderer silently never enables
+                    // and never allocates a decoder — state pins at BUFFERING
+                    // for the rest of the session. The bug reproduces reliably
+                    // on EAC3 5.1 sources (Atmos in particular) and is the same
+                    // hang a user-issued seek unsticks: `seekTo()` cancels the
+                    // in-flight loads and forces the source to re-run
+                    // `selectTracks()`, which wakes the renderer pipeline.
+                    if (!videoBootstrapDone) {
+                        boolean videoSelected = false;
+                        boolean videoSupported = false;
+                        for (Tracks.Group g : tracks.getGroups()) {
+                            if (g.getType() != C.TRACK_TYPE_VIDEO) continue;
+                            if (g.isSelected()) videoSelected = true;
+                            for (int i = 0; i < g.length; i++) {
+                                if (g.isTrackSupported(i)) {
+                                    videoSupported = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (videoSelected) {
+                            // Common case: video track picked. Watchdog reads
+                            // playback state 1.5 s later; if the renderer
+                            // actually started (state != BUFFERING) the seek is
+                            // skipped, so healthy playback is untouched. When
+                            // the bug strikes, state is still BUFFERING and we
+                            // issue a 1 ms forward seek — imperceptible drift
+                            // (well below one frame at 24 fps).
+                            videoBootstrapDone = true;
+                            mainHandler.postDelayed(() -> {
+                                if (player == null) return;
+                                if (player.getPlaybackState() == Player.STATE_BUFFERING) {
+                                    player.seekTo(player.getCurrentPosition() + 1);
+                                }
+                            }, 1500);
+                        } else if (videoSupported) {
+                            // Less common signature: the selector dropped the
+                            // video group entirely (audio surfaced first, the
+                            // video format hadn't propagated). 200 ms is enough
+                            // for the format to arrive before the recovery seek
+                            // re-runs the selection.
+                            videoBootstrapDone = true;
+                            mainHandler.postDelayed(() -> {
+                                if (player == null) return;
+                                player.seekTo(player.getCurrentPosition() + 1);
+                            }, 200);
+                        }
+                    }
                 }
 
                 @Override public void onVideoSizeChanged(@NonNull VideoSize videoSize) {
@@ -360,7 +400,6 @@ public class NativePlayerPlugin extends Plugin {
                 }
 
                 @Override public void onRenderedFirstFrame() {
-                    Log.d(DIAG_TAG, "[firstFrame] pos=" + player.getCurrentPosition());
                     emitFirstFrame();
                 }
 
@@ -369,136 +408,7 @@ public class NativePlayerPlugin extends Plugin {
                         subtitleView.setCues(cueGroup.cues);
                     }
                 }
-            });
 
-            // Diagnostic AnalyticsListener: captures every HLS segment + manifest
-            // load AND the video/audio renderer lifecycle so when the player
-            // gets stuck buffering we can pin down whether the decoder was
-            // even instantiated and which format ExoPlayer picked.
-            player.addAnalyticsListener(new AnalyticsListener() {
-                @Override
-                public void onLoadStarted(@NonNull EventTime eventTime,
-                                          @NonNull LoadEventInfo loadEventInfo,
-                                          @NonNull MediaLoadData mediaLoadData) {
-                    lastRequestedUri = loadEventInfo.uri.toString();
-                    Log.d(DIAG_TAG, "[load>>] dataType=" + mediaLoadData.dataType
-                            + " trackType=" + mediaLoadData.trackType
-                            + " uri=" + lastRequestedUri);
-                }
-
-                @Override
-                public void onLoadCompleted(@NonNull EventTime eventTime,
-                                            @NonNull LoadEventInfo loadEventInfo,
-                                            @NonNull MediaLoadData mediaLoadData) {
-                    Log.d(DIAG_TAG, "[load<<] dataType=" + mediaLoadData.dataType
-                            + " trackType=" + mediaLoadData.trackType
-                            + " bytes=" + loadEventInfo.bytesLoaded
-                            + " elapsed=" + loadEventInfo.loadDurationMs + "ms"
-                            + " uri=" + loadEventInfo.uri);
-                }
-
-                @Override
-                public void onLoadError(@NonNull EventTime eventTime,
-                                        @NonNull LoadEventInfo loadEventInfo,
-                                        @NonNull MediaLoadData mediaLoadData,
-                                        @NonNull IOException error,
-                                        boolean wasCanceled) {
-                    Log.w(DIAG_TAG, "[load!!] dataType=" + mediaLoadData.dataType
-                            + " wasCanceled=" + wasCanceled
-                            + " uri=" + loadEventInfo.uri
-                            + " err=" + error.getMessage());
-                }
-
-                @Override
-                public void onVideoEnabled(@NonNull EventTime eventTime,
-                                           @NonNull androidx.media3.exoplayer.DecoderCounters counters) {
-                    Log.d(DIAG_TAG, "[videoEnabled] renderer started");
-                }
-
-                @Override
-                public void onVideoDisabled(@NonNull EventTime eventTime,
-                                            @NonNull androidx.media3.exoplayer.DecoderCounters counters) {
-                    Log.d(DIAG_TAG, "[videoDisabled] dropped=" + counters.droppedBufferCount
-                            + " skipped=" + counters.skippedOutputBufferCount);
-                }
-
-                @Override
-                public void onVideoInputFormatChanged(@NonNull EventTime eventTime,
-                                                      @NonNull androidx.media3.common.Format format,
-                                                      @androidx.annotation.Nullable
-                                                      androidx.media3.exoplayer.DecoderReuseEvaluation eval) {
-                    Log.d(DIAG_TAG, "[videoFormat] codecs=" + format.codecs
-                            + " w=" + format.width + " h=" + format.height
-                            + " peakBitrate=" + format.peakBitrate
-                            + " colorInfo=" + (format.colorInfo != null ? format.colorInfo.toString() : "null")
-                            + " sampleMime=" + format.sampleMimeType);
-                }
-
-                @Override
-                public void onVideoDecoderInitialized(@NonNull EventTime eventTime,
-                                                      @NonNull String decoderName,
-                                                      long initializedTimestampMs,
-                                                      long initializationDurationMs) {
-                    Log.d(DIAG_TAG, "[videoDecoder] " + decoderName
-                            + " initMs=" + initializationDurationMs);
-                }
-
-                @Override
-                public void onVideoCodecError(@NonNull EventTime eventTime,
-                                              @NonNull Exception videoCodecError) {
-                    Log.e(DIAG_TAG, "[videoCodecError] " + videoCodecError.getClass().getSimpleName()
-                            + ": " + videoCodecError.getMessage(), videoCodecError);
-                }
-
-                @Override
-                public void onAudioEnabled(@NonNull EventTime eventTime,
-                                           @NonNull androidx.media3.exoplayer.DecoderCounters counters) {
-                    Log.d(DIAG_TAG, "[audioEnabled] renderer started");
-                }
-
-                @Override
-                public void onAudioInputFormatChanged(@NonNull EventTime eventTime,
-                                                      @NonNull androidx.media3.common.Format format,
-                                                      @androidx.annotation.Nullable
-                                                      androidx.media3.exoplayer.DecoderReuseEvaluation eval) {
-                    Log.d(DIAG_TAG, "[audioFormat] codecs=" + format.codecs
-                            + " channels=" + format.channelCount
-                            + " sampleRate=" + format.sampleRate
-                            + " sampleMime=" + format.sampleMimeType);
-                }
-
-                @Override
-                public void onAudioDecoderInitialized(@NonNull EventTime eventTime,
-                                                      @NonNull String decoderName,
-                                                      long initializedTimestampMs,
-                                                      long initializationDurationMs) {
-                    Log.d(DIAG_TAG, "[audioDecoder] " + decoderName
-                            + " initMs=" + initializationDurationMs);
-                }
-
-                @Override
-                public void onAudioCodecError(@NonNull EventTime eventTime,
-                                              @NonNull Exception audioCodecError) {
-                    Log.e(DIAG_TAG, "[audioCodecError] " + audioCodecError.getClass().getSimpleName()
-                            + ": " + audioCodecError.getMessage(), audioCodecError);
-                }
-
-                @Override
-                public void onDownstreamFormatChanged(@NonNull EventTime eventTime,
-                                                      @NonNull MediaLoadData mediaLoadData) {
-                    androidx.media3.common.Format f = mediaLoadData.trackFormat;
-                    if (f == null) return;
-                    Log.d(DIAG_TAG, "[abrPick] trackType=" + mediaLoadData.trackType
-                            + " codecs=" + f.codecs
-                            + " w=" + f.width + " h=" + f.height
-                            + " bitrate=" + f.bitrate);
-                }
-
-                @Override
-                public void onPlayWhenReadyChanged(@NonNull EventTime eventTime,
-                                                   boolean playWhenReady, int reason) {
-                    Log.d(DIAG_TAG, "[pwr] " + playWhenReady + " reason=" + reason);
-                }
             });
 
             MediaItem.Builder itemBuilder = new MediaItem.Builder()
@@ -508,6 +418,7 @@ public class NativePlayerPlugin extends Plugin {
             }
             player.setMediaItem(itemBuilder.build());
             lastAudioTrackCount = -1; // Reset so emitTracksChanged fires for new media
+            videoBootstrapDone = false; // Arm cold-prepare bug bootstrap
 
             // Disable text tracks by default — user selects via UI
             player.setTrackSelectionParameters(
@@ -942,16 +853,6 @@ public class NativePlayerPlugin extends Plugin {
     private long lastNonBufferingAt = 0;
     private static final long BUFFERING_GUARD_MS = 300;
 
-    private static String stateName(int state) {
-        switch (state) {
-            case Player.STATE_IDLE: return "IDLE";
-            case Player.STATE_BUFFERING: return "BUFFERING";
-            case Player.STATE_READY: return "READY";
-            case Player.STATE_ENDED: return "ENDED";
-            default: return "UNKNOWN(" + state + ")";
-        }
-    }
-
     private void emitStateChanged(String state) {
         // Hysteresis on BUFFERING: ExoPlayer can briefly dip below the
         // rebuffer threshold after a seek and oscillate ready ↔ buffering
@@ -995,7 +896,18 @@ public class NativePlayerPlugin extends Plugin {
         positionHandler = new Handler(Looper.getMainLooper());
         positionRunnable = new Runnable() {
             @Override public void run() {
-                if (player != null && player.isPlaying()) {
+                // Emit while the player exists, not only while
+                // isPlaying() is true. NativeEngine's firstFrame
+                // fallback (in native-engine.ts) needs a second
+                // event with a growing position to clear the loading
+                // veil — gating on isPlaying() locked the UI on the
+                // spinner whenever Media3 spent its prepare time in
+                // STATE_BUFFERING (isPlaying() is false in that
+                // state). Was harmless when NativeEngine also polled
+                // getPosition() every second; that JS polling was
+                // dropped in commit 9e2269dc as redundant, which made
+                // this push the sole signal.
+                if (player != null) {
                     double pos = player.getCurrentPosition() / 1000.0;
                     double dur = player.getDuration() != C.TIME_UNSET ? player.getDuration() / 1000.0 : 0;
                     double buf = player.getBufferedPosition() / 1000.0;
