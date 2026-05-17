@@ -218,16 +218,33 @@ export function buildFfmpegArgs(
     !burnIn?.filter &&
     normalisedSourceCodecPreflight != null &&
     isDecoderEnabled(`${normalisedSourceCodecPreflight}_qsv_native_decode`);
+  // Resolve the effective tone-mapping path the session will use.
+  // `auto` picks opencl when the boot probe enabled it, vaapi
+  // otherwise; the explicit overrides bypass the probe. This single
+  // value drives both the qsv-native eligibility gate AND the
+  // `useVaapiTonemap` flag below, keeping the two decisions in sync.
+  const tonemapPath: 'vaapi' | 'qsv' | 'opencl' =
+    tonemapAlgo === 'auto'
+      ? isTonemapOpenclEnabled()
+        ? 'opencl'
+        : 'vaapi'
+      : tonemapAlgo;
+
   // The qsv-native path is normally gated on `!!crop` because the
   // single-pass `vpp_qsv` filter was added to keep crop on the QSV
-  // device (no `hwdownload→crop→hwupload` roundtrip). Admin can also
-  // force it explicitly for tone-mapping via `tonemapAlgo='qsv'`, in
-  // which case the gate relaxes to allow tonemap-only sessions.
-  const adminWantsQsvTonemap = tonemap && tonemapAlgo === 'qsv';
+  // device (no `hwdownload→crop→hwupload` roundtrip). When the
+  // session also needs HDR→SDR tonemap, qsv-native forces the
+  // `vpp_qsv=tonemap=1` chain — which can ONLY tonemap via the
+  // fixed-function VPP HDR LUT. Routing tonemap through opencl or
+  // vaapi requires staying on the vaapi-decode chain so the filter
+  // graph can insert `hwmap=opencl` / `tonemap_vaapi` after
+  // `scale_vaapi`. Hence: enable qsv-native for crop-only sessions
+  // unconditionally; for crop+tonemap sessions, only when the
+  // chosen tonemap path is `qsv` (and the probe confirms the LUT).
   const qsvNativeAvailable =
     hasUsableQsvNativeDecoder &&
-    (!!crop || adminWantsQsvTonemap) &&
-    (!tonemap || isVppQsvTonemapEnabled());
+    (!!crop || tonemapPath === 'qsv') &&
+    (!tonemap || (tonemapPath === 'qsv' && isVppQsvTonemapEnabled()));
   const qsvCanCrop =
     qsvNativeAvailable ||
     (hwAccel === 'qsv' && !!crop && !!tonemap && !burnIn?.filter);
@@ -296,28 +313,12 @@ export function buildFfmpegArgs(
     Math.ceil((bitrateNum * (early ? 1 : 2)) / 1_000_000),
   )}M`;
 
-  // Tone-mapping algorithm selection.
-  //
-  // `auto` prefers tonemap_opencl with reinhard when the boot probe
-  // confirms a working OpenCL stack — the fixed-function VPP HDR LUT
-  // shared by tonemap_vaapi and vpp_qsv under-exposes on the iGPUs we
-  // ship to (Raptor Lake i7-13620H produces avg-luma ~40 instead of
-  // ~70 on bright SDR scenes), and opencl is the only HW path that
-  // lands at a perceptually-correct mid-tone. When the probe failed
-  // (missing libOpenCL, broken QSV↔OpenCL bridge, macOS where Apple
-  // deprecated OpenCL in 10.14, …) `auto` falls back to tonemap_vaapi
-  // so HDR sources still get a SDR pass rather than dark broken pixels.
-  //
-  // `vaapi`: legacy chain (scale_vaapi → tonemap_vaapi → hwmap=qsv).
-  // `qsv`: qsv-native decoder + single-pass `vpp_qsv=tonemap=1`
-  //   (same HDR LUT as vaapi underneath; single device, fastest cold
-  //   start when the LUT is good enough on the host iGPU).
-  // `opencl`: explicit opt-in regardless of the probe result. Useful
-  //   when the probe was a false-negative or for diagnostic runs.
-  const autoUsesVaapi =
-    tonemapAlgo === 'auto' && !isTonemapOpenclEnabled();
-  const useVaapiTonemap =
-    tonemap && (tonemapAlgo === 'vaapi' || autoUsesVaapi);
+  // Tone-mapping filter selection. `tonemapPath` (computed above) is
+  // the source of truth — `useVaapiTonemap` is just the boolean the
+  // existing filter helpers expect. The qsv path is handled by the
+  // qsv-native filter chain (`qsvScaleFilter8bit`'s `inputSurface ===
+  // 'qsv'` branch), so it doesn't need a flag here.
+  const useVaapiTonemap = tonemap && tonemapPath === 'vaapi';
 
   // Resolve the decoder via the same registry pattern as the encoder.
   // The decoder picks how the source is brought into memory (HW device
