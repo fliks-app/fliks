@@ -182,6 +182,7 @@ export class StreamingController {
       useTs: this.activeStreamTracker.getUseTs(mediaFileId),
       encoderPreset: this.activeStreamTracker.getEncoderPreset(mediaFileId),
       qsvOptions: this.activeStreamTracker.getQsvOptions(),
+      tonemapAlgo: this.activeStreamTracker.getTonemapAlgo(),
       // Source framerate (e.g. "24", "23.976", "29.97") — used to compute an
       // accurate GOP so IDR frames fall on the same boundary regardless of
       // source fps. Falls back to 24 when unknown.
@@ -396,6 +397,18 @@ export class StreamingController {
     return { hwAccel: this.transcodingService.getDetectedHwAccel() };
   }
 
+  /** HDR→SDR tone-mapping algorithms available on this host. Drives the
+   *  admin streaming-settings dropdown so platforms that can't run a
+   *  given path (macOS for VAAPI/QSV/OpenCL, Linux without the OpenCL
+   *  stack, Intel-less hosts for QSV, …) don't surface options that
+   *  would fail at session time. `'auto'` is always present. */
+  @Get('info/tonemap-algos')
+  tonemapAlgosInfo() {
+    return {
+      available: this.transcodingService.getAvailableTonemapAlgos(),
+    };
+  }
+
   /**
    * PlaybackInfo — the client sends its DeviceProfile, the server decides
    * how to play the file: DirectPlay, DirectStream (remux), or Transcode.
@@ -468,6 +481,7 @@ export class StreamingController {
     this.activeStreamTracker.setQsvOptions({
       lowPower: ss.qsvLowPower,
     });
+    this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
 
     // Persist source→client codec compatibility so hlsMaster can pick a
     // smart-remux variant when the user's quality lock matches the source

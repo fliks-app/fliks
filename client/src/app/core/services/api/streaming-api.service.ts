@@ -451,6 +451,16 @@ export class StreamingApiService {
       this.http.get<DownloadQuality[]>(`/api/stream/info/qualities/${mediaFileId}`),
     );
   }
+
+  /** HDR→SDR tone-mapping algorithms the server can actually run.
+   *  Drives the admin streaming-settings dropdown so platforms / hosts
+   *  that lack a given filter graph (no OpenCL stack, no Intel iGPU, …)
+   *  don't get to pick an option that would fail at session time. */
+  getTonemapAlgos() {
+    return firstValueFrom(
+      this.http.get<{ available: string[] }>('/api/stream/info/tonemap-algos'),
+    );
+  }
 }
 
 export interface DownloadQuality {

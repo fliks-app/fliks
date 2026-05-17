@@ -32,7 +32,14 @@ import { ALL_DESCRIPTORS, encoderRegistry } from './codec/encoders';
 import { runEncoderProbes } from './codec/encoder-probe';
 import { ALL_DECODERS } from './codec/decoders';
 import { runDecoderProbes } from './codec/decoder-probe';
-import { runVppQsvTonemapProbe } from './codec/vpp-qsv-probe';
+import {
+  isVppQsvTonemapEnabled,
+  runVppQsvTonemapProbe,
+} from './codec/vpp-qsv-probe';
+import {
+  isTonemapOpenclEnabled,
+  runTonemapOpenclProbe,
+} from './codec/tonemap-opencl-probe';
 import {
   generateMasterPlaylist,
   getAvailableProfiles,
@@ -48,6 +55,7 @@ import type {
   DeviceType,
   HwAccelType,
   SessionContext,
+  TonemapAlgo,
   TranscodeProfile,
   TranscodeSession,
 } from './types';
@@ -115,6 +123,16 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     if (this.detectedHwAccel === 'qsv') {
       void runVppQsvTonemapProbe(this.log);
     }
+    // tonemap_opencl probe runs on every Linux Intel host (QSV or VAAPI):
+    // both paths can route through the opencl tonemap chain at session
+    // time, but the QSV↔OpenCL bridge is fragile and we need to know
+    // upfront whether `tonemapAlgo='auto'` can safely default to opencl.
+    if (
+      this.detectedHwAccel === 'qsv' ||
+      this.detectedHwAccel === 'vaapi'
+    ) {
+      void runTonemapOpenclProbe(this.log);
+    }
 
     this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 30_000);
   }
@@ -147,6 +165,28 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
   getDetectedHwAccel(): HwAccelType {
     return this.detectedHwAccel;
+  }
+
+  /** List of tone-mapping algorithms the current host can run.
+   *  `'auto'` is always available — it maps to the platform's native
+   *  HW path (`scale_vt` on macOS / VideoToolbox, tonemap_opencl or
+   *  tonemap_vaapi on Intel Linux depending on the probe result). The
+   *  three explicit overrides only surface when their underlying
+   *  filter graph can actually run end-to-end on this host. */
+  getAvailableTonemapAlgos(): TonemapAlgo[] {
+    const out: TonemapAlgo[] = ['auto'];
+    if (this.detectedHwAccel === 'qsv' || this.detectedHwAccel === 'vaapi') {
+      // tonemap_vaapi only needs a VAAPI render node — both the QSV
+      // and the VAAPI hwaccel detect paths confirm one exists.
+      out.push('vaapi');
+    }
+    if (this.detectedHwAccel === 'qsv' && isVppQsvTonemapEnabled()) {
+      out.push('qsv');
+    }
+    if (isTonemapOpenclEnabled()) {
+      out.push('opencl');
+    }
+    return out;
   }
 
   /** Update segment duration from admin streaming settings. */
@@ -615,6 +655,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           audioPlan: ctx?.audioPlan,
           encoderPreset: ctx?.encoderPreset,
           qsvOptions: ctx?.qsvOptions,
+          tonemapAlgo: ctx?.tonemapAlgo,
           sourceFps: ctx?.sourceFps,
           trustedStreamInfo: ctx?.trustedStreamInfo,
           early: true,
@@ -898,6 +939,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         audioPlan: ctx?.audioPlan,
         encoderPreset: ctx?.encoderPreset,
         qsvOptions: ctx?.qsvOptions,
+        tonemapAlgo: ctx?.tonemapAlgo,
         sourceFps: ctx?.sourceFps,
         trustedStreamInfo: ctx?.trustedStreamInfo,
         useTs: ctx?.useTs ?? false,

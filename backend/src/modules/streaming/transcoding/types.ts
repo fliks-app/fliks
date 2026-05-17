@@ -31,6 +31,17 @@ export interface BurnInSubtitle {
   type: 'text' | 'image';
 }
 
+/** HDR → SDR tone-mapping algorithm (admin-selectable).
+ *  - `auto`: tonemap_opencl with reinhard — best mid-tone restoration on
+ *    Intel iGPUs whose fixed-function VPP HDR LUT under-exposes.
+ *  - `vaapi`: scale_vaapi → tonemap_vaapi → hwmap=qsv (hybrid pipeline).
+ *    Fastest cold start, lowest CPU; use when opencl bridge is broken
+ *    or VPP HDR LUT renders correctly on the host iGPU.
+ *  - `qsv`: qsv-native decoder + single-pass `vpp_qsv=tonemap=1`
+ *    (single-device, same HDR LUT as vaapi underneath).
+ *  - `opencl`: explicit opt-in to the `auto` chain. */
+export type TonemapAlgo = 'auto' | 'opencl' | 'vaapi' | 'qsv';
+
 export interface SessionContext {
   userId?: number;
   username?: string;
@@ -60,6 +71,10 @@ export interface SessionContext {
     /** -low_power 1 (VDENC on Gen9+ — faster, slight quality loss) */
     lowPower: boolean;
   };
+  /** HDR → SDR tone-mapping algorithm picked by the admin (or `'auto'` to
+   *  let the codec selector keep its built-in preference order). Forwarded
+   *  to `ffmpeg-args` to override the default `useVaapiTonemap` decision. */
+  tonemapAlgo?: TonemapAlgo;
   /** Source framerate (fps). Used to compute GOP = SEGMENT_DURATION * fps. */
   sourceFps?: number;
   /**

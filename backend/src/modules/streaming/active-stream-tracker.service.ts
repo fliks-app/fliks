@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import type { BurnInSubtitle } from './transcoding';
+import type { BurnInSubtitle, TonemapAlgo } from './transcoding';
 import type { CodecVariant } from './transcoding/codec/types';
 
 export interface DirectPlaySession {
@@ -215,6 +215,15 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
   }
   getQsvOptions(): { lowPower: boolean } {
     return { lowPower: this.qsvLowPowerCache };
+  }
+
+  /** HDR → SDR tone-mapping algorithm (admin-configurable, global). */
+  private tonemapAlgoCache: TonemapAlgo = 'auto';
+  setTonemapAlgo(algo: TonemapAlgo) {
+    this.tonemapAlgoCache = algo;
+  }
+  getTonemapAlgo(): TonemapAlgo {
+    return this.tonemapAlgoCache;
   }
 
   // ── Source-vs-client compat captured at playback-info time, read at
