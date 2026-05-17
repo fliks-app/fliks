@@ -40,6 +40,20 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
 
   private listeners: Array<{ event: string; fn: EventListener }> = [];
 
+  /** Guards against double-emit of 'firstFrame' (engine listeners use
+   *  it to clear the loading veil — flipping it twice is harmless but
+   *  the position-advance fallback below would otherwise fire on every
+   *  later timeUpdate). Reset on each load(). */
+  private firstFrameEmitted = false;
+  /** Last `timeUpdate.position` seen, used to detect that playback is
+   *  actually advancing (Android's onRenderedFirstFrame is unreliable on
+   *  some devices: it fires late or never on transcode → ABR switches,
+   *  leaving the UI stuck on the loading spinner even though the stream
+   *  is playing). When position grows between two updates, we know
+   *  frames are decoding and can fire 'firstFrame' ourselves as a
+   *  belt-and-suspenders signal. */
+  private lastTimeUpdatePos = -1;
+
   // ── Native subtitle overlay (iOS) ──
   private readonly _isIos = Capacitor.getPlatform() === 'ios';
   private _parsedTracks = new Map<string, VttCue[]>();
@@ -82,6 +96,8 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     _mimeType?: string,
     headers?: Record<string, string>,
   ): Promise<void> {
+    this.firstFrameEmitted = false;
+    this.lastTimeUpdatePos = -1;
     const subtitles = this._preloadedSubtitles.length > 0
       ? this._preloadedSubtitles
       : undefined;
@@ -307,6 +323,21 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       this._buffered = d.buffered;
       this.emit('timeUpdate', d);
       this.updateSubtitleOverlay();
+      // Fallback for the missing onRenderedFirstFrame case: native only
+      // fires nativePlayerTimeUpdate when `player.isPlaying()`, so a
+      // position that grows between two updates is a strong signal that
+      // decoded frames are flowing. We use the second observation (not
+      // the first) because a seek-resume's initial update can land at
+      // position=T before any frame has rendered.
+      if (
+        !this.firstFrameEmitted &&
+        this.lastTimeUpdatePos >= 0 &&
+        d.position > this.lastTimeUpdatePos
+      ) {
+        this.firstFrameEmitted = true;
+        this.emit('firstFrame', undefined);
+      }
+      this.lastTimeUpdatePos = d.position;
     });
 
     bind('nativePlayerError', (e: Event) => {
@@ -322,6 +353,8 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     });
 
     bind('nativePlayerFirstFrame', () => {
+      if (this.firstFrameEmitted) return;
+      this.firstFrameEmitted = true;
       this.emit('firstFrame', undefined);
     });
   }
