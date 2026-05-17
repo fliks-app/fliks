@@ -9,6 +9,43 @@ import type { DeviceType, TranscodeProfile } from './types';
 import type { CodecVariant } from './codec/types';
 import { h264CodecString, hevcMainCodecString } from './codec/codec-strings';
 
+/** Apply the `onlyQuality` URL pin to a ladder. Used identically by
+ *  the SDR and HDR branches: when the player has a saved quality
+ *  preference (or an explicit dropdown pick), the master playlist
+ *  emits a single-variant ladder so ExoPlayer's HLS source can't
+ *  pre-load other variants — each unfocused variant playlist or
+ *  init.mp4 fetch triggers a ffmpeg kill+respawn on the backend
+ *  when the requested quality doesn't match the active session.
+ *
+ *  - `remux` / `original` collapse to the top SDR profile that fits
+ *    the source resolution (no upscale). HDR ladder ignores these
+ *    pseudo-labels because the source-resolution HDR rung is emitted
+ *    via the separate `hdrPassThrough` block.
+ *  - When `hdrSuffix` is true, an input `1080p` is matched against
+ *    `1080p-hdr` (HDR ladder rungs carry the suffix); already
+ *    `*-hdr` inputs pass through unchanged.
+ *  - Falls back to the full ladder when the pin doesn't match any
+ *    rung (legacy URLs / typos). */
+function applyQualityPin(
+  ladder: TranscodeProfile[],
+  onlyQuality: string | undefined,
+  sourceWidth: number,
+  hdrSuffix = false,
+): TranscodeProfile[] {
+  if (!onlyQuality) return ladder;
+  if (onlyQuality === 'remux' || onlyQuality === 'original') {
+    if (hdrSuffix) return ladder;
+    const top = ladder.find((p) => p.maxWidth <= sourceWidth) ?? ladder[0];
+    return [top];
+  }
+  const wanted =
+    hdrSuffix && !onlyQuality.endsWith('-hdr')
+      ? `${onlyQuality}-hdr`
+      : onlyQuality;
+  const picked = ladder.find((p) => p.name === wanted);
+  return picked ? [picked] : ladder;
+}
+
 /**
  * Get available quality profiles for a given source resolution + device class.
  */
@@ -116,8 +153,13 @@ export function generateMasterPlaylist(
     // Includes the source-resolution rung if there's an HDR profile
     // at or below source height.
     if (canEncodeHevcHdr) {
-      const hdrLadder = getHdrLadderForDevice(deviceType).filter((p) =>
-        profileFitsSource(p, sourceWidth, sourceHeight),
+      const hdrLadder = applyQualityPin(
+        getHdrLadderForDevice(deviceType).filter((p) =>
+          profileFitsSource(p, sourceWidth, sourceHeight),
+        ),
+        onlyQuality,
+        sourceWidth,
+        /* hdrSuffix */ true,
       );
       for (const p of hdrLadder) {
         const avg =
@@ -128,7 +170,9 @@ export function generateMasterPlaylist(
           sourceWidth,
           sourceHeight,
         );
-        const videoCodec = hevcMain10CodecStringForHeight(p.maxHeight);
+        // Use actual emitted height for the codec level — see SDR
+        // branch below for the rationale (Arcane / cropped sources).
+        const videoCodec = hevcMain10CodecStringForHeight(h);
         lines.push(
           `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},VIDEO-RANGE=${range},NAME="${p.name}",CODECS="${videoCodec},${audioCodec}"${hdrAudioAttr}`,
           `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
@@ -174,19 +218,7 @@ export function generateMasterPlaylist(
   const ladder = getLadderForDevice(deviceType);
   let profiles = getAvailableProfiles(sourceWidth, sourceHeight, deviceType);
   if (!profiles.length) profiles.push(ladder[ladder.length - 1]); // at least 480p
-
-  if (onlyQuality) {
-    if (onlyQuality === 'remux' || onlyQuality === 'original') {
-      // Pick the top profile whose maxWidth is ≤ source (matches source
-      // resolution as closely as possible without upscaling).
-      const top =
-        profiles.find((p) => p.maxWidth <= sourceWidth) ?? profiles[0];
-      profiles = [top];
-    } else {
-      const picked = profiles.find((p) => p.name === onlyQuality);
-      if (picked) profiles = [picked];
-    }
-  }
+  profiles = applyQualityPin(profiles, onlyQuality, sourceWidth);
 
   for (const p of profiles) {
     const avg =
@@ -202,9 +234,18 @@ export function generateMasterPlaylist(
       sourceWidth,
       sourceHeight,
     );
+    // Codec string MUST be derived from the actual emitted height (`h`),
+    // not `p.maxHeight`. Cropped content (e.g. 2.39:1 cinemascope on a
+    // 1920×1080 source → 1920×816) advertises a height below the
+    // profile nominal, so `h264CodecString({height: 720})` would
+    // declare avc1 L3.2 in the master while the bitstream SPS carries
+    // L3.1 for the actual 1280×544 frames. The mismatch (declared > SPS)
+    // can leave ExoPlayer's track selector stuck on cold prepare —
+    // visible as the Arcane "buffering forever, no decoder allocated"
+    // pattern on Android.
     const target = {
       width: w,
-      height: p.maxHeight,
+      height: h,
       videoBitrateBps: 0,
       gopSize: 0,
       frameRate: 24,

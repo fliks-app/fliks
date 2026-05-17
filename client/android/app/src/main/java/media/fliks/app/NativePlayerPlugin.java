@@ -31,7 +31,6 @@ import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.LoadControl;
-import androidx.media3.exoplayer.hls.HlsMediaSource;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import java.util.ArrayList;
 import java.util.List;
@@ -68,6 +67,18 @@ public class NativePlayerPlugin extends Plugin {
     private DefaultHttpDataSource.Factory httpFactory;
     private String currentHlsUrl;
     private int lastAudioTrackCount = -1;
+    // Cold-prepare bug bootstrap state. Media3 1.10.1's HLS source has
+    // a race on initial track surfacing when the variant carries EAC3
+    // (and especially EAC3-JOC Atmos) audio next to an fMP4 video
+    // track: the audio renderer enables first, the video format hasn't
+    // propagated yet when `selectTracks()` runs, so the video group
+    // is dropped from the selection and the renderer never allocates
+    // a decoder — playback stalls in BUFFERING with audio-only tracks.
+    // A user-issued seek unsticks it by forcing `selectTracks()` to
+    // re-run with the format now available; this flag arms a one-shot
+    // programmatic micro-seek in `onTracksChanged` that mimics that
+    // path when we detect the failure signature.
+    private boolean videoBootstrapDone = false;
     private final List<MediaItem.SubtitleConfiguration> subtitleConfigs = new ArrayList<>();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private Handler positionHandler;
@@ -241,10 +252,9 @@ public class NativePlayerPlugin extends Plugin {
             // Offline: CacheDataSource (cached HLS) wrapped in DefaultDataSource
             // (adds file:// support for local subtitle VTTs).
             // Online: DefaultDataSource with HTTP factory.
-            DataSource.Factory dataSourceFactory = offline
+            final DataSource.Factory dataSourceFactory = offline
                     ? new DefaultDataSource.Factory(getContext(), FlixDownloadUtil.getCacheDataSourceFactory(getContext()))
                     : new DefaultDataSource.Factory(getContext(), httpFactory);
-            DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory);
             // 500ms instead of ExoPlayer's default 2500ms — short-segment LAN HLS.
             LoadControl loadControl = new DefaultLoadControl.Builder()
                     .setBufferDurationsMs(3000, 8000, 500, 3000)
@@ -261,6 +271,17 @@ public class NativePlayerPlugin extends Plugin {
                     new DefaultRenderersFactory(getContext())
                             .setEnableAudioFloatOutput(false)
                             .setEnableDecoderFallback(true);
+            // DefaultMediaSourceFactory handles both URL autodetection
+            // (HLS for `.m3u8`, ProgressiveMediaSource for DirectPlay
+            // MP4) and the modern subtitle pipeline (parses external
+            // WebVTT to `application/x-media3-cues` via
+            // SubtitleExtractor before the TextRenderer sees them).
+            // Replicating that machinery with HlsMediaSource.Factory
+            // explicit means re-implementing internal Media3 APIs
+            // (`enableLazyLoadingWithSingleTrack` is package-private)
+            // — not worth the semantic-cleanliness trade-off.
+            DefaultMediaSourceFactory mediaSourceFactory =
+                    new DefaultMediaSourceFactory(dataSourceFactory);
             player = new ExoPlayer.Builder(getContext())
                     .setRenderersFactory(renderersFactory)
                     .setMediaSourceFactory(mediaSourceFactory)
@@ -299,7 +320,6 @@ public class NativePlayerPlugin extends Plugin {
                     }
                 }
 
-
                 @Override public void onPlayerError(@NonNull PlaybackException error) {
                     emitError(error.errorCode, error.getMessage());
                 }
@@ -316,6 +336,58 @@ public class NativePlayerPlugin extends Plugin {
                     if (pendingVideoHeight > 0) {
                         if (applyVideoOverrideByHeight(pendingVideoHeight)) {
                             pendingVideoHeight = -1;
+                        }
+                    }
+                    // Cold-prepare bootstrap. Fires at most once per load() to
+                    // recover from a Media3 1.10.1 race where every ExoPlayer
+                    // instance built after the first one in the same JVM gets
+                    // stuck: track selection completes, the audio renderer
+                    // prepares, but the video renderer silently never enables
+                    // and never allocates a decoder — state pins at BUFFERING
+                    // for the rest of the session. The bug reproduces reliably
+                    // on EAC3 5.1 sources (Atmos in particular) and is the same
+                    // hang a user-issued seek unsticks: `seekTo()` cancels the
+                    // in-flight loads and forces the source to re-run
+                    // `selectTracks()`, which wakes the renderer pipeline.
+                    if (!videoBootstrapDone) {
+                        boolean videoSelected = false;
+                        boolean videoSupported = false;
+                        for (Tracks.Group g : tracks.getGroups()) {
+                            if (g.getType() != C.TRACK_TYPE_VIDEO) continue;
+                            if (g.isSelected()) videoSelected = true;
+                            for (int i = 0; i < g.length; i++) {
+                                if (g.isTrackSupported(i)) {
+                                    videoSupported = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (videoSelected) {
+                            // Common case: video track picked. Watchdog reads
+                            // playback state 1.5 s later; if the renderer
+                            // actually started (state != BUFFERING) the seek is
+                            // skipped, so healthy playback is untouched. When
+                            // the bug strikes, state is still BUFFERING and we
+                            // issue a 1 ms forward seek — imperceptible drift
+                            // (well below one frame at 24 fps).
+                            videoBootstrapDone = true;
+                            mainHandler.postDelayed(() -> {
+                                if (player == null) return;
+                                if (player.getPlaybackState() == Player.STATE_BUFFERING) {
+                                    player.seekTo(player.getCurrentPosition() + 1);
+                                }
+                            }, 1500);
+                        } else if (videoSupported) {
+                            // Less common signature: the selector dropped the
+                            // video group entirely (audio surfaced first, the
+                            // video format hadn't propagated). 200 ms is enough
+                            // for the format to arrive before the recovery seek
+                            // re-runs the selection.
+                            videoBootstrapDone = true;
+                            mainHandler.postDelayed(() -> {
+                                if (player == null) return;
+                                player.seekTo(player.getCurrentPosition() + 1);
+                            }, 200);
                         }
                     }
                 }
@@ -336,6 +408,7 @@ public class NativePlayerPlugin extends Plugin {
                         subtitleView.setCues(cueGroup.cues);
                     }
                 }
+
             });
 
             MediaItem.Builder itemBuilder = new MediaItem.Builder()
@@ -345,6 +418,7 @@ public class NativePlayerPlugin extends Plugin {
             }
             player.setMediaItem(itemBuilder.build());
             lastAudioTrackCount = -1; // Reset so emitTracksChanged fires for new media
+            videoBootstrapDone = false; // Arm cold-prepare bug bootstrap
 
             // Disable text tracks by default — user selects via UI
             player.setTrackSelectionParameters(
@@ -822,7 +896,18 @@ public class NativePlayerPlugin extends Plugin {
         positionHandler = new Handler(Looper.getMainLooper());
         positionRunnable = new Runnable() {
             @Override public void run() {
-                if (player != null && player.isPlaying()) {
+                // Emit while the player exists, not only while
+                // isPlaying() is true. NativeEngine's firstFrame
+                // fallback (in native-engine.ts) needs a second
+                // event with a growing position to clear the loading
+                // veil — gating on isPlaying() locked the UI on the
+                // spinner whenever Media3 spent its prepare time in
+                // STATE_BUFFERING (isPlaying() is false in that
+                // state). Was harmless when NativeEngine also polled
+                // getPosition() every second; that JS polling was
+                // dropped in commit 9e2269dc as redundant, which made
+                // this push the sole signal.
+                if (player != null) {
                     double pos = player.getCurrentPosition() / 1000.0;
                     double dur = player.getDuration() != C.TIME_UNSET ? player.getDuration() / 1000.0 : 0;
                     double buf = player.getBufferedPosition() / 1000.0;
