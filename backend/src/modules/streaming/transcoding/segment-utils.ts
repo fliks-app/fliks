@@ -58,3 +58,19 @@ export function firstMissingSegment(
   return null;
 }
 
+/**
+ * 50ms size-stability check. Returns true when the file exists, is non-empty,
+ * and its size hasn't changed in 50ms (= ffmpeg finished writing this segment).
+ */
+export async function isSegmentStable(segPath: string): Promise<boolean> {
+  try {
+    const s1 = (await fsp.stat(segPath)).size;
+    if (s1 === 0) return false;
+    await new Promise((r) => setTimeout(r, 50));
+    const s2 = (await fsp.stat(segPath)).size;
+    return s1 === s2;
+  } catch {
+    return false;
+  }
+}
+
