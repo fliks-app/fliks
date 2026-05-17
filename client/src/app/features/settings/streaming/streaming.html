@@ -32,6 +32,20 @@
       <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.qsv_preset_help' | translate }}</span></label>
     </div>
 
+    <!-- HDR → SDR tone-mapping algorithm. Hidden when the server reports
+         only 'auto' as available: nothing meaningful to choose. -->
+    @if (tonemapAlgosAvailable().length > 1) {
+      <div class="form-control">
+        <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.tonemap_algo' | translate }}</span></label>
+        <select class="select select-bordered w-full" [ngModel]="tonemapAlgo()" (ngModelChange)="tonemapAlgo.set($event)">
+          @for (algo of tonemapAlgosAvailable(); track algo) {
+            <option [value]="algo">{{ ('settings.streaming.tonemap_algo_' + algo) | translate }}@if (algo === 'auto') { ({{ 'settings.streaming.default' | translate }}) }</option>
+          }
+        </select>
+        <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.tonemap_algo_help' | translate }}</span></label>
+      </div>
+    }
+
     <!-- QSV advanced options (Intel Quick Sync only) -->
     <div class="divider">{{ 'settings.streaming.qsv_advanced' | translate }}</div>
 

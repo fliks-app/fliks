@@ -3,7 +3,12 @@ import * as path from 'path';
 import { getSegmentDuration, segmentIndexToSeconds } from './constants';
 import { isHdrProfile, parseBitrateToBps } from './profiles';
 import { requestedHwAccelFor } from './hw-detect';
-import type { BurnInSubtitle, HwAccelType, TranscodeProfile } from './types';
+import type {
+  BurnInSubtitle,
+  HwAccelType,
+  TonemapAlgo,
+  TranscodeProfile,
+} from './types';
 import { encoderRegistry } from './codec/encoders';
 import type {
   BitDepth,
@@ -14,6 +19,7 @@ import type {
 import { decoderRegistry, findQsvNativeDecoder } from './codec/decoders';
 import { isDecoderEnabled } from './codec/decoder-probe';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
+import { isTonemapOpenclEnabled } from './codec/tonemap-opencl-probe';
 import { normaliseSourceCodec } from './codec/normalise';
 
 export interface BuildFfmpegArgsOptions {
@@ -54,6 +60,9 @@ export interface BuildFfmpegArgsOptions {
       };
   encoderPreset?: string;
   qsvOptions?: { lowPower: boolean };
+  /** HDR → SDR tone-mapping algorithm (admin override). Defaults to `'auto'`
+   *  which preserves the historical vaapi-when-available preference. */
+  tonemapAlgo?: TonemapAlgo;
   sourceFps?: number;
   trustedStreamInfo?: boolean;
   /** Short-lived parallel session producing only seg-0/seg-1 during a
@@ -93,6 +102,7 @@ export function buildFfmpegArgs(
     videoVariant,
     sourceVideoCodec,
     sourceBitDepth = 8,
+    tonemapAlgo = 'auto',
   } = opts;
 
   // Segment container choice. Cast → MPEG-TS (fixes the priming desync
@@ -208,9 +218,15 @@ export function buildFfmpegArgs(
     !burnIn?.filter &&
     normalisedSourceCodecPreflight != null &&
     isDecoderEnabled(`${normalisedSourceCodecPreflight}_qsv_native_decode`);
+  // The qsv-native path is normally gated on `!!crop` because the
+  // single-pass `vpp_qsv` filter was added to keep crop on the QSV
+  // device (no `hwdownload→crop→hwupload` roundtrip). Admin can also
+  // force it explicitly for tone-mapping via `tonemapAlgo='qsv'`, in
+  // which case the gate relaxes to allow tonemap-only sessions.
+  const adminWantsQsvTonemap = tonemap && tonemapAlgo === 'qsv';
   const qsvNativeAvailable =
     hasUsableQsvNativeDecoder &&
-    !!crop &&
+    (!!crop || adminWantsQsvTonemap) &&
     (!tonemap || isVppQsvTonemapEnabled());
   const qsvCanCrop =
     qsvNativeAvailable ||
@@ -280,19 +296,28 @@ export function buildFfmpegArgs(
     Math.ceil((bitrateNum * (early ? 1 : 2)) / 1_000_000),
   )}M`;
 
-  // tonemap_vaapi keeps the pipeline inside VAAPI (1 device transition, no
-  // OpenCL kernel compile) — saves ~300-500ms cold-start on HDR. Quality is
-  // slightly worse than tonemap_opencl/reinhard but the difference is
-  // invisible at streaming bitrates.
+  // Tone-mapping algorithm selection.
   //
-  // Force it on every QSV/VAAPI tonemap path. The OpenCL chain
-  // (`hwmap=derive_device=opencl,tonemap_opencl,hwmap=...,format=qsv`)
-  // depends on a working QSV↔OpenCL bridge that several Intel hosts
-  // can't service — the driver returns 'QSV to OpenCL mapping not
-  // usable' and the encoder crashes with exit=218. tonemap_vaapi has
-  // no such dependency and runs end-to-end inside VAAPI / QSV.
+  // `auto` prefers tonemap_opencl with reinhard when the boot probe
+  // confirms a working OpenCL stack — the fixed-function VPP HDR LUT
+  // shared by tonemap_vaapi and vpp_qsv under-exposes on the iGPUs we
+  // ship to (Raptor Lake i7-13620H produces avg-luma ~40 instead of
+  // ~70 on bright SDR scenes), and opencl is the only HW path that
+  // lands at a perceptually-correct mid-tone. When the probe failed
+  // (missing libOpenCL, broken QSV↔OpenCL bridge, macOS where Apple
+  // deprecated OpenCL in 10.14, …) `auto` falls back to tonemap_vaapi
+  // so HDR sources still get a SDR pass rather than dark broken pixels.
+  //
+  // `vaapi`: legacy chain (scale_vaapi → tonemap_vaapi → hwmap=qsv).
+  // `qsv`: qsv-native decoder + single-pass `vpp_qsv=tonemap=1`
+  //   (same HDR LUT as vaapi underneath; single device, fastest cold
+  //   start when the LUT is good enough on the host iGPU).
+  // `opencl`: explicit opt-in regardless of the probe result. Useful
+  //   when the probe was a false-negative or for diagnostic runs.
+  const autoUsesVaapi =
+    tonemapAlgo === 'auto' && !isTonemapOpenclEnabled();
   const useVaapiTonemap =
-    tonemap && (effectiveHwAccel === 'vaapi' || effectiveHwAccel === 'qsv');
+    tonemap && (tonemapAlgo === 'vaapi' || autoUsesVaapi);
 
   // Resolve the decoder via the same registry pattern as the encoder.
   // The decoder picks how the source is brought into memory (HW device
