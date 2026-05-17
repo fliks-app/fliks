@@ -182,13 +182,15 @@ export class LayoutComponent implements OnInit, OnDestroy {
       this.langTick.update((n) => n + 1);
       this.syncNavbarTitleFromRoute();
     });
-    this.router.events.subscribe(e => {
-      if (e instanceof NavigationEnd) {
-        this.bottomMenuOpen.set(false);
-        this.isHomeRoute.set(e.urlAfterRedirects === '/' || e.urlAfterRedirects.startsWith('/?'));
-        this.syncNavbarTitleFromRoute();
-      }
-    });
+    this.router.events
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(e => {
+        if (e instanceof NavigationEnd) {
+          this.bottomMenuOpen.set(false);
+          this.isHomeRoute.set(e.urlAfterRedirects === '/' || e.urlAfterRedirects.startsWith('/?'));
+          this.syncNavbarTitleFromRoute();
+        }
+      });
     this.syncNavbarTitleFromRoute();
   }
 

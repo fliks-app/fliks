@@ -39,7 +39,6 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   private _variantTracks: any[] = [];
 
   private listeners: Array<{ event: string; fn: EventListener }> = [];
-  private positionPoll: ReturnType<typeof setInterval> | null = null;
 
   // ── Native subtitle overlay (iOS) ──
   private readonly _isIos = Capacitor.getPlatform() === 'ios';
@@ -65,7 +64,6 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
 
   async destroy(): Promise<void> {
     this._initialized = false;
-    this.stopPositionPoll();
     this.unbindWindowEvents();
     this.destroySubtitleOverlay();
     await NativePlayer.destroy();
@@ -93,8 +91,6 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     if (this._subtitleStyle) {
       await NativePlayer.setSubtitleStyle(this._subtitleStyle);
     }
-
-    this.startPositionPoll();
   }
 
   private _subtitleStyle: {
@@ -135,7 +131,6 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   }
 
   async unload(): Promise<void> {
-    this.stopPositionPoll();
     await NativePlayer.stop();
     this._state = 'idle';
     this._currentTime = 0;
@@ -336,31 +331,6 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       window.removeEventListener(event, fn);
     }
     this.listeners = [];
-  }
-
-  // ── Position polling (fallback if native events are sparse) ──
-
-  private startPositionPoll(): void {
-    this.stopPositionPoll();
-    this.positionPoll = setInterval(async () => {
-      try {
-        const pos = await NativePlayer.getPosition();
-        this._currentTime = pos.position;
-        this._duration = pos.duration;
-        this._buffered = pos.buffered;
-        this.emit('timeUpdate', pos);
-        this.updateSubtitleOverlay();
-      } catch {
-        /* player might be destroyed */
-      }
-    }, 1000);
-  }
-
-  private stopPositionPoll(): void {
-    if (this.positionPoll) {
-      clearInterval(this.positionPoll);
-      this.positionPoll = null;
-    }
   }
 
   // ── Native Subtitle Overlay (iOS) ──

@@ -300,7 +300,7 @@
           <div class="avatar">
             <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full ring ring-base-200 group-hover:ring-primary group-focus:ring-primary group-focus-visible:ring-primary group-focus:ring-2 group-focus-visible:ring-2 transition-colors">
               @if (c.person.avatarUrl) {
-                <img appImgFadeIn [src]="c.person.avatarUrl | resolveUrl:'thumb'" [alt]="c.person.name" loading="lazy" fetchpriority="low" />
+                <img appImgFadeIn [src]="c.person.avatarUrl | resolveUrl:'thumb'" [alt]="c.person.name" loading="lazy" decoding="async" fetchpriority="low" />
               } @else {
                 <div class="bg-base-300 flex items-center justify-center w-full h-full text-lg font-bold text-base-content/30">
                   {{ c.person.name.charAt(0) }}

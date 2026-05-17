@@ -1,6 +1,5 @@
 import { Injectable, inject } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
-import shaka from 'shaka-player';
 import { AuthService } from './auth.service';
 
 const CACHE_NAME = 'offline-media';
@@ -13,6 +12,17 @@ let _fs: typeof import('@capacitor/filesystem') | null = null;
 async function getFs() {
   if (!_fs) _fs = await import('@capacitor/filesystem');
   return _fs;
+}
+
+/** Lazy-loaded Shaka Player. Eager-importing it pulls ~750 KB into the
+ *  initial bundle even though the offline-download path is only reached
+ *  from the downloads page (and never on native, where ExoPlayer /
+ *  AVPlayer take over). Loaded on first call to `shakaDownload` /
+ *  `shakaRemove`. */
+let _shaka: typeof import('shaka-player').default | null = null;
+async function getShaka() {
+  if (!_shaka) _shaka = (await import('shaka-player')).default;
+  return _shaka;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -87,6 +97,7 @@ export class OfflineStorageService {
     if (this.isNative) return null;
 
     // Create a temporary Shaka player for the storage API.
+    const shaka = await getShaka();
     const video = document.createElement('video');
     video.style.display = 'none';
     document.body.appendChild(video);
@@ -154,6 +165,7 @@ export class OfflineStorageService {
     const uri = this.getShakaOfflineUri(mediaFileId);
     if (!uri) return;
 
+    const shaka = await getShaka();
     const video = document.createElement('video');
     const player = new shaka.Player();
     await player.attach(video);

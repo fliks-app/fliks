@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Capacitor
 import GoogleCast
 
@@ -21,6 +22,11 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
 
     private var sessionManager: GCKSessionManager?
     private var pollTimer: Timer?
+    /** Tracks whether the 1Hz media-status poll was running when the app
+     *  backgrounded; restart it on foreground so we don't keep firing
+     *  `evaluateJavaScript` against a paused WebView (fliks declares
+     *  `UIBackgroundModes: audio`, so Timers keep running). */
+    private var pollWasActiveBeforeBackground = false
 
     // MARK: - Initialize
 
@@ -31,6 +37,22 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
             // GCKCastContext already initialized in AppDelegate
             self.sessionManager = GCKCastContext.sharedInstance().sessionManager
             self.sessionManager?.add(self)
+
+            // Pause/resume the media-status poll on app background to
+            // avoid wasted bridge round-trips while the WebView is
+            // suspended.
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(self.appDidEnterBackground),
+                name: UIApplication.didEnterBackgroundNotification,
+                object: nil
+            )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(self.appWillEnterForeground),
+                name: UIApplication.willEnterForegroundNotification,
+                object: nil
+            )
 
             // Listen for device discovery
             let discoveryManager = GCKCastContext.sharedInstance().discoveryManager
@@ -290,6 +312,18 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
     private func stopPolling() {
         pollTimer?.invalidate()
         pollTimer = nil
+    }
+
+    @objc private func appDidEnterBackground() {
+        pollWasActiveBeforeBackground = pollTimer != nil
+        stopPolling()
+    }
+
+    @objc private func appWillEnterForeground() {
+        if pollWasActiveBeforeBackground && currentSession?.remoteMediaClient != nil {
+            startPolling()
+        }
+        pollWasActiveBeforeBackground = false
     }
 
     private func pollMediaState() {
