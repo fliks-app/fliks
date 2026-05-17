@@ -585,8 +585,10 @@ export class StreamingController {
     // Surface the actually-used tonemap filter (after `auto` resolution
     // + boot probe). Stats overlay reads this so it can show what's
     // running, not what was originally requested.
+    const hasCrop =
+      resolved.mediaFile.streamInfo?.video?.[0]?.crop != null;
     const tonemapAlgo = result.tonemapping
-      ? resolveTonemapPath(ss.tonemapAlgo)
+      ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop })
       : null;
 
     return {

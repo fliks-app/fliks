@@ -223,7 +223,7 @@ export function buildFfmpegArgs(
   // otherwise; the explicit overrides bypass the probe. This single
   // value drives both the qsv-native eligibility gate AND the
   // `useVaapiTonemap` flag below, keeping the two decisions in sync.
-  const tonemapPath = resolveTonemapPath(tonemapAlgo);
+  const tonemapPath = resolveTonemapPath(tonemapAlgo, { hasCrop: !!crop });
 
   // The qsv-native path is normally gated on `!!crop` because the
   // single-pass `vpp_qsv` filter was added to keep crop on the QSV
@@ -348,8 +348,22 @@ export function buildFfmpegArgs(
   // when (a) we're tonemapping HDR→SDR AND (b) the VAAPI in-place
   // tonemap fallback isn't active AND (c) the decoder's output sits on
   // VAAPI surfaces — the only path that uses the opencl bridge today.
+  //
+  // Critical: do NOT override `-filter_hw_device` here. The decoder
+  // already set it to the vaapi (or qsv) device, and that's what the
+  // `hwupload=derive_device=vaapi` step in `hwCropPrefix` needs to
+  // resolve correctly. Setting `-filter_hw_device ocl` would re-route
+  // every device-less filter through opencl, and Intel iHD reports
+  // `Query format failed: Function not implemented` (ENOSYS) when
+  // hwupload tries to materialise a vaapi context from an opencl
+  // default — the visible failure for cropped HDR sessions was
+  // `Parsed_hwupload_3: Query format failed` followed by exit=218.
+  // `tonemap_opencl` doesn't need to be the default device: it picks
+  // its device from the upstream `hwmap=derive_device=opencl` frame
+  // context, and the round-trip back to qsv uses an explicit
+  // `derive_device=qsv` on the closing hwmap.
   if (tonemap && !useVaapiTonemap && decoder.outputSurface === 'vaapi') {
-    args.push('-init_hw_device', 'opencl=ocl:0.0', '-filter_hw_device', 'ocl');
+    args.push('-init_hw_device', 'opencl=ocl:0.0');
   }
 
   args.push('-i', inputPath);
