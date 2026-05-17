@@ -1132,16 +1132,35 @@ export class StreamingController {
           src,
           initFile,
         );
-        if (initPath) {
-          res.setHeader('Content-Type', segmentContentType(segment));
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          const initStream = fs.createReadStream(initPath);
-          initStream.on('error', () => {
-            if (!res.headersSent) res.status(404).end();
-          });
-          initStream.pipe(res);
-          return;
+        if (!initPath) continue;
+        // 0-byte init.mp4: ffmpeg races between `creat()` and the first
+        // moov write (no temp_file rename for inits). Early sessions
+        // that get killed inside that window leave a present-but-empty
+        // file on disk — `getSegmentPath`'s `existsSync` returns true
+        // and we'd stream 0 bytes to the player. Skip empty inits and
+        // fall through to the next source (main session almost always
+        // has a complete one).
+        let stat;
+        try {
+          stat = fs.statSync(initPath);
+        } catch {
+          continue;
         }
+        if (stat.size === 0) {
+          this.log.warn(
+            `[init] 0-byte ${label} init.mp4 at ${initPath} — skipping`,
+          );
+          continue;
+        }
+        res.setHeader('Content-Type', segmentContentType(segment));
+        res.setHeader('Content-Length', String(stat.size));
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        const initStream = fs.createReadStream(initPath);
+        initStream.on('error', () => {
+          if (!res.headersSent) res.status(404).end();
+        });
+        initStream.pipe(res);
+        return;
       }
     }
 
