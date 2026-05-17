@@ -404,8 +404,19 @@ export function buildFfmpegArgs(
     : '';
 
   // For HW paths with crop: hwdownload to CPU, crop, then hwupload back.
+  // The intermediate `format=` is explicit on purpose — without it
+  // ffmpeg can insert an `auto_scale_0` between hwdownload and crop
+  // (the crop filter refuses some HW-adjacent formats), and that
+  // auto-scaler trips scale_vaapi's "fixed-size pool" check
+  // downstream. Pick the format that matches the source bit depth so
+  // crop runs in the same colour space as the decoded surface: for a
+  // 10-bit HDR source, `format=nv12` would silently downconvert to
+  // 8-bit BT.709-clamped pixels before the tonemap filter ever runs,
+  // which is what produced the dark image on cropped HDR sources
+  // (Mission Impossible 2160p HDR10 + crop).
+  const cropPxFmt = sourceBitDepth === 10 ? 'p010le' : 'nv12';
   const hwCropPrefix = cropStr
-    ? `hwdownload,format=nv12,${cropStr},hwupload=derive_device=vaapi,`
+    ? `hwdownload,format=${cropPxFmt},${cropStr},hwupload=derive_device=vaapi,`
     : '';
 
   const encoderInput: EncoderInput = {
