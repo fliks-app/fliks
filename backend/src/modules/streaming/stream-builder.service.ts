@@ -105,6 +105,7 @@ export class StreamBuilderService {
       colorSpace: v?.colorSpace,
       colorTransfer: v?.colorTransfer,
       colorPrimaries: v?.colorPrimaries,
+      crop: v?.crop,
     };
 
     // HDR detection

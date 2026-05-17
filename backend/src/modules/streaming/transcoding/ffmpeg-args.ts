@@ -19,7 +19,11 @@ import type {
 import { decoderRegistry, findQsvNativeDecoder } from './codec/decoders';
 import { isDecoderEnabled } from './codec/decoder-probe';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
-import { isTonemapOpenclEnabled } from './codec/tonemap-opencl-probe';
+import {
+  isTonemapOpenclEnabled,
+  isTonemapOpenclEnabledWithCrop,
+} from './codec/tonemap-opencl-probe';
+import { resolveTonemapPath } from './tonemap-path';
 import { normaliseSourceCodec } from './codec/normalise';
 
 export interface BuildFfmpegArgsOptions {
@@ -223,28 +227,31 @@ export function buildFfmpegArgs(
   // otherwise; the explicit overrides bypass the probe. This single
   // value drives both the qsv-native eligibility gate AND the
   // `useVaapiTonemap` flag below, keeping the two decisions in sync.
-  const tonemapPath: 'vaapi' | 'qsv' | 'opencl' =
-    tonemapAlgo === 'auto'
-      ? isTonemapOpenclEnabled()
-        ? 'opencl'
-        : 'vaapi'
-      : tonemapAlgo;
+  const tonemapPath = resolveTonemapPath(tonemapAlgo, { hasCrop: !!crop });
 
-  // The qsv-native path is normally gated on `!!crop` because the
-  // single-pass `vpp_qsv` filter was added to keep crop on the QSV
-  // device (no `hwdownload→crop→hwupload` roundtrip). When the
-  // session also needs HDR→SDR tonemap, qsv-native forces the
-  // `vpp_qsv=tonemap=1` chain — which can ONLY tonemap via the
-  // fixed-function VPP HDR LUT. Routing tonemap through opencl or
-  // vaapi requires staying on the vaapi-decode chain so the filter
-  // graph can insert `hwmap=opencl` / `tonemap_vaapi` after
-  // `scale_vaapi`. Hence: enable qsv-native for crop-only sessions
-  // unconditionally; for crop+tonemap sessions, only when the
-  // chosen tonemap path is `qsv` (and the probe confirms the LUT).
+  // The qsv-native path keeps the whole pipeline on the QSV device
+  // (no `hwdownload→crop→hwupload` round-trip), which is roughly 3×
+  // faster than the vaapi-decode chain on cropped HDR sessions.
+  // Enable it when:
+  //  - crop-only sessions: always (no tonemap to coordinate)
+  //  - tonemap via vpp_qsv LUT: when the probe confirmed the LUT
+  //  - tonemap via opencl: `vpp_qsv` does crop+scale on QSV, then
+  //    `hwmap=opencl` reads QSV surfaces, `tonemap_opencl` runs the
+  //    reinhard curve, and the reverse `hwmap=qsv` brings the SDR
+  //    nv12 back to the encoder (same probe gate as the
+  //    vaapi-decode opencl chain)
+  //  - tonemap via vaapi: NOT compatible — tonemap_vaapi consumes
+  //    vaapi surfaces; if the input is QSV-native, we have no way
+  //    to feed it without a hwmap that doesn't exist
+  const tonemapOpenclOk = !!crop
+    ? isTonemapOpenclEnabledWithCrop()
+    : isTonemapOpenclEnabled();
   const qsvNativeAvailable =
     hasUsableQsvNativeDecoder &&
-    (!!crop || tonemapPath === 'qsv') &&
-    (!tonemap || (tonemapPath === 'qsv' && isVppQsvTonemapEnabled()));
+    (!!crop || tonemapPath === 'qsv' || tonemapPath === 'opencl') &&
+    (!tonemap ||
+      (tonemapPath === 'qsv' && isVppQsvTonemapEnabled()) ||
+      (tonemapPath === 'opencl' && tonemapOpenclOk));
   const qsvCanCrop =
     qsvNativeAvailable ||
     (hwAccel === 'qsv' && !!crop && !!tonemap && !burnIn?.filter);
@@ -353,8 +360,22 @@ export function buildFfmpegArgs(
   // when (a) we're tonemapping HDR→SDR AND (b) the VAAPI in-place
   // tonemap fallback isn't active AND (c) the decoder's output sits on
   // VAAPI surfaces — the only path that uses the opencl bridge today.
+  //
+  // Critical: do NOT override `-filter_hw_device` here. The decoder
+  // already set it to the vaapi (or qsv) device, and that's what the
+  // `hwupload=derive_device=vaapi` step in `hwCropPrefix` needs to
+  // resolve correctly. Setting `-filter_hw_device ocl` would re-route
+  // every device-less filter through opencl, and Intel iHD reports
+  // `Query format failed: Function not implemented` (ENOSYS) when
+  // hwupload tries to materialise a vaapi context from an opencl
+  // default — the visible failure for cropped HDR sessions was
+  // `Parsed_hwupload_3: Query format failed` followed by exit=218.
+  // `tonemap_opencl` doesn't need to be the default device: it picks
+  // its device from the upstream `hwmap=derive_device=opencl` frame
+  // context, and the round-trip back to qsv uses an explicit
+  // `derive_device=qsv` on the closing hwmap.
   if (tonemap && !useVaapiTonemap && decoder.outputSurface === 'vaapi') {
-    args.push('-init_hw_device', 'opencl=ocl:0.0', '-filter_hw_device', 'ocl');
+    args.push('-init_hw_device', 'opencl=ocl:0.0');
   }
 
   args.push('-i', inputPath);
@@ -404,8 +425,19 @@ export function buildFfmpegArgs(
     : '';
 
   // For HW paths with crop: hwdownload to CPU, crop, then hwupload back.
+  // The intermediate `format=` is explicit on purpose — without it
+  // ffmpeg can insert an `auto_scale_0` between hwdownload and crop
+  // (the crop filter refuses some HW-adjacent formats), and that
+  // auto-scaler trips scale_vaapi's "fixed-size pool" check
+  // downstream. Pick the format that matches the source bit depth so
+  // crop runs in the same colour space as the decoded surface: for a
+  // 10-bit HDR source, `format=nv12` would silently downconvert to
+  // 8-bit BT.709-clamped pixels before the tonemap filter ever runs,
+  // which is what produced the dark image on cropped HDR sources
+  // (Mission Impossible 2160p HDR10 + crop).
+  const cropPxFmt = sourceBitDepth === 10 ? 'p010le' : 'nv12';
   const hwCropPrefix = cropStr
-    ? `hwdownload,format=nv12,${cropStr},hwupload=derive_device=vaapi,`
+    ? `hwdownload,format=${cropPxFmt},${cropStr},hwupload=derive_device=vaapi,`
     : '';
 
   const encoderInput: EncoderInput = {
@@ -438,6 +470,7 @@ export function buildFfmpegArgs(
       tonemapCpu,
     },
     tonemap,
+    tonemapPath,
     hasBurnIn: !!burnIn?.filter,
     hasCrop: !!crop,
     inputSurface: decoder.outputSurface,

@@ -6,18 +6,32 @@ export interface PlayerStats {
   containerBitrate: string;
   outputFormat: string;
   outputFps: string;
-  audioTranscodeNote: string;
 
   videoLabel: string;
   videoStreamBitrate: string;
   videoProfileLine: string;
   videoPlaybackMode: string;
+  /** Detected letterbox crop rectangle (`"WxH (offset X,Y)"`) when
+   *  the source was flagged by cropdetect. Empty when no crop. */
+  crop: string;
+  /** HDR → SDR tone-mapping filter the backend actually picked
+   *  (after `auto` resolution + opencl-probe fallback). Empty when no
+   *  tone-mapping pass runs on this session. */
+  tonemapping: string;
+  /** `transcodeReasons` flags that drive the video re-encode (any
+   *  `Video*` flag plus `SubtitleBurnIn`). Empty when the video
+   *  stream is copied. Container-level flags are excluded — they
+   *  appear in the stream section, not here. */
+  videoTranscodeReasons: string[];
   droppedFrames: number;
 
   audioLabel: string;
   audioStreamBitrate: string;
   audioDetailLine: string;
   audioPlaybackMode: string;
+  /** `transcodeReasons` flags that drive the audio re-encode (any
+   *  `Audio*` flag). Empty when the audio stream is copied. */
+  audioTranscodeReasons: string[];
 }
 
 @Component({
@@ -43,9 +57,6 @@ export interface PlayerStats {
               @if (s.outputFormat) {
                 <div class="text-white/60">&rarr; {{ s.outputFormat | uppercase }}@if (s.outputFps) { ({{ s.outputFps }}) }</div>
               }
-              @if (s.audioTranscodeNote) {
-                <div class="text-white/50 text-[10px] sm:text-xs">{{ s.audioTranscodeNote }}</div>
-              }
             </div>
           </section>
 
@@ -60,6 +71,15 @@ export interface PlayerStats {
               }
               <div class="text-white/70 text-[10px] sm:text-xs">{{ s.videoProfileLine }}</div>
               <div class="text-white/60">&rarr; {{ s.videoPlaybackMode }}</div>
+              @if (s.crop) {
+                <div class="text-white/60">Crop&nbsp;&nbsp;<span class="font-semibold">{{ s.crop }}</span></div>
+              }
+              @if (s.tonemapping) {
+                <div class="text-white/60">Tonemapping&nbsp;&nbsp;<span class="font-semibold">{{ s.tonemapping }}</span></div>
+              }
+              @if (s.videoTranscodeReasons.length) {
+                <div class="text-white/60">Reasons&nbsp;&nbsp;<span class="font-semibold">{{ s.videoTranscodeReasons.join(', ') }}</span></div>
+              }
               <div class="text-white/70">Dropped frames&nbsp;&nbsp;<span class="font-semibold">{{ s.droppedFrames }}</span></div>
             </div>
           </section>
@@ -75,6 +95,9 @@ export interface PlayerStats {
               }
               <div class="text-white/70 text-[10px] sm:text-xs">Sample rate&nbsp;&nbsp;{{ s.audioDetailLine }}</div>
               <div class="text-white/60">&rarr; {{ s.audioPlaybackMode }}</div>
+              @if (s.audioTranscodeReasons.length) {
+                <div class="text-white/60">Reasons&nbsp;&nbsp;<span class="font-semibold">{{ s.audioTranscodeReasons.join(', ') }}</span></div>
+              }
             </div>
           </section>
         }

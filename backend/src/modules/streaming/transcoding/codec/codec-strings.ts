@@ -28,13 +28,13 @@ export function h264CodecString(target: EncoderTarget): string {
 /** HEVC SDR Main 8-bit — `hvc1.1.6.L<level*30>.B0`. Profile = Main,
  *  profile-compat = `6`, tier = Main (`L`). */
 export function hevcMainCodecString(target: EncoderTarget): string {
-  return `hvc1.1.6.${hevcLevel(target.height)}.B0`;
+  return `hvc1.1.6.${hevcLevel(target)}.B0`;
 }
 
 /** HEVC HDR Main10 — `hvc1.2.4.L<level*30>.B0`. Profile space prefix
  *  `2` = profile_space + profile_idc combined (Main10), compat `4`. */
 export function hevcMain10CodecString(target: EncoderTarget): string {
-  return `hvc1.2.4.${hevcLevel(target.height)}.B0`;
+  return `hvc1.2.4.${hevcLevel(target)}.B0`;
 }
 
 /** AV1 — `av01.<profile>.<level><tier>.<bit_depth>` (simplified form;
@@ -83,12 +83,23 @@ export function videoRange(hdr: HdrFormat | null): 'SDR' | 'PQ' | 'HLG' {
 // ───────────────────────── helpers ─────────────────────────
 
 /** HEVC level encoded as `L<level_idc>` where `level_idc = level * 30`.
- *  Sized to cover 60 fps at the rung resolution. */
-function hevcLevel(height: number): string {
-  if (height >= 2160) return 'L153'; // L5.1 — 4K60
-  if (height >= 1080) return 'L123'; // L4.1 — 1080p60
-  if (height >= 720) return 'L120'; //  L4.0 — 720p60
-  return 'L93'; //                      L3.1 — up to 720p30
+ *  Picked to match the level the encoder will pick on its own — both
+ *  HEVC Spec Annex A and every encoder we drive (hevc_qsv, hevc_vaapi,
+ *  hevc_nvenc, hevc_videotoolbox, libx265) choose the lowest level
+ *  whose `MaxLumaSr` covers the actual luma sample rate. Driving the
+ *  master CODECS string from the same arithmetic keeps the declared
+ *  level lock-stepped to the bitstream — forcing the level via
+ *  `-level:v` blows up hevc_qsv on iHD ("some encoding parameters are
+ *  not supported by the QSV runtime"), so we match what the encoder
+ *  emits instead of telling it what to emit. */
+function hevcLevel(target: EncoderTarget): string {
+  const lumaPerSec = target.width * target.height * target.frameRate;
+  if (lumaPerSec <= 33_177_600) return 'L93'; //   L3.1
+  if (lumaPerSec <= 66_846_720) return 'L120'; //  L4.0
+  if (lumaPerSec <= 133_693_440) return 'L123'; // L4.1
+  if (lumaPerSec <= 267_386_880) return 'L150'; // L5.0
+  if (lumaPerSec <= 534_773_760) return 'L153'; // L5.1
+  return 'L156'; //                                L5.2
 }
 
 /** AV1 level encoded as `<level_idc>` (decimal). Levels follow the AV1

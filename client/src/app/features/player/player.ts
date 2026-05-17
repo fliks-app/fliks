@@ -390,8 +390,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const outputFormat = isHls ? 'HLS' : '';
     const outputFps = src?.frameRate ?? '';
 
-    const audioTranscodeNote = !effectiveAudioCopy && src?.audioCodec !== 'aac'
-      ? 'Audio transcoded to a compatible codec'
+    // Letterbox crop detected at import time (ffprobe `cropdetect`).
+    // The transcode pipeline cuts these bars on every cropped session;
+    // surfacing the rectangle in the overlay lets the user see why
+    // the output resolution doesn't match the source.
+    const cropLine = src?.crop
+      ? `${src.crop.width}x${src.crop.height} (offset ${src.crop.x},${src.crop.y})`
       : '';
 
     // --- Video label ---
@@ -467,9 +471,39 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (playingHeight && src?.height && playingHeight < src.height) {
       videoPlaybackMode += ` \u2192 ${playingWidth}x${playingHeight}`;
     }
-    if (pi?.tonemapping) {
-      videoPlaybackMode += ' (HDR \u2192 SDR)';
-    }
+
+    // Tonemapping line. Show the ACTUALLY-used filter (post `auto`
+    // resolution + opencl-probe fallback), not the admin pick \u2014 when
+    // the boot probe failed, `auto` becomes `vaapi` even if the admin
+    // setting says `auto`/`opencl`. Source of truth is `pi.tonemapAlgo`
+    // set by the backend in playback-info.
+    const tonemapLabel: Record<string, string> = {
+      vaapi: 'tonemap_vaapi',
+      opencl: 'tonemap_opencl',
+      qsv: 'vpp_qsv tonemap',
+    };
+    const tonemapping =
+      pi?.tonemapping && pi?.tonemapAlgo
+        ? (tonemapLabel[pi.tonemapAlgo] ?? pi.tonemapAlgo)
+        : pi?.tonemapping
+          ? 'enabled'
+          : '';
+
+    // Split transcode-reason flags by what they actually re-encode so
+    // each section's "Reasons" line only shows what's relevant to it.
+    // Video re-encode triggers: any `Video*` flag plus `SubtitleBurnIn`
+    // (which composites text frames into the video stream). Audio
+    // re-encode triggers: any `Audio*` flag. `Container*` is intentionally
+    // excluded \u2014 it's a packaging-level reason that already shows up in
+    // the "\u2192 HLS" line of the stream section, and it doesn't tell you
+    // anything about why this codec specifically had to change.
+    const allFlags = (pi?.transcodeReasons ?? []).map((r) => r.flag);
+    const videoTranscodeReasons = effectiveVideoCopy
+      ? []
+      : allFlags.filter((f) => f.startsWith('Video') || f === 'SubtitleBurnIn');
+    const audioTranscodeReasons = effectiveAudioCopy
+      ? []
+      : allFlags.filter((f) => f.startsWith('Audio'));
 
     // --- Audio ---
     const channelLabel = src?.audioChannelLayout ?? (src?.audioChannels ? `${src.audioChannels}ch` : '');
@@ -504,16 +538,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       containerBitrate,
       outputFormat,
       outputFps,
-      audioTranscodeNote,
       videoLabel,
       videoStreamBitrate,
       videoProfileLine,
       videoPlaybackMode,
+      crop: cropLine,
+      tonemapping,
+      videoTranscodeReasons,
       droppedFrames: engineStats?.droppedFrames ?? 0,
       audioLabel,
       audioStreamBitrate,
       audioDetailLine,
       audioPlaybackMode,
+      audioTranscodeReasons,
     };
   });
 
@@ -797,14 +834,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
               },
               manifest: {
                 retryParameters: { timeout: 30_000, maxAttempts: 5, baseDelay: 1000 },
-                // Tell Shaka the HLS-TS codec mime type upfront so it doesn't
-                // fetch seg 0 purely to probe. Matches our transcode output
-                // (H.264 High @ L4.0 + AAC-LC) + the master playlist CODECS
-                // attribute.
-                hls: {
-                  mediaPlaylistFullMimeType:
-                    'video/mp2t; codecs="avc1.640028,mp4a.40.2"',
-                },
               },
               ...(preferredLang ? { preferredAudioLanguage: preferredLang } : {}),
             });

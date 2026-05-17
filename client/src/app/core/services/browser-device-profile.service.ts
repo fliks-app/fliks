@@ -222,16 +222,23 @@ export class BrowserDeviceProfileService {
   // ---------------------------------------------------------------------------
 
   private testType(video: HTMLVideoElement, hasMSE: boolean, mime: string): boolean {
-    if (video.canPlayType(mime)) return true;
-    if (hasMSE && MediaSource.isTypeSupported(mime)) return true;
-    return false;
+    if (hasMSE) return MediaSource.isTypeSupported(mime);
+    return !!video.canPlayType(mime);
   }
 
+  /** Codec support gate for the device profile sent to the backend.
+   *
+   *  Browser playback runs through Shaka + MSE, so the codec list MUST be
+   *  what MSE.isTypeSupported accepts. `canPlayType` can return `"maybe"`
+   *  for codecs MSE actually rejects (HEVC on Chrome Linux is the
+   *  textbook case), and the truthy `"maybe"` would let the backend
+   *  pick a codec that Chrome's SourceBuffer refuses at appendBuffer
+   *  time — surfaces to the user as Shaka error 3014
+   *  MEDIA_SOURCE_OPERATION_FAILED on every first segment. */
   private testCodec(video: HTMLVideoElement, hasMSE: boolean, mime: string, codec: string): boolean {
     const full = codec ? `${mime}; codecs="${codec}"` : mime;
-    if (video.canPlayType(full)) return true;
-    if (hasMSE && MediaSource.isTypeSupported(full)) return true;
-    return false;
+    if (hasMSE) return MediaSource.isTypeSupported(full);
+    return !!video.canPlayType(full);
   }
 
   /** Probe max H.264 level by testing progressively higher levels */
