@@ -19,6 +19,10 @@ import type {
 import { decoderRegistry, findQsvNativeDecoder } from './codec/decoders';
 import { isDecoderEnabled } from './codec/decoder-probe';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
+import {
+  isTonemapOpenclEnabled,
+  isTonemapOpenclEnabledWithCrop,
+} from './codec/tonemap-opencl-probe';
 import { resolveTonemapPath } from './tonemap-path';
 import { normaliseSourceCodec } from './codec/normalise';
 
@@ -225,21 +229,29 @@ export function buildFfmpegArgs(
   // `useVaapiTonemap` flag below, keeping the two decisions in sync.
   const tonemapPath = resolveTonemapPath(tonemapAlgo, { hasCrop: !!crop });
 
-  // The qsv-native path is normally gated on `!!crop` because the
-  // single-pass `vpp_qsv` filter was added to keep crop on the QSV
-  // device (no `hwdownload→crop→hwupload` roundtrip). When the
-  // session also needs HDR→SDR tonemap, qsv-native forces the
-  // `vpp_qsv=tonemap=1` chain — which can ONLY tonemap via the
-  // fixed-function VPP HDR LUT. Routing tonemap through opencl or
-  // vaapi requires staying on the vaapi-decode chain so the filter
-  // graph can insert `hwmap=opencl` / `tonemap_vaapi` after
-  // `scale_vaapi`. Hence: enable qsv-native for crop-only sessions
-  // unconditionally; for crop+tonemap sessions, only when the
-  // chosen tonemap path is `qsv` (and the probe confirms the LUT).
+  // The qsv-native path keeps the whole pipeline on the QSV device
+  // (no `hwdownload→crop→hwupload` round-trip), which is roughly 3×
+  // faster than the vaapi-decode chain on cropped HDR sessions.
+  // Enable it when:
+  //  - crop-only sessions: always (no tonemap to coordinate)
+  //  - tonemap via vpp_qsv LUT: when the probe confirmed the LUT
+  //  - tonemap via opencl: `vpp_qsv` does crop+scale on QSV, then
+  //    `hwmap=opencl` reads QSV surfaces, `tonemap_opencl` runs the
+  //    reinhard curve, and the reverse `hwmap=qsv` brings the SDR
+  //    nv12 back to the encoder (same probe gate as the
+  //    vaapi-decode opencl chain)
+  //  - tonemap via vaapi: NOT compatible — tonemap_vaapi consumes
+  //    vaapi surfaces; if the input is QSV-native, we have no way
+  //    to feed it without a hwmap that doesn't exist
+  const tonemapOpenclOk = !!crop
+    ? isTonemapOpenclEnabledWithCrop()
+    : isTonemapOpenclEnabled();
   const qsvNativeAvailable =
     hasUsableQsvNativeDecoder &&
-    (!!crop || tonemapPath === 'qsv') &&
-    (!tonemap || (tonemapPath === 'qsv' && isVppQsvTonemapEnabled()));
+    (!!crop || tonemapPath === 'qsv' || tonemapPath === 'opencl') &&
+    (!tonemap ||
+      (tonemapPath === 'qsv' && isVppQsvTonemapEnabled()) ||
+      (tonemapPath === 'opencl' && tonemapOpenclOk));
   const qsvCanCrop =
     qsvNativeAvailable ||
     (hwAccel === 'qsv' && !!crop && !!tonemap && !burnIn?.filter);
@@ -458,6 +470,7 @@ export function buildFfmpegArgs(
       tonemapCpu,
     },
     tonemap,
+    tonemapPath,
     hasBurnIn: !!burnIn?.filter,
     hasCrop: !!crop,
     inputSurface: decoder.outputSurface,

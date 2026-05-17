@@ -85,6 +85,14 @@ export interface EncoderInput {
    *  Encoders use this to force BT.709 color tags on the SPS VUI so the
    *  bitstream doesn't carry source HDR tags through with SDR pixels. */
   tonemap: boolean;
+  /** Resolved tonemap filter chain (post `auto` resolution + boot
+   *  probe). The qsv-native filter helper (`qsvScaleFilter*`) branches
+   *  on this: `'opencl'` plus qsv input surfaces emits a `vpp_qsv`
+   *  crop+scale pass followed by an opencl tonemap round-trip — no
+   *  CPU bounce, ~3× faster on cropped HDR than the legacy
+   *  `hwdownload→CPU crop→hwupload→scale_vaapi→opencl` chain. Only
+   *  meaningful when `tonemap` is true. */
+  tonemapPath: 'vaapi' | 'opencl' | 'qsv';
   hasBurnIn: boolean;
   hasCrop: boolean;
   /** Surface format on the decoder's output side. Encoders use it to
