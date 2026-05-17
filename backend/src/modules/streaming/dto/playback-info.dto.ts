@@ -75,6 +75,14 @@ export interface PlaybackInfoResponse {
   /** Whether HDR→SDR tone mapping is being applied */
   tonemapping: boolean;
 
+  /** Actual tone-mapping filter the session will use, after admin
+   *  setting + boot-probe resolution. `null` when no tone-mapping
+   *  pass runs. Distinct from the admin `streaming_tonemap_algo`
+   *  setting because `'auto'` resolves to `'opencl'` when the boot
+   *  probe enabled it and `'vaapi'` otherwise — stats overlays show
+   *  this value, not the (potentially-stale) admin pick. */
+  tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | null;
+
   /**
    * Cibles de débit par rung de qualité (profils FFmpeg).
    * Présent si playMethod === 'Transcode', ou **DirectStream** (master avec remux + échelle transcodage).

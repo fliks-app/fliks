@@ -12,6 +12,15 @@ export interface PlayerStats {
   videoStreamBitrate: string;
   videoProfileLine: string;
   videoPlaybackMode: string;
+  /** HDR → SDR tone-mapping filter the backend actually picked
+   *  (after `auto` resolution + opencl-probe fallback). Empty when no
+   *  tone-mapping pass runs on this session. */
+  tonemapping: string;
+  /** Human-readable reasons the backend went off the DirectPlay path
+   *  (one entry per `transcodeReasons` flag — quality lock, crop,
+   *  container mismatch, audio downmix, …). Empty when the session
+   *  is DirectPlay. */
+  transcodeReasons: string[];
   droppedFrames: number;
 
   audioLabel: string;
@@ -60,6 +69,12 @@ export interface PlayerStats {
               }
               <div class="text-white/70 text-[10px] sm:text-xs">{{ s.videoProfileLine }}</div>
               <div class="text-white/60">&rarr; {{ s.videoPlaybackMode }}</div>
+              @if (s.tonemapping) {
+                <div class="text-white/60">Tonemapping&nbsp;&nbsp;<span class="font-semibold">{{ s.tonemapping }}</span></div>
+              }
+              @if (s.transcodeReasons.length) {
+                <div class="text-white/60">Reasons&nbsp;&nbsp;<span class="font-semibold">{{ s.transcodeReasons.join(', ') }}</span></div>
+              }
               <div class="text-white/70">Dropped frames&nbsp;&nbsp;<span class="font-semibold">{{ s.droppedFrames }}</span></div>
             </div>
           </section>

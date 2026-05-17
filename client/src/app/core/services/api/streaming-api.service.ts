@@ -24,6 +24,10 @@ export interface PlaybackInfoResponse {
   outputContainer: string;
   hwAccel: string;
   tonemapping: boolean;
+  /** Resolved tone-mapping filter the backend will actually use
+   *  (`'auto'` resolves to opencl or vaapi depending on the boot
+   *  probe). Null when no tone-mapping pass runs on this session. */
+  tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | null;
   /** Cibles par rung (transcodage). */
   transcodeBitrateByQuality?: Record<
     string,

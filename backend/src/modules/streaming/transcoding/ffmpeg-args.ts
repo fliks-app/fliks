@@ -19,7 +19,7 @@ import type {
 import { decoderRegistry, findQsvNativeDecoder } from './codec/decoders';
 import { isDecoderEnabled } from './codec/decoder-probe';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
-import { isTonemapOpenclEnabled } from './codec/tonemap-opencl-probe';
+import { resolveTonemapPath } from './tonemap-path';
 import { normaliseSourceCodec } from './codec/normalise';
 
 export interface BuildFfmpegArgsOptions {
@@ -223,12 +223,7 @@ export function buildFfmpegArgs(
   // otherwise; the explicit overrides bypass the probe. This single
   // value drives both the qsv-native eligibility gate AND the
   // `useVaapiTonemap` flag below, keeping the two decisions in sync.
-  const tonemapPath: 'vaapi' | 'qsv' | 'opencl' =
-    tonemapAlgo === 'auto'
-      ? isTonemapOpenclEnabled()
-        ? 'opencl'
-        : 'vaapi'
-      : tonemapAlgo;
+  const tonemapPath = resolveTonemapPath(tonemapAlgo);
 
   // The qsv-native path is normally gated on `!!crop` because the
   // single-pass `vpp_qsv` filter was added to keep crop on the QSV

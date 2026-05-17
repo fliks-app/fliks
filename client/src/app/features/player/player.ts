@@ -467,9 +467,30 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (playingHeight && src?.height && playingHeight < src.height) {
       videoPlaybackMode += ` \u2192 ${playingWidth}x${playingHeight}`;
     }
-    if (pi?.tonemapping) {
-      videoPlaybackMode += ' (HDR \u2192 SDR)';
-    }
+
+    // Tonemapping line. Show the ACTUALLY-used filter (post `auto`
+    // resolution + opencl-probe fallback), not the admin pick \u2014 when
+    // the boot probe failed, `auto` becomes `vaapi` even if the admin
+    // setting says `auto`/`opencl`. Source of truth is `pi.tonemapAlgo`
+    // set by the backend in playback-info.
+    const tonemapLabel: Record<string, string> = {
+      vaapi: 'tonemap_vaapi',
+      opencl: 'tonemap_opencl',
+      qsv: 'vpp_qsv tonemap',
+    };
+    const tonemapping =
+      pi?.tonemapping && pi?.tonemapAlgo
+        ? `HDR \u2192 SDR (${tonemapLabel[pi.tonemapAlgo] ?? pi.tonemapAlgo})`
+        : pi?.tonemapping
+          ? 'HDR \u2192 SDR'
+          : '';
+
+    // Transcode reasons surfaced verbatim \u2014 `flag` (machine name,
+    // short) is more useful in a debug overlay than the localised
+    // `message` (long French sentence).
+    const transcodeReasons = effectiveVideoCopy
+      ? []
+      : (pi?.transcodeReasons ?? []).map((r) => r.flag);
 
     // --- Audio ---
     const channelLabel = src?.audioChannelLayout ?? (src?.audioChannels ? `${src.audioChannels}ch` : '');
@@ -509,6 +530,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       videoStreamBitrate,
       videoProfileLine,
       videoPlaybackMode,
+      tonemapping,
+      transcodeReasons,
       droppedFrames: engineStats?.droppedFrames ?? 0,
       audioLabel,
       audioStreamBitrate,

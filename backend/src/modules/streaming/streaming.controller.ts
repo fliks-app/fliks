@@ -31,6 +31,7 @@ import {
   profileFitsSource,
 } from './transcoding';
 import { secondsToSegmentIndex } from './transcoding/constants';
+import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
@@ -581,8 +582,16 @@ export class StreamingController {
       ? resolved.mediaFile.streamInfo.chapters
       : undefined;
 
+    // Surface the actually-used tonemap filter (after `auto` resolution
+    // + boot probe). Stats overlay reads this so it can show what's
+    // running, not what was originally requested.
+    const tonemapAlgo = result.tonemapping
+      ? resolveTonemapPath(ss.tonemapAlgo)
+      : null;
+
     return {
       ...result,
+      tonemapAlgo,
       durationSeconds: duration,
       markers,
       chapters,
