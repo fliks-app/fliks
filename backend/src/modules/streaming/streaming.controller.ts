@@ -1155,6 +1155,13 @@ export class StreamingController {
         res.setHeader('Content-Type', segmentContentType(segment));
         res.setHeader('Content-Length', String(stat.size));
         res.setHeader('Access-Control-Allow-Origin', '*');
+        // Cloudflare (and any intermediate CDN) will gladly cache a
+        // 0-byte 200 response under the URL and serve it back for 4h
+        // by default — turning a transient cold-start race into a
+        // session-killing permanent failure. Mark the init un-cacheable
+        // so the CDN always re-asks the origin where our size check
+        // can refuse to send the empty file.
+        res.setHeader('Cache-Control', 'no-store');
         const initStream = fs.createReadStream(initPath);
         initStream.on('error', () => {
           if (!res.headersSent) res.status(404).end();
@@ -1177,9 +1184,23 @@ export class StreamingController {
         varStreamMap && quality !== 'remux' ? `0/${segment}` : segment;
       const segPath = `${existing.cachePath}/${segName}`;
       if (fs.existsSync(segPath)) {
+        // Same 0-byte CDN-poisoning trap as the init handler above: a
+        // racing segment write can leave an empty file on disk, and an
+        // intermediate cache (Cloudflare with `Cache-Control: max-age`
+        // by default) will pin that empty response under the URL.
+        // Stat-check and refuse so the CDN never caches the broken
+        // version, then mark every segment served from a live transcode
+        // session un-cacheable for the same reason.
+        const segStat = fs.statSync(segPath);
+        if (segStat.size === 0) {
+          res.status(404).end();
+          return;
+        }
         existing.lastAccess = Date.now();
         res.setHeader('Content-Type', segmentContentType(segment));
+        res.setHeader('Content-Length', String(segStat.size));
         res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Cache-Control', 'no-store');
         const stream = fs.createReadStream(segPath);
         stream.on('error', () => {
           if (!res.headersSent) res.status(404).end();
@@ -1225,8 +1246,15 @@ export class StreamingController {
           10_000,
         );
         if (segPath) {
+          const earlyStat = fs.statSync(segPath);
+          if (earlyStat.size === 0) {
+            res.status(404).end();
+            return;
+          }
           res.setHeader('Content-Type', segmentContentType(segment));
+          res.setHeader('Content-Length', String(earlyStat.size));
           res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Cache-Control', 'no-store');
           const stream = fs.createReadStream(segPath);
           stream.on('error', () => {
             if (!res.headersSent) res.status(404).end();
@@ -1280,8 +1308,15 @@ export class StreamingController {
       return;
     }
 
+    const finalStat = fs.statSync(segPath);
+    if (finalStat.size === 0) {
+      res.status(404).end();
+      return;
+    }
     res.setHeader('Content-Type', segmentContentType(segment));
+    res.setHeader('Content-Length', String(finalStat.size));
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'no-store');
     const stream = fs.createReadStream(segPath);
     stream.on('error', () => {
       if (!res.headersSent) res.status(404).end();
