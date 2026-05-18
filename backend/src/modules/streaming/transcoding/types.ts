@@ -186,4 +186,21 @@ export interface TranscodeSession {
    *  change, etc.) so the close handler doesn't log a spurious "exited
    *  WITHOUT producing first segment" warning. */
   intentionallyKilled?: boolean;
+  /** Audio output the session was spawned for. Compared against the
+   *  fresh playback-info plan on every subsequent /playback-info call;
+   *  a codec drift (e.g. Chromecast picking AAC where browser was on
+   *  EAC-3 copy) forces a kill+respawn so the segments stay coherent
+   *  with the master.m3u8 CODECS string the player will see. */
+  audioPlan?:
+    | { mode: 'copy'; codec: string }
+    | {
+        mode: 'transcode';
+        codec: 'aac' | 'ac3' | 'eac3';
+        bitrateBps: number;
+      };
+  /** Video variant the session was spawned for. Same role as
+   *  `audioPlan` above: any divergence between a fresh playback-info
+   *  decision and the running session means the segments contradict
+   *  the manifest, so the session must respawn. */
+  videoVariant?: import('./codec/types').CodecVariant;
 }
