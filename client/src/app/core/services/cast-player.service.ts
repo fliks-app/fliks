@@ -113,7 +113,7 @@ export class CastPlayerService {
    *  that doesn't answer the probe), we fall back to AAC-only stereo — a
    *  Cast generation we don't recognise is safer downmixed than failing
    *  to play. */
-  private getCastDeviceProfile(): DeviceProfile {
+  getCastDeviceProfile(): DeviceProfile {
     const cs = this.castSettings.get();
     const maxChannels = cs.audioChannels ?? 2;
 
