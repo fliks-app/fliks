@@ -6,9 +6,9 @@
     <nav
       appTvRow
       class="navbar fixed left-0 right-0 z-30 transition-all duration-300"
-      style="padding-top: calc(env(safe-area-inset-top, 0px) + 4px)"
-      [class.top-0]="!tv.isTv()"
-      [class.top-4]="tv.isTv()"
+      [style.padding-top]="tv.isTizen() ? '0.5rem' : 'calc(env(safe-area-inset-top, 0px) + 4px)'"
+      [class.top-0]="!tv.isTv() || tv.isTizen()"
+      [class.top-4]="tv.isAndroidTv()"
       [class.lg:hidden]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
       [class.md:hidden]="device.isTablet() && navbar.effectiveSidebarPinned()"
       [class.-translate-y-full]="navbarHidden()"

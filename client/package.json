@@ -16,10 +16,10 @@
     "cap:open:ios": "npx cap open ios",
     "cap:build": "npm run build && npx cap sync android",
     "cap:build:ios": "npm run build && npx cap sync ios",
-    "tizen:build": "ng build --configuration tizen && node tizen/build-wgt.mjs",
+    "tizen:build": "BROWSERSLIST='chrome 85' ng build --configuration tizen && node tizen/build-wgt.mjs",
     "tizen:deploy": "sdb connect $TV_IP && sdb install dist/Fliks-$(node -p \"require('./package.json').version\").wgt",
     "tizen:build:deploy": "npm run tizen:build && npm run tizen:deploy",
-    "webos:build": "ng build --configuration webos && node webos/build-ipk.mjs"
+    "webos:build": "BROWSERSLIST='chrome 85' ng build --configuration webos && node webos/build-ipk.mjs"
   },
   "packageManager": "npm@10.8.2",
   "dependencies": {
@@ -55,8 +55,13 @@
     "@angular/build": "^21.2.5",
     "@angular/cli": "^21.2.5",
     "@angular/compiler-cli": "^21.2.0",
+    "@csstools/postcss-cascade-layers": "^6.0.0",
+    "@csstools/postcss-color-mix-function": "^4.0.4",
+    "@csstools/postcss-is-pseudo-class": "^6.0.0",
+    "@csstools/postcss-oklab-function": "^5.0.4",
     "@webosose/ares-cli": "^2.4.0",
     "jsdom": "^28.0.0",
+    "postcss-preset-env": "^11.3.0",
     "prettier": "^3.8.1",
     "typescript": "~5.9.2",
     "vitest": "^4.0.8"

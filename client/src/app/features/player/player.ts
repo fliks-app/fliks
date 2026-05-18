@@ -32,6 +32,7 @@ import {
 import { CastSettingsService } from '../../core/services/cast-settings.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
+import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { formatAudioLabel, parseAudioIndex, SpriteMetadata, widthForProfile } from '../../core/utils/player.utils';
 import {
@@ -42,6 +43,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 
 import { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import { ShakaEngine } from '../../core/services/playback-engine/shaka-engine';
+import { TizenEngine, isTizenAvplayAvailable } from '../../core/services/playback-engine/tizen-engine';
 import { NativePlayer } from '../../core/plugins/native-player.plugin';
 import { NativeEngine } from '../../core/services/playback-engine/native-engine';
 import { PlayerStateService } from '../../core/services/player-state.service';
@@ -76,7 +78,10 @@ import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats
   styles: [`
     .player-container {
       position: fixed;
-      inset: 0;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
       background-color: #000;
       z-index: 100;
       overflow: hidden;
@@ -153,6 +158,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly serverConfig = inject(ServerConfigService);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly navHistory = inject(NavigationHistoryService);
+  private readonly toast = inject(ToastService);
   private readonly navbar = inject(NavbarService);
   private readonly translate = inject(TranslateService);
 
@@ -170,6 +176,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  + `castService` directly. */
   private engine: PlaybackEngine | null = null;
   readonly isNativeEngine = signal(false);
+  /** True when AVPlay (Samsung TV native HW decoder) is driving playback —
+   *  same UX treatment as a Capacitor native engine: the WebView paints on
+   *  top of a transparent layer above the hardware video surface. */
+  readonly isTizenEngine = signal(false);
+  /** Tizen WebApp running on a Samsung TV with AVPlay available. Distinct
+   *  from `isNative` (Capacitor) and from `device.isTv()` (which is true
+   *  on any TV form factor including the placeholder browser preview). */
+  readonly isTizen = isTizenAvplayAvailable();
 
   /** Template binding — true when using native (ExoPlayer/AVPlayer) engine. */
   get nativeEngine(): boolean {
@@ -242,7 +256,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return buildCastAudioOptions(file?.streamInfo?.audio, this.translate);
   });
 
-  readonly isNative = Capacitor.isNativePlatform();
+  /** True on every standalone bundle (Capacitor + Smart TV). Drives the
+   *  controls bar: fullscreen toggle hidden, PiP toggle hidden, dpad-
+   *  friendly defaults. Sourced from ServerConfigService so the rule
+   *  matches the rest of the app instead of probing Capacitor directly. */
+  readonly isNative = this.serverConfig.isNative;
 
   // Sync local playback with Cast connection state
   private wasCasting = false;
@@ -732,8 +750,53 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // ExoPlayer on Android (incl. TV), AVPlayer on iOS. They beat the
         // WebView's HTMLMediaElement on every axis we care about: HW
         // decoding, HEVC/AV1 support, HDR, Atmos passthrough, lower latency.
+        // Samsung Tizen goes through AVPlay for the same reasons (HW HEVC/
+        // AV1, Dolby Atmos passthrough, transparent video surface behind
+        // the WebView — Shaka chokes on Tizen 6.5 MSE: e.g. EAC3 audio
+        // claims support but `addSourceBuffer` throws).
         // Web (browser) keeps the Shaka path.
-        if (this.isNative) {
+        if (this.isTizen) {
+          await this.createTizenEngine();
+
+          // Subtitle fetch in parallel with engine load — AVPlay's
+          // `setExternalSubtitlePath` waits for the player to be in
+          // READY/PLAYING state, so we load(...) first, then attach
+          // the active subtitle after prepareAsync resolves.
+          const tizenSubsPromise = this.trackManager.loadSubtitles(
+            this.mediaId, this.mediaFileId, this.streamingApi, this.media,
+          );
+
+          const token = this.authService.accessToken;
+          const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+          if (mode === 'direct') {
+            const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
+            await this.engine!.load(streamUrl, startTime, 'video/mp4', headers);
+          } else {
+            const savedQualityId = this.activeQualityId();
+            const tvStartQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
+            const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId, tvStartQuality, startTime);
+            await this.engine!.load(hlsUrl, startTime, undefined, headers);
+          }
+
+          // Subtitles loaded — expose to the picker. The full auto-pick
+          // path (remembered selection, language match, forced subs) is
+          // shared with native/Shaka further down, via `autoSelectSubtitle`.
+          const subs = await tizenSubsPromise;
+          this.availableSubtitles.set(subs);
+          await this.trackManager.autoSelectSubtitle(
+            subs,
+            this.availableAudioTracks(),
+            this.activeAudioTrackId(),
+            this.mediaFileId,
+            async (sub) => {
+              if (!sub) return;
+              this.engine!.selectTextTrack(sub);
+              this.activeSubtitleId.set(sub.id);
+            },
+            this.mediaId,
+          );
+        } else if (this.isNative) {
           // Start subtitle fetch in parallel with native engine creation so
           // the network round-trip doesn't block ExoPlayer's init.
           const nativeSubsPromise = this.trackManager.loadSubtitles(
@@ -921,7 +984,34 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }, 1000);
     } catch (e: any) {
       console.error('[Player] Init error:', e?.code, e?.category, e?.data, e);
-      this.state.error.set(e?.message ?? String(e));
+      const msg = e?.message ?? String(e);
+      this.state.error.set(msg);
+      // TV / Tizen engine path: the AVPlay <object> + the hidden <video>
+      // both stay parked on top of the error overlay if the engine dies
+      // during load(). Force the player UI back into a visible-DOM state
+      // so the user can read what blew up instead of staring at the
+      // pre-paint bg-base-200 plane.
+      if (this.isTizenEngine() && this.engine) {
+        document.documentElement.classList.remove('native-player-active');
+        const video = this.videoEl()?.nativeElement;
+        if (video) video.style.display = '';
+        try {
+          await this.engine.destroy();
+        } catch {
+          /* AVPlay state may already be torn down — fine */
+        }
+        this.engine = null;
+        this.isTizenEngine.set(false);
+        this.isNativeEngine.set(false);
+      }
+      // Surface a toast on top of everything — fixed z-[9999], rendered
+      // by the always-mounted <app-toast-container>, so it survives even
+      // when the player-container itself isn't laying out correctly.
+      try {
+        this.toast.error(msg.slice(0, 240));
+      } catch {
+        /* toast service may not be ready during early init — ignore */
+      }
     } finally {
       this.state.loading.set(false);
     }
@@ -1004,6 +1094,44 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.state.duration.set(video.duration);
       }
     });
+  }
+
+  private async createTizenEngine(): Promise<void> {
+    const video = this.videoEl()!.nativeElement;
+    // Hide the HTML5 <video> — AVPlay paints to its own hardware surface.
+    video.style.display = 'none';
+
+    const engine = new TizenEngine();
+    const container = this.containerEl()?.nativeElement ?? video.parentElement!;
+    await engine.init(container);
+
+    // Make the page transparent above the AVPlay surface — same trick as
+    // the Capacitor native engine on Android. `html.native-player-active`
+    // is the existing global hook the styles already key off.
+    document.documentElement.classList.add('native-player-active');
+
+    this.engine = engine;
+    this.isTizenEngine.set(true);
+    // Group with the native-engine UX (transparent overlay, controls hidden
+    // on idle, no Shaka-specific buffering hooks). Without this flag, code
+    // paths gated on `!isNativeEngine()` would treat AVPlay as a Shaka
+    // session and (e.g.) try to attach <video> listeners we no longer own.
+    this.isNativeEngine.set(true);
+    this.state.bindEngine(engine);
+
+    engine.on('firstFrame', () => {
+      this.state.videoStarted.set(true);
+    });
+
+    // Tizen audio-tracks listener is deliberately NOT wired. With MPEG-TS
+    // HLS the variant has a single muxed audio, so AVPlay's
+    // `getTotalTrackInfo()` only ever lists ONE entry — that would
+    // shrink the picker to a single option after each reload, even
+    // though the source has multiple languages. The shared streamInfo
+    // fallback (`populateAudioTracksFromStreamInfo` → `si-*` ids) gives
+    // us the full language list from the backend metadata, and the
+    // reload path on switch (see `onSelectAudioTrack` Tizen branch)
+    // applies the new track muxed-in via FFmpeg.
   }
 
   private async createNativeEngine(): Promise<void> {
@@ -1092,6 +1220,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private hideControls() {
     if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
     this.controlsVisible.set(false);
+    // Blur whatever was focused inside the controls so the next remote
+    // Enter/OK doesn't accidentally activate an invisible button
+    // (notably the back arrow at the top of the bar, which would quit
+    // the player). The next D-pad / OK press will fall through to the
+    // global key handler, show controls, and the user can navigate
+    // them deliberately.
+    if (typeof document !== 'undefined') {
+      const active = document.activeElement as HTMLElement | null;
+      if (active && active.closest('app-player-controls')) {
+        active.blur();
+      }
+    }
   }
 
   private resetHideTimer() {
@@ -1551,6 +1691,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    * doesn't apply on ExoPlayer/AVPlayer.
    */
   private applyNativeSubtitleStyle() {
+    // Subtitle styling on engines that own their own renderer:
+    // NativeEngine (ExoPlayer/AVPlayer) and TizenEngine (DOM overlay
+    // via webapis.avplay) both expose `setSubtitleStyle`. Shaka has its
+    // own CSS-variable path via `applySubtitleStyle()`. Duck-type the
+    // method so we don't import TizenEngine here just for the type.
+    if (!(this.engine && typeof (this.engine as NativeEngine).setSubtitleStyle === 'function')) {
+      return;
+    }
     const s = this.playerSettings.get();
     const extraMargin = this.controlsVisible() ? 10 : 0;
     (this.engine as NativeEngine).setSubtitleStyle({
@@ -1729,6 +1877,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
     if (!this.engine) return;
 
+    // When controls are hidden, the first remote press should only WAKE
+    // them — never activate the invisible button that happens to be
+    // focused. Without this, Enter/OK on TV silently triggers the back
+    // arrow (the first focusable inside the controls bar) and quits
+    // the player. We swallow the event after `showControls` so the
+    // default activation path doesn't fire.
+    // EXCLUSION: the Tizen Return key (keyCode 10009 / `XF86Back`) must
+    // bubble up to the window-level handler in `app.ts` — otherwise the
+    // user can't exit the player. Same for `Escape` on dev keyboards.
+    const isBackKey = e.keyCode === 10009 || e.key === 'XF86Back' || e.key === 'GoBack' || e.key === 'Escape';
+    if (!isBackKey && !this.controlsVisible() && this.device.isTv()) {
+      this.showControls();
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
     // ArrowLeft/Right are claimed by the seekbar when it owns focus, and used
     // for D-pad navigation between controls otherwise. Skip them here unless
     // no control has focus (in which case keep the legacy "background" seek).
@@ -1794,7 +1959,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.onSpeedChange(Math.min(2, this.playbackRate() + 0.25));
         break;
     }
-    this.showControls();
+    // Don't wake controls for the back key — the user wants to LEAVE.
+    // `app.ts` listens on `window` and dispatches `app:playerBack`,
+    // which (with no controls shown) goes straight to `onBack()`.
+    // Without this guard, the trailing `showControls()` fired first,
+    // `onPlayerBackEvent` then saw controls visible and only hid them
+    // — so Return-on-TV looked stuck.
+    if (!isBackKey) this.showControls();
   };
 
   // ── Event handlers ──

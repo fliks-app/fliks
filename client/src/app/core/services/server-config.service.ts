@@ -1,7 +1,6 @@
 import { Injectable, signal, computed, inject } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
-import { DeviceService } from './device.service';
 
 const STORAGE_KEY = 'fliks_server_url';
 const KNOWN_SERVERS_KEY = 'fliks_known_servers';
@@ -23,16 +22,28 @@ export class ServerConfigService {
   private readonly _serverUrl = signal('');
   private readonly _knownServers = signal<KnownServer[]>([]);
 
-  private readonly device = inject(DeviceService);
-
   readonly serverUrl = this._serverUrl.asReadonly();
   readonly knownServers = this._knownServers.asReadonly();
   readonly isConfigured = computed(() => this._serverUrl().length > 0);
-  readonly isNative = Capacitor.isNativePlatform();
-  /** Standalone bundles (Capacitor native or Smart TV) ship without a host
-   * backend and need an explicit server URL. Web builds are served by the
-   * backend and use relative `/api` URLs. */
-  readonly requiresServerUrl = computed(() => this.isNative || this.device.isTv());
+  /** "Native" = the app runs standalone, with no backend host serving its
+   * shell — true for Capacitor (iOS/Android), Smart TV (Tizen/webOS) and
+   * any other bundle loaded via `file://`. The bundle is responsible for
+   * resolving every `/api/...` request against a server URL the user
+   * picked at setup. Web builds (served by the backend) keep relative
+   * URLs and have `isNative = false`.
+   * Plain boolean so the dozens of existing `if (serverConfig.isNative)`
+   * call sites stay non-reactive; computed from the UA at construction
+   * time rather than via `DeviceService.isTv()` to avoid a circular
+   * init-order dependency. */
+  readonly isNative = (() => {
+    if (Capacitor.isNativePlatform()) return true;
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent;
+    return /AndroidTV\/\d|\bTizen\b|SMART-TV|Web0S|webOS|BRAVIA|SHIELD|AFT[A-Z0-9]+|GoogleTV/i.test(ua);
+  })();
+  /** @deprecated Same as `isNative` since Smart TV got folded in.
+   *  Kept as a signal alias for call sites still using it. */
+  readonly requiresServerUrl = computed(() => this.isNative);
 
   async load(): Promise<void> {
     await Promise.all([this.loadActiveUrl(), this.loadKnownServers()]);

@@ -10,10 +10,11 @@
  * Smart Hub publication, hand it to `tizen package -t wgt -s <profile>`
  * with a Samsung-issued distributor profile.
  */
-import { readFileSync, mkdirSync, existsSync, copyFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync, copyFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, relative } from 'node:path';
+import { downlevelCss } from './downlevel-css.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const clientRoot = resolve(here, '..');
@@ -30,6 +31,19 @@ if (!existsSync(distBrowser)) {
 const stage = resolve(clientRoot, 'dist/tizen-stage');
 execSync(`rm -rf "${stage}" && mkdir -p "${stage}"`, { stdio: 'inherit' });
 execSync(`cp -R "${distBrowser}/." "${stage}/"`, { stdio: 'inherit' });
+
+// Tizen 6.5 ships Chromium ~85, which predates cascade layers, `:is`/`:where`,
+// `:has`, `:focus-visible`, logical properties, `oklch()`/`color-mix()`,
+// container queries, and `@starting-style`. Run the downlevel pass on every
+// `styles-*.css` chunk now so the WGT contains parser-friendly CSS.
+const stylesFiles = readdirSync(stage).filter((f) => /^styles-.*\.css$/.test(f));
+for (const f of stylesFiles) {
+  const p = resolve(stage, f);
+  const before = readFileSync(p, 'utf8');
+  const after = await downlevelCss(before, p);
+  writeFileSync(p, after);
+  console.log(`[tizen] downlevelled ${f}: ${before.length} → ${after.length} bytes`);
+}
 
 const configXml = resolve(here, 'config.xml');
 const iconSrc = resolve(here, 'icon.png');

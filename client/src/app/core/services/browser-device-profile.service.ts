@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { PlayerSettingsService } from './player-settings.service';
+import { DeviceService } from './device.service';
 
 interface HdrPlugin {
   isSupported(): Promise<{ supported: boolean }>;
@@ -11,6 +12,24 @@ interface AudioCapabilitiesPlugin {
   getSupported(): Promise<{ codecs: string[]; maxChannels: number }>;
 }
 const AudioCaps = registerPlugin<AudioCapabilitiesPlugin>('AudioCapabilities');
+
+/** Probe Tizen's `webapis.avinfo.isHdrTvSupport()` synchronously. The
+ *  Samsung runtime exposes a panel-level HDR capability flag that's
+ *  more reliable than `matchMedia('(dynamic-range: high)')` on
+ *  Chromium 85 (which often returns false even on Q-series HDR sets).
+ *  Returns false on any non-Tizen target or when the API call throws,
+ *  so the call site can fall back to the matchMedia path. */
+function isTizenHdrCapable(): boolean {
+  try {
+    const w = window as unknown as {
+      webapis?: { avinfo?: { isHdrTvSupport?: () => boolean } };
+    };
+    const fn = w.webapis?.avinfo?.isHdrTvSupport;
+    return typeof fn === 'function' ? !!fn() : false;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Builds a DeviceProfile by probing actual browser capabilities via canPlayType()
@@ -50,6 +69,7 @@ export interface DeviceProfile {
 @Injectable({ providedIn: 'root' })
 export class BrowserDeviceProfileService {
   private readonly playerSettings = inject(PlayerSettingsService);
+  private readonly device = inject(DeviceService);
   private cachedProfile: DeviceProfile | null = null;
   private nativeHdr: boolean | null = null;
   private nativeAudio: { codecs: string[]; maxChannels: number } | null = null;
@@ -121,9 +141,17 @@ export class BrowserDeviceProfileService {
       });
     }
 
-    // HEVC
-    if (this.testCodec(video, hasMSE, 'video/mp4', 'hvc1.1.6.L120.B0') ||
-        this.testCodec(video, hasMSE, 'video/mp4', 'hev1.1.6.L120.B0')) {
+    // HEVC — re-enabled on Smart TV. AVPlay on Tizen 6.5 decodes HEVC
+    // natively in HW; the earlier `InvalidAccessError` we attributed to
+    // `hvc1` actually came from the master-playlist setup we've since
+    // fixed (sequence, `setListener` ordering, MPEG-TS branch). Letting
+    // the backend pick HEVC again skips a transcode for HEVC sources on
+    // Q-series TVs.
+    const isTv = this.device.isTv();
+    if (
+      this.testCodec(video, hasMSE, 'video/mp4', 'hvc1.1.6.L120.B0') ||
+      this.testCodec(video, hasMSE, 'video/mp4', 'hev1.1.6.L120.B0')
+    ) {
       videoCodecs.push('hevc', 'h265', 'hvc1', 'hev1');
       const maxLevel = this.probeHevcLevel(video, hasMSE);
       const maxBitDepth = this.testCodec(video, hasMSE, 'video/mp4', 'hvc1.2.4.L120.B0') ? 10 : 8;
@@ -135,8 +163,16 @@ export class BrowserDeviceProfileService {
       });
     }
 
-    // AV1
-    if (this.testCodec(video, hasMSE, 'video/mp4', 'av01.0.08M.08')) {
+    // AV1 — disabled on TV. Two unrelated reasons stack:
+    //   1. Backend's `libsvtav1` rung is misconfigured (Max Bitrate <
+    //      Target Bitrate → encoder exits 234), so any AV1 selection
+    //      cascades into a 404 storm. Same bug we hit before reverting
+    //      the AVPlay migration.
+    //   2. AVPlay's HLS demuxer accepts AV1 in fMP4 but not consistently
+    //      across firmware revisions — keeping it off the TV profile
+    //      until we move to direct-play DASH.
+    // Both go away on non-TV bundles where browser MSE drives playback.
+    if (!isTv && this.testCodec(video, hasMSE, 'video/mp4', 'av01.0.08M.08')) {
       videoCodecs.push('av1');
       const maxBitDepth = this.testCodec(video, hasMSE, 'video/mp4', 'av01.0.08M.10') ? 10 : 8;
       codecConditions.push({
@@ -197,6 +233,16 @@ export class BrowserDeviceProfileService {
     if (Capacitor.isNativePlatform()) {
       // Use native plugin result (pre-fetched in constructor). Default true if not yet resolved.
       supportsHdr = this.nativeHdr ?? true;
+    } else if (isTizenHdrCapable()) {
+      // Tizen Smart TV: the panel-level capability is reported by
+      // `webapis.avinfo.isHdrTvSupport()`. This bypasses the
+      // `matchMedia('(dynamic-range: high)')` probe, which is
+      // unreliable in Chromium 85 on TVs that DO support HDR (matchMedia
+      // returns false even on Q-series sets). Combine with the
+      // 10-bit codec check so we don't promise HDR on a Main-only
+      // profile somehow.
+      const has10bitCodec = codecConditions.some(c => (c.maxBitDepth ?? 0) >= 10);
+      supportsHdr = has10bitCodec;
     } else {
       const hdrDisplay = typeof matchMedia !== 'undefined' && matchMedia('(dynamic-range: high)').matches;
       const has10bitCodec = codecConditions.some(c => (c.maxBitDepth ?? 0) >= 10);
@@ -214,6 +260,13 @@ export class BrowserDeviceProfileService {
       maxAudioChannels,
       supportsHdr,
       deviceType: Capacitor.isNativePlatform() ? 'mobile' : 'desktop',
+      // MPEG-TS HLS on Smart TV. FFmpeg's `-f hls -hls_segment_type fmp4`
+      // pipeline hard-codes `movflags=+frag_custom+dash+delay_moov` in
+      // `hls_mux_init()`, ignoring user-supplied `-movflags +cmaf`. The
+      // resulting `.m4s` segments always carry `sidx` boxes — a DASH-ism
+      // Tizen AVPlay rejects with `InvalidAccessError` / `CONNECTION_FAILED`.
+      // Cast itself stays on fMP4 (Shaka there can't transmux Dolby in TS).
+      useTs: isTv,
     };
   }
 

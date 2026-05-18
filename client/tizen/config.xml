@@ -30,6 +30,14 @@
   <tizen:profile name="tv"/>
   <tizen:privilege name="http://tizen.org/privilege/internet"/>
   <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+  <!-- AVPlay is gated behind a Samsung-vendor privilege. Without this
+       declaration, `webapis.avplay.prepareAsync` rejects every URL with
+       `InvalidAccessError / PLAYER_ERROR_CONNECTION_FAILED` before any
+       network handshake — the failure mode looks like a connectivity bug
+       but it's a permission check. Pair it with `tv.window` so the
+       hardware video plane is allowed to render behind the WebView. -->
+  <tizen:privilege name="http://developer.samsung.com/privilege/avplay"/>
+  <tizen:privilege name="http://tizen.org/privilege/tv.window"/>
   <tizen:setting screen-orientation="landscape"
                  background-support="disable"
                  hwkey-event="enable"
