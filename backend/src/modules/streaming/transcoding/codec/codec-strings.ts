@@ -12,17 +12,53 @@ import type { EncoderTarget, HdrFormat } from './types';
  */
 
 /** H.264 — `avc1.PPCCLL` (6 hex digits). High profile = `64`, constraint
- *  set byte `00` (no flags), level encoded as hex. Levels are sized to
- *  cover 60 fps at the rung resolution. */
+ *  set byte `00` (no flags), level encoded as hex.
+ *
+ *  Level matches what the encoder actually emits: H.264 encoders
+ *  (h264_qsv, libx264, h264_vaapi, h264_nvenc, h264_videotoolbox) pick
+ *  the lowest level whose `MaxMBPerSec` covers the rung's macroblock
+ *  rate, and forcing a higher level via `-level:v` is fragile (qsv
+ *  refuses, others happily ignore). A 1080p24 transcode runs at
+ *  ~49 M luma samples/s — well within L4.0 (62 M) — so the encoder
+ *  picks L4.0. An overpromise like `64002a` (L4.2) makes Cast Shaka
+ *  reject the variant with 4032 CONTENT_UNSUPPORTED_BY_BROWSER because
+ *  the bitstream level_idc (40) doesn't match the manifest claim (42).
+ *  Drive the level off luma sample rate to keep manifest == bitstream. */
 export function h264CodecString(target: EncoderTarget): string {
-  const { height } = target;
-  if (height >= 2160) return 'avc1.640034'; // High @ L5.2 — 4K60
-  if (height >= 1080) return 'avc1.64002a'; // High @ L4.2 — 1080p60 + headroom
-  if (height >= 720) return 'avc1.640020'; //  High @ L3.2 — 720p60
-  if (height >= 480) return 'avc1.64001f'; //  High @ L3.1 — 480p60
-  if (height >= 360) return 'avc1.64001e'; //  High @ L3.0 — 360p30
-  if (height >= 240) return 'avc1.640015'; //  High @ L2.1 — 240p60
-  return 'avc1.64000d'; //                     High @ L1.3 — 144p
+  // Pick the lowest level whose MaxFS (frame size in macroblocks) AND
+  // MaxMBPerSec (macroblock rate) both cover this rung — mirrors what
+  // every H.264 encoder we drive does internally. A pure luma-sample-rate
+  // bucket would mis-classify 1080p24 (49 M samples/s, fits L3.2 by
+  // rate) as L3.2 even though MaxFS=5120 MB rejects the 8160-MB frame.
+  // The level_idc that ends up in the SPS would be L4.0; advertising
+  // L3.2 in the manifest then trips Cast Shaka with 4032
+  // CONTENT_UNSUPPORTED_BY_BROWSER.
+  const mbPerFrame = Math.ceil(target.width / 16) * Math.ceil(target.height / 16);
+  const mbPerSec = mbPerFrame * target.frameRate;
+  // [hex level_idc, MaxFS, MaxMBPerSec]
+  const levels: Array<[string, number, number]> = [
+    ['0a', 99, 1485], //       L1.0
+    ['0c', 396, 3000], //      L1.2
+    ['0d', 396, 11880], //     L1.3
+    ['15', 792, 19800], //     L2.1
+    ['16', 1620, 20250], //    L2.2
+    ['1e', 1620, 40500], //    L3.0
+    ['1f', 3600, 108000], //   L3.1
+    ['20', 5120, 216000], //   L3.2
+    ['28', 8192, 245760], //   L4.0
+    ['29', 8192, 245760], //   L4.1
+    ['2a', 8704, 522240], //   L4.2
+    ['32', 22080, 589824], //  L5.0
+    ['33', 36864, 983040], //  L5.1
+    ['34', 36864, 2073600], // L5.2
+  ];
+  for (const [lvl, maxFS, maxMBPS] of levels) {
+    if (mbPerFrame <= maxFS && mbPerSec <= maxMBPS) {
+      return `avc1.6400${lvl}`;
+    }
+  }
+  return 'avc1.640034'; // Above L5.2 falls back to its codec string; the
+  // encoder will refuse the stream anyway.
 }
 
 /** HEVC SDR Main 8-bit — `hvc1.1.6.L<level*30>.B0`. Profile = Main,

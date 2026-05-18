@@ -1321,6 +1321,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     session.mediaType = ctx.mediaType;
     session.posterUrl = ctx.posterUrl;
     session.transcodeReasons = ctx.transcodeReasons;
+    session.audioPlan = ctx.audioPlan;
+    session.videoVariant = ctx.videoVariant;
     if (!session.startedAt) session.startedAt = new Date();
   }
 

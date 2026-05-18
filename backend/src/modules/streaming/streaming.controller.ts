@@ -506,6 +506,39 @@ export class StreamingController {
       sv?.height ?? 0,
     );
 
+    // Device-profile drift detection. A single user can hop between a
+    // browser tab (which accepts EAC-3 copy on 2-ch) and the Chromecast
+    // (AAC transcode only) without unloading the file. The session map
+    // is keyed (mediaFileId, userId), so both hops share the same
+    // entry — and prewarm short-circuits on `existing.exitCode === null`
+    // without comparing plans. The result is a manifest advertising the
+    // new codec while ffmpeg keeps writing segments in the old one,
+    // tripping Shaka 4032 (CONTENT_UNSUPPORTED_BY_BROWSER) on Cast.
+    // Kill the running session whenever the new audio plan or the new
+    // video variant disagrees with what it was spawned for; the prewarm
+    // immediately below then respawns with the up-to-date plan.
+    const newAudioCodec = result.audioPlan?.codec;
+    const newVideoCodec = this.activeStreamTracker
+      .getVideoVariant(mediaFileId)
+      ?.codec;
+    const existingForDrift = this.transcodingService.getExistingSession(
+      mediaFileId,
+      req.user?.id,
+    );
+    if (
+      existingForDrift &&
+      existingForDrift.process.exitCode === null &&
+      (existingForDrift.audioPlan?.codec !== newAudioCodec ||
+        existingForDrift.videoVariant?.codec !== newVideoCodec)
+    ) {
+      this.log.log(
+        `[playback-info] profile drift on file ${mediaFileId} — killing session ` +
+          `(audio: ${existingForDrift.audioPlan?.codec ?? '∅'} → ${newAudioCodec ?? '∅'}, ` +
+          `video: ${existingForDrift.videoVariant?.codec ?? '∅'} → ${newVideoCodec ?? '∅'})`,
+      );
+      await this.transcodingService.killSession(mediaFileId, req.user?.id);
+    }
+
     // Pre-spawn ffmpeg as early as possible — the client will GET master.m3u8
     // next (~100–300ms later) and then seg-0. Starting ffmpeg here overlaps
     // that gap with encoder init so segment 0 is usually already on disk
