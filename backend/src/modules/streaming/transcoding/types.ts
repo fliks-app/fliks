@@ -136,6 +136,15 @@ export interface SessionContext {
    */
   sourceVideoCodec?: string;
   /**
+   * Source frame dimensions (post container crop / SAR). Drive the
+   * aspect-preserving output sizing in `buildFfmpegArgs` — required
+   * for non-16:9 sources so the encoder's explicit `h=…` argument
+   * matches the source aspect instead of stretching to the profile's
+   * raw `maxHeight`.
+   */
+  sourceWidth?: number;
+  sourceHeight?: number;
+  /**
    * Source has HDR transfer characteristics (HDR10 / HLG / DV). The
    * session-wide `tonemap` flag follows the pass-through decision —
    * false when canPassThroughHdr is true (HDR client + HEVC source) —

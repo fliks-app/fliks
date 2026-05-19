@@ -236,6 +236,8 @@ export class StreamingController {
         this.activeStreamTracker.getAudioPlan(mediaFileId) ?? undefined,
       sourceVideoCodec:
         (si?.video?.[0]?.codec ?? '').toLowerCase() || undefined,
+      sourceWidth: si?.video?.[0]?.width,
+      sourceHeight: si?.video?.[0]?.height,
       isSourceHdr: !!si?.video?.[0]?.hdrFormat,
       // Variant chosen by stream-builder's codec selector at
       // playback-info time, threaded through every session spawn so

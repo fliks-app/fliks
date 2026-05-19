@@ -665,6 +665,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           videoVariant: ctx?.videoVariant,
           sourceVideoCodec: ctx?.sourceVideoCodec,
           sourceBitDepth: ctx?.isSourceHdr ? 10 : 8,
+          sourceWidth: ctx?.sourceWidth,
+          sourceHeight: ctx?.sourceHeight,
         },
         this.log,
       );
@@ -965,6 +967,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         videoVariant: ctx?.videoVariant,
         sourceVideoCodec: ctx?.sourceVideoCodec,
         sourceBitDepth: ctx?.isSourceHdr ? 10 : 8,
+        sourceWidth: ctx?.sourceWidth,
+        sourceHeight: ctx?.sourceHeight,
       },
       this.log,
     );
