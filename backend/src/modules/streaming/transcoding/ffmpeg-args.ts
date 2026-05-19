@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import * as path from 'path';
 import { getSegmentDuration, segmentIndexToSeconds } from './constants';
-import { isHdrProfile, parseBitrateToBps } from './profiles';
+import { isHdrProfile, parseBitrateToBps, profileResolution } from './profiles';
 import { requestedHwAccelFor } from './hw-detect';
 import type {
   BurnInSubtitle,
@@ -52,6 +52,14 @@ export interface BuildFfmpegArgsOptions {
   /** Source bit depth (8 or 10). 10-bit HDR sources need a decoder
    *  that can handle p010le surfaces. Defaults to 8 when omitted. */
   sourceBitDepth?: BitDepth;
+  /** Source frame dimensions (post container crop / SAR). Drive the
+   *  aspect-preserving output sizing in `buildFfmpegArgs` — required
+   *  for non-16:9 sources (cinemascope, vertical, …) so the encoder's
+   *  explicit `h=…` filter argument matches the actual frame instead
+   *  of stretching to `profile.maxHeight`. When omitted, the output
+   *  defaults to the profile's raw `maxWidth × maxHeight`. */
+  sourceWidth?: number;
+  sourceHeight?: number;
   /** Audio output decision — see {@link SessionContext.audioPlan}. When
    *  omitted, ffmpeg-args falls back to AAC stereo at the profile bitrate
    *  (safe default that plays everywhere). */
@@ -109,6 +117,8 @@ export function buildFfmpegArgs(
     videoVariant,
     sourceVideoCodec,
     sourceBitDepth = 8,
+    sourceWidth = 0,
+    sourceHeight = 0,
     tonemapAlgo = 'auto',
   } = opts;
 
@@ -423,8 +433,20 @@ export function buildFfmpegArgs(
     args.push('-ss', String(seekSeconds));
   }
 
-  // Video encoding
-  const w = profile.maxWidth;
+  // Output dimensions cap the source aspect to the profile's
+  // `maxWidth`. `vpp_qsv` / `scale_qsv` don't honour the `-2`
+  // auto-height token, so a 2.39:1 cinemascope title (1920×804) needs
+  // its height computed up front to land at 1920×804 instead of being
+  // stretched to 1920×1080 by an explicit `h=maxHeight`. The result
+  // matches the RESOLUTION attribute the master playlist already
+  // advertises for this rung — display aspect stays stable across the
+  // session even if the player re-parses the manifest.
+  const outDims =
+    sourceWidth > 0 && sourceHeight > 0
+      ? profileResolution(profile, sourceWidth, sourceHeight)
+      : { width: profile.maxWidth, height: profile.maxHeight };
+  const w = outDims.width;
+  const h = outDims.height;
   const cropStr = crop
     ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`
     : '';
@@ -466,7 +488,7 @@ export function buildFfmpegArgs(
     variant,
     target: {
       width: w,
-      height: profile.maxHeight,
+      height: h,
       videoBitrateBps: bitrateNum,
       gopSize,
       frameRate: fps,
