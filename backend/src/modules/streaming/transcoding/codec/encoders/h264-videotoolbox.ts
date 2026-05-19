@@ -15,10 +15,16 @@ export const h264Videotoolbox: EncoderDescriptor = {
   supportsHdrMetadata: () => false,
   codecString: (target: EncoderTarget) => h264CodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, early, filters, tonemap, hasBurnIn, hasCrop } = input;
+    const { target, early, filters } = input;
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
-    const common = [
+    // CPU tonemap path — see the matching comment in
+    // `hevc-videotoolbox.ts`. The `scale_vt` Metal branch is removed
+    // because the decoder descriptor outputs CPU buffers (not VT
+    // IOSurfaces), and the filter graph can't bridge CPU → vt without
+    // `-hwaccel_output_format videotoolbox_vld` upstream. The CPU
+    // tonemap chain works on every macOS host.
+    return [
       '-c:v',
       'h264_videotoolbox',
       '-profile:v',
@@ -28,32 +34,14 @@ export const h264Videotoolbox: EncoderDescriptor = {
       bitrate,
       '-maxrate',
       bitrate,
-    ];
-    const trailing = [
+      '-vf',
+      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
       '-g',
       String(target.gopSize),
       '-keyint_min',
       String(target.gopSize),
       '-force_key_frames',
       input.forceKeyframesExpr,
-    ];
-
-    if (tonemap && !hasBurnIn && !hasCrop) {
-      // Full Metal pipeline: scale_vt does HDR→SDR tonemap via the
-      // Apple Media Engine. Everything stays on IOSurface — no CPU
-      // round-trip.
-      return [
-        ...common,
-        '-vf',
-        `scale_vt=w=${w}:h=-2:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709`,
-        ...trailing,
-      ];
-    }
-    return [
-      ...common,
-      '-vf',
-      `${filters.cpuCropPrefix}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
-      ...trailing,
     ];
   },
 };

@@ -15,10 +15,18 @@ export const hevcVideotoolbox: EncoderDescriptor = {
   supportsHdrMetadata: () => false,
   codecString: (target: EncoderTarget) => hevcMainCodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, early, filters, tonemap, hasBurnIn, hasCrop } = input;
+    const { target, early, filters } = input;
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
-    const common = [
+    // CPU tonemap path. The previous `scale_vt` Metal branch required
+    // the decoder to be set up with `-hwaccel_output_format
+    // videotoolbox_vld`, but our VT decoder descriptor declares its
+    // output as CPU (filters / encoders downstream assume that). With
+    // CPU buffers feeding a `scale_vt`-anchored graph, FFmpeg fails
+    // pixel-format negotiation with `dst: videotoolbox_vld` → error
+    // -78 (ENOSYS). The CPU chain (tonemap filter + libsw scale) is
+    // a hair slower but works reliably on every macOS host.
+    return [
       '-c:v',
       'hevc_videotoolbox',
       '-profile:v',
@@ -28,8 +36,8 @@ export const hevcVideotoolbox: EncoderDescriptor = {
       bitrate,
       '-maxrate',
       bitrate,
-    ];
-    const trailing = [
+      '-vf',
+      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
       '-g',
       String(target.gopSize),
       '-keyint_min',
@@ -38,24 +46,6 @@ export const hevcVideotoolbox: EncoderDescriptor = {
       input.forceKeyframesExpr,
       '-tag:v',
       'hvc1',
-    ];
-
-    if (tonemap && !hasBurnIn && !hasCrop) {
-      // Full Metal pipeline: scale_vt does HDR→SDR tonemap on the
-      // Apple Media Engine. Avoids CPU round-trip when burn-in /
-      // crop aren't requested.
-      return [
-        ...common,
-        '-vf',
-        `scale_vt=w=${w}:h=-2:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709`,
-        ...trailing,
-      ];
-    }
-    return [
-      ...common,
-      '-vf',
-      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
-      ...trailing,
     ];
   },
 };
