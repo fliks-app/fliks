@@ -12,6 +12,7 @@
 		20E73B390732CBE1AFBB97B2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7F7DEBE793CEBCD07C904545 /* Assets.xcassets */; };
 		3685F8FE18738266C476C9C6 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7422312B1F5D7671E9744038 /* MenuBarView.swift */; };
 		3BA40AEEC5D78AF15B1FEF18 /* PostgresManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6EFDD9703C108943A23BE27 /* PostgresManager.swift */; };
+		48E3AE79299C0E5EB6D5B8F5 /* BuildConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6375114CD1C658A30D4CA5F /* BuildConfig.swift */; };
 		98A9A12AB18BD5FC9B012A00 /* ServerState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D571CEB9FF05926A3DD18E2 /* ServerState.swift */; };
 		A60EC33352704F96FE6929C7 /* ProcessRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 567B1538157A619F556157A7 /* ProcessRunner.swift */; };
 		B81065FF67224F21CE062F02 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3B64ACCDF1778C8B2C04AEE /* AppState.swift */; };
@@ -31,6 +32,7 @@
 		9636D1AEAE72470DD3F15BCD /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		A40C10B954E0EB9D66C53747 /* ConfigStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigStore.swift; sourceTree = "<group>"; };
 		B6EFDD9703C108943A23BE27 /* PostgresManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostgresManager.swift; sourceTree = "<group>"; };
+		C6375114CD1C658A30D4CA5F /* BuildConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildConfig.swift; sourceTree = "<group>"; };
 		E3B64ACCDF1778C8B2C04AEE /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		EE372A3138A37BDCE39B1584 /* Fliks.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Fliks.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -74,6 +76,7 @@
 		5EDB86BA3D552CB161DD5E2E /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				C6375114CD1C658A30D4CA5F /* BuildConfig.swift */,
 				46CF836D217191625BFC2462 /* Paths.swift */,
 				567B1538157A619F556157A7 /* ProcessRunner.swift */,
 			);
@@ -190,6 +193,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B81065FF67224F21CE062F02 /* AppState.swift in Sources */,
+				48E3AE79299C0E5EB6D5B8F5 /* BuildConfig.swift in Sources */,
 				104F45E5738E3150737FBAAF /* ConfigStore.swift in Sources */,
 				E02781C772245807E83D4217 /* FliksApp.swift in Sources */,
 				3685F8FE18738266C476C9C6 /* MenuBarView.swift in Sources */,

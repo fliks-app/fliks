@@ -92,6 +92,14 @@ fi
 RESOURCES="$APP_BUNDLE/Contents/Resources"
 echo "==> Populating $APP_BUNDLE"
 
+# Wipe previously-populated trees before re-copying. macOS `cp` refuses
+# to overwrite codesigned binaries from a prior build with "Permission
+# denied" even when the user owns the file — the signature triggers a
+# protected-write check. Without this, an incremental xcodebuild leaves
+# the old Resources in place and the script aborts on the first cp,
+# silently shipping a DMG with a stale backend / Postgres / FFmpeg.
+rm -rf "$RESOURCES/node" "$RESOURCES/postgres" "$RESOURCES/ffmpeg" "$RESOURCES/backend" "$RESOURCES/client"
+
 # ── Node.js (statically linked, no dylib fixup needed) ──
 echo "    [node] Copying Node.js 24..."
 mkdir -p "$RESOURCES/node/bin"

@@ -15,7 +15,7 @@ export const hevcVideotoolbox: EncoderDescriptor = {
   supportsHdrMetadata: () => false,
   codecString: (target: EncoderTarget) => hevcMainCodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, early, filters, tonemap, hasBurnIn, hasCrop } = input;
+    const { target, early, filters, inputSurface } = input;
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
     const common = [
@@ -39,11 +39,13 @@ export const hevcVideotoolbox: EncoderDescriptor = {
       '-tag:v',
       'hvc1',
     ];
-
-    if (tonemap && !hasBurnIn && !hasCrop) {
-      // Full Metal pipeline: scale_vt does HDR→SDR tonemap on the
-      // Apple Media Engine. Avoids CPU round-trip when burn-in /
-      // crop aren't requested.
+    // Full-Metal HDR pipeline: the orchestrator has set the decoder to
+    // emit videotoolbox_vld surfaces (`-hwaccel_output_format`), so
+    // `scale_vt` accepts the input directly and the entire chain runs
+    // on the Apple Media Engine — no CPU bounce. Only viable when no
+    // CPU-only filter (burn-in, crop) is required; the orchestrator
+    // checks those before flipping `inputSurface` to `'videotoolbox'`.
+    if (inputSurface === 'videotoolbox') {
       return [
         ...common,
         '-vf',
@@ -51,6 +53,9 @@ export const hevcVideotoolbox: EncoderDescriptor = {
         ...trailing,
       ];
     }
+    // CPU tonemap fallback — works on every macOS host even when the
+    // Metal fast path is inapplicable (burn-in, crop, or a future
+    // decoder that hands off CPU buffers).
     return [
       ...common,
       '-vf',

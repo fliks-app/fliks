@@ -15,7 +15,7 @@ export const h264Videotoolbox: EncoderDescriptor = {
   supportsHdrMetadata: () => false,
   codecString: (target: EncoderTarget) => h264CodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, early, filters, tonemap, hasBurnIn, hasCrop } = input;
+    const { target, early, filters, inputSurface } = input;
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
     const common = [
@@ -37,11 +37,10 @@ export const h264Videotoolbox: EncoderDescriptor = {
       '-force_key_frames',
       input.forceKeyframesExpr,
     ];
-
-    if (tonemap && !hasBurnIn && !hasCrop) {
-      // Full Metal pipeline: scale_vt does HDR→SDR tonemap via the
-      // Apple Media Engine. Everything stays on IOSurface — no CPU
-      // round-trip.
+    // Full-Metal HDR pipeline — see the matching comment in
+    // `hevc-videotoolbox.ts`. Active when the orchestrator already
+    // configured the decoder to emit videotoolbox_vld IOSurfaces.
+    if (inputSurface === 'videotoolbox') {
       return [
         ...common,
         '-vf',
@@ -52,7 +51,7 @@ export const h264Videotoolbox: EncoderDescriptor = {
     return [
       ...common,
       '-vf',
-      `${filters.cpuCropPrefix}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
+      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
       ...trailing,
     ];
   },

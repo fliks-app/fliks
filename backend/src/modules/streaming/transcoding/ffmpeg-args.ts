@@ -359,6 +359,25 @@ export function buildFfmpegArgs(
         );
   args.push(...decoder.buildInputArgs());
 
+  // Full-Metal HDR opt-in. The h264/hevc_videotoolbox encoders can keep
+  // the pipeline on IOSurface end-to-end when the only filter step is
+  // an HDR→SDR tonemap (no burn-in, no crop): `scale_vt` accepts
+  // videotoolbox_vld buffers and emits the same surface format the
+  // encoder ingests. The default VT decoder descriptor outputs CPU
+  // buffers (every other consumer expects them), so we override its
+  // input args here when the Metal fast path is eligible. The encoder
+  // branches on `inputSurface === 'videotoolbox'` to pick the scale_vt
+  // filter; falls back to the CPU tonemap chain otherwise.
+  const useVtMetalPath =
+    decoder.hwAccel === 'videotoolbox' &&
+    (encoder.id === 'h264_videotoolbox' || encoder.id === 'hevc_videotoolbox') &&
+    tonemap &&
+    !burnIn?.filter &&
+    !crop;
+  if (useVtMetalPath) {
+    args.push('-hwaccel_output_format', 'videotoolbox_vld');
+  }
+
   // OpenCL device init for the tonemap_opencl filter chain. Only needed
   // when (a) we're tonemapping HDR→SDR AND (b) the VAAPI in-place
   // tonemap fallback isn't active AND (c) the decoder's output sits on
@@ -476,7 +495,13 @@ export function buildFfmpegArgs(
     tonemapPath,
     hasBurnIn: !!burnIn?.filter,
     hasCrop: !!crop,
-    inputSurface: decoder.outputSurface,
+    // Override to 'videotoolbox' when the Metal fast path is active —
+    // the descriptor's static `outputSurface` is `'cpu'` because every
+    // OTHER VT consumer expects CPU buffers, but we just told the
+    // decoder (via `-hwaccel_output_format videotoolbox_vld`) to emit
+    // IOSurfaces in this particular session. The encoder branches on
+    // this to pick scale_vt vs the CPU tonemap chain.
+    inputSurface: useVtMetalPath ? 'videotoolbox' : decoder.outputSurface,
   };
   args.push(...encoder.buildArgs(encoderInput));
 
@@ -503,7 +528,15 @@ export function buildFfmpegArgs(
   // No-op when the source already carries BT.709 tags (ffmpeg accepts
   // the redundant overrides). HDR output paths skip this so the
   // encoder keeps the BT.2020/PQ signalling.
-  if (!isHdrOutput) {
+  //
+  // Also skipped on the VT Metal fast path. `scale_vt=color_matrix=
+  // bt709:color_primaries=bt709:color_transfer=bt709` already converts
+  // the IOSurface metadata, and adding the output-level `-color_*`
+  // flags re-triggers FFmpeg's negotiation to insert a CPU
+  // `auto_scale` between the decoder and scale_vt, which then fails
+  // with "Failed to find pixel format" (-78 ENOSYS) because no filter
+  // bridges CPU pixels back into a videotoolbox_vld IOSurface.
+  if (!isHdrOutput && !useVtMetalPath) {
     args.push(
       '-color_primaries',
       'bt709',
