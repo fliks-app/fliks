@@ -491,7 +491,10 @@ export class StreamBuilderService {
     if (!available.length) available.push(ladder[ladder.length - 1]);
     // Ladder is ordered top→bottom, so available[0] is the source-resolution rung.
     const topProfile = available[0];
-    const displayLabel = (name: string) => (name === '2160p' ? '4K' : name);
+    const displayLabel = (name: string) => {
+      const stripped = name.replace(/-hdr$/, '');
+      return stripped === '2160p' ? '4K' : stripped;
+    };
     const resolutionLabel = displayLabel(topProfile.name);
     const originalHeight = sourceH || topProfile.maxHeight;
 
