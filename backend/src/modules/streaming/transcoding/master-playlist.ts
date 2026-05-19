@@ -13,6 +13,14 @@ import {
   hevcMainCodecString,
 } from './codec/codec-strings';
 
+/** Format frame rate for the HLS `FRAME-RATE` attribute. Apple's spec
+ *  says "decimal-floating-point describing the maximum frame rate …
+ *  rounded to three decimal places". Whole numbers stay integer to
+ *  match Apple's reference manifests (e.g. `60`, not `60.000`). */
+function formatFrameRate(fps: number): string {
+  return Number.isInteger(fps) ? String(fps) : fps.toFixed(3);
+}
+
 /** Apply the `onlyQuality` URL pin to a ladder. Used identically by
  *  the SDR and HDR branches: when the player has a saved quality
  *  preference (or an explicit dropdown pick), the master playlist
@@ -108,6 +116,16 @@ export function generateMasterPlaylist(
    *  the appended segments. Absent for legacy callers that haven't
    *  threaded the variant through — falls back to H.264 codec strings. */
   sdrVariant?: CodecVariant,
+  /** Source frame rate in fps (e.g. 23.976, 24, 29.97). Emitted as the
+   *  HLS `FRAME-RATE` attribute on every `#EXT-X-STREAM-INF` and fed
+   *  into the codec-string level computation. REQUIRED on HDR variants:
+   *  Apple's HLS parser rejects PQ/HLG rungs missing `FRAME-RATE` with
+   *  `HDR alternate is missing FRAME-RATE` (CoreMedia -12642), and when
+   *  every HDR variant is filtered out AVPlayer surfaces the empty
+   *  playable set as `NSURLErrorUnsupportedURL -1002`. Defaults to 24
+   *  so legacy callers without source info still produce a valid
+   *  manifest. */
+  sourceFrameRate = 24,
 ): string {
   // The "multi-audio" flag is really an "EXT-X-MEDIA layout" toggle —
   // the caller decided whether to split audio into renditions. Single-
@@ -119,6 +137,8 @@ export function generateMasterPlaylist(
 
   const audioCodecMap = { aac: 'mp4a.40.2', ac3: 'ac-3', eac3: 'ec-3' };
   const audioCodec = audioCodecMap[outputAudioCodec] ?? 'mp4a.40.2';
+
+  const frameRateAttr = `,FRAME-RATE=${formatFrameRate(sourceFrameRate)}`;
 
   // HDR pass-through path — emitted when the source is HEVC HDR and
   // the client claims HDR support. Outputs a full HEVC HDR ladder
@@ -204,10 +224,10 @@ export function generateMasterPlaylist(
           height: h,
           videoBitrateBps: 0,
           gopSize: 0,
-          frameRate: 24,
+          frameRate: sourceFrameRate,
         });
         lines.push(
-          `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},VIDEO-RANGE=${range},NAME="${p.name}",CODECS="${videoCodec},${audioCodec}"${hdrAudioAttr}`,
+          `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},VIDEO-RANGE=${range}${frameRateAttr},NAME="${p.name}",CODECS="${videoCodec},${audioCodec}"${hdrAudioAttr}`,
           `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
         );
       }
@@ -300,7 +320,7 @@ export function generateMasterPlaylist(
       height: h,
       videoBitrateBps: 0,
       gopSize: 0,
-      frameRate: 24,
+      frameRate: sourceFrameRate,
     };
     const videoCodec =
       sdrVariant?.codec === 'hevc'
@@ -308,7 +328,7 @@ export function generateMasterPlaylist(
         : h264CodecString(target);
     const codecsAttr = `,CODECS="${videoCodec},${audioCodec}"`;
     lines.push(
-      `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},NAME="${p.name}"${codecsAttr}${audioAttr}`,
+      `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h}${frameRateAttr},NAME="${p.name}"${codecsAttr}${audioAttr}`,
       `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
     );
   }
