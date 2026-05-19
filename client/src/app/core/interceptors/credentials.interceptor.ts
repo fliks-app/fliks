@@ -5,7 +5,10 @@ import { AuthService } from '../services/auth.service';
 
 /**
  * En mode web : envoie les cookies (session JWT) sur les appels API.
- * En mode natif (Capacitor) : ajoute le header Authorization Bearer.
+ * En mode natif (Capacitor) ou sur Smart TV : ajoute le header
+ * Authorization Bearer. Les bundles standalone (Capacitor et TV) servent
+ * depuis `file://` et ne reçoivent pas les cookies cross-origin, donc le
+ * jeton doit voyager dans l'en-tête.
  */
 export const credentialsInterceptor: HttpInterceptorFn = (req, next) => {
   const serverConfig = inject(ServerConfigService);

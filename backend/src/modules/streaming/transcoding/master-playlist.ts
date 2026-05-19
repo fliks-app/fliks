@@ -106,7 +106,7 @@ export function generateMasterPlaylist(
   sdrVariant?: CodecVariant,
 ): string {
   const multiAudio = audioStreams && audioStreams.length > 1;
-  const lines = ['#EXTM3U'];
+  const lines = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-INDEPENDENT-SEGMENTS'];
 
   const audioCodecMap = { aac: 'mp4a.40.2', ac3: 'ac-3', eac3: 'ec-3' };
   const audioCodec = audioCodecMap[outputAudioCodec] ?? 'mp4a.40.2';

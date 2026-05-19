@@ -35,7 +35,12 @@ export class SelectUserComponent {
   readonly error = signal('');
   /** id of the user whose action sheet is open, or null. */
   readonly openSheetFor = signal<number | null>(null);
-  readonly isNative = Capacitor.isNativePlatform();
+  readonly isNative = this.serverConfig.isNative;
+  /** Show the "change server" affordance on every standalone bundle — both
+   *  Capacitor (mobile native) and Smart TV (both folded into `isNative`).
+   *  Web is served by the backend itself and has no notion of switching
+   *  origins. */
+  readonly canChangeServer = this.isNative;
 
   constructor() {
     void this.loadUsers();

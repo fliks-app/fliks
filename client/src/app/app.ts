@@ -39,6 +39,7 @@ export class App implements OnInit, OnDestroy {
   private readonly navbar = inject(NavbarService);
   private backButtonListener?: { remove: () => Promise<void> };
   private resumeListener?: { remove: () => Promise<void> };
+  private tizenKeyListener?: (e: KeyboardEvent) => void;
 
   ngOnInit() {
     this.auth.hydrateFromServer();
@@ -63,47 +64,7 @@ export class App implements OnInit, OnDestroy {
       });
 
       CapApp.addListener('backButton', () => {
-        // A focused <select> means its picker is open (or about to open
-        // when the user pressed Enter). Blur to close it before any
-        // route-level back logic fires.
-        const active = document.activeElement as HTMLElement | null;
-        if (active?.tagName === 'SELECT') {
-          active.blur();
-          return;
-        }
-        // Close Cast overlay first if open
-        if (this.castPlayer.expanded()) {
-          this.castPlayer.expanded.set(false);
-          return;
-        }
-        // Close any open bottom sheet / dismissable layer before navigating.
-        if (this.dismissStack.dismissTop()) {
-          return;
-        }
-        // On /watch, defer to the player's own back handler so the hardware
-        // back / gesture matches the in-UI back arrow (replaceUrl to the
-        // media detail page rather than history.back which can land on the
-        // tile the user came from — different from the arrow's behaviour).
-        if (this.router.url.startsWith('/watch')) {
-          window.dispatchEvent(new CustomEvent('app:playerBack'));
-          return;
-        }
-        // Capacitor's `canGoBack` reflects WebView full-page history, which
-        // SPAs (Angular Router uses pushState) never grow. NavbarService
-        // tracks NavigationEnd events and navigates explicitly to the
-        // previous in-app URL — `window.history.back()` doesn't reliably
-        // pop pushState entries on Capacitor's Android WebView.
-        if (this.navbar.canGoBack()) {
-          this.navbar.goBack();
-          return;
-        }
-        // Back at a top-level page with no in-app history left: stay put.
-        // Minimising would drop the user out of the app on a "just navigate"
-        // gesture, which on Android 14+ feels indistinguishable from a crash.
-        // Modern UX convention is to leave the app via the home gesture or
-        // the recent-apps switcher — never the back gesture. TV already
-        // followed this rule; mobile now does too.
-        return;
+        this.handleBackButton();
       }).then((handle) => {
         this.backButtonListener = handle;
       });
@@ -115,10 +76,83 @@ export class App implements OnInit, OnDestroy {
         this.resumeListener = handle;
       });
     }
+
+    // Samsung Tizen "Return" remote key. Capacitor's `backButton` event
+    // never fires here (we're not running through Capacitor on Tizen), so
+    // without an explicit handler the player gets stuck on the AVPlay
+    // error screen with no way out. The Return key surfaces as keyCode
+    // 10009 on Tizen 6.5 — Smart TV remotes have no Android-style back
+    // gesture, the user hits a physical button. Same logic as the
+    // Capacitor handler, factored out into `handleBackButton`.
+    if (this.tv.tvPlatform() === 'tizen') {
+      const handler = (e: KeyboardEvent) => {
+        if (e.keyCode === 10009 || e.key === 'XF86Back' || e.key === 'GoBack') {
+          e.preventDefault();
+          this.handleBackButton();
+        }
+      };
+      this.tizenKeyListener = handler;
+      window.addEventListener('keydown', handler);
+    }
+  }
+
+  /** Hardware-back common path — Capacitor (Android/iOS) and Tizen share
+   *  the same close/dismiss/exit sequence so the UX matches across
+   *  platforms. The only thing that differs is the event source. */
+  private handleBackButton(): void {
+    // A focused <select> means its picker is open (or about to open
+    // when the user pressed Enter). Blur to close it before any
+    // route-level back logic fires.
+    const active = document.activeElement as HTMLElement | null;
+    if (active?.tagName === 'SELECT') {
+      active.blur();
+      return;
+    }
+    // Close Cast overlay first if open
+    if (this.castPlayer.expanded()) {
+      this.castPlayer.expanded.set(false);
+      return;
+    }
+    // Close any open bottom sheet / dismissable layer before navigating.
+    if (this.dismissStack.dismissTop()) {
+      return;
+    }
+    // On /watch, defer to the player's own back handler so the hardware
+    // back / gesture matches the in-UI back arrow (replaceUrl to the
+    // media detail page rather than history.back which can land on the
+    // tile the user came from — different from the arrow's behaviour).
+    if (this.router.url.startsWith('/watch')) {
+      window.dispatchEvent(new CustomEvent('app:playerBack'));
+      return;
+    }
+    // Capacitor's `canGoBack` reflects WebView full-page history, which
+    // SPAs (Angular Router uses pushState) never grow. NavbarService
+    // tracks NavigationEnd events and navigates explicitly to the
+    // previous in-app URL — `window.history.back()` doesn't reliably
+    // pop pushState entries on Capacitor's Android WebView.
+    if (this.navbar.canGoBack()) {
+      this.navbar.goBack();
+      return;
+    }
+    // Top-level with no in-app history. On Tizen we let the OS minimise
+    // the app (the default behaviour when no preventDefault was called
+    // — but we DID preventDefault above to suppress the WebApp default
+    // exit confirmation; re-fire it explicitly so the user can leave).
+    if (this.tv.tvPlatform() === 'tizen') {
+      const tizen = (window as unknown as { tizen?: { application?: { getCurrentApplication: () => { exit: () => void } } } }).tizen;
+      try {
+        tizen?.application?.getCurrentApplication().exit();
+      } catch {
+        /* exit() can throw on dev profiles — ignore */
+      }
+    }
   }
 
   ngOnDestroy() {
     this.backButtonListener?.remove();
     this.resumeListener?.remove();
+    if (this.tizenKeyListener) {
+      window.removeEventListener('keydown', this.tizenKeyListener);
+    }
   }
 }

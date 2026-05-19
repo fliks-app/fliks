@@ -1,4 +1,4 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, inject } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
 
@@ -25,7 +25,25 @@ export class ServerConfigService {
   readonly serverUrl = this._serverUrl.asReadonly();
   readonly knownServers = this._knownServers.asReadonly();
   readonly isConfigured = computed(() => this._serverUrl().length > 0);
-  readonly isNative = Capacitor.isNativePlatform();
+  /** "Native" = the app runs standalone, with no backend host serving its
+   * shell — true for Capacitor (iOS/Android), Smart TV (Tizen/webOS) and
+   * any other bundle loaded via `file://`. The bundle is responsible for
+   * resolving every `/api/...` request against a server URL the user
+   * picked at setup. Web builds (served by the backend) keep relative
+   * URLs and have `isNative = false`.
+   * Plain boolean so the dozens of existing `if (serverConfig.isNative)`
+   * call sites stay non-reactive; computed from the UA at construction
+   * time rather than via `DeviceService.isTv()` to avoid a circular
+   * init-order dependency. */
+  readonly isNative = (() => {
+    if (Capacitor.isNativePlatform()) return true;
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent;
+    return /AndroidTV\/\d|\bTizen\b|SMART-TV|Web0S|webOS|BRAVIA|SHIELD|AFT[A-Z0-9]+|GoogleTV/i.test(ua);
+  })();
+  /** @deprecated Same as `isNative` since Smart TV got folded in.
+   *  Kept as a signal alias for call sites still using it. */
+  readonly requiresServerUrl = computed(() => this.isNative);
 
   async load(): Promise<void> {
     await Promise.all([this.loadActiveUrl(), this.loadKnownServers()]);
@@ -103,7 +121,7 @@ export class ServerConfigService {
   }
 
   resolveUrl(path: string): string {
-    if (!this.isNative || !this._serverUrl()) return path;
+    if (!this.requiresServerUrl() || !this._serverUrl()) return path;
     // Absolute URLs (e.g. raw TMDB images) must not be re-prefixed with the
     // server host — would produce https://server/https://image.tmdb.org/...
     if (/^https?:\/\//i.test(path)) return path;

@@ -158,14 +158,15 @@ export class TvSpatialNavService {
     const active = document.activeElement as HTMLElement | null;
     const tag = active?.tagName;
     const inputType = (active as HTMLInputElement | null)?.type;
-    const isTextInput =
-      tag === 'TEXTAREA' ||
-      tag === 'OPTION' ||
-      active?.isContentEditable ||
-      (tag === 'INPUT' && !['checkbox', 'radio', 'range', 'button', 'submit', 'reset'].includes(inputType ?? ''));
-    if (isTextInput) {
-      return;
-    }
+    const isSingleLineTextInput =
+      tag === 'INPUT' &&
+      !['checkbox', 'radio', 'range', 'button', 'submit', 'reset'].includes(inputType ?? '');
+    const isMultiLineText = tag === 'TEXTAREA' || tag === 'OPTION' || !!active?.isContentEditable;
+    // Single-line text inputs only have a horizontal caret — left/right belong
+    // to the field, but up/down should escape to the spatial-nav tree so D-pad
+    // users on TV aren't trapped on the input.
+    if (isSingleLineTextInput && (dir === 'left' || dir === 'right')) return;
+    if (isMultiLineText) return;
     // Native `<select>` cycles its options on arrow keys (changing the
     // value silently). Always block that. We still try to move focus —
     // if a tree-aware neighbour exists, the user goes there; otherwise
@@ -174,11 +175,15 @@ export class TvSpatialNavService {
     if (tag === 'SELECT') {
       e.preventDefault();
     }
-    // Skip on sliders (seekbar, volume) — they handle ArrowLeft/Right themselves
-    // for value adjustment. role="slider" is the canonical signal; we also accept
-    // an opt-out attribute for elements that own their own arrow handling.
+    // Sliders (seekbar, volume) own ArrowLeft/Right for value adjustment —
+    // never spatial-nav those. ArrowUp/Down on a horizontal slider has no
+    // intrinsic meaning, so we let those bubble to the focus tree so the
+    // user can escape vertically (out of the seekbar, into the controls
+    // bar above or the content row below). Without this, the focus gets
+    // trapped on the seekbar and the user has to back out of the player
+    // to recover.
     if (active?.matches('[role="slider"], [data-tv-skip-spatial], [data-tv-skip-spatial] *')) {
-      return;
+      if (dir === 'left' || dir === 'right') return;
     }
     const next = this.findNeighbor(dir);
     e.preventDefault();

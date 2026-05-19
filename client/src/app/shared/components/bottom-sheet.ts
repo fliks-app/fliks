@@ -129,6 +129,22 @@ export class BottomSheetComponent {
           this.prevFocused = document.activeElement as HTMLElement | null;
           document.addEventListener('focusin', this.onFocusIn);
           this.focusTrapActive = true;
+          // Move focus to the first item inside the sheet on open. Without
+          // this, the D-pad still operates on the trigger row (or the
+          // previously-focused tile in the route), so up/down moves to a
+          // background element and the focus-trap fires AFTER the user
+          // has already left the sheet visually — feels unresponsive.
+          // queueMicrotask waits until @if has materialised the sheet
+          // content; rAF would defer one extra frame and let the WebView
+          // paint the focus halo on the wrong element first.
+          queueMicrotask(() => {
+            if (!this.open()) return;
+            const sheetEl = this.sheet()?.nativeElement;
+            const first = sheetEl?.querySelector<HTMLElement>(
+              BottomSheetComponent.FOCUSABLE_SELECTOR,
+            );
+            first?.focus({ preventScroll: true });
+          });
         }
       } else {
         if (this.prevBodyOverflow !== null) {

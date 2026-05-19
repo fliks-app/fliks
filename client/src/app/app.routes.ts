@@ -3,6 +3,7 @@ import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard';
 import { serverConfigGuard } from './core/guards/server-config.guard';
 import { passwordChangeGuard } from './core/guards/password-change.guard';
+import { noTvGuard } from './core/guards/no-tv.guard';
 
 export const routes: Routes = [
   {
@@ -76,6 +77,7 @@ export const routes: Routes = [
       },
       {
         path: 'downloads',
+        canActivate: [noTvGuard],
         loadComponent: () =>
           import('./features/downloads/downloads').then((m) => m.DownloadsComponent),
         data: { titleKey: 'downloads.title' },
@@ -266,6 +268,7 @@ export const routes: Routes = [
       },
       {
         path: 'storage',
+        canActivate: [noTvGuard],
         loadComponent: () =>
           import('./features/playback-settings/storage-settings/storage-settings').then(
             (m) => m.StorageSettingsPageComponent,

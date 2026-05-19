@@ -45,6 +45,14 @@ Thumbs.db
 # the repo (1Password / etc.); CI receives it as a base64-encoded
 # secret decoded at build time.
 client/android/app/fliks-upload.jks
+
+# Tizen / webOS signing material — never commit. Each contributor uses
+# their own Samsung-issued distributor cert (tied to a TV DUID) stored
+# outside the repo (~/tizen-studio-data/). CI uses an org-level secret.
+*.p12
+*.pwd
+client/tizen-studio-cli.bin
+client/webos/*.ipk
 volumes/*
 /backend/images/
 /scripts/

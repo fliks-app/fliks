@@ -120,7 +120,9 @@
            filter staying with the sort group while the search jumps below). -->
       <div class="flex items-center gap-2 ml-auto flex-1 min-w-40 max-w-md">
         <div class="relative flex-1">
-          <svg lucideSearch class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-base-content/40 pointer-events-none z-10"></svg>
+          <span class="absolute left-3 top-0 bottom-0 flex items-center pointer-events-none z-10">
+            <svg lucideSearch class="block h-4 w-4 text-base-content/40"></svg>
+          </span>
           <input
             type="text"
             [placeholder]="'common.search' | translate"

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tizen Web Application manifest for Fliks (Samsung Smart TV).
+
+  - `id` is the W3C widget URI (any unique URI is fine; ours mirrors the
+    Capacitor app id).
+  - `tizen:application id="<10char>.Fliks"` becomes the install id Tizen
+    uses on disk; the leading 10 chars match the Samsung Apps Seller
+    Office package id once we register one.
+  - `required_version="5.5"` covers Tizen TVs from 2020 onwards
+    (MSE/EME parity with the Cast Shaka build).
+  - `<access origin="*" subdomains="true"/>` lets the SPA reach any
+    Fliks backend the user configured via pairing.
+-->
+<widget xmlns="http://www.w3.org/ns/widgets"
+        xmlns:tizen="http://tizen.org/ns/widgets"
+        id="https://fliks.media/tizen"
+        version="1.5.1"
+        viewmodes="maximized">
+  <name>Fliks</name>
+  <description>Fliks media app for Samsung Smart TV</description>
+  <author email="dev@fliks.media" href="https://fliks.media">Fliks</author>
+  <icon src="icon.png"/>
+  <content src="index.html"/>
+  <access origin="*" subdomains="true"/>
+  <feature name="http://tizen.org/feature/screen.size.normal"/>
+  <tizen:application id="abcdefghij.Fliks"
+                     package="abcdefghij"
+                     required_version="5.5"/>
+  <tizen:profile name="tv"/>
+  <tizen:privilege name="http://tizen.org/privilege/internet"/>
+  <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+  <!-- AVPlay is gated behind a Samsung-vendor privilege. Without this
+       declaration, `webapis.avplay.prepareAsync` rejects every URL with
+       `InvalidAccessError / PLAYER_ERROR_CONNECTION_FAILED` before any
+       network handshake — the failure mode looks like a connectivity bug
+       but it's a permission check. Pair it with `tv.window` so the
+       hardware video plane is allowed to render behind the WebView. -->
+  <tizen:privilege name="http://developer.samsung.com/privilege/avplay"/>
+  <tizen:privilege name="http://tizen.org/privilege/tv.window"/>
+  <tizen:setting screen-orientation="landscape"
+                 background-support="disable"
+                 hwkey-event="enable"
+                 pointing-device-support="enable"/>
+  <!-- CSP policy. Permissive on connect-src because the user's NAS URL
+       is only known at runtime. The receiver, like the web bundle,
+       fetches assets/streams from the same origin family the user
+       paired with. -->
+  <tizen:content-security-policy>
+    default-src 'self';
+    script-src 'self' 'unsafe-eval';
+    style-src 'self' 'unsafe-inline';
+    img-src * data: blob:;
+    media-src * blob:;
+    connect-src *;
+    font-src 'self' data:;
+  </tizen:content-security-policy>
+</widget>

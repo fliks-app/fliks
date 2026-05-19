@@ -1,4 +1,5 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
+import { DeviceService } from './device.service';
 
 
 export interface PlayerSettings {
@@ -86,12 +87,15 @@ export const SUBTITLE_BG_MAP: Record<string, string> = {
 
 @Injectable({ providedIn: 'root' })
 export class PlayerSettingsService {
+  private readonly device = inject(DeviceService);
   readonly settings = signal<PlayerSettings>(this.load());
 
   private load(): PlayerSettings {
-    // 10-foot UI: default to large subtitles on Android TV (still overridable by the user)
-    const isTv = typeof navigator !== 'undefined' && /AndroidTV\/\d/.test(navigator.userAgent);
-    const defaults: PlayerSettings = isTv ? { ...DEFAULTS, subtitleSize: 'large' } : { ...DEFAULTS };
+    // 10-foot UI: default to large subtitles on every TV form factor
+    // (AndroidTV / Tizen / webOS — still overridable by the user).
+    const defaults: PlayerSettings = this.device.isTv()
+      ? { ...DEFAULTS, subtitleSize: 'large' }
+      : { ...DEFAULTS };
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
       if (raw) return { ...defaults, ...JSON.parse(raw) };

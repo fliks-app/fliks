@@ -39,7 +39,7 @@
         <svg lucideUserRoundPen class="h-4 w-4"></svg>
         {{ 'select_user.other_user' | translate }}
       </button>
-      @if (isNative) {
+      @if (canChangeServer) {
         <button type="button" class="btn btn-ghost btn-xs" (click)="changeServer(); $event.stopPropagation()">
           {{ 'select_user.change_server' | translate }}
         </button>

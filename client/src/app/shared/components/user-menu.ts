@@ -68,7 +68,7 @@ import {
         <svg lucideRepeat class="h-5 w-5 shrink-0 opacity-80"></svg>
         <span class="flex-1">{{ 'nav.switch_user' | translate }}</span>
       </button>
-      @if (isNative) {
+      @if (canChangeServer) {
         <button type="button" (click)="changeServer()" class="dropdown-item text-white">
           <svg lucideServer class="h-5 w-5 shrink-0 opacity-80"></svg>
           <span class="flex-1">{{ 'nav.change_server' | translate }}</span>
@@ -86,7 +86,12 @@ export class UserMenuComponent {
   private readonly router = inject(Router);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly serverCache = inject(ServerCacheService);
-  protected readonly isNative = Capacitor.isNativePlatform();
+  protected readonly isNative = this.serverConfig.isNative;
+  /** Show the "change server" entry on every standalone bundle — both
+   *  Capacitor mobile and Smart TV (both now reported by `isNative`).
+   *  Web is served by the backend so the origin is fixed; the entry
+   *  would be a dead-end there. */
+  protected readonly canChangeServer = this.isNative;
 
   protected async switchUser() {
     await this.serverCache.clearAll();

@@ -3,7 +3,16 @@
 <head>
   <meta charset="utf-8">
   <title>Fliks</title>
-  <base href="/">
+  <base href="./">
+  <!-- Disable caching of index.html so Tizen WebView fetches the freshly
+       installed file instead of serving the previous build's hashed
+       chunk references. The hashed assets themselves can stay cached
+       (their names change between builds), but index.html keeps the
+       same path and is the entry point — letting it cache strands the
+       WebView on the old chunk names after a partial `tizen install`. -->
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
@@ -20,8 +29,32 @@
   </style>
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1" async></script>
+  <!-- Samsung Tizen WebAPIs bootstrap. Resolves to the on-device runtime
+       `webapis/webapis.js` via the magic `$WEBAPIS` prefix the WebView
+       expands at load time. Required to populate `window.webapis.*` —
+       without it, `webapis.avplay.prepareAsync` is a stub that throws
+       `InvalidAccessError / PLAYER_ERROR_CONNECTION_FAILED` on every
+       call. 404s on non-Tizen targets (browser ignores the missing
+       script and the rest of the app boots normally). -->
+  <script src="$WEBAPIS/webapis/webapis.js"></script>
 </head>
 <body>
+  <!-- Tizen AVPlay surface. Samsung's media runtime instantiates the
+       native player plugin at HTML parse time and binds `webapis.avplay`
+       to the first `<object type="application/avplayer">` it sees;
+       creating it later via JS leaves AVPlay without a surface and
+       `prepareAsync` rejects every URL with `InvalidAccessError`.
+       The element MUST be 100%×100% from parse time — Samsung's plugin
+       seems to record the geometry at init and refuses to play if the
+       surface was 0×0 when registered (same `InvalidAccessError`).
+       The hardware layer is composited BEHIND the WebView regardless of
+       z-index, so by default the opaque WebView fully hides the AVPlay
+       output. When playback starts, `html.native-player-active` makes
+       the WebView transparent so the video shows through.
+       Inert on non-Tizen — the plugin type is unknown and the browser
+       renders nothing. -->
+  <object id="fliks-avplay" type="application/avplayer"
+          style="position: fixed; left: 0; top: 0; width: 100%; height: 100%; background: transparent; display: none; z-index: -1"></object>
   <app-root></app-root>
 </body>
 </html>

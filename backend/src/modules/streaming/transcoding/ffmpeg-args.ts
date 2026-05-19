@@ -540,6 +540,7 @@ export function buildFfmpegArgs(
     }
 
     args.push(
+      ...(useTs ? [] : ['-movflags', '+cmaf']),
       '-f',
       'hls',
       '-hls_time',
@@ -575,6 +576,7 @@ export function buildFfmpegArgs(
     args.push(...audioArgs);
 
     args.push(
+      ...(useTs ? [] : ['-movflags', '+cmaf']),
       '-f',
       'hls',
       '-hls_time',
@@ -651,6 +653,7 @@ export function buildAudioOnlyFfmpegArgs(
   args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
 
   args.push(
+    ...(useTs ? [] : ['-movflags', '+cmaf']),
     '-f',
     'hls',
     '-hls_time',
@@ -780,6 +783,8 @@ export function buildRemuxArgs(
   }
 
   args.push(
+    '-movflags',
+    '+cmaf',
     '-f',
     'hls',
     '-hls_time',

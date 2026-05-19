@@ -35,6 +35,10 @@ export function getDeviceName(): string {
   if (/AFT[A-Z0-9]+/i.test(ua)) return 'Fire TV';
   if (/GoogleTV/i.test(ua)) return 'Google TV';
 
+  // Smart TVs — Samsung Tizen, LG webOS.
+  if (/\bTizen\b|SMART-TV/i.test(ua)) return 'Samsung TV';
+  if (/Web0S|webOS/.test(ua)) return 'LG TV';
+
   // Phone / tablet — Android model parse, iPhone/iPad recognised as such.
   if (/iPhone/.test(ua)) return 'iPhone';
   if (/iPad/.test(ua)) return 'iPad';

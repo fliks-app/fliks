@@ -5,7 +5,7 @@
    target Android TV without depending on viewport width breakpoints (a
    1080p TV reports innerWidth=960 due to DPR=2, so it falls into the md
    range and Tailwind packs the same column count as a portrait tablet). */
-@custom-variant tv (&:where(body.tv *));
+@custom-variant tv (body.tv &);
 
 /* Rounder corners for all DaisyUI components */
 :root, [data-theme] {
@@ -128,14 +128,17 @@ body.native.hero-page {
 body.tv {
   /* Slight scale-up of base text for legibility from the couch */
   font-size: 18px;
-  /* Horizontal overscan compensation — shrink the body 4% horizontally
-     so content stays inside the TV's displayable area. `scaleX` only
-     (not uniform `scale`): vertical scaling silently compounded into
-     every Y offset of descendants, so a sticky bar pinned at top:50vh
-     drifted up as the user scrolled (the body's transform scaled the
-     scroll-relative offset). Modern TVs overscan horizontally far more
-     than vertically; the vertical edge isn't worth the positioning
-     headaches. */
+}
+/* Horizontal overscan compensation — shrink the body 4% horizontally
+   so content stays inside the TV's displayable area. `scaleX` only
+   (not uniform `scale`): vertical scaling silently compounded into
+   every Y offset of descendants, so a sticky bar pinned at top:50vh
+   drifted up as the user scrolled (the body's transform scaled the
+   scroll-relative offset). Modern TVs overscan horizontally far more
+   than vertically; the vertical edge isn't worth the positioning
+   headaches. Excluded on Tizen: the Samsung WebView already trims
+   ~4% on each axis, so adding our own margin would double-clip. */
+body.tv:not(.tv-tizen) {
   transform: scaleX(0.96);
   transform-origin: top center;
 }
@@ -162,6 +165,16 @@ body.tv :is(a, button, [role="button"], [tabindex]):focus {
   outline-offset: 4px;
   z-index: 1;
   position: relative;
+}
+/* TV ghost buttons keep their transparent bg even when focused. The
+   3px primary-color outline above is already a strong focus cue on a
+   10-foot UI, so layering daisyUI's fill (which kicks in via the
+   `.btn-ghost:not(…,:focus,…)` exclusion) is redundant and obscures
+   the underlying video for player controls. */
+body.tv .btn-ghost:focus,
+body.tv .btn-ghost:focus-visible {
+  background-color: transparent !important;
+  --btn-bg: rgba(0, 0, 0, 0) !important;
 }
 /* Cards/list items — scale up on focus to give a clear "selected" affordance */
 body.tv .media-card:focus-within,
@@ -208,6 +221,67 @@ body.tv [data-touch-only] {
   display: none !important;
 }
 
+/* DaisyUI v5 component radii flow through three theme tokens
+   (`--radius-selector`, `--radius-field`, `--radius-box`). The default
+   light/dark themes redeclare them to `.25rem`/`.5rem` at
+   `:root,[data-theme=light]`, which wins by source order over our
+   `:root,[data-theme]` block at the top of this file. At the TV's 1080p
+   viewport scaled by Tizen, .25rem reads as effectively square corners
+   on `.btn`, `.input`, `.select`, `.textarea`, `.badge`, `.tab`,
+   `.card`, `.alert`, `.modal-box`, etc. Re-assert the rounder intent
+   with a higher-specificity selector that descendants inherit through. */
+body.tv {
+  --radius-selector: 1rem;
+  --radius-field: 1rem;
+  --radius-box: 0.5rem;
+}
+/* `.radio` and `.btn-circle` use `border-radius: calc(infinity * 1px)`
+   which Chromium 85 drops entirely; restate with a finite sentinel so
+   the circular shape survives the downlevel pipeline. */
+body.tv .radio,
+body.tv .btn-circle {
+  border-radius: 9999px;
+}
+
+/* Tailwind v4 emits `.rounded-full { border-radius: calc(infinity * 1px) }`.
+   Chromium 85 (Tizen 6.5 / webOS 6) doesn't recognise the CSS Values L4
+   `infinity` keyword, the declaration is dropped, and every `rounded-full`
+   element (avatars, pills, FABs, the seekbar track + thumb) falls back to
+   square corners. Re-state the same intent with the legacy `9999px`
+   sentinel so the value parses on the TV WebView. Scoped to `body.tv`
+   so the modern bundle keeps the wide-gamut form. */
+body.tv .rounded-full {
+  border-radius: 9999px;
+}
+/* Seekbar thumb on TV — the inner div uses Tailwind's `rounded-full` which
+   the rule above already fixes the track of, but we additionally force
+   `border-radius: 50%` on the drag handle so a future markup tweak (e.g.
+   dropping the utility class) still renders it as a perfect circle. The
+   seekbar is a custom div-based scrubber (not `<input type=range>`), so
+   the absolutely-positioned thumb child of `app-seekbar` is the target. */
+body.tv app-seekbar div.absolute.rounded-full.bg-white {
+  border-radius: 50%;
+}
+
+/* Tailwind v4 opacity-modifier utilities like `bg-base-100/80`, `via-base-
+   100/30`, `to-base-100/50` emit `color-mix(in oklab, ...)` for the actual
+   colour and a non-color-mix fallback that resolves to the FULL-opacity base
+   colour. Chromium 85 has no `color-mix()`, takes the fallback, and the
+   media-info-header / tmdb-preview fanart overlays end up as a solid wall
+   of base-100 hiding the fanart entirely. Restore the dimming intent with
+   element opacity (overlay divs have no children, so this matches the
+   visual without needing colour-channel maths). */
+body.tv .bg-base-100\/80 {
+  background-color: var(--color-base-100);
+  opacity: 0.8;
+}
+body.tv .via-base-100\/30 {
+  --tw-gradient-via: transparent;
+}
+body.tv .to-base-100\/50 {
+  --tw-gradient-to: transparent;
+}
+
 /* TV: dropdowns are signal-controlled (`.dropdown-open`). Neutralise any
    `:focus-within` fallback that DaisyUI might re-introduce — D-pad focus alone
    should never auto-open a dropdown. */
@@ -220,7 +294,76 @@ body.tv .dropdown:not(.dropdown-open) > .dropdown-content {
    …) and an icon — everything else (padding, hover, focus, layout) lives
    here so each menu item stays a one-liner. */
 .dropdown-item {
-  @apply w-full flex items-center gap-3 px-3 py-2 text-left text-base rounded-lg cursor-pointer hover:bg-white/5 active:bg-white/10 disabled:opacity-40;
+  @apply w-full flex items-center gap-3 px-3 py-2 text-left text-base rounded-lg cursor-pointer hover:bg-white/5 focus:bg-white/10 focus:outline-none active:bg-white/10 disabled:opacity-40;
+}
+/* TV / keyboard focus: subtle hover tint isn't enough on a 10-foot UI —
+   the user can't track which row is highlighted from the couch without
+   a clear ring. */
+body.tv .dropdown-item:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+/* TV (Tizen 6.5 / webOS 6 — Chromium ~85): daisyUI v5's `.toggle` relies on
+   modern features that don't survive the downlevel pipeline:
+   - `color-mix()` resolves to `rgba(0,0,0,0)`, so `--input-color` is transparent
+     → the dot (`background-color: currentcolor`) is invisible, and the pill's
+     `box-shadow: 0 1px currentColor inset` also collapses, leaving the
+     unchecked pill with no background at all.
+   - `:has(>input:checked)` is stripped by `strip-unsupported-selectors`, taking
+     the entire `.toggle:checked, .toggle[aria-checked=true], .toggle:has(...)`
+     branch with it on the `:before { opacity: 0 }` rule. The dot animation
+     driven by `grid-template-columns` still works for the bare `:checked`
+     branch, so we drive position from `:checked` directly.
+   - `aspect-ratio` is Chrome 88+; spell out width/height in rem units.
+   Markup is `<input type="checkbox" class="toggle">` so `:checked` matches the
+   toggle element itself — no `:has()` needed. */
+/* Target `html.tv-host` rather than `body.tv` so the override also reaches
+   toggles inside `<app-dropdown-menu>`'s bottom-sheet, which gets reparented
+   under `<html>` (sibling of `<body>`) to escape the drawer-content stacking
+   context. Both classes are toggled in sync by DeviceService. */
+html.tv-host .toggle {
+  --input-color: var(--color-base-content);
+  color: var(--color-base-content);
+  /* Unchecked pill: muted grey so the white dot has visible contrast.
+     Uses a translucent base-content colour — works on both light & dark
+     themes (darkens on light bg, lightens on dark bg). */
+  background-color: rgba(128, 128, 128, 0.35);
+}
+html.tv-host .toggle:before {
+  width: 1.125rem;
+  height: 1.125rem;
+  background-color: var(--color-base-100, #fff);
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  outline: none;
+  /* Force the dot fully opaque in every state — the base daisyUI rule
+     `.toggle:checked:before { opacity: 0 }` survives downlevel and would
+     otherwise hide the dot whenever the parent's `:before` is targeted
+     by the checked branch. */
+  opacity: 1;
+}
+html.tv-host .toggle.toggle-sm:before {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+/* Checked state: pill darkens, dot stays light. The parent's
+   `grid-template-columns` transition (already in core CSS) animates the
+   dot from the left column to the right column. We do NOT use
+   `:has(:checked)` — stripped by the pipeline. */
+html.tv-host .toggle:checked,
+html.tv-host .toggle[aria-checked='true'] {
+  background-color: var(--color-base-content);
+  --input-color: var(--color-base-content);
+}
+html.tv-host .toggle:checked:before,
+html.tv-host .toggle[aria-checked='true']:before {
+  background-color: var(--color-base-100, #fff);
+  opacity: 1;
+}
+html.tv-host .toggle-primary:checked,
+html.tv-host .toggle-primary[aria-checked='true'] {
+  background-color: var(--color-primary);
 }
 
 /* ============================================================================
