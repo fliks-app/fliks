@@ -199,12 +199,18 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   // ── Loading ─────────────────────────────────────────────────────────
 
+  /** Last URL passed to `load()` — kept so the seek-failure recovery
+   *  path can reload the stream at the user's target without going
+   *  back through the player layer. */
+  private _lastLoadedUrl: string | null = null;
+
   async load(
     url: string,
     startTime?: number,
     _mimeType?: string,
     headers?: Record<string, string>,
   ): Promise<void> {
+    this._lastLoadedUrl = url;
     this.firstFrameEmitted = false;
     this._currentTime = 0;
     this._duration = 0;
@@ -420,7 +426,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   }
 
   async seek(position: number): Promise<void> {
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
       try {
         webapis.avplay.seekTo(
           Math.round(position * 1000),
@@ -428,19 +434,33 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
             this._currentTime = position;
             resolve();
           },
-          (err) => {
-            // Don't surface seek failures: they fire mostly when the user
-            // spams the seekbar faster than AVPlay can satisfy, or when
-            // the requested position is just outside the buffered range
-            // — both recover on the next seek tick, so a toast every
-            // time would only spam the UI.
+          async (err) => {
+            // AVPlay's failure callback fires whenever it can't
+            // satisfy the seek — typically a big backward seek past
+            // the buffered range, where AVPlay's HLS engine doesn't
+            // retry the segment fetch on its own and ends up stuck
+            // in a half-paused state (next `play()` throws). Reload
+            // the stream at the target position to recover.
             // eslint-disable-next-line no-console
-            console.warn('[TizenEngine] seek failed (swallowed):', err);
-            resolve();
+            console.warn(
+              '[TizenEngine] seek failed → reloading at target:',
+              err,
+            );
+            if (!this._lastLoadedUrl) {
+              reject(new Error(`seek failed: ${err}`));
+              return;
+            }
+            try {
+              await this.load(this._lastLoadedUrl, position);
+              await this.play();
+              resolve();
+            } catch (e) {
+              reject(e);
+            }
           },
         );
-      } catch {
-        resolve();
+      } catch (e) {
+        reject(e);
       }
     });
   }

@@ -1289,21 +1289,83 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (dragging) {
       // Cancel any pending hide
       if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
+      // Freeze the engine→state mirror while the user is dragging /
+      // scrubbing the seekbar — otherwise the player's `timeUpdate`
+      // stream keeps pushing the bar back to the live position under
+      // the user's finger / arrow keys.
+      this.state.seekLocked.set(true);
     } else {
       this.resetHideTimer();
+      // Don't release the lock here: `onSeek` is about to fire with
+      // the commit value and schedules its own release once the
+      // engine catches up to the target.
     }
   }
 
   onSeek(time: number) {
     const t = Math.max(0, Math.min(time, this.duration() || 0));
     if (this.engine) {
-      this.engine.seek(t).catch(() => {});
+      // Lock the mirror BEFORE issuing the seek so transient
+      // `timeUpdate` events fired while the engine still reports the
+      // OLD position can't bounce the seekbar back. The local
+      // `state.currentTime.set(t)` pins the bar at the user's target
+      // until `awaitSeekUnlock` lets the engine resume driving it.
+      this.state.seekLocked.set(true);
       this.state.currentTime.set(t);
+      void this.awaitSeekUnlock(t);
     }
     // Suppress auto-skip for 2s after a manual seek so the user can step back
     // into the intro on purpose without being kicked forward again.
     this.autoSkipSuppressedUntil = Date.now() + 2000;
     this.resetHideTimer();
+  }
+
+  /** Generation counter — every `onSeek` bumps it and the corresponding
+   *  `awaitSeekUnlock` checks it before mutating state. Lets a newer
+   *  seek invalidate an older one mid-flight (e.g. user holds an
+   *  arrow key: each commit cancels the previous unlock loop). */
+  private seekGeneration = 0;
+
+  /** Await the engine's actual seek completion before lifting the
+   *  state lock. Two phases:
+   *    1. Wait for `engine.seek(target)`'s Promise — engines resolve
+   *       this when their internal seek state machine has dispatched
+   *       the request, which for HLS-fMP4 means the variant playlist
+   *       has been re-parsed and the new segment buffer is being
+   *       requested. Failure (Promise reject) keeps the lock on so
+   *       the bar stays pinned at the user's target while the
+   *       `engine.error` event surfaces a playback error UI.
+   *    2. After the promise resolves, poll the engine's reported
+   *       `currentTime` until it lands within 2s of the target. This
+   *       catches engines (notably Shaka) that resolve their seek
+   *       Promise as soon as the seek is queued, before the
+   *       demuxer / decoder has actually moved.
+   *
+   *  Backward seeks that fall outside the cached segment range
+   *  trigger a backend ffmpeg respawn (~10–20 s on long seeks); the
+   *  30 s ceiling is sized for that. If convergence never happens we
+   *  forcibly unlock so the user isn't stranded — the next live
+   *  `timeUpdate` will take over the bar from the engine's actual
+   *  position rather than the (now stale) target. */
+  private async awaitSeekUnlock(target: number): Promise<void> {
+    const gen = ++this.seekGeneration;
+    try {
+      await this.engine?.seek(target);
+    } catch {
+      // Engine rejected the seek (network error, codec stall, …).
+      // Leave the lock on — the bar stays at the user's target and
+      // the playback-error state surfaces via `state.error`.
+      return;
+    }
+    if (gen !== this.seekGeneration) return;
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < 30000) {
+      if (gen !== this.seekGeneration) return;
+      const cur = this.engine?.currentTime ?? 0;
+      if (Math.abs(cur - target) < 2) break;
+      await new Promise<void>((r) => setTimeout(r, 100));
+    }
+    if (gen === this.seekGeneration) this.state.seekLocked.set(false);
   }
 
   // ── Skip-intro UX ──
