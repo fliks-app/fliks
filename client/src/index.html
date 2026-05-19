@@ -4,6 +4,15 @@
   <meta charset="utf-8">
   <title>Fliks</title>
   <base href="./">
+  <!-- Disable caching of index.html so Tizen WebView fetches the freshly
+       installed file instead of serving the previous build's hashed
+       chunk references. The hashed assets themselves can stay cached
+       (their names change between builds), but index.html keeps the
+       same path and is the entry point — letting it cache strands the
+       WebView on the old chunk names after a partial `tizen install`. -->
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
