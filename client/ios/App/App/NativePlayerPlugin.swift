@@ -54,13 +54,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var firstFrameObserver: NSKeyValueObservation?
     private var firstFrameEmitted = false
     private var savedBrightness: CGFloat?
-    /// Seek-and-play target captured at load() time, applied once the
-    /// item flips to .readyToPlay. Seeking on a .unknown item races
-    /// AVPlayer's own status-flip seek and the completion handler can
-    /// fire with `finished=false`, leaving play() never called —
-    /// playback gets stuck on the play overlay until the user taps
-    /// pause/play to re-evaluate.
-    private var pendingStartTime: Double = 0
 
     /// Exposed for PipPlugin to access the player layer.
     public var activePlayerLayer: AVPlayerLayer? { playerLayer }
@@ -269,21 +262,28 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 self.playerLayer?.player = player
             }
 
-            // Capture the resume position before setting up observers so
-            // the status-flip handler can apply seek + play once the
-            // item is .readyToPlay. Issuing the seek now would race
-            // AVPlayer's own status-flip seek.
-            self.pendingStartTime = startTime
-
             // Observe playback state
             self.setupObservers()
 
-            // Start position 0 (or no resume) — start playback immediately;
-            // AVPlayer waits internally for .readyToPlay before producing
-            // frames, no seek required.
-            if startTime <= 0 {
-                player.play()
+            // Seek BEFORE play so AVPlayer's initial prebuffer probe
+            // (gated by automaticallyWaitsToMinimizeStalling=true on
+            // an .unknown item) fires at the resume target, not at
+            // content time 0. On transcoded HLS the backend pre-spawns
+            // ffmpeg at startSegment and only warms segments forward —
+            // a probe at seg-0 / seg-1 cold-spawns a second session.
+            // AVPlayer queues seek and play on .unknown items and
+            // applies both once the asset is loaded. play() runs
+            // unconditionally rather than inside the seek completion
+            // handler — Apple's docs say the completion may fire with
+            // finished=false when AVPlayer pre-empts our seek with
+            // its own status-flip seek, and we would then never start
+            // playback (the symptom that bit us originally: load()
+            // resolved but playback stayed paused).
+            if startTime > 0 {
+                let cmTime = CMTime(seconds: startTime, preferredTimescale: 1000)
+                player.seek(to: cmTime)
             }
+            player.play()
 
             call.resolve()
         }
@@ -604,19 +604,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         statusObserver = player.currentItem?.observe(\.status) { [weak self] item, _ in
             switch item.status {
             case .readyToPlay:
-                if let pending = self?.pendingStartTime, pending > 0 {
-                    self?.pendingStartTime = 0
-                    let cmTime = CMTime(seconds: pending, preferredTimescale: 1000)
-                    // Default tolerance — AVPlayer snaps to the nearest IDR.
-                    // Frame-accurate seek (.zero/.zero) forces backward
-                    // IDR alignment, which on transcoded HLS reaches a
-                    // segment that hasn't been warmed by the ffmpeg
-                    // session at startAt and triggers a cold spawn —
-                    // user sees a black screen for ~30 s.
-                    player.seek(to: cmTime) { _ in
-                        player.play()
-                    }
-                }
                 self?.emitStateChanged("playing")
                 self?.emitTracksChanged()
             case .failed:
