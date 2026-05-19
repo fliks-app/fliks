@@ -204,6 +204,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly activeQualityId = this.qualityManager.activeQualityId;
   readonly availableQualities = this.qualityManager.availableQualities;
   readonly activeResolution = this.qualityManager.activeResolution;
+  /** Label for the currently picked quality, mirroring the per-rung
+   *  label in the dropdown (`q.label`) — so the header row stays in
+   *  sync with the list and never surfaces internal ids like
+   *  `1080p-hdr`. Falls back to the id for legacy callers. */
+  readonly activeQualityLabel = computed(() => {
+    const id = this.activeQualityId();
+    if (id === 'auto') {
+      const res = this.activeResolution();
+      return res ? `Auto (${res})` : 'Auto';
+    }
+    return this.availableQualities().find((q) => q.id === id)?.label ?? id;
+  });
 
   // Component-owned signals (not delegated)
   readonly playbackRate = signal(1);
@@ -1818,9 +1830,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   async onSelectAudioTrack(trackId: string) {
     this.activeAudioTrackId.set(trackId);
-    // Only update activeAudioStreamIndex for si-* tracks (backend stream index).
-    // Shaka/engine tracks switch client-side — no backend reload needed.
-    if (trackId.startsWith('si-')) {
+    // 'si-*' and 'audio-*' suffixes are streamInfo audio indices: the
+    // backend emits EXT-X-MEDIA renditions in streamInfo.audio order
+    // and the native plugins enumerate them in that same order. Keep
+    // activeAudioStreamIndex in sync so a later reloadStream() hands
+    // the right index to /playback-info — otherwise the new master
+    // marks the wrong rendition DEFAULT=YES and the player reverts
+    // to the original language on the item swap. 'shaka-*' is
+    // Shaka's internal audioId, not a streamInfo index.
+    if (trackId.startsWith('si-') || trackId.startsWith('audio-')) {
       this.activeAudioStreamIndex = parseAudioIndex(trackId);
     }
     this.resetHideTimer();

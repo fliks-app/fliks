@@ -265,15 +265,25 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             // Observe playback state
             self.setupObservers()
 
-            // Seek to start position
+            // Seek BEFORE play so AVPlayer's initial prebuffer probe
+            // (gated by automaticallyWaitsToMinimizeStalling=true on
+            // an .unknown item) fires at the resume target, not at
+            // content time 0. On transcoded HLS the backend pre-spawns
+            // ffmpeg at startSegment and only warms segments forward —
+            // a probe at seg-0 / seg-1 cold-spawns a second session.
+            // AVPlayer queues seek and play on .unknown items and
+            // applies both once the asset is loaded. play() runs
+            // unconditionally rather than inside the seek completion
+            // handler — Apple's docs say the completion may fire with
+            // finished=false when AVPlayer pre-empts our seek with
+            // its own status-flip seek, and we would then never start
+            // playback (the symptom that bit us originally: load()
+            // resolved but playback stayed paused).
             if startTime > 0 {
                 let cmTime = CMTime(seconds: startTime, preferredTimescale: 1000)
-                player.seek(to: cmTime) { _ in
-                    player.play()
-                }
-            } else {
-                player.play()
+                player.seek(to: cmTime)
             }
+            player.play()
 
             call.resolve()
         }

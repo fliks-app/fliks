@@ -56,7 +56,7 @@
     [episodeTitle]="episodeTitle()"
     [hasNextEpisode]="nextEpisodeContext() !== null"
     [hasPrevEpisode]="false"
-    [activeQualityLabel]="activeQualityId() === 'auto' ? (activeResolution() ? 'Auto (' + activeResolution() + ')' : 'Auto') : activeQualityId()"
+    [activeQualityLabel]="activeQualityLabel()"
     [isNative]="isNative"
     (togglePlay)="onTogglePlay()"
     (tapOverlay)="toggleControls()"
