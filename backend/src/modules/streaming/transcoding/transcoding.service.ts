@@ -336,6 +336,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       audioBitRateBps?: number;
     },
     sdrVariant?: import('./codec/types').CodecVariant,
+    sourceFrameRate?: number,
   ): string {
     // Ask the encoder registry whether any HEVC Main10 HDR10 encoder is
     // probed-OK on the detected hwAccel (or CPU fallback). When false,
@@ -364,6 +365,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       hdrPassThrough,
       canEncodeHevcHdr,
       sdrVariant,
+      sourceFrameRate,
     );
   }
 
