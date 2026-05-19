@@ -15,18 +15,10 @@ export const hevcVideotoolbox: EncoderDescriptor = {
   supportsHdrMetadata: () => false,
   codecString: (target: EncoderTarget) => hevcMainCodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, early, filters } = input;
+    const { target, early, filters, inputSurface } = input;
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
-    // CPU tonemap path. The previous `scale_vt` Metal branch required
-    // the decoder to be set up with `-hwaccel_output_format
-    // videotoolbox_vld`, but our VT decoder descriptor declares its
-    // output as CPU (filters / encoders downstream assume that). With
-    // CPU buffers feeding a `scale_vt`-anchored graph, FFmpeg fails
-    // pixel-format negotiation with `dst: videotoolbox_vld` → error
-    // -78 (ENOSYS). The CPU chain (tonemap filter + libsw scale) is
-    // a hair slower but works reliably on every macOS host.
-    return [
+    const common = [
       '-c:v',
       'hevc_videotoolbox',
       '-profile:v',
@@ -36,8 +28,8 @@ export const hevcVideotoolbox: EncoderDescriptor = {
       bitrate,
       '-maxrate',
       bitrate,
-      '-vf',
-      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
+    ];
+    const trailing = [
       '-g',
       String(target.gopSize),
       '-keyint_min',
@@ -46,6 +38,29 @@ export const hevcVideotoolbox: EncoderDescriptor = {
       input.forceKeyframesExpr,
       '-tag:v',
       'hvc1',
+    ];
+    // Full-Metal HDR pipeline: the orchestrator has set the decoder to
+    // emit videotoolbox_vld surfaces (`-hwaccel_output_format`), so
+    // `scale_vt` accepts the input directly and the entire chain runs
+    // on the Apple Media Engine — no CPU bounce. Only viable when no
+    // CPU-only filter (burn-in, crop) is required; the orchestrator
+    // checks those before flipping `inputSurface` to `'videotoolbox'`.
+    if (inputSurface === 'videotoolbox') {
+      return [
+        ...common,
+        '-vf',
+        `scale_vt=w=${w}:h=-2:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709`,
+        ...trailing,
+      ];
+    }
+    // CPU tonemap fallback — works on every macOS host even when the
+    // Metal fast path is inapplicable (burn-in, crop, or a future
+    // decoder that hands off CPU buffers).
+    return [
+      ...common,
+      '-vf',
+      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
+      ...trailing,
     ];
   },
 };

@@ -835,6 +835,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     this.log.log(
       `FFmpeg start [${id}] ${quality} dec=${decoder} enc=${encoder} ss=${ss} start_number=${startNumber}`,
     );
+    this.log.debug(`FFmpeg argv [${id}]: ffmpeg ${args.join(' ')}`);
 
     const proc = spawn('ffmpeg', args, {
       stdio: ['ignore', 'ignore', 'pipe'],
