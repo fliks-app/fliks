@@ -204,6 +204,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly activeQualityId = this.qualityManager.activeQualityId;
   readonly availableQualities = this.qualityManager.availableQualities;
   readonly activeResolution = this.qualityManager.activeResolution;
+  /** Label for the currently picked quality, mirroring the per-rung
+   *  label in the dropdown (`q.label`) — so the header row stays in
+   *  sync with the list and never surfaces internal ids like
+   *  `1080p-hdr`. Falls back to the id for legacy callers. */
+  readonly activeQualityLabel = computed(() => {
+    const id = this.activeQualityId();
+    if (id === 'auto') {
+      const res = this.activeResolution();
+      return res ? `Auto (${res})` : 'Auto';
+    }
+    return this.availableQualities().find((q) => q.id === id)?.label ?? id;
+  });
 
   // Component-owned signals (not delegated)
   readonly playbackRate = signal(1);
