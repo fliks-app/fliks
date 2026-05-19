@@ -7,7 +7,11 @@ import {
 } from './profiles';
 import type { DeviceType, TranscodeProfile } from './types';
 import type { CodecVariant } from './codec/types';
-import { h264CodecString, hevcMainCodecString } from './codec/codec-strings';
+import {
+  h264CodecString,
+  hevcMain10CodecString,
+  hevcMainCodecString,
+} from './codec/codec-strings';
 
 /** Apply the `onlyQuality` URL pin to a ladder. Used identically by
  *  the SDR and HDR branches: when the player has a saved quality
@@ -189,9 +193,19 @@ export function generateMasterPlaylist(
           sourceWidth,
           sourceHeight,
         );
-        // Use actual emitted height for the codec level — see SDR
-        // branch below for the rationale (Arcane / cropped sources).
-        const videoCodec = hevcMain10CodecStringForHeight(h);
+        // Level driven by luma sample rate (width × height × fps) so
+        // cropped 4K sources (e.g. 3840×2024 cinemascope, height < 2160)
+        // still get L5.x — height-only bucketing under-declared L4.1
+        // for these and AVPlayer rejected every variant, surfacing as
+        // NSURLErrorUnsupportedURL on iOS. Same rationale as the SDR
+        // branch below.
+        const videoCodec = hevcMain10CodecString({
+          width: w,
+          height: h,
+          videoBitrateBps: 0,
+          gopSize: 0,
+          frameRate: 24,
+        });
         lines.push(
           `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},VIDEO-RANGE=${range},NAME="${p.name}",CODECS="${videoCodec},${audioCodec}"${hdrAudioAttr}`,
           `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
@@ -301,15 +315,3 @@ export function generateMasterPlaylist(
   return lines.join('\n');
 }
 
-/** HEVC Main10 codec string for an HDR pass-through variant. Format:
- *  `hvc1.{profile_space}.{profile_idc}{compat}.L{level_idc}.{constraints}`.
- *  Profile_space=2, profile_idc=4 = Main10 (the only HEVC profile with
- *  10-bit support, which HDR10 / HLG require). Levels picked to cover
- *  60 fps at the rung resolution so AVPlayer doesn't reject the variant
- *  on a level mismatch with the actual SPS. */
-function hevcMain10CodecStringForHeight(height: number): string {
-  if (height >= 2160) return 'hvc1.2.4.L153.B0'; // L5.1 — 4K60
-  if (height >= 1080) return 'hvc1.2.4.L123.B0'; // L4.1 — 1080p60
-  if (height >= 720) return 'hvc1.2.4.L120.B0'; // L4.0 — 720p60
-  return 'hvc1.2.4.L93.B0'; // L3.1 — up to 720p30
-}
