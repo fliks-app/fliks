@@ -128,6 +128,10 @@ export interface RecommendationItem {
     year: number;
     posterUrl: string | null;
     genres: string[];
+    /** False when the recommendation is requested-but-not-yet-downloaded
+     *  (no files / no episodes on disk). Drives the missing-files cross
+     *  overlay on the home recommendations row. */
+    available: boolean;
   };
   becauseTitle: string;
   score: number;

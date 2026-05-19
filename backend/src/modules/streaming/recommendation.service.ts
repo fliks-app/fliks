@@ -64,6 +64,11 @@ export interface RecommendationItem {
     year: number;
     posterUrl: string | null;
     genres: string[];
+    /** True when the title is actually playable: ≥1 downloaded file for
+     *  movies, ≥1 downloaded episode for series. Drives the missing-
+     *  files cross overlay on the home recommendations row (same UX
+     *  as Recently Added). */
+    available: boolean;
   };
   becauseTitle: string;
   score: number;
@@ -249,6 +254,32 @@ export class RecommendationService {
       top.push(s);
     }
 
+    // 6. Compute availability per top result. The candidate query
+    // (step 3) only selects the columns needed for scoring; loading
+    // every `files` relation would balloon the per-row cost. Instead
+    // run a single grouped count: movies hit `media_files` keyed on
+    // `mediaId`, series hit `media_files` keyed on `episodeId` via
+    // `episodes → seasons`. Either side returning ≥1 row → playable.
+    const topIds = top.map((s) => s.media.id);
+    const availableIds = new Set<number>();
+    if (topIds.length) {
+      const rows: { mediaId: number }[] = await this.mediaRepo.query(
+        `SELECT mf."mediaId" AS "mediaId"
+         FROM media_files mf
+         WHERE mf."mediaId" = ANY($1)
+         GROUP BY mf."mediaId"
+         UNION
+         SELECT s."mediaId" AS "mediaId"
+         FROM media_files mf
+         JOIN episodes e ON e.id = mf."episodeId"
+         JOIN seasons s ON s.id = e."seasonId"
+         WHERE s."mediaId" = ANY($1)
+         GROUP BY s."mediaId"`,
+        [topIds],
+      );
+      for (const r of rows) availableIds.add(Number(r.mediaId));
+    }
+
     return top.map((s) => ({
       media: {
         id: s.media.id,
@@ -257,6 +288,7 @@ export class RecommendationService {
         year: s.media.year,
         posterUrl: s.media.posterUrl,
         genres: s.media.genres,
+        available: availableIds.has(s.media.id),
       },
       becauseTitle: genreSource.get(s.topGenre) ?? recentMedia[0].media.title,
       score: Math.round(s.score * 100) / 100,
