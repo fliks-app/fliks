@@ -1818,9 +1818,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   async onSelectAudioTrack(trackId: string) {
     this.activeAudioTrackId.set(trackId);
-    // Only update activeAudioStreamIndex for si-* tracks (backend stream index).
-    // Shaka/engine tracks switch client-side — no backend reload needed.
-    if (trackId.startsWith('si-')) {
+    // 'si-*' and 'audio-*' suffixes are streamInfo audio indices: the
+    // backend emits EXT-X-MEDIA renditions in streamInfo.audio order
+    // and the native plugins enumerate them in that same order. Keep
+    // activeAudioStreamIndex in sync so a later reloadStream() hands
+    // the right index to /playback-info — otherwise the new master
+    // marks the wrong rendition DEFAULT=YES and the player reverts
+    // to the original language on the item swap. 'shaka-*' is
+    // Shaka's internal audioId, not a streamInfo index.
+    if (trackId.startsWith('si-') || trackId.startsWith('audio-')) {
       this.activeAudioStreamIndex = parseAudioIndex(trackId);
     }
     this.resetHideTimer();
