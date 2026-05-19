@@ -13,6 +13,7 @@ import {
   TranscodeProfile,
   TranscodingService,
   encoderRegistry,
+  getHdrLadderForDevice,
   getLadderForDevice,
   parseBitrateToBps,
   profileFitsSource,
@@ -208,6 +209,15 @@ export class StreamBuilderService {
 
     const deviceType: DeviceType = profile.deviceType ?? 'desktop';
     const ladder = getLadderForDevice(deviceType);
+    // Quality ladder shown to the UI matches what the backend will
+    // actually serve: HDR sessions emit the HDR ladder (2160p/1080p/
+    // 720p/480p-hdr — no 360p/240p/144p rungs). Exposing the SDR
+    // ladder in HDR mode let users pick rungs that don't exist; the
+    // pin then failed to match, fell back to the full ladder, and the
+    // master ABR-ran across every HDR rung.
+    const qualityLadder = useHdrLadder
+      ? getHdrLadderForDevice(deviceType)
+      : ladder;
 
     if (directPlayResult.canDirectPlay) {
       this.log.log(
@@ -228,7 +238,7 @@ export class StreamBuilderService {
         outputContainer: sourceContainer,
         hwAccel: 'none',
         tonemapping: false,
-        qualities: this.buildQualityList(source, 'DirectPlay', true, ladder),
+        qualities: this.buildQualityList(source, 'DirectPlay', true, qualityLadder),
         source,
       };
     }
@@ -312,7 +322,7 @@ export class StreamBuilderService {
         tonemapping: false,
         remuxMasterBandwidthBps: remuxBw > 0 ? remuxBw : undefined,
         transcodeBitrateByQuality,
-        qualities: this.buildQualityList(source, 'DirectStream', true, ladder),
+        qualities: this.buildQualityList(source, 'DirectStream', true, qualityLadder),
         source,
       };
     }
@@ -443,7 +453,7 @@ export class StreamBuilderService {
       hwAccel: effectiveHwAccel,
       tonemapping: needsTonemapping,
       transcodeBitrateByQuality,
-      qualities: this.buildQualityList(source, 'Transcode', false, ladder),
+      qualities: this.buildQualityList(source, 'Transcode', false, qualityLadder),
       source,
     };
   }
