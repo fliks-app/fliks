@@ -301,8 +301,8 @@ export function generateMasterPlaylist(
     // declare avc1 L3.2 in the master while the bitstream SPS carries
     // L3.1 for the actual 1280×544 frames. The mismatch (declared > SPS)
     // can leave ExoPlayer's track selector stuck on cold prepare —
-    // visible as the Arcane "buffering forever, no decoder allocated"
-    // pattern on Android.
+    // visible as the "buffering forever, no decoder allocated"
+    // pattern on Android with cropped masters.
     const target = {
       width: w,
       height: h,

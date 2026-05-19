@@ -366,10 +366,10 @@ export class FfprobeService {
     );
     try {
       // Sample 6 timestamps spread across the file (5–80%) — animated 4K
-      // Blurays like Arcane mix full-frame action with cinema-aspect
-      // dialogue scenes, and a tight 3-sample run repeatedly hit only
-      // full-frame moments and reported 'no crop needed' on a clearly
-      // letterboxed source. Six samples in parallel finish faster than
+      // Blurays often mix full-frame action with cinema-aspect dialogue
+      // scenes, and a tight 3-sample run repeatedly hit only full-frame
+      // moments and reported 'no crop needed' on a clearly letterboxed
+      // source. Six samples in parallel finish faster than
       // three sequential, so the wider coverage is free.
       const dur = durationSeconds ?? 600;
       const fractions = [0.05, 0.15, 0.3, 0.45, 0.6, 0.8];

@@ -21,9 +21,9 @@ const execFileAsync = promisify(execFile);
  *  variant: the extra `hwdownload → crop → hwupload=vaapi → …`
  *  prefix changes the surface format that reaches the final
  *  `hwmap=qsv:reverse=1` step and trips the bridge. Splitting the
- *  capability lets a cropped HDR session (Arcane) fall back to
- *  tonemap_vaapi while an uncropped HDR session (Mission Impossible
- *  2160p) keeps using opencl for better mid-tone restoration. */
+ *  capability lets a cropped HDR session fall back to tonemap_vaapi
+ *  while an uncropped HDR session keeps using opencl for better
+ *  mid-tone restoration. */
 let probedOnce = false;
 let noCropEnabled = false;
 let withCropEnabled = false;
@@ -88,8 +88,8 @@ export async function runTonemapOpenclProbe(log: Logger): Promise<void> {
     );
 
     // Probe 1: tonemap_opencl without the crop prefix — the path
-    // session-time uses for uncropped HDR sources. Mirrors what we'd
-    // run for Mission Impossible 2160p HDR no-crop / similar.
+    // session-time uses for uncropped HDR sources (typical 2160p
+    // HDR10 movie at full source aspect).
     //
     // `-filter_hw_device va` (not `ocl`): without this the hwupload
     // back to vaapi after the CPU crop fails with `Function not
