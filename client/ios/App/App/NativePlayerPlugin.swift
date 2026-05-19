@@ -607,7 +607,13 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 if let pending = self?.pendingStartTime, pending > 0 {
                     self?.pendingStartTime = 0
                     let cmTime = CMTime(seconds: pending, preferredTimescale: 1000)
-                    player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
+                    // Default tolerance — AVPlayer snaps to the nearest IDR.
+                    // Frame-accurate seek (.zero/.zero) forces backward
+                    // IDR alignment, which on transcoded HLS reaches a
+                    // segment that hasn't been warmed by the ffmpeg
+                    // session at startAt and triggers a cold spawn —
+                    // user sees a black screen for ~30 s.
+                    player.seek(to: cmTime) { _ in
                         player.play()
                     }
                 }
