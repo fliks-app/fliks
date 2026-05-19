@@ -78,14 +78,33 @@ export class DeviceProfileDto {
   deviceType?: 'mobile' | 'desktop';
 
   /**
-   * True when the request originates from a Chromecast sender. Drives the
-   * HLS segment container choice: MPEG-TS instead of fMP4. TS avoids the
-   * AAC/EAC3 encoder priming desync, because each audio packet in a TS
-   * stream carries its own PTS and there's no init segment / edit-list
-   * for the receiver to honour or ignore. fMP4 stays the default for web
-   * (Shaka), native (ExoPlayer / AVPlayer) and TV.
+   * Force MPEG-TS segments for every transcode session of this device.
+   * Hard override, used as an emergency switch (admin / debug). The
+   * common case for Tizen is the narrower `useTsOnSingleAudio` flag
+   * below; this one stays for clients that want TS regardless of audio
+   * track count.
    */
   @IsBoolean()
   @IsOptional()
   useTs?: boolean;
+
+  /**
+   * Force MPEG-TS only when the source has zero or one audio track.
+   *
+   * Samsung Tizen AVPlay's HLS-fMP4 path requires demuxed audio and
+   * video (per Samsung's General Specifications). For multi-audio
+   * sources our `var_stream_map` layout already satisfies that, but
+   * with a single audio rendition AVPlay never engages its rendition
+   * probe and the variant stalls after the video init (issue #148).
+   * MPEG-TS muxes A+V natively in the same segment, side-stepping the
+   * probe entirely. The trade-off is no Dolby pass-through and a more
+   * fragile HDR path, but it's the only documented Samsung-recommended
+   * pattern for single-audio HLS on AVPlay.
+   *
+   * Browser, Cast and native mobile clients keep this `false` — they
+   * happily play muxed fMP4.
+   */
+  @IsBoolean()
+  @IsOptional()
+  useTsOnSingleAudio?: boolean;
 }

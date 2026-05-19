@@ -1323,6 +1323,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     session.transcodeReasons = ctx.transcodeReasons;
     session.audioPlan = ctx.audioPlan;
     session.videoVariant = ctx.videoVariant;
+    session.muxFlavour = ctx.useTs ? 'ts' : 'fmp4';
+    // Match the gate in `ffmpeg-args.ts useVarStreamMap`: any non-empty
+    // `audioStreams[]` paired with `videoOnly` triggers the var_stream_map
+    // layout (subdirs `0/`, `1/`...). Tag the session with the actual
+    // layout ffmpeg was spawned with so the controller's drift detection
+    // (in `playback-info`) sees the same value `pickAudioLayout()`
+    // computes and doesn't false-positive a kill on every refresh.
+    session.audioLayout =
+      ctx.videoOnly && ctx.audioStreams && ctx.audioStreams.length > 0
+        ? 'var-stream-map'
+        : 'inline';
     if (!session.startedAt) session.startedAt = new Date();
   }
 

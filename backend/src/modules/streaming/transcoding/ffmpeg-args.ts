@@ -74,9 +74,12 @@ export interface BuildFfmpegArgsOptions {
    *  for ramp-up speed: fastest encoder preset + reduced rate-control
    *  buffer so the first frame ships sooner. */
   early?: boolean;
-  /** When true, emit MPEG-TS segments instead of fMP4. Used for Chromecast
-   *  sessions to avoid the priming desync caused by the Cast receiver
-   *  ignoring the init fMP4 `edts/elst` atom. */
+  /** When true, emit MPEG-TS segments instead of fMP4. Used for Tizen TV
+   *  sessions where AVPlay rejects the HLS muxer's fMP4 output (`iso5`
+   *  brand + per-stream `sidx` boxes — see issue #148) with
+   *  `InvalidAccessError` / `PLAYER_ERROR_CONNECTION_FAILED`. MPEG-TS
+   *  side-steps the issue at the cost of Dolby passthrough and a clean
+   *  HDR path. Cast, browser and native mobile all stay on fMP4. */
   useTs?: boolean;
 }
 
@@ -109,10 +112,10 @@ export function buildFfmpegArgs(
     tonemapAlgo = 'auto',
   } = opts;
 
-  // Segment container choice. Cast → MPEG-TS (fixes the priming desync
-  // because TS packets carry per-frame PTS and there's no init fMP4 atom
-  // for the receiver to honour or ignore). Everyone else → fMP4 (better
-  // for HEVC / DASH-like manifests on Shaka & MSE).
+  // Segment container choice. `useTs` stays as the emergency fallback
+  // for Tizen AVPlay quirks (issue #148); the post-process rewrite in
+  // `cmaf-rewrite.ts` makes the fMP4 path consumable on every target
+  // we ship, so `useTs` defaults to false everywhere.
   const segType = useTs ? 'mpegts' : 'fmp4';
   const segExt = useTs ? 'ts' : 'm4s';
 
@@ -514,13 +517,17 @@ export function buildFfmpegArgs(
   }
 
   // ── Audio mapping + HLS output ──
-  // Always use var_stream_map for multi-audio, even when the user has
-  // picked a specific track — otherwise switching audio would require a
-  // full backend reload. With all audio renditions exposed, Shaka switches
-  // client-side via EXT-X-MEDIA. The picked track is signalled via
-  // DEFAULT=YES in the master.m3u8 (see streaming.controller.ts).
+  // Use var_stream_map whenever the caller asked for the EXT-X-MEDIA
+  // layout (`videoOnly + audioStreams[]`), even for a SINGLE audio
+  // track. Multi-audio was the original driver (Shaka switches
+  // client-side via EXT-X-MEDIA without a backend reload), but Samsung
+  // Tizen AVPlay's HLS-fMP4 parser ALSO requires the same shape on
+  // single-audio sources — Tizen muxed-fMP4 stalls silently
+  // (issue #148). The controller forces `videoOnly=true` even with
+  // 1 audio on fMP4 to trigger this branch.
   const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
-  const useVarStreamMap = videoOnly && audioStreams && audioStreams.length > 1;
+  const useVarStreamMap =
+    videoOnly && audioStreams && audioStreams.length > 0;
 
   if (useVarStreamMap) {
     // Single FFmpeg process for video + all audio renditions (perfect sync).

@@ -220,8 +220,12 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
     // Diagnostic flag: `localStorage['fliks.avtest']` selects an
     // alternate URL to isolate failure modes —
-    //   - '1' → Apple's reference single-variant HLS (proven working)
-    //   - 'master' → Apple's multi-variant master playlist
+    //   - '1' → Apple's reference single-variant HLS-TS (proven working)
+    //   - 'master' → Apple's multi-variant master playlist (TS)
+    //   - 'fmp4ref' → external reference single-variant fMP4 with audio
+    //     muxed inline. Confirmed during issue #148 bisection that
+    //     Tizen AVPlay rejects this layout outright — kept here for
+    //     future re-tests against newer firmware.
     //   - 'variant' → our backend's 1080p variant (skipping master)
     // anything else → the requested URL.
     const flag =
@@ -231,6 +235,8 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       safeUrl = 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8';
     } else if (flag === 'master') {
       safeUrl = 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3.m3u8';
+    } else if (flag === 'fmp4ref') {
+      safeUrl = 'https://d2zihajmogu5jn.cloudfront.net/fmp4-muxed-no-playlist-codecs/index.m3u8';
     } else if (flag === 'variant') {
       // Rewrite master.m3u8 → 1080p/index.m3u8 so AVPlay bypasses the
       // master parser entirely and consumes a flat single-rendition
@@ -261,6 +267,30 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     // eslint-disable-next-line no-console
     console.log('[TizenEngine] open URL:', safeUrl);
     webapis.avplay.open(safeUrl);
+
+    // Pin AVPlay's adaptive-bitrate behaviour for the CMAF / single-LAN
+    // case (see `browser-device-profile.service.ts` for the `useCmaf`
+    // rationale). CMAF segments are self-contained mp4s with their own
+    // moov + HEVC config, so every ABR shift forces a decoder re-init
+    // and a buffer drain — left untouched, AVPlay pings between 1080p
+    // and 144p several times per second on a 4K LAN target. The
+    // ADAPTIVE_INFO trio (Samsung-specific extension to AVPlay) caps
+    // that:
+    //   - STARTBITRATE: pin the initial rung high so the first
+    //     segments are already top-quality;
+    //   - BITRATES min~max: refuse rungs outside the band;
+    //   - SKIPBITRATE: floor for emergency-downshift decisions.
+    // The minimum (2 Mbps) cuts the 144p / 240p / 360p rungs from the
+    // selection set entirely — they exist for true bandwidth-starved
+    // clients (mobile data) and aren't useful on a TV.
+    try {
+      webapis.avplay.setStreamingProperty(
+        'ADAPTIVE_INFO',
+        'BITRATES=2000000~30000000|STARTBITRATE=8000000|SKIPBITRATE=2000000',
+      );
+    } catch {
+      /* old firmware may not expose ADAPTIVE_INFO; default ABR is fine. */
+    }
 
     // Set the START position BEFORE prepareAsync. Per Samsung docs,
     // `seekTo` while in IDLE state pins the start time so the first

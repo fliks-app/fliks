@@ -119,11 +119,12 @@ export interface SessionContext {
         bitrateBps: number;
       };
   /**
-   * True when the playback target is a Chromecast receiver. Switches HLS
-   * segments to MPEG-TS (instead of fMP4) so the Cast receiver isn't
-   * subject to the encoder-priming desync that comes from an unhonoured
-   * init fMP4 `edts/elst` atom. Container choice only — codecs and the
-   * rest of the pipeline are unchanged.
+   * True when the playback target is a Tizen TV that can't consume the
+   * HLS muxer's fMP4 output — AVPlay rejects the `iso5` + per-stream
+   * `sidx` boxes with `InvalidAccessError` / `PLAYER_ERROR_CONNECTION_FAILED`
+   * (issue #148). Falling back to MPEG-TS keeps playback working at the
+   * cost of Dolby passthrough and a clean HDR path. Cast, browser and
+   * native mobile all stay on fMP4 (`useTs: false`).
    */
   useTs?: boolean;
   /**
@@ -203,4 +204,21 @@ export interface TranscodeSession {
    *  decision and the running session means the segments contradict
    *  the manifest, so the session must respawn. */
   videoVariant?: import('./codec/types').CodecVariant;
+  /** Mux flavour the session was spawned for:
+   *  - `'ts'`: MPEG-TS HLS (legacy Tizen fallback, opt-in via `useTs`).
+   *  - `'fmp4'`: fMP4 via HLS muxer — the universal path. Segments are
+   *    post-processed at serve time (`cmaf-rewrite.ts`) to strip the
+   *    `sidx` boxes + rewrite the `iso5` brand to `cmfc`, so the
+   *    same bytes parse on AVPlay / Shaka / ExoPlayer / Cast.
+   *  Drift detection respawns the session when the flavour changes. */
+  muxFlavour?: 'ts' | 'fmp4';
+  /** HLS audio layout the session was spawned for:
+   *  - `'inline'`: single video+audio output, flat segment dir.
+   *  - `'var-stream-map'`: FFmpeg `-var_stream_map` with one rendition
+   *    per audio track, segments under `<repIdx>/`.
+   *  Toggled by `audioStreams.length > 1` in the session context, which
+   *  in turn is gated on the `debugForceInlineAudio` flag. Tracked for
+   *  drift detection: flipping the flag mid-stream must kill+respawn
+   *  the session because the on-disk layout differs. */
+  audioLayout?: 'inline' | 'var-stream-map';
 }
