@@ -105,7 +105,12 @@ export function generateMasterPlaylist(
    *  threaded the variant through — falls back to H.264 codec strings. */
   sdrVariant?: CodecVariant,
 ): string {
-  const multiAudio = audioStreams && audioStreams.length > 1;
+  // The "multi-audio" flag is really an "EXT-X-MEDIA layout" toggle —
+  // the caller decided whether to split audio into renditions. Single-
+  // audio sources can opt-in (Tizen fMP4 needs it; see issue #148), so
+  // we honour any non-empty `audioStreams` list rather than gating on
+  // `length > 1`. Callers that want the muxed layout pass `undefined`.
+  const multiAudio = audioStreams && audioStreams.length > 0;
   const lines = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-INDEPENDENT-SEGMENTS'];
 
   const audioCodecMap = { aac: 'mp4a.40.2', ac3: 'ac-3', eac3: 'ec-3' };
@@ -136,8 +141,15 @@ export function generateMasterPlaylist(
         const lang = a.language || 'und';
         const name = a.title || lang;
         const isDefault = i === pickedIdx ? 'YES' : 'NO';
+        // CHANNELS hint matches Apple's reference master and lets
+        // Tizen AVPlay pre-allocate the right audio decoder before
+        // the variant playlist + init are fetched. Without it the
+        // single-audio fMP4 path doesn't follow the rendition link
+        // (issue #148 bisection — multi-audio works because AVPlay
+        // probes the renditions, single-audio doesn't trigger the
+        // probe when the hint is missing).
         lines.push(
-          `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${name}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
+          `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${name}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},CHANNELS="2",URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
         );
       }
     }
@@ -153,14 +165,21 @@ export function generateMasterPlaylist(
     // Includes the source-resolution rung if there's an HDR profile
     // at or below source height.
     if (canEncodeHevcHdr) {
-      const hdrLadder = applyQualityPin(
-        getHdrLadderForDevice(deviceType).filter((p) =>
-          profileFitsSource(p, sourceWidth, sourceHeight),
-        ),
-        onlyQuality,
-        sourceWidth,
-        /* hdrSuffix */ true,
+      const baseHdrLadder = getHdrLadderForDevice(deviceType).filter((p) =>
+        profileFitsSource(p, sourceWidth, sourceHeight),
       );
+      // Same rationale as the SDR branch below: the quality pin only
+      // applies when audio is muxed inline. With multi-audio /
+      // EXT-X-MEDIA renditions, exposing a single variant breaks
+      // Tizen AVPlay's rendition probing (issue #148).
+      const hdrLadder = multiAudio
+        ? baseHdrLadder
+        : applyQualityPin(
+            baseHdrLadder,
+            onlyQuality,
+            sourceWidth,
+            /* hdrSuffix */ true,
+          );
       for (const p of hdrLadder) {
         const avg =
           parseBitrateToBps(p.videoBitrate) + parseBitrateToBps(p.audioBitrate);
@@ -193,8 +212,13 @@ export function generateMasterPlaylist(
       const lang = a.language || 'und';
       const name = a.title || lang;
       const isDefault = i === pickedIdx ? 'YES' : 'NO';
+      // `CHANNELS="2"` matches what ffmpeg emits (`-ac 2`) and what
+      // Apple's reference fMP4 master ships — Tizen AVPlay uses this
+      // hint to pre-allocate the right audio decoder before fetching
+      // the rendition. Without it the single-audio variant doesn't
+      // trigger a rendition probe (issue #148 bisection).
       lines.push(
-        `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${name}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
+        `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${name}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},CHANNELS="2",URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
       );
     }
   }
@@ -218,7 +242,21 @@ export function generateMasterPlaylist(
   const ladder = getLadderForDevice(deviceType);
   let profiles = getAvailableProfiles(sourceWidth, sourceHeight, deviceType);
   if (!profiles.length) profiles.push(ladder[ladder.length - 1]); // at least 480p
-  profiles = applyQualityPin(profiles, onlyQuality, sourceWidth);
+  // The quality pin collapses the master to a single variant so
+  // ExoPlayer (Android) doesn't pre-load other rungs and trigger a
+  // FFmpeg respawn on every probe. That cost only exists when audio
+  // is muxed into the variant segments — when audio sits in its own
+  // EXT-X-MEDIA rendition the audio bytes are shared across all
+  // variants so an ABR probe is cheap. Crucially, Tizen AVPlay also
+  // refuses to fetch the audio rendition when the master only
+  // exposes a single variant (issue #148 bisection — single-audio
+  // fmp4 plays go variant + init then stall), so we MUST keep the
+  // full ladder when `multiAudio` is true. ExoPlayer still gets the
+  // pin via the var_stream_map path producing inline audio when
+  // `multiAudio` is false (legacy mp2-ts callers / single-audio TS).
+  if (!multiAudio) {
+    profiles = applyQualityPin(profiles, onlyQuality, sourceWidth);
+  }
 
   for (const p of profiles) {
     const avg =

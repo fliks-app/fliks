@@ -200,8 +200,6 @@
     "player_remember_audio_hint": "Le lecteur se souviendra de la piste audio choisie pour chaque fichier.",
     "player_disable_hdr": "Désactiver le HDR",
     "player_disable_hdr_hint": "Force le transcodage HDR → SDR. Utile si votre écran affiche des couleurs ternes ou délavées en HDR.",
-    "player_hdr_brightness": "Luminosité maximale en HDR",
-    "player_hdr_brightness_hint": "Monte automatiquement la luminosité au maximum lors de la lecture de contenu HDR. Se désactive en pause ou en quittant le lecteur.",
     "player_clear_saved": "Vider les sélections audio enregistrées",
     "player_auto_skip_intro": "Passer l'intro automatiquement",
     "player_auto_skip_intro_hint": "Saute automatiquement l'intro quand elle est détectée. Vous pouvez toujours revenir en arrière manuellement.",

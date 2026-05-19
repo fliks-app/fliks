@@ -816,8 +816,24 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const startNumberIdx = args.indexOf('-start_number');
     const startNumber =
       startNumberIdx >= 0 ? args[startNumberIdx + 1] : String(startSegment);
+    // Decoder label, inferred from the input-side ffmpeg flags. The
+    // decoder descriptor itself isn't passed through here (it lives in
+    // `ffmpeg-args` and we don't want to thread the registry across
+    // four spawn sites), so we read it back from the args we just
+    // built. Two QSV variants share `qsv=qs@va`: the default emits
+    // VAAPI surfaces (`-hwaccel vaapi`), the native-qsv variant emits
+    // QSV surfaces (`-hwaccel qsv`).
+    const hwaccelIdx = args.indexOf('-hwaccel');
+    const hwaccel = hwaccelIdx >= 0 ? args[hwaccelIdx + 1] : 'cpu';
+    const hasQsvBridge = args.includes('qsv=qs@va');
+    const decoder =
+      hwaccel === 'qsv'
+        ? 'qsv-native'
+        : hwaccel === 'vaapi' && hasQsvBridge
+          ? 'qsv'
+          : hwaccel;
     this.log.log(
-      `FFmpeg start [${id}] ${quality} ${encoder} ss=${ss} start_number=${startNumber}`,
+      `FFmpeg start [${id}] ${quality} dec=${decoder} enc=${encoder} ss=${ss} start_number=${startNumber}`,
     );
 
     const proc = spawn('ffmpeg', args, {
@@ -1323,6 +1339,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     session.transcodeReasons = ctx.transcodeReasons;
     session.audioPlan = ctx.audioPlan;
     session.videoVariant = ctx.videoVariant;
+    session.muxFlavour = ctx.useTs ? 'ts' : 'fmp4';
+    // Match the gate in `ffmpeg-args.ts useVarStreamMap`: any non-empty
+    // `audioStreams[]` paired with `videoOnly` triggers the var_stream_map
+    // layout (subdirs `0/`, `1/`...). Tag the session with the actual
+    // layout ffmpeg was spawned with so the controller's drift detection
+    // (in `playback-info`) sees the same value `pickAudioLayout()`
+    // computes and doesn't false-positive a kill on every refresh.
+    session.audioLayout =
+      ctx.videoOnly && ctx.audioStreams && ctx.audioStreams.length > 0
+        ? 'var-stream-map'
+        : 'inline';
     if (!session.startedAt) session.startedAt = new Date();
   }
 

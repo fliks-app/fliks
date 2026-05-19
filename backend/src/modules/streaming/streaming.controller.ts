@@ -31,6 +31,7 @@ import {
   profileFitsSource,
 } from './transcoding';
 import { secondsToSegmentIndex } from './transcoding/constants';
+import { readAndRewriteCmaf } from './transcoding/cmaf-rewrite';
 import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
@@ -64,9 +65,37 @@ function withTimestampMap(vtt: string | Buffer): string {
 let SEG_DURATION = 3;
 
 /** Pick the right HLS segment Content-Type. fMP4 (.m4s / .mp4) → video/mp4,
- *  MPEG-TS (.ts, used for Chromecast sessions) → video/MP2T. */
+ *  MPEG-TS (.ts, used as the explicit `useTs` fallback for Tizen TVs on
+ *  older firmwares — issue #148) → video/MP2T. */
 function segmentContentType(segment: string): string {
   return segment.endsWith('.ts') ? 'video/MP2T' : 'video/mp4';
+}
+
+/** Decide whether ffmpeg should emit muxed segments (`inline`) or the
+ *  EXT-X-MEDIA layout (`var-stream-map`, video-only main + audio served
+ *  as separate renditions).
+ *
+ *  Rules (single source of truth, mirrored by `master-playlist.ts` and
+ *  `ffmpeg-args.ts`):
+ *    1. Zero audio sources → inline (degenerate, no audio rendition).
+ *    2. Multi-audio sources → var-stream-map (Shaka / AVPlay pick the
+ *       rendition client-side without a backend reload).
+ *    3. Single-audio sources → inline regardless of mux flavour. The
+ *       HLS muxer's hardcoded `+frag_custom+dash+delay_moov` movflags
+ *       used to produce iso5+sidx fMP4 segments AVPlay rejected (issue
+ *       #148), which forced the var_stream_map workaround. With the
+ *       in-tree `cmaf-rewrite` post-processor stripping `sidx` /
+ *       `styp` and stamping the `hlsf` brand on every served chunk,
+ *       muxed segments parse on AVPlay too — and the single-variant
+ *       master that comes with single-audio doesn't trigger AVPlay's
+ *       audio-rendition probe, so leaving audio inline is the only
+ *       layout that actually plays on Tizen single-audio fmp4. */
+export function pickAudioLayout(
+  audioCount: number,
+  _muxFlavour: 'ts' | 'fmp4',
+): 'inline' | 'var-stream-map' {
+  if (audioCount <= 1) return 'inline';
+  return 'var-stream-map';
 }
 
 /** Generate a VOD HLS playlist for a given duration and segment URL pattern.
@@ -141,6 +170,7 @@ export class StreamingController {
     return this.streamingSettingsCache.get();
   }
 
+
   private buildSessionContext(
     req: Request,
     resolved: ResolvedFile,
@@ -158,6 +188,15 @@ export class StreamingController {
     ) {
       this.activeStreamTracker.setAudioStreamCount(mediaFileId, audioCount);
     }
+    const trackedAudioCount =
+      this.activeStreamTracker.getAudioStreamCount(mediaFileId);
+    const muxFlavour: 'ts' | 'fmp4' = this.activeStreamTracker.getUseTs(
+      mediaFileId,
+    )
+      ? 'ts'
+      : 'fmp4';
+    const useMultiAudioLayout =
+      pickAudioLayout(trackedAudioCount, muxFlavour) === 'var-stream-map';
     return {
       userId: user?.id,
       username: user?.username,
@@ -174,11 +213,10 @@ export class StreamingController {
       // Multi-audio: produce video-only segments and let ffmpeg's var_stream_map
       // emit one audio rendition per track (subdirs 1..N) so Shaka can switch
       // client-side via EXT-X-MEDIA.
-      videoOnly: this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1,
-      audioStreams:
-        this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1
-          ? ((si?.audio as { language?: string; title?: string }[]) ?? [])
-          : undefined,
+      videoOnly: useMultiAudioLayout,
+      audioStreams: useMultiAudioLayout
+        ? ((si?.audio as { language?: string; title?: string }[]) ?? [])
+        : undefined,
       deviceType: this.activeStreamTracker.getDeviceType(mediaFileId),
       useTs: this.activeStreamTracker.getUseTs(mediaFileId),
       encoderPreset: this.activeStreamTracker.getEncoderPreset(mediaFileId),
@@ -337,6 +375,38 @@ export class StreamingController {
     return duration;
   }
 
+  /** Serve an fMP4 init or segment, rewriting the bytes for AVPlay
+   *  compatibility (Tizen) before flushing them to the client.
+   *
+   *  The rewrite happens in memory and the result is sent via `res.end`
+   *  rather than `createReadStream`: ffmpeg's HLS muxer rewrites init
+   *  and segments in-place on session restart, and that overwrite races
+   *  the `stat` → `createReadStream` window — the response ends up with
+   *  a Content-Length from one revision of the file and bytes from
+   *  another. Serving from the rewritten buffer takes that race off the
+   *  table. */
+  private async serveCmafFile(
+    res: Response,
+    filePath: string,
+    contentType: string,
+  ): Promise<void> {
+    const buf = await readAndRewriteCmaf(filePath);
+    if (!buf || buf.length === 0) {
+      if (!res.headersSent) res.status(404).end();
+      return;
+    }
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', String(buf.length));
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    // Cloudflare (and any intermediate CDN) will gladly cache a 0-byte
+    // 200 response under the URL and serve it back for 4h by default —
+    // turning a transient cold-start race into a session-killing
+    // permanent failure. Mark each fMP4 chunk un-cacheable so a CDN
+    // refusing the upstream length check never pins a broken response.
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(buf);
+  }
+
   /** Available download qualities for a media file (used by download-quality modal). */
   @Get('info/qualities/:mediaFileId')
   async downloadQualities(
@@ -471,7 +541,16 @@ export class StreamingController {
       mediaFileId,
       deviceProfile.deviceType ?? 'desktop',
     );
-    this.activeStreamTracker.setUseTs(mediaFileId, !!deviceProfile.useTs);
+    // Resolve the effective `useTs`. The explicit profile flag wins as
+    // an admin / debug hard override. Otherwise Tizen-style profiles
+    // opt into TS only when the source has zero or one audio track
+    // (single-audio fmp4 hits AVPlay's missing-rendition-probe stall;
+    // see DTO docstring and issue #148).
+    const sourceAudioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 0;
+    const effectiveUseTs =
+      !!deviceProfile.useTs ||
+      (!!deviceProfile.useTsOnSingleAudio && sourceAudioCount <= 1);
+    this.activeStreamTracker.setUseTs(mediaFileId, effectiveUseTs);
     this.activeStreamTracker.setStreamingDuration(ss.segmentDuration);
     // Update module-level constants used by buildVodPlaylist and transcoding
     SEG_DURATION = ss.segmentDuration;
@@ -514,13 +593,26 @@ export class StreamingController {
     // without comparing plans. The result is a manifest advertising the
     // new codec while ffmpeg keeps writing segments in the old one,
     // tripping Shaka 4032 (CONTENT_UNSUPPORTED_BY_BROWSER) on Cast.
-    // Kill the running session whenever the new audio plan or the new
-    // video variant disagrees with what it was spawned for; the prewarm
-    // immediately below then respawns with the up-to-date plan.
+    // Kill the running session whenever the new audio plan, the new
+    // video variant or the new mux flavour (Tizen hopping TS ↔ fmp4)
+    // disagrees with what it was spawned for; the prewarm immediately
+    // below then respawns with the up-to-date plan.
     const newAudioCodec = result.audioPlan?.codec;
     const newVideoCodec = this.activeStreamTracker
       .getVideoVariant(mediaFileId)
       ?.codec;
+    const newMuxFlavour: 'ts' | 'fmp4' = effectiveUseTs ? 'ts' : 'fmp4';
+    // Audio layout the *next* session would be spawned with. Mirrors
+    // the gate in `buildSessionContext` so flipping `useTs` (which
+    // toggles muxed-vs-separated audio under us) kills the running
+    // session instead of leaving an EXT-X-MEDIA master pointing at a
+    // `var_stream_map`-less segment tree.
+    const trackedAudioCount =
+      this.activeStreamTracker.getAudioStreamCount(mediaFileId);
+    const newAudioLayout: 'inline' | 'var-stream-map' = pickAudioLayout(
+      trackedAudioCount,
+      newMuxFlavour,
+    );
     const existingForDrift = this.transcodingService.getExistingSession(
       mediaFileId,
       req.user?.id,
@@ -529,12 +621,18 @@ export class StreamingController {
       existingForDrift &&
       existingForDrift.process.exitCode === null &&
       (existingForDrift.audioPlan?.codec !== newAudioCodec ||
-        existingForDrift.videoVariant?.codec !== newVideoCodec)
+        existingForDrift.videoVariant?.codec !== newVideoCodec ||
+        (existingForDrift.muxFlavour &&
+          existingForDrift.muxFlavour !== newMuxFlavour) ||
+        (existingForDrift.audioLayout &&
+          existingForDrift.audioLayout !== newAudioLayout))
     ) {
       this.log.log(
         `[playback-info] profile drift on file ${mediaFileId} — killing session ` +
           `(audio: ${existingForDrift.audioPlan?.codec ?? '∅'} → ${newAudioCodec ?? '∅'}, ` +
-          `video: ${existingForDrift.videoVariant?.codec ?? '∅'} → ${newVideoCodec ?? '∅'})`,
+          `video: ${existingForDrift.videoVariant?.codec ?? '∅'} → ${newVideoCodec ?? '∅'}, ` +
+          `mux: ${existingForDrift.muxFlavour ?? '∅'} → ${newMuxFlavour}, ` +
+          `audioLayout: ${existingForDrift.audioLayout ?? '∅'} → ${newAudioLayout})`,
       );
       await this.transcodingService.killSession(mediaFileId, req.user?.id);
     }
@@ -718,7 +816,13 @@ export class StreamingController {
     // is listed even when the user has picked a specific track — the picked
     // track is marked DEFAULT=YES so the player preselects it.
     const pickedIdx = this.activeStreamTracker.getAudioStreamIndex(mediaFileId);
-    const useExtXMedia = audioStreams.length > 1;
+    const muxFlavour: 'ts' | 'fmp4' = this.activeStreamTracker.getUseTs(
+      mediaFileId,
+    )
+      ? 'ts'
+      : 'fmp4';
+    const useExtXMedia =
+      pickAudioLayout(audioStreams.length, muxFlavour) === 'var-stream-map';
     const onlyQuality = firstQueryString(req.query, 'startQuality');
     // Device type: URL param wins (stream URL is built by the frontend with
     // the cached client profile); fall back to whatever playback-info stored.
@@ -842,11 +946,14 @@ export class StreamingController {
       return;
     }
 
-    // With var_stream_map, audio is produced by the video session — no separate
-    // audio session needed. Only start one as fallback for single-audio files.
-    const multiAudio =
-      this.activeStreamTracker.getAudioStreamCount(mediaFileId) > 1;
-    if (!multiAudio) {
+    // Audio is produced by the video session whenever the master picked the
+    // var_stream_map layout (`setUseExtXMedia`). That's now true for any
+    // fMP4 source with audio (issue #148, Tizen) and for multi-audio
+    // sources regardless of mux flavour. Only the muxed TS / muxed-fMP4
+    // legacy path needs a separate audio-only session as a fallback.
+    const useExtXMedia =
+      this.activeStreamTracker.getUseExtXMedia(mediaFileId);
+    if (!useExtXMedia) {
       const user = req.user;
       void this.transcodingService.getOrCreateAudioSession(
         mediaFileId,
@@ -985,13 +1092,7 @@ export class StreamingController {
       return;
     }
 
-    res.setHeader('Content-Type', segmentContentType(segment));
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    const stream = fs.createReadStream(segPath);
-    stream.on('error', () => {
-      if (!res.headersSent) res.status(404).end();
-    });
-    stream.pipe(res);
+    await this.serveCmafFile(res, segPath, segmentContentType(segment));
   }
 
   /** HLS variant playlist — pre-computed segment list based on known duration. */
@@ -1066,8 +1167,10 @@ export class StreamingController {
     // Use the master.m3u8 decision — must match to avoid init filename mismatch.
     const multiAudio = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
     const useTs = this.activeStreamTracker.getUseTs(mediaFileId);
-    // Cast sessions use MPEG-TS segments (no init segment) to avoid the
-    // fMP4 priming desync the Cast receiver doesn't compensate for.
+    // Tizen TV sessions can opt into MPEG-TS segments (no init segment)
+    // to bypass AVPlay's HLS-fMP4 rejection (issue #148). The fMP4 path
+    // is post-processed to CMAF (`cmaf-rewrite.ts`) so it works on
+    // every other client; `useTs` is the emergency fallback.
     const segExt = useTs ? 'ts' : 'm4s';
     // var_stream_map writes per-variant under `<idx>/` with init_<idx>.mp4.
     // The remux session is video-only on multi-audio sources but does NOT
@@ -1185,21 +1288,7 @@ export class StreamingController {
           );
           continue;
         }
-        res.setHeader('Content-Type', segmentContentType(segment));
-        res.setHeader('Content-Length', String(stat.size));
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        // Cloudflare (and any intermediate CDN) will gladly cache a
-        // 0-byte 200 response under the URL and serve it back for 4h
-        // by default — turning a transient cold-start race into a
-        // session-killing permanent failure. Mark the init un-cacheable
-        // so the CDN always re-asks the origin where our size check
-        // can refuse to send the empty file.
-        res.setHeader('Cache-Control', 'no-store');
-        const initStream = fs.createReadStream(initPath);
-        initStream.on('error', () => {
-          if (!res.headersSent) res.status(404).end();
-        });
-        initStream.pipe(res);
+        await this.serveCmafFile(res, initPath, segmentContentType(segment));
         return;
       }
     }
@@ -1230,15 +1319,7 @@ export class StreamingController {
           return;
         }
         existing.lastAccess = Date.now();
-        res.setHeader('Content-Type', segmentContentType(segment));
-        res.setHeader('Content-Length', String(segStat.size));
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Cache-Control', 'no-store');
-        const stream = fs.createReadStream(segPath);
-        stream.on('error', () => {
-          if (!res.headersSent) res.status(404).end();
-        });
-        stream.pipe(res);
+        await this.serveCmafFile(res, segPath, segmentContentType(segment));
         return;
       }
       // Segment not on disk — fall through to full resolve + getOrCreateSession.
@@ -1284,15 +1365,7 @@ export class StreamingController {
             res.status(404).end();
             return;
           }
-          res.setHeader('Content-Type', segmentContentType(segment));
-          res.setHeader('Content-Length', String(earlyStat.size));
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          res.setHeader('Cache-Control', 'no-store');
-          const stream = fs.createReadStream(segPath);
-          stream.on('error', () => {
-            if (!res.headersSent) res.status(404).end();
-          });
-          stream.pipe(res);
+          await this.serveCmafFile(res, segPath, segmentContentType(segment));
           return;
         }
         // Early failed/timeout — log and fall through to slow path
@@ -1346,15 +1419,7 @@ export class StreamingController {
       res.status(404).end();
       return;
     }
-    res.setHeader('Content-Type', segmentContentType(segment));
-    res.setHeader('Content-Length', String(finalStat.size));
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Cache-Control', 'no-store');
-    const stream = fs.createReadStream(segPath);
-    stream.on('error', () => {
-      if (!res.headersSent) res.status(404).end();
-    });
-    stream.pipe(res);
+    await this.serveCmafFile(res, segPath, segmentContentType(segment));
   }
 
   // ---------------------------------------------------------------------------

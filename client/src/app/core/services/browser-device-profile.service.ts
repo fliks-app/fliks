@@ -60,10 +60,29 @@ export interface DeviceProfile {
   /** Client device category — selects the backend bitrate ladder.
    *  Capacitor native (iOS/Android app) → 'mobile'; web (incl. Cast sender) → 'desktop'. */
   deviceType: 'mobile' | 'desktop';
-  /** True when the playback target is a Chromecast receiver. Drives the
-   *  HLS segment container choice on the backend (MPEG-TS instead of
-   *  fMP4) — see `device-profile.dto.ts` for the rationale. */
+  /** Hard force MPEG-TS HLS for every transcode session of this client.
+   *  Defaults to `false`; the only switch in shipping configs is the
+   *  narrower `useTsOnSingleAudio` below. Opt-in via
+   *  `localStorage['fliks.useTs'] = '1'` as an emergency escape hatch
+   *  for future firmware regressions. */
   useTs?: boolean;
+
+  /** Force MPEG-TS only when the source has at most one audio track.
+   *  Set by Tizen profiles: AVPlay HLS-fMP4 needs demuxed audio per
+   *  Samsung spec, but with a single audio rendition AVPlay never
+   *  engages the rendition probe and the variant stalls after the
+   *  video init (issue #148 bisection). MPEG-TS muxes A+V natively,
+   *  side-stepping the probe — at the cost of Dolby pass-through.
+   *  Multi-audio Tizen sources stay on fMP4 + var_stream_map. */
+  useTsOnSingleAudio?: boolean;
+}
+
+/** True when `localStorage['fliks.useTs']` is set to a truthy value.
+ *  See `DeviceProfile.useTs` for the rationale. */
+function readUseTsOverride(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  const v = localStorage.getItem('fliks.useTs');
+  return v != null && v !== '' && v !== '0' && v.toLowerCase() !== 'false';
 }
 
 @Injectable({ providedIn: 'root' })
@@ -100,11 +119,20 @@ export class BrowserDeviceProfileService {
         `[DeviceProfile] audioCodecs=${JSON.stringify(dp?.audioCodecs)} maxAudioChannels=${this.cachedProfile.maxAudioChannels} native=${Capacitor.isNativePlatform()}`,
       );
     }
-    // Override HDR if user forced it off (check every call — setting may change)
-    if (this.playerSettings.get().forceDisableHdr) {
-      return { ...this.cachedProfile, supportsHdr: false };
-    }
-    return this.cachedProfile;
+    // Re-read mutable overrides on every call so toggling them at
+    // runtime (HDR setting in the player UI, `fliks.useTs` escape
+    // hatch in `localStorage`) doesn't require a page reload — the
+    // next playback-info will pick up the change.
+    const useTsOverride = readUseTsOverride();
+    const forceDisableHdr = this.playerSettings.get().forceDisableHdr;
+    const needsOverride =
+      forceDisableHdr || useTsOverride !== !!this.cachedProfile.useTs;
+    if (!needsOverride) return this.cachedProfile;
+    return {
+      ...this.cachedProfile,
+      supportsHdr: forceDisableHdr ? false : this.cachedProfile.supportsHdr,
+      useTs: useTsOverride,
+    };
   }
 
   /** Whether the display hardware supports HDR (ignoring user preference). */
@@ -249,6 +277,9 @@ export class BrowserDeviceProfileService {
       supportsHdr = hdrDisplay && has10bitCodec;
     }
 
+    const useTs = readUseTsOverride();
+    if (useTs) console.warn('[DeviceProfile] useTs override active');
+
     return {
       directPlayProfiles: [{
         containers,
@@ -260,13 +291,14 @@ export class BrowserDeviceProfileService {
       maxAudioChannels,
       supportsHdr,
       deviceType: Capacitor.isNativePlatform() ? 'mobile' : 'desktop',
-      // MPEG-TS HLS on Smart TV. FFmpeg's `-f hls -hls_segment_type fmp4`
-      // pipeline hard-codes `movflags=+frag_custom+dash+delay_moov` in
-      // `hls_mux_init()`, ignoring user-supplied `-movflags +cmaf`. The
-      // resulting `.m4s` segments always carry `sidx` boxes — a DASH-ism
-      // Tizen AVPlay rejects with `InvalidAccessError` / `CONNECTION_FAILED`.
-      // Cast itself stays on fMP4 (Shaka there can't transmux Dolby in TS).
-      useTs: isTv,
+      useTs,
+      // Tizen-style profiles opt into MPEG-TS on single-audio sources
+      // (AVPlay's HLS-fMP4 rendition-probe stall, issue #148). Multi-
+      // audio sources stay on fMP4 + var_stream_map — that path works
+      // because the master exposes ≥2 audio renditions and AVPlay
+      // engages its probe. Browser, Cast and native mobile leave the
+      // flag off and consume muxed fMP4 across the board.
+      useTsOnSingleAudio: isTv,
     };
   }
 

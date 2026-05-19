@@ -199,12 +199,18 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   // ── Loading ─────────────────────────────────────────────────────────
 
+  /** Last URL passed to `load()` — kept so the seek-failure recovery
+   *  path can reload the stream at the user's target without going
+   *  back through the player layer. */
+  private _lastLoadedUrl: string | null = null;
+
   async load(
     url: string,
     startTime?: number,
     _mimeType?: string,
     headers?: Record<string, string>,
   ): Promise<void> {
+    this._lastLoadedUrl = url;
     this.firstFrameEmitted = false;
     this._currentTime = 0;
     this._duration = 0;
@@ -220,8 +226,12 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
     // Diagnostic flag: `localStorage['fliks.avtest']` selects an
     // alternate URL to isolate failure modes —
-    //   - '1' → Apple's reference single-variant HLS (proven working)
-    //   - 'master' → Apple's multi-variant master playlist
+    //   - '1' → Apple's reference single-variant HLS-TS (proven working)
+    //   - 'master' → Apple's multi-variant master playlist (TS)
+    //   - 'fmp4ref' → external reference single-variant fMP4 with audio
+    //     muxed inline. Confirmed during issue #148 bisection that
+    //     Tizen AVPlay rejects this layout outright — kept here for
+    //     future re-tests against newer firmware.
     //   - 'variant' → our backend's 1080p variant (skipping master)
     // anything else → the requested URL.
     const flag =
@@ -231,6 +241,8 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       safeUrl = 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8';
     } else if (flag === 'master') {
       safeUrl = 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3.m3u8';
+    } else if (flag === 'fmp4ref') {
+      safeUrl = 'https://d2zihajmogu5jn.cloudfront.net/fmp4-muxed-no-playlist-codecs/index.m3u8';
     } else if (flag === 'variant') {
       // Rewrite master.m3u8 → 1080p/index.m3u8 so AVPlay bypasses the
       // master parser entirely and consumes a flat single-rendition
@@ -261,6 +273,30 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     // eslint-disable-next-line no-console
     console.log('[TizenEngine] open URL:', safeUrl);
     webapis.avplay.open(safeUrl);
+
+    // Pin AVPlay's adaptive-bitrate behaviour for the CMAF / single-LAN
+    // case (see `browser-device-profile.service.ts` for the `useCmaf`
+    // rationale). CMAF segments are self-contained mp4s with their own
+    // moov + HEVC config, so every ABR shift forces a decoder re-init
+    // and a buffer drain — left untouched, AVPlay pings between 1080p
+    // and 144p several times per second on a 4K LAN target. The
+    // ADAPTIVE_INFO trio (Samsung-specific extension to AVPlay) caps
+    // that:
+    //   - STARTBITRATE: pin the initial rung high so the first
+    //     segments are already top-quality;
+    //   - BITRATES min~max: refuse rungs outside the band;
+    //   - SKIPBITRATE: floor for emergency-downshift decisions.
+    // The minimum (2 Mbps) cuts the 144p / 240p / 360p rungs from the
+    // selection set entirely — they exist for true bandwidth-starved
+    // clients (mobile data) and aren't useful on a TV.
+    try {
+      webapis.avplay.setStreamingProperty(
+        'ADAPTIVE_INFO',
+        'BITRATES=2000000~30000000|STARTBITRATE=8000000|SKIPBITRATE=2000000',
+      );
+    } catch {
+      /* old firmware may not expose ADAPTIVE_INFO; default ABR is fine. */
+    }
 
     // Set the START position BEFORE prepareAsync. Per Samsung docs,
     // `seekTo` while in IDLE state pins the start time so the first
@@ -390,7 +426,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   }
 
   async seek(position: number): Promise<void> {
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
       try {
         webapis.avplay.seekTo(
           Math.round(position * 1000),
@@ -398,19 +434,33 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
             this._currentTime = position;
             resolve();
           },
-          (err) => {
-            // Don't surface seek failures: they fire mostly when the user
-            // spams the seekbar faster than AVPlay can satisfy, or when
-            // the requested position is just outside the buffered range
-            // — both recover on the next seek tick, so a toast every
-            // time would only spam the UI.
+          async (err) => {
+            // AVPlay's failure callback fires whenever it can't
+            // satisfy the seek — typically a big backward seek past
+            // the buffered range, where AVPlay's HLS engine doesn't
+            // retry the segment fetch on its own and ends up stuck
+            // in a half-paused state (next `play()` throws). Reload
+            // the stream at the target position to recover.
             // eslint-disable-next-line no-console
-            console.warn('[TizenEngine] seek failed (swallowed):', err);
-            resolve();
+            console.warn(
+              '[TizenEngine] seek failed → reloading at target:',
+              err,
+            );
+            if (!this._lastLoadedUrl) {
+              reject(new Error(`seek failed: ${err}`));
+              return;
+            }
+            try {
+              await this.load(this._lastLoadedUrl, position);
+              await this.play();
+              resolve();
+            } catch (e) {
+              reject(e);
+            }
           },
         );
-      } catch {
-        resolve();
+      } catch (e) {
+        reject(e);
       }
     });
   }

@@ -22,6 +22,16 @@ export class PlayerStateService {
   readonly playbackMode = signal<'direct' | 'remux' | 'transcode'>('direct');
   readonly hwAccel = signal('none');
 
+  /** True while a seek gesture is in flight — set by the player while
+   *  the user drags the seekbar or holds an arrow key, and during the
+   *  short window after a `seek()` call where the engine still emits
+   *  intermediate `timeUpdate` events for the OLD position before it
+   *  catches up to the target. While set, the engine→state mirror
+   *  ignores `position` updates so the seekbar stays pinned at the
+   *  user's commit value instead of bouncing back to whatever the
+   *  engine reports mid-seek. */
+  readonly seekLocked = signal(false);
+
   private engine: PlaybackEngine | null = null;
 
   /** Bind a playback engine's events to our signals. Call this when the engine changes. */
@@ -40,7 +50,7 @@ export class PlayerStateService {
     });
 
     engine.on('timeUpdate', (e) => {
-      this.currentTime.set(e.position);
+      if (!this.seekLocked()) this.currentTime.set(e.position);
       if (e.duration > 0) this.duration.set(e.duration);
       this.bufferedEnd.set(e.buffered);
     });
@@ -60,6 +70,7 @@ export class PlayerStateService {
     this.duration.set(0);
     this.buffering.set(false);
     this.bufferedEnd.set(0);
+    this.seekLocked.set(false);
   }
 
   getEngine(): PlaybackEngine | null {

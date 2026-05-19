@@ -32,7 +32,6 @@ export class PlayerSettingsPageComponent implements OnInit {
   readonly useDefaultAudioStream = signal(false);
   readonly rememberAudioSelections = signal(false);
   readonly forceDisableHdr = signal(false);
-  readonly hdrAutoBrightness = signal(false);
   readonly showHdrToggle = signal(false);
   readonly autoSkipIntro = signal(false);
 
@@ -42,7 +41,6 @@ export class PlayerSettingsPageComponent implements OnInit {
     this.useDefaultAudioStream.set(p.useDefaultAudioStream);
     this.rememberAudioSelections.set(p.rememberAudioSelections);
     this.forceDisableHdr.set(p.forceDisableHdr);
-    this.hdrAutoBrightness.set(p.hdrAutoBrightness);
     this.showHdrToggle.set(this.deviceProfile.hardwareSupportsHdr);
     this.autoSkipIntro.set(p.autoSkipIntro);
   }
@@ -60,7 +58,6 @@ export class PlayerSettingsPageComponent implements OnInit {
       useDefaultAudioStream: this.useDefaultAudioStream(),
       rememberAudioSelections: this.rememberAudioSelections(),
       forceDisableHdr: this.forceDisableHdr(),
-      hdrAutoBrightness: this.hdrAutoBrightness(),
       autoSkipIntro: this.autoSkipIntro(),
     });
     this.toast.success(this.translate.instant('common.settings_saved'));

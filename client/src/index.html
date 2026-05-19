@@ -29,14 +29,6 @@
   </style>
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1" async></script>
-  <!-- Samsung Tizen WebAPIs bootstrap. Resolves to the on-device runtime
-       `webapis/webapis.js` via the magic `$WEBAPIS` prefix the WebView
-       expands at load time. Required to populate `window.webapis.*` —
-       without it, `webapis.avplay.prepareAsync` is a stub that throws
-       `InvalidAccessError / PLAYER_ERROR_CONNECTION_FAILED` on every
-       call. 404s on non-Tizen targets (browser ignores the missing
-       script and the rest of the app boots normally). -->
-  <script src="$WEBAPIS/webapis/webapis.js"></script>
 </head>
 <body>
   <!-- Tizen AVPlay surface. Samsung's media runtime instantiates the

@@ -166,8 +166,10 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.useExtXMediaCache.get(mediaFileId) ?? false;
   }
 
-  /** Set when the playback target is a Chromecast receiver. Drives the
-   *  HLS segment container choice (mpegts vs fmp4) in `buildFfmpegArgs`. */
+  /** Set when the playback target is a Tizen TV that needs the MPEG-TS
+   *  fallback (issue #148 — AVPlay rejects HLS-fMP4 from the HLS muxer).
+   *  Drives the HLS segment container choice (mpegts vs fmp4) in
+   *  `buildFfmpegArgs`. Cast / browser / native mobile never set this. */
   private readonly useTsCache = new Map<number, boolean>();
 
   setUseTs(mediaFileId: number, value: boolean) {
