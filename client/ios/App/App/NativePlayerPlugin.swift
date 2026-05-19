@@ -54,6 +54,13 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var firstFrameObserver: NSKeyValueObservation?
     private var firstFrameEmitted = false
     private var savedBrightness: CGFloat?
+    /// Seek-and-play target captured at load() time, applied once the
+    /// item flips to .readyToPlay. Seeking on a .unknown item races
+    /// AVPlayer's own status-flip seek and the completion handler can
+    /// fire with `finished=false`, leaving play() never called —
+    /// playback gets stuck on the play overlay until the user taps
+    /// pause/play to re-evaluate.
+    private var pendingStartTime: Double = 0
 
     /// Exposed for PipPlugin to access the player layer.
     public var activePlayerLayer: AVPlayerLayer? { playerLayer }
@@ -262,16 +269,19 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 self.playerLayer?.player = player
             }
 
+            // Capture the resume position before setting up observers so
+            // the status-flip handler can apply seek + play once the
+            // item is .readyToPlay. Issuing the seek now would race
+            // AVPlayer's own status-flip seek.
+            self.pendingStartTime = startTime
+
             // Observe playback state
             self.setupObservers()
 
-            // Seek to start position
-            if startTime > 0 {
-                let cmTime = CMTime(seconds: startTime, preferredTimescale: 1000)
-                player.seek(to: cmTime) { _ in
-                    player.play()
-                }
-            } else {
+            // Start position 0 (or no resume) — start playback immediately;
+            // AVPlayer waits internally for .readyToPlay before producing
+            // frames, no seek required.
+            if startTime <= 0 {
                 player.play()
             }
 
@@ -594,6 +604,13 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         statusObserver = player.currentItem?.observe(\.status) { [weak self] item, _ in
             switch item.status {
             case .readyToPlay:
+                if let pending = self?.pendingStartTime, pending > 0 {
+                    self?.pendingStartTime = 0
+                    let cmTime = CMTime(seconds: pending, preferredTimescale: 1000)
+                    player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
+                        player.play()
+                    }
+                }
                 self?.emitStateChanged("playing")
                 self?.emitTracksChanged()
             case .failed:
