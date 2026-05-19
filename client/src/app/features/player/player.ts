@@ -117,13 +117,6 @@ import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats
       max-width: none !important;
       max-height: none !important;
     }
-    /* Dim controls when HDR max brightness is active.
-       Uses opacity on the direct child — safe for layout since controls are already
-       absolutely positioned and won't affect the video surface behind. */
-    .player-container.hdr-bright app-player-controls,
-    .player-container.hdr-bright > .loading-overlay {
-      opacity: 0.5;
-    }
     /* Lift native subtitles by the user's configured bottom margin
        (--cue-bottom-margin, set per-video by applySubtitleStyle), and bump
        another 5vh when the controls bar is visible so cues clear it. We
@@ -320,23 +313,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly pipPlaybackEffect = effect(() => {
     if (!this.isNative) return;
     Pip.updatePlaybackState({ playing: !this.paused() }).catch(() => {});
-  });
-
-  // HDR auto-brightness: max brightness when playing HDR, restore on pause/exit
-  private readonly isHdrContent = signal(false);
-
-  /** True when HDR max brightness is active — used to dim controls/subtitles. */
-  readonly hdrBrightnessActive = computed(() => {
-    if (!this.isNative || !this.isNativeEngine()) return false;
-    const settings = this.playerSettings.get();
-    if (!settings.hdrAutoBrightness || settings.forceDisableHdr) return false;
-    return this.isHdrContent() && !this.paused();
-  });
-
-  private readonly hdrBrightnessEffect = effect(() => {
-    const active = this.hdrBrightnessActive();
-    if (!this.isNative) return;
-    NativePlayer.setBrightness({ brightness: active ? 1.0 : -1 }).catch(() => {});
   });
 
   /** Re-apply native subtitle style on controls show/hide so the bottom-margin
@@ -724,7 +700,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // Await playback-info (kicked off in parallel with media load above)
         this.playbackInfo = await playbackInfoPromise!;
         const pi = this.playbackInfo;
-        this.isHdrContent.set(!!pi.source?.hdrFormat && !pi.tonemapping);
         this.introMarker.set(pi.markers?.intro ?? null);
         this.outroMarker.set(pi.markers?.outro ?? null);
         this.chapters.set(pi.chapters ?? []);
@@ -1043,8 +1018,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.engine) {
       if (this.isNativeEngine()) {
         document.documentElement.classList.remove('native-player-active');
-        // Restore system brightness
-        NativePlayer.setBrightness({ brightness: -1 }).catch(() => {});
       }
       this.engine.destroy().catch(() => {});
     }

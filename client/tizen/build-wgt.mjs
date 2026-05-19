@@ -60,14 +60,26 @@ for (const f of stylesFiles) {
   const indexPath = resolve(stage, 'index.html');
   if (existsSync(indexPath)) {
     const before = readFileSync(indexPath, 'utf8');
-    const after = before.replace(
+    let after = before.replace(
       /<link rel="stylesheet" href="([^"]+)" media="print" onload="this\.media='all'">/g,
       '<link rel="stylesheet" href="$1">',
     );
     if (after !== before) {
-      writeFileSync(indexPath, after, 'utf8');
       console.log('[tizen] forced render-blocking <link rel="stylesheet"> in index.html');
     }
+    // Inject the Tizen WebAPIs bootstrap. `$WEBAPIS` is a magic prefix
+    // that only Tizen's WebView expands at load time, populating
+    // `window.webapis.*` (avplay, avinfo, …). The tag is added here
+    // — not in src/index.html — so dev/web/Cast builds don't try to
+    // load the path and trip the strict-MIME-type check in Chromium.
+    if (!after.includes('$WEBAPIS/webapis/webapis.js')) {
+      after = after.replace(
+        '</head>',
+        '  <script src="$WEBAPIS/webapis/webapis.js"></script>\n</head>',
+      );
+      console.log('[tizen] injected $WEBAPIS/webapis/webapis.js bootstrap');
+    }
+    if (after !== before) writeFileSync(indexPath, after, 'utf8');
   }
 }
 

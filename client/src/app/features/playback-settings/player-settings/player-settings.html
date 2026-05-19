@@ -37,13 +37,6 @@
         [hint]="'playback_settings.player_disable_hdr_hint' | translate"
       />
 
-      @if (!forceDisableHdr()) {
-        <app-toggle-field
-          [(value)]="hdrAutoBrightness"
-          [label]="'playback_settings.player_hdr_brightness' | translate"
-          [hint]="'playback_settings.player_hdr_brightness_hint' | translate"
-        />
-      }
     }
 
     <div class="divider my-0"></div>

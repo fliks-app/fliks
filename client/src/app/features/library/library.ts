@@ -35,8 +35,6 @@ import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown, LucideX, LucideFilm } from '@lucide/angular';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
-import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
-import { ImgFadeInDirective } from '../../shared/directives/img-fade-in.directive';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
@@ -72,8 +70,6 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     LucideFilm,
     LucideX,
     MosaicCardComponent,
-    ResolveUrlPipe,
-    ImgFadeInDirective,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library.html',

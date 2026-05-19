@@ -816,8 +816,24 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const startNumberIdx = args.indexOf('-start_number');
     const startNumber =
       startNumberIdx >= 0 ? args[startNumberIdx + 1] : String(startSegment);
+    // Decoder label, inferred from the input-side ffmpeg flags. The
+    // decoder descriptor itself isn't passed through here (it lives in
+    // `ffmpeg-args` and we don't want to thread the registry across
+    // four spawn sites), so we read it back from the args we just
+    // built. Two QSV variants share `qsv=qs@va`: the default emits
+    // VAAPI surfaces (`-hwaccel vaapi`), the native-qsv variant emits
+    // QSV surfaces (`-hwaccel qsv`).
+    const hwaccelIdx = args.indexOf('-hwaccel');
+    const hwaccel = hwaccelIdx >= 0 ? args[hwaccelIdx + 1] : 'cpu';
+    const hasQsvBridge = args.includes('qsv=qs@va');
+    const decoder =
+      hwaccel === 'qsv'
+        ? 'qsv-native'
+        : hwaccel === 'vaapi' && hasQsvBridge
+          ? 'qsv'
+          : hwaccel;
     this.log.log(
-      `FFmpeg start [${id}] ${quality} ${encoder} ss=${ss} start_number=${startNumber}`,
+      `FFmpeg start [${id}] ${quality} dec=${decoder} enc=${encoder} ss=${ss} start_number=${startNumber}`,
     );
 
     const proc = spawn('ffmpeg', args, {

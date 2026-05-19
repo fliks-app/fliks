@@ -4,7 +4,6 @@
   class="player-container"
   [class.hide-cursor]="!controlsVisible()"
   [class.native-player]="!!nativeEngine"
-  [class.hdr-bright]="hdrBrightnessActive()"
   [class.hidden]="castService.isConnected()"
   (mousemove)="device.isTouch() || isNative ? null : showControls()"
 >
