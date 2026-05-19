@@ -477,8 +477,8 @@ export function buildFfmpegArgs(
   // crop runs in the same colour space as the decoded surface: for a
   // 10-bit HDR source, `format=nv12` would silently downconvert to
   // 8-bit BT.709-clamped pixels before the tonemap filter ever runs,
-  // which is what produced the dark image on cropped HDR sources
-  // (Mission Impossible 2160p HDR10 + crop).
+  // which is what produced the dark image on cropped 2160p HDR10
+  // sources.
   const cropPxFmt = sourceBitDepth === 10 ? 'p010le' : 'nv12';
   const hwCropPrefix = cropStr
     ? `hwdownload,format=${cropPxFmt},${cropStr},hwupload=derive_device=vaapi,`
@@ -537,8 +537,8 @@ export function buildFfmpegArgs(
   //    pixels. iOS AVPlayer rejects that combination with -12927; other
   //    players tolerate it but render with the wrong gamut / TRC.
   //
-  // 2. Source with unsignalled colorimetry (e.g. older WEBDL H.264
-  //    masters like Arcane S2): the source SPS leaves
+  // 2. Source with unsignalled colorimetry (older WEBDL H.264
+  //    masters): the source SPS leaves
   //    color_primaries/_trc/_space/_range all `unknown`. FFmpeg
   //    propagates the unknown tags into the output SPS. Android
   //    Media3 + the HDR-preserving SurfaceView path can refuse to
