@@ -145,10 +145,18 @@ export class EpisodeDownloadService {
     );
 
     const searchQuery = customQuery?.trim();
-    const queryTitle = searchQuery || media.title;
+    // Sonarr-style: prefer the original (typically English) title for
+    // the indexer query — scene release names rarely use localized
+    // titles. The localized title still goes into expectedTitle so the
+    // matcher accepts releases that use either spelling.
+    const queryTitle = searchQuery || media.originalTitle || media.title;
     const expectedTitle: string | string[] = searchQuery
       ? searchQuery
-      : [media.title, ...(media.alternativeTitles ?? [])];
+      : [
+          media.originalTitle,
+          media.title,
+          ...(media.alternativeTitles ?? []),
+        ].filter((t): t is string => !!t && t.length > 0);
     const externalIds = { tvdbId: media.tvdbId, imdbId: media.imdbId };
     const batches = await Promise.all(
       indexers.map((ix) =>
