@@ -559,6 +559,7 @@ export class MediaService {
       title: 'media.title',
       year: 'media.year',
       added: 'media.createdAt',
+      createdAt: 'media.createdAt',
       rating: 'media.rating',
     };
     const sortBy = SORT_BY_MAP[query.sortBy ?? 'title'] ?? 'media.title';
