@@ -143,9 +143,24 @@ export class MovieDownloadService {
   }
 
   private searchQueryForMedia(media: Media): string {
-    const parts = [media.title];
+    // Radarr-style: indexer release names overwhelmingly use the
+    // original title (typically English), so a TMDB import in a
+    // non-English locale would otherwise search "Le Seigneur des
+    // Anneaux" and miss "The Lord of the Rings" releases entirely.
+    const parts = [media.originalTitle || media.title];
     if (media.year) parts.push(String(media.year));
     return parts.join(' ');
+  }
+
+  /** Title list passed to the scorer for release-title matching. Order
+   *  doesn't matter — the matcher tries each. Filter out falsy values
+   *  in case the media has no original title or no localized title. */
+  private expectedTitlesForMedia(media: Media): string[] {
+    return [
+      media.originalTitle,
+      media.title,
+      ...(media.alternativeTitles ?? []),
+    ].filter((t): t is string => !!t && t.length > 0);
   }
 
   async searchMovieReleases(
@@ -193,7 +208,7 @@ export class MovieDownloadService {
       indexers,
       allowed,
       allowedLangs,
-      customTitle || [media.title, ...(media.alternativeTitles ?? [])],
+      customTitle || this.expectedTitlesForMedia(media),
     );
     const accepted = rows.filter((r) => r.rejections.length === 0).length;
     this.log.log(
@@ -383,7 +398,7 @@ export class MovieDownloadService {
       indexers,
       allowed,
       allowedLangs,
-      customTitle || [media.title, ...(media.alternativeTitles ?? [])],
+      customTitle || this.expectedTitlesForMedia(media),
     );
 
     // Only keep releases that are strictly better than current AND within cutoff
