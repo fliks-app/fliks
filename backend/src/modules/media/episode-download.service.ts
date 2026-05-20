@@ -38,6 +38,7 @@ import {
   computeRejections,
   computeSizeDeviation,
   detectVideoCodec,
+  resolveSearchTitles,
   sortReleasesByRelevance,
   SizeLimits,
 } from './release-rejection.helper';
@@ -161,19 +162,8 @@ export class EpisodeDownloadService {
       ]),
     );
 
-    const searchQuery = customQuery?.trim();
-    // Sonarr-style: prefer the original (typically English) title for
-    // the indexer query — scene release names rarely use localized
-    // titles. The localized title still goes into expectedTitle so the
-    // matcher accepts releases that use either spelling.
-    const queryTitle = searchQuery || media.originalTitle || media.title;
-    const expectedTitle: string | string[] = searchQuery
-      ? searchQuery
-      : [
-          media.originalTitle,
-          media.title,
-          ...(media.alternativeTitles ?? []),
-        ].filter((t): t is string => !!t && t.length > 0);
+    const { searchTitle: queryTitle, expectedTitles: expectedTitle } =
+      resolveSearchTitles(media, customQuery);
     const externalIds = { tvdbId: media.tvdbId, imdbId: media.imdbId };
     const batches = await Promise.all(
       indexers.map((ix) =>
@@ -471,11 +461,8 @@ export class EpisodeDownloadService {
         0,
       ) || defaultEpRuntime;
 
-    const customTitle = customQuery?.trim();
-    const searchTitle = customTitle || media.title;
-    const expectedTitle: string | string[] = customTitle
-      ? customTitle
-      : [media.title, ...(media.alternativeTitles ?? [])];
+    const { searchTitle, expectedTitles: expectedTitle } =
+      resolveSearchTitles(media, customQuery);
     const externalIds = { tvdbId: media.tvdbId, imdbId: media.imdbId };
     const batches = await Promise.all(
       indexers.map((ix) =>
@@ -516,20 +503,16 @@ export class EpisodeDownloadService {
       }),
     );
 
-    // Drop everything above the profile's cutoff.
+    // Drop everything above the profile's cutoff, and drop single
+    // episodes — the user asked for a season pack, releases that
+    // happen to match the show but aren't packs aren't relevant
+    // here. The auto-grab path still falls back to per-episode
+    // search if no pack works.
     const cutoffRank = getAppQualityById(media.qualityProfile?.cutoff ?? 0)?.rank ?? 999;
-    const withinCutoff = rowsWithKind.filter((x) => x.row.rank <= cutoffRank);
-
-    // User is asking for the whole season — surface packs first.
-    // Single episodes still appear (useful as a fallback when no
-    // pack matches the quality profile), just below all packs.
-    const packs = sortReleasesByRelevance(
-      withinCutoff.filter((x) => x.isPack).map((x) => x.row),
-    );
-    const singles = sortReleasesByRelevance(
-      withinCutoff.filter((x) => !x.isPack).map((x) => x.row),
-    );
-    return [...packs, ...singles];
+    const packs = rowsWithKind
+      .filter((x) => x.isPack && x.row.rank <= cutoffRank)
+      .map((x) => x.row);
+    return sortReleasesByRelevance(packs);
   }
 
   async grabSeason(
@@ -630,12 +613,12 @@ export class EpisodeDownloadService {
     );
 
     const externalIds = { tvdbId: media.tvdbId, imdbId: media.imdbId };
-    const expectedTitles = [media.title, ...(media.alternativeTitles ?? [])];
+    const { searchTitle, expectedTitles } = resolveSearchTitles(media);
     const packBatches = await Promise.all(
       indexers.map((ix) =>
         this.torznab.searchSeasonPack(
           ix,
-          media.title,
+          searchTitle,
           season.seasonNumber,
           externalIds,
         ),
@@ -649,9 +632,15 @@ export class EpisodeDownloadService {
         0,
       ) || defaultEpRuntime;
 
+    // Indexer-side `season=` filtering isn't honoured by every backend
+    // (notably TPB via Cardigann), so the result set can contain single
+    // episodes of the same show. We only treat actual full-season
+    // packs as candidates — otherwise the auto-grab would download a
+    // random S01EXX and call it a "season grab".
     const packRows = await Promise.all(
       packBatches
         .flat()
+        .filter((r) => parseSeasonEpisode(r.title).isFullSeason)
         .map((r) =>
           this.buildReleaseRow(
             r,
@@ -704,26 +693,39 @@ export class EpisodeDownloadService {
     // --- Fallback: grab each missing episode individually ---
     this.log.log(`No season pack found, falling back to per-episode grab`);
     const today = new Date().toISOString().slice(0, 10);
-    const missingEpisodes = (season.episodes ?? []).filter(
+    const allEpisodes = season.episodes ?? [];
+    const missingEpisodes = allEpisodes.filter(
       (ep) => ep.monitored && !ep.hasFile && ep.airDate && ep.airDate <= today,
     );
+    const skippedCount = allEpisodes.length - missingEpisodes.length;
+    this.log.log(
+      `Per-episode grab: ${missingEpisodes.length}/${allEpisodes.length} episode(s) eligible (${skippedCount} skipped — not monitored, already on disk, or not yet aired)`,
+    );
+    if (missingEpisodes.length === 0) {
+      return {
+        grabbed: 0,
+        errors: ['No monitored, missing, and aired episodes to grab'],
+      };
+    }
 
     let grabbed = 0;
     const errors: string[] = [];
 
     for (const ep of missingEpisodes) {
+      const epLabel = `S${String(season.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
       try {
         const epBatches = await Promise.all(
           indexers.map((ix) =>
             this.torznab.searchSeries(
               ix,
-              media.title,
+              searchTitle,
               season.seasonNumber,
               ep.episodeNumber,
               externalIds,
             ),
           ),
         );
+        const rawCount = epBatches.flat().length;
         const epFlat = epBatches.flat().filter((r) => {
           const p = parseSeasonEpisode(r.title);
           if (p.season === null) return true;
@@ -753,10 +755,15 @@ export class EpisodeDownloadService {
         const pick = epRows.find(
           (r) => r.allowed && !r.blocklisted && r.rejections.length === 0,
         );
-        if (!pick) continue;
+        if (!pick) {
+          this.log.warn(
+            `[${epLabel}] no matching release (${rawCount} raw, ${epFlat.length} after ep filter, ${epRows.length} scored)`,
+          );
+          continue;
+        }
 
         this.log.log(
-          `Sending episode to qBittorrent: "${pick.title}" — ${pick.downloadUrl}`,
+          `[${epLabel}] sending to qBittorrent: "${pick.title}" — ${pick.downloadUrl}`,
         );
         const epHash = await this.qbittorrent.addTorrentUrl(
           qbit,
@@ -764,7 +771,7 @@ export class EpisodeDownloadService {
           'series',
         );
         this.log.log(
-          `Episode grab successful for "${pick.title}" (hash=${epHash})`,
+          `[${epLabel}] grab successful for "${pick.title}" (hash=${epHash})`,
         );
         await this.historyRepo.save(
           this.historyRepo.create({
@@ -779,11 +786,14 @@ export class EpisodeDownloadService {
         );
         grabbed++;
       } catch (e) {
-        const epLabel = `S${String(season.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
+        this.log.error(`[${epLabel}] grab failed: ${(e as Error).message}`);
         errors.push(`${epLabel}: ${(e as Error).message}`);
       }
     }
 
+    this.log.log(
+      `Per-episode grab complete: ${grabbed} grabbed, ${missingEpisodes.length - grabbed - errors.length} skipped (no release), ${errors.length} errored`,
+    );
     if (grabbed === 0 && errors.length === 0) {
       errors.push('No matching release found for any episode in this season');
     }

@@ -60,6 +60,39 @@ export interface ReleaseRejection {
  *   Unknown      → 1.0  (conservative — assume x264)
  */
 /**
+ * Build the Torznab search query and the list of expected release-name
+ * variants for matching. Mirrors Sonarr/Radarr: indexer release titles
+ * use the original (typically English) name, so we prefer `originalTitle`
+ * as the query while passing every known spelling — original, localized,
+ * alternative — through to the matcher.
+ *
+ * `customQuery` overrides everything: it stays authoritative both for
+ * the query and the expected-title list (otherwise an indexer-specific
+ * search the user typed in could be matched against the localized
+ * title and silently rejected).
+ */
+export function resolveSearchTitles(
+  media: {
+    originalTitle?: string | null;
+    title: string;
+    alternativeTitles?: string[] | null;
+  },
+  customQuery?: string,
+): { searchTitle: string; expectedTitles: string[] } {
+  const custom = customQuery?.trim();
+  if (custom) {
+    return { searchTitle: custom, expectedTitles: [custom] };
+  }
+  const searchTitle = media.originalTitle || media.title;
+  const expectedTitles = [
+    media.originalTitle,
+    media.title,
+    ...(media.alternativeTitles ?? []),
+  ].filter((t): t is string => !!t && t.length > 0);
+  return { searchTitle, expectedTitles };
+}
+
+/**
  * Returns the codec-adjusted absolute deviation of a release's MB/h
  * rate from the quality's preferred MB/h, normalised by preferred.
  * 0 = on target; 0.5 = 50% off either way; `null` when preferred /
