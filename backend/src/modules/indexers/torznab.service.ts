@@ -1,9 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { Indexer } from './entities/indexer.entity';
 import { IndexerStat } from './entities/indexer-stat.entity';
+import { IndexerThrottle } from './indexer-throttle.service';
 
 export interface TorznabRelease {
   title: string;
@@ -162,7 +163,27 @@ export class TorznabService {
     private readonly statRepo: Repository<IndexerStat>,
     @InjectRepository(Indexer)
     private readonly indexerRepo: Repository<Indexer>,
+    private readonly throttle: IndexerThrottle,
   ) {}
+
+  /** Detect Retry-After-bearing responses (429, 503) and feed the
+   *  header to the throttle so subsequent queued calls wait. Returns
+   *  true if the error was rate-limit-shaped — caller treats it as a
+   *  transient failure rather than a hard outage. */
+  private maybeHandleRateLimit(indexer: Indexer, e: unknown): boolean {
+    if (!axios.isAxiosError(e)) return false;
+    const ax = e as AxiosError;
+    const status = ax.response?.status;
+    if (status === 429 || status === 503) {
+      const header = ax.response?.headers?.['retry-after'];
+      this.throttle.setRetryAfter(
+        indexer,
+        typeof header === 'string' ? header : undefined,
+      );
+      return true;
+    }
+    return false;
+  }
 
   /**
    * Call t=caps and persist the results on the indexer row.
@@ -179,14 +200,16 @@ export class TorznabService {
     let capsTvSearch = false;
 
     try {
-      const res = await axios.get<string>(
-        `${baseUrl}?t=caps&apikey=${encodeURIComponent(apiKey)}`,
-        {
-          timeout: 10_000,
-          responseType: 'text',
-          headers: { 'User-Agent': 'Fliks/1.0' },
-          validateStatus: () => true,
-        },
+      const res = await this.throttle.run(indexer, () =>
+        axios.get<string>(
+          `${baseUrl}?t=caps&apikey=${encodeURIComponent(apiKey)}`,
+          {
+            timeout: 10_000,
+            responseType: 'text',
+            headers: { 'User-Agent': 'Fliks/1.0' },
+            validateStatus: () => true,
+          },
+        ),
       );
       const body = typeof res.data === 'string' ? res.data : String(res.data);
       capsMovieSearch = /<movie-search\s[^>]*available="yes"/i.test(body);
@@ -195,6 +218,8 @@ export class TorznabService {
         `[${indexer.name}] caps refreshed — movieSearch=${capsMovieSearch}, tvSearch=${capsTvSearch}`,
       );
     } catch (e) {
+      this.maybeHandleRateLimit(indexer, e);
+      this.throttle.notifyFailure(indexer);
       this.log.warn(
         `[${indexer.name}] caps fetch failed: ${(e as Error).message}`,
       );
@@ -218,12 +243,14 @@ export class TorznabService {
   ): Promise<{ results: TorznabRelease[]; torznabError: string | null }> {
     const start = Date.now();
     try {
-      const res = await axios.get<string>(url, {
-        timeout: 90_000,
-        responseType: 'text',
-        headers: { 'User-Agent': 'Fliks/1.0' },
-        validateStatus: (s) => s >= 200 && s < 400,
-      });
+      const res = await this.throttle.run(indexer, () =>
+        axios.get<string>(url, {
+          timeout: 90_000,
+          responseType: 'text',
+          headers: { 'User-Agent': 'Fliks/1.0' },
+          validateStatus: (s) => s >= 200 && s < 400,
+        }),
+      );
       const body = typeof res.data === 'string' ? res.data : String(res.data);
       if (/<error\s+code=/i.test(body)) {
         const m = body.match(/description="([^"]*)"/i);
@@ -251,6 +278,8 @@ export class TorznabService {
       );
       return { results, torznabError: null };
     } catch (e) {
+      this.maybeHandleRateLimit(indexer, e);
+      this.throttle.notifyFailure(indexer);
       const msg = (e as Error).message;
       void this.statRepo.save(
         this.statRepo.create({
@@ -299,6 +328,9 @@ export class TorznabService {
     }
     const url = `${base}?t=caps&apikey=${encodeURIComponent(apiKey || '')}`;
     try {
+      // Connection test is invoked from the UI before an indexer row
+      // exists — no throttle key to use. The user only fires this
+      // sporadically, so it can safely bypass the per-indexer queue.
       const res = await axios.get<string>(url, {
         timeout: 30_000,
         responseType: 'text',
@@ -336,12 +368,14 @@ export class TorznabService {
     const url = `${baseUrl}?t=search&q=&cat=2000&apikey=${encodeURIComponent(apiKey)}`;
     const start = Date.now();
     try {
-      const res = await axios.get<string>(url, {
-        timeout: 60_000,
-        responseType: 'text',
-        headers: { 'User-Agent': 'Fliks/1.0' },
-        validateStatus: (s) => s >= 200 && s < 400,
-      });
+      const res = await this.throttle.run(indexer, () =>
+        axios.get<string>(url, {
+          timeout: 60_000,
+          responseType: 'text',
+          headers: { 'User-Agent': 'Fliks/1.0' },
+          validateStatus: (s) => s >= 200 && s < 400,
+        }),
+      );
       const body = typeof res.data === 'string' ? res.data : String(res.data);
       const results = parseTorznabItems(body, indexer);
       void this.statRepo.save(
@@ -355,6 +389,8 @@ export class TorznabService {
       );
       return results;
     } catch (e) {
+      this.maybeHandleRateLimit(indexer, e);
+      this.throttle.notifyFailure(indexer);
       void this.statRepo.save(
         this.statRepo.create({
           indexer,
