@@ -54,6 +54,7 @@
           [subtitles]="subtitleSection()?.headerSubtitles() ?? []"
           [files]="episodeFiles()"
           [selectedFileId]="episodeActiveFileId()"
+          [qualityProfileName]="m.qualityProfile?.name ?? null"
           [canGrab]="canGrab()"
           [isAdmin]="isAdmin()"
           [releasesLoading]="epReleasesLoading()"
