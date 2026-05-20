@@ -116,7 +116,7 @@
         @if (_link()) {
           <a [routerLink]="_link()" [state]="_navState()" class="absolute inset-0 z-0" [attr.aria-label]="_title()" (pointerdown)="flagPosterForTransition()" (keydown.enter)="flagPosterForTransition()" (click)="$event.stopPropagation()"></a>
         }
-        @if (_playable() || aspect() === 'landscape') {
+        @if (_playable()) {
           <button type="button" class="relative z-10 w-12 h-12 rounded-full bg-black/50 flex items-center justify-center text-white cursor-pointer" (click)="onPlayClick($event)">
             <svg lucidePlay class="h-6 w-6" [strokeWidth]="2"></svg>
           </button>

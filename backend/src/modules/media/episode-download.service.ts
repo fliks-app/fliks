@@ -19,6 +19,8 @@ import {
   parseReleaseLanguage,
   resolveUnknownLanguage,
 } from './release-language.parser';
+import { parseSeasonEpisode } from './release-episode.parser';
+import { getAppQualityById } from '../../common/constants/app-qualities';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
 import { ProfilesService } from '../profiles/profiles.service';
 import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
@@ -34,6 +36,8 @@ import {
   buildIndexerMinSeeders,
   buildAllowedQualityIds,
   computeRejections,
+  computeSizeDeviation,
+  detectVideoCodec,
   sortReleasesByRelevance,
   SizeLimits,
 } from './release-rejection.helper';
@@ -58,6 +62,19 @@ export interface EpisodeReleaseRow {
   rejections: ReleaseRejection[];
   freeleech: boolean;
   downloadVolumeFactor: number;
+  /** True when the release title parses as a full-season pack
+   *  (`S01`, `Season 1`, etc. without an episode number). */
+  isFullSeason: boolean;
+  /** Absolute distance of this release's MB/h from the codec-adjusted
+   *  preferred size for its quality, divided by the preferred. 0 when
+   *  on target, 0.5 = 50% off. `null` when the quality has no
+   *  preferred or the runtime is unknown. Used by the sort to nudge
+   *  on-target releases above oversized/undersized ones at equal
+   *  quality + custom-format score. */
+  sizeDeviation: number | null;
+  /** Video codec parsed from the release title. `null` when no
+   *  recognised codec token appears. */
+  videoCodec: 'AV1' | 'HEVC' | 'VP9' | 'x264' | null;
 }
 
 @Injectable()
@@ -106,7 +123,7 @@ export class EpisodeDownloadService {
 
     const episode = await this.episodeRepo.findOne({
       where: { id: episodeId },
-      relations: ['season'],
+      relations: ['season', 'season.episodes'],
     });
     if (!episode)
       throw new NotFoundException(`Episode #${episodeId} not found`);
@@ -169,24 +186,69 @@ export class EpisodeDownloadService {
         ),
       ),
     );
-    const flat = batches.flat();
+    // Filter out releases that clearly belong to a different episode.
+    // Some indexers (notably The Pirate Bay via Cardigann) ignore the
+    // `season=` / `ep=` Torznab parameters and run a plain text search,
+    // returning every episode of the show whose title matches. Keep
+    // releases when:
+    //   - the parser couldn't extract season/episode (could be a movie
+    //     or oddly-named release — let scoring decide), OR
+    //   - the season matches AND (episode matches OR it's a season pack
+    //     that contains the target episode).
+    const flat = batches.flat().filter((r) => {
+      const p = parseSeasonEpisode(r.title);
+      if (p.season === null) return true;
+      if (p.season !== season.seasonNumber) return false;
+      if (p.isFullSeason) return true;
+      if (p.episode === null) return true;
+      return p.episode === episode.episodeNumber;
+    });
 
-    const rows = await Promise.all(
-      flat.map((r) =>
-        this.buildReleaseRow(
+    // Season packs need their size scored against the WHOLE season's
+    // runtime (sum of episode runtimes), not a single episode — else
+    // a legit 25 GB 10-ep 2160p pack gets rejected as "oversize"
+    // because the limit was computed for a 45-min slot.
+    const defaultEpRuntime = media.runtime ?? 45;
+    const episodeRuntime = episode.runtime ?? defaultEpRuntime;
+    const seasonRuntime =
+      (episode.season.episodes ?? []).reduce(
+        (sum, ep) => sum + (ep.runtime ?? defaultEpRuntime),
+        0,
+      ) || episodeRuntime;
+
+    const rowsWithKind = await Promise.all(
+      flat.map(async (r) => {
+        const isPack = parseSeasonEpisode(r.title).isFullSeason;
+        const row = await this.buildReleaseRow(
           r,
           allowed,
           allowedLangs,
           sizeByQuality,
           indexerMinSeeders,
-          media.runtime ?? 45,
+          isPack ? seasonRuntime : episodeRuntime,
           indexerUnknownLang,
           expectedTitle,
-        ),
-      ),
+        );
+        return { row, isPack };
+      }),
     );
 
-    return sortReleasesByRelevance(rows);
+    // Drop everything above the profile's cutoff — see equivalent
+    // comment in MovieDownloadService.searchMovieReleases.
+    const cutoffRank = getAppQualityById(media.qualityProfile?.cutoff ?? 0)?.rank ?? 999;
+    const withinCutoff = rowsWithKind.filter((x) => x.row.rank <= cutoffRank);
+
+    // User is asking for ONE episode. Season packs still match, but
+    // they download a whole season for a single episode — they should
+    // rank below any equally-good single-episode release. Sort the two
+    // groups independently then concatenate.
+    const singles = sortReleasesByRelevance(
+      withinCutoff.filter((x) => !x.isPack).map((x) => x.row),
+    );
+    const packs = sortReleasesByRelevance(
+      withinCutoff.filter((x) => x.isPack).map((x) => x.row),
+    );
+    return [...singles, ...packs];
   }
 
   async grabEpisode(
@@ -327,6 +389,13 @@ export class EpisodeDownloadService {
       releaseTitle: r.title,
       expectedTitle,
     });
+    const isFullSeason = parseSeasonEpisode(r.title).isFullSeason;
+    const sizeDeviation = computeSizeDeviation(
+      r.title,
+      r.size,
+      runtimeMinutes,
+      sizeByQuality.get(parsed.quality.id),
+    );
     return {
       title: r.title,
       downloadUrl: r.downloadUrl,
@@ -347,6 +416,9 @@ export class EpisodeDownloadService {
       rejections,
       freeleech: r.freeleech,
       downloadVolumeFactor: r.downloadVolumeFactor,
+      isFullSeason,
+      sizeDeviation,
+      videoCodec: detectVideoCodec(r.title),
     };
   }
 
@@ -416,24 +488,48 @@ export class EpisodeDownloadService {
       ),
     );
 
-    const rows = await Promise.all(
-      batches
-        .flat()
-        .map((r) =>
-          this.buildReleaseRow(
-            r,
-            allowed,
-            allowedLangs,
-            sizeByQuality,
-            indexerMinSeeders,
-            seasonRuntime,
-            indexerUnknownLang,
-            expectedTitle,
-          ),
-        ),
+    // Same fan-out drift as the per-episode path: some indexers
+    // ignore `season=` and return any release whose title contains
+    // the show name. Keep only releases that parse to the requested
+    // season (single episodes or full packs alike).
+    const flat = batches.flat().filter((r) => {
+      const p = parseSeasonEpisode(r.title);
+      if (p.season === null) return true;
+      return p.season === season.seasonNumber;
+    });
+
+    const defaultEpisodeRuntime = media.runtime ?? 45;
+    const rowsWithKind = await Promise.all(
+      flat.map(async (r) => {
+        const isPack = parseSeasonEpisode(r.title).isFullSeason;
+        const row = await this.buildReleaseRow(
+          r,
+          allowed,
+          allowedLangs,
+          sizeByQuality,
+          indexerMinSeeders,
+          isPack ? seasonRuntime : defaultEpisodeRuntime,
+          indexerUnknownLang,
+          expectedTitle,
+        );
+        return { row, isPack };
+      }),
     );
 
-    return sortReleasesByRelevance(rows);
+    // Drop everything above the profile's cutoff.
+    const cutoffRank = getAppQualityById(media.qualityProfile?.cutoff ?? 0)?.rank ?? 999;
+    const withinCutoff = rowsWithKind.filter((x) => x.row.rank <= cutoffRank);
+
+    // User is asking for the whole season — surface packs first.
+    // Single episodes still appear (useful as a fallback when no
+    // pack matches the quality profile), just below all packs.
+    const packs = sortReleasesByRelevance(
+      withinCutoff.filter((x) => x.isPack).map((x) => x.row),
+    );
+    const singles = sortReleasesByRelevance(
+      withinCutoff.filter((x) => !x.isPack).map((x) => x.row),
+    );
+    return [...packs, ...singles];
   }
 
   async grabSeason(
@@ -628,21 +724,29 @@ export class EpisodeDownloadService {
             ),
           ),
         );
+        const epFlat = epBatches.flat().filter((r) => {
+          const p = parseSeasonEpisode(r.title);
+          if (p.season === null) return true;
+          if (p.season !== season.seasonNumber) return false;
+          if (p.isFullSeason) return true;
+          if (p.episode === null) return true;
+          return p.episode === ep.episodeNumber;
+        });
+        const epRuntime = ep.runtime ?? media.runtime ?? 45;
         const epRows = await Promise.all(
-          epBatches
-            .flat()
-            .map((r) =>
-              this.buildReleaseRow(
-                r,
-                allowed,
-                allowedLangs,
-                sizeByQuality,
-                indexerMinSeeders,
-                media.runtime ?? 45,
-                indexerUnknownLang,
-                expectedTitles,
-              ),
-            ),
+          epFlat.map((r) => {
+            const isPack = parseSeasonEpisode(r.title).isFullSeason;
+            return this.buildReleaseRow(
+              r,
+              allowed,
+              allowedLangs,
+              sizeByQuality,
+              indexerMinSeeders,
+              isPack ? seasonRuntime : epRuntime,
+              indexerUnknownLang,
+              expectedTitles,
+            );
+          }),
         );
         sortReleasesByRelevance(epRows);
 
