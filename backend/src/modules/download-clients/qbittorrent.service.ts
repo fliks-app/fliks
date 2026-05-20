@@ -3,6 +3,7 @@ import axios from 'axios';
 import * as crypto from 'crypto';
 import FormData from 'form-data';
 import { DownloadClient } from './entities/download-client.entity';
+import { decodeHtmlEntities } from '../../common/utils/decode-html-entities';
 
 export interface QbittorrentTorrent {
   hash: string;
@@ -161,7 +162,13 @@ export class QbittorrentService {
         );
         return [];
       }
-      return res.data;
+      // Decode HTML entities baked into the `.torrent` `name` field by
+      // misbehaving indexers (`Berl&iacute;n` → `Berlín`). Anything
+      // downstream — history matching, activity UI, sourceTitle —
+      // gets the human-readable form.
+      return res.data.map((t) =>
+        t.name ? { ...t, name: decodeHtmlEntities(t.name) } : t,
+      );
     } catch (e) {
       this.log.warn(
         `getTorrents: error fetching torrents from "${client.name}": ${(e as Error).message}`,
