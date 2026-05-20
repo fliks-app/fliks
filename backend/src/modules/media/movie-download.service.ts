@@ -65,6 +65,9 @@ export interface MovieReleaseRow {
   rejections: ReleaseRejection[];
   freeleech: boolean;
   downloadVolumeFactor: number;
+  isFullSeason: boolean;
+  sizeDeviation: number | null;
+  videoCodec: 'AV1' | 'HEVC' | 'VP9' | 'x264' | null;
 }
 
 @Injectable()
@@ -210,12 +213,19 @@ export class MovieDownloadService {
       allowedLangs,
       customTitle || this.expectedTitlesForMedia(media),
     );
-    const accepted = rows.filter((r) => r.rejections.length === 0).length;
+    // Drop everything above the profile's cutoff. Above-cutoff qualities
+    // surfaced in manual results even when they couldn't be auto-grabbed,
+    // bloating the list with irrelevant 2160p hits when the user targets
+    // 1080p. The cutoff already gates the upgrade pipeline; mirror that
+    // contract here.
+    const cutoffRank = getAppQualityById(media.qualityProfile?.cutoff ?? 0)?.rank ?? 999;
+    const withinCutoff = rows.filter((r) => r.rank <= cutoffRank);
+    const accepted = withinCutoff.filter((r) => r.rejections.length === 0).length;
     this.log.log(
-      `[searchMovieReleases] "${media.title}" — ${rows.length} scored, ${accepted} accepted, ${rows.length - accepted} rejected`,
+      `[searchMovieReleases] "${media.title}" — ${withinCutoff.length} within cutoff (rank ≤ ${cutoffRank}), ${accepted} accepted, ${withinCutoff.length - accepted} rejected`,
     );
-    if (accepted === 0 && rows.length > 0) {
-      const sample = rows
+    if (accepted === 0 && withinCutoff.length > 0) {
+      const sample = withinCutoff
         .slice(0, 5)
         .map((r) => `"${r.title}" [${r.rejections.join(', ')}]`);
       this.log.warn(
@@ -223,7 +233,7 @@ export class MovieDownloadService {
       );
     }
 
-    return sortReleasesByRelevance(rows);
+    return sortReleasesByRelevance(withinCutoff);
   }
 
   async grabMovie(

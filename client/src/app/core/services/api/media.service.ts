@@ -43,6 +43,9 @@ export interface MovieRelease {
   rejections: { code: string; params?: Record<string, number | string> }[];
   freeleech: boolean;
   downloadVolumeFactor: number;
+  isFullSeason: boolean;
+  sizeDeviation: number | null;
+  videoCodec: 'AV1' | 'HEVC' | 'VP9' | 'x264' | null;
 }
 
 export interface Episode {

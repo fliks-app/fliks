@@ -8,6 +8,7 @@ import {
   parseReleaseLanguage,
   resolveUnknownLanguage,
 } from './release-language.parser';
+import { parseSeasonEpisode } from './release-episode.parser';
 
 /**
  * Resolve a stored media-file quality string (e.g. `"WEBDL-1080p"`,
@@ -58,14 +59,52 @@ export interface ReleaseRejection {
  *   VP9          → 0.60 (~40% smaller than x264)
  *   Unknown      → 1.0  (conservative — assume x264)
  */
-function detectCodecSizeFactor(title?: string): number {
-  if (!title) return 1;
+/**
+ * Returns the codec-adjusted absolute deviation of a release's MB/h
+ * rate from the quality's preferred MB/h, normalised by preferred.
+ * 0 = on target; 0.5 = 50% off either way; `null` when preferred /
+ * runtime is unknown. Used by the sort comparator as a tiebreaker —
+ * lower deviation ranks above larger deviations at equal quality
+ * + custom-format score.
+ */
+export function computeSizeDeviation(
+  releaseTitle: string,
+  sizeBytes: number,
+  runtimeMinutes: number,
+  rawLimits: { min: number; preferred: number; max: number } | undefined,
+): number | null {
+  if (!rawLimits || rawLimits.preferred <= 0) return null;
+  if (runtimeMinutes <= 0 || sizeBytes <= 0) return null;
+  const sizeMb = sizeBytes / (1024 * 1024);
+  const sizeMbPerHour = sizeMb / (runtimeMinutes / 60);
+  const preferred = rawLimits.preferred * detectCodecSizeFactor(releaseTitle);
+  if (preferred <= 0) return null;
+  return Math.abs(sizeMbPerHour - preferred) / preferred;
+}
+
+export function detectCodecSizeFactor(title?: string): number {
+  switch (detectVideoCodec(title)) {
+    case 'AV1': return 0.45;
+    case 'HEVC': return 0.55;
+    case 'VP9': return 0.6;
+    default: return 1; // x264/h264 or unknown → baseline
+  }
+}
+
+/** Surface-friendly codec name parsed from the release title. Returns
+ *  null when no codec token is recognised so the UI can omit the
+ *  badge instead of guessing. */
+export function detectVideoCodec(title?: string): 'AV1' | 'HEVC' | 'VP9' | 'x264' | null {
+  if (!title) return null;
   const t = title.toLowerCase();
-  if (/\bav1\b/.test(t)) return 0.45;
-  if (/\b(x265|h\.?265|hevc)\b/.test(t)) return 0.55;
-  if (/\bvp9\b/.test(t)) return 0.6;
-  // x264/h264 or unknown → baseline
-  return 1;
+  if (/\bav1\b/.test(t)) return 'AV1';
+  // `h[.\s-]?` lets us catch "H.264", "H264", "h 264", "H-264" — some
+  // indexers tokenise dots to spaces, which would otherwise hide the
+  // codec marker behind a word boundary.
+  if (/\b(x265|h[.\s-]?265|hevc)\b/.test(t)) return 'HEVC';
+  if (/\bvp9\b/.test(t)) return 'VP9';
+  if (/\b(x264|h[.\s-]?264|avc)\b/.test(t)) return 'x264';
+  return null;
 }
 
 export interface SizeLimits {
@@ -291,22 +330,11 @@ export function computeRejections(opts: {
         },
       });
     }
-    if (
-      limits.preferred > 0 &&
-      out.every((r) => r.code !== 'SIZE_TOO_LOW' && r.code !== 'SIZE_TOO_HIGH')
-    ) {
-      const deviation =
-        Math.abs(sizeMbPerHour - limits.preferred) / limits.preferred;
-      if (deviation > 0.3) {
-        out.push({
-          code: 'SIZE_NOT_PREFERRED',
-          params: {
-            actual: Math.round(sizeMbPerHour),
-            preferred: Math.round(limits.preferred),
-          },
-        });
-      }
-    }
+    // Preferred is a sort-time signal only — anything within min/max
+    // is a valid release. Treating "deviation from preferred" as a
+    // rejection bumped legit season packs and oversize-but-still-good
+    // single episodes out of the auto-grab pool. min/max alone keep
+    // truly bad sizes out.
   }
 
   const minSeed = opts.indexerMinSeeders.get(opts.indexerId) ?? 0;
@@ -343,6 +371,7 @@ export function sortReleasesByRelevance<
     customFormatScore: number;
     seeders: number;
     freeleech: boolean;
+    sizeDeviation?: number | null;
   },
 >(rows: T[]): T[] {
   return rows.sort((a, b) => {
@@ -368,7 +397,15 @@ export function sortReleasesByRelevance<
     if (a.customFormatScore !== b.customFormatScore)
       return b.customFormatScore - a.customFormatScore;
 
-    // 7. Seeders desc (log scale)
+    // 7. Closer to preferred size wins (only when both rows expose it
+    //    and the gap is big enough to matter — within 5% of each other
+    //    counts as tied, otherwise tiny noise would flip the order).
+    if (a.sizeDeviation != null && b.sizeDeviation != null) {
+      const diff = Math.abs(a.sizeDeviation - b.sizeDeviation);
+      if (diff > 0.05) return a.sizeDeviation - b.sizeDeviation;
+    }
+
+    // 8. Seeders desc (log scale)
     const aSeed = Math.log2(a.seeders + 1);
     const bSeed = Math.log2(b.seeders + 1);
     if (Math.abs(aSeed - bSeed) > 0.5) return bSeed - aSeed;
@@ -393,6 +430,9 @@ export interface ScoredRelease extends TorznabRelease {
   languageName: string;
   languageAllowed: boolean;
   rejections: ReleaseRejection[];
+  isFullSeason: boolean;
+  sizeDeviation: number | null;
+  videoCodec: 'AV1' | 'HEVC' | 'VP9' | 'x264' | null;
 }
 
 /** Async callbacks injected by the caller (avoids coupling to NestJS services). */
@@ -470,6 +510,14 @@ export async function scoreAndSortReleases(
         languageAllowed:
           opts.allowedLangs.size === 0 || opts.allowedLangs.has(lang.id),
         rejections,
+        isFullSeason: parseSeasonEpisode(r.title).isFullSeason,
+        sizeDeviation: computeSizeDeviation(
+          r.title,
+          r.size,
+          opts.runtimeMinutes,
+          opts.sizeByQuality.get(parsed.quality.id),
+        ),
+        videoCodec: detectVideoCodec(r.title),
       };
     }),
   );
