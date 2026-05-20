@@ -49,13 +49,13 @@
 
   @if (openSheetFor() !== null) {
     <div class="fixed inset-0 z-40 bg-black/50 flex items-end sm:items-center justify-center p-4" (click)="closeSheet()">
-      <div class="card bg-base-100 w-full max-w-sm shadow-xl" (click)="$event.stopPropagation()">
+      <div data-tv-modal class="card bg-base-100 w-full max-w-sm shadow-xl" (click)="$event.stopPropagation()">
         <div class="card-body gap-2">
           @let selected = users().length ? users() : [];
           @for (u of selected; track u.id) {
             @if (u.id === openSheetFor()) {
               <div class="text-center font-semibold mb-2">{{ u.username }}</div>
-              <button type="button" class="btn btn-primary justify-start gap-3" (click)="goToPasswordLogin(u)">
+              <button #passwordBtn type="button" class="btn btn-primary justify-start gap-3" (click)="goToPasswordLogin(u)">
                 <svg lucideKeyRound class="h-5 w-5"></svg>
                 {{ 'select_user.use_password' | translate }}
               </button>

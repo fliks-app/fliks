@@ -78,10 +78,15 @@ import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats
   styles: [`
     .player-container {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
+      /* 'inset: 0' pins all four edges to the layout viewport. On iOS
+         Safari with the bottom URL bar, the layout viewport ignores the
+         chrome so 'bottom: 0' lands BEHIND it — explicit 'height: 100dvh'
+         caps the container to the visible (dynamic) viewport and pulls
+         the seekbar above the URL bar. '100vh' is the legacy fallback for
+         browsers without dvh support (Tizen Chrome 85 — no URL bar). */
+      inset: 0;
       height: 100vh;
+      height: 100dvh;
       background-color: #000;
       z-index: 100;
       overflow: hidden;
@@ -1494,6 +1499,26 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   onToggleFullscreen() {
+    // iOS Safari rejects the standard Fullscreen API on arbitrary elements
+    // (and `document.fullscreenEnabled` is false). The only path to a
+    // fullscreen video there is the legacy `webkitEnterFullscreen` on the
+    // <video> tag itself, which surfaces the native iOS player overlay.
+    // Detect by capability, not UA, so iPadOS-as-desktop-mode still works.
+    if (!document.fullscreenEnabled) {
+      const video = this.videoEl()?.nativeElement as (HTMLVideoElement & {
+        webkitEnterFullscreen?: () => void;
+        webkitExitFullscreen?: () => void;
+        webkitDisplayingFullscreen?: boolean;
+      }) | undefined;
+      if (video?.webkitEnterFullscreen) {
+        if (video.webkitDisplayingFullscreen) {
+          video.webkitExitFullscreen?.();
+        } else {
+          video.webkitEnterFullscreen();
+        }
+        return;
+      }
+    }
     if (document.fullscreenElement) {
       document.exitFullscreen();
     } else {
@@ -1849,7 +1874,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     );
 
     const isEngineTrack =
-      this.engine && (trackId.startsWith('shaka-') || trackId.startsWith('audio-'));
+      this.engine && (
+        trackId.startsWith('shaka-') ||
+        trackId.startsWith('audio-') ||
+        trackId.startsWith('avplay-audio-')
+      );
 
     // Engine-level audio switch (Shaka native or NativeEngine)
     if (isEngineTrack) {
