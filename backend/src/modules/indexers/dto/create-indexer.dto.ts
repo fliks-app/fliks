@@ -32,6 +32,11 @@ export class CreateIndexerDto {
   @IsOptional()
   priority?: number;
 
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  requestDelay?: number;
+
   @IsBoolean()
   @IsOptional()
   enabled?: boolean;

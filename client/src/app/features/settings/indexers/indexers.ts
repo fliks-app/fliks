@@ -40,6 +40,7 @@ export class IndexersSettingsComponent implements OnInit {
 
   readonly formName = signal('');
   readonly formPriority = signal(25);
+  readonly formRequestDelay = signal(2);
   readonly formEnabled = signal(true);
   readonly formEnableSearch = signal(true);
   readonly formTorznabBase = signal('');
@@ -83,6 +84,7 @@ export class IndexersSettingsComponent implements OnInit {
     this.editingId.set(null);
     this.formName.set('');
     this.formPriority.set(25);
+    this.formRequestDelay.set(2);
     this.formEnabled.set(true);
     this.formEnableSearch.set(true);
     this.formTorznabBase.set('');
@@ -99,6 +101,7 @@ export class IndexersSettingsComponent implements OnInit {
     this.editingId.set(ix.id);
     this.formName.set(ix.name);
     this.formPriority.set(ix.priority);
+    this.formRequestDelay.set(ix.requestDelay ?? 2);
     this.formEnabled.set(ix.enabled);
     this.formEnableSearch.set(ix.enableSearch);
     const s = ix.settings ?? {};
@@ -156,6 +159,7 @@ export class IndexersSettingsComponent implements OnInit {
       name,
       implementation: 'torznab' as const,
       priority: this.formPriority(),
+      requestDelay: this.formRequestDelay(),
       enabled: this.formEnabled(),
       enableSearch: this.formEnableSearch(),
       settings: {

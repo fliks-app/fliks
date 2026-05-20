@@ -21,6 +21,13 @@ export class Indexer extends BaseEntity {
   @Column({ default: 25 })
   priority: number;
 
+  /** Minimum seconds between two consecutive requests to this indexer.
+   *  Enforced by `IndexerThrottle` — protects against IP bans from
+   *  trackers behind anti-DDoS (Cloudflare etc.) when the search
+   *  runner fans out across many medias. */
+  @Column({ default: 2 })
+  requestDelay: number;
+
   @Column({ default: true })
   enabled: boolean;
 

@@ -44,6 +44,7 @@ export class IndexersService {
       enableRss: dto.enableRss ?? true,
       enableSearch: dto.enableSearch ?? true,
       priority: dto.priority ?? 25,
+      requestDelay: dto.requestDelay ?? 2,
       enabled: dto.enabled ?? true,
     });
 
@@ -73,6 +74,7 @@ export class IndexersService {
     if (dto.enableRss !== undefined) ix.enableRss = dto.enableRss;
     if (dto.enableSearch !== undefined) ix.enableSearch = dto.enableSearch;
     if (dto.priority !== undefined) ix.priority = dto.priority;
+    if (dto.requestDelay !== undefined) ix.requestDelay = dto.requestDelay;
     if (dto.enabled !== undefined) ix.enabled = dto.enabled;
     if (dto.settings !== undefined)
       ix.settings = this.sanitizeSettings(dto.settings);

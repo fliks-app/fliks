@@ -10,6 +10,7 @@ export interface IndexerRow {
   enableRss: boolean;
   enableSearch: boolean;
   priority: number;
+  requestDelay: number;
   enabled: boolean;
 }
 
@@ -20,6 +21,7 @@ export interface CreateIndexerBody {
   enableRss?: boolean;
   enableSearch?: boolean;
   priority?: number;
+  requestDelay?: number;
   enabled?: boolean;
 }
 

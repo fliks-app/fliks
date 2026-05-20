@@ -163,6 +163,21 @@
             />
           </label>
         </div>
+        <div class="grid grid-cols-1 gap-3">
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.indexers.field_request_delay' | translate }}</span>
+            <input
+              type="number"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formRequestDelay()"
+              (ngModelChange)="formRequestDelay.set(+$event)"
+              min="0"
+            />
+            <div class="label">
+              <span class="label-text-alt text-base-content/50">{{ 'settings.indexers.request_delay_hint' | translate }}</span>
+            </div>
+          </label>
+        </div>
         <div class="grid grid-cols-2 gap-3">
           <label class="form-control w-full">
             <span class="label-text">{{ 'settings.indexers.field_seed_ratio' | translate }}</span>
