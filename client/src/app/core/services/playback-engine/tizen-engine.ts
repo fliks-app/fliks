@@ -15,28 +15,15 @@ import {
 /**
  * Samsung Tizen AVPlay backend.
  *
- * Tizen's web runtime exposes a native media player through `webapis.avplay`
- * — a singleton bound to a single `<object type="application/avplayer">`
- * element. It decodes HEVC / H.264 / AV1 / Dolby in hardware, handles HLS
- * adaptive bitrate internally (no MSE / SourceBuffer plumbing), and is the
- * only path that survives the codec mismatch quirks that Shaka hits on
- * Tizen 6.5 (e.g. EAC3 audio: `MediaSource.isTypeSupported` returns true,
- * but `addSourceBuffer('audio/mp4; codecs="ec-3"')` throws —
- * `[Player] Init error: 3015 …` and the WebView stays black).
- *
- * The video surface lives BEHIND the WebView (same model as
- * `NativeEngine` on Android): the AVPlay object renders to a hardware
- * layer; everything in the Angular template paints on top with
- * transparent backgrounds (driven by `html.native-player-active`).
- *
- * Subtitle and ABR controls intentionally minimal in V1 — they go
- * through AVPlay's `setSelectTrack` / `setStreamingProperty` APIs once
- * the basic playback loop is proven.
+ * `webapis.avplay` is a process-wide singleton bound to the
+ * `<object id="fliks-avplay" type="application/avplayer">` declared at
+ * HTML parse time (creating it dynamically silently fails). The video
+ * surface renders on a hardware plane BEHIND the WebView; DOM overlays
+ * paint on top of transparent CSS regions driven by
+ * `html.native-player-active`. HEVC / AV1 / Dolby decoding and HLS ABR
+ * are handled natively — Shaka chokes on Tizen 6.5 MSE quirks.
  */
 
-// AVPlay is a globally-registered Tizen WebAPI. Declared loosely here so
-// the build doesn't depend on `@types/tizen-tv-webapis` (not on npm at
-// time of writing). The runtime check below guards every call.
 declare const webapis: {
   avplay: {
     open(url: string): void;
@@ -89,26 +76,35 @@ interface VttCue {
 }
 
 export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngine {
+  /** Most recently `init()`'d instance. The shared AVPlay surface and
+   *  native listener fan out to whoever holds this slot. */
+  private static activeEngine: TizenEngine | null = null;
+  /** `setListener` is append-only on Tizen 6.5 — calling it more than
+   *  ~20 times exits the WAS process. Install once per process and
+   *  dispatch through `activeEngine`. */
+  private static listenerInstalled = false;
+
   private avObject: HTMLObjectElement | null = null;
+  private _lastLoadedUrl: string | null = null;
   private _currentTime = 0;
   private _duration = 0;
   private _buffered = 0;
-  private _paused = true;
+  private _paused = false;
   private _playbackRate = 1;
   private _volume = 1;
   private _muted = false;
   private _audioTracks: AudioTrack[] = [];
-  /** Last AVPlay audio track index we asked for (or were defaulted to).
-   *  AVPlay doesn't expose a `getCurrentAudioTrack()`; track it ourselves
+  /** AVPlay exposes no `getCurrentAudioTrack()` — track it ourselves
    *  so the dropdown reflects the active language. */
   private _currentAudioIndex = 0;
   private firstFrameEmitted = false;
   private orientationHandler: (() => void) | null = null;
-  // ── Subtitle overlay (DOM-rendered) ──
-  // AVPlay's `setExternalSubtitlePath` only accepts local file paths,
-  // not HTTPS URLs, and we ship no privilege to write to /tmp on the
-  // TV. We parse the VTT ourselves and render text in a positioned div,
-  // syncing on `oncurrentplaytime`.
+  private _seekInFlight = false;
+  private _pendingSeek: number | null = null;
+
+  /** DOM-rendered subtitle overlay. AVPlay's `setExternalSubtitlePath`
+   *  only accepts local file paths, not HTTPS — we parse VTT
+   *  ourselves and render into a positioned div. */
   private subtitleEl: HTMLDivElement | null = null;
   private parsedCues: VttCue[] = [];
   private subtitleVisible = false;
@@ -120,28 +116,13 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     if (!isTizenAvplayAvailable()) {
       throw new Error('Tizen AVPlay not available (webapis.avplay missing)');
     }
-
-    // The AVPlay object lives in index.html (parsed before Angular boot)
-    // because Samsung's runtime instantiates the native player plugin at
-    // HTML-parse time and only binds `webapis.avplay` to objects it saw
-    // then. Creating it dynamically here silently fails: `prepareAsync`
-    // rejects every URL with `InvalidAccessError`. Promote the static
-    // element to fullscreen + z-0 so it sits behind the WebView surface;
-    // teardown reverts to the parked geometry.
     const obj = document.getElementById(AVPLAY_OBJECT_ID) as HTMLObjectElement | null;
     if (!obj) {
       throw new Error('Tizen AVPlay surface missing — index.html should define <object id="' + AVPLAY_OBJECT_ID + '">');
     }
-    // Reveal the surface. The element is `display:none` in index.html so
-    // the unsupported-plugin placeholder doesn't cover the home page on
-    // non-Tizen browsers and stays out of the layout flow on TV until a
-    // playback engine actually exists.
     obj.style.display = 'block';
     this.avObject = obj;
-
-    // Resize the AVPlay surface when the window itself resizes — Tizen
-    // overscan trims ~4% on each axis, and the player object dimensions
-    // must be in screen pixels (setDisplayRect ignores CSS percentages).
+    TizenEngine.activeEngine = this;
     this.applyDisplayRect();
     this.orientationHandler = () => this.applyDisplayRect();
     window.addEventListener('resize', this.orientationHandler);
@@ -149,22 +130,18 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   async destroy(): Promise<void> {
     try {
-      const state = webapis.avplay.getState();
-      if (state !== 'NONE' && state !== 'IDLE') webapis.avplay.stop();
-      webapis.avplay.close();
-    } catch {
-      /* AVPlay throws if already closed — fine. */
-    }
+      const s = webapis.avplay.getState();
+      if (s !== 'NONE' && s !== 'IDLE') webapis.avplay.stop();
+    } catch { /* ok */ }
     if (this.orientationHandler) {
       window.removeEventListener('resize', this.orientationHandler);
       this.orientationHandler = null;
     }
-    // Hide the surface again so the unsupported-plugin chrome doesn't
-    // surface on the home page / other routes once playback ends. The
-    // element itself stays in DOM (TizenEngine re-uses it next time).
-    if (this.avObject) this.avObject.style.display = 'none';
+    if (TizenEngine.activeEngine === this) {
+      if (this.avObject) this.avObject.style.display = 'none';
+      TizenEngine.activeEngine = null;
+    }
     this.avObject = null;
-    // Tear down subtitle overlay so the next engine starts fresh.
     if (this.subtitleEl?.parentElement) {
       this.subtitleEl.parentElement.removeChild(this.subtitleEl);
     }
@@ -177,213 +154,107 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   private applyDisplayRect() {
     if (!this.avObject) return;
-    // AVPlay HW plane → fullscreen, video letter-boxed inside. The
-    // WebView is composited *above* the plane on Tizen 6.5 (verified:
-    // `<object>` z-index doesn't affect stacking, and shrinking the
-    // element doesn't reveal the plane edges either), so the DOM
-    // overlays (controls, loading spinner, error dialog) are visible on
-    // top of the video as long as they actually have non-zero
-    // dimensions — see `player.ts` `.player-container` which uses
-    // explicit `top/right/bottom/left:0` instead of the `inset:0`
-    // shorthand (Chrome 87+; Tizen 6.5 = Chromium 85 ignores it and
-    // collapses the element to 0×0).
     try {
       webapis.avplay.setDisplayRect(0, 0, 1920, 1080);
       webapis.avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_LETTER_BOX');
-    } catch {
-      /* setDisplayRect throws when AVPlay state is NONE — first call
-         before open() falls into this branch and is recovered
-         post-prepare from the success callback. */
-    }
+    } catch { /* invalid in NONE — re-applied post-prepare */ }
   }
 
   // ── Loading ─────────────────────────────────────────────────────────
-
-  /** Last URL passed to `load()` — kept so the seek-failure recovery
-   *  path can reload the stream at the user's target without going
-   *  back through the player layer. */
-  private _lastLoadedUrl: string | null = null;
 
   async load(
     url: string,
     startTime?: number,
     _mimeType?: string,
-    headers?: Record<string, string>,
+    _headers?: Record<string, string>,
   ): Promise<void> {
     this._lastLoadedUrl = url;
     this.firstFrameEmitted = false;
     this._currentTime = 0;
     this._duration = 0;
 
-    // Close any in-flight session so open() doesn't INVALID_STATE.
+    const safeUrl = resolveAvtestUrl(url);
+
     try {
       const s = webapis.avplay.getState();
-      if (s !== 'NONE' && s !== 'IDLE') webapis.avplay.stop();
-      webapis.avplay.close();
-    } catch {
-      /* OK */
-    }
-
-    // Diagnostic flag: `localStorage['fliks.avtest']` selects an
-    // alternate URL to isolate failure modes —
-    //   - '1' → Apple's reference single-variant HLS-TS (proven working)
-    //   - 'master' → Apple's multi-variant master playlist (TS)
-    //   - 'fmp4ref' → external reference single-variant fMP4 with audio
-    //     muxed inline. Confirmed during issue #148 bisection that
-    //     Tizen AVPlay rejects this layout outright — kept here for
-    //     future re-tests against newer firmware.
-    //   - 'variant' → our backend's 1080p variant (skipping master)
-    // anything else → the requested URL.
-    const flag =
-      typeof localStorage !== 'undefined' ? localStorage.getItem('fliks.avtest') : null;
-    let safeUrl: string;
-    if (flag === '1') {
-      safeUrl = 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8';
-    } else if (flag === 'master') {
-      safeUrl = 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3.m3u8';
-    } else if (flag === 'fmp4ref') {
-      safeUrl = 'https://d2zihajmogu5jn.cloudfront.net/fmp4-muxed-no-playlist-codecs/index.m3u8';
-    } else if (flag === 'variant') {
-      // Rewrite master.m3u8 → 1080p/index.m3u8 so AVPlay bypasses the
-      // master parser entirely and consumes a flat single-rendition
-      // playlist. Same auth (`?token=`) carries over.
-      safeUrl = url.replace(/\/master\.m3u8(\?|$)/, '/1080p/index.m3u8$1');
-    } else if (flag === 'encoded') {
-      // Percent-encode the JWT dots in the query string. JWTs have two
-      // literal `.` separators which some embedded URL parsers (incl.
-      // older AVPlay builds) misread as path-extension boundaries,
-      // confusing the HLS detector. The backend's URL decoder reads
-      // back the original token.
-      safeUrl = url.replace(
-        /([?&]token=)([^&#]+)/,
-        (_m, prefix, tok) => prefix + tok.replace(/\./g, '%2E'),
-      );
-    } else {
-      safeUrl = url;
-    }
-    void headers;
-
-    // Strict Samsung-sample order — every divergence we tried ends in
-    // `InvalidAccessError`. The official SDC2016 VideoAVPlayer sample
-    // calls `open → setListener → prepare → setDisplayRect`. Setting
-    // the listener AFTER open() and the display rect AFTER prepare
-    // appears to be a state-machine requirement on Tizen 6.5; setting
-    // the display rect before prepare while still in NONE state seems
-    // to leave AVPlay confused and the prepare error fires.
-    // eslint-disable-next-line no-console
-    console.log('[TizenEngine] open URL:', safeUrl);
+      if (s !== 'NONE' && s !== 'IDLE') {
+        try { webapis.avplay.stop(); } catch { /* ok */ }
+      }
+    } catch { /* ok */ }
     webapis.avplay.open(safeUrl);
 
-    // Pin AVPlay's adaptive-bitrate behaviour for the CMAF / single-LAN
-    // case (see `browser-device-profile.service.ts` for the `useCmaf`
-    // rationale). CMAF segments are self-contained mp4s with their own
-    // moov + HEVC config, so every ABR shift forces a decoder re-init
-    // and a buffer drain — left untouched, AVPlay pings between 1080p
-    // and 144p several times per second on a 4K LAN target. The
-    // ADAPTIVE_INFO trio (Samsung-specific extension to AVPlay) caps
-    // that:
-    //   - STARTBITRATE: pin the initial rung high so the first
-    //     segments are already top-quality;
-    //   - BITRATES min~max: refuse rungs outside the band;
-    //   - SKIPBITRATE: floor for emergency-downshift decisions.
-    // The minimum (2 Mbps) cuts the 144p / 240p / 360p rungs from the
-    // selection set entirely — they exist for true bandwidth-starved
-    // clients (mobile data) and aren't useful on a TV.
+    // Cap AVPlay's ABR band — segments below 2 Mbps are useless on a
+    // TV display and the constant rung-switching they trigger drains
+    // the HW decoder. STARTBITRATE pins the opening rung high.
     try {
       webapis.avplay.setStreamingProperty(
         'ADAPTIVE_INFO',
         'BITRATES=2000000~30000000|STARTBITRATE=8000000|SKIPBITRATE=2000000',
       );
-    } catch {
-      /* old firmware may not expose ADAPTIVE_INFO; default ABR is fine. */
+    } catch { /* old firmware — default ABR is fine */ }
+
+    // Seeding the resume position in IDLE pre-prepare lets AVPlay
+    // request the right segment first instead of the "play from 0 →
+    // seek to X" round-trip (which on slow backends races with FFmpeg
+    // segment generation and 404s).
+    if (startTime !== undefined && startTime > 0) {
+      try { webapis.avplay.seekTo(Math.round(startTime * 1000)); } catch { /* ok */ }
     }
 
-    // Set the START position BEFORE prepareAsync. Per Samsung docs,
-    // `seekTo` while in IDLE state pins the start time so the first
-    // segment AVPlay requests is already at the resume position. The
-    // earlier post-prepare seek racked up a "play from 0 → seek to X"
-    // sequence: AVPlay grabbed seg-0000 first, which made the backend
-    // restart FFmpeg at segment 1; only then did the seek hit, by
-    // which point FFmpeg was busy regenerating early segments and the
-    // resume segment wasn't on disk yet → 404 → playback error.
-    if (startTime && startTime > 0) {
-      try {
-        webapis.avplay.seekTo(Math.round(startTime * 1000));
-      } catch {
-        /* IDLE-state seek rejected on some firmware — the resume offset
-           is also encoded in `?startAt=` on the master URL, so even
-           without an IDLE seek the backend has already pre-warmed the
-           right segment range. */
-      }
-    }
-
-    webapis.avplay.setListener({
-      onbufferingstart: () => this.emit('stateChanged', { state: 'buffering' }),
-      onbufferingcomplete: () => {
-        if (!this._paused) this.emit('stateChanged', { state: 'playing' });
-      },
-      oncurrentplaytime: (ms) => {
-        this._currentTime = ms / 1000;
-        this._buffered = this._currentTime;
-        this.emit('timeUpdate', {
-          position: this._currentTime,
-          duration: this._duration,
-          buffered: this._buffered,
-        });
-        // Sync DOM subtitle overlay — AVPlay drives the timeline so we
-        // tick on every reported play-time update rather than running
-        // our own rAF loop.
-        this.updateSubtitleAt(this._currentTime);
-        if (!this.firstFrameEmitted && ms > 0) {
-          this.firstFrameEmitted = true;
-          this.emit('firstFrame', undefined);
-        }
-      },
-      onerror: (err) => {
-        this.emit('error', { code: -1, message: String(err) });
-        this.emit('stateChanged', { state: 'error' });
-      },
-      onstreamcompleted: () => {
-        this.emit('stateChanged', { state: 'ended' });
-        this.emit('ended', undefined);
-      },
-      onevent: () => { /* opaque AVPlay events — ignore for now */ },
-    });
+    TizenEngine.ensureGlobalListener();
 
     return new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        try { webapis.avplay.stop(); } catch { /* ok */ }
+        document.documentElement.classList.remove('native-player-active');
+        const msg = 'AVPlay prepareAsync timeout (30s)';
+        this.emit('error', { code: -1, message: msg });
+        reject(new Error(msg));
+      }, 30000);
+      const done = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn();
+      };
+
       try {
         webapis.avplay.prepareAsync(
-          () => {
+          () => done(() => {
             try {
               this._duration = (webapis.avplay.getDuration() ?? 0) / 1000;
-            } catch {
-              this._duration = 0;
+            } catch { this._duration = 0; }
+            try { this.populateAudioTracks(); } catch { /* tracks not ready */ }
+            try { this.applyDisplayRect(); } catch { /* ok */ }
+            if (!this._paused) {
+              try { webapis.avplay.play(); } catch (e) {
+                this.emit('error', { code: -1, message: 'AVPlay play (post-prepare) failed: ' + String(e) });
+              }
+              this.emit('stateChanged', { state: 'playing' });
+            } else {
+              this.emit('stateChanged', { state: 'paused' });
             }
-            this.populateAudioTracks();
-            // setDisplayRect AFTER prepare (Samsung sample order).
-            this.applyDisplayRect();
-            webapis.avplay.play();
-            this._paused = false;
-            // We seeded the resume position in IDLE pre-prepare; record
-            // it locally so the seekbar shows the right starting offset
-            // before AVPlay's first `oncurrentplaytime` tick.
             if (startTime && startTime > 0) this._currentTime = startTime;
-            this.emit('stateChanged', { state: 'playing' });
             resolve();
-          },
-          (err) => {
-            try { webapis.avplay.close(); } catch { /* fine */ }
+          }),
+          (err) => done(() => {
+            try { webapis.avplay.stop(); } catch { /* ok */ }
             document.documentElement.classList.remove('native-player-active');
             this.emit('error', { code: -1, message: 'AVPlay prepare failed: ' + String(err) });
             reject(new Error('AVPlay prepare failed: ' + String(err)));
-          },
+          }),
         );
       } catch (e) {
-        try { webapis.avplay.close(); } catch { /* fine */ }
-        document.documentElement.classList.remove('native-player-active');
-        const msg = 'AVPlay prepareAsync threw: ' + (e instanceof Error ? e.message : String(e));
-        this.emit('error', { code: -1, message: msg });
-        reject(new Error(msg));
+        done(() => {
+          try { webapis.avplay.stop(); } catch { /* ok */ }
+          document.documentElement.classList.remove('native-player-active');
+          const msg = 'AVPlay prepareAsync threw: ' + (e instanceof Error ? e.message : String(e));
+          this.emit('error', { code: -1, message: msg });
+          reject(new Error(msg));
+        });
       }
     });
   }
@@ -392,77 +263,148 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     try {
       const s = webapis.avplay.getState();
       if (s !== 'NONE' && s !== 'IDLE') webapis.avplay.stop();
-      webapis.avplay.close();
-    } catch {
-      /* OK */
+    } catch { /* ok */ }
+  }
+
+  private static ensureGlobalListener(): void {
+    if (TizenEngine.listenerInstalled) return;
+    TizenEngine.listenerInstalled = true;
+    webapis.avplay.setListener({
+      onbufferingstart: () => TizenEngine.activeEngine?.handleBufferingStart(),
+      onbufferingcomplete: () => TizenEngine.activeEngine?.handleBufferingComplete(),
+      oncurrentplaytime: (ms) => TizenEngine.activeEngine?.handleCurrentPlayTime(ms),
+      onerror: (err) => TizenEngine.activeEngine?.handleError(err),
+      onstreamcompleted: () => TizenEngine.activeEngine?.handleStreamCompleted(),
+      onevent: () => { /* opaque AVPlay events */ },
+    });
+  }
+
+  private handleBufferingStart(): void {
+    this.emit('stateChanged', { state: 'buffering' });
+  }
+  private handleBufferingComplete(): void {
+    if (!this._paused) this.emit('stateChanged', { state: 'playing' });
+  }
+  private handleCurrentPlayTime(ms: number): void {
+    this._currentTime = ms / 1000;
+    this._buffered = this._currentTime;
+    this.emit('timeUpdate', {
+      position: this._currentTime,
+      duration: this._duration,
+      buffered: this._buffered,
+    });
+    this.updateSubtitleAt(this._currentTime);
+    if (!this.firstFrameEmitted && ms > 0) {
+      this.firstFrameEmitted = true;
+      this.emit('firstFrame', undefined);
     }
+  }
+  private handleError(err: unknown): void {
+    // Seek failures go through `runSeek`'s per-call error path (which
+    // reloads). The global onerror fires for them too — suppress the
+    // duplicate so the player UI doesn't surface a "Playback error"
+    // on top of an in-flight recovery.
+    if (this._seekInFlight) return;
+    const msg = String(err);
+    if (msg.includes('SEEK_FAILED')) return;
+    this.emit('error', { code: -1, message: msg });
+    this.emit('stateChanged', { state: 'error' });
+  }
+  private handleStreamCompleted(): void {
+    this.emit('stateChanged', { state: 'ended' });
+    this.emit('ended', undefined);
   }
 
   // ── Playback ────────────────────────────────────────────────────────
 
   async play(): Promise<void> {
+    this._paused = false;
     try {
       const s = webapis.avplay.getState();
       if (s === 'PAUSED' && typeof webapis.avplay.resume === 'function') {
         webapis.avplay.resume();
-      } else if (s !== 'PLAYING') {
+      } else if (s === 'READY') {
         webapis.avplay.play();
       }
+      // NONE / IDLE: post-prepare success checks `_paused` and starts
+      // playback once AVPlay reaches READY. PLAYING: nothing to do.
     } catch (e) {
       this.emit('error', { code: -1, message: 'AVPlay play failed: ' + String(e) });
     }
-    this._paused = false;
     this.emit('stateChanged', { state: 'playing' });
   }
 
   async pause(): Promise<void> {
+    this._paused = true;
     try {
-      webapis.avplay.pause();
+      if (webapis.avplay.getState() === 'PLAYING') webapis.avplay.pause();
     } catch (e) {
       this.emit('error', { code: -1, message: 'AVPlay pause failed: ' + String(e) });
     }
-    this._paused = true;
     this.emit('stateChanged', { state: 'paused' });
   }
 
   async seek(position: number): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      try {
-        webapis.avplay.seekTo(
-          Math.round(position * 1000),
-          () => {
-            this._currentTime = position;
-            resolve();
-          },
-          async (err) => {
-            // AVPlay's failure callback fires whenever it can't
-            // satisfy the seek — typically a big backward seek past
-            // the buffered range, where AVPlay's HLS engine doesn't
-            // retry the segment fetch on its own and ends up stuck
-            // in a half-paused state (next `play()` throws). Reload
-            // the stream at the target position to recover.
-            // eslint-disable-next-line no-console
-            console.warn(
-              '[TizenEngine] seek failed → reloading at target:',
-              err,
-            );
-            if (!this._lastLoadedUrl) {
-              reject(new Error(`seek failed: ${err}`));
-              return;
-            }
-            try {
-              await this.load(this._lastLoadedUrl, position);
-              await this.play();
+    if (!isFinite(position) || isNaN(position)) return;
+    if (this._seekInFlight) {
+      this._pendingSeek = position;
+      return;
+    }
+    return this.runSeek(position);
+  }
+
+  private async runSeek(position: number): Promise<void> {
+    this._seekInFlight = true;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          reject(new Error('seek timeout'));
+        }, 35000);
+        const done = (fn: () => void) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          fn();
+        };
+
+        try {
+          webapis.avplay.seekTo(
+            Math.round(position * 1000),
+            () => done(() => {
+              this._currentTime = position;
               resolve();
-            } catch (e) {
-              reject(e);
-            }
-          },
-        );
-      } catch (e) {
-        reject(e);
+            }),
+            async (err) => {
+              if (settled) return;
+              clearTimeout(timer);
+              settled = true;
+              if (!this._lastLoadedUrl) {
+                reject(new Error(`seek failed: ${err}`));
+                return;
+              }
+              try {
+                await this.load(this._lastLoadedUrl, position);
+                resolve();
+              } catch (e) {
+                reject(e);
+              }
+            },
+          );
+        } catch (e) {
+          done(() => reject(e));
+        }
+      });
+    } finally {
+      this._seekInFlight = false;
+      if (this._pendingSeek !== null) {
+        const next = this._pendingSeek;
+        this._pendingSeek = null;
+        void this.runSeek(next);
       }
-    });
+    }
   }
 
   // ── State getters ───────────────────────────────────────────────────
@@ -474,37 +416,22 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       return this._currentTime;
     }
   }
-  get duration(): number {
-    return this._duration;
-  }
-  get paused(): boolean {
-    return this._paused;
-  }
-  get buffered(): number {
-    return this._buffered;
-  }
-  get playbackRate(): number {
-    return this._playbackRate;
-  }
+  get duration(): number { return this._duration; }
+  get paused(): boolean { return this._paused; }
+  get buffered(): number { return this._buffered; }
+  get playbackRate(): number { return this._playbackRate; }
   set playbackRate(_rate: number) {
-    // AVPlay supports `setSpeed(rate)` on Tizen 4.0+ but it's a separate
-    // API (`webapis.avplay.setSpeed`). Skipped in V1 — controls UI doesn't
-    // expose rate changes on TV.
+    /* `setSpeed(rate)` exists on AVPlay but the controls UI doesn't expose rate on TV. */
   }
-  get volume(): number {
-    return this._volume;
-  }
+  get volume(): number { return this._volume; }
   set volume(v: number) {
     this._volume = v;
-    // AVPlay uses the system volume — no per-stream knob. Mute is the
-    // closest equivalent and is wired through `muted` below.
+    /* AVPlay uses system volume; no per-stream knob. */
   }
-  get muted(): boolean {
-    return this._muted;
-  }
+  get muted(): boolean { return this._muted; }
   set muted(m: boolean) {
     this._muted = m;
-    // No web-level mute API on AVPlay; rely on the TV remote / system.
+    /* No web-level mute API on AVPlay; rely on TV remote / system. */
   }
 
   // ── Audio tracks ────────────────────────────────────────────────────
@@ -513,10 +440,6 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     try {
       const all = webapis.avplay.getTotalTrackInfo() ?? [];
       const audioTracks = all.filter((t) => t.type === 'AUDIO');
-      // Default-active: AVPlay starts on the first audio track unless
-      // the manifest's `DEFAULT=YES` rendition is elsewhere. We don't
-      // have a getCurrent API to ask, so we trust index 0 until the
-      // user picks otherwise.
       this._currentAudioIndex = audioTracks[0]?.index ?? 0;
       this._audioTracks = audioTracks.map((t) => {
         const meta = parseAvplayExtraInfo(t.extra_info);
@@ -527,19 +450,10 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
         } as AudioTrack;
       });
       if (this._audioTracks.length > 0) this.emitAudioTracks();
-    } catch {
-      /* getTotalTrackInfo throws before AVPlay enters READY — caller
-         retries via the audioTracksChanged listener once the pipeline
-         publishes its tracks. */
-    }
+    } catch { /* getTotalTrackInfo throws pre-READY — retried via audioTracksChanged later */ }
   }
 
-  /** Emit the cached track list with the `selected` flag set on whichever
-   *  index `_currentAudioIndex` currently points at. The base
-   *  `AudioTrack` type from the engine interface doesn't expose
-   *  `selected`, but the native engine fans it in via an extra field
-   *  (see `player.ts` `audioTracksChanged` handler) and the player UI
-   *  reads it from the emission. */
+  /** Emit with `selected` flag so the picker highlights the active language. */
   private emitAudioTracks(): void {
     const tracks = this._audioTracks.map((t) => {
       const idx = Number(t.id.replace('avplay-audio-', ''));
@@ -561,8 +475,6 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     try {
       webapis.avplay.setSelectTrack('AUDIO', index);
       this._currentAudioIndex = index;
-      // Re-emit so the picker reflects the new active language. AVPlay
-      // doesn't fire its own "track changed" event we can listen for.
       this.emitAudioTracks();
     } catch (e) {
       this.emit('error', { code: -1, message: 'AVPlay setSelectTrack audio failed: ' + String(e) });
@@ -593,11 +505,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     if (!visible) this.renderSubtitle('');
   }
 
-  /** Match the subtitle settings UX wired on web/native via the shared
-   *  preset maps from `player-settings.service` — same enums the Shaka
-   *  path consumes (`small/normal/large/xlarge`,
-   *  `white/yellow/green/cyan`, `none/drop/outline/raised`,
-   *  `transparent/semi/black`). `bottomMargin` is in vh. */
+  /** Same preset enums Shaka consumes from `player-settings.service`. */
   setSubtitleStyle(style: {
     size?: string;
     color?: string;
@@ -630,10 +538,8 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       if (!res.ok) throw new Error('VTT fetch ' + res.status);
       const raw = await res.text();
       this.parsedCues = this.parseVtt(raw);
-    } catch (e) {
+    } catch {
       this.parsedCues = [];
-      // eslint-disable-next-line no-console
-      console.warn('[TizenEngine] subtitle load failed:', e);
     }
   }
 
@@ -642,9 +548,6 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     if (typeof document === 'undefined') return null;
     const el = document.createElement('div');
     el.id = 'fliks-avplay-subtitle';
-    // Defaults match the "no settings yet" state: transparent backdrop,
-    // white text, drop-shadow legibility. `setSubtitleStyle` overlays
-    // the user's choices on top of these.
     el.style.cssText = [
       'position: fixed',
       'left: 50%',
@@ -705,10 +608,9 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       const end = this.vttTimeToSec(endStr);
       if (isNaN(start) || isNaN(end)) continue;
       const textLines = lines.slice(lines.indexOf(timeLine) + 1);
+      // Allow <b>, <i>, <u>, <br> so `innerHTML` is safe (third-party
+      // sub files; backend just proxies).
       const text = textLines.join('<br>').replace(/<\/?[^>]*>/g, (tag) => {
-        // Allow <b>, <i>, <u>, <br> — strip everything else so we can
-        // safely use `innerHTML` (parsed VTT is from our own backend
-        // but the source files come from third-party subtitle DBs).
         if (/^<\/?(b|i|u|br)\s*\/?>$/i.test(tag)) return tag;
         return '';
       });
@@ -731,25 +633,49 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   // ── Quality — AVPlay handles ABR internally ────────────────────────
 
-  getVariantTracks(): unknown[] {
-    return [];
-  }
+  getVariantTracks(): unknown[] { return []; }
   selectVariantTrack(_track: unknown, _clearBuffer?: boolean): void {
-    /* AVPlay does its own ABR via the HLS master playlist; manual
-       variant pinning would require setStreamingProperty('AVAILABLE_BITRATE',
-       '<min~max>'). Deferred. */
+    /* AVPlay does its own ABR; manual pinning would need
+       setStreamingProperty('AVAILABLE_BITRATE', '<min~max>'). */
   }
-  configure(_config: unknown): void {
-    /* no-op — Shaka-specific. */
-  }
+  configure(_config: unknown): void { /* Shaka-specific */ }
 
   // ── Stats ───────────────────────────────────────────────────────────
 
   getStats(): EngineStats {
-    return {
-      droppedFrames: 0,
-    };
+    return { droppedFrames: 0 };
   }
+}
+
+/**
+ * `localStorage['fliks.avtest']` selects an alternate URL for AVPlay
+ * compatibility testing — '1' / 'master' point at Apple reference
+ * streams, 'fmp4ref' at a known-broken-on-Tizen sample, 'variant'
+ * rewrites our master to its 1080p child playlist, 'encoded'
+ * percent-encodes JWT dots in the token. Anything else passes through.
+ */
+function resolveAvtestUrl(url: string): string {
+  const flag =
+    typeof localStorage !== 'undefined' ? localStorage.getItem('fliks.avtest') : null;
+  if (flag === '1') {
+    return 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8';
+  }
+  if (flag === 'master') {
+    return 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3.m3u8';
+  }
+  if (flag === 'fmp4ref') {
+    return 'https://d2zihajmogu5jn.cloudfront.net/fmp4-muxed-no-playlist-codecs/index.m3u8';
+  }
+  if (flag === 'variant') {
+    return url.replace(/\/master\.m3u8(\?|$)/, '/1080p/index.m3u8$1');
+  }
+  if (flag === 'encoded') {
+    return url.replace(
+      /([?&]token=)([^&#]+)/,
+      (_m, prefix, tok) => prefix + tok.replace(/\./g, '%2E'),
+    );
+  }
+  return url;
 }
 
 interface AvplayTrackMeta {
@@ -759,9 +685,8 @@ interface AvplayTrackMeta {
 
 /**
  * `extra_info` is a JSON-ish blob whose shape depends on the firmware.
- * 2020+ Q-series TVs return a stringified JSON object with `language`
- * and `channels`; older builds return a flat ":" / "|"-separated string.
- * We try JSON first, then fall back to a permissive split.
+ * 2020+ Q-series TVs return stringified JSON; older builds return a
+ * flat ":"/"|"-separated string.
  */
 function parseAvplayExtraInfo(raw: string): AvplayTrackMeta {
   if (!raw) return {};

@@ -146,16 +146,10 @@
           </button>
         }
         <button type="button" class="btn btn-ghost btn-sm text-white/80 text-sm" (click)="openSheet('speed')">{{ playbackRate() }}x</button>
-        <!-- Fullscreen — web only. Native apps are already fullscreen via the
-             Immersive plugin, so the toggle is irrelevant there. -->
-        @if (!isNative()) {
-          <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" (click)="toggleFullscreen.emit()">
-            <svg lucideMaximize class="h-5 w-5"></svg>
-          </button>
-        }
         <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" (click)="openSheet('settings')">
           <svg lucideSettings class="h-5 w-5"></svg>
         </button>
+        <ng-container *ngTemplateOutlet="fullscreenBtn; context: { $implicit: 'sm' }"></ng-container>
       </div>
     }
   </div>
@@ -217,27 +211,7 @@
             <svg lucideCaptions class="h-6 w-6"></svg>
           </button>
           <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[75vh] overflow-y-auto mb-2">
-            <div class="text-center text-white/70 text-sm font-medium mb-3">Sous-titres</div>
-            <button
-              class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
-              [disabled]="!activeSubtitleId()"
-              (click)="selectSubtitle.emit(null)"
-            >
-              <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
-              <span class="flex-1 text-left">Désactivé</span>
-              @if (!activeSubtitleId()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
-            </button>
-            @for (sub of availableSubtitles(); track sub.id) {
-              <button
-                class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
-                [disabled]="activeSubtitleId() === sub.id"
-                (click)="selectSubtitle.emit(sub.id)"
-              >
-                <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
-                <span class="flex-1 text-left">{{ sub.label }}@if (sub.burnIn) { <span class="text-warning/70 text-[10px] ml-1">gravé</span> }</span>
-                @if (activeSubtitleId() === sub.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
-              </button>
-            }
+            <ng-container [ngTemplateOutlet]="subtitlesMenu"></ng-container>
           </div>
         </div>
         }
@@ -248,18 +222,7 @@
               <svg lucideHeadphones class="h-6 w-6"></svg>
             </button>
             <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[75vh] overflow-y-auto mb-2">
-              <div class="text-center text-white/70 text-sm font-medium mb-3">Piste audio</div>
-              @for (track of availableAudioTracks(); track track.id) {
-                <button
-                  class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
-                  [disabled]="activeAudioTrackId() === track.id"
-                  (click)="selectAudioTrack.emit(track.id)"
-                >
-                  <svg lucideHeadphones class="h-5 w-5 text-white/50 shrink-0"></svg>
-                  <span class="flex-1 text-left">{{ track.label }}</span>
-                  @if (activeAudioTrackId() === track.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
-                </button>
-              }
+              <ng-container [ngTemplateOutlet]="audioMenu"></ng-container>
             </div>
           </div>
         }
@@ -267,13 +230,7 @@
         <div class="dropdown dropdown-top dropdown-end" [class.dropdown-open]="openDropdown() === 'speed'">
           <button type="button" class="btn btn-ghost btn-md text-white/80" (click)="toggleDropdown('speed', $event)">{{ playbackRate() }}x</button>
           <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-48 max-h-[75vh] overflow-y-auto mb-2">
-            <div class="text-center text-white/70 text-sm font-medium mb-3">Vitesse</div>
-            @for (r of speedOptions; track r) {
-              <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="speedChange.emit(r)">
-                <span class="flex-1 text-left">{{ r }}x</span>
-                @if (playbackRate() === r) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
-              </button>
-            }
+            <ng-container [ngTemplateOutlet]="speedMenu"></ng-container>
           </div>
         </div>
         <!-- Settings dropdown -->
@@ -285,12 +242,7 @@
             <ng-container [ngTemplateOutlet]="settingsMenu"></ng-container>
           </div>
         </div>
-        <!-- lucide:maximize — web only, native apps are already fullscreen -->
-        @if (!isNative()) {
-          <button type="button" class="btn btn-ghost btn-md btn-circle text-white" (click)="toggleFullscreen.emit()">
-            <svg lucideMaximize class="h-6 w-6"></svg>
-          </button>
-        }
+        <ng-container *ngTemplateOutlet="fullscreenBtn; context: { $implicit: 'md' }"></ng-container>
       </div>
     </div>
   }
@@ -326,44 +278,19 @@
 
 <app-bottom-sheet [open]="activeSheet() === 'subtitles'" [showBackdrop]="false" [rightAligned]="true" (closed)="closeSheet()">
   <div class="px-4 pb-4">
-    <div class="text-center text-white/60 text-xs font-medium mb-3">Sous-titres</div>
-    <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="selectSubtitle.emit(null); closeSheet()">
-      <svg lucideCaptions class="h-5 w-5 text-white/40 shrink-0"></svg>
-      <span class="flex-1 text-left">Désactivé</span>
-      @if (!activeSubtitleId()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
-    </button>
-    @for (sub of availableSubtitles(); track sub.id) {
-      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="selectSubtitle.emit(sub.id); closeSheet()">
-        <svg lucideCaptions class="h-5 w-5 text-white/40 shrink-0"></svg>
-        <span class="flex-1 text-left">{{ sub.label }}@if (sub.burnIn) { <span class="text-warning/70 text-[10px] ml-1">gravé</span> }</span>
-        @if (activeSubtitleId() === sub.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
-      </button>
-    }
+    <ng-container [ngTemplateOutlet]="subtitlesMenu"></ng-container>
   </div>
 </app-bottom-sheet>
 
 <app-bottom-sheet [open]="activeSheet() === 'audio'" [showBackdrop]="false" [rightAligned]="true" (closed)="closeSheet()">
   <div class="px-4 pb-4">
-    <div class="text-center text-white/60 text-xs font-medium mb-3">Piste audio</div>
-    @for (track of availableAudioTracks(); track track.id) {
-      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="selectAudioTrack.emit(track.id); closeSheet()">
-        <svg lucideHeadphones class="h-5 w-5 text-white/40 shrink-0"></svg>
-        <span class="flex-1 text-left">{{ track.label }}</span>
-        @if (activeAudioTrackId() === track.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
-      </button>
-    }
+    <ng-container [ngTemplateOutlet]="audioMenu"></ng-container>
   </div>
 </app-bottom-sheet>
 
 <app-bottom-sheet [open]="activeSheet() === 'speed'" [showBackdrop]="false" [rightAligned]="true" (closed)="closeSheet()">
   <div class="px-4 pb-4">
-    <div class="text-center text-white/60 text-xs font-medium mb-3">Vitesse</div>
-    @for (r of speedOptions; track r) {
-      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="speedChange.emit(r); closeSheet()">
-        <span class="flex-1 text-left">{{ r }}x</span>
-        @if (playbackRate() === r) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
-      </button>
-    }
+    <ng-container [ngTemplateOutlet]="speedMenu"></ng-container>
   </div>
 </app-bottom-sheet>
 
@@ -469,4 +396,91 @@
       </div>
     }
   </div>
+</ng-template>
+
+<!-- ===== Shared menu templates =====
+     Each menu is used in TWO contexts: the desktop dropdown-content (hover,
+     dropdown closes on blur) and the mobile bottom sheet (touch, close on
+     select). The shared item style covers both:
+     - py-3 rounded-xl gives touch-friendly hit targets that look fine in a
+       hover dropdown too
+     - hover:bg-white/10 + active:bg-white/10 light up in either context
+     - disabled covers the active-item disable used in dropdowns (no-op on
+       sheet because no item is disabled in the sheet)
+     - The select handler emits then calls closeSheet() — no-op on desktop
+       (activeSheet is already null) so it's safe in both modes.
+     -->
+<ng-template #subtitlesMenu>
+  <div class="text-center text-white/60 text-xs font-medium mb-3">Sous-titres</div>
+  <button
+    type="button"
+    class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
+    [disabled]="!activeSubtitleId()"
+    (click)="selectSubtitle.emit(null); closeSheet()"
+  >
+    <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
+    <span class="flex-1 text-left">Désactivé</span>
+    @if (!activeSubtitleId()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+  </button>
+  @for (sub of availableSubtitles(); track sub.id) {
+    <button
+      type="button"
+      class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
+      [disabled]="activeSubtitleId() === sub.id"
+      (click)="selectSubtitle.emit(sub.id); closeSheet()"
+    >
+      <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
+      <span class="flex-1 text-left">{{ sub.label }}@if (sub.burnIn) { <span class="text-warning/70 text-[10px] ml-1">gravé</span> }</span>
+      @if (activeSubtitleId() === sub.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+    </button>
+  }
+</ng-template>
+
+<ng-template #audioMenu>
+  <div class="text-center text-white/60 text-xs font-medium mb-3">Piste audio</div>
+  @for (track of availableAudioTracks(); track track.id) {
+    <button
+      type="button"
+      class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
+      [disabled]="activeAudioTrackId() === track.id"
+      (click)="selectAudioTrack.emit(track.id); closeSheet()"
+    >
+      <svg lucideHeadphones class="h-5 w-5 text-white/50 shrink-0"></svg>
+      <span class="flex-1 text-left">{{ track.label }}</span>
+      @if (activeAudioTrackId() === track.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+    </button>
+  }
+</ng-template>
+
+<ng-template #speedMenu>
+  <div class="text-center text-white/60 text-xs font-medium mb-3">Vitesse</div>
+  @for (r of speedOptions; track r) {
+    <button
+      type="button"
+      class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10"
+      (click)="speedChange.emit(r); closeSheet()"
+    >
+      <span class="flex-1 text-left">{{ r }}x</span>
+      @if (playbackRate() === r) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+    </button>
+  }
+</ng-template>
+
+<!-- Fullscreen toggle — shared between the mobile action row (sm size) and
+     the desktop right-action row (md). Hidden on native apps (immersive
+     plugin already runs the WebView fullscreen). `size` is one of
+     'sm' | 'md'; defaults to 'md'. -->
+<ng-template #fullscreenBtn let-size>
+  @if (!isNative()) {
+    @let isSm = size === 'sm';
+    <button
+      type="button"
+      class="btn btn-ghost btn-circle text-white/80"
+      [class.btn-sm]="isSm"
+      [class.btn-md]="!isSm"
+      (click)="toggleFullscreen.emit()"
+    >
+      <svg lucideMaximize [class.h-5]="isSm" [class.w-5]="isSm" [class.h-6]="!isSm" [class.w-6]="!isSm"></svg>
+    </button>
+  }
 </ng-template>
