@@ -1232,7 +1232,7 @@ export class MediaService {
       });
       await this.downloadMediaImages(media.id, details);
       await this.persistMediaMetadata(media, details);
-      await this.refreshSeriesEpisodes(media);
+      await this.refreshSeriesEpisodes(media, { provider, externalId });
     }
 
     await this.updateSearchVector(media.id);
@@ -1292,9 +1292,17 @@ export class MediaService {
     return this.findOne(mediaId);
   }
 
-  private async refreshSeriesEpisodes(media: Media): Promise<void> {
+  private async refreshSeriesEpisodes(
+    media: Media,
+    preResolved?: { provider: IMetadataProvider; externalId: string },
+  ): Promise<void> {
     // 1. Media-level provider enumerates all seasons and provides defaults.
-    const mediaResolve = await this.resolveProviderForMedia(media);
+    //    `refreshMetadata` has already resolved the provider — accept it
+    //    so we don't re-emit the `resolveProvider:` log and skip the DB
+    //    lookup. Cron / non-refreshMetadata callers omit `preResolved`
+    //    and we resolve on their behalf.
+    const mediaResolve =
+      preResolved ?? (await this.resolveProviderForMedia(media));
     const mediaSeasons = await mediaResolve.provider.getTvShowSeasons(
       mediaResolve.externalId,
     );
@@ -1458,6 +1466,10 @@ export class MediaService {
         await this.downloadEpisodeStill(id, stillUrl);
       }
     });
+
+    if (sd.posterUrl) {
+      await this.downloadSeasonPoster(dbSeason.id, sd.posterUrl);
+    }
   }
 
   /**
@@ -1877,6 +1889,31 @@ export class MediaService {
       if (local) updates.fanartUrl = local;
     }
 
+    // Extra fanarts (variants fanart-1..N). Downloaded in parallel
+    // since each entry is an independent CDN GET. Slots are
+    // 1-indexed so the on-disk filename mirrors the variant string
+    // a frontend caller passes back (`/api/images/media/X/fanart-1`).
+    if (details.additionalFanartUrls?.length) {
+      const downloaded = await Promise.all(
+        details.additionalFanartUrls.map((url: string, i: number) =>
+          this.imageService.downloadAndStore(
+            url,
+            'media',
+            mediaId,
+            `fanart-${i + 1}`,
+          ),
+        ),
+      );
+      updates.additionalFanartUrls = downloaded.filter(
+        (p): p is string => !!p,
+      );
+    } else {
+      // Provider returned no extras → clear stale entries from a
+      // previous refresh that did. Keeps the column consistent
+      // with provider reality.
+      updates.additionalFanartUrls = [];
+    }
+
     if (Object.keys(updates).length > 0) {
       await this.mediaRepo.update(mediaId, updates);
     }
@@ -1914,6 +1951,26 @@ export class MediaService {
     );
     if (local) {
       await this.episodeRepo.update(episodeId, { stillUrl: local });
+    }
+  }
+
+  /**
+   * Download a season poster from TMDB / TVDB and persist the local
+   * API path on the Season row. Best-effort: a failed download leaves
+   * `posterUrl` null on the DB row and the UI falls back to the
+   * series poster.
+   */
+  private async downloadSeasonPoster(
+    seasonId: number,
+    posterUrl: string,
+  ): Promise<void> {
+    const local = await this.imageService.downloadAndStore(
+      posterUrl,
+      'season',
+      seasonId,
+    );
+    if (local) {
+      await this.seasonRepo.update(seasonId, { posterUrl: local });
     }
   }
 
@@ -2189,6 +2246,9 @@ export class MediaService {
             monitored: true,
           })),
         );
+      }
+      if (sd.posterUrl) {
+        await this.downloadSeasonPoster(sSaved.id, sd.posterUrl);
       }
     }
 

@@ -152,6 +152,12 @@ export class TvdbProvider implements IMetadataProvider {
       year: m.year ? parseInt(m.year) : null,
       posterUrl: this.pickArtwork(m.artworks, ART_POSTER) ?? m.image ?? null,
       fanartUrl: this.pickArtwork(m.artworks, ART_BACKGROUND) ?? null,
+      additionalFanartUrls: this.pickArtworks(
+        m.artworks,
+        ART_BACKGROUND,
+        5,
+        this.pickArtwork(m.artworks, ART_BACKGROUND),
+      ),
       rating: 0,
       genres: (m.genres ?? []).map((g) => g.name),
       mediaType: 'movie',
@@ -217,6 +223,12 @@ export class TvdbProvider implements IMetadataProvider {
       year: s.year ? parseInt(s.year) : null,
       posterUrl: this.pickArtwork(s.artworks, ART_POSTER) ?? s.image ?? null,
       fanartUrl: this.pickArtwork(s.artworks, ART_BACKGROUND) ?? null,
+      additionalFanartUrls: this.pickArtworks(
+        s.artworks,
+        ART_BACKGROUND,
+        5,
+        this.pickArtwork(s.artworks, ART_BACKGROUND),
+      ),
       rating: 0,
       genres: (s.genres ?? []).map((g) => g.name),
       mediaType: 'series',
@@ -324,6 +336,7 @@ export class TvdbProvider implements IMetadataProvider {
         episodeCount: eps.length,
         overview: null,
         airDate: seasonBase?.year ?? eps[0]?.aired ?? null,
+        posterUrl: seasonBase?.image || null,
         episodes: eps.map((ep) => {
           const tr = epTranslations.get(ep.id);
           return {
@@ -529,6 +542,23 @@ export class TvdbProvider implements IMetadataProvider {
         return (b.score ?? 0) - (a.score ?? 0);
       });
     return filtered[0]?.image ?? null;
+  }
+
+  /** Top-N artworks of a given type, skipping the one already
+   *  consumed as the primary (matched by URL). Sorted by score
+   *  descending — same ranking as {@link pickArtwork}. */
+  private pickArtworks(
+    artworks: TvdbArtwork[] | undefined,
+    type: number,
+    n: number,
+    skipUrl: string | null,
+  ): string[] {
+    if (!artworks) return [];
+    return artworks
+      .filter((a) => a.type === type && a.image && a.image !== skipUrl)
+      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+      .slice(0, n)
+      .map((a) => a.image);
   }
 
   private extractRemoteId(

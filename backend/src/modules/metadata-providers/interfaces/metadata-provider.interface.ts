@@ -17,6 +17,10 @@ export interface MetadataDetails extends MetadataSearchResult {
   imdbId: string | null;
   tvdbId: number | null;
   fanartUrl: string | null;
+  /** Extra fanarts (top-N) returned by the provider, used to
+   *  randomise the page background. Empty array when the provider
+   *  has no additional artwork. */
+  additionalFanartUrls: string[];
   runtime: number | null;
   releaseDate: string | null;
   inCinemas: string | null;
@@ -100,6 +104,9 @@ export interface SeasonDetails {
   episodeCount: number;
   overview: string | null;
   airDate: string | null;
+  /** Per-season poster URL (provider-hosted). May be null when the
+   *  provider has no artwork for this season. */
+  posterUrl: string | null;
   episodes: EpisodeDetails[];
 }
 

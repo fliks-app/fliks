@@ -67,6 +67,8 @@ export interface Season {
   seasonNumber: number;
   monitored: boolean;
   preferredProvider?: 'tmdb' | 'tvdb' | null;
+  /** Season-specific poster (TMDB/TVDB); null → fall back to series poster. */
+  posterUrl: string | null;
   episodes: Episode[];
 }
 
@@ -87,6 +89,9 @@ export interface Media {
   library?: { id: number; name: string } | null;
   posterUrl: string | null;
   fanartUrl: string | null;
+  /** Extra fanarts kept locally (variants `fanart-1`..`fanart-N`).
+   *  Mixed with {@link fanartUrl} for the randomised page background. */
+  additionalFanartUrls: string[];
   rating: number;
   genres?: string[];
   runtime: number;

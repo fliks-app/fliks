@@ -41,6 +41,7 @@ import { ReleasesModalComponent } from './components/releases-modal/releases-mod
 import { MediaDetailProfilesModalComponent } from './components/media-detail-profiles-modal/media-detail-profiles-modal.component';
 import { MediaDetailLibraryModalComponent } from './components/media-detail-library-modal/media-detail-library-modal.component';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
+import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
 import {
@@ -82,6 +83,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     MediaDetailProfilesModalComponent,
     MediaDetailLibraryModalComponent,
     HorizontalScrollerComponent,
+    MediaCardComponent,
     DownloadQualityModalComponent,
     RouterLink,
     NgTemplateOutlet,
@@ -135,14 +137,27 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   /**
    * Drive the global page background from the currently-focused media.
-   * In episode mode we prefer the episode still over the parent media's
-   * fanart — keeps the backdrop tied to what the viewer is looking at.
+   *
+   * We always pull from the *series / movie* fanart pool (never the
+   * episode still): TMDB stills cap at ~780×438 and look mushy when
+   * stretched fullscreen. The pool is `[fanartUrl,
+   * ...additionalFanartUrls]`; one entry is picked at random when the
+   * page loads and stays put — no auto-rotation.
    */
   private readonly backgroundEffect = effect(() => {
     const m = this.media();
-    const ep = this.focusedEpisode();
-    const url = ep?.stillUrl ?? m?.fanartUrl ?? null;
-    this.backgroundService.setBackground(url);
+    if (!m) {
+      this.backgroundService.clear();
+      return;
+    }
+    const pool = [m.fanartUrl, ...(m.additionalFanartUrls ?? [])].filter(
+      (u): u is string => !!u,
+    );
+    if (pool.length === 0) {
+      this.backgroundService.clear();
+      return;
+    }
+    this.backgroundService.setBackgrounds(pool);
   });
 
   /** React to SSE rescan + metadata-refresh events for this media */
@@ -314,6 +329,29 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const s = this.focusedSeason();
     return hideShadowedEpisodes(s?.episodes ?? []);
   });
+
+  /**
+   * Sibling seasons rendered as cards under the "more from season N" row on
+   * the episode detail page. Hides the currently-focused season and any
+   * empty season (no episodes → no link target).
+   */
+  readonly otherSeasons = computed<Season[]>(() => {
+    const m = this.media();
+    const focused = this.focusedSeason();
+    if (!m?.seasons || !focused) return [];
+    return m.seasons
+      .filter((s) => s.id !== focused.id && (s.episodes?.length ?? 0) > 0)
+      .slice()
+      .sort((a, b) => a.seasonNumber - b.seasonNumber);
+  });
+
+  /** Route to the first episode of `season` so a click jumps the user
+   *  into that season's context without an intermediate landing page. */
+  seasonLink(m: Media, season: Season): string[] | null {
+    const first = season.episodes?.[0];
+    if (!first) return null;
+    return ['/series', String(m.id), 'episode', String(first.id)];
+  }
 
   /**
    * When the focused episode changes on the episode detail page, center the
