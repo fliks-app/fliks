@@ -499,7 +499,7 @@
                   >
                     <option [ngValue]="null">—</option>
                     @for (lib of eligibleLocalLibraries('radarr'); track lib.id) {
-                      <option [ngValue]="rf.id">{{ lib.name }} ({{ lib.path }})</option>
+                      <option [ngValue]="lib.id">{{ lib.name }} ({{ lib.path }})</option>
                     }
                     <option [ngValue]="IGNORE_VALUE">{{ 'import.path_wizard.option_ignore' | translate }}</option>
                   </select>
@@ -560,7 +560,7 @@
                   >
                     <option [ngValue]="null">—</option>
                     @for (lib of eligibleLocalLibraries('sonarr'); track lib.id) {
-                      <option [ngValue]="rf.id">{{ lib.name }} ({{ lib.path }})</option>
+                      <option [ngValue]="lib.id">{{ lib.name }} ({{ lib.path }})</option>
                     }
                     <option [ngValue]="IGNORE_VALUE">{{ 'import.path_wizard.option_ignore' | translate }}</option>
                   </select>
