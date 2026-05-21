@@ -14,6 +14,10 @@ import { firstValueFrom } from 'rxjs';
 import { MediaService } from '../../core/services/api/media.service';
 import { LibrariesApiService, Library } from '../../core/services/api/libraries-api.service';
 import { MediaType } from '../../core/enums/media-type.enum';
+import {
+  SearchableSelectComponent,
+  SearchableSelectOption,
+} from '../../shared/components/forms/searchable-select/searchable-select';
 
 export interface ScanCandidate {
   filePath: string;
@@ -51,7 +55,7 @@ export type ImportMethod = 'copy' | 'move';
 
 @Component({
   selector: 'app-import-disk',
-  imports: [DecimalPipe, FormsModule, TranslateModule],
+  imports: [DecimalPipe, FormsModule, TranslateModule, SearchableSelectComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './import-disk.html',
 })
@@ -76,6 +80,11 @@ export class ImportDiskComponent implements OnInit {
   readonly importResult = signal<{ imported: number; errors: string[] } | null>(null);
 
   readonly selectedCount = computed(() => this.rows().filter((r) => r.selected).length);
+
+  /** Media list mapped to the searchable-select shape (id → display label). */
+  readonly mediaSelectOptions = computed<SearchableSelectOption[]>(() =>
+    this.mediaOptions().map((m) => ({ value: m.id, label: this.mediaLabel(m) })),
+  );
   /** Selected rows that are missing a media / library — block the import button. */
   readonly invalidSelectedCount = computed(
     () =>

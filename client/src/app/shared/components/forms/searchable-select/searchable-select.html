@@ -1,0 +1,64 @@
+<button
+  type="button"
+  [class]="triggerClasses()"
+  [disabled]="disabled()"
+  (click)="toggle()"
+>
+  <span class="truncate flex-1">
+    @if (current(); as opt) {
+      {{ opt.label }}
+    } @else {
+      <span class="text-base-content/50">
+        {{ placeholder() || (emptyOptionLabel() || ('common.search' | translate)) }}
+      </span>
+    }
+  </span>
+</button>
+
+@if (open()) {
+  <div
+    class="absolute left-0 right-0 mt-1 z-40 bg-base-100 border border-base-300 rounded-lg shadow-lg overflow-hidden"
+  >
+    <div class="p-2 border-b border-base-200">
+      <input
+        #searchInput
+        type="text"
+        class="input input-bordered input-sm w-full"
+        [placeholder]="'common.search' | translate"
+        [ngModel]="query()"
+        (ngModelChange)="query.set($event)"
+        (keydown)="onKeydown($event)"
+      />
+    </div>
+    <ul class="overflow-y-auto py-1 {{ maxHeightClass() }}">
+      @if (emptyOptionLabel()) {
+        <li>
+          <button
+            type="button"
+            class="w-full text-left px-3 py-1.5 text-sm hover:bg-base-200"
+            [class.text-primary]="value() === null"
+            (click)="pick(null)"
+          >
+            {{ emptyOptionLabel() }}
+          </button>
+        </li>
+      }
+      @for (opt of filtered(); track opt.value) {
+        <li>
+          <button
+            type="button"
+            class="w-full text-left px-3 py-1.5 text-sm hover:bg-base-200 truncate"
+            [class.text-primary]="opt.value === value()"
+            (click)="pick(opt.value)"
+            [title]="opt.label"
+          >
+            {{ opt.label }}
+          </button>
+        </li>
+      }
+      @if (filtered().length === 0) {
+        <li class="px-3 py-2 text-sm text-base-content/50 italic">—</li>
+      }
+    </ul>
+  </div>
+}
