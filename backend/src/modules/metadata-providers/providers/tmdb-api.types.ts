@@ -87,6 +87,20 @@ export interface TmdbPaginated<T> {
   results: T[];
 }
 
+export interface TmdbImage {
+  file_path: string;
+  vote_average?: number;
+  iso_639_1?: string | null;
+  width?: number;
+  height?: number;
+}
+
+export interface TmdbImages {
+  backdrops?: TmdbImage[];
+  posters?: TmdbImage[];
+  logos?: TmdbImage[];
+}
+
 export interface TmdbReleaseDateCountry {
   iso_3166_1: string;
   release_dates: { type: number; release_date: string }[];
@@ -122,6 +136,7 @@ export interface TmdbMovieDetailsResponse {
   alternative_titles?: {
     titles?: { iso_3166_1?: string; title: string; type?: string }[];
   };
+  images?: TmdbImages;
 }
 
 export interface TmdbTvDetailsResponse {
@@ -150,6 +165,7 @@ export interface TmdbTvDetailsResponse {
   alternative_titles?: {
     results?: { iso_3166_1?: string; title: string; type?: string }[];
   };
+  images?: TmdbImages;
 }
 
 export interface TmdbTvSeasonStub {
@@ -174,5 +190,6 @@ export interface TmdbTvSeasonResponse {
   season_number: number;
   overview?: string | null;
   air_date?: string | null;
+  poster_path?: string | null;
   episodes?: TmdbTvEpisode[];
 }

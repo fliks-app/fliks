@@ -11,6 +11,7 @@ import {
   ExternalIdResult,
 } from '../interfaces/metadata-provider.interface';
 import type {
+  TmdbImages,
   TmdbMovieDetailsResponse,
   TmdbMovieListItem,
   TmdbPaginated,
@@ -25,6 +26,30 @@ import type {
 } from './tmdb-api.types';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
+
+/** Cap on how many extra fanarts we keep per media. Each entry is
+ *  downloaded at thumb + medium + full → ~3× storage per item, so 5
+ *  stays under ~10 MB per series even with high-res sources. */
+const MAX_ADDITIONAL_FANARTS = 5;
+
+/**
+ * Pick the top `n` fanart URLs from a TMDB images response,
+ * skipping the one already used as the primary `fanartUrl` so the
+ * background rotation doesn't repeat it. Sorted by `vote_average`
+ * descending — TMDB's community-voted score is a decent proxy for
+ * "looks good as a backdrop".
+ */
+function pickAdditionalFanarts(
+  images: TmdbImages | undefined,
+  primaryPath: string | null | undefined,
+  n: number,
+): string[] {
+  const candidates = (images?.backdrops ?? [])
+    .filter((b) => b.file_path && b.file_path !== primaryPath)
+    .sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0))
+    .slice(0, n);
+  return candidates.map((b) => `${TMDB_IMAGE_BASE}/original${b.file_path}`);
+}
 
 /**
  * Pull alternative_titles out of a TMDB movie / tv details response.
@@ -139,6 +164,11 @@ export class TmdbProvider implements IMetadataProvider {
       fanartUrl: data.backdrop_path
         ? `${TMDB_IMAGE_BASE}/original${data.backdrop_path}`
         : null,
+      additionalFanartUrls: pickAdditionalFanarts(
+        data.images,
+        data.backdrop_path,
+        MAX_ADDITIONAL_FANARTS,
+      ),
       rating: data.vote_average ?? 0,
       genres: data.genres?.map((g: TmdbNamed) => g.name) ?? [],
       mediaType: 'movie',
@@ -214,6 +244,11 @@ export class TmdbProvider implements IMetadataProvider {
       fanartUrl: data.backdrop_path
         ? `${TMDB_IMAGE_BASE}/original${data.backdrop_path}`
         : null,
+      additionalFanartUrls: pickAdditionalFanarts(
+        data.images,
+        data.backdrop_path,
+        MAX_ADDITIONAL_FANARTS,
+      ),
       rating: data.vote_average ?? 0,
       genres: data.genres?.map((g: TmdbNamed) => g.name) ?? [],
       mediaType: 'series',
@@ -300,6 +335,9 @@ export class TmdbProvider implements IMetadataProvider {
       episodeCount: season.episodes?.length ?? 0,
       overview: season.overview || null,
       airDate: season.air_date || null,
+      posterUrl: season.poster_path
+        ? `${TMDB_IMAGE_BASE}/w500${season.poster_path}`
+        : null,
       episodes: (season.episodes ?? []).map((e: TmdbTvEpisode) => ({
         episodeNumber: e.episode_number,
         title: e.name,
@@ -335,6 +373,9 @@ export class TmdbProvider implements IMetadataProvider {
           episodeCount: season.episodes?.length ?? 0,
           overview: season.overview || null,
           airDate: season.air_date || null,
+          posterUrl: season.poster_path
+            ? `${TMDB_IMAGE_BASE}/w500${season.poster_path}`
+            : null,
           episodes: (season.episodes ?? []).map((e: TmdbTvEpisode) => ({
             episodeNumber: e.episode_number,
             title: e.name,

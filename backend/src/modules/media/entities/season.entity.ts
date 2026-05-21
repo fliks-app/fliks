@@ -34,6 +34,12 @@ export class Season extends BaseEntity {
   @Column({ type: 'varchar', length: 16, nullable: true, default: null })
   preferredProvider: string | null;
 
+  /** Season-specific poster, populated from TMDB / TVDB during metadata
+   *  refresh. Falls back to {@link Media.posterUrl} on the UI when null
+   *  (e.g. provider returned no per-season artwork). */
+  @Column({ type: 'text', nullable: true })
+  posterUrl: string | null;
+
   @OneToMany(() => Episode, (episode) => episode.season, { cascade: true })
   episodes: Episode[];
 }

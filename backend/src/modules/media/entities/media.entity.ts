@@ -123,6 +123,12 @@ export class Media extends BaseEntity {
   @Column({ nullable: true })
   fanartUrl: string;
 
+  /** Extra fanarts pulled from the provider (top N by score), stored
+   *  as local API paths (variants `fanart-1`, `fanart-2`, …). Mixed
+   *  with {@link fanartUrl} to randomise the page background. */
+  @Column({ type: 'text', array: true, default: () => "'{}'" })
+  additionalFanartUrls: string[];
+
   @Column({ type: 'float', nullable: true })
   rating: number;
 

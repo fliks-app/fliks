@@ -127,6 +127,11 @@ export interface RecommendationItem {
     type: string;
     year: number;
     posterUrl: string | null;
+    /** Primary fanart, exposed so the home page can include
+     *  recommended titles in its background-image pool. */
+    fanartUrl: string | null;
+    /** Extra fanarts variants — same role as on {@link Media}. */
+    additionalFanartUrls: string[];
     genres: string[];
     /** False when the recommendation is requested-but-not-yet-downloaded
      *  (no files / no episodes on disk). Drives the missing-files cross

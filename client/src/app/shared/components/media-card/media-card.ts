@@ -12,6 +12,7 @@ import { CardAction, CardActionsService } from '../../../core/services/card-acti
 import { TvService } from '../../../core/services/tv.service';
 import { DeviceService } from '../../../core/services/device.service';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
+import { NavbarService } from '../../../core/services/navbar.service';
 
 export type MediaCardAspect = 'portrait' | 'landscape';
 
@@ -40,6 +41,7 @@ export class MediaCardComponent {
   private readonly tv = inject(TvService);
   private readonly cardActionsService = inject(CardActionsService);
   private readonly playableMedia = inject(PlayableMediaService);
+  private readonly navbar = inject(NavbarService);
   protected readonly device = inject(DeviceService);
   protected readonly isNative = Capacitor.isNativePlatform();
   /** Hover overlay (play button) only makes sense on a real pointer device. */
@@ -75,6 +77,12 @@ export class MediaCardComponent {
   // Navigation (override media-derived link)
   readonly link = input<string[] | null>(null);
   readonly subtitleLink = input<string[] | null>(null);
+  /** When true, navigation triggered by the card replaces the
+   *  current history entry instead of pushing a new one. Useful for
+   *  "cards within the same media context" (sibling seasons, sibling
+   *  episodes…) so a single browser-back exits the media instead of
+   *  walking up the in-page chain. */
+  readonly replaceUrl = input(false);
   readonly playable = input(false);
 
   // Progress
@@ -206,6 +214,16 @@ export class MediaCardComponent {
    * same media appears in two cards (continue-watching + recently-added,
    * etc.).
    */
+  /** Pointerdown helper for the inline `[routerLink]` anchors: prepare
+   *  the view transition AND mark the next navigation as a back-pop
+   *  when `replaceUrl` is on, so NavbarService doesn't push the
+   *  replaced URL onto its history stack. Pointerdown fires before
+   *  click → before RouterLink kicks off `navigateByUrl`. */
+  protected onAnchorPointerdown() {
+    this.flagPosterForTransition();
+    if (this.replaceUrl()) this.navbar.markAsBackNavigation();
+  }
+
   protected flagPosterForTransition() {
     // Skip on engines without View Transitions API (Chromium <111,
     // Tizen 5.5 WebKit, webOS 5 Chromium 79). Angular's
@@ -253,7 +271,17 @@ export class MediaCardComponent {
     // parent's navigate kicked in.
     if (this.clickIntent() !== 'play') {
       const link = this._link();
-      if (link) void this.router.navigate(link, { state: this._navState() });
+      if (link) {
+        // Keep NavbarService's history stack in sync with the browser
+        // history: when we replace the URL, the page we're leaving
+        // must NOT be pushed onto the back stack — otherwise the
+        // in-app "Retour" walks the chain of replaced entries.
+        if (this.replaceUrl()) this.navbar.markAsBackNavigation();
+        void this.router.navigate(link, {
+          state: this._navState(),
+          replaceUrl: this.replaceUrl(),
+        });
+      }
     }
     this.clicked.emit();
   }
@@ -267,7 +295,11 @@ export class MediaCardComponent {
     const link = this._link();
     if (!link) return;
     this.flagPosterForTransition();
-    void this.router.navigate(link, { state: this._navState() });
+    if (this.replaceUrl()) this.navbar.markAsBackNavigation();
+    void this.router.navigate(link, {
+      state: this._navState(),
+      replaceUrl: this.replaceUrl(),
+    });
   }
 
   protected onWatchedClick(event: Event) {

@@ -85,6 +85,23 @@
           />
         }
 
+        @if (otherSeasons().length) {
+          <div class="divider my-6"></div>
+          <app-horizontal-scroller [title]="'media_detail.other_seasons_of' | translate:{ title: m.title }">
+            @for (other of otherSeasons(); track other.id) {
+              <app-media-card
+                class="shrink-0 w-28 sm:w-36"
+                [aspect]="'portrait'"
+                [imageUrl]="other.posterUrl ?? m.posterUrl"
+                [title]="('media_detail.season' | translate) + ' ' + other.seasonNumber"
+                [subtitle]="other.episodes.length + ' ' + ('media_detail.episodes' | translate)"
+                [link]="seasonLink(m, other)"
+                [replaceUrl]="true"
+              />
+            }
+          </app-horizontal-scroller>
+        }
+
         @if (cast().length) {
           <div class="divider my-6"></div>
           <ng-container *ngTemplateOutlet="castCrewBlock" />

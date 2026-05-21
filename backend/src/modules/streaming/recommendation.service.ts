@@ -63,6 +63,14 @@ export interface RecommendationItem {
     type: string;
     year: number;
     posterUrl: string | null;
+    /** Primary fanart for the recommended title. Exposed so the home
+     *  page can use the recommendations as a background image pool
+     *  without an extra round-trip per title. */
+    fanartUrl: string | null;
+    /** Extra fanarts (variants `fanart-1`..`fanart-N`). Same role as
+     *  on {@link Media}; concatenated with `fanartUrl` to build the
+     *  randomised background pool. */
+    additionalFanartUrls: string[];
     genres: string[];
     /** True when the title is actually playable: ≥1 downloaded file for
      *  movies, ≥1 downloaded episode for series. Drives the missing-
@@ -179,6 +187,8 @@ export class RecommendationService {
         'm.type',
         'm.year',
         'm.posterUrl',
+        'm.fanartUrl',
+        'm.additionalFanartUrls',
         'm.genres',
       ])
       .where('m.genres IS NOT NULL')
@@ -287,6 +297,8 @@ export class RecommendationService {
         type: s.media.type,
         year: s.media.year,
         posterUrl: s.media.posterUrl,
+        fanartUrl: s.media.fanartUrl ?? null,
+        additionalFanartUrls: s.media.additionalFanartUrls ?? [],
         genres: s.media.genres,
         available: availableIds.has(s.media.id),
       },

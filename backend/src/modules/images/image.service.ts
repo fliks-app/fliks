@@ -3,8 +3,12 @@ import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 
-export type ImageType = 'media' | 'person' | 'episode';
-export type MediaImageVariant = 'poster' | 'fanart';
+export type ImageType = 'media' | 'person' | 'episode' | 'season';
+/** Variant of a media image. `fanart-${N}` (N≥1) addresses the extra
+ *  fanarts kept for randomised page backgrounds — they share `fanart`'s
+ *  size pipeline (thumb / medium / full) so frontends can request any
+ *  size without an extra round-trip to the source provider. */
+export type MediaImageVariant = 'poster' | 'fanart' | `fanart-${number}`;
 export type ImageSize = 'thumb' | 'medium' | 'full';
 
 /**
@@ -23,12 +27,18 @@ const TMDB_SIZE_MAP: Record<string, Partial<Record<ImageSize, string>>> = {
   'media/fanart': { thumb: 'w300', medium: 'w780', full: 'original' },
   person: { thumb: 'w45', full: 'original' },
   episode: { thumb: 'w300', full: 'original' },
+  season: { thumb: 'w185', medium: 'w500', full: 'original' },
 };
 
 const TMDB_HOST = /^https?:\/\/image\.tmdb\.org\//;
 
 function sizeMapKey(type: ImageType, variant?: MediaImageVariant): string {
-  if (type === 'media') return `media/${variant ?? 'poster'}`;
+  if (type === 'media') {
+    const v = variant ?? 'poster';
+    // Indexed fanarts share the parent `fanart` size pipeline.
+    const base = /^fanart-\d+$/.test(v) ? 'fanart' : v;
+    return `media/${base}`;
+  }
   return type;
 }
 
@@ -162,6 +172,8 @@ export class ImageService {
         return path.join(this.baseDir, 'persons', `${id}${suffix}.jpg`);
       case 'episode':
         return path.join(this.baseDir, 'episodes', `${id}${suffix}.jpg`);
+      case 'season':
+        return path.join(this.baseDir, 'seasons', `${id}${suffix}.jpg`);
     }
   }
 
@@ -177,6 +189,8 @@ export class ImageService {
         return `/api/images/person/${id}`;
       case 'episode':
         return `/api/images/episode/${id}`;
+      case 'season':
+        return `/api/images/season/${id}`;
     }
   }
 }

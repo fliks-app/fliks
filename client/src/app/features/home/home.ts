@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal, OnInit, OnDestroy, Injector, afterNextRender } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal, effect, OnInit, OnDestroy, Injector, afterNextRender } from '@angular/core';
 import { ActivatedRoute, NavigationStart, Router, RouterLink } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
@@ -12,6 +12,7 @@ import { PlayableMediaService } from '../../core/services/playable-media.service
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { FocusMemoryService } from '../../core/services/focus-memory.service';
 import { NavbarService } from '../../core/services/navbar.service';
+import { BackgroundService } from '../../core/services/background.service';
 import { TvService } from '../../core/services/tv.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
@@ -72,6 +73,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly focusMemory = inject(FocusMemoryService);
   private readonly navbar = inject(NavbarService);
+  private readonly backgroundService = inject(BackgroundService);
   private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
   private readonly route = inject(ActivatedRoute);
@@ -90,6 +92,21 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly recentMedia = signal<Media[]>([]);
   readonly comingSoon = signal<CalendarEntry[]>([]);
   readonly recommendations = signal<RecommendationItem[]>([]);
+
+  /** Once the recommendations land, randomise the page background
+   *  using their fanarts (primary + extras). One pick per visit;
+   *  the BackgroundService keeps it stable while the user stays on
+   *  the home — same contract as media-detail. */
+  private readonly recommendationsBackgroundEffect = effect(() => {
+    const recs = this.recommendations();
+    if (recs.length === 0) return;
+    const pool: string[] = [];
+    for (const r of recs) {
+      if (r.media.fanartUrl) pool.push(r.media.fanartUrl);
+      pool.push(...(r.media.additionalFanartUrls ?? []));
+    }
+    if (pool.length) this.backgroundService.setBackgrounds(pool);
+  });
   readonly onlyMyRequests = signal(
     localStorage.getItem('fliks.home.onlyMyRequests') === 'true',
   );
@@ -159,6 +176,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.navStartSub?.unsubscribe();
     this.attachedSub?.unsubscribe();
     this.detachedSub?.unsubscribe();
+    this.backgroundService.clear();
   }
 
   /**

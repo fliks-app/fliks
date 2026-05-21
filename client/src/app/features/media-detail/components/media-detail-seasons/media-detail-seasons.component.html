@@ -135,6 +135,7 @@
             [status]="watchedEpisodeIds().has(ep.id) ? 'watched' : (!ep.hasFile ? 'missing' : null)"
             [progressPercent]="episodeProgress()[ep.id]"
             [link]="episodeRoute(ep)"
+            [replaceUrl]="hideControls()"
             [playable]="ep.hasFile"
             [interactiveWatched]="ep.hasFile"
             [dimmed]="!ep.monitored"
