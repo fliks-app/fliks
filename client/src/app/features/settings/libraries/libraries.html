@@ -47,17 +47,18 @@
                     </span>
                   }
                 </div>
-                <p class="text-xs text-base-content/60 mt-2">
-                  {{ lib.rootFolders.length }} {{ 'settings.libraries.paths' | translate }} —
-                  {{ formatBytes(totalFreeSpace(lib)) }} / {{ formatBytes(totalCapacity(lib)) }}
-                </p>
-                @for (rf of lib.rootFolders; track rf.id) {
+                @if (lib.rootFolder; as rf) {
+                  <p class="text-xs text-base-content/60 mt-2">
+                    {{ formatBytes(freeSpace(lib)) }} / {{ formatBytes(totalCapacity(lib)) }}
+                  </p>
                   <p class="font-mono text-xs text-base-content/60 mt-1 truncate">
                     {{ rf.path }}
                     @if (!rf.accessible) {
                       <span class="badge badge-error badge-xs ml-2">{{ 'settings.libraries.inaccessible' | translate }}</span>
                     }
                   </p>
+                } @else {
+                  <p class="text-xs text-base-content/50 italic mt-2">{{ 'settings.libraries.no_path' | translate }}</p>
                 }
               </div>
               <div class="flex gap-1 shrink-0">
@@ -130,32 +131,13 @@
         </div>
       </div>
 
-      <!-- Paths section -->
-      <div>
-        <div class="flex items-center justify-between">
-          <span class="label-text">{{ 'settings.libraries.paths' | translate }}</span>
-          <button type="button" class="btn btn-ghost btn-xs" (click)="addDraftPath()">
-            + {{ 'settings.libraries.add_path' | translate }}
-          </button>
-        </div>
-        <div class="flex flex-col gap-2 mt-2">
-          @for (p of formPaths(); track $index) {
-            <div class="flex gap-2 items-start">
-              <input type="text" class="input input-bordered input-sm flex-1 font-mono"
-                [ngModel]="p.path" (ngModelChange)="updateDraftPath($index, { path: $event })"
-                placeholder="/media/movies" />
-              <input type="text" class="input input-bordered input-sm w-40"
-                [ngModel]="p.label" (ngModelChange)="updateDraftPath($index, { label: $event })"
-                [placeholder]="'settings.libraries.path_label_placeholder' | translate" />
-              <button type="button" class="btn btn-ghost btn-sm text-error"
-                (click)="removeDraftPath($index)">×</button>
-            </div>
-          }
-          @if (formPaths().length === 0) {
-            <p class="text-xs text-base-content/50 italic">{{ 'settings.libraries.no_paths' | translate }}</p>
-          }
-        </div>
-      </div>
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.libraries.path' | translate }}</span>
+        <input type="text" class="input input-bordered input-sm w-full font-mono"
+          [ngModel]="formPath()" (ngModelChange)="formPath.set($event)"
+          placeholder="/media/movies" />
+        <span class="label-text-alt text-base-content/50 mt-1">{{ 'settings.libraries.path_hint' | translate }}</span>
+      </label>
 
       <label class="form-control w-full">
         <span class="label-text">{{ 'settings.libraries.preferred_provider' | translate }}</span>

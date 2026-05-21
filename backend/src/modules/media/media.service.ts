@@ -356,24 +356,20 @@ export class MediaService {
       );
     }
 
-    // If the caller passed a rootFolderId that belongs to this library, honor
-    // it (lets advanced clients pin a specific path). Otherwise pick the path
-    // with the most free space.
+    // Library carries exactly one root folder — `dto.rootFolderId` is
+    // honoured only as long as it matches; otherwise we resolve through
+    // the library directly.
     let rootFolderId: number;
     if (dto.rootFolderId) {
       const rf = await this.rootFolderRepo.findOne({
         where: { id: dto.rootFolderId },
       });
-      if (rf?.libraryId === library.id) {
-        rootFolderId = rf.id;
-      } else {
-        rootFolderId = (
-          await this.libraries.pickRootFolderForLibrary(library.id)
-        ).id;
-      }
+      rootFolderId =
+        rf?.libraryId === library.id
+          ? rf.id
+          : (await this.libraries.getRootFolder(library.id)).id;
     } else {
-      rootFolderId = (await this.libraries.pickRootFolderForLibrary(library.id))
-        .id;
+      rootFolderId = (await this.libraries.getRootFolder(library.id)).id;
     }
 
     return { libraryId: library.id, rootFolderId };
@@ -850,7 +846,7 @@ export class MediaService {
     if (!library) {
       throw new NotFoundException(`Library #${libraryId} not found`);
     }
-    const rootFolder = await this.libraries.pickRootFolderForLibrary(libraryId);
+    const rootFolder = await this.libraries.getRootFolder(libraryId);
     await this.mediaRepo.update(id, {
       library,
       rootFolder,

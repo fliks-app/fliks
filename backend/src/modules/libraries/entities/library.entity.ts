@@ -1,7 +1,7 @@
 import {
   Entity,
   Column,
-  OneToMany,
+  OneToOne,
   ManyToOne,
   JoinColumn,
   RelationId,
@@ -15,7 +15,7 @@ import { LanguageProfile } from '../../profiles/entities/language-profile.entity
 
 /**
  * User-facing top-level container for media.
- * Owns one or more root paths (internal) and carries the settings that used to
+ * Owns a single root path (internal) and carries the settings that used to
  * live on RootFolder: allowed media types, preferred metadata provider,
  * stalled-cleanup profile, and default quality/language profiles used when
  * adding new media to this library.
@@ -66,6 +66,6 @@ export class Library extends BaseEntity {
   @Column({ default: false })
   isDefaultForSeries: boolean;
 
-  @OneToMany(() => RootFolder, (rf) => rf.library)
-  rootFolders: RootFolder[];
+  @OneToOne(() => RootFolder, (rf) => rf.library)
+  rootFolder: RootFolder | null;
 }

@@ -56,11 +56,10 @@ export class CreateLibraryDto {
   @IsBoolean()
   isDefaultForSeries?: boolean;
 
-  /** Initial root paths to attach to the library. */
+  /** Initial root path. Optional — admin can attach it later via update. */
   @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  paths?: string[];
+  @IsString()
+  path?: string;
 
   /** Initial set of users granted access. Admins always have access. */
   @IsOptional()
