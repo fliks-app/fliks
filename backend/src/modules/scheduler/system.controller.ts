@@ -18,7 +18,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
-import { RootFolder } from '../root-folders/entities/root-folder.entity';
+import { Library } from '../libraries/entities/library.entity';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
@@ -134,8 +134,8 @@ export class SystemController {
     private readonly indexerRepo: Repository<Indexer>,
     @InjectRepository(DownloadClient)
     private readonly clientRepo: Repository<DownloadClient>,
-    @InjectRepository(RootFolder)
-    private readonly rootFolderRepo: Repository<RootFolder>,
+    @InjectRepository(Library)
+    private readonly libraryRepo: Repository<Library>,
     private readonly qbittorrent: QbittorrentService,
     private readonly backup: BackupService,
     private readonly logBuffer: LogBufferService,
@@ -192,7 +192,7 @@ export class SystemController {
   @Get('stats')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   async stats(): Promise<StatsReport> {
-    const [[moviesRow], [seriesRow], [pendingRow], rootFolders] =
+    const [[moviesRow], [seriesRow], [pendingRow], libraries] =
       await Promise.all([
         this.dataSource.query(
           `SELECT COUNT(*)::int AS count FROM media WHERE type = 'movie'`,
@@ -203,27 +203,29 @@ export class SystemController {
         this.dataSource.query(
           `SELECT COUNT(*)::int AS count FROM requests WHERE status = 'pending'`,
         ),
-        this.rootFolderRepo.find({ order: { path: 'ASC' } }),
+        this.libraryRepo.find({ order: { name: 'ASC' } }),
       ]);
 
-    const diskSpace: DiskSpaceEntry[] = rootFolders.map((f) => {
-      try {
-        const stat = fs.statfsSync(f.path);
-        return {
-          path: f.path,
-          label: f.label ?? null,
-          freeSpace: stat.bfree * stat.bsize,
-          totalSpace: stat.blocks * stat.bsize,
-        };
-      } catch {
-        return {
-          path: f.path,
-          label: f.label ?? null,
-          freeSpace: -1,
-          totalSpace: -1,
-        };
-      }
-    });
+    const diskSpace: DiskSpaceEntry[] = libraries
+      .filter((lib) => !!lib.path)
+      .map((lib) => {
+        try {
+          const stat = fs.statfsSync(lib.path!);
+          return {
+            path: lib.path!,
+            label: lib.label ?? lib.name,
+            freeSpace: stat.bfree * stat.bsize,
+            totalSpace: stat.blocks * stat.bsize,
+          };
+        } catch {
+          return {
+            path: lib.path!,
+            label: lib.label ?? lib.name,
+            freeSpace: -1,
+            totalSpace: -1,
+          };
+        }
+      });
 
     return {
       movies: moviesRow.count,

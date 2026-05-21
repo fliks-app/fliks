@@ -4,7 +4,6 @@ import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
-import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { User } from '../users/entities/user.entity';
@@ -30,7 +29,6 @@ import { FliksSchedulerModule } from '../scheduler/scheduler.module';
       MediaFile,
       Season,
       Episode,
-      RootFolder,
       QualityProfile,
       SubtitleFile,
       User,

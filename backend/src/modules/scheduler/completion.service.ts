@@ -9,7 +9,6 @@ import { DownloadHistory } from '../media/entities/download-history.entity';
 import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
-import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import {
   QbittorrentService,
   QbittorrentTorrent,
@@ -53,8 +52,6 @@ export class CompletionService {
     private readonly episodeRepo: Repository<Episode>,
     @InjectRepository(DownloadClient)
     private readonly clientRepo: Repository<DownloadClient>,
-    @InjectRepository(RootFolder)
-    private readonly rootFolderRepo: Repository<RootFolder>,
     @InjectRepository(Indexer)
     private readonly indexerRepo: Repository<Indexer>,
     @InjectRepository(StalledCheck)
@@ -142,9 +139,7 @@ export class CompletionService {
     const seriesFolderFormat = formats.seriesFolder;
     const seasonFolderFormat = formats.seasonFolder;
 
-    const rootFolders = await this.rootFolderRepo.find({
-      order: { path: 'ASC' },
-    });
+    const libraries = await this.libraryRepo.find({ order: { path: 'ASC' } });
 
     // Reverse-lookup: build `historyId → torrent` from the matcher (which
     // also self-heals missing torrentHash on each history row).
@@ -180,7 +175,7 @@ export class CompletionService {
           seriesFormat,
           seriesFolderFormat,
           seasonFolderFormat,
-          rootFolders,
+          libraries,
         );
       } catch (e) {
         this.log.error(
@@ -226,7 +221,7 @@ export class CompletionService {
     seriesFormat: string,
     seriesFolderFormat: string,
     seasonFolderFormat: string,
-    rootFolders: RootFolder[],
+    libraries: Library[],
   ): Promise<void> {
     const VIDEO_EXTS = [
       '.mkv',
@@ -275,7 +270,7 @@ export class CompletionService {
 
     const media = await this.mediaRepo.findOne({
       where: { id: history.mediaId },
-      relations: ['rootFolder'],
+      relations: ['library'],
     });
     if (!media) {
       this.log.warn(
@@ -291,21 +286,22 @@ export class CompletionService {
 
     // Destination root folder (just the root, without folderName — folderName
     // is appended separately when building destDir).
-    let rootPath = media.rootFolder?.path ?? '';
+    let rootPath = media.library?.path ?? '';
+    let resolvedLib = media.library ?? null;
     if (!rootPath) {
-      if (!rootFolders.length) {
+      const fallback = libraries.find((l) => !!l.path);
+      if (!fallback) {
         this.log.warn(
-          `Import[${history.sourceTitle}]: no root folder configured, skipping`,
+          `Import[${history.sourceTitle}]: no library path configured, skipping`,
         );
         return;
       }
-      rootPath = rootFolders[0].path;
+      resolvedLib = fallback;
+      rootPath = fallback.path!;
       this.log.log(
-        `Import[${history.sourceTitle}]: no path on media, using root folder "${rootPath}"`,
+        `Import[${history.sourceTitle}]: no path on media, falling back to library "${fallback.name}" (${rootPath})`,
       );
     }
-    // Resolve rootFolderId for media without one
-    const resolvedRf = rootFolders.find((rf) => rootPath.startsWith(rf.path));
 
     // Ensure folderName is set
     const folderName =
@@ -327,11 +323,13 @@ export class CompletionService {
       await this.mediaRepo.update(media.id, { folderName });
     }
 
-    // Store rootFolderId if not set
-    if (!media.rootFolderId && resolvedRf) {
-      await this.mediaRepo.update(media.id, { rootFolder: resolvedRf });
+    // Pin the library on media without one.
+    if (!media.libraryId && resolvedLib) {
+      await this.mediaRepo.update(media.id, {
+        library: { id: resolvedLib.id } as Library,
+      });
       this.log.log(
-        `Import[${history.sourceTitle}]: saved rootFolderId=${resolvedRf.id} on media`,
+        `Import[${history.sourceTitle}]: pinned libraryId=${resolvedLib.id} on media`,
       );
     }
 

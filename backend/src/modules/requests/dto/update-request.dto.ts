@@ -15,5 +15,5 @@ export class UpdateRequestDto {
   @IsOptional()
   @IsInt()
   @Type(() => Number)
-  rootFolderId?: number;
+  libraryId?: number;
 }

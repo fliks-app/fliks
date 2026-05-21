@@ -15,7 +15,6 @@ import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
-import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { Library } from '../libraries/entities/library.entity';
 import { MediaType } from '../../common/enums';
 import { parseReleaseQuality } from '../media/release-quality.parser';
@@ -70,8 +69,6 @@ export class DiskImportService {
     private readonly seasonRepo: Repository<Season>,
     @InjectRepository(Episode)
     private readonly episodeRepo: Repository<Episode>,
-    @InjectRepository(RootFolder)
-    private readonly rootFolderRepo: Repository<RootFolder>,
     @Inject(forwardRef(() => MediaService))
     private readonly mediaService: MediaService,
     @Inject(forwardRef(() => SubtitleSchedulerService))
@@ -115,8 +112,8 @@ export class DiskImportService {
    *   `method`; the source is left intact on copy and unlinked on move.
    * - Destination layout follows the same naming pipeline as the torrent-
    *   completion path (movie folder format, series + season folder format).
-   *   `Media.path` / `Media.folderName` / `Media.rootFolder` are set lazily
-   *   on the first imported file for that media; subsequent files reuse them.
+   *   `Media.library` / `Media.folderName` are set lazily on the first
+   *   imported file for that media; subsequent files reuse them.
    */
   async confirmImport(
     imports: ImportFileEntry[],
@@ -132,7 +129,7 @@ export class DiskImportService {
       try {
         const media = await this.mediaRepo.findOne({
           where: { id: entry.mediaId },
-          relations: ['rootFolder'],
+          relations: ['library'],
         });
         if (!media) {
           errors.push(`Media #${entry.mediaId} not found`);
@@ -150,26 +147,24 @@ export class DiskImportService {
           continue;
         }
 
-        // Resolve the target library's root folder. The DTO guarantees
-        // `targetLibraryId` is set; `getRootFolder` throws if the library
-        // has no path configured — surface the message cleanly.
-        const library = await this.libraries.findOne(entry.targetLibraryId);
+        // Resolve target library + its path. Throws if the library has
+        // no path configured — surface the message cleanly.
+        const library = await this.libraries.requirePathFor(
+          entry.targetLibraryId,
+        );
         if (!library.mediaTypes?.includes(media.type as MediaType)) {
           errors.push(
             `${path.basename(entry.filePath)}: la bibliothèque "${library.name}" n'accepte pas ${media.type}`,
           );
           continue;
         }
-        const targetRoot = await this.libraries.getRootFolder(
-          entry.targetLibraryId,
-        );
 
-        // Pin the media to this library/root on the first import. Once
-        // assigned we keep the same anchor for subsequent files (a series'
-        // S02 must land under the same folder as S01). `Media.path` is a
-        // computed getter (rootFolder + folderName) so we only persist the
-        // two underlying columns.
-        if (!media.rootFolderId || media.rootFolderId !== targetRoot.id) {
+        // Pin the media to this library on the first import. Once assigned
+        // we keep the same anchor for subsequent files (a series' S02 must
+        // land under the same folder as S01). `Media.path` is a computed
+        // getter (library.path + folderName) so we only persist the
+        // anchor columns.
+        if (!media.libraryId || media.libraryId !== library.id) {
           const folderName =
             media.type === MediaType.MOVIE
               ? this.naming.applyMovieFolderFormat(formats.movieFolder, {
@@ -185,11 +180,10 @@ export class DiskImportService {
                   tmdbId: media.tmdbId,
                 });
           await this.mediaRepo.update(media.id, {
-            rootFolder: targetRoot,
             library: { id: library.id } as Library,
             folderName,
           });
-          media.rootFolder = targetRoot;
+          media.library = library;
           media.folderName = folderName;
         }
 
@@ -248,12 +242,12 @@ export class DiskImportService {
         // Skip if the destination already holds a row for this media —
         // re-running the same import twice should be safe / no-op.
         const relativePath = relativePathUnderMediaRoot(
-          targetRoot.path,
+          library.path!,
           destPath,
         );
         if (!relativePath) {
           this.logger.error(
-            `Disk import: computed dest outside library root — root=${targetRoot.path} dest=${destPath}`,
+            `Disk import: computed dest outside library root — root=${library.path!} dest=${destPath}`,
           );
           errors.push(
             `${path.basename(entry.filePath)}: destination en dehors du dossier racine`,

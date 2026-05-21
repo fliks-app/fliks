@@ -31,12 +31,5 @@ export class ImportTmdbDto {
   @IsNumber()
   @IsInt()
   @Min(1)
-  rootFolderId?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @IsInt()
-  @Min(1)
   libraryId?: number;
 }

@@ -27,7 +27,7 @@ type FileInput = {
 })
 export class MediaFileInfoComponent {
   readonly file = input.required<FileInput | null>();
-  /** Absolute folder path of the parent media (rootFolder + folderName).
+  /** Absolute folder path of the parent media (library.path + folderName).
    *  Concatenated with `file.relativePath` so the panel exposes the
    *  full disk path instead of a basename-like fragment. */
   readonly mediaPath = input<string | null>(null);

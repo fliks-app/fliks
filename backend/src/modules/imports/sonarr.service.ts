@@ -2,7 +2,6 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Media } from '../media/entities/media.entity';
-import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import {
   QualityProfile,
   QualityProfileItem,
@@ -15,7 +14,7 @@ import {
   parseSubtitleTags,
   type PathMapping,
   subtitlePathsBesideEpisode,
-  suggestLocalRootFolderId,
+  suggestLocalLibraryId,
   upsertImportedSubtitleFile,
 } from '../scheduler/utils/arr-import.util';
 import { PreviewImportResult } from './dto/preview-import.dto';
@@ -73,8 +72,8 @@ export class ImportSonarrService {
   constructor(
     @InjectRepository(Media)
     private readonly mediaRepo: Repository<Media>,
-    @InjectRepository(RootFolder)
-    private readonly rootFolderRepo: Repository<RootFolder>,
+    @InjectRepository(Library)
+    private readonly libraryRepo: Repository<Library>,
     @InjectRepository(QualityProfile)
     private readonly qpRepo: Repository<QualityProfile>,
     @InjectRepository(SubtitleFile)
@@ -116,7 +115,7 @@ export class ImportSonarrService {
 
   /**
    * Wizard step before the import: returns the *arr's root folders alongside
-   * a server-side suggestion for which Fliks RootFolder to map each one to.
+   * a server-side suggestion for which Fliks library to map each one to.
    * Pure read — no DB writes.
    */
   async previewRootFolders(
@@ -141,21 +140,18 @@ export class ImportSonarrService {
         `Cannot connect to Sonarr: ${(e as Error).message}`,
       );
     }
-    const localRootFolders = await this.rootFolderRepo.find();
+    const localLibraries = await this.libraryRepo.find();
     return {
       remoteRootFolders: remoteFolders
         .filter((r) => r.path?.trim())
         .map((r) => ({
           remotePath: r.path,
-          suggestedLocalRootFolderId: suggestLocalRootFolderId(
-            r.path,
-            localRootFolders,
-          ),
+          suggestedLocalLibraryId: suggestLocalLibraryId(r.path, localLibraries),
         })),
-      localRootFolders: localRootFolders.map((rf) => ({
-        id: rf.id,
-        path: rf.path,
-        libraryId: rf.libraryId ?? null,
+      localLibraries: localLibraries.map((lib) => ({
+        id: lib.id,
+        name: lib.name,
+        path: lib.path,
       })),
     };
   }
@@ -240,7 +236,7 @@ export class ImportSonarrService {
           continue;
         }
         if ('ignore' in resolved) continue;
-        const { rootFolderId, folderName } = resolved;
+        const { libraryId, folderName } = resolved;
 
         if (exists) {
           if (mode === 'skip') continue;
@@ -248,12 +244,11 @@ export class ImportSonarrService {
             title,
             year: s.year ?? exists.year,
             monitored: s.monitored ?? exists.monitored,
-            rootFolder: { id: rootFolderId } as RootFolder,
             folderName,
             imdbId: s.imdbId || exists.imdbId,
             overview: s.overview || exists.overview,
             qualityProfileId: localProfileId ?? exists.qualityProfileId,
-            library: { id: exists.libraryId ?? targetLibrary.id } as Library,
+            library: { id: libraryId } as Library,
           });
         } else {
           const saved = await this.mediaRepo.save(
@@ -264,8 +259,7 @@ export class ImportSonarrService {
               type: MediaType.SERIES,
               status: MediaStatus.CONTINUING,
               monitored: s.monitored ?? true,
-              rootFolder: { id: rootFolderId } as RootFolder,
-              library: targetLibrary,
+              library: { id: libraryId } as Library,
               folderName,
               imdbId: s.imdbId || undefined,
               overview: s.overview || undefined,
@@ -328,7 +322,7 @@ export class ImportSonarrService {
 
       const media = await this.mediaRepo.findOne({
         where: { tmdbId, type: MediaType.SERIES },
-        relations: ['rootFolder'],
+        relations: ['library'],
       });
       if (!media?.path) continue;
 
@@ -516,9 +510,8 @@ export class ImportSonarrService {
   }
 
   /**
-   * Up-front guard: every mapping that targets a Fliks RootFolder must point
-   * to one whose library is unassigned or matches the import target. We
-   * refuse to silently re-home a RootFolder belonging to another library.
+   * Up-front guard: every mapping must target the import's target library
+   * (an import goes into exactly one library).
    */
   private async assertMappingsBelongToLibrary(
     pathMappings: PathMapping[],
@@ -527,28 +520,15 @@ export class ImportSonarrService {
     const ids = Array.from(
       new Set(
         pathMappings
-          .filter((m) => !m.ignore && m.localRootFolderId != null)
-          .map((m) => m.localRootFolderId as number),
+          .filter((m) => !m.ignore && m.localLibraryId != null)
+          .map((m) => m.localLibraryId as number),
       ),
     );
     if (!ids.length) return;
-    const folders = await this.rootFolderRepo.findByIds(ids);
-    const offending: string[] = [];
-    for (const id of ids) {
-      const rf = folders.find((f) => f.id === id);
-      if (!rf) {
-        offending.push(`RootFolder #${id}: not found`);
-        continue;
-      }
-      if (rf.libraryId != null && rf.libraryId !== targetLibraryId) {
-        offending.push(
-          `"${rf.path}" belongs to library #${rf.libraryId} (target is #${targetLibraryId})`,
-        );
-      }
-    }
+    const offending = ids.filter((id) => id !== targetLibraryId);
     if (offending.length) {
       throw new BadRequestException(
-        `Path mappings reference root folders from another library: ${offending.join('; ')}`,
+        `Path mappings target a different library than the import (target #${targetLibraryId}, mappings: ${offending.join(', ')})`,
       );
     }
   }

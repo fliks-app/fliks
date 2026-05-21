@@ -54,7 +54,7 @@ export class StreamingService {
   async resolveFile(mediaFileId: number, user?: User): Promise<ResolvedFile> {
     const file = await this.mediaFileRepo.findOne({
       where: { id: mediaFileId },
-      relations: ['media', 'media.rootFolder'],
+      relations: ['media', 'media.library'],
     });
     if (!file)
       throw new NotFoundException(`MediaFile #${mediaFileId} not found`);

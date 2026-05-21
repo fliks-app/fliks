@@ -1097,8 +1097,8 @@ export class SchedulerService implements OnModuleInit {
    */
   private async doRescanMissingFiles(): Promise<void> {
     const allMedia = await this.mediaRepo.find({
-      select: ['id', 'title', 'type', 'rootFolderId', 'folderName'],
-      relations: ['files', 'rootFolder'],
+      select: ['id', 'title', 'type', 'libraryId', 'folderName'],
+      relations: ['files', 'library'],
     });
 
     const candidates = allMedia.filter((m) => {

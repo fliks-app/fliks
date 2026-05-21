@@ -37,7 +37,6 @@ import { ProfilesService } from '../profiles/profiles.service';
 import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../profiles/entities/language-profile.entity';
 import { User } from '../users/entities/user.entity';
-import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { Library } from '../libraries/entities/library.entity';
 import { LibrariesService } from '../libraries/libraries.service';
 import { NamingService } from '../scheduler/naming.service';
@@ -74,8 +73,6 @@ export class MediaService {
     private readonly mediaFileRepo: Repository<MediaFile>,
     @InjectRepository(DownloadHistory)
     private readonly historyRepo: Repository<DownloadHistory>,
-    @InjectRepository(RootFolder)
-    private readonly rootFolderRepo: Repository<RootFolder>,
     @InjectRepository(Library)
     private readonly libraryRepo: Repository<Library>,
     private readonly libraries: LibrariesService,
@@ -127,10 +124,9 @@ export class MediaService {
         dto.languageProfileId,
       );
 
-    const { libraryId, rootFolderId } = await this.resolveImportTarget(
-      dto.type,
-      { libraryId: dto.libraryId, rootFolderId: dto.rootFolderId },
-    );
+    const { libraryId } = await this.resolveImportTarget(dto.type, {
+      libraryId: dto.libraryId,
+    });
 
     // Load folder format settings
     const fmtKeys = [
@@ -159,7 +155,6 @@ export class MediaService {
         details,
         qualityProfileId,
         languageProfileId,
-        rootFolderId,
         folderName,
         libraryId,
         addedByUserId,
@@ -181,7 +176,6 @@ export class MediaService {
       seasons,
       qualityProfileId,
       languageProfileId,
-      rootFolderId,
       folderName,
       libraryId,
       addedByUserId,
@@ -228,10 +222,9 @@ export class MediaService {
         dto.languageProfileId,
       );
 
-    const { libraryId, rootFolderId } = await this.resolveImportTarget(
-      dto.type,
-      { libraryId: dto.libraryId, rootFolderId: dto.rootFolderId },
-    );
+    const { libraryId } = await this.resolveImportTarget(dto.type, {
+      libraryId: dto.libraryId,
+    });
 
     // Load folder format settings
     const fmtKeys = [
@@ -269,7 +262,6 @@ export class MediaService {
         details,
         qualityProfileId,
         languageProfileId,
-        rootFolderId,
         folderName,
         libraryId,
         addedByUserId,
@@ -299,7 +291,6 @@ export class MediaService {
       seasons,
       qualityProfileId,
       languageProfileId,
-      rootFolderId,
       folderName,
       libraryId,
       addedByUserId,
@@ -307,20 +298,18 @@ export class MediaService {
   }
 
   /**
-   * Resolves the destination library + root folder for an import.
+   * Resolve the destination library for an import.
+   *  - Explicit `libraryId` from DTO wins (validated against media type).
+   *  - Otherwise we fall back to the default library for the media type
+   *    (`isDefaultForMovies` / `isDefaultForSeries` flag).
    *
-   * Priority:
-   *  1. Explicit `libraryId` from DTO (validated against media type).
-   *  2. Legacy `rootFolderId` from DTO — derive `libraryId` from it.
-   *  3. Default library for the media type (`isDefaultForMovies` /
-   *     `isDefaultForSeries` flag).
-   *
-   * Then picks one root folder inside that library (most-free-space).
+   * The library is also required to have a configured `path` — every
+   * import flow needs to know where to drop files.
    */
   private async resolveImportTarget(
     type: MediaType,
-    dto: { libraryId?: number; rootFolderId?: number },
-  ): Promise<{ libraryId: number; rootFolderId: number }> {
+    dto: { libraryId?: number },
+  ): Promise<{ libraryId: number }> {
     let library: Library | null = null;
 
     if (dto.libraryId) {
@@ -329,15 +318,6 @@ export class MediaService {
       });
       if (!library) {
         throw new BadRequestException(`Library #${dto.libraryId} not found`);
-      }
-    } else if (dto.rootFolderId) {
-      const rf = await this.rootFolderRepo.findOne({
-        where: { id: dto.rootFolderId },
-      });
-      if (rf?.libraryId) {
-        library = await this.libraryRepo.findOne({
-          where: { id: rf.libraryId },
-        });
       }
     }
 
@@ -355,24 +335,13 @@ export class MediaService {
         `Library "${library.name}" does not accept ${type}`,
       );
     }
-
-    // Library carries exactly one root folder — `dto.rootFolderId` is
-    // honoured only as long as it matches; otherwise we resolve through
-    // the library directly.
-    let rootFolderId: number;
-    if (dto.rootFolderId) {
-      const rf = await this.rootFolderRepo.findOne({
-        where: { id: dto.rootFolderId },
-      });
-      rootFolderId =
-        rf?.libraryId === library.id
-          ? rf.id
-          : (await this.libraries.getRootFolder(library.id)).id;
-    } else {
-      rootFolderId = (await this.libraries.getRootFolder(library.id)).id;
+    if (!library.path) {
+      throw new BadRequestException(
+        `Library "${library.name}" has no root path configured`,
+      );
     }
 
-    return { libraryId: library.id, rootFolderId };
+    return { libraryId: library.id };
   }
 
   async create(dto: CreateMediaDto): Promise<Media> {
@@ -495,7 +464,7 @@ export class MediaService {
 
     const qb = this.mediaRepo
       .createQueryBuilder('media')
-      .leftJoinAndSelect('media.rootFolder', 'rootFolder')
+      .leftJoinAndSelect('media.library', 'library')
       .leftJoinAndSelect('media.qualityProfile', 'qualityProfile')
       .leftJoinAndSelect('media.languageProfile', 'languageProfile')
       .leftJoinAndSelect('media.files', 'files');
@@ -846,11 +815,12 @@ export class MediaService {
     if (!library) {
       throw new NotFoundException(`Library #${libraryId} not found`);
     }
-    const rootFolder = await this.libraries.getRootFolder(libraryId);
-    await this.mediaRepo.update(id, {
-      library,
-      rootFolder,
-    });
+    if (!library.path) {
+      throw new BadRequestException(
+        `Library "${library.name}" has no root path configured`,
+      );
+    }
+    await this.mediaRepo.update(id, { library });
     return this.findOne(id);
   }
 
@@ -911,11 +881,8 @@ export class MediaService {
     if (dto.monitored !== undefined) {
       patch.monitored = dto.monitored;
     }
-    if (dto.rootFolder !== undefined) {
-      // QueryBuilder.set() accepts the column name directly (bypasses entity
-      // metadata for relation properties), so the @RelationId-virtual
-      // `rootFolderId` is fine to write here.
-      patch.rootFolderId = dto.rootFolder;
+    if (dto.libraryId !== undefined) {
+      patch.libraryId = dto.libraryId;
     }
 
     if (Object.keys(patch).length === 0) {
@@ -2164,7 +2131,6 @@ export class MediaService {
     details: MetadataDetails,
     qualityProfileId: number | null,
     languageProfileId: number | null,
-    rootFolderId?: number,
     folderName?: string,
     libraryId?: number,
     addedByUserId?: number | null,
@@ -2178,9 +2144,6 @@ export class MediaService {
         : {}),
       ...(languageProfileId != null
         ? { languageProfile: { id: languageProfileId } as LanguageProfile }
-        : {}),
-      ...(rootFolderId
-        ? { rootFolder: { id: rootFolderId } as RootFolder }
         : {}),
       ...(libraryId ? { library: { id: libraryId } as Library } : {}),
       ...(folderName ? { folderName } : {}),
@@ -2198,7 +2161,6 @@ export class MediaService {
     seasons: SeasonDetails[],
     qualityProfileId: number | null,
     languageProfileId: number | null,
-    rootFolderId?: number,
     folderName?: string,
     libraryId?: number,
     addedByUserId?: number | null,
@@ -2212,9 +2174,6 @@ export class MediaService {
         : {}),
       ...(languageProfileId != null
         ? { languageProfile: { id: languageProfileId } as LanguageProfile }
-        : {}),
-      ...(rootFolderId
-        ? { rootFolder: { id: rootFolderId } as RootFolder }
         : {}),
       ...(libraryId ? { library: { id: libraryId } as Library } : {}),
       ...(folderName ? { folderName } : {}),

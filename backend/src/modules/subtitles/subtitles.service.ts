@@ -230,7 +230,7 @@ export class SubtitlesService {
 
     const media = await this.mediaRepo.findOne({
       where: { id: mediaId },
-      relations: ['rootFolder'],
+      relations: ['library'],
     });
     if (!media?.path) {
       throw new BadRequestException(
@@ -296,7 +296,7 @@ export class SubtitlesService {
   ): Promise<string | null> {
     const media = await this.mediaRepo.findOne({
       where: { id: sub.mediaId },
-      relations: ['rootFolder'],
+      relations: ['library'],
     });
     return resolveSubtitleAbsolutePath(media?.path ?? null, sub.relativePath);
   }

@@ -10,10 +10,10 @@ export class PreviewImportDto {
 
 export interface PreviewRow {
   remotePath: string;
-  suggestedLocalRootFolderId: number | null;
+  suggestedLocalLibraryId: number | null;
 }
 
 export interface PreviewImportResult {
   remoteRootFolders: PreviewRow[];
-  localRootFolders: { id: number; path: string; libraryId: number | null }[];
+  localLibraries: { id: number; name: string; path: string | null }[];
 }

@@ -477,7 +477,7 @@
         <p class="text-sm text-base-content/60 mt-1">{{ 'import.path_wizard.description' | translate }}</p>
 
         @if (radarrPreview(); as preview) {
-          @if (eligibleLocalRootFolders('radarr').length === 0) {
+          @if (eligibleLocalLibraries('radarr').length === 0) {
             <div role="alert" class="alert alert-warning mt-4 text-sm">
               <div>
                 <p>{{ 'import.path_wizard.no_root_folders' | translate }}</p>
@@ -494,12 +494,12 @@
                   <span class="text-base-content/40 hidden sm:inline">→</span>
                   <select
                     class="select select-bordered select-sm sm:flex-1"
-                    [ngModel]="m.ignore ? IGNORE_VALUE : m.localRootFolderId"
+                    [ngModel]="m.ignore ? IGNORE_VALUE : m.localLibraryId"
                     (ngModelChange)="setMapping('radarr', m.remotePath, $event)"
                   >
                     <option [ngValue]="null">—</option>
-                    @for (rf of eligibleLocalRootFolders('radarr'); track rf.id) {
-                      <option [ngValue]="rf.id">{{ rf.path }}</option>
+                    @for (lib of eligibleLocalLibraries('radarr'); track lib.id) {
+                      <option [ngValue]="rf.id">{{ lib.name }} ({{ lib.path }})</option>
                     }
                     <option [ngValue]="IGNORE_VALUE">{{ 'import.path_wizard.option_ignore' | translate }}</option>
                   </select>
@@ -513,7 +513,7 @@
           <button type="button" class="btn btn-ghost btn-sm" (click)="cancelWizard('radarr')">
             {{ 'import.path_wizard.cancel' | translate }}
           </button>
-          @if (eligibleLocalRootFolders('radarr').length > 0) {
+          @if (eligibleLocalLibraries('radarr').length > 0) {
             <button
               type="button"
               class="btn btn-primary btn-sm"
@@ -538,7 +538,7 @@
         <p class="text-sm text-base-content/60 mt-1">{{ 'import.path_wizard.description' | translate }}</p>
 
         @if (sonarrPreview(); as preview) {
-          @if (eligibleLocalRootFolders('sonarr').length === 0) {
+          @if (eligibleLocalLibraries('sonarr').length === 0) {
             <div role="alert" class="alert alert-warning mt-4 text-sm">
               <div>
                 <p>{{ 'import.path_wizard.no_root_folders' | translate }}</p>
@@ -555,12 +555,12 @@
                   <span class="text-base-content/40 hidden sm:inline">→</span>
                   <select
                     class="select select-bordered select-sm sm:flex-1"
-                    [ngModel]="m.ignore ? IGNORE_VALUE : m.localRootFolderId"
+                    [ngModel]="m.ignore ? IGNORE_VALUE : m.localLibraryId"
                     (ngModelChange)="setMapping('sonarr', m.remotePath, $event)"
                   >
                     <option [ngValue]="null">—</option>
-                    @for (rf of eligibleLocalRootFolders('sonarr'); track rf.id) {
-                      <option [ngValue]="rf.id">{{ rf.path }}</option>
+                    @for (lib of eligibleLocalLibraries('sonarr'); track lib.id) {
+                      <option [ngValue]="rf.id">{{ lib.name }} ({{ lib.path }})</option>
                     }
                     <option [ngValue]="IGNORE_VALUE">{{ 'import.path_wizard.option_ignore' | translate }}</option>
                   </select>
@@ -574,7 +574,7 @@
           <button type="button" class="btn btn-ghost btn-sm" (click)="cancelWizard('sonarr')">
             {{ 'import.path_wizard.cancel' | translate }}
           </button>
-          @if (eligibleLocalRootFolders('sonarr').length > 0) {
+          @if (eligibleLocalLibraries('sonarr').length > 0) {
             <button
               type="button"
               class="btn btn-primary btn-sm"

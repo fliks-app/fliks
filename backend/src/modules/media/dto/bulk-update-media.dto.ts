@@ -1,10 +1,4 @@
-import {
-  IsArray,
-  IsBoolean,
-  IsNumber,
-  IsOptional,
-  IsString,
-} from 'class-validator';
+import { IsArray, IsBoolean, IsNumber, IsOptional } from 'class-validator';
 
 export class BulkUpdateMediaDto {
   @IsArray()
@@ -24,6 +18,6 @@ export class BulkUpdateMediaDto {
   monitored?: boolean;
 
   @IsOptional()
-  @IsString()
-  rootFolder?: string;
+  @IsNumber()
+  libraryId?: number;
 }

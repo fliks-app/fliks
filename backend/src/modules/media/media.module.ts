@@ -24,7 +24,6 @@ import { MovieDownloadService } from './movie-download.service';
 import { EpisodeDownloadService } from './episode-download.service';
 import { AutoGrabPipelineService } from './auto-grab-pipeline.service';
 import { NamingService } from '../scheduler/naming.service';
-import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { Library } from '../libraries/entities/library.entity';
 import { LibrariesModule } from '../libraries/libraries.module';
 import { FliksSchedulerModule } from '../scheduler/scheduler.module';
@@ -43,7 +42,6 @@ import { StreamingModule } from '../streaming/streaming.module';
       Person,
       MediaCast,
       MediaCrew,
-      RootFolder,
       Library,
     ]),
     AuthModule,

@@ -161,7 +161,7 @@ export class LibrariesSettingsComponent implements OnInit {
     this.formLanguageProfileId.set(lib.defaultLanguageProfileId);
     this.formDefaultMovies.set(lib.isDefaultForMovies);
     this.formDefaultSeries.set(lib.isDefaultForSeries);
-    this.formPath.set(lib.rootFolder?.path ?? '');
+    this.formPath.set(lib.path ?? '');
     this.formUserIds.set(new Set(lib.userIds));
     this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
@@ -272,12 +272,12 @@ export class LibrariesSettingsComponent implements OnInit {
   }
 
   freeSpace(lib: Library): number {
-    const rf = lib.rootFolder;
-    return rf && rf.freeSpace > 0 ? rf.freeSpace : 0;
+    const d = lib.disk;
+    return d && d.freeSpace > 0 ? d.freeSpace : 0;
   }
 
   totalCapacity(lib: Library): number {
-    const rf = lib.rootFolder;
-    return rf && rf.totalSpace > 0 ? rf.totalSpace : 0;
+    const d = lib.disk;
+    return d && d.totalSpace > 0 ? d.totalSpace : 0;
   }
 }
