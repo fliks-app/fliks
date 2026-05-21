@@ -1,3 +1,4 @@
+<app-background />
 <div class="drawer min-h-screen"
      [class.lg:drawer-open]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
      [class.md:drawer-open]="device.isTablet() && navbar.effectiveSidebarPinned()">
@@ -247,7 +248,11 @@
 
   <div class="drawer-side z-40" [class.hidden]="isNative && device.isPhone()">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
-    <aside class="bg-base-100 w-64 min-h-full flex flex-col" style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 )">
+    <aside class="w-64 min-h-full flex flex-col"
+           [class.bg-base-100]="!background.url()"
+           [class.bg-base-100/40]="!!background.url()"
+           [class.backdrop-blur-sm]="!!background.url()"
+           style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 )">
       <div class="p-4 border-b border-base-200 flex items-center gap-2">
         <a routerLink="/" class="flex items-center gap-2 pl-2 text-2xl font-bold flex-1 min-w-0">
           <img src="fliks-mark.png" alt="" class="h-8 w-8 shrink-0" />

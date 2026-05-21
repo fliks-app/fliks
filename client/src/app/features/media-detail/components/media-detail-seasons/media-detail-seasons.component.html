@@ -35,6 +35,57 @@
             <span class="flex-1">{{ 'media_detail.mark_season_watched' | translate }}</span>
           }
         </button>
+        @if (isSeasonTabVisible(selSeason) && !episodesHasFileOnly()) {
+          @if (canGrab() && m.qualityProfile) {
+            <button
+              type="button"
+              class="dropdown-item text-white"
+              [disabled]="seasonReleasesLoading() && seasonReleasesOpenId() === selSeason.id"
+              (click)="loadSeasonReleases.emit(selSeason)"
+            >
+              @if (seasonReleasesLoading() && seasonReleasesOpenId() === selSeason.id) {
+                <span class="loading loading-spinner loading-sm"></span>
+                <span class="flex-1"></span>
+              } @else {
+                <svg lucidePackage class="h-5 w-5 shrink-0 opacity-80"></svg>
+                <span class="flex-1">{{ 'media_detail.season_releases' | translate }}</span>
+              }
+            </button>
+            <button
+              type="button"
+              class="dropdown-item text-white"
+              [disabled]="seasonGrabBusy() !== null"
+              (click)="grabSeason.emit(selSeason)"
+            >
+              @if (seasonGrabBusy() !== null) {
+                <span class="loading loading-spinner loading-sm"></span>
+                <span class="flex-1"></span>
+              } @else {
+                <svg lucideDownload class="h-5 w-5 shrink-0 opacity-80"></svg>
+                <span class="flex-1">{{ 'media_detail.grab_season' | translate }}</span>
+              }
+            </button>
+          }
+          @if (isAdmin()) {
+            <button
+              type="button"
+              class="dropdown-item text-white"
+              [disabled]="seasonBusyId() === selSeason.id"
+              (click)="toggleSeasonMonitored.emit(selSeason)"
+            >
+              @if (seasonBusyId() === selSeason.id) {
+                <span class="loading loading-spinner loading-sm"></span>
+                <span class="flex-1"></span>
+              } @else if (selSeason.monitored) {
+                <svg lucideEyeOff class="h-5 w-5 shrink-0 opacity-80"></svg>
+                <span class="flex-1">{{ 'media_detail.unmonitor' | translate }}</span>
+              } @else {
+                <svg lucideEye class="h-5 w-5 shrink-0 opacity-80"></svg>
+                <span class="flex-1">{{ 'media_detail.monitor' | translate }}</span>
+              }
+            </button>
+          }
+        }
       }
     </app-dropdown-menu>
     <select
@@ -50,67 +101,11 @@
       }
     </select>
     @if (selSeason && isSeasonTabVisible(selSeason) && !episodesHasFileOnly()) {
-      <div class="w-4 shrink-0"></div>
       @if (!selSeason.monitored) {
         <span class="badge badge-ghost shrink-0">{{ 'media_detail.unmonitored' | translate }}</span>
       }
       @if (selSeason.preferredProvider) {
         <span class="badge badge-primary badge-sm shrink-0">{{ selSeason.preferredProvider | uppercase }}</span>
-      }
-      @if (canGrab()) {
-        <button
-          type="button"
-          class="btn btn-outline btn-primary shrink-0"
-          [disabled]="seasonReleasesLoading() && seasonReleasesOpenId() === selSeason.id"
-          (click)="loadSeasonReleases.emit(selSeason)"
-        >
-          @if (seasonReleasesLoading() && seasonReleasesOpenId() === selSeason.id) {
-            <span class="loading loading-spinner loading-xs"></span>
-          } @else {
-            {{ 'media_detail.season_releases' | translate }}
-          }
-        </button>
-        <button
-          type="button"
-          class="btn btn-primary shrink-0"
-          [disabled]="seasonGrabBusy() !== null"
-          (click)="grabSeason.emit(selSeason)"
-        >
-          @if (seasonGrabBusy() !== null) {
-            <span class="loading loading-spinner loading-xs"></span>
-          } @else {
-            {{ 'media_detail.grab_season' | translate }}
-          }
-        </button>
-      }
-      @if (isAdmin()) {
-        <button
-          type="button"
-          class="btn btn-ghost shrink-0"
-          [class.opacity-50]="seasonBusyId() === selSeason.id"
-          [disabled]="seasonBusyId() === selSeason.id"
-          (click)="toggleSeasonMonitored.emit(selSeason)"
-        >
-          @if (seasonBusyId() === selSeason.id) {
-            <span class="loading loading-spinner loading-xs"></span>
-          } @else if (selSeason.monitored) {
-            {{ 'media_detail.unmonitor' | translate }}
-          } @else {
-            {{ 'media_detail.monitor' | translate }}
-          }
-        </button>
-        <select
-          class="select select-bordered select-sm shrink-0"
-          [title]="'media_detail.provider_section_title' | translate"
-          [ngModel]="selSeason.preferredProvider ?? null"
-          (ngModelChange)="setSeasonProvider.emit({ season: selSeason, provider: $event })"
-        >
-          @for (opt of providerOptions; track opt.value) {
-            <option [ngValue]="opt.value">
-              {{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}
-            </option>
-          }
-        </select>
       }
     }
   </div>

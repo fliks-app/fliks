@@ -1,0 +1,32 @@
+<!-- Hidden below the `lg` breakpoint so phones / tablet-portrait keep
+     the existing inline `mobile-fanart-hero` and don't show a second
+     image of the same fanart. -->
+<div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none hidden lg:block">
+  @if (layerA()) {
+    <img
+      [src]="layerA()! | resolveUrl:'medium'"
+      alt=""
+      loading="eager"
+      decoding="async"
+      class="absolute inset-0 w-full h-full object-cover object-[50%_25%] transition-opacity duration-500"
+      [class.opacity-100]="activeLayer() === 'A' && imageVisible()"
+      [class.opacity-0]="activeLayer() !== 'A' || !imageVisible()"
+    />
+  }
+  @if (layerB()) {
+    <img
+      [src]="layerB()! | resolveUrl:'medium'"
+      alt=""
+      loading="eager"
+      decoding="async"
+      class="absolute inset-0 w-full h-full object-cover object-[50%_25%] transition-opacity duration-500"
+      [class.opacity-100]="activeLayer() === 'B' && imageVisible()"
+      [class.opacity-0]="activeLayer() !== 'B' || !imageVisible()"
+    />
+  }
+  <!-- Veil is permanent: when no background is set, the 90 % base-100
+       tint over the body's solid base-100 is a no-op (same colour);
+       when an image is fading in/out beneath it, the tint stays
+       constant so we never flash an un-tinted frame. -->
+  <div class="absolute inset-0 bg-base-100/90"></div>
+</div>
