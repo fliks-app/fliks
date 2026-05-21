@@ -1,0 +1,48 @@
+<nav class="flex justify-end items-center gap-1" [attr.aria-label]="'pagination.label' | translate">
+  <button
+    type="button"
+    class="btn btn-sm btn-ghost"
+    [class.btn-square]="compact()"
+    [disabled]="current() <= 1"
+    [attr.aria-label]="'pagination.previous' | translate"
+    (click)="goTo(current() - 1)"
+  >
+    @if (compact()) {
+      <svg lucideChevronLeft class="h-4 w-4"></svg>
+    } @else {
+      {{ 'common.prev' | translate }}
+    }
+  </button>
+
+  @for (slot of slots(); track $index) {
+    @if (slot === 'ellipsis') {
+      <span class="px-1.5 text-base-content/50 select-none" aria-hidden="true">…</span>
+    } @else {
+      <button
+        type="button"
+        class="btn btn-sm min-w-10"
+        [class.btn-primary]="slot === current()"
+        [class.btn-ghost]="slot !== current()"
+        [attr.aria-current]="slot === current() ? 'page' : null"
+        (click)="goTo(slot)"
+      >
+        {{ slot }}
+      </button>
+    }
+  }
+
+  <button
+    type="button"
+    class="btn btn-sm btn-ghost"
+    [class.btn-square]="compact()"
+    [disabled]="current() >= total()"
+    [attr.aria-label]="'pagination.next' | translate"
+    (click)="goTo(current() + 1)"
+  >
+    @if (compact()) {
+      <svg lucideChevronRight class="h-4 w-4"></svg>
+    } @else {
+      {{ 'common.next' | translate }}
+    }
+  </button>
+</nav>

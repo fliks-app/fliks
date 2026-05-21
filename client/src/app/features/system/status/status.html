@@ -142,17 +142,12 @@
       </table>
     </div>
     @if (commandsTotalPages > 1) {
-      <div class="flex justify-center mt-3">
-        <div class="join">
-          @for (p of [].constructor(commandsTotalPages); track $index) {
-            <button
-              class="join-item btn btn-sm"
-              [class.btn-active]="commandsPage() === $index + 1"
-              (click)="loadCommands($index + 1)"
-            >{{ $index + 1 }}</button>
-          }
-        </div>
-      </div>
+      <app-pagination
+        class="mt-3"
+        [current]="commandsPage()"
+        [total]="commandsTotalPages"
+        (pageChange)="loadCommands($event)"
+      />
     }
   }
 </div>

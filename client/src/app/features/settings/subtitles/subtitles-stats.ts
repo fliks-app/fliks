@@ -16,10 +16,11 @@ import {
 } from '../../../core/services/api/subtitles-api.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { TranslateService } from '@ngx-translate/core';
+import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 
 @Component({
   selector: 'app-subtitles-stats',
-  imports: [LucideSearch, RouterLink, TranslateModule],
+  imports: [LucideSearch, RouterLink, TranslateModule, PaginationComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitles-stats.html',
 })

@@ -12,10 +12,11 @@ import {
   BlocklistApiService,
   BlocklistEntry,
 } from '../../../core/services/api/blocklist-api.service';
+import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 
 @Component({
   selector: 'app-blocklist-settings',
-  imports: [TranslateModule, DatePipe],
+  imports: [TranslateModule, DatePipe, PaginationComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './blocklist.html',
 })

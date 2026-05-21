@@ -8,10 +8,11 @@ import { PlaybackState, StreamingApiService, WatchHistoryItem } from '../../core
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
+import { PaginationComponent } from '../../shared/components/pagination/pagination';
 
 @Component({
   selector: 'app-watch-history',
-  imports: [TranslateModule, ResolveUrlPipe, LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical],
+  imports: [TranslateModule, ResolveUrlPipe, PaginationComponent, LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './watch-history.html',
 })
@@ -34,15 +35,6 @@ export class WatchHistoryComponent implements OnInit, OnDestroy {
   readonly pageSize = 25;
 
   readonly totalPages = computed(() => Math.ceil(this.total() / this.pageSize));
-
-  /** Visible page numbers (max 7, centered around current page) */
-  readonly visiblePages = computed(() => {
-    const total = this.totalPages();
-    const current = this.currentPage();
-    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-    const start = Math.max(1, Math.min(current - 3, total - 6));
-    return Array.from({ length: 7 }, (_, i) => start + i);
-  });
 
   async ngOnInit() {
     this.scrollMemory.activate(WatchHistoryComponent.SCROLL_KEY);
