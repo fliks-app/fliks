@@ -281,7 +281,8 @@ public class NativePlayerPlugin extends Plugin {
             // (`enableLazyLoadingWithSingleTrack` is package-private)
             // — not worth the semantic-cleanliness trade-off.
             DefaultMediaSourceFactory mediaSourceFactory =
-                    new DefaultMediaSourceFactory(dataSourceFactory);
+                    new DefaultMediaSourceFactory(dataSourceFactory)
+                            .setLoadErrorHandlingPolicy(new RetryHttp404LoadErrorPolicy());
             player = new ExoPlayer.Builder(getContext())
                     .setRenderersFactory(renderersFactory)
                     .setMediaSourceFactory(mediaSourceFactory)
