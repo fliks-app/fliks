@@ -1,5 +1,5 @@
 <!-- ===== MOBILE layout ===== -->
-<div class="lg:hidden tv:hidden">
+<div class="md:hidden tv:hidden">
   <app-mobile-fanart-hero [fanartUrl]="fanartUrl()" />
 
   <div class="-mt-16 relative z-20">
@@ -127,7 +127,7 @@
 </div>
 
 <!-- ===== DESKTOP layout ===== -->
-<div class="hidden lg:block tv:block relative">
+<div class="hidden md:block tv:block relative">
   @if (fanartUrl()) {
     @if (!navbar.mobileNavbarVisible()) {
       <button type="button" (click)="goBack()" class="relative z-10 btn btn-ghost btn gap-1 mb-4 text-base-content/80 hover:text-base-content">

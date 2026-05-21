@@ -13,6 +13,7 @@ import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { FocusMemoryService } from '../../core/services/focus-memory.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
+import { DisplaySettingsService } from '../../core/services/display-settings.service';
 import { TvService } from '../../core/services/tv.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
@@ -77,6 +78,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly focusMemory = inject(FocusMemoryService);
   private readonly navbar = inject(NavbarService);
   private readonly backgroundService = inject(BackgroundService);
+  private readonly displaySettings = inject(DisplaySettingsService);
   readonly auth = inject(AuthService);
   private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
@@ -104,6 +106,10 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly recommendationsBackgroundEffect = effect(() => {
     const recs = this.recommendations();
     if (recs.length === 0) return;
+    if (!this.displaySettings.settings().homeBackground) {
+      this.backgroundService.clear();
+      return;
+    }
     const pool: string[] = [];
     for (const r of recs) {
       if (r.media.fanartUrl) pool.push(r.media.fanartUrl);

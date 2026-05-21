@@ -108,8 +108,14 @@
       "player": "Lecture",
       "subtitles": "Sous-titres",
       "cast": "Chromecast",
+      "display": "Affichage",
       "storage": "Stockage"
     }
+  },
+  "display_settings": {
+    "title": "Affichage",
+    "home_background": "Image de fond sur l'accueil",
+    "home_background_hint": "Affiche une affiche en plein écran derrière les sections de l'accueil."
   },
   "storage_settings": {
     "clear_cache": "Vider le cache",
