@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 import { Media } from '../media/entities/media.entity';
@@ -16,11 +17,17 @@ import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { Library } from '../libraries/entities/library.entity';
+import { MediaType } from '../../common/enums';
 import { parseReleaseQuality } from '../media/release-quality.parser';
 import { ImportFileEntry } from './dto/confirm-disk-import.dto';
 import { MediaService } from '../media/media.service';
 import { NamingService } from '../scheduler/naming.service';
 import { SubtitleSchedulerService } from '../scheduler/subtitle-scheduler.service';
+import { LibrariesService } from '../libraries/libraries.service';
+import {
+  FileTransferService,
+  TransferMethod,
+} from '../../common/services/file-transfer.service';
 
 const VIDEO_EXTS = new Set([
   '.mkv',
@@ -70,6 +77,8 @@ export class DiskImportService {
     @Inject(forwardRef(() => SubtitleSchedulerService))
     private readonly subtitleScheduler: SubtitleSchedulerService,
     private readonly naming: NamingService,
+    private readonly libraries: LibrariesService,
+    private readonly fileTransfer: FileTransferService,
   ) {}
 
   async scanFolder(folderPath: string): Promise<ScanCandidate[]> {
@@ -97,111 +106,186 @@ export class DiskImportService {
     return Promise.all(videoFiles.map((f) => this.buildCandidate(f, allMedia)));
   }
 
+  /**
+   * Take user-staged files anywhere on disk and materialise them under the
+   * target library's root folder, then register them in DB so the rest of
+   * the app sees them as if they had been grabbed by a download client.
+   *
+   * - The file (and its companions) is either copied or moved depending on
+   *   `method`; the source is left intact on copy and unlinked on move.
+   * - Destination layout follows the same naming pipeline as the torrent-
+   *   completion path (movie folder format, series + season folder format).
+   *   `Media.path` / `Media.folderName` / `Media.rootFolder` are set lazily
+   *   on the first imported file for that media; subsequent files reuse them.
+   */
   async confirmImport(
     imports: ImportFileEntry[],
+    method: TransferMethod,
   ): Promise<{ imported: number; errors: string[] }> {
     let imported = 0;
     const errors: string[] = [];
+
+    const formats = await this.naming.getFormats();
+    const companionExts = await this.fileTransfer.getCompanionExts();
 
     for (const entry of imports) {
       try {
         const media = await this.mediaRepo.findOne({
           where: { id: entry.mediaId },
+          relations: ['rootFolder'],
         });
         if (!media) {
           errors.push(`Media #${entry.mediaId} not found`);
           continue;
         }
 
-        let fileSize = 0;
+        // Verify the source still exists before we touch the DB.
+        let sourceStat: fs.Stats;
         try {
-          fileSize = fs.statSync(entry.filePath).size;
+          sourceStat = fs.statSync(entry.filePath);
         } catch {
-          /* use 0 if file disappeared */
-        }
-
-        // Ensure media.rootFolderId and folderName are set
-        if (!media.rootFolderId) {
-          const dir = path.dirname(entry.filePath);
-          const rootFolders = await this.rootFolderRepo.find();
-          const rf = rootFolders
-            .filter((r) => dir.startsWith(r.path))
-            .sort((a, b) => b.path.length - a.path.length)[0];
-          if (rf) {
-            const remainder = dir
-              .slice(rf.path.length)
-              .replace(/^\/+/, '')
-              .split('/')[0];
-            const folderName = remainder || path.basename(dir);
-            // Mirror the rootFolder's library so the new media is ACL-visible
-            // through the standard libraryId filter.
-            await this.mediaRepo.update(media.id, {
-              rootFolder: rf,
-              library: rf.libraryId ? ({ id: rf.libraryId } as Library) : null,
-              folderName,
-            });
-            media.rootFolder = rf;
-            media.library = rf.library;
-            media.folderName = folderName;
-          }
-        } else if (!media.folderName) {
-          const dir = path.dirname(entry.filePath);
-          const folderName = media.rootFolder
-            ? dir
-                .slice(media.rootFolder.path.length)
-                .replace(/^\/+/, '')
-                .split('/')[0]
-            : path.basename(dir);
-          if (folderName) {
-            await this.mediaRepo.update(media.id, { folderName });
-            media.folderName = folderName;
-          }
-        }
-
-        if (!media.path) continue; // Skip if we can't compute a path
-        let relativePath = relativePathUnderMediaRoot(
-          media.path,
-          entry.filePath,
-        );
-        // The disk folder may not match media.folderName when titles are
-        // localised (e.g. "Mean Girls (2004)" on disk vs "Lolita malgré
-        // moi (2004)" stored from a French TMDB lookup). The user-confirmed
-        // import already vouches for the media association, so realign
-        // folderName to the actual disk folder under the same rootFolder.
-        if (!relativePath && media.rootFolder?.path) {
-          const dir = path.dirname(entry.filePath);
-          if (dir.startsWith(media.rootFolder.path)) {
-            const newFolderName = dir
-              .slice(media.rootFolder.path.length)
-              .replace(/^\/+/, '')
-              .split('/')[0];
-            if (newFolderName && newFolderName !== media.folderName) {
-              await this.mediaRepo.update(media.id, {
-                folderName: newFolderName,
-              });
-              media.folderName = newFolderName;
-              relativePath = relativePathUnderMediaRoot(
-                media.path,
-                entry.filePath,
-              );
-            }
-          }
-        }
-        if (!relativePath) {
-          this.logger.error(
-            `Disk import: file outside media folder — mediaId=${media.id} mediaPath=${media.path} filePath=${entry.filePath}`,
-          );
           errors.push(
-            `${path.basename(entry.filePath)}: fichier en dehors du dossier média (vérifiez le dossier racine)`,
+            `${path.basename(entry.filePath)}: fichier source introuvable`,
           );
           continue;
         }
 
-        // Avoid duplicate path
+        // Resolve the target library's root folder. The DTO guarantees
+        // `targetLibraryId` is set; `getRootFolder` throws if the library
+        // has no path configured — surface the message cleanly.
+        const library = await this.libraries.findOne(entry.targetLibraryId);
+        if (!library.mediaTypes?.includes(media.type as MediaType)) {
+          errors.push(
+            `${path.basename(entry.filePath)}: la bibliothèque "${library.name}" n'accepte pas ${media.type}`,
+          );
+          continue;
+        }
+        const targetRoot = await this.libraries.getRootFolder(
+          entry.targetLibraryId,
+        );
+
+        // Pin the media to this library/root on the first import. Once
+        // assigned we keep the same anchor for subsequent files (a series'
+        // S02 must land under the same folder as S01). `Media.path` is a
+        // computed getter (rootFolder + folderName) so we only persist the
+        // two underlying columns.
+        if (!media.rootFolderId || media.rootFolderId !== targetRoot.id) {
+          const folderName =
+            media.type === MediaType.MOVIE
+              ? this.naming.applyMovieFolderFormat(formats.movieFolder, {
+                  title: media.title,
+                  originalTitle: media.originalTitle,
+                  year: media.year,
+                  tmdbId: media.tmdbId,
+                })
+              : this.naming.applySeriesFolderFormat(formats.seriesFolder, {
+                  seriesTitle: media.title,
+                  originalTitle: media.originalTitle,
+                  year: media.year,
+                  tmdbId: media.tmdbId,
+                });
+          await this.mediaRepo.update(media.id, {
+            rootFolder: targetRoot,
+            library: { id: library.id } as Library,
+            folderName,
+          });
+          media.rootFolder = targetRoot;
+          media.folderName = folderName;
+        }
+
+        // Build destination filename + folder via the naming service.
+        const ext = path.extname(entry.filePath);
+        const sourceBase = path.basename(entry.filePath, ext);
+        let newBaseName: string;
+        let destDir: string;
+
+        if (media.type === MediaType.MOVIE) {
+          newBaseName = this.naming.applyMovieFormat(formats.movie, {
+            title: media.title,
+            originalTitle: media.originalTitle,
+            year: media.year,
+            quality: entry.quality,
+            tmdbId: media.tmdbId,
+          });
+          destDir = media.path!;
+        } else {
+          // Series: pull season + episode metadata from the matched Episode
+          // (the scan phase already created/linked it) so renaming stays
+          // consistent with the DB rather than re-parsing the filename.
+          let seasonNumber = 1;
+          let episodeNumber = 1;
+          let episodeTitle: string | undefined;
+          let airDate: string | undefined;
+          if (entry.episodeId) {
+            const ep = await this.episodeRepo.findOne({
+              where: { id: entry.episodeId },
+              relations: ['season'],
+            });
+            if (ep) {
+              episodeNumber = ep.episodeNumber;
+              seasonNumber = ep.season?.seasonNumber ?? 1;
+              episodeTitle = ep.title ?? undefined;
+              airDate = ep.airDate ?? undefined;
+            }
+          }
+          newBaseName = this.naming.applySeriesFormat(formats.series, {
+            seriesTitle: media.title,
+            season: seasonNumber,
+            episode: episodeNumber,
+            episodeTitle,
+            quality: entry.quality,
+            airDate,
+          });
+          const seasonFolder = this.naming.applySeasonFolderFormat(
+            formats.seasonFolder,
+            { season: seasonNumber },
+          );
+          destDir = path.join(media.path!, seasonFolder);
+        }
+
+        const destPath = path.join(destDir, newBaseName + ext);
+
+        // Skip if the destination already holds a row for this media —
+        // re-running the same import twice should be safe / no-op.
+        const relativePath = relativePathUnderMediaRoot(
+          targetRoot.path,
+          destPath,
+        );
+        if (!relativePath) {
+          this.logger.error(
+            `Disk import: computed dest outside library root — root=${targetRoot.path} dest=${destPath}`,
+          );
+          errors.push(
+            `${path.basename(entry.filePath)}: destination en dehors du dossier racine`,
+          );
+          continue;
+        }
         const existing = await this.fileRepo.findOne({
           where: { media: { id: media.id }, relativePath },
         });
-        if (existing) continue;
+        if (existing && !entry.force) {
+          continue;
+        }
+
+        // Filesystem write. mkdir + copy/move handled by FileTransferService.
+        await this.fileTransfer.transferFile(entry.filePath, destPath, method);
+        await this.fileTransfer.transferCompanions({
+          srcDir: path.dirname(entry.filePath),
+          destDir,
+          sourceBaseName: sourceBase,
+          newBaseName,
+          method,
+          allowedExts: companionExts,
+          logTag: `disk-import:${media.title}`,
+        });
+
+        const finalSize = (() => {
+          try {
+            return fs.statSync(destPath).size;
+          } catch {
+            return sourceStat.size;
+          }
+        })();
 
         const saved = await this.fileRepo.save(
           this.fileRepo.create({
@@ -211,13 +295,12 @@ export class DiskImportService {
                 ? ({ id: entry.episodeId } as Episode)
                 : null,
             relativePath,
-            size: fileSize,
+            size: finalSize,
             quality: entry.quality,
           }),
         );
 
         await this.mediaService.enrichMediaFileFromDisk(saved.id);
-
         try {
           await this.subtitleScheduler.onMediaFileImported(
             media.id,
@@ -230,7 +313,6 @@ export class DiskImportService {
           );
         }
 
-        // Mark episode as having a file
         if (entry.episodeId) {
           await this.episodeRepo.update(entry.episodeId, { hasFile: true });
         }

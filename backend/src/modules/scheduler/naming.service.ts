@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -13,8 +14,59 @@ const VIDEO_EXTS = new Set([
   '.flv',
 ]);
 
+export interface NamingFormats {
+  movie: string;
+  movieFolder: string;
+  series: string;
+  seriesFolder: string;
+  seasonFolder: string;
+}
+
+const DEFAULT_FORMATS: NamingFormats = {
+  movie: '{Movie Title} ({Release Year}) {Quality Full}',
+  movieFolder: '{Movie Title} ({Release Year})',
+  series:
+    '{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}',
+  seriesFolder: '{Series Title}',
+  seasonFolder: 'Season {season:00}',
+};
+
 @Injectable()
 export class NamingService {
+  constructor(private readonly dataSource: DataSource) {}
+
+  /**
+   * Reads the five `naming_*_format` settings in one round-trip and merges
+   * with sensible defaults. Single source of truth for every code path
+   * that needs to lay out a destination filename/folder (completion
+   * pipeline, disk import …).
+   */
+  async getFormats(): Promise<NamingFormats> {
+    const keys = [
+      'naming_movie_format',
+      'naming_movie_folder_format',
+      'naming_series_format',
+      'naming_series_folder_format',
+      'naming_season_folder_format',
+    ];
+    const rows: { key: string; value: string }[] = await this.dataSource.query(
+      `SELECT key, value FROM app_settings WHERE key = ANY($1)`,
+      [keys],
+    );
+    const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    return {
+      movie: map['naming_movie_format'] ?? DEFAULT_FORMATS.movie,
+      movieFolder:
+        map['naming_movie_folder_format'] ?? DEFAULT_FORMATS.movieFolder,
+      series: map['naming_series_format'] ?? DEFAULT_FORMATS.series,
+      seriesFolder:
+        map['naming_series_folder_format'] ?? DEFAULT_FORMATS.seriesFolder,
+      seasonFolder:
+        map['naming_season_folder_format'] ?? DEFAULT_FORMATS.seasonFolder,
+    };
+  }
+
+
   applyMovieFormat(
     format: string,
     data: {

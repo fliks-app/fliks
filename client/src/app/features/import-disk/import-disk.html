@@ -29,6 +29,28 @@
     @if (scanError()) {
       <div role="alert" class="alert alert-error text-sm mt-2">{{ scanError() }}</div>
     }
+    <div class="flex items-center gap-3 mt-3">
+      <span class="text-sm font-medium">{{ 'import_disk.method_label' | translate }}</span>
+      <div class="join">
+        <button type="button" class="btn btn-sm join-item"
+          [class.btn-primary]="method() === 'copy'"
+          (click)="method.set('copy')">
+          {{ 'import_disk.method_copy' | translate }}
+        </button>
+        <button type="button" class="btn btn-sm join-item"
+          [class.btn-primary]="method() === 'move'"
+          (click)="method.set('move')">
+          {{ 'import_disk.method_move' | translate }}
+        </button>
+      </div>
+      <span class="text-xs text-base-content/50">
+        @if (method() === 'copy') {
+          {{ 'import_disk.method_copy_hint' | translate }}
+        } @else {
+          {{ 'import_disk.method_move_hint' | translate }}
+        }
+      </span>
+    </div>
   </div>
 
   <!-- Step 2: review candidates -->
@@ -64,6 +86,7 @@
                 <th class="w-20">{{ 'import_disk.col_size' | translate }}</th>
                 <th class="w-28">{{ 'import_disk.col_quality' | translate }}</th>
                 <th>{{ 'import_disk.col_media' | translate }}</th>
+                <th class="w-40">{{ 'import_disk.col_library' | translate }}</th>
                 <th class="w-24">{{ 'import_disk.col_episode' | translate }}</th>
               </tr>
             </thead>
@@ -120,6 +143,18 @@
                       </select>
                     }
                   </td>
+                  <td>
+                    <select
+                      class="select select-bordered select-xs w-full"
+                      [ngModel]="row.targetLibraryId"
+                      (ngModelChange)="setRowLibrary(i, $event ? +$event : null)"
+                    >
+                      <option [ngValue]="null" disabled>{{ 'import_disk.no_library' | translate }}</option>
+                      @for (lib of librariesForRow(row); track lib.id) {
+                        <option [ngValue]="lib.id">{{ lib.name }}</option>
+                      }
+                    </select>
+                  </td>
                   <td class="text-sm text-base-content/60">
                     @if (row.candidate.seasonNumber !== null && row.candidate.episodeNumber !== null) {
                       <span class="font-mono">
@@ -159,7 +194,7 @@
             type="button"
             class="btn btn-primary"
             (click)="confirmImport()"
-            [disabled]="importing() || selectedCount() === 0"
+            [disabled]="importing() || selectedCount() === 0 || invalidSelectedCount() > 0"
           >
             @if (importing()) {
               <span class="loading loading-spinner loading-sm"></span>

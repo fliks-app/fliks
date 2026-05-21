@@ -147,6 +147,6 @@ export class ImportsController {
   @Post('disk/confirm')
   @CheckPolicies((ability) => ability.can(Action.Create, Media))
   diskConfirm(@Body() dto: ConfirmDiskImportDto) {
-    return this.diskImport.confirmImport(dto.imports);
+    return this.diskImport.confirmImport(dto.imports, dto.method);
   }
 }

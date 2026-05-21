@@ -25,6 +25,7 @@ import { PersonsModule } from './modules/persons/persons.module';
 import { ImageModule } from './modules/images/image.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { SetupChecklistModule } from './modules/setup-checklist/setup-checklist.module';
+import { CommonModule } from './common/common.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 
@@ -71,6 +72,7 @@ import { join } from 'path';
         };
       },
     }),
+    CommonModule,
     EventsModule,
     AuthModule,
     UsersModule,
