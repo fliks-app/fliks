@@ -1,0 +1,81 @@
+@if (visibleItems().length > 0 || (showAll() && items().length > 0)) {
+  <section class="card bg-base-200/60 backdrop-blur-sm shadow-sm">
+    <div class="card-body p-4 sm:p-5 gap-3">
+      <header class="flex items-center justify-between gap-3 flex-wrap">
+        <h2 class="card-title text-base">
+          {{ 'setup_checklist.title' | translate }}
+          @if (pendingRequiredCount() > 0) {
+            <span class="badge badge-error badge-sm">
+              {{ pendingRequiredCount() }}
+            </span>
+          } @else if (pendingRecommendedCount() > 0) {
+            <span class="badge badge-warning badge-sm">
+              {{ pendingRecommendedCount() }}
+            </span>
+          }
+        </h2>
+        @if (loading() && items().length === 0) {
+          <span class="loading loading-spinner loading-sm"></span>
+        }
+      </header>
+
+      <ul class="flex flex-col divide-y divide-base-300/50">
+        @for (item of visibleItems(); track trackByKey($index, item)) {
+          <li class="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+            <span class="shrink-0">
+              @if (item.done) {
+                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-success/20 text-success" [attr.aria-label]="'setup_checklist.status_done' | translate">
+                  <svg lucideCheck class="h-3.5 w-3.5"></svg>
+                </span>
+              } @else if (item.severity === 'required') {
+                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-error/20 text-error" [attr.aria-label]="'setup_checklist.status_required' | translate">
+                  <svg lucideCircleAlert class="h-3.5 w-3.5"></svg>
+                </span>
+              } @else {
+                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-warning/20 text-warning" [attr.aria-label]="'setup_checklist.status_recommended' | translate">
+                  <svg lucideTriangleAlert class="h-3.5 w-3.5"></svg>
+                </span>
+              }
+            </span>
+
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium leading-tight"
+                 [class.line-through]="item.done || item.dismissed"
+                 [class.text-base-content/50]="item.done || item.dismissed">
+                {{ 'setup_checklist.items.' + item.key + '.label' | translate }}
+              </p>
+              <p class="text-xs text-base-content/60 mt-0.5 line-clamp-2">
+                {{ 'setup_checklist.items.' + item.key + '.hint' | translate }}
+              </p>
+            </div>
+
+            <div class="shrink-0 flex items-center gap-1">
+              @if (!item.done && !item.dismissed) {
+                <a [routerLink]="item.route"
+                   class="btn btn-ghost btn-sm gap-1"
+                   [attr.aria-label]="'setup_checklist.configure' | translate">
+                  <span class="hidden sm:inline">{{ 'setup_checklist.configure' | translate }}</span>
+                  <svg lucideChevronRight class="h-4 w-4"></svg>
+                </a>
+                <button type="button"
+                        class="btn btn-ghost btn-sm btn-square"
+                        (click)="onDismiss(item.key, $event)"
+                        [attr.aria-label]="'setup_checklist.dismiss' | translate"
+                        [attr.title]="'setup_checklist.dismiss' | translate">
+                  <svg lucideX class="h-4 w-4"></svg>
+                </button>
+              } @else if (item.dismissed) {
+                <button type="button"
+                        class="btn btn-ghost btn-sm"
+                        (click)="onUndismiss(item.key, $event)"
+                        [attr.title]="'setup_checklist.undismiss' | translate">
+                  {{ 'setup_checklist.undismiss' | translate }}
+                </button>
+              }
+            </div>
+          </li>
+        }
+      </ul>
+    </div>
+  </section>
+}

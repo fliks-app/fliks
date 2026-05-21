@@ -17,7 +17,9 @@ import { TvService } from '../../core/services/tv.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { LucideIconComponent } from '../../shared/components/lucide-icon';
+import { SetupChecklistComponent } from '../../shared/components/setup-checklist/setup-checklist';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
+import { AuthService } from '../../core/services/auth.service';
 
 /**
  * # Home page
@@ -58,6 +60,7 @@ import { TvSectionDirective } from '../../shared/directives/tv-section.directive
     MediaCardComponent,
     HorizontalScrollerComponent,
     LucideIconComponent,
+    SetupChecklistComponent,
     TvSectionDirective,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -74,6 +77,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly focusMemory = inject(FocusMemoryService);
   private readonly navbar = inject(NavbarService);
   private readonly backgroundService = inject(BackgroundService);
+  readonly auth = inject(AuthService);
   private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
   private readonly route = inject(ActivatedRoute);

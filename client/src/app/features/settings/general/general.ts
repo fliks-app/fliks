@@ -9,10 +9,11 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { SetupChecklistComponent } from '../../../shared/components/setup-checklist/setup-checklist';
 
 @Component({
   selector: 'app-general-settings',
-  imports: [FormsModule, TranslateModule],
+  imports: [FormsModule, TranslateModule, SetupChecklistComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './general.html',
 })
