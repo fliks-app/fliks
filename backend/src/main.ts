@@ -44,6 +44,33 @@ async function bootstrap() {
   const expressApp = app.getHttpAdapter().getInstance();
   expressApp.set('trust proxy', true);
 
+  // CDNs (Cloudflare etc.) cache 4xx responses by default — disastrous
+  // for live transcoding where a transient 404 (segment requested
+  // before ffmpeg wrote it) gets pinned under the URL and every retry
+  // sees the same 404 even after the file exists. Intercept writeHead
+  // to force `Cache-Control: no-store` on every error response before
+  // it leaves the process. Successful responses keep whatever headers
+  // their controller set.
+  expressApp.use(
+    (
+      _req: import('express').Request,
+      res: import('express').Response,
+      next: import('express').NextFunction,
+    ) => {
+      const origWriteHead = res.writeHead.bind(res);
+      res.writeHead = function (statusCode: number, ...args: unknown[]) {
+        if (statusCode >= 400) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        }
+        return (origWriteHead as (s: number, ...a: unknown[]) => typeof res)(
+          statusCode,
+          ...args,
+        );
+      } as typeof res.writeHead;
+      next();
+    },
+  );
+
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
     new ValidationPipe({

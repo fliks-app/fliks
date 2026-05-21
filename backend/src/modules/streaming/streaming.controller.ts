@@ -98,6 +98,42 @@ export function pickAudioLayout(
   return 'var-stream-map';
 }
 
+/**
+ * Poll `filePath` until its size is non-zero or the timeout elapses.
+ * Returns `true` when the file became non-empty, `false` on timeout
+ * or missing path. Used to absorb the ~200-500 ms gap between
+ * ffmpeg's `creat()` (visible to the kernel) and its first
+ * moov-box write (visible to the player). Anything looking at the
+ * file in that window sees a 0-byte entry and would, without this
+ * helper, serve a corrupt 200 or a transient 404.
+ */
+async function awaitFileNonEmpty(
+  filePath: string,
+  timeoutMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const stat = fs.statSync(filePath);
+      if (stat.size > 0) return true;
+    } catch {
+      /* still creating */
+    }
+    await new Promise<void>((r) => setTimeout(r, 50));
+  }
+  return false;
+}
+
+/** Send a transient unavailability response. Players with sane HTTP
+ *  retry policies (Shaka, Media3's loader when given a backoff)
+ *  treat 503 as retryable, unlike 404 which Media3 marks as a
+ *  terminal failure. `Retry-After` is honoured by both stacks. */
+function sendTransientUnavailable(res: Response, retryAfterSec: number = 2): void {
+  res.setHeader('Retry-After', String(retryAfterSec));
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.status(503).end();
+}
+
 /** Generate a VOD HLS playlist for a given duration and segment URL pattern.
  *  Uniform segment grid: each segment is SEG_DURATION seconds, seg-N covers
  *  `[N*SEG, (N+1)*SEG)`. The EXTINF values mirror what FFmpeg actually emits
@@ -1274,21 +1310,18 @@ export class StreamingController {
         );
         if (!initPath) continue;
         // 0-byte init.mp4: ffmpeg races between `creat()` and the first
-        // moov write (no temp_file rename for inits). Early sessions
-        // that get killed inside that window leave a present-but-empty
-        // file on disk — `getSegmentPath`'s `existsSync` returns true
-        // and we'd stream 0 bytes to the player. Skip empty inits and
-        // fall through to the next source (main session almost always
-        // has a complete one).
-        let stat;
-        try {
-          stat = fs.statSync(initPath);
-        } catch {
-          continue;
-        }
-        if (stat.size === 0) {
+        // moov write (no temp_file rename for inits). Poll the file
+        // until it has bytes — beats giving up immediately, which
+        // would surface as a terminal 404 on every player that
+        // doesn't retry HTTP errors (ExoPlayer's
+        // DefaultLoadErrorHandlingPolicy treats 404 as unrecoverable).
+        // 5s is well above ffmpeg's typical write-the-moov latency
+        // (~200-500 ms after spawn) and bounded so a permanently-
+        // broken session can't hang the request forever.
+        const ready = await awaitFileNonEmpty(initPath, 5000);
+        if (!ready) {
           this.log.warn(
-            `[init] 0-byte ${label} init.mp4 at ${initPath} — skipping`,
+            `[init] 0-byte ${label} init.mp4 at ${initPath} after 5s — skipping`,
           );
           continue;
         }
@@ -1319,7 +1352,7 @@ export class StreamingController {
         // session un-cacheable for the same reason.
         const segStat = fs.statSync(segPath);
         if (segStat.size === 0) {
-          res.status(404).end();
+          sendTransientUnavailable(res);
           return;
         }
         existing.lastAccess = Date.now();
@@ -1366,7 +1399,7 @@ export class StreamingController {
         if (segPath) {
           const earlyStat = fs.statSync(segPath);
           if (earlyStat.size === 0) {
-            res.status(404).end();
+            sendTransientUnavailable(res);
             return;
           }
           await this.serveCmafFile(res, segPath, segmentContentType(segment));
@@ -1411,6 +1444,16 @@ export class StreamingController {
       segName,
     );
     if (!segPath) {
+      // ffmpeg session is healthy (exitCode === null) → segment will
+      // arrive on the next tick; surface as transient so players retry.
+      // Hard 404 only when the session actually died.
+      if (session.process.exitCode === null) {
+        this.log.warn(
+          `Segment 503 (transient): ${segment} (quality=${quality}, mfid=${mediaFileId})`,
+        );
+        sendTransientUnavailable(res);
+        return;
+      }
       this.log.warn(
         `Segment 404: ${segment} (quality=${quality}, mfid=${mediaFileId}, exitCode=${session.process.exitCode})`,
       );
@@ -1420,7 +1463,7 @@ export class StreamingController {
 
     const finalStat = fs.statSync(segPath);
     if (finalStat.size === 0) {
-      res.status(404).end();
+      sendTransientUnavailable(res);
       return;
     }
     await this.serveCmafFile(res, segPath, segmentContentType(segment));
