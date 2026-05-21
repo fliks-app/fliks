@@ -42,17 +42,11 @@ export class ImportApiDto {
   @IsBoolean()
   importSubtitles?: boolean;
 
-  /** Drop imported media into this existing library. Mutually exclusive with newLibraryName. */
-  @IsOptional()
+  /** Drop imported media into this existing library. */
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  targetLibraryId?: number;
-
-  /** Create a new library with this name and use it as the import target. */
-  @IsOptional()
-  @IsString()
-  newLibraryName?: string;
+  targetLibraryId: number;
 
   /**
    * Maps each *arr remote root folder onto an existing Fliks RootFolder, or

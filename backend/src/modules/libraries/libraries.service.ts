@@ -489,58 +489,26 @@ export class LibrariesService implements OnModuleInit {
   }
 
   /**
-   * Resolves a target library for Radarr/Sonarr import flows.
-   *  - Existing library id wins (validates media type).
-   *  - Otherwise creates a new library with the requested name.
-   *  - Otherwise creates a library with `autoLabel` ("Radarr Import …").
+   * Validates a target library for Radarr/Sonarr import flows: the library
+   * must exist and accept the imported media type.
    */
   async resolveTargetLibrary(opts: {
-    targetLibraryId?: number;
-    newLibraryName?: string;
+    targetLibraryId: number;
     mediaType: MediaType;
-    autoLabel: string;
   }): Promise<Library> {
-    if (opts.targetLibraryId && opts.newLibraryName) {
-      throw new BadRequestException(
-        'Specify either targetLibraryId or newLibraryName, not both',
-      );
-    }
-
-    if (opts.targetLibraryId) {
-      const lib = await this.repo.findOne({
-        where: { id: opts.targetLibraryId },
-      });
-      if (!lib) {
-        throw new BadRequestException(
-          `Library #${opts.targetLibraryId} not found`,
-        );
-      }
-      if (!lib.mediaTypes?.includes(opts.mediaType)) {
-        throw new BadRequestException(
-          `Library "${lib.name}" does not accept ${opts.mediaType}`,
-        );
-      }
-      return lib;
-    }
-
-    const name = (opts.newLibraryName ?? opts.autoLabel).trim();
-    if (!name) throw new BadRequestException('Library name is required');
-
-    return this.dataSource.transaction(async (m) => {
-      const lib = await m.save(
-        m.create(Library, {
-          name,
-          mediaTypes: [opts.mediaType],
-        }),
-      );
-      // Seed access via existing role defaults (mirrors regular library creation).
-      // Load the relation so we can append rather than replacing it.
-      const roles = await m.find(Role, { relations: ['defaultLibraries'] });
-      for (const r of roles) {
-        r.defaultLibraries = [...(r.defaultLibraries ?? []), lib];
-        await m.save(r);
-      }
-      return lib;
+    const lib = await this.repo.findOne({
+      where: { id: opts.targetLibraryId },
     });
+    if (!lib) {
+      throw new BadRequestException(
+        `Library #${opts.targetLibraryId} not found`,
+      );
+    }
+    if (!lib.mediaTypes?.includes(opts.mediaType)) {
+      throw new BadRequestException(
+        `Library "${lib.name}" does not accept ${opts.mediaType}`,
+      );
+    }
+    return lib;
   }
 }

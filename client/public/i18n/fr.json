@@ -1383,8 +1383,7 @@
       "editor_edit_title": "Modifier la bibliothèque",
       "confirm_delete": "Supprimer la bibliothèque « {{name}} » ?",
       "import_target": "Bibliothèque cible",
-      "import_target_new": "Créer une nouvelle bibliothèque…",
-      "import_new_name_placeholder": "Nom de la nouvelle bibliothèque",
+      "import_target_placeholder": "Choisir une bibliothèque…",
       "media_type_movie": "Films",
       "media_type_series": "Séries",
       "inaccessible": "Inaccessible"
