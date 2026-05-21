@@ -174,7 +174,7 @@
       <a routerLink="/search"
          [routerLinkActive]="['dock-active', '!bg-primary', '!text-primary-content']"
          [routerLinkActiveOptions]="{ exact: false }"
-         (click)="resetNavHistory()"
+         (click)="onSearchNavClick()"
          class="fixed left-1/2 -translate-x-1/2 z-50 bg-white text-primary !rounded-full !p-0 shadow-lg flex items-center justify-center [&.dock-active]:before:hidden [&.dock-active]:after:hidden"
          style="bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem); width: 56px; height: 56px;"
          [attr.aria-label]="'search.title' | translate">

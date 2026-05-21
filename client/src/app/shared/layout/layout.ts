@@ -37,6 +37,7 @@ import { LucideIconComponent } from '../components/lucide-icon';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { BackgroundComponent } from '../components/background/background';
 import { BackgroundService } from '../../core/services/background.service';
+import { SearchStateService } from '../../core/services/search-state.service';
 import {
   LucideMenu,
   LucideChevronLeft,
@@ -85,6 +86,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly castService = inject(CastService);
   readonly navbar = inject(NavbarService);
   readonly background = inject(BackgroundService);
+  private readonly searchState = inject(SearchStateService);
   readonly tv = inject(TvService);
   readonly device = inject(DeviceService);
   readonly castPlayer = inject(CastPlayerService);
@@ -273,6 +275,17 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   resetNavHistory() {
     this.navbar.resetNavHistory();
+  }
+
+  /** Bottom-dock search button: same-route click should re-focus the
+   *  input and re-open the soft keyboard. The default Router behaviour
+   *  no-ops on a same-URL navigation, so the click handler signals the
+   *  search page via {@link SearchStateService.requestFocus}. */
+  onSearchNavClick(): void {
+    this.resetNavHistory();
+    if (this.router.url.split('?')[0] === '/search') {
+      this.searchState.requestFocus();
+    }
   }
 
   toggleBottomMenu() {
