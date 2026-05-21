@@ -919,6 +919,53 @@
     "confirm_delete": "Supprimer ce téléchargement ? Le fichier sera supprimé de cet appareil.",
     "retry": "Réessayer"
   },
+  "setup_checklist": {
+    "title": "Configuration",
+    "configure": "Configurer",
+    "dismiss": "Masquer",
+    "undismiss": "Réactiver",
+    "status_done": "Configuré",
+    "status_required": "Requis",
+    "status_recommended": "Recommandé",
+    "items": {
+      "library": {
+        "label": "Ajouter au moins une bibliothèque",
+        "hint": "Indiquez le chemin d'au moins un dossier de films ou de séries pour qu'ils apparaissent dans Fliks."
+      },
+      "quality-profile": {
+        "label": "Créer un profil de qualité",
+        "hint": "Définit les qualités acceptées et préférées (1080p, 4K, ...) lors du téléchargement."
+      },
+      "language-profile": {
+        "label": "Créer un profil de langue",
+        "hint": "Détermine les langues audio et de sous-titres préférées pour les releases téléchargées."
+      },
+      "download-client": {
+        "label": "Connecter un client de téléchargement",
+        "hint": "qBittorrent, Transmission… au moins un client actif est nécessaire pour télécharger."
+      },
+      "indexer": {
+        "label": "Ajouter un indexeur",
+        "hint": "Au moins un indexeur Torznab actif est nécessaire pour chercher des releases."
+      },
+      "subtitle-provider": {
+        "label": "Activer un fournisseur de sous-titres",
+        "hint": "Active la recherche automatique de sous-titres (OpenSubtitles, Subdl…)."
+      },
+      "notification": {
+        "label": "Configurer les notifications",
+        "hint": "Recevez les évènements (téléchargements, erreurs…) sur Discord, Telegram ou autre."
+      },
+      "non-admin-user": {
+        "label": "Créer un utilisateur non-administrateur",
+        "hint": "Donnez accès à Fliks à vos proches sans leur accorder les droits admin."
+      },
+      "auto-approval-rule": {
+        "label": "Configurer une règle d'approbation automatique",
+        "hint": "Les demandes correspondant à la règle sont approuvées sans intervention manuelle."
+      }
+    }
+  },
   "settings": {
     "nav": {
       "general": "Général",

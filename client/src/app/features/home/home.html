@@ -1,5 +1,9 @@
 <div appTvSection class="flex flex-col gap-8">
 
+    @if (auth.canAccessSettings()) {
+      <app-setup-checklist class="mt-4" />
+    }
+
     <!-- Libraries -->
     @if (libraries().length) {
       <app-horizontal-scroller [title]="'home.libraries' | translate">
