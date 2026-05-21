@@ -35,6 +35,8 @@ import { CardActionsPanelComponent } from '../components/card-actions-panel/card
 import { UserMenuComponent } from '../components/user-menu';
 import { LucideIconComponent } from '../components/lucide-icon';
 import { TvRowDirective } from '../directives/tv-row.directive';
+import { BackgroundComponent } from '../components/background/background';
+import { BackgroundService } from '../../core/services/background.service';
 import {
   LucideMenu,
   LucideChevronLeft,
@@ -63,6 +65,7 @@ import {
     UserMenuComponent,
     LucideIconComponent,
     TvRowDirective,
+    BackgroundComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './layout.html',
@@ -81,6 +84,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly networkService = inject(NetworkService);
   readonly castService = inject(CastService);
   readonly navbar = inject(NavbarService);
+  readonly background = inject(BackgroundService);
   readonly tv = inject(TvService);
   readonly device = inject(DeviceService);
   readonly castPlayer = inject(CastPlayerService);

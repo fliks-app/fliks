@@ -29,6 +29,7 @@ import {
   Library,
 } from '../../core/services/api/libraries-api.service';
 import { NavbarService } from '../../core/services/navbar.service';
+import { BackgroundService } from '../../core/services/background.service';
 import { StreamingApiService, MediaResumeInfo } from '../../core/services/api/streaming-api.service';
 import { MarkersApiService } from '../../core/services/api/markers-api.service';
 import { MediaInfoHeaderComponent } from '../../shared/components/media-info-header/media-info-header';
@@ -100,6 +101,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly navbarService = inject(NavbarService);
+  private readonly backgroundService = inject(BackgroundService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly sse = inject(SseService);
@@ -129,6 +131,18 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const paramId = idParam ? Number(idParam) : NaN;
     if (m.id !== paramId) return;
     this.applyEpisodeFocus(m, params.get('episodeId'));
+  });
+
+  /**
+   * Drive the global page background from the currently-focused media.
+   * In episode mode we prefer the episode still over the parent media's
+   * fanart — keeps the backdrop tied to what the viewer is looking at.
+   */
+  private readonly backgroundEffect = effect(() => {
+    const m = this.media();
+    const ep = this.focusedEpisode();
+    const url = ep?.stillUrl ?? m?.fanartUrl ?? null;
+    this.backgroundService.setBackground(url);
   });
 
   /** React to SSE rescan + metadata-refresh events for this media */
@@ -508,6 +522,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.navbarService.leaveHeroPage();
+    this.backgroundService.clear();
   }
 
   async ngOnInit() {
@@ -1072,35 +1087,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         ),
       });
       this.syncActiveSeasonForSeriesFilter();
-    } finally {
-      this.seasonBusy.set(null);
-    }
-  }
-
-  async setSeasonProvider(
-    season: Season,
-    provider: 'tmdb' | 'tvdb' | null,
-  ): Promise<void> {
-    if (!this.isAdmin()) return;
-    if ((season.preferredProvider ?? null) === provider) return;
-    this.seasonBusy.set(season.id);
-    try {
-      const updated = await this.mediaService.updateSeason(season.id, {
-        preferredProvider: provider,
-      });
-      const m = this.media();
-      if (!m?.seasons) return;
-      this.media.set({
-        ...m,
-        seasons: m.seasons.map((s) =>
-          s.id === updated.id
-            ? { ...s, preferredProvider: updated.preferredProvider }
-            : s,
-        ),
-      });
-      this.toast.success(
-        this.translate.instant('media_detail.provider_saved'),
-      );
     } finally {
       this.seasonBusy.set(null);
     }
