@@ -72,12 +72,8 @@ type Provider = 'radarr' | 'sonarr';
 const IGNORE_VALUE = '__ignore__' as const;
 type MappingSelectValue = number | typeof IGNORE_VALUE | null;
 
-/**
- * "new" sentinel for the library select -> tells the import to create a new
- * library (optionally with `newLibraryName`). null/undefined means "auto-create
- * with a timestamped default name" on the backend.
- */
-type LibrarySelection = number | 'new' | null;
+/** `null` means no library selected yet; the import button stays disabled. */
+type LibrarySelection = number | null;
 
 @Component({
   selector: 'app-data-imports-settings',
@@ -129,7 +125,6 @@ export class DataImportsSettingsComponent implements OnInit {
   readonly radarrMode = signal<'skip' | 'update'>('skip');
   readonly radarrImportSubs = signal(false);
   readonly radarrLibrary = signal<LibrarySelection>(null);
-  readonly radarrNewLibraryName = signal('');
   readonly radarrLoading = signal(false);
   readonly radarrSaving = signal(false);
   readonly radarrTesting = signal(false);
@@ -145,7 +140,6 @@ export class DataImportsSettingsComponent implements OnInit {
   readonly sonarrMode = signal<'skip' | 'update'>('skip');
   readonly sonarrImportSubs = signal(false);
   readonly sonarrLibrary = signal<LibrarySelection>(null);
-  readonly sonarrNewLibraryName = signal('');
   readonly sonarrLoading = signal(false);
   readonly sonarrSaving = signal(false);
   readonly sonarrTesting = signal(false);
@@ -389,11 +383,20 @@ export class DataImportsSettingsComponent implements OnInit {
     );
   }
 
+  /** Import-specific gate: credentials AND a picked target library. */
+  get canImportRadarr(): boolean {
+    return this.canSubmitRadarr && this.radarrLibrary() != null;
+  }
+
   get canSubmitSonarr(): boolean {
     return (
       this.sonarrUrl().trim().length > 0 &&
       this.sonarrApiKey().trim().length > 0
     );
+  }
+
+  get canImportSonarr(): boolean {
+    return this.canSubmitSonarr && this.sonarrLibrary() != null;
   }
 
   async saveRadarrCredentials() {
@@ -478,10 +481,8 @@ export class DataImportsSettingsComponent implements OnInit {
     }
   }
 
-  private libraryBody(sel: LibrarySelection, newName: string) {
-    if (typeof sel === 'number') return { targetLibraryId: sel };
-    if (sel === 'new') return { newLibraryName: newName.trim() || undefined };
-    return {};
+  private libraryBody(sel: LibrarySelection) {
+    return typeof sel === 'number' ? { targetLibraryId: sel } : {};
   }
 
   /**
@@ -605,10 +606,6 @@ export class DataImportsSettingsComponent implements OnInit {
 
     const lib =
       provider === 'radarr' ? this.radarrLibrary() : this.sonarrLibrary();
-    const newLibName =
-      provider === 'radarr'
-        ? this.radarrNewLibraryName()
-        : this.sonarrNewLibraryName();
     const mode = provider === 'radarr' ? this.radarrMode() : this.sonarrMode();
     const importSubs =
       provider === 'radarr'
@@ -623,7 +620,7 @@ export class DataImportsSettingsComponent implements OnInit {
           mode,
           importSubtitles: importSubs,
           pathMappings: mappings,
-          ...this.libraryBody(lib, newLibName),
+          ...this.libraryBody(lib),
         }),
       );
       this.resultSig(provider).set(result);

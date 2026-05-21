@@ -226,22 +226,13 @@
               class="select select-bordered select-sm w-full"
               [ngModel]="radarrLibrary()"
               (ngModelChange)="radarrLibrary.set($event)"
+              required
             >
-              <option [ngValue]="null">—</option>
+              <option [ngValue]="null" disabled>{{ 'settings.libraries.import_target_placeholder' | translate }}</option>
               @for (l of movieLibraries(); track l.id) {
                 <option [ngValue]="l.id">{{ l.name }}</option>
               }
-              <option [ngValue]="'new'">{{ 'settings.libraries.import_target_new' | translate }}</option>
             </select>
-            @if (radarrLibrary() === 'new') {
-              <input
-                type="text"
-                class="input input-bordered input-sm w-full mt-2"
-                [placeholder]="'settings.libraries.import_new_name_placeholder' | translate"
-                [ngModel]="radarrNewLibraryName()"
-                (ngModelChange)="radarrNewLibraryName.set($event)"
-              />
-            }
           </label>
 
           <div class="flex flex-wrap gap-2 pt-2">
@@ -272,7 +263,7 @@
             <button
               type="button"
               class="btn btn-primary btn-sm"
-              [disabled]="radarrLoading() || radarrPreviewing() || !canSubmitRadarr"
+              [disabled]="radarrLoading() || radarrPreviewing() || !canImportRadarr"
               (click)="openRadarrWizard()"
             >
               @if (radarrLoading() || radarrPreviewing()) {
@@ -384,22 +375,13 @@
               class="select select-bordered select-sm w-full"
               [ngModel]="sonarrLibrary()"
               (ngModelChange)="sonarrLibrary.set($event)"
+              required
             >
-              <option [ngValue]="null">—</option>
+              <option [ngValue]="null" disabled>{{ 'settings.libraries.import_target_placeholder' | translate }}</option>
               @for (l of seriesLibraries(); track l.id) {
                 <option [ngValue]="l.id">{{ l.name }}</option>
               }
-              <option [ngValue]="'new'">{{ 'settings.libraries.import_target_new' | translate }}</option>
             </select>
-            @if (sonarrLibrary() === 'new') {
-              <input
-                type="text"
-                class="input input-bordered input-sm w-full mt-2"
-                [placeholder]="'settings.libraries.import_new_name_placeholder' | translate"
-                [ngModel]="sonarrNewLibraryName()"
-                (ngModelChange)="sonarrNewLibraryName.set($event)"
-              />
-            }
           </label>
 
           <div class="flex flex-wrap gap-2 pt-2">
@@ -430,7 +412,7 @@
             <button
               type="button"
               class="btn btn-primary btn-sm"
-              [disabled]="sonarrLoading() || sonarrPreviewing() || !canSubmitSonarr"
+              [disabled]="sonarrLoading() || sonarrPreviewing() || !canImportSonarr"
               (click)="openSonarrWizard()"
             >
               @if (sonarrLoading() || sonarrPreviewing()) {

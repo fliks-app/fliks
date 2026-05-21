@@ -55,10 +55,7 @@ export class ImportsController {
       dto.mode ?? 'skip',
       dto.importSubtitles ?? false,
       dto.pathMappings,
-      {
-        targetLibraryId: dto.targetLibraryId,
-        newLibraryName: dto.newLibraryName,
-      },
+      dto.targetLibraryId,
     );
   }
 
@@ -87,10 +84,7 @@ export class ImportsController {
       dto.mode ?? 'skip',
       dto.importSubtitles ?? false,
       dto.pathMappings,
-      {
-        targetLibraryId: dto.targetLibraryId,
-        newLibraryName: dto.newLibraryName,
-      },
+      dto.targetLibraryId,
     );
   }
 

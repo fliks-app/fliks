@@ -26,11 +26,6 @@ import { LibrariesService } from '../libraries/libraries.service';
 import { Library } from '../libraries/entities/library.entity';
 import * as path from 'path';
 
-export interface ImportTargetSpec {
-  targetLibraryId?: number;
-  newLibraryName?: string;
-}
-
 interface RadarrMovie {
   id?: number;
   title?: string;
@@ -100,12 +95,6 @@ export class ImportRadarrService {
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly libraries: LibrariesService,
   ) {}
-
-  private autoLibraryName(): string {
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `Radarr Import ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  }
 
   /**
    * Hits Radarr's `/api/v3/system/status` to validate the URL + API key. Same
@@ -188,7 +177,7 @@ export class ImportRadarrService {
     mode: 'skip' | 'update' = 'skip',
     importSubtitles = false,
     pathMappings: PathMapping[] = [],
-    target: ImportTargetSpec = {},
+    targetLibraryId: number,
   ): Promise<ApiImportResult> {
     const baseUrl = url.replace(/\/+$/, '');
     let imported = 0;
@@ -197,10 +186,8 @@ export class ImportRadarrService {
     const qualityProfilesCreated: string[] = [];
 
     const targetLibrary = await this.libraries.resolveTargetLibrary({
-      targetLibraryId: target.targetLibraryId,
-      newLibraryName: target.newLibraryName,
+      targetLibraryId,
       mediaType: MediaType.MOVIE,
-      autoLabel: this.autoLibraryName(),
     });
 
     await this.assertMappingsBelongToLibrary(pathMappings, targetLibrary.id);

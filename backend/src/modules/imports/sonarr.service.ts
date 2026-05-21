@@ -25,7 +25,6 @@ import { MediaService } from '../media/media.service';
 import { SubtitleProviderType } from '../../common/enums';
 import { LibrariesService } from '../libraries/libraries.service';
 import { Library } from '../libraries/entities/library.entity';
-import type { ImportTargetSpec } from './radarr.service';
 import * as path from 'path';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 
@@ -85,12 +84,6 @@ export class ImportSonarrService {
     private readonly mediaService: MediaService,
     private readonly libraries: LibrariesService,
   ) {}
-
-  private autoLibraryName(): string {
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `Sonarr Import ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  }
 
   /**
    * Hits Sonarr's `/api/v3/system/status` to validate the URL + API key. Same
@@ -173,7 +166,7 @@ export class ImportSonarrService {
     mode: 'skip' | 'update' = 'skip',
     importSubtitles = false,
     pathMappings: PathMapping[] = [],
-    target: ImportTargetSpec = {},
+    targetLibraryId: number,
   ): Promise<ApiImportResult> {
     const baseUrl = url.replace(/\/+$/, '');
     let imported = 0;
@@ -182,10 +175,8 @@ export class ImportSonarrService {
     const qualityProfilesCreated: string[] = [];
 
     const targetLibrary = await this.libraries.resolveTargetLibrary({
-      targetLibraryId: target.targetLibraryId,
-      newLibraryName: target.newLibraryName,
+      targetLibraryId,
       mediaType: MediaType.SERIES,
-      autoLabel: this.autoLibraryName(),
     });
 
     await this.assertMappingsBelongToLibrary(pathMappings, targetLibrary.id);
