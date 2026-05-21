@@ -310,6 +310,71 @@ export class QbittorrentService {
   }
 
   /**
+   * Walk the indexer's redirect chain manually so we can intercept a
+   * `magnet:` Location header (LimeTorrents et al.) before Axios tries
+   * to dial it like a regular HTTP URL — its protocol handler rejects
+   * `magnet:` and surfaces "Unsupported protocol".
+   *
+   * Returns either the resolved `.torrent` body, or the magnet URI we
+   * should hand straight to qBittorrent.
+   */
+  private async fetchTorrentOrMagnet(
+    http: import('axios').AxiosInstance,
+    startUrl: string,
+    maxHops = 5,
+  ): Promise<{ buffer: Buffer } | { magnet: string }> {
+    let url = startUrl;
+    for (let hop = 0; hop <= maxHops; hop++) {
+      let res: import('axios').AxiosResponse<Buffer>;
+      try {
+        res = await http.get<Buffer>(url, {
+          responseType: 'arraybuffer',
+          timeout: 30_000,
+          maxRedirects: 0,
+          validateStatus: () => true,
+        });
+      } catch (e) {
+        this.log.error(
+          `Failed to download torrent file — URL: ${url} — Error: ${(e as Error).message}`,
+        );
+        throw new BadRequestException(
+          `Could not fetch torrent from indexer: ${(e as Error).message}`,
+        );
+      }
+
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers['location'] as string | undefined;
+        if (!location) {
+          throw new BadRequestException(
+            `Indexer redirected without a Location header (HTTP ${res.status})`,
+          );
+        }
+        if (location.startsWith('magnet:')) {
+          return { magnet: location };
+        }
+        const next = new URL(location, url).toString();
+        url = next;
+        this.log.log(`Following indexer redirect → ${url}`);
+        continue;
+      }
+
+      if (res.status !== 200) {
+        this.log.error(
+          `Indexer returned HTTP ${res.status} for torrent download — URL: ${url}`,
+        );
+        throw new BadRequestException(
+          `Indexer returned HTTP ${res.status} for torrent download`,
+        );
+      }
+
+      return { buffer: Buffer.from(res.data) };
+    }
+    throw new BadRequestException(
+      `Indexer redirect chain exceeded ${maxHops} hops`,
+    );
+  }
+
+  /**
    * Add a torrent to qBittorrent and return the info hash (lowercase hex).
    */
   async addTorrentUrl(
@@ -399,50 +464,52 @@ export class QbittorrentService {
         },
       );
     } else {
-      // Download the .torrent file from the indexer on our end
-      this.log.log(`Downloading .torrent from: ${torrentUrl}`);
-      let torrentBuffer: Buffer;
-      try {
-        const dlRes = await http.get<Buffer>(torrentUrl, {
-          responseType: 'arraybuffer',
-          timeout: 30_000,
+      // Download the .torrent file from the indexer on our end. Some
+      // indexers (LimeTorrents, a few Torznab proxies …) reply with a
+      // 302 whose Location is a `magnet:` URI — Axios' default redirect
+      // handler chokes on the magnet protocol, so we walk the redirect
+      // chain ourselves and switch to the magnet path on first hit.
+      const fetched = await this.fetchTorrentOrMagnet(http, torrentUrl);
+
+      if ('magnet' in fetched) {
+        this.log.log(
+          `Indexer redirected to magnet — adding directly to qBittorrent`,
+        );
+        const btih = fetched.magnet.match(/xt=urn:btih:([a-fA-F0-9]{40})/)?.[1];
+        if (btih) infoHash = btih.toLowerCase();
+        const formAdd = new URLSearchParams({ urls: fetched.magnet });
+        if (category) formAdd.set('category', category);
+        addRes = await http.post(
+          `${base}/api/v2/torrents/add`,
+          formAdd.toString(),
+          {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              Cookie: cookieHeader,
+            },
+            validateStatus: () => true,
+          },
+        );
+      } else {
+        const torrentBuffer = fetched.buffer;
+        this.log.log(`Downloaded .torrent OK (${torrentBuffer.length} bytes)`);
+
+        // Compute info hash from the raw bencoded "info" dictionary
+        infoHash = this.computeInfoHash(torrentBuffer);
+
+        // Upload the .torrent file to qBittorrent via multipart
+        const fd = new FormData();
+        fd.append('torrents', torrentBuffer, {
+          filename: 'download.torrent',
+          contentType: 'application/x-bittorrent',
+        });
+        if (category) fd.append('category', category);
+
+        addRes = await http.post(`${base}/api/v2/torrents/add`, fd, {
+          headers: { ...fd.getHeaders(), Cookie: cookieHeader },
           validateStatus: () => true,
         });
-        if (dlRes.status !== 200) {
-          this.log.error(
-            `Indexer returned HTTP ${dlRes.status} for torrent download — URL: ${torrentUrl}`,
-          );
-          throw new BadRequestException(
-            `Indexer returned HTTP ${dlRes.status} for torrent download`,
-          );
-        }
-        torrentBuffer = Buffer.from(dlRes.data);
-        this.log.log(`Downloaded .torrent OK (${torrentBuffer.length} bytes)`);
-      } catch (e) {
-        if (e instanceof BadRequestException) throw e;
-        this.log.error(
-          `Failed to download torrent file — URL: ${torrentUrl} — Error: ${(e as Error).message}`,
-        );
-        throw new BadRequestException(
-          `Could not fetch torrent from indexer: ${(e as Error).message}`,
-        );
       }
-
-      // Compute info hash from the raw bencoded "info" dictionary
-      infoHash = this.computeInfoHash(torrentBuffer);
-
-      // Upload the .torrent file to qBittorrent via multipart
-      const fd = new FormData();
-      fd.append('torrents', torrentBuffer, {
-        filename: 'download.torrent',
-        contentType: 'application/x-bittorrent',
-      });
-      if (category) fd.append('category', category);
-
-      addRes = await http.post(`${base}/api/v2/torrents/add`, fd, {
-        headers: { ...fd.getHeaders(), Cookie: cookieHeader },
-        validateStatus: () => true,
-      });
     }
 
     if (addRes.status !== 200) {
