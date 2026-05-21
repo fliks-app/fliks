@@ -18,6 +18,15 @@ export class SearchStateService {
   readonly externalResults = signal<MetadataSearchResult[]>([]);
   readonly externalLoading = signal(false);
   readonly hasQuery = computed(() => this.query().trim().length > 0);
+  /** Counter incremented whenever a caller (e.g. the bottom-dock
+   *  search button) asks the search page to refocus its input.
+   *  Search page watches this in an effect — using a counter (not a
+   *  boolean) so back-to-back requests both fire. */
+  readonly focusRequestId = signal(0);
+
+  requestFocus(): void {
+    this.focusRequestId.update((n) => n + 1);
+  }
 
   /** External results filtered to exclude items already in local results */
   readonly filteredExternalResults = computed(() => {

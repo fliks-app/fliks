@@ -2,6 +2,7 @@ import {
   Component,
   ChangeDetectionStrategy,
   signal,
+  effect,
   inject,
   Injector,
   OnDestroy,
@@ -47,6 +48,23 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly state = inject(SearchStateService);
 
   readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
+
+  /** Refocus the input whenever something external (e.g. the bottom-
+   *  dock search button on mobile re-tapping the same route) requests
+   *  it. Selecting the current text lets the user immediately
+   *  overwrite the existing query. */
+  private readonly externalFocusEffect = effect(() => {
+    const id = this.state.focusRequestId();
+    if (id === 0) return;
+    // Defer to the next tick so the effect runs even when the view
+    // hasn't fully reconciled yet (e.g. just navigated to /search).
+    setTimeout(() => {
+      const el = this.searchInput()?.nativeElement;
+      if (!el) return;
+      el.focus();
+      el.select();
+    }, 0);
+  });
 
   readonly requestedTmdbIds = signal<Map<number, FliksRequestStatus>>(new Map());
 
