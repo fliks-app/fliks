@@ -250,9 +250,9 @@ export class EpisodeDownloadService {
       mediaId,
       episodeId,
     );
-    if (!media.rootFolderId) {
+    if (!media.libraryId) {
       throw new BadRequestException(
-        'Assign a root folder to this series before downloading',
+        'Assign a library to this series before downloading',
       );
     }
 
@@ -528,9 +528,9 @@ export class EpisodeDownloadService {
     if (media.type !== MediaType.SERIES) {
       throw new BadRequestException('Season grab is only available for series');
     }
-    if (!media.rootFolderId) {
+    if (!media.libraryId) {
       throw new BadRequestException(
-        'Assign a root folder to this series before downloading',
+        'Assign a library to this series before downloading',
       );
     }
 

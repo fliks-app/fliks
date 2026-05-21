@@ -86,7 +86,7 @@ export class SubtitleStreamService {
   async getSubtitleAsVtt(subtitleId: number): Promise<string> {
     const sub = await this.subtitleFileRepo.findOne({
       where: { id: subtitleId },
-      relations: ['media', 'media.rootFolder'],
+      relations: ['media', 'media.library'],
     });
     if (!sub?.relativePath) {
       throw new NotFoundException(`Subtitle #${subtitleId} not found`);

@@ -17,7 +17,6 @@ import {
 } from '../../../common/enums';
 import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
-import { RootFolder } from '../../root-folders/entities/root-folder.entity';
 import { Library } from '../../libraries/entities/library.entity';
 import { User } from '../../users/entities/user.entity';
 import { Season } from './season.entity';
@@ -70,26 +69,22 @@ export class Media extends BaseEntity {
   @Column({ default: true })
   monitored: boolean;
 
-  @ManyToOne(() => RootFolder, {
+  /**
+   * Library this media lives in. Both ACL filtering and disk I/O resolve
+   * through here — the library carries `path`, the media stores
+   * `folderName`, and `media.path` derives from both (see getter below).
+   *
+   * `onDelete: RESTRICT` matches the service-level guard that forbids
+   * deleting a library while it still owns media — the DB is the second
+   * line of defence.
+   * `eager: true` because the `path` getter needs the library on every
+   * read.
+   */
+  @ManyToOne(() => Library, {
     nullable: true,
     eager: true,
-    onDelete: 'SET NULL',
+    onDelete: 'RESTRICT',
   })
-  @JoinColumn({ name: 'rootFolderId' })
-  rootFolder: RootFolder | null;
-
-  @RelationId((m: Media) => m.rootFolder)
-  rootFolderId: number | null;
-
-  /**
-   * Library this media belongs to. Coexists with `rootFolderId`: the FK here
-   * drives ACL filtering and stalled-cleanup lookups, the rootFolder FK drives
-   * disk I/O. Invariant: `media.rootFolder.libraryId === media.libraryId`.
-   *
-   * `onDelete: RESTRICT` matches the service-level guard that forbids deleting
-   * a library while it still owns media — the DB is the second line of defence.
-   */
-  @ManyToOne(() => Library, { nullable: true, onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'libraryId' })
   library: Library | null;
 
@@ -106,10 +101,10 @@ export class Media extends BaseEntity {
   @Column({ nullable: true })
   folderName: string;
 
-  /** Virtual computed path: rootFolder.path + '/' + folderName */
+  /** Virtual computed path: library.path + '/' + folderName */
   get path(): string | null {
-    return this.rootFolder?.path && this.folderName
-      ? nodePath.join(this.rootFolder.path, this.folderName)
+    return this.library?.path && this.folderName
+      ? nodePath.join(this.library.path, this.folderName)
       : null;
   }
 

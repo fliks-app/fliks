@@ -15,7 +15,7 @@ import {
 import { User } from '../users/entities/user.entity';
 import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../profiles/entities/language-profile.entity';
-import { RootFolder } from '../root-folders/entities/root-folder.entity';
+import { Library } from '../libraries/entities/library.entity';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { ListRequestsDto } from './dto/list-requests.dto';
 import { UpdateRequestDto } from './dto/update-request.dto';
@@ -194,9 +194,7 @@ export class RequestsService {
       languageProfile: dto.languageProfileId
         ? ({ id: dto.languageProfileId } as LanguageProfile)
         : null,
-      rootFolder: dto.rootFolderId
-        ? ({ id: dto.rootFolderId } as RootFolder)
-        : null,
+      library: dto.libraryId ? ({ id: dto.libraryId } as Library) : null,
       status: autoApprove ? RequestStatus.APPROVED : RequestStatus.PENDING,
       approvedBy: autoApprove ? user : null,
     };
@@ -278,10 +276,8 @@ export class RequestsService {
         ? ({ id: dto.languageProfileId } as LanguageProfile)
         : null;
     }
-    if (dto.rootFolderId !== undefined) {
-      row.rootFolder = dto.rootFolderId
-        ? ({ id: dto.rootFolderId } as RootFolder)
-        : null;
+    if (dto.libraryId !== undefined) {
+      row.library = dto.libraryId ? ({ id: dto.libraryId } as Library) : null;
     }
     return this.requestRepo.save(row);
   }
@@ -326,7 +322,7 @@ export class RequestsService {
           tmdbId: row.tmdbId,
           qualityProfileId: row.qualityProfileId ?? undefined,
           languageProfileId: row.languageProfileId ?? undefined,
-          rootFolderId: row.rootFolderId ?? undefined,
+          libraryId: row.libraryId ?? undefined,
         },
         row.userId ?? null,
       );

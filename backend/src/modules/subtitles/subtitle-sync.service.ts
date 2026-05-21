@@ -169,7 +169,7 @@ export class SubtitleSyncService {
 
     const mediaForSub = await this.mediaRepo.findOne({
       where: { id: subtitle.mediaId },
-      relations: ['rootFolder'],
+      relations: ['library'],
     });
     const subPath = resolveSubtitleAbsolutePath(
       mediaForSub?.path ?? null,
@@ -347,7 +347,7 @@ export class SubtitleSyncService {
 
     const media = await this.mediaRepo.findOne({
       where: { id: subtitle.mediaId },
-      relations: ['rootFolder'],
+      relations: ['library'],
     });
     const abs = resolveSubtitleAbsolutePath(
       media?.path ?? null,

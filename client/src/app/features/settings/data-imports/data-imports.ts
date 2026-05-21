@@ -52,23 +52,23 @@ interface ArrImportResult {
 
 interface PathMapping {
   remotePath: string;
-  localRootFolderId: number | null;
+  localLibraryId: number | null;
   ignore?: boolean;
 }
 
 interface PreviewRow {
   remotePath: string;
-  suggestedLocalRootFolderId: number | null;
+  suggestedLocalLibraryId: number | null;
 }
 
 interface PreviewImportResult {
   remoteRootFolders: PreviewRow[];
-  localRootFolders: { id: number; path: string; libraryId: number | null }[];
+  localLibraries: { id: number; name: string; path: string | null }[];
 }
 
 type Provider = 'radarr' | 'sonarr';
 
-/** Sentinel passed through the mapping select in place of a numeric RootFolder id. */
+/** Sentinel passed through the mapping select in place of a numeric library id. */
 const IGNORE_VALUE = '__ignore__' as const;
 type MappingSelectValue = number | typeof IGNORE_VALUE | null;
 
@@ -157,7 +157,7 @@ export class DataImportsSettingsComponent implements OnInit {
   readonly radarrShowWizard = signal(false);
   readonly radarrCanConfirm = computed(() =>
     this.radarrMappings().every(
-      (m) => m.ignore || m.localRootFolderId != null,
+      (m) => m.ignore || m.localLibraryId != null,
     ),
   );
 
@@ -167,7 +167,7 @@ export class DataImportsSettingsComponent implements OnInit {
   readonly sonarrShowWizard = signal(false);
   readonly sonarrCanConfirm = computed(() =>
     this.sonarrMappings().every(
-      (m) => m.ignore || m.localRootFolderId != null,
+      (m) => m.ignore || m.localLibraryId != null,
     ),
   );
 
@@ -526,7 +526,7 @@ export class DataImportsSettingsComponent implements OnInit {
       this.mappingsSig(provider).set(
         preview.remoteRootFolders.map((row) => ({
           remotePath: row.remotePath,
-          localRootFolderId: row.suggestedLocalRootFolderId,
+          localLibraryId: row.suggestedLocalLibraryId,
         })),
       );
       this.showWizardSig(provider).set(true);
@@ -548,7 +548,7 @@ export class DataImportsSettingsComponent implements OnInit {
   }
 
   /**
-   * Empty-state CTA when the user has no compatible Fliks RootFolders. We
+   * Empty-state CTA when the user has no compatible Fliks libraries. We
    * navigate programmatically because mixing `routerLink` with the `(click)`
    * handler that closes the wizard removed the anchor before Angular Router
    * had a chance to navigate, and the click was a no-op.
@@ -563,27 +563,24 @@ export class DataImportsSettingsComponent implements OnInit {
       list.map((m) =>
         m.remotePath === remotePath
           ? value === IGNORE_VALUE
-            ? { remotePath, localRootFolderId: null, ignore: true }
-            : { remotePath, localRootFolderId: value }
+            ? { remotePath, localLibraryId: null, ignore: true }
+            : { remotePath, localLibraryId: value }
           : m,
       ),
     );
   }
 
   /**
-   * Filter local root folders for the picker: a row is eligible when its
-   * library matches the import target or is unassigned. The backend enforces
-   * the same rule; this is just to hide the unselectable options.
+   * Filter libraries for the picker: only the import target is offered.
+   * The backend enforces the same rule; this just hides unselectable options.
    */
-  eligibleLocalRootFolders(provider: Provider) {
+  eligibleLocalLibraries(provider: Provider) {
     const preview = this.previewSig(provider)();
     if (!preview) return [];
     const target =
       provider === 'radarr' ? this.radarrLibrary() : this.sonarrLibrary();
-    return preview.localRootFolders.filter((rf) => {
-      if (rf.libraryId == null) return true;
-      return typeof target === 'number' && rf.libraryId === target;
-    });
+    if (typeof target !== 'number') return [];
+    return preview.localLibraries.filter((lib) => lib.id === target);
   }
 
   async confirmRadarrImport() {

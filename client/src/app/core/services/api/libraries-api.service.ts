@@ -15,10 +15,7 @@ export interface LibrarySummary {
   isDefaultForSeries: boolean;
 }
 
-export interface LibraryRootFolder {
-  id: number;
-  path: string;
-  label: string | null;
+export interface LibraryDiskMetrics {
   freeSpace: number;
   totalSpace: number;
   accessible: boolean;
@@ -36,7 +33,9 @@ export interface Library {
   defaultLanguageProfileId: number | null;
   isDefaultForMovies: boolean;
   isDefaultForSeries: boolean;
-  rootFolder: LibraryRootFolder | null;
+  path: string | null;
+  label: string | null;
+  disk: LibraryDiskMetrics | null;
   userIds: number[];
 }
 

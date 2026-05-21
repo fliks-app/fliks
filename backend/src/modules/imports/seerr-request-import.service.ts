@@ -247,7 +247,6 @@ export class SeerrRequestImportService {
       // time (Fliks already applies sensible defaults at grab time).
       qualityProfile: null,
       languageProfile: null,
-      rootFolder: null,
       library: null,
       approvedBy: null,
       declinedReason: null,

@@ -39,5 +39,5 @@ export class CreateRequestDto {
   @IsOptional()
   @IsInt()
   @Type(() => Number)
-  rootFolderId?: number;
+  libraryId?: number;
 }

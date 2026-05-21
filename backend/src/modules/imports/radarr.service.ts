@@ -2,7 +2,6 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Media } from '../media/entities/media.entity';
-import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import {
   QualityProfile,
   QualityProfileItem,
@@ -14,7 +13,7 @@ import {
   parseLanguageFromPath,
   parseSubtitleTags,
   type PathMapping,
-  suggestLocalRootFolderId,
+  suggestLocalLibraryId,
   SUBTITLE_FILE_EXTENSIONS,
   upsertImportedSubtitleFile,
 } from '../scheduler/utils/arr-import.util';
@@ -85,8 +84,8 @@ export class ImportRadarrService {
   constructor(
     @InjectRepository(Media)
     private readonly mediaRepo: Repository<Media>,
-    @InjectRepository(RootFolder)
-    private readonly rootFolderRepo: Repository<RootFolder>,
+    @InjectRepository(Library)
+    private readonly libraryRepo: Repository<Library>,
     @InjectRepository(QualityProfile)
     private readonly qpRepo: Repository<QualityProfile>,
     @InjectRepository(SubtitleFile)
@@ -127,7 +126,7 @@ export class ImportRadarrService {
 
   /**
    * Wizard step before the import: returns the *arr's root folders alongside
-   * a server-side suggestion for which Fliks RootFolder to map each one to.
+   * a server-side suggestion for which Fliks library to map each one to.
    * Pure read — no DB writes.
    */
   async previewRootFolders(
@@ -152,21 +151,18 @@ export class ImportRadarrService {
         `Cannot connect to Radarr: ${(e as Error).message}`,
       );
     }
-    const localRootFolders = await this.rootFolderRepo.find();
+    const localLibraries = await this.libraryRepo.find();
     return {
       remoteRootFolders: remoteFolders
         .filter((r) => r.path?.trim())
         .map((r) => ({
           remotePath: r.path,
-          suggestedLocalRootFolderId: suggestLocalRootFolderId(
-            r.path,
-            localRootFolders,
-          ),
+          suggestedLocalLibraryId: suggestLocalLibraryId(r.path, localLibraries),
         })),
-      localRootFolders: localRootFolders.map((rf) => ({
-        id: rf.id,
-        path: rf.path,
-        libraryId: rf.libraryId ?? null,
+      localLibraries: localLibraries.map((lib) => ({
+        id: lib.id,
+        name: lib.name,
+        path: lib.path,
       })),
     };
   }
@@ -249,7 +245,7 @@ export class ImportRadarrService {
           continue;
         }
         if ('ignore' in resolved) continue;
-        const { rootFolderId, folderName } = resolved;
+        const { libraryId, folderName } = resolved;
 
         if (exists) {
           if (mode === 'skip') continue;
@@ -258,12 +254,11 @@ export class ImportRadarrService {
             title,
             year: movie.year ?? exists.year,
             monitored: movie.monitored ?? exists.monitored,
-            rootFolder: { id: rootFolderId } as RootFolder,
             folderName,
             imdbId: movie.imdbId || exists.imdbId,
             overview: movie.overview || exists.overview,
             qualityProfileId: localProfileId ?? exists.qualityProfileId,
-            library: { id: exists.libraryId ?? targetLibrary.id } as Library,
+            library: { id: libraryId } as Library,
           });
         } else {
           await this.mediaRepo.save(
@@ -274,8 +269,7 @@ export class ImportRadarrService {
               type: MediaType.MOVIE,
               status: MediaStatus.RELEASED,
               monitored: movie.monitored ?? true,
-              rootFolder: { id: rootFolderId } as RootFolder,
-              library: targetLibrary,
+              library: { id: libraryId } as Library,
               folderName,
               imdbId: movie.imdbId || undefined,
               overview: movie.overview || undefined,
@@ -519,9 +513,10 @@ export class ImportRadarrService {
   }
 
   /**
-   * Up-front guard: every mapping that targets a Fliks RootFolder must point
-   * to one whose library is unassigned or matches the import target. We
-   * refuse to silently re-home a RootFolder belonging to another library.
+   * Up-front guard: every mapping that targets a Fliks library must point
+   * to one that exists and accepts the imported media type. The target
+   * library passed by the caller is treated as the only allowed library,
+   * matching the contract that an import goes into exactly one library.
    */
   private async assertMappingsBelongToLibrary(
     pathMappings: PathMapping[],
@@ -530,28 +525,15 @@ export class ImportRadarrService {
     const ids = Array.from(
       new Set(
         pathMappings
-          .filter((m) => !m.ignore && m.localRootFolderId != null)
-          .map((m) => m.localRootFolderId as number),
+          .filter((m) => !m.ignore && m.localLibraryId != null)
+          .map((m) => m.localLibraryId as number),
       ),
     );
     if (!ids.length) return;
-    const folders = await this.rootFolderRepo.findByIds(ids);
-    const offending: string[] = [];
-    for (const id of ids) {
-      const rf = folders.find((f) => f.id === id);
-      if (!rf) {
-        offending.push(`RootFolder #${id}: not found`);
-        continue;
-      }
-      if (rf.libraryId != null && rf.libraryId !== targetLibraryId) {
-        offending.push(
-          `"${rf.path}" belongs to library #${rf.libraryId} (target is #${targetLibraryId})`,
-        );
-      }
-    }
+    const offending = ids.filter((id) => id !== targetLibraryId);
     if (offending.length) {
       throw new BadRequestException(
-        `Path mappings reference root folders from another library: ${offending.join('; ')}`,
+        `Path mappings target a different library than the import (target #${targetLibraryId}, mappings: ${offending.join(', ')})`,
       );
     }
   }

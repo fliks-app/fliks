@@ -1,7 +1,7 @@
 import * as path from 'path';
 import { Repository } from 'typeorm';
 import { readdir } from 'fs/promises';
-import { RootFolder } from '../../root-folders/entities/root-folder.entity';
+import { Library } from '../../libraries/entities/library.entity';
 import { SubtitleFile } from '../../subtitles/entities/subtitle-file.entity';
 import { Episode } from '../../media/entities/episode.entity';
 import { Media } from '../../media/entities/media.entity';
@@ -14,7 +14,7 @@ import { SubtitleProviderType, SubtitleStatus } from '../../../common/enums';
 
 export interface PathMapping {
   remotePath: string;
-  localRootFolderId: number | null;
+  localLibraryId: number | null;
   ignore?: boolean;
 }
 
@@ -27,18 +27,18 @@ function normalizePath(p: string): string {
 
 /**
  * Longest-prefix match of `fullArrPath` against the user-provided mappings.
- *   { rootFolderId, folderName }  → use this RootFolder + first-segment folder name
- *   { ignore: true }              → matched mapping is ignored (caller skips silently)
- *   null                          → no mapping matched (caller pushes error and skips)
+ *   { libraryId, folderName }   → use this library + first-segment folder name
+ *   { ignore: true }            → matched mapping is ignored (caller skips silently)
+ *   null                        → no mapping matched (caller pushes error and skips)
  *
  * folderName is the first segment of the *arr path under the matched remote
  * root, so that on-disk folder naming follows what Radarr/Sonarr already laid
- * out — independent of how the local Fliks RootFolder is named.
+ * out — independent of how the local Fliks library path is named.
  */
 export function applyPathMapping(
   fullArrPath: string | null | undefined,
   mappings: PathMapping[],
-): { rootFolderId: number; folderName: string } | { ignore: true } | null {
+): { libraryId: number; folderName: string } | { ignore: true } | null {
   if (!fullArrPath?.trim() || !mappings.length) return null;
   const full = normalizePath(fullArrPath);
   const sorted = [...mappings].sort(
@@ -52,34 +52,35 @@ export function applyPathMapping(
     const isUnderRoot = full === remote || full.startsWith(prefix);
     if (!isUnderRoot) continue;
     if (m.ignore) return { ignore: true };
-    if (m.localRootFolderId == null) return null;
+    if (m.localLibraryId == null) return null;
     const rest = full === remote ? '' : full.slice(prefix.length);
     const folderName = rest.split('/')[0] || path.basename(full);
     if (!folderName) return null;
-    return { rootFolderId: m.localRootFolderId, folderName };
+    return { libraryId: m.localLibraryId, folderName };
   }
   return null;
 }
 
 /**
  * Server-side suggestion for the wizard pre-select:
- *   1. unique RootFolder whose path ends with `/<basename(remotePath)>`
- *   2. fallback: unique RootFolder whose basename equals basename(remotePath)
+ *   1. unique library whose path ends with `/<basename(remotePath)>`
+ *   2. fallback: unique library whose basename equals basename(remotePath)
  *   3. ambiguous or none → null (the row stays unselected, blocking Confirm)
  */
-export function suggestLocalRootFolderId(
+export function suggestLocalLibraryId(
   remotePath: string,
-  candidates: RootFolder[],
+  candidates: Library[],
 ): number | null {
   if (!remotePath?.trim() || !candidates.length) return null;
   const remoteBase = path.basename(normalizePath(remotePath));
   if (!remoteBase) return null;
-  const tailMatches = candidates.filter((rf) =>
-    normalizePath(rf.path).endsWith('/' + remoteBase),
+  const tailMatches = candidates.filter(
+    (lib) => !!lib.path && normalizePath(lib.path).endsWith('/' + remoteBase),
   );
   if (tailMatches.length === 1) return tailMatches[0].id;
   const baseMatches = candidates.filter(
-    (rf) => path.basename(normalizePath(rf.path)) === remoteBase,
+    (lib) =>
+      !!lib.path && path.basename(normalizePath(lib.path)) === remoteBase,
   );
   if (baseMatches.length === 1) return baseMatches[0].id;
   return null;

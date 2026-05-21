@@ -47,13 +47,13 @@
                     </span>
                   }
                 </div>
-                @if (lib.rootFolder; as rf) {
+                @if (lib.path) {
                   <p class="text-xs text-base-content/60 mt-2">
                     {{ formatBytes(freeSpace(lib)) }} / {{ formatBytes(totalCapacity(lib)) }}
                   </p>
                   <p class="font-mono text-xs text-base-content/60 mt-1 truncate">
-                    {{ rf.path }}
-                    @if (!rf.accessible) {
+                    {{ lib.path }}
+                    @if (lib.disk && !lib.disk.accessible) {
                       <span class="badge badge-error badge-xs ml-2">{{ 'settings.libraries.inaccessible' | translate }}</span>
                     }
                   </p>

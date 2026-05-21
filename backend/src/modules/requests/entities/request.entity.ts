@@ -10,7 +10,6 @@ import { BaseEntity } from '../../../common/entities/base.entity';
 import { MediaType, RequestStatus } from '../../../common/enums';
 import { User } from '../../users/entities/user.entity';
 import { Media } from '../../media/entities/media.entity';
-import { RootFolder } from '../../root-folders/entities/root-folder.entity';
 import { Library } from '../../libraries/entities/library.entity';
 import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
@@ -64,13 +63,6 @@ export class FliksRequest extends BaseEntity {
 
   @RelationId((r: FliksRequest) => r.languageProfile)
   languageProfileId: number | null;
-
-  @ManyToOne(() => RootFolder, { nullable: true, onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'rootFolderId' })
-  rootFolder: RootFolder | null;
-
-  @RelationId((r: FliksRequest) => r.rootFolder)
-  rootFolderId: number | null;
 
   @ManyToOne(() => Library, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'libraryId' })

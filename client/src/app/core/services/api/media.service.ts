@@ -438,7 +438,7 @@ export class MediaService {
     );
   }
 
-  bulkUpdate(body: { ids: number[]; qualityProfileId?: number; languageProfileId?: number; monitored?: boolean; rootFolder?: string }) {
+  bulkUpdate(body: { ids: number[]; qualityProfileId?: number; languageProfileId?: number; monitored?: boolean; libraryId?: number }) {
     return firstValueFrom(this.http.patch<{ updated: number }>('/api/media/bulk', body));
   }
 

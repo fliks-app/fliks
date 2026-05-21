@@ -18,7 +18,7 @@ export class PathMappingDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  localRootFolderId: number | null;
+  localLibraryId: number | null;
 
   @IsOptional()
   @IsBoolean()
@@ -49,9 +49,9 @@ export class ImportApiDto {
   targetLibraryId: number;
 
   /**
-   * Maps each *arr remote root folder onto an existing Fliks RootFolder, or
-   * marks it ignored. Required (can be empty when *arr exposes no roots).
-   * The wizard step in the UI is the only place these are produced.
+   * Maps each *arr remote root folder onto a Fliks library, or marks it
+   * ignored. Required (can be empty when *arr exposes no roots). The
+   * wizard step in the UI is the only place these are produced.
    */
   @IsArray()
   @ValidateNested({ each: true })

@@ -1,7 +1,6 @@
 import {
   Entity,
   Column,
-  OneToOne,
   ManyToOne,
   JoinColumn,
   RelationId,
@@ -9,16 +8,12 @@ import {
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { MediaType } from '../../../common/enums/media-type.enum';
 import type { StalledCleanupProfileKey } from '../../../common/constants/stalled-cleanup-profiles';
-import { RootFolder } from '../../root-folders/entities/root-folder.entity';
 import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
 
 /**
- * User-facing top-level container for media.
- * Owns a single root path (internal) and carries the settings that used to
- * live on RootFolder: allowed media types, preferred metadata provider,
- * stalled-cleanup profile, and default quality/language profiles used when
- * adding new media to this library.
+ * User-facing top-level container for media. Owns a single filesystem
+ * path (`path`) where Fliks drops files for this library.
  *
  * Access is granted per-user through {@link LibraryUserAccess}.
  */
@@ -66,6 +61,11 @@ export class Library extends BaseEntity {
   @Column({ default: false })
   isDefaultForSeries: boolean;
 
-  @OneToOne(() => RootFolder, (rf) => rf.library)
-  rootFolder: RootFolder | null;
+  /** Absolute path on the server where Fliks drops media in this library. */
+  @Column({ type: 'varchar', nullable: true, default: null })
+  path: string | null;
+
+  /** Free-form admin annotation. */
+  @Column({ type: 'varchar', nullable: true, default: null })
+  label: string | null;
 }

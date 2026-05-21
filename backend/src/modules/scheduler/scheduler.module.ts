@@ -9,7 +9,6 @@ import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
-import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { SchedulerService } from './scheduler.service';
 import { CompletionService } from './completion.service';
@@ -51,7 +50,6 @@ import { Library } from '../libraries/entities/library.entity';
       Episode,
       Indexer,
       DownloadClient,
-      RootFolder,
       DelayProfile,
       QualityProfile,
       SubtitleFile,
