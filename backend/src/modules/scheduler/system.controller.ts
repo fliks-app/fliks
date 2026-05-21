@@ -368,7 +368,15 @@ export class SystemController {
       let episodeId: number | null = null;
       if (s.userId && mf?.mediaId) {
         try {
-          const ps = await this.playbackService.getState(s.userId, mf.mediaId);
+          // `playback_states` is keyed by (user, media, episode?). Series
+          // episodes carry an episodeId — the media-file row tells us
+          // which one — so we pass it through, otherwise the lookup
+          // hits the IS NULL branch (movies) and returns nothing.
+          const ps = await this.playbackService.getState(
+            s.userId,
+            mf.mediaId,
+            mf.episodeId ?? undefined,
+          );
           if (ps) {
             positionSeconds = ps.positionSeconds;
             if (ps.durationSeconds > 0) durationSeconds = ps.durationSeconds;
