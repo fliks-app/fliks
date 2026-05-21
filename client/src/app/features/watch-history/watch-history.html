@@ -104,31 +104,12 @@
 
     <!-- Pagination -->
     @if (totalPages() > 1) {
-      <div class="flex justify-center gap-1.5 pt-2">
-        <button
-          class="btn btn-sm"
-          [disabled]="currentPage() <= 1"
-          (click)="goToPage(currentPage() - 1)"
-        >
-          &laquo;
-        </button>
-        @for (p of visiblePages(); track p) {
-          <button
-            class="btn btn-sm"
-            [class.btn-primary]="currentPage() === p"
-            (click)="goToPage(p)"
-          >
-            {{ p }}
-          </button>
-        }
-        <button
-          class="btn btn-sm"
-          [disabled]="currentPage() >= totalPages()"
-          (click)="goToPage(currentPage() + 1)"
-        >
-          &raquo;
-        </button>
-      </div>
+      <app-pagination
+        class="pt-2"
+        [current]="currentPage()"
+        [total]="totalPages()"
+        (pageChange)="goToPage($event)"
+      />
     }
   }
 </div>

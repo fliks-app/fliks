@@ -907,6 +907,11 @@
     "retry": "Réessayer",
     "offline_banner": "Mode hors-ligne — les données affichées peuvent ne pas être à jour"
   },
+  "pagination": {
+    "label": "Pagination",
+    "previous": "Page précédente",
+    "next": "Page suivante"
+  },
   "downloads": {
     "title": "Téléchargements",
     "download": "Télécharger",

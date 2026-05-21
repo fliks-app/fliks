@@ -101,25 +101,12 @@
         </div>
 
         @if (totalPages() > 1) {
-          <div class="flex justify-center items-center gap-1 mt-2">
-            <button type="button" class="btn btn-ghost btn-xs" [disabled]="page() === 0" (click)="goToPage(page() - 1)">
-              {{ 'common.prev' | translate }}
-            </button>
-            @for (p of [].constructor(totalPages()); track $index) {
-              <button
-                type="button"
-                class="btn btn-xs"
-                [class.btn-primary]="$index === page()"
-                [class.btn-ghost]="$index !== page()"
-                (click)="goToPage($index)"
-              >
-                {{ $index + 1 }}
-              </button>
-            }
-            <button type="button" class="btn btn-ghost btn-xs" [disabled]="page() === totalPages() - 1" (click)="goToPage(page() + 1)">
-              {{ 'common.next' | translate }}
-            </button>
-          </div>
+          <app-pagination
+            class="mt-2"
+            [current]="page() + 1"
+            [total]="totalPages()"
+            (pageChange)="goToPage($event - 1)"
+          />
         }
       }
     </div>

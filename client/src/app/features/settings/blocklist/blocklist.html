@@ -63,21 +63,11 @@
     </div>
 
     @if (totalPages > 1) {
-      <div class="flex justify-center gap-2">
-        <button
-          class="btn btn-sm btn-ghost"
-          [disabled]="page() <= 1"
-          (click)="load(page() - 1)"
-        >«</button>
-        <span class="btn btn-sm btn-ghost pointer-events-none">
-          {{ page() }} / {{ totalPages }}
-        </span>
-        <button
-          class="btn btn-sm btn-ghost"
-          [disabled]="page() >= totalPages"
-          (click)="load(page() + 1)"
-        >»</button>
-      </div>
+      <app-pagination
+        [current]="page()"
+        [total]="totalPages"
+        (pageChange)="load($event)"
+      />
     }
   }
 </div>

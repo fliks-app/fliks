@@ -589,8 +589,8 @@ export class SubtitlesService {
           providerType: SubtitleProviderType.DISK,
           relativePath: relPath,
           status: SubtitleStatus.DOWNLOADED,
-          score: 0,
-          synced: false,
+          score: 100,
+          synced: true,
         } as any);
 
         existingPaths.add(relPath);

@@ -8,6 +8,7 @@ import { firstValueFrom } from 'rxjs';
 import { LucideTrash2 } from '@lucide/angular';
 import { SseService } from '../../../core/services/sse.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 
 interface CommandEntry { id: number; name: string; status: string; trigger: string; startedOn: string; endedOn?: string; body?: Record<string, unknown>; }
 interface ServiceStatus { name: string; ok: boolean; message?: string; }
@@ -15,7 +16,7 @@ interface HealthReport { version: string; uptimeSeconds: number; database: Servi
 
 @Component({
   selector: 'app-system-status',
-  imports: [TranslateModule, DatePipe, DecimalPipe, NgClass, KeyValuePipe, LucideTrash2],
+  imports: [TranslateModule, DatePipe, DecimalPipe, NgClass, KeyValuePipe, LucideTrash2, PaginationComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './status.html',
 })
