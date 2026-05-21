@@ -119,4 +119,11 @@ jobs:
           # `completed` so each upload rolls out automatically to the
           # selected track.
           status: draft
+          # While the app has never had a production release approved,
+          # the Edit API refuses to submit changes for automatic review
+          # ("Changes cannot be sent for review automatically…"). Skip
+          # the auto-submission; the changes still land as a draft and
+          # can be promoted from the Play Console UI. Remove (or flip
+          # to false) once the first production rollout is live.
+          changesNotSentForReview: true
           whatsNewDirectory: client/android/app/src/main/play/release-notes
