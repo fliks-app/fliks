@@ -15,7 +15,6 @@ import type { Request } from 'express';
 import { LibrariesService } from './libraries.service';
 import { CreateLibraryDto } from './dto/create-library.dto';
 import { UpdateLibraryDto } from './dto/update-library.dto';
-import { AddLibraryPathDto } from './dto/add-library-path.dto';
 import { AssignLibraryAccessDto } from './dto/assign-library-access.dto';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
@@ -65,24 +64,6 @@ export class LibrariesController {
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.remove(id);
-  }
-
-  @Post(':id/paths')
-  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
-  addPath(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: AddLibraryPathDto,
-  ) {
-    return this.service.addPath(id, dto);
-  }
-
-  @Delete(':id/paths/:pathId')
-  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
-  removePath(
-    @Param('id', ParseIntPipe) id: number,
-    @Param('pathId', ParseIntPipe) pathId: number,
-  ) {
-    return this.service.removePath(id, pathId);
   }
 
   @Get(':id/access')

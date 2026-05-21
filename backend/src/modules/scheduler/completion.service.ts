@@ -2,8 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, LessThan, Repository } from 'typeorm';
-import * as fs from 'fs';
-import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
@@ -35,6 +33,7 @@ import { StalledCheck } from './entities/stalled-check.entity';
 import { CleanupProfile } from '../cleanup-profiles/entities/cleanup-profile.entity';
 import { Library } from '../libraries/entities/library.entity';
 import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
+import { FileTransferService } from '../../common/services/file-transfer.service';
 
 @Injectable()
 export class CompletionService {
@@ -75,6 +74,7 @@ export class CompletionService {
     private readonly ffprobe: FfprobeService,
     private readonly thumbnailService: ThumbnailService,
     private readonly historyMatcher: TorrentHistoryMatcher,
+    private readonly fileTransfer: FileTransferService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -135,31 +135,12 @@ export class CompletionService {
       `Import: ${remaining} entries to process, ${completedTorrents.length} completed torrents`,
     );
 
-    const fmtKeys = [
-      'naming_movie_format',
-      'naming_movie_folder_format',
-      'naming_series_format',
-      'naming_series_folder_format',
-      'naming_season_folder_format',
-    ];
-    const fmtRows: { key: string; value: string }[] =
-      await this.dataSource.query(
-        `SELECT key, value FROM app_settings WHERE key = ANY($1)`,
-        [fmtKeys],
-      );
-    const fmtMap = Object.fromEntries(fmtRows.map((r) => [r.key, r.value]));
-    const movieFormat =
-      fmtMap['naming_movie_format'] ??
-      '{Movie Title} ({Release Year}) {Quality Full}';
-    const movieFolderFormat =
-      fmtMap['naming_movie_folder_format'] ?? '{Movie Title} ({Release Year})';
-    const seriesFormat =
-      fmtMap['naming_series_format'] ??
-      '{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}';
-    const seriesFolderFormat =
-      fmtMap['naming_series_folder_format'] ?? '{Series Title}';
-    const seasonFolderFormat =
-      fmtMap['naming_season_folder_format'] ?? 'Season {season:00}';
+    const formats = await this.naming.getFormats();
+    const movieFormat = formats.movie;
+    const movieFolderFormat = formats.movieFolder;
+    const seriesFormat = formats.series;
+    const seriesFolderFormat = formats.seriesFolder;
+    const seasonFolderFormat = formats.seasonFolder;
 
     const rootFolders = await this.rootFolderRepo.find({
       order: { path: 'ASC' },
@@ -357,7 +338,7 @@ export class CompletionService {
     // libraryRoot = rootPath + folderName (= media.path) — relativePath is
     // stored relative to this because resolveFile joins media.path + relativePath.
     const libraryRoot = path.normalize(path.join(rootPath, folderName));
-    const companionExts = await this.getCompanionExts();
+    const companionExts = await this.fileTransfer.getCompanionExts();
 
     // For movies or single episode: import the largest file
     // For series with multiple files: import each file as a separate episode
@@ -452,22 +433,32 @@ export class CompletionService {
         destDir = path.join(rootPath, folderName, seasonFolder);
       }
 
-      await fsp.mkdir(destDir, { recursive: true });
       const destPath = path.join(destDir, newFilename + ext);
 
       this.log.log(
         `Import[${history.sourceTitle}]: copying "${path.basename(videoFile.filePath)}" → "${destPath}"`,
       );
-      await fsp.copyFile(videoFile.filePath, destPath);
-
-      // Copy companion files for this video
-      await this.copyCompanionFiles(
-        path.dirname(videoFile.filePath),
-        destDir,
-        newFilename,
-        history.sourceTitle,
-        companionExts,
+      await this.fileTransfer.transferFile(
+        videoFile.filePath,
+        destPath,
+        'copy',
       );
+
+      // Copy companion files for this video — torrent client keeps seeding
+      // from the source, so we never move.
+      const sourceBaseName = path.basename(
+        videoFile.filePath,
+        path.extname(videoFile.filePath),
+      );
+      await this.fileTransfer.transferCompanions({
+        srcDir: path.dirname(videoFile.filePath),
+        destDir,
+        sourceBaseName,
+        newBaseName: newFilename,
+        method: 'copy',
+        allowedExts: companionExts,
+        logTag: `Import[${history.sourceTitle}]`,
+      });
 
       const relativePath = relativePathUnderMediaRoot(
         path.resolve(libraryRoot),
@@ -617,70 +608,6 @@ export class CompletionService {
       }
     } catch (e) {
       this.log.warn(`Post-import script failed: ${(e as Error).message}`);
-    }
-  }
-
-  private static readonly DEFAULT_COMPANION_EXTS =
-    '.nfo,.srt,.ass,.ssa,.sub,.idx,.vtt,.sup,.txt,.jpg,.jpeg,.png,.tbn,.nfo-orig';
-
-  /**
-   * Copies whitelisted companion files from srcDir to destDir,
-   * renaming them to match the new video filename base.
-   */
-  private async getCompanionExts(): Promise<Set<string>> {
-    const companionRows: { value: string | null }[] =
-      await this.dataSource.query(
-        `SELECT value FROM app_settings WHERE key = 'companion_file_extensions' LIMIT 1`,
-      );
-    const row = companionRows[0];
-    const raw = row?.value ?? CompletionService.DEFAULT_COMPANION_EXTS;
-    return new Set(
-      raw
-        .split(',')
-        .map((e) => e.trim().toLowerCase())
-        .filter(Boolean)
-        .map((e) => (e.startsWith('.') ? e : `.${e}`)),
-    );
-  }
-
-  private async copyCompanionFiles(
-    srcDir: string,
-    destDir: string,
-    newBaseName: string,
-    sourceTitle: string,
-    allowedExts: Set<string>,
-  ): Promise<void> {
-    let entries: fs.Dirent[];
-    try {
-      entries = await fsp.readdir(srcDir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-
-    for (const entry of entries) {
-      if (!entry.isFile()) continue;
-      const ext = path.extname(entry.name).toLowerCase();
-      if (!allowedExts.has(ext)) continue;
-
-      // Preserve language suffix if present (e.g. "movie.en.srt" → keep ".en.srt")
-      const baseName = path.basename(entry.name, ext);
-      const langMatch = baseName.match(/\.([a-z]{2,3}(?:\.[a-z]+)?)$/i);
-      const destName = langMatch
-        ? `${newBaseName}.${langMatch[1]}${ext}`
-        : `${newBaseName}${ext}`;
-
-      const srcPath = path.join(srcDir, entry.name);
-      const destPath = path.join(destDir, destName);
-      try {
-        await fsp.copyFile(srcPath, destPath);
-        this.log.log(
-          `Import[${sourceTitle}]: companion "${entry.name}" → "${destName}"`,
-        );
-      } catch (e) {
-        this.log.warn(
-          `Import[${sourceTitle}]: failed to copy companion "${entry.name}": ${(e as Error).message}`,
-        );
-      }
     }
   }
 

@@ -12,7 +12,12 @@ import { HttpClient } from '@angular/common/http';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { MediaService } from '../../core/services/api/media.service';
+import { LibrariesApiService, Library } from '../../core/services/api/libraries-api.service';
 import { MediaType } from '../../core/enums/media-type.enum';
+import {
+  SearchableSelectComponent,
+  SearchableSelectOption,
+} from '../../shared/components/forms/searchable-select/searchable-select';
 
 export interface ScanCandidate {
   filePath: string;
@@ -42,18 +47,22 @@ interface RowState {
   candidate: ScanCandidate;
   selected: boolean;
   mediaId: number | null;
+  targetLibraryId: number | null;
   force: boolean;
 }
 
+export type ImportMethod = 'copy' | 'move';
+
 @Component({
   selector: 'app-import-disk',
-  imports: [DecimalPipe, FormsModule, TranslateModule],
+  imports: [DecimalPipe, FormsModule, TranslateModule, SearchableSelectComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './import-disk.html',
 })
 export class ImportDiskComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly mediaApi = inject(MediaService);
+  private readonly librariesApi = inject(LibrariesApiService);
   private readonly translate = inject(TranslateService);
 
   readonly folderPath = signal('');
@@ -61,21 +70,64 @@ export class ImportDiskComponent implements OnInit {
   readonly scanError = signal('');
   readonly rows = signal<RowState[]>([]);
   readonly scanned = signal(false);
+  readonly method = signal<ImportMethod>('copy');
 
   readonly mediaOptions = signal<MediaOption[]>([]);
   readonly mediaOptionsLoading = signal(true);
+  readonly libraries = signal<Library[]>([]);
 
   readonly importing = signal(false);
   readonly importResult = signal<{ imported: number; errors: string[] } | null>(null);
 
   readonly selectedCount = computed(() => this.rows().filter((r) => r.selected).length);
 
+  /** Media list mapped to the searchable-select shape (id → display label). */
+  readonly mediaSelectOptions = computed<SearchableSelectOption[]>(() =>
+    this.mediaOptions().map((m) => ({ value: m.id, label: this.mediaLabel(m) })),
+  );
+  /** Selected rows that are missing a media / library — block the import button. */
+  readonly invalidSelectedCount = computed(
+    () =>
+      this.rows().filter(
+        (r) => r.selected && (r.mediaId == null || r.targetLibraryId == null),
+      ).length,
+  );
+
+  librariesForRow(row: RowState): Library[] {
+    const type = this.mediaTypeForRow(row);
+    if (!type) return this.libraries();
+    return this.libraries().filter((l) => l.mediaTypes.includes(type));
+  }
+
+  private mediaTypeForRow(row: RowState): 'movie' | 'series' | null {
+    if (row.candidate.mediaType === 'movie' || row.candidate.mediaType === 'series') {
+      return row.candidate.mediaType;
+    }
+    const opt = this.mediaOptions().find((m) => m.id === row.mediaId);
+    return opt ? (opt.type as 'movie' | 'series') : null;
+  }
+
+  private defaultLibraryForType(type: 'movie' | 'series' | null): number | null {
+    if (!type) return null;
+    const def = this.libraries().find((l) =>
+      type === 'movie' ? l.isDefaultForMovies : l.isDefaultForSeries,
+    );
+    if (def && def.mediaTypes.includes(type)) return def.id;
+    // No default → first library accepting this type.
+    const first = this.libraries().find((l) => l.mediaTypes.includes(type));
+    return first?.id ?? null;
+  }
+
   async ngOnInit() {
     try {
-      const page = await this.mediaApi.getAll({ limit: 2000, sortBy: 'title', sortOrder: 'ASC' });
+      const [page, libs] = await Promise.all([
+        this.mediaApi.getAll({ limit: 2000, sortBy: 'title', sortOrder: 'ASC' }),
+        this.librariesApi.list().catch(() => [] as Library[]),
+      ]);
       this.mediaOptions.set(
         page.data.map((m) => ({ id: m.id, title: m.title, year: m.year, type: m.type })),
       );
+      this.libraries.set(libs);
     } finally {
       this.mediaOptionsLoading.set(false);
     }
@@ -98,6 +150,9 @@ export class ImportDiskComponent implements OnInit {
           candidate: c,
           selected: c.mediaId !== null && !c.existingQuality,
           mediaId: c.mediaId,
+          targetLibraryId: this.defaultLibraryForType(
+            (c.mediaType as 'movie' | 'series' | null) ?? null,
+          ),
           force: false,
         })),
       );
@@ -123,7 +178,29 @@ export class ImportDiskComponent implements OnInit {
 
   setRowMedia(index: number, mediaId: number | null) {
     this.rows.update((rows) =>
-      rows.map((r, i) => (i === index ? { ...r, mediaId } : r)),
+      rows.map((r, i) => {
+        if (i !== index) return r;
+        // Recompute the default library when switching media — the new
+        // pick may flip movie/series and the library set differs.
+        const opt = this.mediaOptions().find((m) => m.id === mediaId);
+        const type: 'movie' | 'series' | null = opt
+          ? (opt.type as 'movie' | 'series')
+          : ((r.candidate.mediaType as 'movie' | 'series' | null) ?? null);
+        const targetLibraryId =
+          r.targetLibraryId != null &&
+          this.libraries().some(
+            (l) => l.id === r.targetLibraryId && (!type || l.mediaTypes.includes(type)),
+          )
+            ? r.targetLibraryId
+            : this.defaultLibraryForType(type);
+        return { ...r, mediaId, targetLibraryId };
+      }),
+    );
+  }
+
+  setRowLibrary(index: number, libraryId: number | null) {
+    this.rows.update((rows) =>
+      rows.map((r, i) => (i === index ? { ...r, targetLibraryId: libraryId } : r)),
     );
   }
 
@@ -141,10 +218,13 @@ export class ImportDiskComponent implements OnInit {
 
   async confirmImport() {
     const toImport = this.rows()
-      .filter((r) => r.selected && r.mediaId !== null)
+      .filter(
+        (r) => r.selected && r.mediaId !== null && r.targetLibraryId !== null,
+      )
       .map((r) => ({
         filePath: r.candidate.filePath,
         mediaId: r.mediaId!,
+        targetLibraryId: r.targetLibraryId!,
         episodeId: r.candidate.episodeId ?? undefined,
         quality: r.candidate.qualityName,
         ...(r.force ? { force: true } : {}),
@@ -157,13 +237,18 @@ export class ImportDiskComponent implements OnInit {
       const result = await firstValueFrom(
         this.http.post<{ imported: number; errors: string[] }>(
           '/api/imports/disk/confirm',
-          { imports: toImport },
+          { method: this.method(), imports: toImport },
         ),
       );
       this.importResult.set(result);
       // Remove successfully imported rows
       if (result.imported > 0) {
-        this.rows.update((rows) => rows.filter((r) => !r.selected || r.mediaId === null));
+        this.rows.update((rows) =>
+          rows.filter(
+            (r) =>
+              !r.selected || r.mediaId === null || r.targetLibraryId === null,
+          ),
+        );
       }
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };

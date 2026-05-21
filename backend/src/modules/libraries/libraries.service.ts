@@ -3,24 +3,20 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, IsNull, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import * as fs from 'fs';
 import { Library } from './entities/library.entity';
 import { LibraryUserAccess } from './entities/library-user-access.entity';
 import { RootFolder } from '../root-folders/entities/root-folder.entity';
 import { Media } from '../media/entities/media.entity';
 import { User } from '../users/entities/user.entity';
-import { Role } from '../roles/entities/role.entity';
 import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../profiles/entities/language-profile.entity';
 import { CreateLibraryDto } from './dto/create-library.dto';
 import { UpdateLibraryDto } from './dto/update-library.dto';
-import { AddLibraryPathDto } from './dto/add-library-path.dto';
 import { MediaType } from '../../common/enums/media-type.enum';
-import { SettingsService } from '../settings/settings.service';
 
 interface RootFolderWithDisk {
   id: number;
@@ -31,13 +27,13 @@ interface RootFolderWithDisk {
   accessible: boolean;
 }
 
-export interface LibraryWithDetails extends Omit<Library, 'rootFolders'> {
-  rootFolders: RootFolderWithDisk[];
+export interface LibraryWithDetails extends Omit<Library, 'rootFolder'> {
+  rootFolder: RootFolderWithDisk | null;
   userIds: number[];
 }
 
 @Injectable()
-export class LibrariesService implements OnModuleInit {
+export class LibrariesService {
   private readonly log = new Logger(LibrariesService.name);
 
   constructor(
@@ -49,96 +45,8 @@ export class LibrariesService implements OnModuleInit {
     private readonly rootFolderRepo: Repository<RootFolder>,
     @InjectRepository(Media)
     private readonly mediaRepo: Repository<Media>,
-    @InjectRepository(User)
-    private readonly userRepo: Repository<User>,
-    @InjectRepository(Role)
-    private readonly roleRepo: Repository<Role>,
-    private readonly settings: SettingsService,
     private readonly dataSource: DataSource,
   ) {}
-
-  async onModuleInit(): Promise<void> {
-    await this.autoWrapLegacyRootFolders();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Migration: wrap every legacy RootFolder into its own Library on first boot
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Idempotent. Runs once on first startup after the library feature lands.
-   * Skips entirely once at least one Library exists.
-   */
-  private async autoWrapLegacyRootFolders(): Promise<void> {
-    const existing = await this.repo.count();
-    if (existing > 0) return;
-
-    // RootFolder.libraryId is a @RelationId virtual; filter by the relation
-    // being null (translates to `libraryId IS NULL`).
-    const orphanRoots = await this.rootFolderRepo
-      .createQueryBuilder('rf')
-      .where('rf."libraryId" IS NULL')
-      .getMany();
-    if (!orphanRoots.length) return;
-
-    this.log.log(
-      `Auto-wrapping ${orphanRoots.length} legacy root folder(s) into libraries`,
-    );
-
-    await this.dataSource.transaction(async (m) => {
-      const libraries: Library[] = [];
-
-      // 1. Create one Library per RootFolder. Defaults only — legacy
-      //    per-rootfolder columns (mediaTypes/preferredProvider/cleanup)
-      //    have been removed; admin reconfigures via library editor.
-      for (const rf of orphanRoots) {
-        const lib = m.create(Library, {
-          name: rf.label?.trim() || rf.path,
-          mediaTypes: [MediaType.MOVIE, MediaType.SERIES],
-        });
-        const saved = await m.save(lib);
-        libraries.push(saved);
-
-        // 2. Link the root folder.
-        await m.update(RootFolder, rf.id, {
-          library: { id: saved.id } as Library,
-        });
-
-        // 3. Bulk-update all media under that root folder.
-        //    Use QueryBuilder because both `rootFolderId` (where) and
-        //    `libraryId` (set) are virtual relation columns that can't be
-        //    expressed via DeepPartial.
-        await m
-          .createQueryBuilder()
-          .update(Media)
-          .set({ library: { id: saved.id } as Library })
-          .where('"rootFolderId" = :rfId', { rfId: rf.id })
-          .execute();
-      }
-
-      // 4. Grant every existing user access to every new library.
-      const users = await m.find(User);
-      const accessRows: LibraryUserAccess[] = [];
-      for (const u of users) {
-        for (const lib of libraries) {
-          accessRows.push(
-            m.create(LibraryUserAccess, { user: u, library: lib }),
-          );
-        }
-      }
-      if (accessRows.length) await m.save(accessRows);
-
-      // 6. Mirror "everyone sees everything" in the role defaults
-      //    (real ManyToMany — sets the junction rows, not a raw id list).
-      const roles = await m.find(Role);
-      for (const r of roles) {
-        r.defaultLibraries = libraries;
-        await m.save(r);
-      }
-    });
-
-    this.log.log('Auto-wrap complete');
-  }
 
   // ---------------------------------------------------------------------------
   // ACL helper
@@ -206,7 +114,7 @@ export class LibrariesService implements OnModuleInit {
     const libs = await this.repo.find({
       where,
       order: { name: 'ASC' },
-      relations: ['rootFolders'],
+      relations: ['rootFolder'],
     });
     return Promise.all(libs.map((l) => this.enrich(l)));
   }
@@ -214,7 +122,7 @@ export class LibrariesService implements OnModuleInit {
   async findOne(id: number): Promise<LibraryWithDetails> {
     const lib = await this.repo.findOne({
       where: { id },
-      relations: ['rootFolders'],
+      relations: ['rootFolder'],
     });
     if (!lib) throw new NotFoundException(`Library #${id} not found`);
     return this.enrich(lib);
@@ -252,9 +160,9 @@ export class LibrariesService implements OnModuleInit {
         }),
       );
 
-      // Initial paths.
-      for (const p of dto.paths ?? []) {
-        await this.attachPath(m, lib.id, { path: p });
+      // Initial path (singleton — at most one root folder per library).
+      if (dto.path) {
+        await this.attachPath(m, lib.id, dto.path);
       }
 
       // Initial user access.
@@ -303,6 +211,14 @@ export class LibrariesService implements OnModuleInit {
       if (dto.isDefaultForSeries !== undefined)
         patch.isDefaultForSeries = dto.isDefaultForSeries;
       if (Object.keys(patch).length) await m.update(Library, id, patch);
+
+      // Singleton path: replace, attach, or leave untouched depending on
+      // the incoming value. `undefined` = no change; an empty string clears
+      // the path; any non-empty value either replaces an existing folder
+      // (same path = no-op) or creates the first one.
+      if (dto.path !== undefined) {
+        await this.replacePath(m, id, dto.path);
+      }
     });
     return this.findOne(id);
   }
@@ -323,37 +239,6 @@ export class LibrariesService implements OnModuleInit {
   }
 
   // ---------------------------------------------------------------------------
-  // Path management
-  // ---------------------------------------------------------------------------
-
-  async addPath(
-    libraryId: number,
-    dto: AddLibraryPathDto,
-  ): Promise<RootFolder> {
-    return this.dataSource.transaction((m) =>
-      this.attachPath(m, libraryId, dto),
-    );
-  }
-
-  async removePath(libraryId: number, pathId: number): Promise<void> {
-    const rf = await this.rootFolderRepo.findOne({ where: { id: pathId } });
-    if (!rf || rf.libraryId !== libraryId) {
-      throw new NotFoundException(
-        `Path #${pathId} not found in library #${libraryId}`,
-      );
-    }
-    const used = await this.mediaRepo.count({
-      where: { rootFolder: { id: pathId } },
-    });
-    if (used > 0) {
-      throw new BadRequestException(
-        `Path "${rf.path}" still contains ${used} media item(s). Remove or move them before removing the path.`,
-      );
-    }
-    await this.rootFolderRepo.remove(rf);
-  }
-
-  // ---------------------------------------------------------------------------
   // User access management
   // ---------------------------------------------------------------------------
 
@@ -371,23 +256,19 @@ export class LibrariesService implements OnModuleInit {
   }
 
   /**
-   * Pick the "best" root folder inside the library to drop new media into.
-   * Strategy: most free space (spreads data across disks). Falls back to the
-   * first root folder if disk info is unavailable on every path.
+   * Look up the singleton root folder for a library. Throws if the library
+   * has no path configured yet (admin must set one before adding media).
    */
-  async pickRootFolderForLibrary(libraryId: number): Promise<RootFolder> {
-    const folders = await this.rootFolderRepo.find({
+  async getRootFolder(libraryId: number): Promise<RootFolder> {
+    const rf = await this.rootFolderRepo.findOne({
       where: { library: { id: libraryId } },
     });
-    if (!folders.length) {
+    if (!rf) {
       throw new BadRequestException(
         `Library #${libraryId} has no root path configured`,
       );
     }
-    const ranked = folders
-      .map((f) => ({ folder: f, free: this.diskFreeSpace(f.path) }))
-      .sort((a, b) => b.free - a.free);
-    return ranked[0].folder;
+    return rf;
   }
 
   // ---------------------------------------------------------------------------
@@ -397,28 +278,74 @@ export class LibrariesService implements OnModuleInit {
   private async attachPath(
     m: import('typeorm').EntityManager,
     libraryId: number,
-    dto: AddLibraryPathDto,
+    path: string,
+    label?: string,
   ): Promise<RootFolder> {
     const lib = await m.findOne(Library, { where: { id: libraryId } });
     if (!lib) throw new NotFoundException(`Library #${libraryId} not found`);
-    if (!fs.existsSync(dto.path)) {
+    if (!fs.existsSync(path)) {
       throw new BadRequestException(
-        `Path "${dto.path}" does not exist on the server`,
+        `Path "${path}" does not exist on the server`,
       );
     }
-    const existing = await m.findOne(RootFolder, { where: { path: dto.path } });
+    const existing = await m.findOne(RootFolder, { where: { path } });
     if (existing) {
       if (existing.libraryId === libraryId) return existing;
       throw new BadRequestException(
-        `Path "${dto.path}" is already attached to another library`,
+        `Path "${path}" is already attached to another library`,
       );
     }
     const rf = m.create(RootFolder, {
-      path: dto.path,
-      label: dto.label,
+      path,
+      label: label ?? undefined,
       library: lib,
     });
     return m.save(rf);
+  }
+
+  /**
+   * Replace the library's singleton root folder. An empty string clears
+   * it (only allowed if no media still anchors there); a non-empty path
+   * either no-ops (same path), updates the existing row in place, or
+   * creates a brand new one. Detaching by switching to a different path
+   * is blocked while media still anchor on the previous one — admin
+   * must move/remove the media first.
+   */
+  private async replacePath(
+    m: import('typeorm').EntityManager,
+    libraryId: number,
+    nextPath: string,
+  ): Promise<void> {
+    const current = await m.findOne(RootFolder, {
+      where: { library: { id: libraryId } },
+    });
+    const trimmed = nextPath.trim();
+    if (!trimmed) {
+      if (!current) return;
+      const used = await m.count(Media, {
+        where: { rootFolder: { id: current.id } },
+      });
+      if (used > 0) {
+        throw new BadRequestException(
+          `Path "${current.path}" still contains ${used} media item(s).`,
+        );
+      }
+      await m.remove(current);
+      return;
+    }
+    if (current && current.path === trimmed) return;
+    if (current) {
+      const used = await m.count(Media, {
+        where: { rootFolder: { id: current.id } },
+      });
+      if (used > 0) {
+        throw new BadRequestException(
+          `Path "${current.path}" still contains ${used} media item(s) — cannot change the library's root path.`,
+        );
+      }
+      await m.remove(current);
+    }
+    await this.attachPath(m, libraryId, trimmed);
   }
 
   private async replaceUserAccess(
@@ -456,27 +383,21 @@ export class LibrariesService implements OnModuleInit {
     }
   }
 
-  private diskFreeSpace(path: string): number {
-    const info = this.diskInfo(path);
-    return info.freeSpace < 0 ? 0 : info.freeSpace;
-  }
-
   private async enrich(lib: Library): Promise<LibraryWithDetails> {
-    const rootFolders: RootFolderWithDisk[] = (lib.rootFolders ?? []).map(
-      (rf) => {
-        const disk = this.diskInfo(rf.path);
-        return {
-          id: rf.id,
-          path: rf.path,
-          label: rf.label ?? null,
-          freeSpace: disk.freeSpace,
-          totalSpace: disk.totalSpace,
-          accessible: disk.freeSpace !== -1,
-        };
-      },
-    );
+    let rootFolder: RootFolderWithDisk | null = null;
+    if (lib.rootFolder) {
+      const disk = this.diskInfo(lib.rootFolder.path);
+      rootFolder = {
+        id: lib.rootFolder.id,
+        path: lib.rootFolder.path,
+        label: lib.rootFolder.label ?? null,
+        freeSpace: disk.freeSpace,
+        totalSpace: disk.totalSpace,
+        accessible: disk.freeSpace !== -1,
+      };
+    }
     const userIds = await this.getUserAccess(lib.id);
-    return { ...lib, rootFolders, userIds };
+    return { ...lib, rootFolder, userIds };
   }
 
   // Used by other modules wanting to filter on "is it the default lib for X type"

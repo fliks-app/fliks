@@ -36,7 +36,7 @@ export interface Library {
   defaultLanguageProfileId: number | null;
   isDefaultForMovies: boolean;
   isDefaultForSeries: boolean;
-  rootFolders: LibraryRootFolder[];
+  rootFolder: LibraryRootFolder | null;
   userIds: number[];
 }
 
@@ -51,11 +51,11 @@ export interface CreateLibraryBody {
   defaultLanguageProfileId?: number | null;
   isDefaultForMovies?: boolean;
   isDefaultForSeries?: boolean;
-  paths?: string[];
+  path?: string;
   userIds?: number[];
 }
 
-export type UpdateLibraryBody = Partial<Omit<CreateLibraryBody, 'paths' | 'userIds'>>;
+export type UpdateLibraryBody = Partial<Omit<CreateLibraryBody, 'userIds'>>;
 
 @Injectable({ providedIn: 'root' })
 export class LibrariesApiService {
@@ -86,18 +86,6 @@ export class LibrariesApiService {
 
   remove(id: number) {
     return firstValueFrom(this.http.delete<void>(`/api/libraries/${id}`));
-  }
-
-  addPath(id: number, body: { path: string; label?: string }) {
-    return firstValueFrom(
-      this.http.post<LibraryRootFolder>(`/api/libraries/${id}/paths`, body),
-    );
-  }
-
-  removePath(id: number, pathId: number) {
-    return firstValueFrom(
-      this.http.delete<void>(`/api/libraries/${id}/paths/${pathId}`),
-    );
   }
 
   getAccess(id: number) {

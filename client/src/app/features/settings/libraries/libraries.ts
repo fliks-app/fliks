@@ -14,7 +14,6 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   Library,
   LibrariesApiService,
-  LibraryRootFolder,
   StalledCleanupProfileKey,
 } from '../../../core/services/api/libraries-api.service';
 import { UsersApiService, UserRow } from '../../../core/services/api/users-api.service';
@@ -26,12 +25,6 @@ import {
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { METADATA_PROVIDER_OPTIONS_LIBRARY } from '../../../core/constants/metadata-providers';
-
-interface DraftPath {
-  id?: number; // undefined for new (unsaved) paths
-  path: string;
-  label: string;
-}
 
 @Component({
   selector: 'app-libraries-settings',
@@ -70,7 +63,7 @@ export class LibrariesSettingsComponent implements OnInit {
   readonly formLanguageProfileId = signal<number | null>(null);
   readonly formDefaultMovies = signal(false);
   readonly formDefaultSeries = signal(false);
-  readonly formPaths = signal<DraftPath[]>([]);
+  readonly formPath = signal('');
   readonly formUserIds = signal<Set<number>>(new Set());
   readonly saveError = signal('');
 
@@ -149,7 +142,7 @@ export class LibrariesSettingsComponent implements OnInit {
     this.formLanguageProfileId.set(null);
     this.formDefaultMovies.set(false);
     this.formDefaultSeries.set(false);
-    this.formPaths.set([]);
+    this.formPath.set('');
     this.formUserIds.set(new Set());
     this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
@@ -168,9 +161,7 @@ export class LibrariesSettingsComponent implements OnInit {
     this.formLanguageProfileId.set(lib.defaultLanguageProfileId);
     this.formDefaultMovies.set(lib.isDefaultForMovies);
     this.formDefaultSeries.set(lib.isDefaultForSeries);
-    this.formPaths.set(
-      lib.rootFolders.map((rf) => ({ id: rf.id, path: rf.path, label: rf.label ?? '' })),
-    );
+    this.formPath.set(lib.rootFolder?.path ?? '');
     this.formUserIds.set(new Set(lib.userIds));
     this.saveError.set('');
     this.editorDialog()?.nativeElement.showModal();
@@ -178,20 +169,6 @@ export class LibrariesSettingsComponent implements OnInit {
 
   closeEditor() {
     this.editorDialog()?.nativeElement.close();
-  }
-
-  addDraftPath() {
-    this.formPaths.update((p) => [...p, { path: '', label: '' }]);
-  }
-
-  updateDraftPath(idx: number, patch: Partial<DraftPath>) {
-    this.formPaths.update((paths) =>
-      paths.map((p, i) => (i === idx ? { ...p, ...patch } : p)),
-    );
-  }
-
-  removeDraftPath(idx: number) {
-    this.formPaths.update((paths) => paths.filter((_, i) => i !== idx));
   }
 
   toggleUser(id: number) {
@@ -220,6 +197,7 @@ export class LibrariesSettingsComponent implements OnInit {
     this.saving.set(true);
     this.saveError.set('');
     try {
+      const path = this.formPath().trim();
       const payload = {
         name,
         icon: this.formIcon(),
@@ -231,43 +209,20 @@ export class LibrariesSettingsComponent implements OnInit {
         defaultLanguageProfileId: this.formLanguageProfileId(),
         isDefaultForMovies: this.formDefaultMovies(),
         isDefaultForSeries: this.formDefaultSeries(),
+        path,
       };
 
       const id = this.editingId();
       let libraryId: number;
       if (id == null) {
-        // CREATE: send paths + userIds inline.
         const created = await this.api.create({
           ...payload,
-          paths: this.formPaths()
-            .map((p) => p.path.trim())
-            .filter((p) => !!p),
           userIds: Array.from(this.formUserIds()),
         });
         libraryId = created.id;
       } else {
-        // UPDATE base fields, then sync paths + access through dedicated endpoints.
         await this.api.update(id, payload);
         libraryId = id;
-
-        // Diff paths: remove those no longer present, add new ones.
-        const before = (this.libraries().find((l) => l.id === id)?.rootFolders ?? []);
-        const draft = this.formPaths();
-        const draftIds = new Set(draft.map((p) => p.id).filter((x): x is number => x != null));
-        for (const rf of before) {
-          if (!draftIds.has(rf.id)) {
-            await this.api.removePath(libraryId, rf.id);
-          }
-        }
-        for (const p of draft) {
-          if (p.id == null && p.path.trim()) {
-            await this.api.addPath(libraryId, {
-              path: p.path.trim(),
-              label: p.label.trim() || undefined,
-            });
-          }
-        }
-        // User access
         await this.api.setAccess(libraryId, Array.from(this.formUserIds()));
       }
 
@@ -316,17 +271,13 @@ export class LibrariesSettingsComponent implements OnInit {
     return `${val.toFixed(1)} ${units[i]}`;
   }
 
-  totalFreeSpace(lib: Library): number {
-    return lib.rootFolders.reduce(
-      (sum, rf) => sum + (rf.freeSpace > 0 ? rf.freeSpace : 0),
-      0,
-    );
+  freeSpace(lib: Library): number {
+    const rf = lib.rootFolder;
+    return rf && rf.freeSpace > 0 ? rf.freeSpace : 0;
   }
 
   totalCapacity(lib: Library): number {
-    return lib.rootFolders.reduce(
-      (sum, rf) => sum + (rf.totalSpace > 0 ? rf.totalSpace : 0),
-      0,
-    );
+    const rf = lib.rootFolder;
+    return rf && rf.totalSpace > 0 ? rf.totalSpace : 0;
   }
 }

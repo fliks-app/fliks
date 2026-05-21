@@ -1,4 +1,4 @@
-import { Entity, Column, ManyToOne, JoinColumn, RelationId } from 'typeorm';
+import { Entity, Column, OneToOne, JoinColumn, RelationId } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Library } from '../../libraries/entities/library.entity';
 
@@ -10,18 +10,11 @@ export class RootFolder extends BaseEntity {
   @Column({ nullable: true })
   label: string;
 
-  /**
-   * Library this root path belongs to. Nullable only for the transient window
-   * between entity creation and the startup auto-wrap migration; after that,
-   * every RootFolder has a library.
-   */
-  @ManyToOne(() => Library, (lib) => lib.rootFolders, {
-    nullable: true,
-    onDelete: 'CASCADE',
-  })
+  /** Library this root path belongs to. Enforced 1:1 by DB constraint. */
+  @OneToOne(() => Library, (lib) => lib.rootFolder, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'libraryId' })
-  library: Library | null;
+  library: Library;
 
   @RelationId((rf: RootFolder) => rf.library)
-  libraryId: number | null;
+  libraryId: number;
 }

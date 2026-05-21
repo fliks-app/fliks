@@ -14,13 +14,18 @@ import {
 } from '../../../common/constants/stalled-cleanup-profiles';
 
 /**
- * Patch DTO. `paths` and `userIds` are managed via dedicated endpoints
- * (POST/DELETE :id/paths, PUT :id/access).
+ * Patch DTO. `userIds` is managed via the dedicated PUT :id/access endpoint.
+ * `path` (singleton root folder) is updated through this DTO directly.
  */
 export class UpdateLibraryDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  /** Replace the library's root path. Empty string clears it. */
+  @IsOptional()
+  @IsString()
+  path?: string;
 
   @IsOptional()
   @IsString()
