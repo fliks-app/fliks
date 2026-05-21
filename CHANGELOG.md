@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.1](https://github.com/fliks-app/fliks/compare/v1.6.0...v1.6.1) (2026-05-21)
+
+
+### Bug Fixes
+
+* **streaming:** force-transcode MP3 audio when remuxing to fMP4 (v1.6.1) ([#171](https://github.com/fliks-app/fliks/issues/171)) ([2e4fb07](https://github.com/fliks-app/fliks/commit/2e4fb07a73054d32aeb5b8b0742c3ee88b87edb5))
+* **streaming:** retryable transient errors for HLS live transcoding ([#173](https://github.com/fliks-app/fliks/issues/173)) ([ac41541](https://github.com/fliks-app/fliks/commit/ac41541cba5e5934dd4d0c91ac616321e5f37c03))
+
 ## [1.6.0](https://github.com/fliks-app/fliks/compare/v1.5.1...v1.6.0) (2026-05-20)
 
 
