@@ -16,6 +16,8 @@ export interface QueueEntry extends QbittorrentTorrent {
   mediaId?: number;
   mediaTitle?: string;
   mediaType?: 'movie' | 'series';
+  /** Indexer the torrent was grabbed from (resolved through DownloadHistory). */
+  indexerName?: string;
   /** Download client status (Downloading, Seeding, Paused, Stalled…) */
   trackerStatus: string;
   /** App-level status (Awaiting import, Importing, Imported, Import failed…) */
@@ -244,7 +246,7 @@ export class DownloadClientsService {
         { status: 'completed' },
         { status: 'warning' },
       ],
-      relations: ['media'],
+      relations: ['media', 'indexer'],
     });
 
     for (const entry of results) {
@@ -256,6 +258,9 @@ export class DownloadClientsService {
         entry.mediaId = match.mediaId;
         entry.mediaTitle = match.media.title;
         entry.mediaType = match.media.type;
+      }
+      if (match?.indexer) {
+        entry.indexerName = match.indexer.name;
       }
 
       // App-level status from history

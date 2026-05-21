@@ -602,7 +602,6 @@
     "releases_error": "Impossible de charger les releases.",
     "grab_ok": "Envoyé au client de téléchargement.",
     "grab_success": "Téléchargement lancé avec succès.",
-    "grab_error": "Échec de l'ajout du téléchargement.",
     "profiles_section": "Profils",
     "language_profile_label": "Profil de langue",
     "profile_none": "Non défini",
