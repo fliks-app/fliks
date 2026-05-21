@@ -111,8 +111,8 @@
             @if (item.num_seeds > 0 || item.num_leechs > 0) {
               <span>S:{{ item.num_seeds }} L:{{ item.num_leechs }}</span>
             }
-            @if (item.category) {
-              <span class="badge badge-ghost badge-xs">{{ item.category }}</span>
+            @if (item.indexerName) {
+              <span class="badge badge-ghost badge-xs">{{ item.indexerName }}</span>
             }
             @if (item.clientName) {
               <span class="badge badge-outline badge-xs">{{ item.clientName }}</span>

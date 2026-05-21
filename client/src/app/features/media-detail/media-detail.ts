@@ -856,7 +856,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       this.grabState.update((s) => new Map(s).set('best', 'error'));
-      this.toast.error(this.translate.instant('media_detail.grab_error'));
     } finally {
       this.grabBusy.set(null);
     }
@@ -1192,7 +1191,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       this.epGrabState.update((s) => new Map(s).set('best', 'error'));
-      this.toast.error(this.translate.instant('media_detail.grab_error'));
     } finally {
       this.epGrabBusy.set(null);
     }
@@ -1207,7 +1205,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       this.epGrabState.update((s) => new Map(s).set(key, 'error'));
-      this.toast.error(this.translate.instant('media_detail.grab_error'));
     } finally {
       this.epGrabBusy.set(null);
     }
@@ -1239,7 +1236,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       await this.mediaService.grabSeason(mediaId, season.id, {});
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
-      this.toast.error(this.translate.instant('media_detail.grab_error'));
     } finally {
       this.seasonGrabBusy.set(null);
     }
@@ -1263,7 +1259,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       this.seasonReleaseGrabState.update((s) => new Map(s).set(key, 'error'));
-      this.toast.error(this.translate.instant('media_detail.grab_error'));
     } finally {
       this.seasonGrabBusy.set(null);
     }
@@ -1385,7 +1380,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       this.grabState.update((s) => new Map(s).set(key, 'error'));
-      this.toast.error(this.translate.instant('media_detail.grab_error'));
     } finally {
       this.grabBusy.set(null);
     }
