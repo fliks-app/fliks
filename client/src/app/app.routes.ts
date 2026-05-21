@@ -274,6 +274,13 @@ export const routes: Routes = [
             (m) => m.StorageSettingsPageComponent,
           ),
       },
+      {
+        path: 'display',
+        loadComponent: () =>
+          import('./features/app-settings/display-settings/display-settings').then(
+            (m) => m.DisplaySettingsPageComponent,
+          ),
+      },
     ],
   },
   // Admin area — own layout with dedicated sidebar

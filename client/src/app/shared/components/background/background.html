@@ -1,14 +1,14 @@
-<!-- Hidden below the `lg` breakpoint so phones / tablet-portrait keep
-     the existing inline `mobile-fanart-hero` and don't show a second
-     image of the same fanart. -->
-<div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none hidden lg:block">
+<!-- Hidden below the `md` breakpoint so phones keep the existing inline
+     `mobile-fanart-hero` and don't show a second image of the same
+     fanart. Tablets (md+) get the global background. -->
+<div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none hidden md:block">
   @if (layerA()) {
     <img
       [src]="layerA()! | resolveUrl:'medium'"
       alt=""
       loading="eager"
       decoding="async"
-      class="absolute inset-0 w-full h-full object-cover object-[50%_25%] transition-opacity duration-500"
+      class="absolute inset-0 w-full h-full object-cover object-[50%_25%] transition-opacity duration-1500"
       [class.opacity-100]="activeLayer() === 'A' && imageVisible()"
       [class.opacity-0]="activeLayer() !== 'A' || !imageVisible()"
     />
@@ -19,7 +19,7 @@
       alt=""
       loading="eager"
       decoding="async"
-      class="absolute inset-0 w-full h-full object-cover object-[50%_25%] transition-opacity duration-500"
+      class="absolute inset-0 w-full h-full object-cover object-[50%_25%] transition-opacity duration-1500"
       [class.opacity-100]="activeLayer() === 'B' && imageVisible()"
       [class.opacity-0]="activeLayer() !== 'B' || !imageVisible()"
     />

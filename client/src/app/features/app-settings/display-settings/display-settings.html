@@ -1,0 +1,11 @@
+<h1 class="text-2xl font-bold mb-4">{{ 'display_settings.title' | translate }}</h1>
+<div class="card bg-base-100 border border-base-200">
+  <div class="card-body gap-5">
+    <app-toggle-field
+      [value]="homeBackground()"
+      (valueChange)="onHomeBackgroundChange($event)"
+      [label]="'display_settings.home_background' | translate"
+      [hint]="'display_settings.home_background_hint' | translate"
+    />
+  </div>
+</div>
