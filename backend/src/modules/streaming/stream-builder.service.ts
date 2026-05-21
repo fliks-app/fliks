@@ -253,12 +253,22 @@ export class StreamBuilderService {
       !needsBurnIn &&
       !needsCrop;
     if (canCopyVideo) {
-      const canCopyAudio = directPlayResult.audioSupported;
+      // Some audio codecs the device profile claims to support are
+      // only playable in their NATIVE container (e.g. MP3 via
+      // `audio/mpeg`), not when wrapped inside fMP4 segments via MSE
+      // — Chrome refuses `audio/mp4; codecs="mp4a.6B"` on append.
+      // For DirectStream we always emit fMP4 / HLS, so audio codecs
+      // outside the fMP4-MSE-safe set get force-transcoded to AAC
+      // regardless of the profile match.
+      const fmp4CompatibleAudio = new Set(['aac', 'ac3', 'eac3', 'opus', 'flac']);
+      const canCopyAudio =
+        directPlayResult.audioSupported &&
+        fmp4CompatibleAudio.has(sourceAudioCodec.toLowerCase());
       const outputAudioCodec = canCopyAudio ? sourceAudioCodec : 'aac';
       if (!canCopyAudio && !reasons.some((r) => r.flag.startsWith('Audio'))) {
         reasons.push({
           flag: 'AudioCodecNotSupported',
-          message: `Codec "${sourceAudioCodec}" incompatible`,
+          message: `Audio codec "${sourceAudioCodec}" is not playable inside fMP4 segments`,
         });
       }
       if (
@@ -267,7 +277,7 @@ export class StreamBuilderService {
       ) {
         reasons.push({
           flag: 'ContainerNotSupported',
-          message: `Conteneur "${sourceContainer}" incompatible`,
+          message: `Container "${sourceContainer}" not supported`,
         });
       }
 
@@ -617,7 +627,7 @@ export class StreamBuilderService {
           videoConditionsMet = false;
           reasons.push({
             flag: 'VideoProfileNotSupported',
-            message: `Profil "${source.videoProfile}" incompatible`,
+            message: `Video profile "${source.videoProfile}" not supported`,
           });
         }
         if (
@@ -678,19 +688,19 @@ export class StreamBuilderService {
     if (!videoSupported) {
       reasons.push({
         flag: 'VideoCodecNotSupported',
-        message: `Codec "${source.videoCodec}" incompatible`,
+        message: `Codec "${source.videoCodec}" not supported`,
       });
     }
     if (!audioSupported) {
       reasons.push({
         flag: 'AudioCodecNotSupported',
-        message: `Codec "${source.audioCodec}" incompatible`,
+        message: `Codec "${source.audioCodec}" not supported`,
       });
     }
     if (!containerSupported) {
       reasons.push({
         flag: 'ContainerNotSupported',
-        message: `Conteneur "${source.container}" incompatible`,
+        message: `Conteneur "${source.container}" not supported`,
       });
     }
 
