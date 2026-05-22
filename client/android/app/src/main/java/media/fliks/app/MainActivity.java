@@ -101,7 +101,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onResume() {
+    public void onResume() {
         super.onResume();
         // `singleTask` means the activity isn't recreated when the user
         // brings the app back from background — `onCreate` doesn't run
