@@ -128,6 +128,7 @@ export class MediaDetailSeasonsComponent {
       title: m.title,
       episodeTitle: ep.title ?? undefined,
       fanartUrl: m.fanartUrl ?? null,
+      stillUrl: ep.stillUrl ?? null,
       streamInfo: (files[0] as any).streamInfo,
     }, false);
   }

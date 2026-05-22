@@ -28,7 +28,7 @@
         @for (item of continueWatching(); track item.id) {
           <app-media-card [aspect]="'landscape'"
             [attr.data-home-focus]="'cw:' + item.id"
-            [imageUrl]="item.fanartUrl ?? item.posterUrl"
+            [imageUrl]="item.stillUrl ?? item.fanartUrl ?? item.posterUrl"
             [title]="item.mediaTitle"
             [subtitle]="item.episodeLabel ?? undefined"
             [progressPercent]="item.progressPercent"

@@ -42,6 +42,8 @@ export interface ContinueWatchingItem {
   mediaType: string;
   posterUrl: string | null;
   fanartUrl: string | null;
+  /** Episode still — null for movie rows or when TMDB had no still. */
+  stillUrl: string | null;
   episodeLabel: string | null;
 }
 
@@ -343,6 +345,7 @@ export class PlaybackService implements OnModuleInit {
               ps.id, ps."mediaId", ps."mediaFileId", ps."episodeId",
               ps."positionSeconds", ps."durationSeconds", ps."lastPlayedAt",
               m.title AS "mediaTitle", m."posterUrl", m."fanartUrl",
+              NULL::text AS "stillUrl",
               CASE WHEN ps."durationSeconds" > 0
                    THEN ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)
                    ELSE 0 END AS "progressPercent"
@@ -429,6 +432,7 @@ export class PlaybackService implements OnModuleInit {
         us."lastPlayedAt",
         m.title AS "mediaTitle",
         m."posterUrl", m."fanartUrl",
+        e."stillUrl",
         'S' || LPAD(s."seasonNumber"::text, 2, '0') || 'E' || LPAD(e."episodeNumber"::text, 2, '0')
           || COALESCE(' - ' || e.title, '') AS "episodeLabel",
         CASE WHEN COALESCE(ps_next."durationSeconds", c."durationSeconds", 0) > 0

@@ -155,6 +155,7 @@ export interface ContinueWatchingItem {
   mediaType: string;
   posterUrl: string | null;
   fanartUrl: string | null;
+  stillUrl: string | null;
   episodeLabel: string | null;
 }
 

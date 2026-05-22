@@ -326,6 +326,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       title: item.mediaTitle,
       episodeTitle: item.episodeLabel ?? undefined,
       fanartUrl: item.fanartUrl ?? item.posterUrl ?? null,
+      stillUrl: item.stillUrl ?? null,
     }, false);
   }
 
