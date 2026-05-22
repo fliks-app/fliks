@@ -47,10 +47,11 @@ import { DismissableStackService } from '../../core/services/dismissable-stack.s
       <div class="fixed inset-0 z-[100]" (click)="close()"></div>
       <div
         data-tv-modal
-        class="fixed z-[101] bg-base-200 rounded-box shadow-xl overflow-hidden"
+        class="fixed z-[101] bg-base-200 rounded-box shadow-xl overflow-y-auto p-2 [scroll-padding:0.5rem] [scroll-behavior:smooth]"
         [style.top.px]="position().top"
         [style.left.px]="position().left"
         [style.min-width.px]="position().width"
+        [style.max-height.px]="position().maxHeight"
       >
         <ng-container *ngTemplateOutlet="content"></ng-container>
       </div>
@@ -97,9 +98,17 @@ export class PopoverMenuComponent {
     effect((onCleanup) => {
       if (!this.open()) return;
       queueMicrotask(() => {
-        this.host.nativeElement
-          .querySelector<HTMLElement>('a[href], button:not([disabled]), [tabindex="0"]')
-          ?.focus({ preventScroll: false });
+        // Prefer the active item (caller marks it with `[autofocus]` or
+        // `[aria-current]`) so the user lands on the current selection
+        // instead of having to scroll through the list. Falls back to the
+        // first focusable when nothing's marked active.
+        const root = this.host.nativeElement;
+        const target =
+          root.querySelector<HTMLElement>('[autofocus]:not([disabled])') ??
+          root.querySelector<HTMLElement>('[aria-current="true"]:not([disabled])') ??
+          root.querySelector<HTMLElement>('a[href], button:not([disabled]), [tabindex="0"]');
+        target?.focus({ preventScroll: false });
+        target?.scrollIntoView({ block: 'nearest', behavior: 'instant' as ScrollBehavior });
       });
       // Register with the dismissable stack so Escape (browser) and the
       // hardware back button (Capacitor / Tizen) close the popover.
@@ -113,18 +122,26 @@ export class PopoverMenuComponent {
   readonly useDropdown = computed(() => !this.tv.isTv() && !this.device.isTouch());
 
   /** Recomputed every render. The parent passes anchor by ref so we can
-   *  read its bounding box at open time without an explicit signal. */
+   *  read its bounding box at open time without an explicit signal.
+   *  `maxHeight` is capped to the available space between the popover's
+   *  edge and the viewport edge so a long list doesn't overflow off-screen
+   *  (the internal `overflow-y-auto` only scrolls content INSIDE the box,
+   *  it doesn't help when the box itself is taller than the viewport). */
   readonly position = computed(() => {
     const a = this.anchor();
-    if (!a) return { top: 0, left: 0, width: 0 };
+    if (!a) return { top: 0, left: 0, width: 0, maxHeight: 0 };
     const r = a.getBoundingClientRect();
     const placement = this.placement();
     const onTop = placement.startsWith('top');
     const onEnd = placement.endsWith('end');
+    const GUTTER = 8;
+    const viewportH = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const maxHeight = onTop ? r.top - GUTTER * 2 : viewportH - r.bottom - GUTTER * 2;
     return {
-      top: onTop ? r.top - 8 : r.bottom + 8,
+      top: onTop ? r.top - GUTTER : r.bottom + GUTTER,
       left: onEnd ? r.right - 240 : r.left,
       width: 240,
+      maxHeight: Math.max(120, maxHeight),
     };
   });
 

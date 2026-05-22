@@ -209,6 +209,27 @@ body.tv *:hover {
   z-index: 1;
   position: relative;
 }
+/* Opt-out for focusables that paint their own focus affordance (e.g.
+   round avatar with a ring-primary on the inner div). The default
+   rectangle would draw a competing outer ring around the card. */
+[data-no-focus-ring]:focus-visible,
+[data-no-focus-ring]:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Seekbar thumb: when its parent slider has focus, paint a primary ring
+   around the white dot with a 2 px base-100 gap. Implemented as plain
+   box-shadow so the rule works on Tizen 6.5 / Chromium 85 where
+   Tailwind v4's `ring-*` utilities can lose their custom-property
+   wiring through the downlevel CSS pipeline. */
+[role="slider"]:focus .seekbar-thumb,
+[role="slider"]:focus-visible .seekbar-thumb {
+  box-shadow:
+    0 0 0 2px var(--color-base-100, #1d232a),
+    0 0 0 4px var(--color-primary, #7a3ff2);
+  transform: translateX(-50%) scale(1.25);
+}
 /* TV ghost buttons keep their transparent bg even when focused. The
    3px primary-color outline above is already a strong focus cue on a
    10-foot UI, so layering daisyUI's fill (which kicks in via the

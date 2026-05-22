@@ -6,7 +6,7 @@
   }
 
   <!-- View tabs (own row, centered like the reference) -->
-  <nav class="flex items-center gap-1 mt-2 overflow-x-auto">
+  <nav class="flex items-center gap-1 mt-2 overflow-x-auto py-2 -my-2 px-2 -mx-2">
     <button
       type="button"
       class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
@@ -92,6 +92,7 @@
 
       <div class="flex items-center gap-1">
         <select
+          appTvSelect
           class="select select-bordered select-sm w-fit"
           [ngModel]="sortBy()"
           (ngModelChange)="onSortByChange($event)"
@@ -315,6 +316,7 @@
       <div class="sticky bottom-0 z-20 bg-base-200 border-t border-base-300 px-4 py-3 flex flex-wrap items-center gap-3 shadow-lg rounded-t-lg">
         <span class="font-semibold text-sm">{{ 'library.bulk_selected' | translate:{ count: selectedIds().size } }}</span>
         <select
+          appTvSelect
           class="select select-bordered select-sm"
           [ngModel]="bulkQualityProfileId()"
           (ngModelChange)="bulkQualityProfileId.set($event)"
@@ -325,6 +327,7 @@
           }
         </select>
         <select
+          appTvSelect
           class="select select-bordered select-sm"
           [ngModel]="bulkMonitored()"
           (ngModelChange)="bulkMonitored.set($event)"
