@@ -84,7 +84,11 @@ public class ImmersivePlugin extends Plugin {
     public void exit(PluginCall call) {
         getActivity().runOnUiThread(() -> {
             Window window = getActivity().getWindow();
-            WindowCompat.setDecorFitsSystemWindows(window, true);
+            // Edge-to-edge is the app-wide baseline (set in MainActivity).
+            // Keep it on when leaving immersive mode — only the bar
+            // visibility toggles back, layout stays under the bars so
+            // CSS env(safe-area-inset-*) keeps returning real values.
+            WindowCompat.setDecorFitsSystemWindows(window, false);
 
             // Tell MainActivity to re-apply system bar padding
             if (getActivity() instanceof MainActivity) {
@@ -106,7 +110,16 @@ public class ImmersivePlugin extends Plugin {
                     controller.show(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
                 }
             } else {
-                window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+                // On pre-R, `SYSTEM_UI_FLAG_VISIBLE` (== 0) wipes every
+                // flag including the LAYOUT_FULLSCREEN bits that make
+                // the WebView draw under the system bars. Keep those
+                // bits so layout stays edge-to-edge while the bars
+                // themselves become visible again.
+                window.getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                );
             }
             call.resolve();
         });
