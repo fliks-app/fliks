@@ -35,6 +35,38 @@
   white-space: normal;
 }
 
+/* Global background veil — sits over the fanart image inside
+   `<app-background>`. Hard-coded rgba so the rule survives the
+   Tizen / webOS downlevel pass (Chromium 85 doesn't grok
+   `color-mix`, and the preset-env fallback for Tailwind's
+   `bg-base-100/N` drops the alpha and yields a 100%-opaque veil).
+   `#1d232a` matches daisyUI's dark theme `--color-base-100`. */
+.app-bg-veil {
+  background-color: rgba(29, 35, 42, 0.95);
+}
+
+/* Sidebar veil when a fanart background is showing — frosted
+   look without depending on Tailwind's color-mix-based
+   `bg-base-100/40`. Phones/tablets/desktop: 40 % alpha. TV: a
+   little stronger so the menu text doesn't bleed into the fanart. */
+.app-sidebar-veil {
+  background-color: rgba(29, 35, 42, 0.4);
+}
+body.tv .app-sidebar-veil {
+  background-color: rgba(29, 35, 42, 0.55);
+}
+
+/* Topbar veil when a fanart background is showing. Non-TV gets a
+   light frosted-glass tint; TV stays fully transparent so the
+   fanart reads cleanly across the top of the screen at 10-foot
+   viewing distance. */
+.app-navbar-veil {
+  background-color: rgba(29, 35, 42, 0.4);
+}
+body.tv .app-navbar-veil {
+  background-color: transparent;
+}
+
 /* Native app (Capacitor): offset content from system bars */
 body.native {
   padding-left: env(safe-area-inset-left);

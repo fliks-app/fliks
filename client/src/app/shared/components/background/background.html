@@ -24,9 +24,14 @@
       [class.opacity-0]="activeLayer() !== 'B' || !imageVisible()"
     />
   }
-  <!-- Veil is permanent: when no background is set, the 90 % base-100
-       tint over the body's solid base-100 is a no-op (same colour);
-       when an image is fading in/out beneath it, the tint stays
-       constant so we never flash an un-tinted frame. -->
-  <div class="absolute inset-0 bg-base-100/95"></div>
+  <!-- Veil is permanent: when no background is set, the tint over
+       the body's solid base-100 is a no-op (same colour); when an
+       image is fading in/out beneath it, the tint stays constant
+       so we never flash an un-tinted frame.
+       Custom class (instead of Tailwind's `bg-base-100/N`) because
+       Tailwind v4 emits `color-mix(in oklab, …)` for that helper,
+       which Chromium 85 (Tizen TV) doesn't support — the preset-env
+       fallback drops the alpha and the veil ends up 100% opaque,
+       killing the fanart. Plain `rgba()` is universally supported. -->
+  <div class="absolute inset-0 app-bg-veil"></div>
 </div>
