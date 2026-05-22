@@ -1165,6 +1165,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ctx?.audioStreamIndex,
       this.log,
       ctx?.sourceVideoCodec,
+      ctx?.audioStreams,
     );
 
     const session = this.spawnFfmpegSession({
@@ -1257,6 +1258,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ctx?.trustedStreamInfo ?? false,
       this.log,
       ctx?.useTs ?? false,
+      ctx?.audioStreams?.[audioIndex]?.streamIndex,
     );
 
     const session = this.spawnFfmpegSession({

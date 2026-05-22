@@ -250,9 +250,16 @@ export class StreamingController {
       // emit one audio rendition per track (subdirs 1..N) so Shaka can switch
       // client-side via EXT-X-MEDIA.
       videoOnly: useMultiAudioLayout,
-      audioStreams: useMultiAudioLayout
-        ? ((si?.audio as { language?: string; title?: string }[]) ?? [])
-        : undefined,
+      // Always plumb the cached audio streams (incl. `streamIndex`) so the
+      // single-track path can also resolve `-map 0:<abs>` and skip FFmpeg's
+      // audio enumeration. `useMultiAudioLayout` only gates the var_stream_map
+      // branch, not the presence of the data.
+      audioStreams:
+        (si?.audio as {
+          language?: string;
+          title?: string;
+          streamIndex?: number;
+        }[]) ?? undefined,
       deviceType: this.activeStreamTracker.getDeviceType(mediaFileId),
       useTs: this.activeStreamTracker.getUseTs(mediaFileId),
       encoderPreset: this.activeStreamTracker.getEncoderPreset(mediaFileId),
