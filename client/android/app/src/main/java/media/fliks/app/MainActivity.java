@@ -75,6 +75,11 @@ public class MainActivity extends BridgeActivity {
         // between routes when content briefly has transparent body bg)
         // doesn't flash the AppCompat.Light default white through the gap.
         window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.BLACK));
+        // Draw content edge-to-edge: required for `env(safe-area-inset-*)`
+        // to report real values on Android ≤ 14. Android 15 (targetSdk 35)
+        // applies the same opt-in automatically; calling it explicitly here
+        // keeps the behaviour uniform across OS versions.
+        WindowCompat.setDecorFitsSystemWindows(window, false);
         // Transparent system bars — CSS env(safe-area-inset-*) handles the offset
         window.setStatusBarColor(Color.TRANSPARENT);
         window.setNavigationBarColor(Color.TRANSPARENT);
