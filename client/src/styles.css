@@ -435,10 +435,6 @@ body.tablet [data-touch-only] {
    own bounding box (DaisyUI's .dock would otherwise clip it). */
 .dock-with-fab-cradle {
   overflow: visible !important;
-  /* Edge-to-edge Android: reserve room for the system nav bar so its
-     overlay doesn't sit on top of the dock icons. Browsers without a
-     safe-area report 0 → no extra padding. */
-  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .dock-with-fab-cradle::before {
   content: '';
