@@ -882,7 +882,12 @@ export class StreamingController {
       tokenParam,
       includeRemux,
       sourceBitrate || undefined,
-      useExtXMedia ? audioStreams : undefined,
+      // Pass the array when we want EXT-X-MEDIA renditions, OR when the
+      // source has zero audio streams — the empty array signals
+      // `noAudio` to the master-playlist builder so CODECS drops the
+      // audio entry (otherwise Shaka / ExoPlayer reject the variant).
+      // `undefined` keeps the muxed single-audio layout for everyone else.
+      useExtXMedia || audioStreams.length === 0 ? audioStreams : undefined,
       onlyQuality,
       pickedIdx ?? 0,
       deviceType,
