@@ -117,13 +117,20 @@ public class MainActivity extends BridgeActivity {
      * Asserts the window's edge-to-edge layout + transparent system
      * bars. Safe to call multiple times; idempotent.
      */
+    /** Matches the app's dark theme background (`#1d232a`). Used as the
+     *  activity windowBackground so the brief reveal of the system bar
+     *  zone during open/close transitions blends with the app instead
+     *  of flashing pure black against the WebView content. */
+    private static final int APP_WINDOW_BG = 0xFF1D232A;
+
     private void applyEdgeToEdge() {
         Window window = getWindow();
-        // Force the activity windowBackground to black so any moment where
-        // the WebView is transparent (during native player playback, or
-        // between routes when content briefly has transparent body bg)
-        // doesn't flash the AppCompat.Light default white through the gap.
-        window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.BLACK));
+        // Activity windowBackground = app's dark theme color so any
+        // moment where the WebView is transparent (native player
+        // playback, between routes with transparent body bg, OS
+        // open/close transition revealing the bar area) blends with
+        // the rest of the app instead of flashing black.
+        window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(APP_WINDOW_BG));
         // Draw content edge-to-edge: required for `env(safe-area-inset-*)`
         // to report real values on Android ≤ 14. Android 15 (targetSdk 35)
         // applies the same opt-in automatically; calling it explicitly here
