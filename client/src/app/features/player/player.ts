@@ -2057,13 +2057,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   };
 
   private onPlayerBackEvent = () => {
-    // Back/Escape progression while watching: dropdowns close first (via
-    // DismissableStack in player-controls), then the controls bar itself,
-    // and only when the screen is truly clean does back actually leave.
-    if (this.controlsVisible()) {
-      this.hideControls();
-      return;
-    }
+    // Hardware back / gesture back always leaves the player, regardless
+    // of whether the controls bar is visible. Dropdowns inside the bar
+    // still close first through DismissableStack in app.ts.
     this.onBack();
   };
 

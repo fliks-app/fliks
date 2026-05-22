@@ -385,10 +385,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
   setViewMode(mode: LibraryViewMode) {
     if (this.viewMode() === mode) return;
     this.viewMode.set(mode);
-    // Push a history entry on tab switch so browser back walks through
-    // the previously-active tabs (Films / Suggestions / Genres). Same
-    // pattern as Plex / Jellyseerr web.
-    this.syncQueryParams(true);
+    // Tab switches stay on the same history entry — back from the
+    // library should return to the previous page, not walk through
+    // every tab the user clicked.
+    this.syncQueryParams(false);
     if (mode === 'suggestions') {
       void this.loadSuggestions();
     } else if (mode === 'genres') {
@@ -403,9 +403,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   pickGenre(genre: string) {
     this.selectedGenre.set(genre);
     this.viewMode.set('all');
-    // Push a real history entry so the browser back button returns
-    // to the Genres list instead of the page-before-library.
-    this.syncQueryParams(true);
+    this.syncQueryParams(false);
     void this.load(this.library()?.id);
   }
 
@@ -418,7 +416,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   pickCollection(id: number) {
     this.selectedCollectionId.set(id);
     this.viewMode.set('all');
-    this.syncQueryParams(true);
+    this.syncQueryParams(false);
     void this.load(this.library()?.id);
   }
 
