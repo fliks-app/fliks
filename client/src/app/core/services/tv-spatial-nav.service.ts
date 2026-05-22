@@ -166,20 +166,27 @@ export class TvSpatialNavService {
     const isMultiLineText = tag === 'TEXTAREA' || tag === 'OPTION' || !!active?.isContentEditable;
     if (isMultiLineText) return;
 
-    // Desktop / laptop users expect native arrow handling everywhere inside
-    // form fields (caret in text, value cycle in select / range / number /
-    // date, etc.). Get out of the way entirely for any input + select when
-    // we're not in TV mode — they fall through to the browser. On TV the
-    // narrower skip list below preserves the existing D-pad semantics.
-    if (!this.tv.isTv() && (tag === 'INPUT' || tag === 'SELECT')) return;
+    // Inputs without native arrow handling — checkbox/radio/button-style
+    // — must always fall through to the spatial-nav tree, regardless of
+    // platform, or the user gets focus-trapped on the field. Toggles
+    // (DaisyUI `.toggle` is a styled `<input type="checkbox">`) are the
+    // canonical example: no caret, no value cycle, arrows would just
+    // dead-end without this.
+    const NATIVE_INPUT_TYPES = new Set([
+      'text', 'email', 'password', 'search', 'tel', 'url',
+      'number', 'range', 'date', 'time', 'datetime-local', 'month', 'week',
+    ]);
+    const isInputWithNativeArrows = tag === 'INPUT' && NATIVE_INPUT_TYPES.has(inputType ?? 'text');
+
+    // Desktop / laptop: defer entirely to native for fields that actually
+    // use arrows (caret in text, value cycle in number / range / date /
+    // select). TV keeps the narrower skip list below for the same fields.
+    if (!this.tv.isTv() && (isInputWithNativeArrows || tag === 'SELECT')) return;
 
     // TV mode: text-style inputs own horizontal arrows (caret); other arrow
     // directions and other inputs escape to the spatial-nav tree so the
     // D-pad user isn't trapped on a field.
-    const isSingleLineTextInput =
-      tag === 'INPUT' &&
-      !['checkbox', 'radio', 'range', 'button', 'submit', 'reset'].includes(inputType ?? '');
-    if (isSingleLineTextInput && (dir === 'left' || dir === 'right')) return;
+    if (isInputWithNativeArrows && inputType !== 'range' && (dir === 'left' || dir === 'right')) return;
     // Native `<select>` cycles its options on arrow keys (changing the
     // value silently). Always block that on TV. We still try to move focus
     // — if a tree-aware neighbour exists, the user goes there; otherwise
