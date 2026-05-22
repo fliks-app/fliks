@@ -135,7 +135,7 @@
          navigate via the drawer/sidebar; phones use the dock as the primary
          nav surface so they need the spacer to avoid content under the bar. -->
     @if (isNative && device.isPhone()) {
-      <div class="h-20"></div>
+      <div style="height: calc(5rem + env(safe-area-inset-bottom, 0px))"></div>
     }
     <!-- Native bottom navigation bar — phones only.
          Tablets and TV use the drawer/sidebar instead. -->
