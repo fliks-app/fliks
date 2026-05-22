@@ -10,6 +10,21 @@ export interface TranscodeProfile {
 
 export type DeviceType = 'mobile' | 'desktop';
 
+/**
+ * Audio stream metadata sourced from the cached `streamInfo` (ffprobe at
+ * scan/rescan time). `streamIndex` is the ABSOLUTE position inside the
+ * file (ffprobe `index`), used by FFmpeg arg builders to map audio via
+ * `-map 0:<idx>` without re-enumerating streams — required on Blu-ray
+ * remuxes where probing for the relative `0:a:N` shorthand fails because
+ * PGS subtitle tracks exhaust the probe budget before audio codec params
+ * are identified.
+ */
+export interface AudioStreamMeta {
+  language?: string;
+  title?: string;
+  streamIndex?: number;
+}
+
 export type HwAccelType = 'vaapi' | 'nvenc' | 'qsv' | 'videotoolbox' | 'none';
 
 /** Short human-readable label for each HW accel type (used in admin
@@ -56,12 +71,8 @@ export interface SessionContext {
   crop?: { width: number; height: number; x: number; y: number };
   /** When true, produce video-only segments (audio served separately via EXT-X-MEDIA) */
   videoOnly?: boolean;
-  /** Audio stream info from cached `streamInfo`. `streamIndex` is the
-   *  ABSOLUTE position inside the file (ffprobe `index`), used by FFmpeg
-   *  arg builders to map audio via `-map 0:<idx>` without re-enumerating
-   *  streams — required on Blu-ray remuxes where probing for `0:a:N`
-   *  fails because PGS subtitle tracks exhaust the probe budget. */
-  audioStreams?: { language?: string; title?: string; streamIndex?: number }[];
+  /** Audio stream info from cached `streamInfo`. See {@link AudioStreamMeta}. */
+  audioStreams?: AudioStreamMeta[];
   /** Client device category — selects the per-device bitrate ladder. */
   deviceType?: DeviceType;
   /**

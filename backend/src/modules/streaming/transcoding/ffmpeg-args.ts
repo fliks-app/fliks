@@ -4,6 +4,7 @@ import { getSegmentDuration, segmentIndexToSeconds } from './constants';
 import { isHdrProfile, parseBitrateToBps, profileResolution } from './profiles';
 import { requestedHwAccelFor } from './hw-detect';
 import type {
+  AudioStreamMeta,
   BurnInSubtitle,
   HwAccelType,
   TonemapAlgo,
@@ -37,13 +38,8 @@ export interface BuildFfmpegArgsOptions {
   audioStreamIndex?: number;
   crop?: { width: number; height: number; x: number; y: number };
   videoOnly?: boolean;
-  /** Audio streams from the cached `streamInfo`. `streamIndex` is the
-   *  ABSOLUTE position inside the file (as reported by ffprobe at
-   *  scan time), so callers can `-map 0:<streamIndex>` without forcing
-   *  FFmpeg to re-enumerate audio streams — required on Blu-ray remuxes
-   *  where probing for `0:a:N` fails because PGS subtitles eat the probe
-   *  budget before audio codec params are identified. */
-  audioStreams?: { language?: string; title?: string; streamIndex?: number }[];
+  /** Audio streams from the cached `streamInfo`. See {@link AudioStreamMeta}. */
+  audioStreams?: AudioStreamMeta[];
   /** Output codec variant. Drives the encoder lookup via
    *  `encoderRegistry`. Required: a missing variant means the caller
    *  lost the master-playlist variant for this session, which would
@@ -95,6 +91,25 @@ export interface BuildFfmpegArgsOptions {
    *  side-steps the issue at the cost of Dolby passthrough and a clean
    *  HDR path. Cast, browser and native mobile all stay on fMP4. */
   useTs?: boolean;
+}
+
+/**
+ * Resolve the `-map` value for an audio track, preferring the absolute
+ * ffprobe `streamIndex` over the relative `0:a:N` shorthand. The `?`
+ * suffix on the relative fallback keeps FFmpeg from hard-failing when
+ * the audio is missing or unprobeable.
+ */
+function audioMapSpec(
+  streams: AudioStreamMeta[] | undefined,
+  relIndex: number,
+): string {
+  const abs = streams?.[relIndex]?.streamIndex;
+  return abs != null ? `0:${abs}` : `0:a:${relIndex}?`;
+}
+
+/** True iff the cached streamInfo explicitly reports zero audio streams. */
+function hasNoAudio(streams: AudioStreamMeta[] | undefined): boolean {
+  return streams != null && streams.length === 0;
 }
 
 export function buildFfmpegArgs(
@@ -595,13 +610,8 @@ export function buildFfmpegArgs(
     if (!args.some((a) => a === '-map')) {
       args.push('-map', '0:v:0');
     }
-    // Prefer absolute stream index (`0:<idx>`) when ffprobe gave us one at
-    // scan time — skips FFmpeg's redundant audio enumeration that fails on
-    // Blu-ray remuxes (28+ PGS tracks consume the probe budget). Fall back
-    // to the relative `0:a:N` when streamIndex is missing.
     for (let i = 0; i < audioStreams.length; i++) {
-      const abs = audioStreams[i].streamIndex;
-      args.push('-map', abs != null ? `0:${abs}` : `0:a:${i}`);
+      args.push('-map', audioMapSpec(audioStreams, i));
     }
     args.push(...audioArgs);
 
@@ -641,18 +651,21 @@ export function buildFfmpegArgs(
     // (some HEVC MKVs have 28+) where the parallel subrip→webvtt pipeline
     // starves the VAAPI HEVC decoder buffer pool, making the early session
     // loop on "thread_get_buffer() failed".
-    // Resolve to an absolute stream index when possible so FFmpeg doesn't
-    // re-enumerate audio streams (probe budget is exhausted by PGS subtitle
-    // tracks on Blu-ray remuxes, making `0:a:N` match nothing).
-    const pickedRel = userPickedAudio ? audioStreamIndex! : 0;
-    const pickedAbs = audioStreams?.[pickedRel]?.streamIndex;
-    args.push(
-      '-map',
-      '0:v:0',
-      '-map',
-      pickedAbs != null ? `0:${pickedAbs}` : `0:a:${pickedRel}`,
-    );
-    args.push(...audioArgs);
+    // Audio-less sources (silent video, corrupted track, etc.) must NOT
+    // emit a `-map` for audio — FFmpeg fails with "Stream map matches no
+    // streams" otherwise.
+    if (hasNoAudio(audioStreams)) {
+      args.push('-map', '0:v:0', '-an');
+    } else {
+      const pickedRel = userPickedAudio ? audioStreamIndex! : 0;
+      args.push(
+        '-map',
+        '0:v:0',
+        '-map',
+        audioMapSpec(audioStreams, pickedRel),
+      );
+      args.push(...audioArgs);
+    }
 
     args.push(
       ...(useTs ? [] : ['-movflags', '+cmaf']),
@@ -691,10 +704,10 @@ export function buildAudioOnlyFfmpegArgs(
   trustedStreamInfo = false,
   log: Logger,
   useTs = false,
-  /** Absolute stream index (ffprobe `index`) for the audio track. When
-   *  provided, used instead of the relative `0:a:N` shorthand so FFmpeg
-   *  doesn't need to re-enumerate audio streams. */
-  audioAbsoluteIndex?: number,
+  /** Cached streamInfo audio array. Used to resolve `audioStreamIndex`
+   *  (relative) to its absolute ffprobe index so `-map 0:<abs>` skips
+   *  FFmpeg's audio enumeration. */
+  audioStreams?: AudioStreamMeta[],
 ): string[] {
   const segType = useTs ? 'mpegts' : 'fmp4';
   const segExt = useTs ? 'ts' : 'm4s';
@@ -731,12 +744,7 @@ export function buildAudioOnlyFfmpegArgs(
     args.push('-ss', String(seekSeconds));
   }
 
-  args.push(
-    '-map',
-    audioAbsoluteIndex != null
-      ? `0:${audioAbsoluteIndex}`
-      : `0:a:${audioStreamIndex}`,
-  );
+  args.push('-map', audioMapSpec(audioStreams, audioStreamIndex));
   args.push('-vn');
   args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
 
@@ -784,10 +792,8 @@ export function buildRemuxArgs(
    *  in the bitstream (`hev1`). Without this, iOS AVPlayer fails the
    *  variant with error -12927 on the first segment fetch. */
   sourceVideoCodec?: string,
-  /** Audio streams from cached `streamInfo`. Used to resolve the picked
-   *  audio's absolute stream index so `-map 0:<idx>` bypasses FFmpeg's
-   *  audio enumeration. */
-  audioStreams?: { language?: string; title?: string; streamIndex?: number }[],
+  /** Cached streamInfo audio array. See {@link AudioStreamMeta}. */
+  audioStreams?: AudioStreamMeta[],
 ): string[] {
   const SEGMENT_DURATION = getSegmentDuration();
 
@@ -825,18 +831,16 @@ export function buildRemuxArgs(
   // index lookup; that's all remux needs.
 
   const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
-  if (videoOnly && !userPickedAudio) {
-    // Video-only remux for var_stream_map (audio served separately).
+  if ((videoOnly && !userPickedAudio) || hasNoAudio(audioStreams)) {
+    // Video-only remux: var_stream_map (audio served separately) OR a
+    // source with zero audio streams in the cached streamInfo.
     args.push('-map', '0:v:0', '-c:v', 'copy', '-an');
   } else if (userPickedAudio) {
-    // Resolve to absolute index when available — avoids FFmpeg's audio
-    // enumeration that fails on remuxes with many PGS subtitle tracks.
-    const pickedAbs = audioStreams?.[audioStreamIndex!]?.streamIndex;
     args.push(
       '-map',
       '0:v:0',
       '-map',
-      pickedAbs != null ? `0:${pickedAbs}` : `0:a:${audioStreamIndex}`,
+      audioMapSpec(audioStreams, audioStreamIndex!),
       '-c:v',
       'copy',
     );

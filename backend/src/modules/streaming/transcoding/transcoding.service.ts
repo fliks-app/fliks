@@ -1258,7 +1258,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ctx?.trustedStreamInfo ?? false,
       this.log,
       ctx?.useTs ?? false,
-      ctx?.audioStreams?.[audioIndex]?.streamIndex,
+      ctx?.audioStreams,
     );
 
     const session = this.spawnFfmpegSession({

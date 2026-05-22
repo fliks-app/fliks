@@ -254,12 +254,7 @@ export class StreamingController {
       // single-track path can also resolve `-map 0:<abs>` and skip FFmpeg's
       // audio enumeration. `useMultiAudioLayout` only gates the var_stream_map
       // branch, not the presence of the data.
-      audioStreams:
-        (si?.audio as {
-          language?: string;
-          title?: string;
-          streamIndex?: number;
-        }[]) ?? undefined,
+      audioStreams: si?.audio ?? undefined,
       deviceType: this.activeStreamTracker.getDeviceType(mediaFileId),
       useTs: this.activeStreamTracker.getUseTs(mediaFileId),
       encoderPreset: this.activeStreamTracker.getEncoderPreset(mediaFileId),
