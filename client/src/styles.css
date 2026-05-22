@@ -235,10 +235,24 @@ body.tv app-media-card .opacity-0.group-hover\:opacity-100 {
    `z-index` keeps it above the cover image. The matching
    `outline: none` defeats the generic ring above that would draw a
    duplicate outer ring at offset:4. */
-app-media-card figure:focus-visible {
+/* Inset focus ring for card-shaped focusables — applied to
+   `app-media-card`'s inner figure and to any home card that opts in
+   via `[data-home-focus]` (libraries, continue-watching, etc.).
+   Draws the ring INSIDE the element via `::after { inset: 0;
+   border: 3px }` so it follows the card's own `border-radius` and
+   sits on top of stacking contexts that the cover image would
+   otherwise occlude (lingering `view-transition-name`). The matching
+   `outline: none` defeats the generic outline that would draw a
+   duplicate outer ring at offset:4.
+   `position: relative` is added on focus so the pseudo can anchor
+   to the element even when its layout didn't already position it. */
+app-media-card figure:focus-visible,
+[data-home-focus]:focus-visible {
   outline: none !important;
+  position: relative;
 }
-app-media-card figure:focus-visible::after {
+app-media-card figure:focus-visible::after,
+[data-home-focus]:focus-visible::after {
   content: '';
   position: absolute;
   inset: 0;
