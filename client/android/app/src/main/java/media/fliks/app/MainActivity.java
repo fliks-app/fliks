@@ -107,10 +107,29 @@ public class MainActivity extends BridgeActivity {
         // brings the app back from background — `onCreate` doesn't run
         // again, so the edge-to-edge flag needs to be re-asserted here
         // (some Android versions reset window flags on detach/attach
-        // cycles). Also reapplies the status-bar icon color in case it
-        // was reset alongside.
-        applyEdgeToEdge();
-        getWindow().getDecorView().post(this::applyLightStatusBar);
+        // cycles). Post to the decor view's queue so the call lands
+        // after the system has finished restoring its own window state
+        // on resume — calling it inline raced with Android 13's async
+        // bar reset and missed roughly 1 in 3 returns from background.
+        getWindow().getDecorView().post(() -> {
+            applyEdgeToEdge();
+            applyLightStatusBar();
+        });
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        // Belt-and-braces: when the system finishes the return-from-
+        // recents animation it dispatches a focus-gained that lands
+        // strictly after any internal flag reset. Re-asserting here
+        // catches the cases where onResume fired too early to stick.
+        if (hasFocus) {
+            getWindow().getDecorView().post(() -> {
+                applyEdgeToEdge();
+                applyLightStatusBar();
+            });
+        }
     }
 
     /**
