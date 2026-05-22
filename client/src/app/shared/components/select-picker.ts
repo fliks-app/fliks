@@ -27,6 +27,7 @@ import { PopoverMenuComponent } from './popover-menu';
         <button
           type="button"
           [disabled]="opt.disabled"
+          [attr.aria-current]="opt.selected ? 'true' : null"
           class="dropdown-item"
           [class.text-primary]="opt.selected"
           [class.text-white]="!opt.selected"

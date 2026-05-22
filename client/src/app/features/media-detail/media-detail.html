@@ -313,9 +313,9 @@
     <div class="cv-auto" style="contain-intrinsic-size: auto 12rem">
     <app-horizontal-scroller [title]="'media_detail.cast' | translate">
       @for (c of cast(); track c.id) {
-        <a [routerLink]="['/persons', c.person.id]" class="shrink-0 w-20 sm:w-24 flex flex-col items-center gap-1.5 group tv:focus:outline-none! tv:focus-visible:outline-none!">
+        <a [routerLink]="['/persons', c.person.id]" data-no-focus-ring class="shrink-0 w-20 sm:w-24 flex flex-col items-center gap-1.5 group">
           <div class="avatar">
-            <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full ring ring-base-200 group-hover:ring-primary group-focus:ring-primary group-focus-visible:ring-primary group-focus:ring-2 group-focus-visible:ring-2 transition-colors">
+            <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full ring ring-base-200 group-hover:ring-primary group-focus:ring-primary group-focus-visible:ring-primary group-focus:ring-4 group-focus-visible:ring-4 group-focus:ring-offset-2 group-focus-visible:ring-offset-2 group-focus:ring-offset-base-100 group-focus-visible:ring-offset-base-100 transition-colors">
               @if (c.person.avatarUrl) {
                 <img appImgFadeIn [src]="c.person.avatarUrl | resolveUrl:'thumb'" [alt]="c.person.name" loading="lazy" decoding="async" fetchpriority="low" />
               } @else {

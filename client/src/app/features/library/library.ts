@@ -22,6 +22,7 @@ import { ProfilesService, QualityProfile } from '../../core/services/api/profile
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
+import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import type {
   ContinueWatchingItem,
@@ -60,6 +61,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
   imports: [
     MediaCardComponent,
     DropdownMenuComponent,
+    TvSelectDirective,
     HorizontalScrollerComponent,
     FormsModule,
     TranslateModule,

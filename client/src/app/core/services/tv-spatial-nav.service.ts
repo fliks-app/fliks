@@ -178,19 +178,32 @@ export class TvSpatialNavService {
     ]);
     const isInputWithNativeArrows = tag === 'INPUT' && NATIVE_INPUT_TYPES.has(inputType ?? 'text');
 
-    // Desktop / laptop: defer entirely to native for fields that actually
-    // use arrows (caret in text, value cycle in number / range / date /
-    // select). TV keeps the narrower skip list below for the same fields.
-    // `<select appTvSelect>` opts out — the directive routes opens through
-    // SelectPickerService, so arrow keys should escape to spatial nav
-    // instead of silently cycling the underlying native value.
+    // `<select appTvSelect>` opts out of native arrow handling — the
+    // directive routes opens through SelectPickerService, so arrow keys
+    // should escape to spatial nav instead of silently cycling the
+    // underlying native value.
     const isPickerSelect = tag === 'SELECT' && active?.hasAttribute('appTvSelect');
-    if (!this.tv.isTv() && (isInputWithNativeArrows || (tag === 'SELECT' && !isPickerSelect))) return;
-
-    // TV mode: text-style inputs own horizontal arrows (caret); other arrow
-    // directions and other inputs escape to the spatial-nav tree so the
-    // D-pad user isn't trapped on a field.
-    if (isInputWithNativeArrows && inputType !== 'range' && (dir === 'left' || dir === 'right')) return;
+    // Native <select> (without the picker directive): always defer to
+    // native; left/right cycles options, up/down opens the dropdown.
+    if (tag === 'SELECT' && !isPickerSelect) return;
+    // Text-style inputs own horizontal arrows (caret movement) — defer
+    // left/right to native UNTIL the caret hits the end of the value, at
+    // which point the arrow should escape to spatial nav instead of
+    // dead-ending on a no-op caret move. Up/down don't move the caret on
+    // single-line inputs, so they escape unconditionally. Range inputs
+    // are excluded (their arrows adjust the value on every axis).
+    if (isInputWithNativeArrows && inputType !== 'range' && (dir === 'left' || dir === 'right')) {
+      const input = active as HTMLInputElement;
+      const value = input.value ?? '';
+      const start = input.selectionStart ?? 0;
+      const end = input.selectionEnd ?? 0;
+      const hasSelection = start !== end;
+      const atStart = !hasSelection && start === 0;
+      const atEnd = !hasSelection && end === value.length;
+      if (dir === 'left' && !atStart) return;
+      if (dir === 'right' && !atEnd) return;
+      // Caret at boundary → fall through to spatial nav.
+    }
     // Native `<select>` cycles its options on arrow keys (changing the
     // value silently). Always block that on TV. We still try to move focus
     // — if a tree-aware neighbour exists, the user goes there; otherwise
@@ -225,8 +238,13 @@ export class TvSpatialNavService {
     // No focusable neighbour: scroll the page manually so the user can
     // reach informational content (file infos, descriptions, etc.) that
     // sits below the last focusable card. Up/down only — left/right at a
-    // boundary should just block (intra-row).
-    if (dir === 'down' || dir === 'up') {
+    // boundary should just block (intra-row). Skip when a modal trap is
+    // active (open popover / dropdown / bottom-sheet): the user hitting
+    // the boundary inside a menu shouldn't drift the page underneath.
+    const modalOpen =
+      !!document.querySelector('[data-tv-modal]') ||
+      !!document.querySelector('.dropdown-open .dropdown-content');
+    if (!modalOpen && (dir === 'down' || dir === 'up')) {
       window.scrollBy({ top: dir === 'down' ? 300 : -300, behavior: 'smooth' });
     }
   }
