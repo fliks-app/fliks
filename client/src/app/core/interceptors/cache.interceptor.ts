@@ -24,6 +24,12 @@ const CACHEABLE_PREFIXES = [
   '/api/playback/history',
   '/api/playback/watched-ids',
   '/api/libraries/mine',
+  // Form-population endpoints — change rarely, dominate the media-detail
+  // page load when reopened (profiles modal + library picker). SWR keeps
+  // them fresh in the background without blocking render.
+  '/api/libraries',
+  '/api/profiles/quality',
+  '/api/profiles/language',
 ];
 
 const EXCLUDED_PREFIXES = [
@@ -41,7 +47,7 @@ const EXCLUDED_PATTERNS = [
 
 const DETAIL_PATTERN = /^\/api\/media\/\d+$/;
 const TTL_LIST = 5 * 60_000;
-const TTL_DETAIL = 60 * 60_000;
+const TTL_DETAIL = 4 * 60 * 60_000;
 
 interface CacheEntry {
   url: string;

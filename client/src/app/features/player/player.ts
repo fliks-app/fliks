@@ -2036,6 +2036,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     switch (e.key) {
       case ' ':
       case 'k':
+        // Space is the universal activation key on buttons / links. When
+        // the controls bar is shown and focus sits on an interactive
+        // element inside it, let the native activation fire instead of
+        // hijacking the press for play/pause. 'k' has no such overload —
+        // it always toggles playback.
+        if (
+          e.key === ' ' &&
+          this.controlsVisible() &&
+          active &&
+          active !== document.body &&
+          active.closest('app-player-controls')
+        ) {
+          return; // fall through to native activation
+        }
         e.preventDefault();
         this.onTogglePlay();
         break;
@@ -2266,6 +2280,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.streamingApi.stopSessions(this.mediaFileId).catch(() => {});
   }
 
+  /** Last second-rounded position we PUT to /state. Used to dedup the
+   *  3 saves that fire on exit (onBack, ngOnDestroy, savePosition
+   *  interval): all three see the same `currentTime`, so only the first
+   *  hits the network. */
+  private lastSavedPosition: number | null = null;
+
   private async savePosition() {
     if (!this.mediaId) return;
 
@@ -2283,6 +2303,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
 
     if (!pos) return;
+
+    const rounded = Math.floor(pos);
+    if (this.lastSavedPosition === rounded) return;
+    this.lastSavedPosition = rounded;
 
     const payload = {
       positionSeconds: pos,

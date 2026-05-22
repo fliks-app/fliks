@@ -10,10 +10,11 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { Library } from '../../../../core/services/api/libraries-api.service';
 import { METADATA_PROVIDER_OPTIONS_OVERRIDE } from '../../../../core/constants/metadata-providers';
+import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 
 @Component({
   selector: 'app-media-detail-library-modal',
-  imports: [TranslateModule, FormsModule],
+  imports: [TranslateModule, FormsModule, TvSelectDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-library-modal.component.html',
 })

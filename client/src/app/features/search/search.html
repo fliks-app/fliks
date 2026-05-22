@@ -17,19 +17,17 @@
         </button>
       }
     </div>
-    <div class="dropdown dropdown-end">
-      <div tabindex="0" role="button" class="btn btn-square btn-ghost">
+    <app-dropdown-menu placement="bottom-end">
+      <div trigger tabindex="0" role="button" class="btn btn-square btn-ghost">
         <svg lucideSettings class="h-5 w-5"></svg>
       </div>
-      <div tabindex="0" class="dropdown-content bg-base-100 rounded-box shadow-xl border border-base-200 p-4 w-64 z-50">
-        <label class="flex items-center justify-between gap-3 cursor-pointer">
-          <span class="text-sm">{{ 'search.external_search' | translate }}</span>
-          <input type="checkbox" class="toggle toggle-primary toggle-sm"
-                 [ngModel]="state.externalEnabled()"
-                 (ngModelChange)="toggleExternal()" />
-        </label>
-      </div>
-    </div>
+      <label class="flex items-center justify-between gap-3 cursor-pointer px-3 py-2">
+        <span class="text-sm">{{ 'search.external_search' | translate }}</span>
+        <input type="checkbox" class="toggle toggle-primary toggle-sm"
+               [ngModel]="state.externalEnabled()"
+               (ngModelChange)="toggleExternal()" />
+      </label>
+    </app-dropdown-menu>
   </div>
 
   <!-- Filter tabs -->

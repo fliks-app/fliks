@@ -46,7 +46,12 @@ export class SelectPickerService {
   }
 
   close() {
+    const sel = this.currentSelect;
     this.open.set(false);
     this.currentSelect = null;
+    // Restore focus to the trigger so a subsequent Enter / Space re-opens
+    // the picker — without this the browser drops focus to <body> when the
+    // popover unmounts and the user has to Tab back to the select.
+    sel?.focus({ preventScroll: true });
   }
 }

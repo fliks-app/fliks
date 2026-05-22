@@ -10,10 +10,11 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { LocalizeLanguagePipe } from '../../../../core/pipes/localize-language.pipe';
 import { SubtitleSearchResult } from '../../../../core/services/api/subtitles-api.service';
+import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 
 @Component({
   selector: 'app-media-detail-subtitle-search-modal',
-  imports: [TranslateModule, FormsModule, LocalizeLanguagePipe],
+  imports: [TranslateModule, FormsModule, LocalizeLanguagePipe, TvSelectDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-subtitle-search-modal.component.html',
 })

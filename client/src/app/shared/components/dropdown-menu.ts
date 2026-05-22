@@ -92,6 +92,8 @@ export class DropdownMenuComponent {
    *  traps `z-[101]` below the bottom dock at `z-40`). The trigger stays
    *  inline so the layout's flex/grid placement keeps working. */
   private readonly sheet = viewChild('sheet', { read: ElementRef });
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private wasOpen = false;
 
   constructor() {
     if (typeof document === 'undefined') return;
@@ -100,6 +102,20 @@ export class DropdownMenuComponent {
       if (!ref || this.useDropdown()) return;
       queueMicrotask(() => {
         document.documentElement.appendChild(ref.nativeElement);
+      });
+    });
+    // Sheet branch (touch / TV) doesn't go through DropdownToggleDirective,
+    // so refocus the projected trigger ourselves on close — keeps Enter /
+    // tap parity with the dropdown branch (re-activating re-opens).
+    effect(() => {
+      const open = this.open();
+      const justClosed = this.wasOpen && !open;
+      this.wasOpen = open;
+      if (!justClosed || this.useDropdown()) return;
+      queueMicrotask(() => {
+        this.host.nativeElement
+          .querySelector<HTMLElement>('[trigger]')
+          ?.focus({ preventScroll: true });
       });
     });
   }

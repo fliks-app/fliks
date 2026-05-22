@@ -181,7 +181,11 @@ export class TvSpatialNavService {
     // Desktop / laptop: defer entirely to native for fields that actually
     // use arrows (caret in text, value cycle in number / range / date /
     // select). TV keeps the narrower skip list below for the same fields.
-    if (!this.tv.isTv() && (isInputWithNativeArrows || tag === 'SELECT')) return;
+    // `<select appTvSelect>` opts out — the directive routes opens through
+    // SelectPickerService, so arrow keys should escape to spatial nav
+    // instead of silently cycling the underlying native value.
+    const isPickerSelect = tag === 'SELECT' && active?.hasAttribute('appTvSelect');
+    if (!this.tv.isTv() && (isInputWithNativeArrows || (tag === 'SELECT' && !isPickerSelect))) return;
 
     // TV mode: text-style inputs own horizontal arrows (caret); other arrow
     // directions and other inputs escape to the spatial-nav tree so the
@@ -208,7 +212,14 @@ export class TvSpatialNavService {
     const next = this.findNeighbor(dir);
     e.preventDefault();
     if (next) {
-      next.focus({ preventScroll: false });
+      // `preventScroll: true` keeps the browser's instant auto-scroll from
+      // firing on every focus tick. We then call `scrollIntoView` smooth
+      // with `block: 'nearest'` so an off-screen card animates in, while
+      // horizontal-scroller's `focusin` handler owns vertical row-top
+      // alignment when focus crosses rows. Two coordinated smooth
+      // scrolls instead of a jarring instant→smooth one-two punch.
+      next.focus({ preventScroll: true });
+      next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
       return;
     }
     // No focusable neighbour: scroll the page manually so the user can

@@ -267,9 +267,10 @@ export class PlayerControlsComponent {
     if (next) {
       // Remember the trigger so Back/Escape can refocus it after closing.
       this.dropdownTrigger = (event?.currentTarget as HTMLElement) ?? null;
-      // On TV, push focus into the panel so the D-pad lands on the first item
-      // instead of having to traverse out of the trigger via spatial nav.
-      if (this.isTv()) this.focusFirstDropdownItem();
+      // Push focus into the panel so the first item is reachable without
+      // having to traverse out of the trigger via spatial nav (D-pad on TV,
+      // arrow keys on desktop keyboard). Harmless for mouse users.
+      this.focusFirstDropdownItem();
     }
   }
 

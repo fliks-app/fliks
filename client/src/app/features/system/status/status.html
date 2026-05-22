@@ -72,19 +72,15 @@
             {{ item.label | translate }}
           </button>
         } @else {
-          <div class="dropdown dropdown-bottom">
-            <div tabindex="0" role="button" class="btn btn-outline btn-sm">{{ item.label | translate }} ▾</div>
-            <ul tabindex="0" class="dropdown-content z-10 menu p-1 shadow-lg bg-base-200 rounded-lg min-w-48 mt-1">
-              @for (sub of item.items; track sub.name) {
-                <li>
-                  <button type="button" (click)="trigger(sub.name)" [disabled]="triggering() !== null" class="text-sm">
-                    @if (triggering() === sub.name) { <span class="loading loading-spinner loading-xs"></span> }
-                    {{ sub.label | translate }}
-                  </button>
-                </li>
-              }
-            </ul>
-          </div>
+          <app-dropdown-menu placement="bottom-start">
+            <div trigger tabindex="0" role="button" class="btn btn-outline btn-sm">{{ item.label | translate }} ▾</div>
+            @for (sub of item.items; track sub.name) {
+              <button type="button" class="dropdown-item text-white" (click)="trigger(sub.name)" [disabled]="triggering() !== null">
+                @if (triggering() === sub.name) { <span class="loading loading-spinner loading-xs"></span> }
+                {{ sub.label | translate }}
+              </button>
+            }
+          </app-dropdown-menu>
         }
       }
     </div>

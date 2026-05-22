@@ -40,6 +40,7 @@ export class App implements OnInit, OnDestroy {
   private backButtonListener?: { remove: () => Promise<void> };
   private resumeListener?: { remove: () => Promise<void> };
   private tizenKeyListener?: (e: KeyboardEvent) => void;
+  private escapeKeyListener?: (e: KeyboardEvent) => void;
 
   ngOnInit() {
     this.auth.hydrateFromServer();
@@ -76,6 +77,22 @@ export class App implements OnInit, OnDestroy {
         this.resumeListener = handle;
       });
     }
+
+    // Browser/desktop Escape mirrors the hardware back button: closes the
+    // topmost dismissable layer (open dropdown, bottom sheet, modal) if
+    // any, else falls through to route-level back. Skip when focus is
+    // inside a text input so Escape can still e.g. cancel an inline edit
+    // without navigating away.
+    this.escapeKeyListener = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.handleBackButton();
+    };
+    window.addEventListener('keydown', this.escapeKeyListener, true);
 
     // Samsung Tizen "Return" remote key. Capacitor's `backButton` event
     // never fires here (we're not running through Capacitor on Tizen), so
@@ -153,6 +170,9 @@ export class App implements OnInit, OnDestroy {
     this.resumeListener?.remove();
     if (this.tizenKeyListener) {
       window.removeEventListener('keydown', this.tizenKeyListener);
+    }
+    if (this.escapeKeyListener) {
+      window.removeEventListener('keydown', this.escapeKeyListener, true);
     }
   }
 }

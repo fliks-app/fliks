@@ -3,6 +3,7 @@ import { formatTime, parseAudioIndex } from '../../core/utils/player.utils';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { SeekbarComponent } from '../components/seekbar/seekbar';
+import { DropdownMenuComponent } from '../components/dropdown-menu';
 import {
   LucideCaptions,
   LucideCast,
@@ -24,6 +25,7 @@ import {
     LucideHeadphones, LucidePause, LucidePlay, LucideRotateCcw, LucideRotateCw,
     LucideSettings, LucideSquare, LucideX,
     SeekbarComponent,
+    DropdownMenuComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './cast-overlay.html',

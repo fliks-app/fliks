@@ -43,6 +43,7 @@ import { formatAudioLabel } from '../../../core/utils/player.utils';
 import { DropdownMenuComponent } from '../dropdown-menu';
 import { ImgFadeInDirective } from '../../directives/img-fade-in.directive';
 import { TvRowDirective } from '../../directives/tv-row.directive';
+import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { NgTemplateOutlet } from '@angular/common';
 
 export interface MediaInfoHeaderFile {
@@ -74,6 +75,7 @@ interface AudioTrack {
     DropdownMenuComponent,
     ImgFadeInDirective,
     TvRowDirective,
+    TvSelectDirective,
     NgTemplateOutlet,
     DecimalPipe, FormsModule, RouterLink, TranslateModule,
     LucideCaptions, LucideChevronLeft, LucideCheck, LucideDownload,
