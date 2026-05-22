@@ -68,6 +68,8 @@ export class SetupChecklistComponent implements OnInit {
       ).length,
   );
 
+  padding = input(false);
+
   ngOnInit() {
     // Reuse already-cached items on second mount; otherwise fetch.
     if (this.items().length === 0) void this.api.refresh();

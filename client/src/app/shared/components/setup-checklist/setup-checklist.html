@@ -1,5 +1,6 @@
 @if (visibleItems().length > 0 || (showAll() && items().length > 0)) {
-  <section class="card bg-base-200/60 backdrop-blur-sm shadow-sm">
+  <div [class.py-4]="padding()">
+  <section class="card bg-base-200/60 backdrop-blur-sm shadow-sm" >
     <div class="card-body p-4 sm:p-5 gap-3">
       <header class="flex items-center justify-between gap-3 flex-wrap">
         <h2 class="card-title text-base">
@@ -76,6 +77,7 @@
           </li>
         }
       </ul>
-    </div>
-  </section>
+      </div>
+    </section>
+  </div>
 }

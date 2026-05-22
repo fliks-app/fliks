@@ -1,8 +1,9 @@
-<div appTvSection class="flex flex-col gap-8">
+@if (auth.canAccessSettings()) {
+  <app-setup-checklist [padding]="true" />
+}
 
-    @if (auth.canAccessSettings()) {
-      <app-setup-checklist class="mt-4" />
-    }
+
+<div appTvSection class="flex flex-col gap-8">
 
     <!-- Libraries -->
     @if (libraries().length) {
