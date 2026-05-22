@@ -190,9 +190,10 @@ html.tv-host {
 body.tv *:hover {
   background-color: revert;
 }
-/* High-contrast focus ring for D-pad navigation */
-body.tv :is(a, button, [role="button"], [tabindex]):focus-visible,
-body.tv :is(a, button, [role="button"], [tabindex]):focus {
+/* High-contrast primary focus ring — applies on every form factor so
+   keyboard / D-pad navigation looks identical. `:focus-visible` only
+   so mouse clicks on desktop don't paint a ring after activation. */
+:is(a, button, [role="button"], [tabindex]):focus-visible {
   outline: 3px solid var(--color-primary, #7a3ff2);
   outline-offset: 4px;
   z-index: 1;
@@ -208,11 +209,11 @@ body.tv .btn-ghost:focus-visible {
   background-color: transparent !important;
   --btn-bg: rgba(0, 0, 0, 0) !important;
 }
-/* Cards/list items — scale up on focus to give a clear "selected" affordance */
+/* Cards/list items — scale up on focus to give a clear "selected"
+   affordance on TV. Desktop users get the focus ring + native hover
+   states; the extra scale would feel jumpy alongside the pointer. */
 body.tv .media-card:focus-within,
-body.tv .media-card:focus,
-body.tv [data-tv-focusable]:focus-visible,
-body.tv [data-tv-focusable]:focus {
+body.tv [data-tv-focusable]:focus-visible {
   transform: scale(1.06);
   transition: transform 0.15s ease-out;
 }
@@ -226,20 +227,18 @@ body.tv app-media-card figure > .absolute.inset-0,
 body.tv app-media-card .opacity-0.group-hover\:opacity-100 {
   display: none !important;
 }
-/* Card focus on TV — drawn as an absolutely-positioned pseudo-element so
-   the ring overlays the cover image AND repaints reliably even when the
-   img sits in its own stacking context (the lingering view-transition-name
-   on the clicked card creates one). `border-radius: inherit` follows the
-   figure's `rounded-lg`, `inset: 0` snaps to its border-box, `z-index`
-   keeps it above the cover image. The matching `outline: none` defeats
-   the generic body.tv :focus rule that would otherwise draw a duplicate
-   outer ring at offset:4. */
-body.tv app-media-card figure:focus,
-body.tv app-media-card figure:focus-visible {
+/* Card focus ring — drawn as an absolutely-positioned pseudo-element
+   so it overlays the cover image AND repaints reliably even when the
+   img sits in its own stacking context (lingering view-transition-name
+   on the clicked card creates one). `border-radius: inherit` follows
+   the figure's `rounded-lg`, `inset: 0` snaps to its border-box,
+   `z-index` keeps it above the cover image. The matching
+   `outline: none` defeats the generic ring above that would draw a
+   duplicate outer ring at offset:4. */
+app-media-card figure:focus-visible {
   outline: none !important;
 }
-body.tv app-media-card figure:focus::after,
-body.tv app-media-card figure:focus-visible::after {
+app-media-card figure:focus-visible::after {
   content: '';
   position: absolute;
   inset: 0;
