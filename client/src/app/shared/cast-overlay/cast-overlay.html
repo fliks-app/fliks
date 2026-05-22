@@ -76,56 +76,50 @@
           <!-- Pickers -->
           <div class="flex items-center justify-center gap-3 lg:gap-2 flex-wrap">
             @if (cp.availableSubtitles().length) {
-              <div class="dropdown dropdown-top dropdown-start">
-                <div tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
+              <app-dropdown-menu placement="top-start">
+                <div trigger tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
                   <svg lucideCaptions class="h-4 w-4"></svg>
                   <span class="text-xs">Sous-titres</span>
                 </div>
-                <div tabindex="0" class="dropdown-content z-50 bg-base-200 rounded-lg shadow-xl p-2 w-56 max-w-[calc(100vw-2rem)] max-h-40 overflow-y-auto mb-2">
-                  <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-white/10" (click)="selectSubtitle(null)">
-                    <span class="flex-1 text-left">Désactivé</span>
-                    @if (!cp.activeSubtitleId()) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
+                <button class="dropdown-item text-white" (click)="selectSubtitle(null)">
+                  <span class="flex-1 text-left">Désactivé</span>
+                  @if (!cp.activeSubtitleId()) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
+                </button>
+                @for (sub of cp.availableSubtitles(); track sub.id) {
+                  <button class="dropdown-item text-white" (click)="selectSubtitle(sub)">
+                    <span class="flex-1 text-left">{{ sub.label }}</span>
+                    @if (cp.activeSubtitleId() === sub.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
                   </button>
-                  @for (sub of cp.availableSubtitles(); track sub.id) {
-                    <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-white/10" (click)="selectSubtitle(sub)">
-                      <span class="flex-1 text-left">{{ sub.label }}</span>
-                      @if (cp.activeSubtitleId() === sub.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
-                    </button>
-                  }
-                </div>
-              </div>
+                }
+              </app-dropdown-menu>
             }
             @if (cp.availableAudioTracks().length > 1) {
-              <div class="dropdown dropdown-top dropdown-end">
-                <div tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
+              <app-dropdown-menu placement="top-end">
+                <div trigger tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
                   <svg lucideHeadphones class="h-4 w-4"></svg>
                   <span class="text-xs">Audio</span>
                 </div>
-                <div tabindex="0" class="dropdown-content z-50 bg-base-200 rounded-lg shadow-xl p-2 w-56 max-w-[calc(100vw-2rem)] max-h-40 overflow-y-auto mb-2">
-                  @for (track of cp.availableAudioTracks(); track track.id) {
-                    <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-white/10" (click)="selectAudio(track)">
-                      <span class="flex-1 text-left">{{ track.label }}</span>
-                      @if (cp.activeAudioTrackId() === track.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
-                    </button>
-                  }
-                </div>
-              </div>
+                @for (track of cp.availableAudioTracks(); track track.id) {
+                  <button class="dropdown-item text-white" (click)="selectAudio(track)">
+                    <span class="flex-1 text-left">{{ track.label }}</span>
+                    @if (cp.activeAudioTrackId() === track.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
+                  </button>
+                }
+              </app-dropdown-menu>
             }
             @if (cp.availableQualities().length > 1) {
-              <div class="dropdown dropdown-top dropdown-end">
-                <div tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
+              <app-dropdown-menu placement="top-end">
+                <div trigger tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
                   <svg lucideSettings class="h-4 w-4"></svg>
                   <span class="text-xs">Qualité</span>
                 </div>
-                <div tabindex="0" class="dropdown-content z-50 bg-base-200 rounded-lg shadow-xl p-2 w-48 max-h-40 overflow-y-auto mb-2">
-                  @for (q of cp.availableQualities(); track q.id) {
-                    <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-white/10" (click)="selectQuality(q)">
-                      <span class="flex-1 text-left">{{ q.label }}</span>
-                      @if (cp.activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
-                    </button>
-                  }
-                </div>
-              </div>
+                @for (q of cp.availableQualities(); track q.id) {
+                  <button class="dropdown-item text-white" (click)="selectQuality(q)">
+                    <span class="flex-1 text-left">{{ q.label }}</span>
+                    @if (cp.activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
+                  </button>
+                }
+              </app-dropdown-menu>
             }
           </div>
 

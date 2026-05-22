@@ -10,6 +10,7 @@
         <select
           class="select select-bordered select-sm w-full"
           name="library"
+          appTvSelect
           [ngModel]="selectedLibraryId()"
           (ngModelChange)="selectedLibraryIdChange.emit($event)"
         >
@@ -24,6 +25,7 @@
         <select
           class="select select-bordered select-sm w-full"
           name="provider"
+          appTvSelect
           [ngModel]="selectedProvider()"
           (ngModelChange)="selectedProviderChange.emit($event)"
         >

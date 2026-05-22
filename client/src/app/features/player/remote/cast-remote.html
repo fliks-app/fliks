@@ -28,71 +28,62 @@
     <div class="flex items-center justify-center gap-3 mb-3 landscape:mb-1">
       <!-- Subtitles -->
       @if (availableSubtitles().length) {
-        <div class="dropdown dropdown-top dropdown-end">
-          <button tabindex="0" class="btn btn-ghost btn-sm text-white/70 gap-2">
+        <app-dropdown-menu placement="top-end">
+          <button trigger type="button" class="btn btn-ghost btn-sm text-white/70 gap-2">
             <svg lucideCaptions class="h-4 w-4"></svg>
             Sous-titres
           </button>
-          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-3 px-2 min-w-60 max-h-[50vh] overflow-y-auto mb-2">
-            <div class="text-center text-white/70 text-xs font-medium mb-2">Sous-titres</div>
-            <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle(null)">
+          <button class="dropdown-item text-white" (click)="selectSubtitle(null)">
+            <svg lucideCaptions class="h-4 w-4 text-white/50 shrink-0"></svg>
+            <span class="flex-1 text-left">Désactivé</span>
+            @if (!activeSubId()) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+          </button>
+          @for (sub of availableSubtitles(); track sub.id) {
+            <button class="dropdown-item text-white" (click)="selectSubtitle(sub)">
               <svg lucideCaptions class="h-4 w-4 text-white/50 shrink-0"></svg>
-              <span class="flex-1 text-left">Désactivé</span>
-              @if (!activeSubId()) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+              <span class="flex-1 text-left">{{ sub.label }}@if (sub.burnIn) { <span class="text-warning/70 text-[10px] ml-1">gravé</span> }</span>
+              @if (activeSubId() === sub.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
             </button>
-            @for (sub of availableSubtitles(); track sub.id) {
-              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectSubtitle(sub)">
-                <svg lucideCaptions class="h-4 w-4 text-white/50 shrink-0"></svg>
-                <span class="flex-1 text-left">{{ sub.label }}@if (sub.burnIn) { <span class="text-warning/70 text-[10px] ml-1">gravé</span> }</span>
-                @if (activeSubId() === sub.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
-              </button>
-            }
-          </div>
-        </div>
+          }
+        </app-dropdown-menu>
       }
 
       <!-- Audio -->
       @if (availableAudioTracks().length > 1) {
-        <div class="dropdown dropdown-top dropdown-end">
-          <button tabindex="0" class="btn btn-ghost btn-sm text-white/70 gap-2">
+        <app-dropdown-menu placement="top-end">
+          <button trigger type="button" class="btn btn-ghost btn-sm text-white/70 gap-2">
             <svg lucideHeadphones class="h-4 w-4"></svg>
             Audio
           </button>
-          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-3 px-2 min-w-60 max-h-[50vh] overflow-y-auto mb-2">
-            <div class="text-center text-white/70 text-xs font-medium mb-2">Piste audio</div>
-            @for (track of availableAudioTracks(); track track.id) {
-              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectAudio(track)">
-                <svg lucideHeadphones class="h-4 w-4 text-white/50 shrink-0"></svg>
-                <span class="flex-1 text-left">{{ track.label }}</span>
-                @if (activeAudioId() === track.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
-              </button>
-            }
-          </div>
-        </div>
+          @for (track of availableAudioTracks(); track track.id) {
+            <button class="dropdown-item text-white" (click)="selectAudio(track)">
+              <svg lucideHeadphones class="h-4 w-4 text-white/50 shrink-0"></svg>
+              <span class="flex-1 text-left">{{ track.label }}</span>
+              @if (activeAudioId() === track.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+            </button>
+          }
+        </app-dropdown-menu>
       }
 
       <!-- Quality -->
       @if (availableQualities().length > 1) {
-        <div class="dropdown dropdown-top dropdown-end">
-          <button tabindex="0" class="btn btn-ghost btn-sm text-white/70 gap-2">
+        <app-dropdown-menu placement="top-end">
+          <button trigger type="button" class="btn btn-ghost btn-sm text-white/70 gap-2">
             <svg lucideSettings class="h-4 w-4"></svg>
             {{ activeQualityId() === 'auto' ? 'Auto' : activeQualityId() }}
           </button>
-          <div tabindex="0" class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-3 px-2 min-w-60 max-h-[50vh] overflow-y-auto mb-2">
-            <div class="text-center text-white/70 text-xs font-medium mb-2">Qualité</div>
-            @for (q of availableQualities(); track q.id) {
-              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10" (click)="selectQuality(q)">
-                <span class="flex-1 text-left">
-                  {{ q.label }}
-                  @if (q.lowBandwidth) {
-                    <span class="text-white/50 ml-1 text-xs">({{ 'player.low_bandwidth' | translate }})</span>
-                  }
-                </span>
-                @if (activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
-              </button>
-            }
-          </div>
-        </div>
+          @for (q of availableQualities(); track q.id) {
+            <button class="dropdown-item text-white" (click)="selectQuality(q)">
+              <span class="flex-1 text-left">
+                {{ q.label }}
+                @if (q.lowBandwidth) {
+                  <span class="text-white/50 ml-1 text-xs">({{ 'player.low_bandwidth' | translate }})</span>
+                }
+              </span>
+              @if (activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+            </button>
+          }
+        </app-dropdown-menu>
       }
     </div>
 

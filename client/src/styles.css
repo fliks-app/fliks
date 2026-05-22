@@ -190,11 +190,22 @@ html.tv-host {
 body.tv *:hover {
   background-color: revert;
 }
-/* High-contrast focus ring for D-pad navigation */
-body.tv :is(a, button, [role="button"], [tabindex]):focus-visible,
-body.tv :is(a, button, [role="button"], [tabindex]):focus {
-  outline: 3px solid var(--color-primary, #7a3ff2);
-  outline-offset: 4px;
+/* High-contrast primary focus ring — applies on every form factor so
+   keyboard / D-pad navigation looks identical. `:focus-visible` only
+   so mouse clicks on desktop don't paint a ring after activation.
+   Rendered as a two-layer box-shadow (page-bg gap + primary ring)
+   instead of `outline` because `outline` ignores `border-radius` on
+   Chromium <94 (Tizen 6.5 ships Chromium ~85), which would paint a
+   rectangle around a rounded button. box-shadow follows border-radius
+   everywhere. The inner layer uses `--color-base-100` (the surrounding
+   page bg in this dark theme) so the gap looks transparent over the
+   common backgrounds — a real `transparent` value can't be used here
+   because the second shadow shows through it. */
+:is(a, button, select, input, [role="button"], [tabindex]):focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--color-base-100, #1d232a),
+    0 0 0 4px var(--color-primary, #7a3ff2);
   z-index: 1;
   position: relative;
 }
@@ -208,13 +219,19 @@ body.tv .btn-ghost:focus-visible {
   background-color: transparent !important;
   --btn-bg: rgba(0, 0, 0, 0) !important;
 }
-/* Cards/list items — scale up on focus to give a clear "selected" affordance */
-body.tv .media-card:focus-within,
-body.tv .media-card:focus,
-body.tv [data-tv-focusable]:focus-visible,
-body.tv [data-tv-focusable]:focus {
-  transform: scale(1.06);
+/* Cards / list items — gentle scale on keyboard / D-pad focus so the
+   selected card "lifts" off the grid. Smaller bump on desktop (mouse
+   users already get hover feedback), bigger on TV for the 10-foot UI. */
+app-media-card figure:focus-visible,
+[data-home-focus]:focus-visible {
+  transform: scale(1.04);
   transition: transform 0.15s ease-out;
+}
+body.tv .media-card:focus-within,
+body.tv app-media-card figure:focus-visible,
+body.tv [data-home-focus]:focus-visible,
+body.tv [data-tv-focusable]:focus-visible {
+  transform: scale(1.06);
 }
 
 /* Media-card simplification on TV: the card is a single focus target. The
@@ -226,27 +243,21 @@ body.tv app-media-card figure > .absolute.inset-0,
 body.tv app-media-card .opacity-0.group-hover\:opacity-100 {
   display: none !important;
 }
-/* Card focus on TV — drawn as an absolutely-positioned pseudo-element so
-   the ring overlays the cover image AND repaints reliably even when the
-   img sits in its own stacking context (the lingering view-transition-name
-   on the clicked card creates one). `border-radius: inherit` follows the
-   figure's `rounded-lg`, `inset: 0` snaps to its border-box, `z-index`
-   keeps it above the cover image. The matching `outline: none` defeats
-   the generic body.tv :focus rule that would otherwise draw a duplicate
-   outer ring at offset:4. */
-body.tv app-media-card figure:focus,
-body.tv app-media-card figure:focus-visible {
+/* Card focus — Lumen "lit-from-within" ring inspired by
+   mediaplatform-hub/frontend-tv: 2 px spacer in the surface colour,
+   4 px primary ring outside that, plus a soft primary glow and a
+   drop shadow so the focused card lifts off the rail on any bg.
+   Spread sits at 0 offset (against the element edge) so it follows
+   the card's `border-radius` — needed because Tizen 6.5 Chromium 85
+   would otherwise paint a rectangle (outline-without-radius). */
+app-media-card figure:focus-visible,
+[data-home-focus]:focus-visible {
   outline: none !important;
-}
-body.tv app-media-card figure:focus::after,
-body.tv app-media-card figure:focus-visible::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border: 3px solid var(--color-primary, #7a3ff2);
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: 10;
+  box-shadow:
+    0 0 0 2px var(--color-base-100, #1d232a),
+    0 0 0 6px var(--color-primary, #7a3ff2),
+    0 0 18px -4px var(--color-primary, #7a3ff2),
+    0 8px 22px rgb(0 0 0 / 35%) !important;
 }
 /* Touch-only UI elements should be hidden on TV */
 body.tv [data-touch-only] {
@@ -314,10 +325,11 @@ body.tv .to-base-100\/50 {
   --tw-gradient-to: transparent;
 }
 
-/* TV: dropdowns are signal-controlled (`.dropdown-open`). Neutralise any
-   `:focus-within` fallback that DaisyUI might re-introduce — D-pad focus alone
-   should never auto-open a dropdown. */
-body.tv .dropdown:not(.dropdown-open) > .dropdown-content {
+/* Dropdowns are click-driven (`.dropdown-open` toggled by
+   `appDropdownToggle`). Neutralise DaisyUI's `:focus-within` fallback so
+   tabbing onto a trigger never auto-opens the menu — Tab/D-pad focus alone
+   should be a focus move, not an open. */
+.dropdown:not(.dropdown-open) > .dropdown-content {
   display: none !important;
 }
 
@@ -361,6 +373,12 @@ html.tv-host .toggle {
      Uses a translucent base-content colour — works on both light & dark
      themes (darkens on light bg, lightens on dark bg). */
   background-color: rgba(128, 128, 128, 0.35);
+  /* DaisyUI v5's default `border-radius: var(--rounded-btn)` is stripped
+     by the downlevel CSS pipeline on Tizen 6.5 (Chromium 85) — explicit
+     pill radius so the toggle stays rounded AND the box-shadow focus
+     ring inherits it. Without this, focus paints a rectangle around the
+     pill. */
+  border-radius: 9999px;
 }
 html.tv-host .toggle:before {
   width: 1.125rem;

@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { CastService } from './cast.service';
 import { CastPlayerService } from './cast-player.service';
+import { MediaService } from './api/media.service';
 import { StreamingApiService } from './api/streaming-api.service';
 
 export interface PlayContext {
@@ -27,6 +28,7 @@ export class PlayableMediaService {
   readonly castService = inject(CastService);
   private readonly castPlayer = inject(CastPlayerService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly mediaService = inject(MediaService);
 
   /** Play a media file — Cast if connected, otherwise navigate to player. */
   async play(ctx: PlayContext, fromStart: boolean) {
@@ -59,6 +61,15 @@ export class PlayableMediaService {
           stillUrl: ctx.stillUrl ?? null,
         },
       });
+      // Warm the stale-while-revalidate cache for the media-detail page
+      // the user will land on when they back out of the player. The
+      // detail's `getOne` / cast / crew responses get stored under
+      // `/api/media/<id>*` keys in `fliks-api-cache` (60 min TTL), so the
+      // back-navigation renders instantly instead of spinning on a cold
+      // network round-trip.
+      void this.mediaService.getOne(ctx.mediaId).catch(() => {});
+      void this.mediaService.getCast(ctx.mediaId).catch(() => {});
+      void this.mediaService.getCrew(ctx.mediaId).catch(() => {});
     }
   }
 

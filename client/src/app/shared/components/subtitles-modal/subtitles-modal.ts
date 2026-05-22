@@ -47,6 +47,7 @@ import { SseService } from '../../../core/services/sse.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { PaginationComponent } from '../pagination/pagination';
 import { MediaDetailSubtitleSearchModalComponent } from '../../../features/media-detail/components/media-detail-subtitle-search-modal/media-detail-subtitle-search-modal.component';
+import { DropdownMenuComponent } from '../dropdown-menu';
 import type { MediaInfoHeaderSubtitle } from '../media-info-header/media-info-header';
 
 interface SubtitleRow {
@@ -70,6 +71,7 @@ interface SubtitleRow {
     SubtitleFilenamePipe,
     PaginationComponent,
     MediaDetailSubtitleSearchModalComponent,
+    DropdownMenuComponent,
     LucideArrowRightLeft,
     LucideBan,
     LucideChevronDown,

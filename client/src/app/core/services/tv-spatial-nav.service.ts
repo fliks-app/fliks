@@ -1,8 +1,12 @@
-import { Injectable, inject, DestroyRef, effect } from '@angular/core';
+import { Injectable, inject, DestroyRef } from '@angular/core';
 import { TvService } from './tv.service';
 
 /**
- * Spatial navigation for D-pad input on Android TV.
+ * Spatial navigation for D-pad input on Android TV — and keyboard
+ * arrow keys on desktop / laptop. Same algorithm, same container
+ * tree; the gating is removed so any pointer device benefits. The
+ * TV-only quirks (forced initial focus, `body.tv` 10-foot styling)
+ * stay scoped via the `tv.isTv()` checks they already had.
  *
  * Two cooperating layers:
  *
@@ -45,11 +49,11 @@ export class TvSpatialNavService {
   private readonly containers = new Map<HTMLElement, ContainerNode>();
 
   constructor() {
-    // Use an effect so we react to isTv flipping later (e.g. when TvService is
-    // instantiated after us, or if detection is updated post-bootstrap).
-    effect(() => {
-      if (this.tv.isTv() && !this.bound) this.bind();
-    });
+    // Bind unconditionally — desktop / laptop users press arrow keys
+    // expecting spatial focus moves, and the handler is a no-op for
+    // any non-arrow key. Touch-only phones never fire arrow keydowns
+    // so binding there has no observable effect.
+    this.bind();
   }
 
   private bind() {
@@ -71,7 +75,12 @@ export class TvSpatialNavService {
     // means D-pad events are consumed by the native View and never reach JS.
     // Pushing focus to the first interactive element guarantees subsequent
     // keydowns are dispatched into our handler.
-    queueMicrotask(() => this.focusFirstIfNoFocus());
+    // Desktop / laptop opt out — stealing focus on bootstrap from whatever
+    // the browser would otherwise restore (e.g. a form input on a refresh)
+    // is hostile, and arrow keys reach the body fine anyway.
+    if (this.tv.isTv()) {
+      queueMicrotask(() => this.focusFirstIfNoFocus());
+    }
   }
 
   /**
@@ -151,25 +160,40 @@ export class TvSpatialNavService {
     // still ship `keyCode` 37/38/39/40 — accept either form.
     const dir = ARROW_TO_DIR[e.key] ?? KEYCODE_TO_DIR[e.keyCode];
     if (!dir) return;
-    // Skip if focus is inside a text-style input, a <select>, or its
-    // open-picker option — they own arrow-key handling natively (caret
-    // movement / option cycling). Checkbox/radio/range have no caret, so
-    // spatial nav keeps handling them.
     const active = document.activeElement as HTMLElement | null;
     const tag = active?.tagName;
     const inputType = (active as HTMLInputElement | null)?.type;
-    const isSingleLineTextInput =
-      tag === 'INPUT' &&
-      !['checkbox', 'radio', 'range', 'button', 'submit', 'reset'].includes(inputType ?? '');
     const isMultiLineText = tag === 'TEXTAREA' || tag === 'OPTION' || !!active?.isContentEditable;
-    // Single-line text inputs only have a horizontal caret — left/right belong
-    // to the field, but up/down should escape to the spatial-nav tree so D-pad
-    // users on TV aren't trapped on the input.
-    if (isSingleLineTextInput && (dir === 'left' || dir === 'right')) return;
     if (isMultiLineText) return;
+
+    // Inputs without native arrow handling — checkbox/radio/button-style
+    // — must always fall through to the spatial-nav tree, regardless of
+    // platform, or the user gets focus-trapped on the field. Toggles
+    // (DaisyUI `.toggle` is a styled `<input type="checkbox">`) are the
+    // canonical example: no caret, no value cycle, arrows would just
+    // dead-end without this.
+    const NATIVE_INPUT_TYPES = new Set([
+      'text', 'email', 'password', 'search', 'tel', 'url',
+      'number', 'range', 'date', 'time', 'datetime-local', 'month', 'week',
+    ]);
+    const isInputWithNativeArrows = tag === 'INPUT' && NATIVE_INPUT_TYPES.has(inputType ?? 'text');
+
+    // Desktop / laptop: defer entirely to native for fields that actually
+    // use arrows (caret in text, value cycle in number / range / date /
+    // select). TV keeps the narrower skip list below for the same fields.
+    // `<select appTvSelect>` opts out — the directive routes opens through
+    // SelectPickerService, so arrow keys should escape to spatial nav
+    // instead of silently cycling the underlying native value.
+    const isPickerSelect = tag === 'SELECT' && active?.hasAttribute('appTvSelect');
+    if (!this.tv.isTv() && (isInputWithNativeArrows || (tag === 'SELECT' && !isPickerSelect))) return;
+
+    // TV mode: text-style inputs own horizontal arrows (caret); other arrow
+    // directions and other inputs escape to the spatial-nav tree so the
+    // D-pad user isn't trapped on a field.
+    if (isInputWithNativeArrows && inputType !== 'range' && (dir === 'left' || dir === 'right')) return;
     // Native `<select>` cycles its options on arrow keys (changing the
-    // value silently). Always block that. We still try to move focus —
-    // if a tree-aware neighbour exists, the user goes there; otherwise
+    // value silently). Always block that on TV. We still try to move focus
+    // — if a tree-aware neighbour exists, the user goes there; otherwise
     // we preventDefault below and the focus stays put. Either way, the
     // value of the select isn't mutated by a stray arrow press.
     if (tag === 'SELECT') {
@@ -188,7 +212,14 @@ export class TvSpatialNavService {
     const next = this.findNeighbor(dir);
     e.preventDefault();
     if (next) {
-      next.focus({ preventScroll: false });
+      // `preventScroll: true` keeps the browser's instant auto-scroll from
+      // firing on every focus tick. We then call `scrollIntoView` smooth
+      // with `block: 'nearest'` so an off-screen card animates in, while
+      // horizontal-scroller's `focusin` handler owns vertical row-top
+      // alignment when focus crosses rows. Two coordinated smooth
+      // scrolls instead of a jarring instant→smooth one-two punch.
+      next.focus({ preventScroll: true });
+      next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
       return;
     }
     // No focusable neighbour: scroll the page manually so the user can

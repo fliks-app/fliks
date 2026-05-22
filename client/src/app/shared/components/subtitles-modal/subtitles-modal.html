@@ -101,92 +101,64 @@
                     </td>
                     <td class="text-end">
                       @if (canGrab() && sub.providerType !== 'embedded') {
-                        <div class="dropdown dropdown-end dropdown-top">
-                          <div tabindex="0" role="button" class="btn btn-ghost btn-xs" [class.btn-disabled]="subtitleActionBusy()">
+                        <app-dropdown-menu placement="top-end">
+                          <div trigger tabindex="0" role="button" class="btn btn-ghost btn-xs" [class.btn-disabled]="subtitleActionBusy()">
                             {{ 'media_detail.subtitle_actions' | translate }}
                             <svg lucideChevronDown class="h-3 w-3"></svg>
                           </div>
-                          <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-10 w-56 p-2 shadow-lg text-sm">
-                            <li>
-                              <a class="flex items-center gap-3" (click)="openSyncModal(sub.id)">
-                                <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                                {{ 'media_detail.action_sync' | translate }}
-                              </a>
-                            </li>
-                            <li>
-                              <a class="flex items-center gap-3" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'removeHiTags' })">
-                                <svg lucideVolume2 class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                                {{ 'media_detail.action_remove_hi' | translate }}
-                              </a>
-                            </li>
-                            <li>
-                              <a class="flex items-center gap-3" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'removeStyleTags' })">
-                                <svg lucideCode class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                                {{ 'media_detail.action_remove_style' | translate }}
-                              </a>
-                            </li>
-                            <li>
-                              <a class="flex items-center gap-3" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'removeEmoji' })">
-                                <svg lucideSmile class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                                {{ 'media_detail.action_remove_emoji' | translate }}
-                              </a>
-                            </li>
-                            <li>
-                              <a class="flex items-center gap-3" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'ocrFixes' })">
-                                <svg lucideImage class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                                {{ 'media_detail.action_ocr_fixes' | translate }}
-                              </a>
-                            </li>
-                            <li>
-                              <a class="flex items-center gap-3" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'commonFixes' })">
-                                <svg lucideThermometer class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                                {{ 'media_detail.action_common_fixes' | translate }}
-                              </a>
-                            </li>
-                            <li>
-                              <a class="flex items-center gap-3" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'fixUppercase' })">
-                                <svg lucideMaximize2 class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                                {{ 'media_detail.action_fix_uppercase' | translate }}
-                              </a>
-                            </li>
-                            <li>
-                              <a class="flex items-center gap-3" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'reverseRtl' })">
-                                <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                                {{ 'media_detail.action_reverse_rtl' | translate }}
-                              </a>
-                            </li>
-                            <li>
-                              <a class="flex items-center gap-3" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'convertToSrt' })">
-                                <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                                {{ 'media_detail.action_convert_srt' | translate }}
-                              </a>
-                            </li>
-                            <li>
-                              <a class="flex items-center gap-3" (click)="openAdjustModal(sub.id)">
-                                <svg lucideClock class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                                {{ 'media_detail.action_adjust_times' | translate }}
-                              </a>
-                            </li>
-                            <li>
-                              <a class="flex items-center gap-3" (click)="openFpsModal(sub.id)">
-                                <svg lucideZap class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                                {{ 'media_detail.action_change_fps' | translate }}
-                              </a>
-                            </li>
-                            <li class="border-t border-base-300 mt-1 pt-1">
-                              <a class="flex items-center gap-3 text-warning" (click)="blacklistSubtitle(sub)">
-                                <svg lucideBan class="h-4 w-4 shrink-0 opacity-80" aria-hidden="true"></svg>
-                                {{ 'media_detail.action_blacklist' | translate }}
-                              </a>
-                            </li>
-                            <li>
-                              <a class="flex items-center gap-3 text-error" (click)="deleteSubtitle(sub.id)">
-                                <svg lucideTrash2 class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
-                                {{ 'media_detail.action_delete' | translate }}
-                              </a>
-                            </li>
-                          </ul>
-                        </div>
+                          <button type="button" class="dropdown-item text-white" (click)="openSyncModal(sub.id)">
+                            <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                            {{ 'media_detail.action_sync' | translate }}
+                          </button>
+                          <button type="button" class="dropdown-item text-white" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'removeHiTags' })">
+                            <svg lucideVolume2 class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                            {{ 'media_detail.action_remove_hi' | translate }}
+                          </button>
+                          <button type="button" class="dropdown-item text-white" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'removeStyleTags' })">
+                            <svg lucideCode class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                            {{ 'media_detail.action_remove_style' | translate }}
+                          </button>
+                          <button type="button" class="dropdown-item text-white" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'removeEmoji' })">
+                            <svg lucideSmile class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                            {{ 'media_detail.action_remove_emoji' | translate }}
+                          </button>
+                          <button type="button" class="dropdown-item text-white" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'ocrFixes' })">
+                            <svg lucideImage class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                            {{ 'media_detail.action_ocr_fixes' | translate }}
+                          </button>
+                          <button type="button" class="dropdown-item text-white" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'commonFixes' })">
+                            <svg lucideThermometer class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                            {{ 'media_detail.action_common_fixes' | translate }}
+                          </button>
+                          <button type="button" class="dropdown-item text-white" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'fixUppercase' })">
+                            <svg lucideMaximize2 class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                            {{ 'media_detail.action_fix_uppercase' | translate }}
+                          </button>
+                          <button type="button" class="dropdown-item text-white" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'reverseRtl' })">
+                            <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                            {{ 'media_detail.action_reverse_rtl' | translate }}
+                          </button>
+                          <button type="button" class="dropdown-item text-white" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'convertToSrt' })">
+                            <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                            {{ 'media_detail.action_convert_srt' | translate }}
+                          </button>
+                          <button type="button" class="dropdown-item text-white" (click)="openAdjustModal(sub.id)">
+                            <svg lucideClock class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                            {{ 'media_detail.action_adjust_times' | translate }}
+                          </button>
+                          <button type="button" class="dropdown-item text-white" (click)="openFpsModal(sub.id)">
+                            <svg lucideZap class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+                            {{ 'media_detail.action_change_fps' | translate }}
+                          </button>
+                          <button type="button" class="dropdown-item text-warning" (click)="blacklistSubtitle(sub)">
+                            <svg lucideBan class="h-4 w-4 shrink-0 opacity-80" aria-hidden="true"></svg>
+                            {{ 'media_detail.action_blacklist' | translate }}
+                          </button>
+                          <button type="button" class="dropdown-item text-error" (click)="deleteSubtitle(sub.id)">
+                            <svg lucideTrash2 class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
+                            {{ 'media_detail.action_delete' | translate }}
+                          </button>
+                        </app-dropdown-menu>
                       }
                     </td>
                   </tr>

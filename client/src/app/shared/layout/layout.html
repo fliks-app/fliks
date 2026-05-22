@@ -93,8 +93,9 @@
     ></div>
     <!-- Desktop top-right: Cast + User -->
     <div appTvRow
+         [appTvRowSnap]="true"
          class="hidden items-center justify-end gap-1 absolute right-4 z-50 pointer-events-none [&>*]:pointer-events-auto"
-         style="top: calc(0.75rem + env(safe-area-inset-top, 0px))"
+         [style.top]="tv.isTv() ? 'calc(4rem + env(safe-area-inset-top, 0px))' : 'calc(1.5rem + env(safe-area-inset-top, 0px))'"
          [class.lg:flex]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
          [class.md:flex]="device.isTablet() && navbar.effectiveSidebarPinned()">
       @if (castPlayer.hasMedia()) {
@@ -256,7 +257,7 @@
            [class.backdrop-blur-sm]="!!background.url()"
            style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 )">
       <div class="p-4 border-b border-base-200 flex items-center gap-2">
-        <a routerLink="/" class="flex items-center gap-2 pl-2 text-2xl font-bold flex-1 min-w-0">
+        <a routerLink="/" class="flex items-center gap-2 px-2 py-1 rounded-lg text-2xl font-bold flex-1 min-w-0">
           <img src="fliks-mark.png" alt="" class="h-8 w-8 shrink-0" />
           <span class="truncate">{{ 'app.name' | translate }}</span>
         </a>

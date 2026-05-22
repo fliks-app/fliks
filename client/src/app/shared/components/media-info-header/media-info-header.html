@@ -315,7 +315,7 @@
       <div class="flex items-center gap-2">
         <span class="text-base-content/50">{{ 'media_info.video' | translate }}</span>
         @if (multipleFiles()) {
-          <select class="select select-bordered select-sm w-fit" [ngModel]="selectedFileId()" (ngModelChange)="selectedFileIdChange.emit($event)">
+          <select class="select select-bordered select-sm w-fit" appTvSelect [ngModel]="selectedFileId()" (ngModelChange)="selectedFileIdChange.emit($event)">
             @for (f of files(); track f.id) {
               <option [ngValue]="f.id">{{ fileLabel(f) }}</option>
             }
@@ -330,7 +330,7 @@
           @if (audioTracks().length === 1) {
             <span>{{ audioTracks()[0].label }}</span>
           } @else {
-            <select class="select select-bordered select-sm w-fit" [ngModel]="selectedAudioIndex()" (ngModelChange)="onAudioChange($event)">
+            <select class="select select-bordered select-sm w-fit" appTvSelect [ngModel]="selectedAudioIndex()" (ngModelChange)="onAudioChange($event)">
               @for (t of audioTracks(); track t.index) {
                 <option [ngValue]="t.index">{{ t.label }}</option>
               }
@@ -344,7 +344,7 @@
           @if (subtitles().length === 1) {
             <span>{{ subtitles()[0].label }}</span>
           } @else {
-            <select class="select select-bordered select-sm w-fit" [ngModel]="selectedSubtitleId()" (ngModelChange)="onSubtitleChange($event)">
+            <select class="select select-bordered select-sm w-fit" appTvSelect [ngModel]="selectedSubtitleId()" (ngModelChange)="onSubtitleChange($event)">
               <option [ngValue]="null">{{ 'player.off' | translate }}</option>
               @for (s of subtitles(); track s.id) {
                 <option [ngValue]="s.id">{{ s.label }}</option>

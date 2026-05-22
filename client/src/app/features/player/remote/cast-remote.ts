@@ -8,6 +8,7 @@ import {
   signal,
 } from '@angular/core';
 import { CastService } from '../../../core/services/cast.service';
+import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
 import { TranslateModule } from '@ngx-translate/core';
 import {
   LucideCaptions,
@@ -50,6 +51,7 @@ export interface CastQualityOption {
     LucideHeadphones, LucidePause, LucidePlay, LucideRotateCcw, LucideRotateCw,
     LucideSettings, LucideSquare,
     TranslateModule,
+    DropdownMenuComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './cast-remote.html',

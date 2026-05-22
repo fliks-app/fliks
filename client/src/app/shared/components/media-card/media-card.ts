@@ -47,12 +47,12 @@ export class MediaCardComponent {
   /** Hover overlay (play button) only makes sense on a real pointer device. */
   protected readonly showHoverOverlay = computed(() => this.device.input() === 'mouse');
   /**
-   * On TV the figure is the single focus target — child links (title, subtitle,
-   * hover overlay) are visually still navigable via the contextual actions
-   * panel but should not steal focus from D-pad navigation, so we mark them
-   * with tabindex=-1.
+   * The figure is the single focus target across every form factor —
+   * child links (title, subtitle, hover overlay) stay clickable but
+   * never steal the spatial nav focus from the card itself. Same
+   * semantics for D-pad on TV, arrow keys on desktop, and Tab order.
    */
-  protected readonly innerTabindex = computed(() => this.tv.isTv() ? -1 : null);
+  protected readonly innerTabindex = -1;
 
   // Data source (auto-derives imageUrl, title, rating, link, playable, barStatus, barPercent)
   readonly media = input<Media | null>(null);

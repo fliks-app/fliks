@@ -27,11 +27,12 @@ import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { MediaType } from '../../core/enums/media-type.enum';
 import { MediaCardComponent, CardBadge } from '../../shared/components/media-card/media-card';
+import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { LucideSearch, LucideX, LucideSettings } from '@lucide/angular';
 
 @Component({
   selector: 'app-search',
-  imports: [FormsModule, TranslateModule, MediaCardComponent, LucideSearch, LucideX, LucideSettings],
+  imports: [FormsModule, TranslateModule, MediaCardComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './search.html',
 })

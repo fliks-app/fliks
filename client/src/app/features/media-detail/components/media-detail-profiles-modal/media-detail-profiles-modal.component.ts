@@ -8,10 +8,11 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
+import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 
 @Component({
   selector: 'app-media-detail-profiles-modal',
-  imports: [TranslateModule, FormsModule],
+  imports: [TranslateModule, FormsModule, TvSelectDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-profiles-modal.component.html',
 })

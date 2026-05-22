@@ -4,6 +4,7 @@
     <div class="flex gap-2 mb-4">
       <select
         class="select select-bordered select-sm"
+        appTvSelect
         [ngModel]="subSearchLang()"
         (ngModelChange)="subSearchLangChange.emit($event)"
       >

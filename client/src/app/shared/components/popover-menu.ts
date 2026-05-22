@@ -12,6 +12,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { BottomSheetComponent } from './bottom-sheet';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
+import { DismissableStackService } from '../../core/services/dismissable-stack.service';
 
 /**
  * Reusable menu chrome that picks its presentation per-platform:
@@ -45,6 +46,7 @@ import { DeviceService } from '../../core/services/device.service';
       <!-- Click-out backdrop (transparent) -->
       <div class="fixed inset-0 z-[100]" (click)="close()"></div>
       <div
+        data-tv-modal
         class="fixed z-[101] bg-base-200 rounded-box shadow-xl overflow-hidden"
         [style.top.px]="position().top"
         [style.left.px]="position().left"
@@ -73,6 +75,7 @@ export class PopoverMenuComponent {
   private readonly tv = inject(TvService);
   private readonly device = inject(DeviceService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly dismissStack = inject(DismissableStackService);
 
   constructor() {
     // Move the host to <html> on every platform that renders the sheet
@@ -91,13 +94,18 @@ export class PopoverMenuComponent {
     // Focus the first focusable inside the menu on every open. autofocus
     // is unreliable on Capacitor's Android WebView for dynamically added
     // content, so we do it programmatically.
-    effect(() => {
+    effect((onCleanup) => {
       if (!this.open()) return;
       queueMicrotask(() => {
         this.host.nativeElement
           .querySelector<HTMLElement>('a[href], button:not([disabled]), [tabindex="0"]')
           ?.focus({ preventScroll: false });
       });
+      // Register with the dismissable stack so Escape (browser) and the
+      // hardware back button (Capacitor / Tizen) close the popover.
+      const close = () => this.close();
+      this.dismissStack.push(close);
+      onCleanup(() => this.dismissStack.remove(close));
     });
   }
 
