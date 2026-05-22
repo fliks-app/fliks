@@ -250,9 +250,11 @@ export class StreamingController {
       // emit one audio rendition per track (subdirs 1..N) so Shaka can switch
       // client-side via EXT-X-MEDIA.
       videoOnly: useMultiAudioLayout,
-      audioStreams: useMultiAudioLayout
-        ? ((si?.audio as { language?: string; title?: string }[]) ?? [])
-        : undefined,
+      // Always plumb the cached audio streams (incl. `streamIndex`) so the
+      // single-track path can also resolve `-map 0:<abs>` and skip FFmpeg's
+      // audio enumeration. `useMultiAudioLayout` only gates the var_stream_map
+      // branch, not the presence of the data.
+      audioStreams: si?.audio ?? undefined,
       deviceType: this.activeStreamTracker.getDeviceType(mediaFileId),
       useTs: this.activeStreamTracker.getUseTs(mediaFileId),
       encoderPreset: this.activeStreamTracker.getEncoderPreset(mediaFileId),
@@ -847,8 +849,7 @@ export class StreamingController {
             audioBitRateBps: si?.audio?.[0]?.bitRate ?? undefined,
           }
         : undefined;
-    const audioStreams: { language?: string; title?: string }[] =
-      si?.audio ?? [];
+    const audioStreams = si?.audio ?? [];
     // Multi-audio is exposed via separate EXT-X-MEDIA renditions so the
     // player can switch audio client-side without a reload. Every rendition
     // is listed even when the user has picked a specific track — the picked
@@ -880,7 +881,12 @@ export class StreamingController {
       tokenParam,
       includeRemux,
       sourceBitrate || undefined,
-      useExtXMedia ? audioStreams : undefined,
+      // Pass the array when we want EXT-X-MEDIA renditions, OR when the
+      // source has zero audio streams — the empty array signals
+      // `noAudio` to the master-playlist builder so CODECS drops the
+      // audio entry (otherwise Shaka / ExoPlayer reject the variant).
+      // `undefined` keeps the muxed single-audio layout for everyone else.
+      useExtXMedia || audioStreams.length === 0 ? audioStreams : undefined,
       onlyQuality,
       pickedIdx ?? 0,
       deviceType,

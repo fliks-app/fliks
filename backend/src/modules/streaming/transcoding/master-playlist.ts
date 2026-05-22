@@ -5,7 +5,7 @@ import {
   profileFitsSource,
   profileResolution,
 } from './profiles';
-import type { DeviceType, TranscodeProfile } from './types';
+import type { AudioStreamMeta, DeviceType, TranscodeProfile } from './types';
 import type { CodecVariant } from './codec/types';
 import {
   h264CodecString,
@@ -81,7 +81,7 @@ export function generateMasterPlaylist(
   tokenParam: string,
   includeRemux = false,
   sourceBitrate?: number,
-  audioStreams?: { language?: string; title?: string }[],
+  audioStreams?: AudioStreamMeta[],
   onlyQuality?: string,
   defaultAudioIndex = 0,
   deviceType: DeviceType = 'desktop',
@@ -133,10 +133,17 @@ export function generateMasterPlaylist(
   // we honour any non-empty `audioStreams` list rather than gating on
   // `length > 1`. Callers that want the muxed layout pass `undefined`.
   const multiAudio = audioStreams && audioStreams.length > 0;
+  // Audio-less source: ffmpeg emits `-an` so the segments truly carry no
+  // audio. The master MUST NOT advertise an audio codec in CODECS — Shaka
+  // and ExoPlayer reject the variant when the manifest declares a track
+  // the segments don't contain (iOS AVPlayer is permissive enough to play
+  // it anyway, which is why this only surfaces on Shaka / Exo).
+  const noAudio = audioStreams != null && audioStreams.length === 0;
   const lines = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-INDEPENDENT-SEGMENTS'];
 
   const audioCodecMap = { aac: 'mp4a.40.2', ac3: 'ac-3', eac3: 'ec-3' };
   const audioCodec = audioCodecMap[outputAudioCodec] ?? 'mp4a.40.2';
+  const codecsTail = noAudio ? '' : `,${audioCodec}`;
 
   const frameRateAttr = `,FRAME-RATE=${formatFrameRate(sourceFrameRate)}`;
 
@@ -225,7 +232,7 @@ export function generateMasterPlaylist(
           frameRate: sourceFrameRate,
         });
         lines.push(
-          `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},VIDEO-RANGE=${range}${frameRateAttr},NAME="${p.name}",CODECS="${videoCodec},${audioCodec}"${hdrAudioAttr}`,
+          `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},VIDEO-RANGE=${range}${frameRateAttr},NAME="${p.name}",CODECS="${videoCodec}${codecsTail}"${hdrAudioAttr}`,
           `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
         );
       }
@@ -314,7 +321,7 @@ export function generateMasterPlaylist(
       sdrVariant?.codec === 'hevc'
         ? hevcMainCodecString(target)
         : h264CodecString(target);
-    const codecsAttr = `,CODECS="${videoCodec},${audioCodec}"`;
+    const codecsAttr = `,CODECS="${videoCodec}${codecsTail}"`;
     lines.push(
       `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h}${frameRateAttr},NAME="${p.name}"${codecsAttr}${audioAttr}`,
       `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
