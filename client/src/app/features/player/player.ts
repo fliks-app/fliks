@@ -9,6 +9,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -166,6 +167,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly qualityManager = inject(QualityManagerService);
   readonly device = inject(DeviceService);
 
+  /** Reset the singleton PlayerStateService synchronously at field-init
+   *  time so that effects declared further down (e.g. `autoHideOnPlay`)
+   *  don't see lingering `videoStarted=true` / `paused=false` from the
+   *  previous session. `state.reset()` is also called in
+   *  `ngAfterViewInit` but that happens after the first effect pass. */
+  private readonly _stateReset = (this.state.reset(), null);
+
   private readonly videoEl = viewChild<ElementRef<HTMLVideoElement>>('videoElement');
   private readonly containerEl = viewChild<ElementRef<HTMLDivElement>>('playerContainer');
 
@@ -224,12 +232,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // Component-owned signals (not delegated)
   readonly playbackRate = signal(1);
-  /** Controls start visible on browser (pointer present, the user
-   *  expects to see the affordances immediately) and hidden on native
-   *  (touch / TV — the user taps / moves the remote to reveal them).
-   *  The auto-hide timer that runs during playback toggles this back
-   *  to false after inactivity regardless of the initial state. */
-  readonly controlsVisible = signal(!Capacitor.isNativePlatform());
+  /** Controls start visible everywhere — the user is staring at a
+   *  paused / loading frame and expects to see the affordances. A
+   *  dedicated effect (see `playbackVisibilityEffect`) flips them
+   *  off the moment playback actually starts, and the auto-hide
+   *  timer takes over from there during the rest of the session. */
+  readonly controlsVisible = signal(true);
   readonly inPipMode = signal(false);
   readonly pipAvailable = signal(true);
   private readonly isLandscape = signal(screen.orientation?.type?.startsWith('landscape') ?? false);
@@ -332,6 +340,26 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     Pip.updatePlaybackState({ playing: !this.paused() }).catch(() => {});
   });
 
+  /** Hide the controls bar the moment the first frame of the new
+   *  session is painted. Uses `videoStarted` (per-session, set after
+   *  the engine actually surfaces a frame) rather than `paused` —
+   *  the `paused` signal is on a singleton service, so opening a
+   *  second video would inherit `paused = false` from the previous
+   *  session and the effect would fire before this video has even
+   *  loaded.
+   *  `controlsVisible` is read through `untracked` so the effect
+   *  only reacts to videoStarted transitions — without it, the
+   *  user moving the mouse (which calls `showControls()`) would
+   *  re-fire this effect and re-hide them immediately, making the
+   *  cursor / bar impossible to keep visible. Subsequent pause /
+   *  resume cycles fall through to the existing auto-hide timer +
+   *  user-interaction reveal. */
+  private readonly autoHideOnPlayEffect = effect(() => {
+    if (this.videoStarted() && untracked(() => this.controlsVisible())) {
+      this.controlsVisible.set(false);
+    }
+  });
+
   /** Re-apply native subtitle style on controls show/hide so the bottom-margin
       bump kicks in. Browser playback uses CSS instead — see styles below. */
   private readonly subtitleControlsMarginEffect = effect(() => {
@@ -355,6 +383,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly mediaTitle = signal('');
   readonly episodeTitle = signal('');
   readonly fanartUrl = signal<string | null>(null);
+
+  /** Low-quality variant of `fanartUrl` for the loading backdrop's
+   *  LQIP layer. Only kicks in for our own `/api/images/...` URLs
+   *  (which support `?size=thumb`); remote / data URLs fall through
+   *  as-is so the layer paints the same image as the full-res one. */
+  readonly fanartThumbUrl = computed(() => {
+    const url = this.fanartUrl();
+    if (!url) return null;
+    if (!url.includes('/api/images/')) return url;
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}size=thumb`;
+  });
   private playbackInfo: PlaybackInfoResponse | null = null;
 
   readonly playerStats = computed<PlayerStats | null>(() => {
@@ -575,13 +615,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       screen.orientation?.addEventListener('change', this.onOrientationChange);
     }
 
-    // Eager fanart from router state — set BEFORE any await so the backdrop
-    // renders on the first tick of the loading phase instead of popping in
-    // only after the media API + image download (~1s+ later). The image is
-    // already in the browser cache from the source tile/header.
-    const navState = (this.router.getCurrentNavigation()?.extras?.state ?? history.state) as { fanartUrl?: string | null } | null;
-    if (navState?.fanartUrl) {
-      this.fanartUrl.set(this.serverConfig.resolveUrl(navState.fanartUrl));
+    // Eager backdrop from router state — set BEFORE any await so the
+    // loading screen renders on the first tick instead of popping in
+    // only after the media API + image download (~1s+ later). The
+    // image is already in the browser cache from the source tile/header.
+    // `stillUrl` (episode thumbnail) wins over `fanartUrl` when both
+    // are passed: a series viewer recognises the episode they just
+    // selected, not the show's hero.
+    const navState = (this.router.getCurrentNavigation()?.extras?.state ?? history.state) as { fanartUrl?: string | null; stillUrl?: string | null } | null;
+    const eagerBackdrop = navState?.stillUrl ?? navState?.fanartUrl;
+    if (eagerBackdrop) {
+      this.fanartUrl.set(this.serverConfig.resolveUrl(eagerBackdrop));
     }
 
     const qp = this.route.snapshot.queryParams;
@@ -652,6 +696,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             if (ep) {
               const label = `S${season.seasonNumber}:E${ep.episodeNumber}`;
               this.episodeTitle.set(ep.title ? `${label} - ${ep.title}` : label);
+              // Prefer the episode still (full quality stored locally
+              // by ImageService.downloadAndStore('episode', ...)) over
+              // the series fanart so the loading backdrop matches
+              // exactly what's about to play.
+              if (ep.stillUrl) {
+                this.fanartUrl.set(this.serverConfig.resolveUrl(ep.stillUrl));
+              }
               break;
             }
           }

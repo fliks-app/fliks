@@ -11,6 +11,9 @@ export interface PlayContext {
   title: string;
   episodeTitle?: string;
   fanartUrl?: string | null;
+  /** Episode thumbnail to use as the eager backdrop instead of the
+   *  series fanart when playing an episode. Optional. */
+  stillUrl?: string | null;
   streamInfo?: any;
 }
 
@@ -43,13 +46,18 @@ export class PlayableMediaService {
       const qp: any = { mediaId: ctx.mediaId };
       if (ctx.episodeId) qp.episodeId = ctx.episodeId;
       if (fromStart) qp.t = 0;
-      // Pass fanartUrl via router state so the player can paint the
-      // backdrop on its first tick — without it the fanart only appears
-      // after the media API call returns AND the image finishes
-      // downloading (~1s+ on cold network), leaving a long black phase.
+      // Pass fanartUrl + stillUrl via router state so the player can
+      // paint the backdrop on its first tick — without it the image
+      // only appears after the media API call returns AND the image
+      // finishes downloading (~1s+ on cold network), leaving a long
+      // black phase. Player prefers `stillUrl` over `fanartUrl` when
+      // both are present (episode-accurate backdrop on series).
       this.router.navigate(['/watch', ctx.fileId], {
         queryParams: qp,
-        state: { fanartUrl: ctx.fanartUrl ?? null },
+        state: {
+          fanartUrl: ctx.fanartUrl ?? null,
+          stillUrl: ctx.stillUrl ?? null,
+        },
       });
     }
   }

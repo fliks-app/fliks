@@ -7,12 +7,38 @@
   [class.hidden]="castService.isConnected()"
   (mousemove)="device.isTouch() || isNative ? null : showControls()"
 >
-  <!-- Fanart backdrop until video renders its first frame. Rendered for
-       both web (Shaka) and native (ExoPlayer) — on native the WebView is
-       transparent so the fanart in HTML covers the ExoPlayer surface
-       behind it during the loading phase. -->
+  <!-- Backdrop until video renders its first frame. Rendered for both
+       web (Shaka) and native (ExoPlayer) — on native the WebView is
+       transparent so the HTML backdrop covers the ExoPlayer surface
+       behind it during the loading phase.
+
+       Progressive load: thumb variant (e.g. `?size=thumb`, ~10 KB)
+       paints first thanks to its smaller payload, then the full-res
+       version stacked on top fades in once it has decoded. Falls
+       back to the same image at both layers for remote / non-`/api/
+       images/...` URLs. -->
   @if (!videoStarted()) {
-    <div class="absolute inset-0 z-1" [style.background-image]="fanartUrl() ? 'url(' + fanartUrl() + ')' : 'none'" style="background-size: cover; background-position: center; background-color: #000"></div>
+    <div class="absolute inset-0 z-1 bg-black">
+      @if (fanartThumbUrl()) {
+        <img
+          [src]="fanartThumbUrl()!"
+          alt=""
+          fetchpriority="high"
+          decoding="async"
+          class="absolute inset-0 w-full h-full object-cover"
+        />
+      }
+      @if (fanartUrl()) {
+        <img
+          [src]="fanartUrl()!"
+          alt=""
+          fetchpriority="high"
+          decoding="async"
+          class="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300"
+          (load)="$any($event.target).classList.remove('opacity-0')"
+        />
+      }
+    </div>
   }
 
   <video
