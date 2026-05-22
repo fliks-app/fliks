@@ -5,7 +5,7 @@ import {
   profileFitsSource,
   profileResolution,
 } from './profiles';
-import type { DeviceType, TranscodeProfile } from './types';
+import type { AudioStreamMeta, DeviceType, TranscodeProfile } from './types';
 import type { CodecVariant } from './codec/types';
 import {
   h264CodecString,
@@ -81,7 +81,7 @@ export function generateMasterPlaylist(
   tokenParam: string,
   includeRemux = false,
   sourceBitrate?: number,
-  audioStreams?: { language?: string; title?: string }[],
+  audioStreams?: AudioStreamMeta[],
   onlyQuality?: string,
   defaultAudioIndex = 0,
   deviceType: DeviceType = 'desktop',
