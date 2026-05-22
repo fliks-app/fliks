@@ -69,23 +69,10 @@ public class MainActivity extends BridgeActivity {
             wv.requestFocus();
         }
 
-        Window window = getWindow();
-        // Force the activity windowBackground to black so any moment where
-        // the WebView is transparent (during native player playback, or
-        // between routes when content briefly has transparent body bg)
-        // doesn't flash the AppCompat.Light default white through the gap.
-        window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.BLACK));
-        // Draw content edge-to-edge: required for `env(safe-area-inset-*)`
-        // to report real values on Android ≤ 14. Android 15 (targetSdk 35)
-        // applies the same opt-in automatically; calling it explicitly here
-        // keeps the behaviour uniform across OS versions.
-        WindowCompat.setDecorFitsSystemWindows(window, false);
-        // Transparent system bars — CSS env(safe-area-inset-*) handles the offset
-        window.setStatusBarColor(Color.TRANSPARENT);
-        window.setNavigationBarColor(Color.TRANSPARENT);
+        applyEdgeToEdge();
 
         // Set initial status bar icon color — post to run after Capacitor setup
-        window.getDecorView().post(() -> setLightStatusBar(false));
+        getWindow().getDecorView().post(() -> setLightStatusBar(false));
 
         // PiP action receiver (play/pause button in PiP window)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -111,6 +98,39 @@ public class MainActivity extends BridgeActivity {
         if (pipActionReceiver != null) {
             try { unregisterReceiver(pipActionReceiver); } catch (Exception ignored) {}
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // `singleTask` means the activity isn't recreated when the user
+        // brings the app back from background — `onCreate` doesn't run
+        // again, so the edge-to-edge flag needs to be re-asserted here
+        // (some Android versions reset window flags on detach/attach
+        // cycles). Also reapplies the status-bar icon color in case it
+        // was reset alongside.
+        applyEdgeToEdge();
+        getWindow().getDecorView().post(this::applyLightStatusBar);
+    }
+
+    /**
+     * Asserts the window's edge-to-edge layout + transparent system
+     * bars. Safe to call multiple times; idempotent.
+     */
+    private void applyEdgeToEdge() {
+        Window window = getWindow();
+        // Force the activity windowBackground to black so any moment where
+        // the WebView is transparent (during native player playback, or
+        // between routes when content briefly has transparent body bg)
+        // doesn't flash the AppCompat.Light default white through the gap.
+        window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.BLACK));
+        // Draw content edge-to-edge: required for `env(safe-area-inset-*)`
+        // to report real values on Android ≤ 14. Android 15 (targetSdk 35)
+        // applies the same opt-in automatically; calling it explicitly here
+        // keeps the behaviour uniform across OS versions.
+        WindowCompat.setDecorFitsSystemWindows(window, false);
+        window.setStatusBarColor(Color.TRANSPARENT);
+        window.setNavigationBarColor(Color.TRANSPARENT);
     }
 
     /** Called by ImmersivePlugin. */
