@@ -16,6 +16,7 @@ import { ConfirmationModalComponent } from './shared/components/confirmation-mod
 import { SelectPickerComponent } from './shared/components/select-picker';
 import { DismissableStackService } from './core/services/dismissable-stack.service';
 import { NavbarService } from './core/services/navbar.service';
+import { PwaAutoUpdateService } from './core/services/pwa-auto-update.service';
 
 @Component({
   selector: 'app-root',
@@ -37,6 +38,7 @@ export class App implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly dismissStack = inject(DismissableStackService);
   private readonly navbar = inject(NavbarService);
+  private readonly pwaAutoUpdate = inject(PwaAutoUpdateService);
   private backButtonListener?: { remove: () => Promise<void> };
   private resumeListener?: { remove: () => Promise<void> };
   private tizenKeyListener?: (e: KeyboardEvent) => void;
@@ -46,6 +48,9 @@ export class App implements OnInit, OnDestroy {
     this.auth.hydrateFromServer();
     // Pre-warm device profile cache (codec probing) so it's instant when the player needs it
     this.deviceProfile.getProfile();
+    // Watch for a fresher PWA build emitted by the Angular service worker
+    // — when one lands, full-reload the tab so the new asset map is live.
+    this.pwaAutoUpdate.init();
 
     if (Capacitor.isNativePlatform()) {
       document.body.classList.add('native');
