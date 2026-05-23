@@ -139,6 +139,13 @@ export class HomeComponent implements OnInit, OnDestroy {
     // Each section guards itself with `@if (().length)` so sections paint
     // independently as their data arrives. No global loading gate.
     await this.loadAllSections();
+    // App-open SWR: the cache served Pass 1 above (instant render even on
+    // a cold network). Now force a network round-trip so the user sees
+    // the freshest data — additions, watched-status flips made on
+    // another device, new recommendations, etc. — without waiting on it.
+    // Signals already populated, so a slower fresh response just
+    // overwrites in place; no spinner, no flash.
+    queueMicrotask(() => void this.loadAllSections({ force: true }));
     this.scrollMemory.restore(HomeComponent.SCROLL_KEY, this.injector);
     if (this.tv.isTv()) {
       afterNextRender(() => this.applyDefaultFocus(), { injector: this.injector });
@@ -193,13 +200,24 @@ export class HomeComponent implements OnInit, OnDestroy {
    * Fetch every section in parallel. Signals are updated as responses land —
    * existing values stay visible until each new response arrives, so a
    * background revalidation never blanks the UI.
+   *
+   * The pattern is two-pass SWR-on-demand:
+   *   • Pass 1 (default): cache-first. The interceptor serves IndexedDB
+   *     if fresh, network otherwise. Renders the home in ≤1 frame on a
+   *     warm cache.
+   *   • Pass 2 (`{ force: true }`): always go to network. Fired right
+   *     after Pass 1 from `ngOnInit` to refresh the home's data even
+   *     when the cache was fresh — the user expects the page to reflect
+   *     current backend state every time they open the app, but doesn't
+   *     want to wait for the network for the first paint.
    */
-  private async loadAllSections(): Promise<void> {
+  private async loadAllSections(opts: { force?: boolean } = {}): Promise<void> {
+    const force = !!opts.force;
     try {
       const [libs, cw, recs] = await Promise.all([
-        this.librariesApi.listMine().catch(() => null),
-        this.streamingApi.getContinueWatching().catch(() => null),
-        this.streamingApi.getRecommendations().catch(() => null),
+        this.librariesApi.listMine({ force }).catch(() => null),
+        this.streamingApi.getContinueWatching(undefined, { force }).catch(() => null),
+        this.streamingApi.getRecommendations({ force }).catch(() => null),
       ]);
       if (libs) this.libraries.set(libs);
       if (cw) this.continueWatching.set(cw);
