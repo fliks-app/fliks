@@ -251,7 +251,8 @@
 
   <div class="drawer-side z-40" [class.hidden]="isNative && device.isPhone()">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
-    <aside class="w-64 min-h-full flex flex-col"
+    <aside data-tv-modal
+           class="w-64 min-h-full flex flex-col"
            [class.bg-base-100]="!background.url()"
            [class.app-sidebar-veil]="!!background.url()"
            [class.backdrop-blur-sm]="!!background.url()"
