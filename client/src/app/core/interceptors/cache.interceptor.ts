@@ -171,6 +171,11 @@ function resourcePrefix(url: string): string {
   return m?.[1] ?? url;
 }
 
+/** Opt-in hint for callers that want the freshest data on this specific
+ *  request even when a fresh cache entry exists. Stripped before the
+ *  request leaves the interceptor — the backend has no use for it. */
+export const CACHE_BYPASS_HEADER = 'X-Cache-Bypass';
+
 export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
   const url = req.urlWithParams;
 
@@ -181,6 +186,19 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
   }
 
   if (!isCacheable(url)) return next(req);
+
+  // Force-refresh path: skip the cache READ but still PUT the network
+  // response so future cache-first callers get the refreshed value.
+  if (req.headers.has(CACHE_BYPASS_HEADER)) {
+    const cleanReq = req.clone({ headers: req.headers.delete(CACHE_BYPASS_HEADER) });
+    return next(cleanReq).pipe(
+      tap((event) => {
+        if (event instanceof HttpResponse && event.status === 200) {
+          void putCache(url, event.body);
+        }
+      }),
+    );
+  }
 
   return new Observable((subscriber) => {
     getCached(url).then((entry) => {

@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
 import { CastService } from '../cast.service';
+import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
 import {
   BrowserDeviceProfileService,
   DeviceProfile,
@@ -364,26 +365,34 @@ export class StreamingApiService {
     );
   }
 
-  getContinueWatching(libraryId?: number) {
-    const params = libraryId
-      ? { params: { libraryId: String(libraryId) } }
-      : {};
+  getContinueWatching(libraryId?: number, opts: { force?: boolean } = {}) {
+    const reqOpts: { params?: { libraryId: string }; headers?: { [k: string]: string } } = {};
+    if (libraryId) reqOpts.params = { libraryId: String(libraryId) };
+    if (opts.force) reqOpts.headers = { [CACHE_BYPASS_HEADER]: '1' };
     return firstValueFrom(
       this.http.get<ContinueWatchingItem[]>(
         '/api/playback/continue-watching',
-        params,
+        reqOpts,
       ),
     );
   }
 
-  getRecommendations(opts: { libraryId?: number; limit?: number } = {}) {
+  getRecommendations(
+    opts: { libraryId?: number; limit?: number; force?: boolean } = {},
+  ) {
     const params: Record<string, string> = {};
     if (opts.libraryId) params['libraryId'] = String(opts.libraryId);
     if (opts.limit) params['limit'] = String(opts.limit);
+    const reqOpts: {
+      params?: Record<string, string>;
+      headers?: { [k: string]: string };
+    } = {};
+    if (Object.keys(params).length) reqOpts.params = params;
+    if (opts.force) reqOpts.headers = { [CACHE_BYPASS_HEADER]: '1' };
     return firstValueFrom(
       this.http.get<RecommendationItem[]>(
         '/api/playback/recommendations',
-        Object.keys(params).length ? { params } : {},
+        reqOpts,
       ),
     );
   }
