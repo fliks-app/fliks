@@ -218,9 +218,12 @@ export class SeerrRequestImportService {
     // When the Seerr request maps to a Media already in Fliks that nobody
     // owns yet (`addedById` null — typical for *arr-migrated or disk-rescanned
     // rows), claim it for the Seerr requester so the "Mine" filter surfaces
-    // it without waiting on a manual re-approval.
+    // it without waiting on a manual re-approval. `addedById` is a
+    // `@RelationId` virtual column (read-only); we write through the
+    // `addedBy` relation so TypeORM resolves it to the underlying FK
+    // column instead of failing with "Property addedById was not found".
     if (media && media.addedById == null) {
-      await this.mediaRepo.update(media.id, { addedById: user.id });
+      await this.mediaRepo.update(media.id, { addedBy: { id: user.id } as User });
     }
 
     if (existing) {
