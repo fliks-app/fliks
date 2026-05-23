@@ -90,7 +90,7 @@
           <app-horizontal-scroller [title]="'media_detail.other_seasons_of' | translate:{ title: m.title }">
             @for (other of otherSeasons(); track other.id) {
               <app-media-card
-                class="shrink-0 w-32 sm:w-40"
+                class="shrink-0 w-28 sm:w-40"
                 [aspect]="'portrait'"
                 [imageUrl]="other.posterUrl ?? m.posterUrl"
                 [title]="('media_detail.season' | translate) + ' ' + other.seasonNumber"

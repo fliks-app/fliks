@@ -280,6 +280,34 @@ app-media-card figure:focus-visible,
     0 0 18px -4px var(--color-primary, #7a3ff2),
     0 8px 22px rgb(0 0 0 / 35%) !important;
 }
+/* Android TV ships on Capacitor + Chromium WebView, often with mid-range
+   SoCs where blurred box-shadows are the most expensive thing on the
+   compositor. D-pad nav rapidly moves focus card-to-card, so each move
+   re-paints the 18 px glow + 22 px drop shadow blur regions — visible
+   as jank. Drop the blurs on AndroidTV, keep the crisp 2-step ring
+   (cheap, no blur). Tizen / webOS / desktop keep the full Lumen look. */
+body.tv-androidtv app-media-card figure:focus-visible,
+body.tv-androidtv [data-home-focus]:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--color-base-100, #1d232a),
+    0 0 0 6px var(--color-primary, #7a3ff2) !important;
+}
+/* Smaller media-card footprint on AndroidTV: visually the same layout but
+   ~10 % shorter cards, which both reduces image decode pressure (smaller
+   thumb pixels rendered → less GPU work per scroll) and fits a couple more
+   cards in a row for denser browsing. Targets the `sm:` Tailwind widths
+   only — TV viewports always cross the 640 px breakpoint, so this is the
+   width that actually paints. Other form factors are untouched. */
+@media (min-width: 640px) {
+  body.tv-androidtv app-media-card.sm\:w-40 { width: 7.5rem; }    /* 160px → 120px (portrait) */
+  body.tv-androidtv app-media-card > .sm\:w-72 { width: 13rem; }  /* 288px → 208px (landscape) */
+  /* Library cards on the home page (linear pill with icon + name). Same
+     ~17 % reduction so they line up visually with the media-card width
+     and the row keeps a consistent density. */
+  body.tv-androidtv [data-home-focus^="library:"].sm\:w-48 { width: 10rem; }   /* 192px → 160px */
+  body.tv-androidtv [data-home-focus^="library:"].sm\:h-28 { height: 6rem; }   /* 112px → 96px */
+}
+
 /* Touch-only UI elements should be hidden on TV */
 body.tv [data-touch-only] {
   display: none !important;

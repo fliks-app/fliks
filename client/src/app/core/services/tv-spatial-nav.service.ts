@@ -260,13 +260,22 @@ export class TvSpatialNavService {
       const tree = this.findNeighborInTree(active, dir);
       if (tree) return tree;
     }
-    // Focus trap: any open dropdown/menu/bottom-sheet that opts in via
-    // `[data-tv-modal]` (or `.dropdown-open .dropdown-content` for the
-    // legacy player dropdowns) restricts navigation to its contents so
-    // D-pad keys can't escape the modal.
+    // Focus trap: any open dropdown / menu / bottom-sheet / always-visible
+    // pinned sidebar that opts in via `[data-tv-modal]` restricts
+    // navigation to its contents so arrow keys can't leak outside. Only
+    // applies when focus is CURRENTLY inside the modal — otherwise an
+    // always-on element (e.g. the pinned admin sidebar) would prevent
+    // ever reaching it from elsewhere on the page. The `.dropdown-open
+    // .dropdown-content` form is kept for the legacy player dropdowns
+    // that don't carry the attribute.
+    const modalCandidates: HTMLElement[] = [
+      ...Array.from(document.querySelectorAll<HTMLElement>('[data-tv-modal]')),
+      ...Array.from(
+        document.querySelectorAll<HTMLElement>('.dropdown-open .dropdown-content'),
+      ),
+    ];
     const openModal =
-      document.querySelector<HTMLElement>('[data-tv-modal]') ??
-      document.querySelector<HTMLElement>('.dropdown-open .dropdown-content');
+      modalCandidates.find((m) => active && m.contains(active)) ?? null;
     const all = openModal ? collectFocusables(openModal) : collectFocusables();
     if (!all.length) return null;
 
