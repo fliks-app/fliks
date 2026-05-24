@@ -355,9 +355,29 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func seek(_ call: CAPPluginCall) {
         let position = call.getDouble("position") ?? 0
         DispatchQueue.main.async { [weak self] in
+            guard let player = self?.player else {
+                call.resolve()
+                return
+            }
             let cmTime = CMTime(seconds: position, preferredTimescale: 1000)
-            self?.player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
-            call.resolve()
+            // Resolve only AFTER AVPlayer finishes the seek. Resolving
+            // synchronously (the old behaviour) made the JS layer think
+            // the engine was at `position` immediately, the seek-lock
+            // released, and the next time-observer tick with a still-
+            // mid-seek `player.currentTime()` (often 0 because CMTime
+            // briefly becomes .indefinite during the transition)
+            // snapped the seekbar back to 0 before AVPlayer settled at
+            // the target — the visible "forward → back to 0 → forward"
+            // hop. Apple guarantees the completion fires even when our
+            // seek is pre-empted by a subsequent seek (finished=false),
+            // so this never hangs.
+            player.seek(
+                to: cmTime,
+                toleranceBefore: .zero,
+                toleranceAfter: .zero
+            ) { _ in
+                call.resolve()
+            }
         }
     }
 
