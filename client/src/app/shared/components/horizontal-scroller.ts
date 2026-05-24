@@ -55,7 +55,7 @@ import { TvService } from '../../core/services/tv.service';
     <div
       #scroller
       appTvRow
-      class="flex gap-2 lg:gap-4 overflow-x-auto scrollbar-none [scroll-behavior:smooth] py-5 -my-5 px-5 -mx-5 scroll-px-5"
+      class="flex gap-2 lg:gap-4 overflow-x-auto scrollbar-none [scroll-behavior:smooth] py-5 -my-5 px-4 -mx-4 lg:px-5 lg:-mx-5 scroll-px-4 lg:scroll-px-5"
       (scroll)="updateArrows()"
     >
       <ng-content />

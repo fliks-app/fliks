@@ -1,12 +1,14 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   computed,
   effect,
   inject,
   input,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -179,6 +181,26 @@ export class MediaInfoHeaderComponent {
   readonly durationSeconds = signal<number | null>(null);
   readonly selectedAudioIndex = signal<number | null>(null);
   readonly selectedSubtitleId = signal<string | null>(null);
+
+  // Mobile overview clamp / expand
+  private readonly overviewTextRef = viewChild<ElementRef<HTMLParagraphElement>>('overviewText');
+  readonly overviewClamped = signal(false);
+  readonly overviewExpanded = signal(false);
+
+  private readonly overviewClampEffect = effect(() => {
+    // Re-measure whenever the overview text changes.
+    this.overview();
+    this.overviewExpanded.set(false);
+    requestAnimationFrame(() => {
+      const el = this.overviewTextRef()?.nativeElement;
+      if (el) this.overviewClamped.set(el.scrollHeight > el.clientHeight + 1);
+      else this.overviewClamped.set(false);
+    });
+  });
+
+  toggleOverview() {
+    this.overviewExpanded.update(v => !v);
+  }
 
   // ── Load playback state + watched when media/episode changes ──
 
