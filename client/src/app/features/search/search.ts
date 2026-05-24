@@ -29,6 +29,8 @@ import { MediaType } from '../../core/enums/media-type.enum';
 import { MediaCardComponent, CardBadge } from '../../shared/components/media-card/media-card';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { LucideSearch, LucideX, LucideSettings } from '@lucide/angular';
+import { Capacitor } from '@capacitor/core';
+import { Keyboard } from '@capacitor/keyboard';
 
 @Component({
   selector: 'app-search',
@@ -104,6 +106,50 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.scrollMemory.deactivate();
     this.attachedSub?.unsubscribe();
     this.detachedSub?.unsubscribe();
+    this.removeOutsidePointerListener();
+  }
+
+  /** Outside-tap → blur. Capacitor's iOS WebView doesn't reliably blur an
+   *  input when the user taps a non-interactive element (no cursor:pointer,
+   *  no click handler). We register a one-shot pointerdown listener while
+   *  the input has focus that blurs it on any tap outside its wrapper. */
+  private outsidePointerHandler: ((e: Event) => void) | null = null;
+
+  protected onInputFocus() {
+    if (this.outsidePointerHandler) return;
+    const inputEl = this.searchInput()?.nativeElement;
+    if (!inputEl) return;
+    this.outsidePointerHandler = (e: Event) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+      // Tap inside the input or the surrounding <form> (clear button, icon)
+      // — keep focus.
+      if (inputEl.closest('form')?.contains(target)) return;
+      inputEl.blur();
+    };
+    document.addEventListener('pointerdown', this.outsidePointerHandler, { capture: true });
+  }
+
+  protected onInputBlur() {
+    this.removeOutsidePointerListener();
+    // Capacitor WebView sometimes keeps the soft keyboard up after a JS
+    // blur — force it down to match the visual state.
+    if (Capacitor.isNativePlatform()) {
+      Keyboard.hide().catch(() => {});
+    }
+  }
+
+  /** Called from the <form> ngSubmit (virtual-keyboard Enter on iOS and
+   *  Android both fire it through the native browser form contract). */
+  protected dismissKeyboard() {
+    this.searchInput()?.nativeElement.blur();
+  }
+
+  private removeOutsidePointerListener() {
+    if (this.outsidePointerHandler) {
+      document.removeEventListener('pointerdown', this.outsidePointerHandler, { capture: true });
+      this.outsidePointerHandler = null;
+    }
   }
 
   async loadRequestedIds() {
