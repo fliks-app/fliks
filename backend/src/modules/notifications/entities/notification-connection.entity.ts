@@ -12,6 +12,8 @@ export type NotificationEvent =
   | 'request.created'
   | 'request.approved'
   | 'request.declined'
+  | 'request.processing'
+  | 'request.available'
   | 'grab.started'
   | 'download.complete'
   | 'health.issue'
