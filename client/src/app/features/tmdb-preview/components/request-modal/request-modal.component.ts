@@ -51,11 +51,20 @@ export class RequestModalComponent {
   readonly seasons = signal<SeasonStub[]>([]);
   readonly selectedSeasons = signal<Set<number>>(new Set());
   readonly seasonsLoading = signal(false);
+  /** Season numbers already covered by an active request — passed in by
+   *  the parent so the row is disabled in the table (cannot re-request). */
+  readonly alreadyRequestedSeasons = signal<Set<number>>(new Set());
 
-  open(params: { title: string; mediaType: MediaType; tmdbId: number }) {
+  open(params: {
+    title: string;
+    mediaType: MediaType;
+    tmdbId: number;
+    alreadyRequestedSeasons?: number[];
+  }) {
     this.title.set(params.title);
     this.mediaType.set(params.mediaType);
     this.tmdbId.set(params.tmdbId);
+    this.alreadyRequestedSeasons.set(new Set(params.alreadyRequestedSeasons ?? []));
     this.qualityProfileId.set(this.qualityProfiles()[0]?.id ?? null);
     this.languageProfileId.set(this.languageProfiles()[0]?.id ?? null);
     const compatible = this.libraries().filter((l) => l.mediaTypes.includes(params.mediaType));
@@ -73,7 +82,8 @@ export class RequestModalComponent {
       this.seasonsLoading.set(true);
       this.metadata.getTvSeasons(params.tmdbId).then((s) => {
         this.seasons.set(s);
-        this.selectedSeasons.set(new Set(s.map((x) => x.seasonNumber)));
+        // Nothing pre-selected — the user opts in season-by-season.
+        this.selectedSeasons.set(new Set());
       }).catch(() => {
         this.seasons.set([]);
       }).finally(() => {
@@ -82,11 +92,26 @@ export class RequestModalComponent {
     }
   }
 
+  /** Seasons the user can still pick (= total minus already-requested).
+   *  Drives the header toggle's checked state so it reflects only the
+   *  selectable rows, not the disabled "déjà demandé" rows. */
+  readonly selectableSeasonCount = computed(
+    () => this.seasons().length - this.alreadyRequestedSeasons().size,
+  );
+
+  /** True iff every selectable row is currently picked. */
+  readonly allSelectableChosen = computed(
+    () =>
+      this.selectableSeasonCount() > 0 &&
+      this.selectedSeasons().size === this.selectableSeasonCount(),
+  );
+
   close() {
     this.dialogEl()?.nativeElement.close();
   }
 
   toggleSeason(n: number) {
+    if (this.alreadyRequestedSeasons().has(n)) return;
     this.selectedSeasons.update((set) => {
       const next = new Set(set);
       next.has(n) ? next.delete(n) : next.add(n);
@@ -95,11 +120,14 @@ export class RequestModalComponent {
   }
 
   toggleAllSeasons() {
-    const all = this.seasons();
-    if (this.selectedSeasons().size === all.length) {
+    const taken = this.alreadyRequestedSeasons();
+    const selectable = this.seasons()
+      .map((s) => s.seasonNumber)
+      .filter((n) => !taken.has(n));
+    if (this.selectedSeasons().size === selectable.length) {
       this.selectedSeasons.set(new Set());
     } else {
-      this.selectedSeasons.set(new Set(all.map((s) => s.seasonNumber)));
+      this.selectedSeasons.set(new Set(selectable));
     }
   }
 
