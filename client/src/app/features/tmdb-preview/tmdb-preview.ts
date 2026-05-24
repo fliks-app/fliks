@@ -4,6 +4,7 @@ import {
   signal,
   inject,
   computed,
+  effect,
   OnInit,
   OnDestroy,
   viewChild,
@@ -20,16 +21,17 @@ import {
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { LibrariesApiService, Library } from '../../core/services/api/libraries-api.service';
 import { NavbarService } from '../../core/services/navbar.service';
+import { BackgroundService } from '../../core/services/background.service';
 import { RequestModalComponent } from './components/request-modal/request-modal.component';
 import { ImportModalComponent } from './components/import-modal/import-modal.component';
 import { MediaType } from '../../core/enums/media-type.enum';
-import { LucideFilm } from '@lucide/angular';
+import { LucideFilm, LucideChevronLeft } from '@lucide/angular';
 import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart-hero';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, ResolveUrlPipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, LucideFilm],
+  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, ResolveUrlPipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, LucideFilm, LucideChevronLeft],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tmdb-preview.html',
 })
@@ -40,8 +42,27 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   private readonly profilesApi = inject(ProfilesService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly translate = inject(TranslateService);
-  private readonly navbar = inject(NavbarService);
+  protected readonly navbar = inject(NavbarService);
+  private readonly backgroundService = inject(BackgroundService);
   readonly auth = inject(AuthService);
+
+  /** Page-wide fanart background — same plumbing as media-detail. The
+   *  inline bleed div is gone; `app-background` (mounted in layout)
+   *  picks the URL up from the service and renders it under the page. */
+  private readonly backgroundEffect = effect(() => {
+    const m = this.media();
+    if (!m?.fanartUrl) {
+      this.backgroundService.clear();
+      return;
+    }
+    this.backgroundService.setBackgrounds([m.fanartUrl]);
+  });
+
+  /** Back to the previous in-app URL — falls back to `/` when no history.
+   *  Same contract as media-detail's back button on desktop. */
+  goBack() {
+    this.navbar.goBack(['/']);
+  }
 
   readonly media = signal<MetadataDetails | null>(null);
   readonly loading = signal(true);
@@ -76,6 +97,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.navbar.leaveHeroPage();
+    this.backgroundService.clear();
   }
 
   async ngOnInit() {
