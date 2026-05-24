@@ -171,122 +171,171 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         let startTime = call.getDouble("startTime") ?? 0
-        let headers = call.getObject("headers") ?? [:]
+        let headers = parseHeaders(call.getObject("headers"))
 
-        // Trace what URL the engine is asking us to load — confirms in
-        // console which playback path stream-builder picked (DirectPlay
-        // raw / DirectStream remux master / Transcode master).
-        let safeUrl = urlString.replacingOccurrences(of: "'", with: "\\'")
-        let logJs = "console.warn('[NativePlayer] load', '\(safeUrl)', 'startTime=\(startTime)');"
-        DispatchQueue.main.async { [weak self] in
-            self?.bridge?.webView?.evaluateJavaScript(logJs)
-        }
-
-        // Diagnostic: when the URL points at an HLS master playlist, fetch
-        // it ourselves and dump the body to console BEFORE handing it to
-        // AVPlayer. Captured CODECS / BANDWIDTH / VIDEO-RANGE values so
-        // we can reproduce a -12927 rejection that came back with an
-        // empty errorLog. Gated on DEBUG: in release the extra fetch
-        // adds 100ms-3s of cellular latency to every load.
-        #if DEBUG
-        if urlString.contains(".m3u8") {
-            var req = URLRequest(url: url)
-            for (k, v) in headers {
-                if let s = v as? String { req.setValue(s, forHTTPHeaderField: k) }
-            }
-            URLSession.shared.dataTask(with: req) { [weak self] data, _, _ in
-                guard let body = data.flatMap({ String(data: $0, encoding: .utf8) }) else { return }
-                let escaped = body
-                    .replacingOccurrences(of: "\\", with: "\\\\")
-                    .replacingOccurrences(of: "'", with: "\\'")
-                    .replacingOccurrences(of: "\n", with: "\\n")
-                let dumpJs = "console.warn('[NativePlayer] manifest:\\n' + '\(escaped)');"
-                DispatchQueue.main.async {
-                    self?.bridge?.webView?.evaluateJavaScript(dumpJs)
-                }
-            }.resume()
-        }
-        #endif
+        logLoad(urlString: urlString, startTime: startTime)
+        dumpManifestForDebug(url: url, headers: headers)
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-
-            // Clean up previous player
             self.removeObservers()
             self.firstFrameEmitted = false
             self.player?.pause()
 
-            // Create AVURLAsset with custom headers
-            var assetHeaders: [String: String] = [:]
-            for (key, value) in headers {
-                if let str = value as? String {
-                    assetHeaders[key] = str
-                }
-            }
+            // Audio session can be flipped out of `.playback` by a phone
+            // call, route change, or Siri. AppDelegate sets it once at
+            // launch — reasserting on every load defends against any
+            // subsequent corruption that would otherwise have AVPlayer
+            // start with audio in a mute or downmixed state.
+            self.ensureAudioSessionActive()
 
-            let asset = AVURLAsset(url: url, options: assetHeaders.isEmpty ? nil : [
-                "AVURLAssetHTTPHeaderFieldsKey": assetHeaders,
-            ])
-
-            // Preload `playable`/`tracks`/`duration` so `.readyToPlay` fires
-            // without a second round-trip after the asset header arrives.
-            let playerItem = AVPlayerItem(
-                asset: asset,
-                automaticallyLoadedAssetKeys: ["playable", "tracks", "duration"]
-            )
-            // No initial bitrate / resolution caps. We used to clamp these
-            // to the device's native screen to fight per-rung FFmpeg
-            // session thrash, but the cap also silently rejected the
-            // single-variant HDR pass-through manifest when the source
-            // resolution (e.g. 3840×2160) exceeded the screen native size
-            // (e.g. 1290×2796 on iPhone 15 Pro Max). AVPlayer had no
-            // lower variant to fall back to, errored out with CoreMedia
-            // -12927, and the errorLog stayed empty because the failure
-            // happened at variant selection — before any segment fetch.
-            // ABR runs freely; `setMaxResolution` from the engine still
-            // applies a cap when the user explicitly picks a quality.
-            let player = AVPlayer(playerItem: playerItem)
-            // Don't second-guess AVPlayer's prebuffer — let it wait until it
-            // has enough video to play without immediate stall.
-            player.automaticallyWaitsToMinimizeStalling = true
-            self.player = player
-
-            // Setup player layer
-            if self.playerLayer == nil, let view = self.playerView {
-                let layer = AVPlayerLayer(player: player)
-                layer.frame = view.bounds
-                layer.videoGravity = .resizeAspect
-                view.layer.addSublayer(layer)
-                self.playerLayer = layer
-            } else {
-                self.playerLayer?.player = player
-            }
-
-            // Observe playback state
+            let item = self.buildPlayerItem(url: url, assetHeaders: headers)
+            let player = self.attachPlayerItem(item)
             self.setupObservers()
-
-            // Seek BEFORE play so AVPlayer's initial prebuffer probe
-            // (gated by automaticallyWaitsToMinimizeStalling=true on
-            // an .unknown item) fires at the resume target, not at
-            // content time 0. On transcoded HLS the backend pre-spawns
-            // ffmpeg at startSegment and only warms segments forward —
-            // a probe at seg-0 / seg-1 cold-spawns a second session.
-            // AVPlayer queues seek and play on .unknown items and
-            // applies both once the asset is loaded. play() runs
-            // unconditionally rather than inside the seek completion
-            // handler — Apple's docs say the completion may fire with
-            // finished=false when AVPlayer pre-empts our seek with
-            // its own status-flip seek, and we would then never start
-            // playback (the symptom that bit us originally: load()
-            // resolved but playback stayed paused).
-            if startTime > 0 {
-                let cmTime = CMTime(seconds: startTime, preferredTimescale: 1000)
-                player.seek(to: cmTime)
-            }
-            player.play()
+            self.startPlayback(player: player, startTime: startTime)
 
             call.resolve()
         }
+    }
+
+    private func parseHeaders(_ raw: [String: Any]?) -> [String: String] {
+        var out: [String: String] = [:]
+        for (key, value) in raw ?? [:] {
+            if let str = value as? String { out[key] = str }
+        }
+        return out
+    }
+
+    private func logLoad(urlString: String, startTime: Double) {
+        let safeUrl = urlString.replacingOccurrences(of: "'", with: "\\'")
+        let js = "console.warn('[NativePlayer] load', '\(safeUrl)', 'startTime=\(startTime)');"
+        DispatchQueue.main.async { [weak self] in
+            self?.bridge?.webView?.evaluateJavaScript(js)
+        }
+    }
+
+    /// Debug-only manifest dump. Captures the exact CODECS / BANDWIDTH /
+    /// VIDEO-RANGE the player sees, so a `-12927` rejection that comes
+    /// back with an empty `errorLog` can be reproduced from the trace.
+    /// Skipped in release builds (the extra fetch adds 100ms-3s of
+    /// cellular latency to every load).
+    private func dumpManifestForDebug(url: URL, headers: [String: String]) {
+        #if DEBUG
+        guard url.absoluteString.contains(".m3u8") else { return }
+        var req = URLRequest(url: url)
+        for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
+        URLSession.shared.dataTask(with: req) { [weak self] data, _, _ in
+            guard let body = data.flatMap({ String(data: $0, encoding: .utf8) }) else { return }
+            let escaped = body
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "'", with: "\\'")
+                .replacingOccurrences(of: "\n", with: "\\n")
+            let js = "console.warn('[NativePlayer] manifest:\\n' + '\(escaped)');"
+            DispatchQueue.main.async {
+                self?.bridge?.webView?.evaluateJavaScript(js)
+            }
+        }.resume()
+        #endif
+    }
+
+    private func ensureAudioSessionActive() {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            if session.category != .playback {
+                try session.setCategory(
+                    .playback,
+                    mode: .moviePlayback,
+                    options: [.allowAirPlay, .allowBluetoothA2DP]
+                )
+            }
+            try session.setActive(true)
+        } catch {
+            // Best effort. AVPlayer keeps playing on whatever session
+            // state was active before — degraded audio is preferable to
+            // a hard load failure.
+        }
+    }
+
+    /// Build the AVPlayerItem with a 4-second forward buffer hint.
+    /// `preferredForwardBufferDuration = 4` (≈ one full GOP-cut HLS
+    /// segment plus margin) gives AVPlayer a consistent prebuffer
+    /// target before it flips `timeControlStatus` to `.playing` —
+    /// without it, the default "as needed" heuristic can start
+    /// audio decode while video is still resolving its first IDR
+    /// and we briefly hear sound over a black frame at startup.
+    private func buildPlayerItem(url: URL, assetHeaders: [String: String]) -> AVPlayerItem {
+        let assetOptions: [String: Any]? = assetHeaders.isEmpty
+            ? nil
+            : ["AVURLAssetHTTPHeaderFieldsKey": assetHeaders]
+        let asset = AVURLAsset(url: url, options: assetOptions)
+        // Preload `playable`/`tracks`/`duration` so `.readyToPlay` fires
+        // without a second round-trip after the asset header arrives.
+        let item = AVPlayerItem(
+            asset: asset,
+            automaticallyLoadedAssetKeys: ["playable", "tracks", "duration"]
+        )
+        item.preferredForwardBufferDuration = 4
+        return item
+    }
+
+    /// Attach the new item to the existing AVPlayer (via
+    /// `replaceCurrentItem`) when one exists, otherwise spin up a fresh
+    /// player + layer. Reusing the player keeps observers, audio session
+    /// bindings, and PiP wiring stable across loads — the previous
+    /// "new AVPlayer per load" pattern left a small window where the
+    /// PipPlugin could still hold the prior layer's player while we
+    /// were swapping in the next one.
+    ///
+    /// No initial bitrate / resolution caps. We used to clamp these to
+    /// the device's native screen to fight per-rung FFmpeg session
+    /// thrash, but the cap also silently rejected the single-variant
+    /// HDR pass-through manifest when source resolution exceeded the
+    /// screen (-12927 with an empty errorLog). ABR runs freely now;
+    /// `setMaxResolution` from the engine still applies a cap when the
+    /// user explicitly picks a quality.
+    @discardableResult
+    private func attachPlayerItem(_ item: AVPlayerItem) -> AVPlayer {
+        if let existing = player {
+            existing.replaceCurrentItem(with: item)
+            existing.automaticallyWaitsToMinimizeStalling = true
+            return existing
+        }
+        let player = AVPlayer(playerItem: item)
+        player.automaticallyWaitsToMinimizeStalling = true
+        self.player = player
+        if playerLayer == nil, let view = playerView {
+            let layer = AVPlayerLayer(player: player)
+            layer.frame = view.bounds
+            layer.videoGravity = .resizeAspect
+            view.layer.addSublayer(layer)
+            playerLayer = layer
+        } else {
+            playerLayer?.player = player
+        }
+        return player
+    }
+
+    /// Seek (frame-accurate, `.zero` tolerance on both sides) then
+    /// kick `play()`. The zero tolerance is the critical bit: with the
+    /// default `±infinity` tolerance, AVPlayer is free to snap each
+    /// stream to its own nearest keyframe — audio AAC frames sit at
+    /// every ~21 ms, video keyframes only at IDR boundaries (every
+    /// segment, ~3 s). That asymmetry would let audio land 0-3 s
+    /// before video → the "big A/V desync on resume that goes away
+    /// after a close + reopen" symptom (reopen used `startTime=0`,
+    /// which skipped the seek entirely).
+    ///
+    /// `play()` runs outside any seek completion handler. Apple's docs
+    /// say the completion may report `finished=false` when AVPlayer
+    /// pre-empts our seek with its own status-flip seek; conditioning
+    /// play on that flag would leave playback paused forever in that
+    /// race.
+    private func startPlayback(player: AVPlayer, startTime: Double) {
+        if startTime > 0 {
+            let cmTime = CMTime(seconds: startTime, preferredTimescale: 1000)
+            player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+        }
+        player.play()
     }
 
     @objc func play(_ call: CAPPluginCall) {
@@ -600,8 +649,16 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             self?.emitTimeUpdate()
         }
 
-        // Playback status
-        statusObserver = player.currentItem?.observe(\.status) { [weak self] item, _ in
+        // Playback status. `.initial` catches the case where the asset
+        // was already loaded synchronously (warm cache, in-memory
+        // playlist) and the status flipped to `.readyToPlay` between
+        // AVPlayerItem creation and observer attach — without `.initial`
+        // we'd miss the only emit and the UI would never leave the
+        // loading state. emit handlers are idempotent so a duplicate
+        // initial fire is harmless.
+        statusObserver = player.currentItem?.observe(
+            \.status, options: [.initial, .new]
+        ) { [weak self] item, _ in
             switch item.status {
             case .readyToPlay:
                 self?.emitStateChanged("playing")
