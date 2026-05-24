@@ -118,7 +118,17 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             label.layer.shadowOpacity = 0.9
             subContainer.addSubview(label)
 
-            let bottomConstraint = label.bottomAnchor.constraint(equalTo: subContainer.safeAreaLayoutGuide.bottomAnchor, constant: -40)
+            // Anchor to the container's raw `bottomAnchor`, not its
+            // `safeAreaLayoutGuide.bottomAnchor`. iPhones with a home
+            // indicator have ~34 pt of safe-area padding at the bottom,
+            // so anchoring to the safe area left a permanent ~34 pt gap
+            // even when the user set the subtitle margin to 0 %. With
+            // the raw anchor, `bottomMarginPercent` is the only thing
+            // that decides where the subtitle sits — 0 % means flush
+            // with the screen bottom. The home indicator auto-hides
+            // during video playback anyway, so subtitles never collide
+            // with a visible system gesture handle.
+            let bottomConstraint = label.bottomAnchor.constraint(equalTo: subContainer.bottomAnchor, constant: -40)
             NSLayoutConstraint.activate([
                 label.leadingAnchor.constraint(equalTo: subContainer.leadingAnchor, constant: 24),
                 label.trailingAnchor.constraint(equalTo: subContainer.trailingAnchor, constant: -24),
