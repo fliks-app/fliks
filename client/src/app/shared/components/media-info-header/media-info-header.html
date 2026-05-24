@@ -6,7 +6,7 @@
     <!-- Title -->
     <h1 class="text-3xl font-semibold tracking-tight leading-tight">
       @if (episodeLabel()) {
-        <a [routerLink]="backRoute()" class="hover:underline">{{ title() }}</a>
+        <a [routerLink]="backRoute()" class="hover:underline rounded">{{ title() }}</a>
       } @else {
         {{ title() }}
       }
@@ -181,7 +181,7 @@
       <!-- Title -->
       <h1 class="text-4xl font-bold tracking-tight">
         @if (episodeLabel()) {
-          <a [routerLink]="backRoute()" class="hover:underline">{{ title() }}</a>
+          <a [routerLink]="backRoute()" class="hover:underline rounded">{{ title() }}</a>
         } @else {
           {{ title() }}
         }
