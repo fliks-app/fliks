@@ -797,12 +797,22 @@ export class MediaService {
 
   async update(id: number, dto: UpdateMediaDto): Promise<Media> {
     const media = await this.findOne(id);
+    const wasMonitored = media.monitored;
     const { path: _path, ...rest } = dto;
 
     Object.assign(media, rest);
 
     const saved = await this.mediaRepo.save(media);
     await this.updateSearchVector(saved.id);
+    // Admin just disabled monitoring → any active request on this title
+    // can no longer be fulfilled; mark them declined so users see the
+    // status change. Same rule as the media-deletion path.
+    if (wasMonitored && saved.monitored === false) {
+      await this.declineLinkedActiveRequests(
+        saved,
+        'Media was unmonitored',
+      );
+    }
     return this.findOne(saved.id);
   }
 
@@ -915,17 +925,16 @@ export class MediaService {
   }
 
   /**
-   * When the admin removes a media from the library, any request still
-   * tied to it (`PENDING` / `APPROVED` / `PROCESSING`) has no chance of
-   * being fulfilled — the row is going away. Flip them to `DECLINED`
-   * with a machine-readable reason so users see a clear "Media retiré
-   * de la bibliothèque" instead of a stale "in progress" status.
-   *
-   * `AVAILABLE` requests stay as-is: the user already had the content
-   * at some point, and a post-removal delete is part of the user's
-   * own history, not a rejection of their request.
+   * Decline every active (`PENDING` / `APPROVED` / `PROCESSING`) request
+   * linked to this media — used when the row is going away or when the
+   * admin disables monitoring on it. `AVAILABLE` requests stay as-is:
+   * the user already had the content at some point, the post-fulfilment
+   * removal is library hygiene, not a rejection of their original ask.
    */
-  private async declineLinkedActiveRequests(media: Media): Promise<void> {
+  private async declineLinkedActiveRequests(
+    media: Media,
+    reason = 'Media removed from library',
+  ): Promise<void> {
     const linked = await this.requestRepo.find({
       where: {
         media: { id: media.id },
@@ -939,10 +948,52 @@ export class MediaService {
     if (linked.length === 0) return;
     for (const r of linked) {
       r.status = RequestStatus.DECLINED;
-      r.declinedReason = 'Media removed from library';
+      r.declinedReason = reason;
       r.media = null;
     }
     await this.requestRepo.save(linked);
+  }
+
+  /**
+   * When the admin disables monitoring on a single season, requests
+   * touching that season can't be fulfilled anymore:
+   *  - Per-season requests carrying ONLY this season → declined.
+   *  - Per-season requests carrying this season AND others → scope
+   *    trimmed (the season is removed from `seasons`), the rest of the
+   *    request lives on.
+   *  - Whole-series requests (`seasons` empty/null) → untouched. The
+   *    user wanted the whole show, partial unmonitoring is the admin's
+   *    discretion and doesn't void the ask.
+   */
+  private async declineLinkedActiveRequestsForSeason(
+    media: Media,
+    seasonNumber: number,
+  ): Promise<void> {
+    const candidates = await this.requestRepo.find({
+      where: {
+        media: { id: media.id },
+        status: In([
+          RequestStatus.PENDING,
+          RequestStatus.APPROVED,
+          RequestStatus.PROCESSING,
+        ]),
+      },
+    });
+    const touched: FliksRequest[] = [];
+    for (const r of candidates) {
+      if (!r.seasons || r.seasons.length === 0) continue;
+      if (!r.seasons.includes(seasonNumber)) continue;
+      const remaining = r.seasons.filter((n) => n !== seasonNumber);
+      if (remaining.length === 0) {
+        r.status = RequestStatus.DECLINED;
+        r.declinedReason = `Season ${seasonNumber} was unmonitored`;
+        r.media = null;
+      } else {
+        r.seasons = remaining;
+      }
+      touched.push(r);
+    }
+    if (touched.length) await this.requestRepo.save(touched);
   }
 
   // ---------------------------------------------------------------------------
@@ -1132,12 +1183,23 @@ export class MediaService {
     seasonId: number,
     patch: { monitored?: boolean; preferredProvider?: 'tmdb' | 'tvdb' | null },
   ): Promise<Season> {
-    const season = await this.seasonRepo.findOne({ where: { id: seasonId } });
+    const season = await this.seasonRepo.findOne({
+      where: { id: seasonId },
+      relations: ['media'],
+    });
     if (!season) throw new NotFoundException(`Season #${seasonId} not found`);
+    const wasMonitored = season.monitored;
     if (patch.monitored !== undefined) season.monitored = patch.monitored;
     if (patch.preferredProvider !== undefined)
       season.preferredProvider = patch.preferredProvider;
-    return this.seasonRepo.save(season);
+    const saved = await this.seasonRepo.save(season);
+    if (wasMonitored && saved.monitored === false && season.media) {
+      await this.declineLinkedActiveRequestsForSeason(
+        season.media,
+        saved.seasonNumber,
+      );
+    }
+    return saved;
   }
 
   async updateEpisodeMonitored(
@@ -2250,6 +2312,42 @@ export class MediaService {
   }
 
   /**
+   * Ensure the request scope is monitored after a request transitions
+   * to APPROVED. Idempotent: only ever flips false → true, never the
+   * other way around — admins keep control over what's unmonitored.
+   *
+   *  - Movies / whole-series requests (`seasons` empty/null): flip
+   *    `media.monitored` if it was off.
+   *  - Per-season series requests: flip `media.monitored` AND each
+   *    listed `season.monitored`. Seasons not in the list are left
+   *    untouched.
+   *
+   * Episode-level monitoring isn't toggled here — requests aren't
+   * granular below the season, and an unmonitored episode inside a
+   * monitored season still gets caught by the season-level grab.
+   */
+  async applyMonitoredForRequestScope(
+    media: Media,
+    seasons: number[] | null,
+  ): Promise<void> {
+    if (!media.monitored) {
+      media.monitored = true;
+      await this.mediaRepo.save(media);
+    }
+    if (media.type !== MediaType.SERIES || !seasons?.length) return;
+    const rows = await this.seasonRepo.find({
+      where: { media: { id: media.id } },
+    });
+    const targets = rows.filter(
+      (s) => seasons.includes(s.seasonNumber) && !s.monitored,
+    );
+    if (targets.length) {
+      for (const s of targets) s.monitored = true;
+      await this.seasonRepo.save(targets);
+    }
+  }
+
+  /**
    * After a manual import (admin clicks "Add to library" on /add), look
    * at every open request on the same `tmdbId` and decide what to do
    * with each:
@@ -2308,6 +2406,9 @@ export class MediaService {
         }
       }
       touched.push(r);
+      // Bring monitoring in line with what was promised by the request.
+      // Idempotent (no-op when already on), and per-season-aware.
+      await this.applyMonitoredForRequestScope(media, r.seasons ?? null);
     }
     if (touched.length) await this.requestRepo.save(touched);
   }

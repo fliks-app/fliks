@@ -198,6 +198,7 @@ export class RequestsService {
             qualityProfileId: dto.qualityProfileId ?? null,
             languageProfileId: dto.languageProfileId ?? null,
             libraryId: dto.libraryId ?? null,
+            seasons: dto.seasons ?? null,
           },
           user.id,
         )
@@ -458,6 +459,7 @@ export class RequestsService {
         qualityProfileId: row.qualityProfileId ?? null,
         languageProfileId: row.languageProfileId ?? null,
         libraryId: row.libraryId ?? null,
+        seasons: row.seasons ?? null,
       },
       row.userId ?? null,
     );
@@ -491,11 +493,15 @@ export class RequestsService {
       qualityProfileId: number | null;
       languageProfileId: number | null;
       libraryId: number | null;
+      /** Seasons the request targets, for per-season monitoring sync.
+       *  `null` / empty → whole movie / whole series. */
+      seasons: number[] | null;
     },
     addedByUserId: number | null,
   ): Promise<Media | null> {
+    let media: Media | null;
     try {
-      return await this.mediaService.importFromTmdb(
+      media = await this.mediaService.importFromTmdb(
         {
           type: spec.mediaType,
           tmdbId: spec.tmdbId,
@@ -527,8 +533,17 @@ export class RequestsService {
           "This title is already in the library with a different profile and can't satisfy the request — decline it or update the library media's profiles.",
         );
       }
-      return existing;
+      media = existing;
     }
+    if (media) {
+      // Monitor the request scope so the auto-grab pipeline picks it
+      // up. Idempotent — flips false → true only, never the reverse.
+      await this.mediaService.applyMonitoredForRequestScope(
+        media,
+        spec.seasons,
+      );
+    }
+    return media;
   }
 
   async decline(
