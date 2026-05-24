@@ -1,5 +1,54 @@
 # Changelog
 
+## [1.7.0](https://github.com/fliks-app/fliks/compare/v1.6.1...v1.7.0) (2026-05-24)
+
+
+### Features
+
+* **admin:** setup checklist widget (home + general settings) ([#179](https://github.com/fliks-app/fliks/issues/179)) ([ef05655](https://github.com/fliks-app/fliks/commit/ef056559741ce4520ceca34f025e6319d5b358f3))
+* **app-settings:** display page with home background toggle ([#181](https://github.com/fliks-app/fliks/issues/181)) ([5f34603](https://github.com/fliks-app/fliks/commit/5f34603794f836fbf040515798f3e584e263cecf))
+* **home:** lift setup checklist out of the TV section wrapper ([#190](https://github.com/fliks-app/fliks/issues/190)) ([6f7ac92](https://github.com/fliks-app/fliks/commit/6f7ac920c8639caf36386961c12da02676b59d87))
+* **home:** two-pass SWR refresh on app open ([#200](https://github.com/fliks-app/fliks/issues/200)) ([4922f56](https://github.com/fliks-app/fliks/commit/4922f56e1e38d20292a76c1d9eaaad323c222fe1))
+* **imports:** disk import copies/moves into Fliks-managed libraries ([#184](https://github.com/fliks-app/fliks/issues/184)) ([cff3458](https://github.com/fliks-app/fliks/commit/cff34584c2c4408bb57326edaa6b6a5d5727d93b))
+* **imports:** require an existing target library for Radarr/Sonarr ([#183](https://github.com/fliks-app/fliks/issues/183)) ([d2aa06e](https://github.com/fliks-app/fliks/commit/d2aa06e63f0e5764542352959800efd11e81b133))
+* **media-detail:** global page background + condensed season actions ([#174](https://github.com/fliks-app/fliks/issues/174)) ([e541199](https://github.com/fliks-app/fliks/commit/e54119901a551c4dc2bdd83f7a0961b7de6f31c2))
+* **media:** per-season posters + random fanart pool on detail/home ([#176](https://github.com/fliks-app/fliks/issues/176)) ([097b745](https://github.com/fliks-app/fliks/commit/097b745105eb23362b96543c76ab776d3ff18cf5))
+* **nav:** keyboard nav polish — focus opt-out, input boundary escape, popover sizing ([#197](https://github.com/fliks-app/fliks/issues/197)) ([72f0cb3](https://github.com/fliks-app/fliks/commit/72f0cb3cdf641446938c699fe6b15d8cbbc62215))
+* **nav:** keyboard spatial navigation on desktop / laptop too ([#196](https://github.com/fliks-app/fliks/issues/196)) ([020f191](https://github.com/fliks-app/fliks/commit/020f19105513d6050cae57261fcb2867a971db3b))
+* **pagination, subtitles:** ellipsis pagination + treat disk subs as trusted ([#182](https://github.com/fliks-app/fliks/issues/182)) ([d14eb7b](https://github.com/fliks-app/fliks/commit/d14eb7b3390ad247dcf174fe556c796cf19867f6))
+* **player:** episode still as backdrop + progressive load + CW thumbnails ([#195](https://github.com/fliks-app/fliks/issues/195)) ([73b5aff](https://github.com/fliks-app/fliks/commit/73b5affe48df9d68e7d47502e120b24e69f11ab1))
+* **pwa:** auto-reload when the service worker has a new version ready ([#202](https://github.com/fliks-app/fliks/issues/202)) ([8cdde73](https://github.com/fliks-app/fliks/commit/8cdde7364b9201db0af00a4251af96258e2d3685))
+* **requests:** lifecycle hooks + immediate auto-grab + post-import marker detection ([942cc1a](https://github.com/fliks-app/fliks/commit/942cc1ab2078a73d8a28a32886d9c54cded71c27))
+* **requests:** unique-per-user, profile-aware auto-approval, lifecycle hooks ([15ad61c](https://github.com/fliks-app/fliks/commit/15ad61c979fd34e3f0088439a91e16685d92983b))
+* **search:** refocus input + reopen keyboard on same-route nav click ([#177](https://github.com/fliks-app/fliks/issues/177)) ([ef10dac](https://github.com/fliks-app/fliks/commit/ef10daced7291ff7e2cfca70e3e692e24ec71a15))
+* **tmdb-preview:** align ui with media-detail (back button, page-wide fanart, breakpoint) ([63c0c4e](https://github.com/fliks-app/fliks/commit/63c0c4e5b67c651be11d67eb761711cdc3b170f9))
+* **ui:** TV polish — focus lock, transient admin drawer, denser cards ([#199](https://github.com/fliks-app/fliks/issues/199)) ([abe528d](https://github.com/fliks-app/fliks/commit/abe528d242940a23d31f67c893adca16bd02219e))
+
+
+### Bug Fixes
+
+* **activity, media-detail:** show indexer on queue rows + drop duplicate grab toast ([#189](https://github.com/fliks-app/fliks/issues/189)) ([970f900](https://github.com/fliks-app/fliks/commit/970f900cf076d365793d399d86f95f660b8d68db))
+* **admin-streams:** pass episodeId when reading playback state ([#178](https://github.com/fliks-app/fliks/issues/178)) ([ab4e733](https://github.com/fliks-app/fliks/commit/ab4e73339085b686395b59d2ff41675f67326efa))
+* **android:** enable edge-to-edge on Android ≤ 14 ([#192](https://github.com/fliks-app/fliks/issues/192)) ([c1b76be](https://github.com/fliks-app/fliks/commit/c1b76be6bb43b63895c768ec1317f8f301b1365e))
+* **data-imports:** wizard option uses lib.id (typo from rename) ([#186](https://github.com/fliks-app/fliks/issues/186)) ([3eb2fab](https://github.com/fliks-app/fliks/commit/3eb2fab3229b61fbf9539be98bad3794a454edd0))
+* **imports:** write addedBy via the relation instead of the @RelationId ([#201](https://github.com/fliks-app/fliks/issues/201)) ([abf62f7](https://github.com/fliks-app/fliks/commit/abf62f73e4beeb471ae4fd5c430455e580cb2fbe))
+* **ios:** anchor subtitle to container bottom, not safe area ([#214](https://github.com/fliks-app/fliks/issues/214)) ([804ae89](https://github.com/fliks-app/fliks/commit/804ae89f7b53d3400b851680eea983eba0002e3b))
+* **ios:** drop A/V desync race on resume + harden load() ([#210](https://github.com/fliks-app/fliks/issues/210)) ([ad0209a](https://github.com/fliks-app/fliks/commit/ad0209a70703c9fb175a8fac4c4b9e21832ab9a7))
+* **ios:** suppress accidental focus / zoom / native-select pop-ups ([#216](https://github.com/fliks-app/fliks/issues/216)) ([fed5958](https://github.com/fliks-app/fliks/commit/fed5958b7f8d02205227b09415a22c716e9ea654))
+* **ios:** wait for AVPlayer seek completion before resolving seek() ([#211](https://github.com/fliks-app/fliks/issues/211)) ([de25cef](https://github.com/fliks-app/fliks/commit/de25cef9c5c9df19e99b4a221c19028662e4362d))
+* **macos-dmg:** patch info.plist with the release version before building ([f6fc4f6](https://github.com/fliks-app/fliks/commit/f6fc4f632c02ba1a3fbdc72b6f5a418bb419f143))
+* **media-info-header:** round the title anchor's focus ring ([4d63083](https://github.com/fliks-app/fliks/commit/4d6308330a9e23a033a98f069a9c06e83e7f83c2))
+* **navigation:** library tabs out of history, player back always exits ([#191](https://github.com/fliks-app/fliks/issues/191)) ([5ba2873](https://github.com/fliks-app/fliks/commit/5ba28738b150fcd4c8bb4fe9125b3eeb3f48cfa4))
+* **player:** restore "back hides controls first" only on TV ([#194](https://github.com/fliks-app/fliks/issues/194)) ([d979212](https://github.com/fliks-app/fliks/commit/d9792124c2e5aaef34c33125830a0a2562b197c8))
+* **player:** seekbar polish + suppress native long-press selection ([#213](https://github.com/fliks-app/fliks/issues/213)) ([fc3ce15](https://github.com/fliks-app/fliks/commit/fc3ce1515cebd58911e1b197f3da93f4757c88b9))
+* **popover-menu:** clipping / top-layer / focus polish for in-modal usage ([7d720d5](https://github.com/fliks-app/fliks/commit/7d720d5bb0c6632d351d8a817452ebb8504d0cdc))
+* **qbittorrent:** follow indexer redirects manually + handle magnet target ([#188](https://github.com/fliks-app/fliks/issues/188)) ([80bd14e](https://github.com/fliks-app/fliks/commit/80bd14e48c114a6abf81612c431819277ab7ed5d))
+* **settings:** correct /medias/movies placeholder in library path input ([#187](https://github.com/fliks-app/fliks/issues/187)) ([cae41d1](https://github.com/fliks-app/fliks/commit/cae41d1c04e1bfd13307fb0e85416157c1fa6917))
+* **streaming:** map audio by absolute stream index (PGS-heavy remux fix) ([#198](https://github.com/fliks-app/fliks/issues/198)) ([ba6c430](https://github.com/fliks-app/fliks/commit/ba6c4304577db2b0fb34dfe3d6162ea9e8ee4102))
+* **tv:** fanart visible through veils on Chromium-85 builds ([#193](https://github.com/fliks-app/fliks/issues/193)) ([a90b1bd](https://github.com/fliks-app/fliks/commit/a90b1bd9796622a35b4e1afff6f4d28971844f59))
+* **ui:** media-detail polish, spatial-nav rework, watched-toggle rollout ([e86da5c](https://github.com/fliks-app/fliks/commit/e86da5ce29e63959928dede2d403bd14f633d3a0))
+* **ui:** recover the 15 commits that never reached pr [#203](https://github.com/fliks-app/fliks/issues/203) ([5688434](https://github.com/fliks-app/fliks/commit/56884346a8469168c06b9f94a6042817814dd8e2))
+
 ## [1.6.1](https://github.com/fliks-app/fliks/compare/v1.6.0...v1.6.1) (2026-05-21)
 
 
