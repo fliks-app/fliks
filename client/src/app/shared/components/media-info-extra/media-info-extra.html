@@ -54,7 +54,7 @@
           <dt class="text-base-content/50 text-sm">{{ 'media_info.genres' | translate }}</dt>
           <dd class="font-medium text-base flex flex-wrap gap-x-1">
             @for (genre of genres(); track genre; let last = $last) {
-              <span class="whitespace-nowrap"><button type="button" class="hover:underline rounded" (click)="navigateToGenre(genre)">{{ genre }}</button>@if (!last){,}</span>
+              <span><button type="button" class="hover:underline rounded text-left" (click)="navigateToGenre(genre)">{{ genre }}</button>@if (!last){,}</span>
             }
           </dd>
         </div>
