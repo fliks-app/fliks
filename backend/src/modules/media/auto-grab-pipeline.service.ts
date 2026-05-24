@@ -2,7 +2,7 @@ import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Media } from './entities/media.entity';
-import { MediaService } from './media.service';
+import { RequestLifecycleService } from '../requests/request-lifecycle.service';
 import { DownloadHistory } from './entities/download-history.entity';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { TorznabRelease } from '../indexers/torznab.service';
@@ -68,8 +68,8 @@ export class AutoGrabPipelineService {
     private readonly qbittorrent: QbittorrentService,
     private readonly naming: NamingService,
     private readonly qualityDefs: QualityDefinitionsService,
-    @Inject(forwardRef(() => MediaService))
-    private readonly mediaService: MediaService,
+    @Inject(forwardRef(() => RequestLifecycleService))
+    private readonly requestLifecycle: RequestLifecycleService,
   ) {}
 
   async buildScoringContext(
@@ -259,8 +259,8 @@ export class AutoGrabPipelineService {
       );
       // Flip linked APPROVED requests to PROCESSING. Failures don't
       // abort the grab — best effort.
-      void this.mediaService
-        .onReleaseGrabbedForMedia(args.media.id, args.seasonNumber)
+      void this.requestLifecycle
+        .onReleaseGrabbed(args.media.id, args.seasonNumber)
         .catch((err) =>
           this.log.warn(
             `request-lifecycle: failed to flip requests to PROCESSING for media#${args.media.id}: ${(err as Error).message}`,

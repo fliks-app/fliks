@@ -4,12 +4,12 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
-  OnModuleInit,
-  OnModuleDestroy,
+  forwardRef,
+  Inject,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, SelectQueryBuilder, Brackets, In } from 'typeorm';
+import { Repository, DataSource, SelectQueryBuilder, Brackets } from 'typeorm';
 import { Media } from './entities/media.entity';
 import { MediaFile } from './entities/media-file.entity';
 import { Season } from './entities/season.entity';
@@ -34,8 +34,8 @@ import {
   MetadataDetails,
   SeasonDetails,
 } from '../metadata-providers/interfaces/metadata-provider.interface';
-import { MediaType, MediaStatus, RequestStatus } from '../../common/enums';
-import { FliksRequest } from '../requests/entities/request.entity';
+import { MediaType, MediaStatus } from '../../common/enums';
+import { RequestLifecycleService } from '../requests/request-lifecycle.service';
 import { ProfilesService } from '../profiles/profiles.service';
 import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../profiles/entities/language-profile.entity';
@@ -55,9 +55,6 @@ import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service'
 import { clearMediaCache } from '../../common/utils/media-cache.util';
 import { mapWithConcurrency } from '../../common/utils/concurrency';
 import { MediaServersService } from '../media-servers/media-servers.service';
-import { EventsService } from '../scheduler/events.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { Subscription } from 'rxjs';
 import { FfprobeService } from '../subtitles/ffprobe.service';
 import { SubtitlesService } from '../subtitles/subtitles.service';
 import * as fs from 'fs';
@@ -65,9 +62,8 @@ import * as path from 'path';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 
 @Injectable()
-export class MediaService implements OnModuleInit, OnModuleDestroy {
+export class MediaService {
   private readonly log = new Logger(MediaService.name);
-  private importCompleteSub?: Subscription;
 
   constructor(
     @InjectRepository(Media)
@@ -91,8 +87,6 @@ export class MediaService implements OnModuleInit, OnModuleDestroy {
     private readonly castRepo: Repository<MediaCast>,
     @InjectRepository(MediaCrew)
     private readonly crewRepo: Repository<MediaCrew>,
-    @InjectRepository(FliksRequest)
-    private readonly requestRepo: Repository<FliksRequest>,
     private readonly dataSource: DataSource,
     private readonly tmdb: TmdbProvider,
     private readonly providerRegistry: MetadataProviderRegistry,
@@ -105,27 +99,9 @@ export class MediaService implements OnModuleInit, OnModuleDestroy {
     private readonly subtitles: SubtitlesService,
     private readonly imageService: ImageService,
     private readonly subtitleStream: SubtitleStreamService,
-    private readonly events: EventsService,
-    private readonly notifications: NotificationsService,
+    @Inject(forwardRef(() => RequestLifecycleService))
+    private readonly requestLifecycle: RequestLifecycleService,
   ) {}
-
-  onModuleInit(): void {
-    // Listen for download completions so we can recompute the lifecycle
-    // status of every active request linked to the media. Cheap: only
-    // active requests get inspected, and most events have none.
-    this.importCompleteSub = this.events.subscribe((event) => {
-      if (event.type !== 'import.complete') return;
-      this.onMediaFilesChanged(event.mediaId).catch((err) => {
-        this.log.warn(
-          `request-lifecycle: failed to recompute on import.complete for media#${event.mediaId}: ${(err as Error).message}`,
-        );
-      });
-    });
-  }
-
-  onModuleDestroy(): void {
-    this.importCompleteSub?.unsubscribe();
-  }
 
   async importFromTmdb(
     dto: ImportTmdbDto,
@@ -830,15 +806,7 @@ export class MediaService implements OnModuleInit, OnModuleDestroy {
 
     const saved = await this.mediaRepo.save(media);
     await this.updateSearchVector(saved.id);
-    // Admin just disabled monitoring → any active request on this title
-    // can no longer be fulfilled; mark them declined so users see the
-    // status change. Same rule as the media-deletion path.
-    if (wasMonitored && saved.monitored === false) {
-      await this.declineLinkedActiveRequests(
-        saved,
-        'Media was unmonitored',
-      );
-    }
+    await this.requestLifecycle.onMediaMonitorChange(saved, wasMonitored);
     return this.findOne(saved.id);
   }
 
@@ -942,84 +910,12 @@ export class MediaService implements OnModuleInit, OnModuleDestroy {
     const media = await this.findOne(id);
     const title = media.title;
     const mediaPath = media.path;
-    await this.declineLinkedActiveRequests(media);
+    await this.requestLifecycle.onMediaRemoved(media);
     await this.mediaRepo.remove(media);
     void this.mediaServers.dispatch('media.deleted', {
       title,
       path: mediaPath,
     });
-  }
-
-  /**
-   * Decline every active (`PENDING` / `APPROVED` / `PROCESSING`) request
-   * linked to this media — used when the row is going away or when the
-   * admin disables monitoring on it. `AVAILABLE` requests stay as-is:
-   * the user already had the content at some point, the post-fulfilment
-   * removal is library hygiene, not a rejection of their original ask.
-   */
-  private async declineLinkedActiveRequests(
-    media: Media,
-    reason = 'Media removed from library',
-  ): Promise<void> {
-    const linked = await this.requestRepo.find({
-      where: {
-        media: { id: media.id },
-        status: In([
-          RequestStatus.PENDING,
-          RequestStatus.APPROVED,
-          RequestStatus.PROCESSING,
-        ]),
-      },
-    });
-    if (linked.length === 0) return;
-    for (const r of linked) {
-      r.status = RequestStatus.DECLINED;
-      r.declinedReason = reason;
-      r.media = null;
-    }
-    await this.requestRepo.save(linked);
-  }
-
-  /**
-   * When the admin disables monitoring on a single season, requests
-   * touching that season can't be fulfilled anymore:
-   *  - Per-season requests carrying ONLY this season → declined.
-   *  - Per-season requests carrying this season AND others → scope
-   *    trimmed (the season is removed from `seasons`), the rest of the
-   *    request lives on.
-   *  - Whole-series requests (`seasons` empty/null) → untouched. The
-   *    user wanted the whole show, partial unmonitoring is the admin's
-   *    discretion and doesn't void the ask.
-   */
-  private async declineLinkedActiveRequestsForSeason(
-    media: Media,
-    seasonNumber: number,
-  ): Promise<void> {
-    const candidates = await this.requestRepo.find({
-      where: {
-        media: { id: media.id },
-        status: In([
-          RequestStatus.PENDING,
-          RequestStatus.APPROVED,
-          RequestStatus.PROCESSING,
-        ]),
-      },
-    });
-    const touched: FliksRequest[] = [];
-    for (const r of candidates) {
-      if (!r.seasons || r.seasons.length === 0) continue;
-      if (!r.seasons.includes(seasonNumber)) continue;
-      const remaining = r.seasons.filter((n) => n !== seasonNumber);
-      if (remaining.length === 0) {
-        r.status = RequestStatus.DECLINED;
-        r.declinedReason = `Season ${seasonNumber} was unmonitored`;
-        r.media = null;
-      } else {
-        r.seasons = remaining;
-      }
-      touched.push(r);
-    }
-    if (touched.length) await this.requestRepo.save(touched);
   }
 
   // ---------------------------------------------------------------------------
@@ -1219,10 +1115,12 @@ export class MediaService implements OnModuleInit, OnModuleDestroy {
     if (patch.preferredProvider !== undefined)
       season.preferredProvider = patch.preferredProvider;
     const saved = await this.seasonRepo.save(season);
-    if (wasMonitored && saved.monitored === false && season.media) {
-      await this.declineLinkedActiveRequestsForSeason(
+    if (season.media) {
+      await this.requestLifecycle.onSeasonMonitorChange(
         season.media,
         saved.seasonNumber,
+        wasMonitored,
+        saved.monitored,
       );
     }
     return saved;
@@ -2276,7 +2174,7 @@ export class MediaService implements OnModuleInit, OnModuleDestroy {
     await this.downloadMediaImages(saved.id, details);
     await this.updateSearchVector(saved.id);
     await this.persistMediaMetadata(saved, details);
-    await this.linkOpenRequestsToImportedMedia(saved, addedByUserId ?? null);
+    await this.requestLifecycle.onMediaImported(saved, addedByUserId ?? null);
     return this.findOne(saved.id);
   }
 
@@ -2333,127 +2231,24 @@ export class MediaService implements OnModuleInit, OnModuleDestroy {
 
     await this.updateSearchVector(saved.id);
     await this.persistMediaMetadata(saved, details);
-    await this.linkOpenRequestsToImportedMedia(saved, addedByUserId ?? null);
+    await this.requestLifecycle.onMediaImported(saved, addedByUserId ?? null);
     return this.findOne(saved.id);
   }
 
   // ---------------------------------------------------------------------------
-  // Request lifecycle hooks — drive the `APPROVED → PROCESSING → AVAILABLE`
-  // progression based on auto-grab + file landing events. See issue #208 for
-  // the design rationale.
+  // Request-driven media operations — narrow public surface that
+  // `RequestLifecycleService` calls when it needs to mutate the media
+  // layer. The orchestration itself lives in the lifecycle service.
   // ---------------------------------------------------------------------------
 
-  /**
-   * Called when a release is grabbed (sent to the download client) for
-   * `mediaId`. Flips every active `APPROVED` request linked to that
-   * media to `PROCESSING` so the user sees the download is on its way.
-   *
-   * `seasonNumber` is honoured for series: per-season requests only
-   * flip when their scope includes the grabbed season. Whole-series
-   * requests flip on any grab. Movies pass `undefined`.
-   */
-  async onReleaseGrabbedForMedia(
-    mediaId: number,
-    seasonNumber?: number,
-  ): Promise<void> {
-    const candidates = await this.requestRepo.find({
-      where: {
-        media: { id: mediaId },
-        status: RequestStatus.APPROVED,
-      },
-    });
-    if (candidates.length === 0) return;
-    const touched: FliksRequest[] = [];
-    for (const r of candidates) {
-      if (
-        seasonNumber !== undefined &&
-        r.seasons?.length &&
-        !r.seasons.includes(seasonNumber)
-      ) {
-        continue;
-      }
-      r.status = RequestStatus.PROCESSING;
-      touched.push(r);
-    }
-    if (touched.length) {
-      await this.requestRepo.save(touched);
-      for (const r of touched) {
-        void this.notifications.dispatch('request.processing', {
-          title: r.title,
-          mediaType: r.mediaType,
-        });
-      }
-    }
-  }
-
-  /**
-   * Called after one or more `MediaFile` rows are inserted for
-   * `mediaId`. Walks active `APPROVED` / `PROCESSING` requests and
-   * promotes the ones whose scope is now fully on disk to `AVAILABLE`.
-   *
-   *  - Movies: at least one file → covered.
-   *  - Series whole-request (`seasons` empty/null): every monitored
-   *    season with monitored episodes has all those episodes on disk.
-   *  - Series per-season request: every monitored episode of each
-   *    listed season has a file.
-   *
-   * Unmonitored items are ignored — the admin dropped them from the
-   * scope, they don't gate the promotion.
-   */
-  async onMediaFilesChanged(mediaId: number): Promise<void> {
-    const active = await this.requestRepo.find({
-      where: {
-        media: { id: mediaId },
-        status: In([RequestStatus.APPROVED, RequestStatus.PROCESSING]),
-      },
-    });
-    if (active.length === 0) return;
-
-    const ctx = await this.mediaRepo.findOne({
+  /** Load a media row with the relations the lifecycle needs to compute
+   *  coverage (`files`, `seasons`, `seasons.episodes`). Centralised here
+   *  to keep `mediaRepo.findOne` calls in one place. */
+  findOneWithSeasonsAndFiles(mediaId: number): Promise<Media | null> {
+    return this.mediaRepo.findOne({
       where: { id: mediaId },
       relations: ['files', 'seasons', 'seasons.episodes'],
     });
-    if (!ctx) return;
-
-    const touched: FliksRequest[] = [];
-    for (const r of active) {
-      if (!this.isRequestScopeCovered(r, ctx)) continue;
-      r.status = RequestStatus.AVAILABLE;
-      touched.push(r);
-    }
-    if (touched.length) {
-      await this.requestRepo.save(touched);
-      for (const r of touched) {
-        void this.notifications.dispatch('request.available', {
-          title: r.title,
-          mediaType: r.mediaType,
-        });
-      }
-    }
-  }
-
-  /** True when every file the request scope requires is on disk. */
-  private isRequestScopeCovered(request: FliksRequest, media: Media): boolean {
-    if (media.type === MediaType.MOVIE) {
-      return (media.files?.length ?? 0) > 0;
-    }
-    const scope = !request.seasons || request.seasons.length === 0
-      ? null
-      : new Set(request.seasons);
-    const seasons = media.seasons ?? [];
-    let anyChecked = false;
-    for (const s of seasons) {
-      if (scope && !scope.has(s.seasonNumber)) continue;
-      if (!s.monitored) continue;
-      const monitoredEps = (s.episodes ?? []).filter((e) => e.monitored);
-      if (monitoredEps.length === 0) continue;
-      anyChecked = true;
-      if (!monitoredEps.every((e) => e.hasFile)) return false;
-    }
-    // Nothing left to wait for (everything unmonitored, or scope
-    // covers seasons that don't exist) — treat as delivered rather
-    // than stranding the request in PROCESSING forever.
-    return anyChecked;
   }
 
   /**
@@ -2490,72 +2285,6 @@ export class MediaService implements OnModuleInit, OnModuleDestroy {
       for (const s of targets) s.monitored = true;
       await this.seasonRepo.save(targets);
     }
-  }
-
-  /**
-   * After a manual import (admin clicks "Add to library" on /add), look
-   * at every open request on the same `tmdbId` and decide what to do
-   * with each:
-   *
-   *  - **Profile envelope covers the request** (e.g. media imported as
-   *    1080p FR-EN, request was 1080p FR): link to the media and, if
-   *    `PENDING`, flip to `APPROVED` with `approvedBy = importer`. The
-   *    new media will satisfy the request.
-   *  - **Profile envelope does NOT cover the request** (e.g. media
-   *    imported as FR, request was VO): leave the request untouched.
-   *    The user wanted something else; an admin will have to decline
-   *    or import a second profile manually. We don't silently swap
-   *    profiles on the user.
-   *
-   * `APPROVED` / `PROCESSING` requests are linked too (so they can
-   * transition to `AVAILABLE` later) but only when the envelope still
-   * covers them — same rule applies in both directions.
-   * `DECLINED` / `FAILED` / `AVAILABLE` are skipped: terminal or
-   * already resolved.
-   */
-  private async linkOpenRequestsToImportedMedia(
-    media: Media,
-    addedByUserId: number | null,
-  ): Promise<void> {
-    if (!media.tmdbId) return;
-    const open = await this.requestRepo.find({
-      where: {
-        tmdbId: media.tmdbId,
-        mediaType: media.type,
-        status: In([
-          RequestStatus.PENDING,
-          RequestStatus.APPROVED,
-          RequestStatus.PROCESSING,
-        ]),
-      },
-    });
-    if (open.length === 0) return;
-
-    const mediaEnvelope = {
-      qualityProfileId: media.qualityProfile?.id ?? null,
-      languageProfileId: media.languageProfile?.id ?? null,
-    };
-
-    const touched: FliksRequest[] = [];
-    for (const r of open) {
-      const covers = await this.profiles.envelopeCovers(mediaEnvelope, {
-        qualityProfileId: r.qualityProfileId,
-        languageProfileId: r.languageProfileId,
-      });
-      if (!covers) continue;
-      r.media = media;
-      if (r.status === RequestStatus.PENDING) {
-        r.status = RequestStatus.APPROVED;
-        if (addedByUserId) {
-          r.approvedBy = { id: addedByUserId } as User;
-        }
-      }
-      touched.push(r);
-      // Bring monitoring in line with what was promised by the request.
-      // Idempotent (no-op when already on), and per-season-aware.
-      await this.applyMonitoredForRequestScope(media, r.seasons ?? null);
-    }
-    if (touched.length) await this.requestRepo.save(touched);
   }
 
   /**

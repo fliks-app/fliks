@@ -27,24 +27,11 @@ import { Media } from '../media/entities/media.entity';
 import { ProfilesService } from '../profiles/profiles.service';
 import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
 import { Action } from '../auth/casl/actions.enum';
-
-/** Request statuses that count as "this user already wants this title".
- *  Pending: awaiting decision. Approved/Processing: the system is on it.
- *  Available: already delivered. All four block a same-user re-request. */
-const ACTIVE_REQUEST_STATUSES: readonly RequestStatus[] = [
-  RequestStatus.PENDING,
-  RequestStatus.APPROVED,
-  RequestStatus.PROCESSING,
-  RequestStatus.AVAILABLE,
-] as const;
-
-/** Statuses on which another user's request can satisfy a new one — the
- *  resulting media is (or will be) downloaded under those profiles. */
-const SATISFIABLE_REQUEST_STATUSES: readonly RequestStatus[] = [
-  RequestStatus.APPROVED,
-  RequestStatus.PROCESSING,
-  RequestStatus.AVAILABLE,
-] as const;
+import {
+  ACTIVE_REQUEST_STATUSES,
+  SATISFIABLE_REQUEST_STATUSES,
+  seasonScopeOf,
+} from './request-status.constants';
 
 interface ProfileEnvelope {
   qualityProfileId: number | null;
@@ -313,29 +300,25 @@ export class RequestsService {
     };
 
     for (const existing of candidates) {
-      if (
-        !(await this.coversSeasons(existing, dto)) ||
-        !(await this.envelopeCovers(existing, requested))
-      ) {
-        continue;
-      }
+      if (!this.coversSeasons(existing, dto)) continue;
+      if (!(await this.envelopeCovers(existing, requested))) continue;
       return true;
     }
     return false;
   }
 
   /** For series only: true when `existing` already covers every season
-   *  the new request is asking for. `null`/empty seasons on `existing`
-   *  means whole series → always covers. Movies skip this check. */
-  private async coversSeasons(
+   *  the new request is asking for. `null` scope on `existing` means
+   *  whole series → always covers. Movies skip this check. */
+  private coversSeasons(
     existing: FliksRequest,
     dto: CreateRequestDto,
-  ): Promise<boolean> {
+  ): boolean {
     if (dto.mediaType !== MediaType.SERIES) return true;
-    if (!existing.seasons || existing.seasons.length === 0) return true;
+    const existingScope = seasonScopeOf(existing);
+    if (!existingScope) return true;
     if (!dto.seasons || dto.seasons.length === 0) return false;
-    const taken = new Set(existing.seasons);
-    return dto.seasons.every((s) => taken.has(s));
+    return dto.seasons.every((s) => existingScope.has(s));
   }
 
   /** Thin wrapper — the encompassment rule lives in ProfilesService so
