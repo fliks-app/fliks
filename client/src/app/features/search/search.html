@@ -11,6 +11,7 @@
         [placeholder]="'search.placeholder' | translate"
         [ngModel]="state.query()"
         (ngModelChange)="onQueryInput($event)"
+        [ngModelOptions]="{ standalone: true }"
         (focus)="onInputFocus()"
         (blur)="onInputBlur()"
       />
