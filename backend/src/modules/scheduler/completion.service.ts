@@ -79,9 +79,10 @@ export class CompletionService {
   /**
    * Whether series imports trigger automatic intro / outro marker
    * detection. Default on — most users want skip-intro working right
-   * after a series finishes downloading. A future settings toggle
-   * (e.g. `markers.autoDetectOnImport`) will read here so the admin
-   * can opt out without changing the rest of the pipeline.
+   * after a series finishes downloading.
+   *
+   * TODO(#212): replace with an awaited `SettingsService.get(...)` read
+   * so the admin can opt out from the UI. Default stays `true`.
    */
   private autoDetectMarkersOnImport(): boolean {
     return true;

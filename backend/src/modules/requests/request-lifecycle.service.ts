@@ -71,9 +71,10 @@ export class RequestLifecycleService
    * Whether an import driven by a request approval should kick off a
    * targeted search immediately, or wait for the next scheduled
    * SearchMissing tick. Default is "yes" — users expect the download
-   * to start right after the green check. A future settings toggle
-   * (e.g. `requests.autoGrabOnApproval`) will read here so the admin
-   * can opt out without changing the rest of the pipeline.
+   * to start right after the green check.
+   *
+   * TODO(#212): replace with an awaited `SettingsService.get(...)` read
+   * so the admin can opt out from the UI. Default stays `true`.
    */
   private autoGrabOnApproval(): boolean {
     return true;
