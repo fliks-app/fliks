@@ -121,9 +121,10 @@
          `position: sticky` on descendants (sticky would anchor to <main>
          and never engage because the actual scroll happens on the page). -->
     <main
-      class="min-w-0 flex-1 p-4 lg:p-6"
+      class="min-w-0 flex-1 p-4 lg:p-8"
       [class.overflow-x-clip]="!navbar.isHeroPage()"
       [class.lg:pt-20]="!navbar.isHeroPage() && !isNative && !navbar.mobileNavbarVisible()"
+      [class.pt-8]="!navbar.isHeroPage() && !isNative && navbar.mobileNavbarVisible()"
       [style.padding-top]="!navbar.isHeroPage() && isNative && !navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 1rem)' : null"
     >
       @if (!networkService.isOnline()) {
