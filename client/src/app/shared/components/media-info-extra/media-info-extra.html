@@ -10,7 +10,7 @@
       @if (originalTitle()) {
         <div>
           <dt class="text-base-content/50 text-sm">{{ 'discover.preview_original_title' | translate }}</dt>
-          <dd class="font-medium text-base truncate">{{ originalTitle() }}</dd>
+          <dd class="font-medium text-base">{{ originalTitle() }}</dd>
         </div>
       }
       @if (media().status) {
@@ -34,27 +34,27 @@
       @if (productionCountries()) {
         <div>
           <dt class="text-base-content/50 text-sm">{{ 'discover.preview_countries' | translate }}</dt>
-          <dd class="font-medium text-base truncate">{{ productionCountries() }}</dd>
+          <dd class="font-medium text-base">{{ productionCountries() }}</dd>
         </div>
       }
       @if (productionCompanies()) {
         <div>
           <dt class="text-base-content/50 text-sm">{{ 'discover.preview_studios' | translate }}</dt>
-          <dd class="font-medium text-base truncate">{{ productionCompanies() }}</dd>
+          <dd class="font-medium text-base">{{ productionCompanies() }}</dd>
         </div>
       }
       @if (directorsLabel()) {
         <div>
           <dt class="text-base-content/50 text-sm">{{ 'media_info.directors' | translate }}</dt>
-          <dd class="font-medium text-base truncate">{{ directorsLabel() }}</dd>
+          <dd class="font-medium text-base">{{ directorsLabel() }}</dd>
         </div>
       }
       @if (genres().length) {
         <div>
           <dt class="text-base-content/50 text-sm">{{ 'media_info.genres' | translate }}</dt>
-          <dd class="font-medium text-base flex flex-wrap">
+          <dd class="font-medium text-base flex flex-wrap gap-x-1">
             @for (genre of genres(); track genre; let last = $last) {
-              <span><button type="button" class="hover:underline rounded px-1" (click)="navigateToGenre(genre)">{{ genre }}</button>@if (!last){<span>,&nbsp;</span>}</span>
+              <span class="whitespace-nowrap"><button type="button" class="hover:underline rounded" (click)="navigateToGenre(genre)">{{ genre }}</button>@if (!last){,}</span>
             }
           </dd>
         </div>
