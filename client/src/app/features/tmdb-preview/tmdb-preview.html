@@ -38,18 +38,27 @@
       }
 
       <!-- Action buttons -->
-      <div class="flex items-center gap-3 mt-4">
+      <div class="flex flex-wrap items-center gap-3 mt-4">
         @if (canImport()) {
           <button type="button" class="btn btn-primary flex-1" (click)="openImportModal()">
             {{ 'discover.add_to_library' | translate }}
           </button>
         }
         @if (canRequest()) {
-          <button type="button" class="btn btn-secondary flex-1" (click)="openRequestModal()">
-            {{ 'discover.request' | translate }}
-          </button>
+          @if (hasBlockingRequest()) {
+            <span class="badge badge-warning">{{ 'discover.already_requested' | translate }}</span>
+          } @else {
+            <button type="button" class="btn btn-secondary flex-1" (click)="openRequestModal()">
+              {{ 'discover.request' | translate }}
+            </button>
+          }
         }
       </div>
+      @if (canRequest() && !hasBlockingRequest() && requestedSeasons().length) {
+        <p class="text-xs text-warning mt-2">
+          {{ 'discover.seasons_already_requested' | translate:{ seasons: requestedSeasons().join(', ') } }}
+        </p>
+      }
 
       @if (m.overview) {
         <p class="mt-3 text-sm text-base-content/80 leading-relaxed line-clamp-4">{{ m.overview }}</p>
@@ -152,11 +161,20 @@
             </button>
           }
           @if (canRequest()) {
-            <button type="button" class="btn btn-secondary" (click)="openRequestModal()">
-              {{ 'discover.request' | translate }}
-            </button>
+            @if (hasBlockingRequest()) {
+              <span class="badge badge-warning">{{ 'discover.already_requested' | translate }}</span>
+            } @else {
+              <button type="button" class="btn btn-secondary" (click)="openRequestModal()">
+                {{ 'discover.request' | translate }}
+              </button>
+            }
           }
         </div>
+        @if (canRequest() && !hasBlockingRequest() && requestedSeasons().length) {
+          <p class="text-sm text-warning mt-2">
+            {{ 'discover.seasons_already_requested' | translate:{ seasons: requestedSeasons().join(', ') } }}
+          </p>
+        }
 
         @if (m.overview) {
           <p class="mt-4 text-base-content/90 leading-relaxed whitespace-pre-line">{{ m.overview }}</p>
@@ -240,6 +258,7 @@
   [qualityProfiles]="qualityProfiles()"
   [languageProfiles]="languageProfiles()"
   [libraries]="libraries()"
+  (requested)="refreshExistingRequests()"
 />
 
 <app-import-modal />

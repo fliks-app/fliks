@@ -23,7 +23,8 @@
                   <input
                     type="checkbox"
                     class="toggle toggle-sm toggle-primary"
-                    [checked]="selectedSeasons().size === seasons().length"
+                    [checked]="allSelectableChosen()"
+                    [disabled]="selectableSeasonCount() === 0"
                     (change)="toggleAllSeasons()"
                   />
                 </th>
@@ -34,19 +35,25 @@
             </thead>
             <tbody>
               @for (s of seasons(); track s.seasonNumber) {
-                <tr class="hover" [class.opacity-50]="!selectedSeasons().has(s.seasonNumber)">
+                @let alreadyRequested = alreadyRequestedSeasons().has(s.seasonNumber);
+                <tr class="hover"
+                    [class.opacity-50]="!selectedSeasons().has(s.seasonNumber) && !alreadyRequested"
+                    [class.opacity-60]="alreadyRequested">
                   <td>
                     <input
                       type="checkbox"
                       class="toggle toggle-sm toggle-primary"
-                      [checked]="selectedSeasons().has(s.seasonNumber)"
+                      [checked]="selectedSeasons().has(s.seasonNumber) || alreadyRequested"
+                      [disabled]="alreadyRequested"
                       (change)="toggleSeason(s.seasonNumber)"
                     />
                   </td>
                   <td class="font-medium">{{ 'discover.season_label' | translate }} {{ s.seasonNumber }}</td>
                   <td>{{ s.episodeCount }}</td>
                   <td>
-                    @if (selectedSeasons().has(s.seasonNumber)) {
+                    @if (alreadyRequested) {
+                      <span class="badge badge-warning badge-sm">{{ 'discover.already_requested' | translate }}</span>
+                    } @else if (selectedSeasons().has(s.seasonNumber)) {
                       <span class="badge badge-primary badge-sm">{{ 'discover.status_selected' | translate }}</span>
                     } @else {
                       <span class="badge badge-ghost badge-sm">{{ 'discover.status_not_requested' | translate }}</span>

@@ -57,6 +57,8 @@
           [qualityProfileName]="m.qualityProfile?.name ?? null"
           [canGrab]="canGrab()"
           [isAdmin]="isAdmin()"
+          [canRequest]="canRequest()"
+          [userHasOpenWholeRequest]="userHasOpenWholeRequest()"
           [releasesLoading]="epReleasesLoading()"
           [grabBusy]="epGrabBusy()"
           (selectedFileIdChange)="selectedFileId.set($event)"
@@ -69,6 +71,7 @@
           (rescanFiles)="rescanFiles()"
           (editSubtitles)="openSubtitles()"
           (episodeWatchedToggled)="onEpisodeWatchedToggledFromHeader($event)"
+          (requestMedia)="openRequestForMedia()"
         />
 
         @if (currentSeasonEpisodes().length > 1) {
@@ -154,6 +157,8 @@
           [canGrab]="canGrab()"
           [canEditProfiles]="canEditProfiles()"
           [isAdmin]="isAdmin()"
+          [canRequest]="canRequest()"
+          [userHasOpenWholeRequest]="userHasOpenWholeRequest()"
           [releasesLoading]="releasesLoading()"
           [grabBusy]="grabBusy()"
           [monitoredLoading]="monitoredLoading()"
@@ -172,6 +177,7 @@
           (detectIntros)="detectIntros(m.id)"
           (seriesWatchedToggled)="onSeriesWatchedToggled($event)"
           (editSubtitles)="openSubtitles()"
+          (requestMedia)="openRequestForMedia()"
         />
 
         @if (m.type === 'movie') {
@@ -214,6 +220,8 @@
             [seasonWatchedBusyId]="seasonWatchedBusy()"
             [canGrab]="canGrab()"
             [isAdmin]="isAdmin()"
+            [canRequest]="canRequest()"
+            [userRequestedSeasonNumbers]="userRequestedSeasonNumbers()"
             (selectSeason)="selectSeason($event)"
             (episodesHasFileOnlyChange)="setEpisodesHasFileOnly($event)"
             (loadSeasonReleases)="loadSeasonReleases(m.id, $event)"
@@ -221,6 +229,7 @@
             (toggleSeasonMonitored)="toggleSeasonMonitored($event)"
             (toggleSeasonWatched)="onToggleSeasonWatched(m.id, $event.season, $event.watched)"
             (toggleEpisodeWatched)="onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
+            (requestSeason)="openRequestForSeason($event)"
           />
         }
 
@@ -335,3 +344,15 @@
     </div>
   }
 </ng-template>
+
+<!-- Request modal — only relevant for users who can request (regular
+     requesters). Profiles + libraries already loaded by media-detail. -->
+@if (canRequest()) {
+  <app-request-modal
+    #requestModal
+    [qualityProfiles]="qualityProfileOptions()"
+    [languageProfiles]="languageProfileOptions()"
+    [libraries]="libraries()"
+    (requested)="onRequestSubmitted()"
+  />
+}

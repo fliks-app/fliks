@@ -32,6 +32,7 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { StreamingApiService, MediaResumeInfo } from '../../core/services/api/streaming-api.service';
 import { MarkersApiService } from '../../core/services/api/markers-api.service';
+import { FliksRequestRow, RequestsService } from '../../core/services/api/requests.service';
 import { MediaInfoHeaderComponent } from '../../shared/components/media-info-header/media-info-header';
 import { MediaInfoExtraComponent } from '../../shared/components/media-info-extra/media-info-extra';
 import { SubtitlesModalComponent } from '../../shared/components/subtitles-modal/subtitles-modal';
@@ -40,6 +41,7 @@ import { MediaDetailSeasonsComponent } from './components/media-detail-seasons/m
 import { ReleasesModalComponent } from './components/releases-modal/releases-modal.component';
 import { MediaDetailProfilesModalComponent } from './components/media-detail-profiles-modal/media-detail-profiles-modal.component';
 import { MediaDetailLibraryModalComponent } from './components/media-detail-library-modal/media-detail-library-modal.component';
+import { RequestModalComponent } from '../tmdb-preview/components/request-modal/request-modal.component';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
@@ -82,6 +84,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     ReleasesModalComponent,
     MediaDetailProfilesModalComponent,
     MediaDetailLibraryModalComponent,
+    RequestModalComponent,
     HorizontalScrollerComponent,
     MediaCardComponent,
     DownloadQualityModalComponent,
@@ -109,6 +112,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly sse = inject(SseService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly markersApi = inject(MarkersApiService);
+  private readonly requestsApi = inject(RequestsService);
   private readonly downloadManager = inject(DownloadManagerService);
   private readonly downloadModal = viewChild<DownloadQualityModalComponent>('downloadModal');
   /** Same SSE payload must run handlers once; `media` updates (e.g. after rescan) re-run this effect. */
@@ -512,6 +516,40 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly canGrab = computed(() => this.auth.hasPermission('media.grab'));
   readonly canEditProfiles = computed(() => this.auth.hasPermission('media.edit'));
   readonly isAdmin = computed(() => this.auth.hasPermission('settings.access'));
+
+  /** Regular requester (no `media.create` permission). The Demander
+   *  actions are only surfaced for them — admins use Grab/Search. */
+  readonly canRequest = computed(
+    () =>
+      !this.auth.hasPermission('media.create') &&
+      this.auth.hasPermission('requests.create'),
+  );
+
+  /** Active requests of the viewer for the current title. The backend
+   *  filters by user for non-admins, so this is "my requests" by
+   *  construction; admins see all but they don't go through this
+   *  code path anyway (`canRequest()` is false for them). */
+  readonly userActiveRequests = signal<FliksRequestRow[]>([]);
+
+  /** Whether the viewer already has an active "whole" request on this
+   *  title — a movie request (no seasons concept) or a series request
+   *  without a season scope (covers everything). Blocks the Demander
+   *  entry in the header for the corresponding case. */
+  readonly userHasOpenWholeRequest = computed(() =>
+    this.userActiveRequests().some(
+      (r) => !r.seasons || r.seasons.length === 0,
+    ),
+  );
+
+  /** Season numbers the viewer has already requested. Used by the
+   *  season-level Demander gate and pre-fed to the request modal. */
+  readonly userRequestedSeasonNumbers = computed<number[]>(() => {
+    const set = new Set<number>();
+    for (const r of this.userActiveRequests()) {
+      if (r.seasons?.length) for (const n of r.seasons) set.add(n);
+    }
+    return Array.from(set).sort((a, b) => a - b);
+  });
   readonly deleteLoading = signal(false);
   readonly monitoredLoading = signal(false);
   /** Active season tab (series) — first season selected after load */
@@ -588,7 +626,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
 
     const loadProfiles = async () => {
-      if (!this.auth.hasPermission('media.edit')) return;
+      // Admins edit profiles inline; regular requesters need the same
+      // options surfaced to fill the request modal. Either permission
+      // is enough to justify the round-trip.
+      if (
+        !this.auth.hasPermission('media.edit') &&
+        !this.auth.hasPermission('requests.create')
+      ) return;
       this.profilesOptionsLoading.set(true);
       try {
         const [q, l, libs] = await Promise.all([
@@ -629,6 +673,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // Load cast/crew async — doesn't block page render
       this.mediaService.getCast(m.id).then((c) => this.cast.set(c)).catch(() => {});
       this.mediaService.getCrew(m.id).then((c) => this.crew.set(c)).catch(() => {});
+      // Active requests (only for users who would ever see the Demander
+      // button — admins skip the round-trip).
+      if (this.canRequest()) {
+        void this.loadUserActiveRequests(m.tmdbId, m.type);
+      }
       // Load resume + watched episodes + per-episode progress for series
       const [resumeInfo, watchedIds, progress] = await Promise.all([
         this.streamingApi.getMediaResumeInfo(m.id).catch(() => null),
@@ -1383,5 +1432,70 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     } finally {
       this.grabBusy.set(null);
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Re-request (user-facing) — surfaced in More dropdowns when the item is
+  // missing and the viewer hasn't already requested it. Backend dedups per
+  // user across active statuses so the API would refuse a true duplicate;
+  // the gating here is purely UX so the action isn't surfaced when pointless.
+  // ---------------------------------------------------------------------------
+
+  private readonly requestModal = viewChild<RequestModalComponent>('requestModal');
+
+  /** Fetch the viewer's active requests for this title. Run after the
+   *  media loads, and again after a successful submit so the gates flip
+   *  without a manual reload. Non-admins only see their own rows from
+   *  this endpoint, so no extra filtering is needed. */
+  private async loadUserActiveRequests(tmdbId: number, mediaType: MediaType) {
+    try {
+      const res = await this.requestsApi.list({ limit: 200 });
+      const active = new Set(['pending', 'approved', 'processing', 'available']);
+      this.userActiveRequests.set(
+        res.data.filter(
+          (r) =>
+            r.tmdbId === tmdbId &&
+            r.mediaType === mediaType &&
+            active.has(r.status),
+        ),
+      );
+    } catch {
+      /* swallowed; global interceptor surfaces it */
+    }
+  }
+
+  /** Open the request modal for the current title — movie or
+   *  whole-series scope (no seasons pre-selected). */
+  protected openRequestForMedia() {
+    const m = this.media();
+    if (!m) return;
+    this.requestModal()?.open({
+      title: m.title,
+      mediaType: m.type,
+      tmdbId: m.tmdbId,
+      alreadyRequestedSeasons: this.userRequestedSeasonNumbers(),
+    });
+  }
+
+  /** Open the request modal pre-fed with a single season selected.
+   *  Used by the season-level Demander entry. The modal still lets
+   *  the user toggle which seasons to send. */
+  protected openRequestForSeason(season: Season) {
+    const m = this.media();
+    if (!m) return;
+    this.requestModal()?.open({
+      title: m.title,
+      mediaType: m.type,
+      tmdbId: m.tmdbId,
+      alreadyRequestedSeasons: this.userRequestedSeasonNumbers(),
+      preselectedSeasons: [season.seasonNumber],
+    });
+  }
+
+  /** Re-fetch on submit so the More-menu Demander disappears and the
+   *  season list flips its already-requested badges. */
+  protected onRequestSubmitted() {
+    const m = this.media();
+    if (m) void this.loadUserActiveRequests(m.tmdbId, m.type);
   }
 }

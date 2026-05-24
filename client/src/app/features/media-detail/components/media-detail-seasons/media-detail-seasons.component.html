@@ -36,6 +36,16 @@
           }
         </button>
         @if (isSeasonTabVisible(selSeason) && !episodesHasFileOnly()) {
+          @if (canRequest() && seasonHasMissingEpisodes(selSeason) && !seasonAlreadyRequested(selSeason)) {
+            <button
+              type="button"
+              class="dropdown-item text-white"
+              (click)="requestSeason.emit(selSeason)"
+            >
+              <svg lucideClipboardList class="h-5 w-5 shrink-0 opacity-80"></svg>
+              <span class="flex-1">{{ 'media_detail.request_season' | translate }}</span>
+            </button>
+          }
           @if (canGrab() && m.qualityProfile) {
             <button
               type="button"
