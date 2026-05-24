@@ -18,6 +18,7 @@ import {
   LucideCaptions,
   LucideChevronLeft,
   LucideCheck,
+  LucideClipboardList,
   LucideDownload,
   LucideEllipsisVertical,
   LucideEye,
@@ -80,7 +81,7 @@ interface AudioTrack {
     TvSelectDirective,
     NgTemplateOutlet,
     DecimalPipe, FormsModule, RouterLink, TranslateModule,
-    LucideCaptions, LucideChevronLeft, LucideCheck, LucideDownload,
+    LucideCaptions, LucideChevronLeft, LucideCheck, LucideClipboardList, LucideDownload,
     LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideFileText,
     LucideFilm, LucideFolder, LucidePlay, LucideRotateCcw, LucideSearch,
     LucideSettings, LucideSkipForward, LucideTrash2,
@@ -139,6 +140,13 @@ export class MediaInfoHeaderComponent {
   readonly canGrab = input(false);
   readonly canEditProfiles = input(false);
   readonly isAdmin = input(false);
+  /** Viewer can submit a request (regular requester role). Surfaces the
+   *  Demander entry in the More dropdown when the item is missing. */
+  readonly canRequest = input(false);
+  /** Viewer already has an active request on the current scope (movie
+   *  for movies / whole-series for series). When true the Demander
+   *  entry is hidden — the backend would refuse the duplicate anyway. */
+  readonly userHasOpenWholeRequest = input(false);
   readonly releasesLoading = input(false);
   readonly grabBusy = input<string | null>(null);
   readonly monitoredLoading = input(false);
@@ -168,6 +176,8 @@ export class MediaInfoHeaderComponent {
   readonly rescanFiles = output<void>();
   readonly detectIntros = output<void>();
   readonly editSubtitles = output<void>();
+  /** Viewer (regular requester) asks to (re-)request the current title. */
+  readonly requestMedia = output<void>();
   /** Emitted after a series-level bulk watched toggle. Parent should refresh its episode watched list. */
   readonly seriesWatchedToggled = output<{ watched: boolean }>();
   /** Emitted after a single-episode watched toggle so the parent can refresh

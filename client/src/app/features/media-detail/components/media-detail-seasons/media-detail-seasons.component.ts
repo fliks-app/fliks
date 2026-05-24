@@ -11,6 +11,7 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import {
   LucideCheck,
+  LucideClipboardList,
   LucideDownload,
   LucideEllipsisVertical,
   LucideEye,
@@ -40,7 +41,7 @@ import { PlayableMediaService } from '../../../../core/services/playable-media.s
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, FormsModule, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, TvSelectDirective, TvRowDirective, LucideCheck, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucidePackage, LucideX],
+  imports: [TranslateModule, FormsModule, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, TvSelectDirective, TvRowDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucidePackage, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
@@ -64,6 +65,12 @@ export class MediaDetailSeasonsComponent {
   readonly episodeProgress = input<Record<number, number>>({});
   readonly canGrab = input(false);
   readonly isAdmin = input(false);
+  /** Viewer can submit a request (regular requester). Surfaces the
+   *  Demander entry for any season that still has missing episodes. */
+  readonly canRequest = input(false);
+  /** Season numbers already covered by an active request from the
+   *  viewer — those rows skip the Demander entry. */
+  readonly userRequestedSeasonNumbers = input<number[]>([]);
   /** Hide the action bar (season select, bulk actions). Used by the
    *  "More from season X" block on episode detail pages. */
   readonly hideControls = input(false);
@@ -78,6 +85,8 @@ export class MediaDetailSeasonsComponent {
   readonly toggleSeasonMonitored = output<Season>();
   readonly toggleSeasonWatched = output<{ season: Season; watched: boolean }>();
   readonly toggleEpisodeWatched = output<{ episode: Episode; watched: boolean }>();
+  /** Viewer (regular requester) asks to (re-)request this season. */
+  readonly requestSeason = output<Season>();
   readonly seasonWatchedBusyId = input<number | null>(null);
 
   /** Every episode with a file in the season is in the watched set. */
@@ -95,6 +104,20 @@ export class MediaDetailSeasonsComponent {
 
   tabEpisodeCount(season: Season): number {
     return filterSeasonEpisodesOnDisk(season, this.media(), this.episodesHasFileOnly()).length;
+  }
+
+  /** True when at least one episode of the season has no file — the
+   *  prerequisite for surfacing a Demander entry. */
+  seasonHasMissingEpisodes(season: Season | null): boolean {
+    if (!season) return false;
+    return (season.episodes ?? []).some((ep) => !ep.hasFile);
+  }
+
+  /** True when the viewer already has an active request covering this
+   *  season — Demander is hidden in that case. */
+  seasonAlreadyRequested(season: Season | null): boolean {
+    if (!season) return false;
+    return this.userRequestedSeasonNumbers().includes(season.seasonNumber);
   }
 
   /** Évite d'afficher le panneau d'une saison masquée par le filtre disque. */

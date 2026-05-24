@@ -379,6 +379,20 @@
        because the back-end refuses both actions without a quality profile;
        surfacing greyed-out buttons that only ever throw an error toast is
        worse than hiding them entirely until a profile is assigned. -->
+  <!-- Regular requester: surface a Demander entry when the unit isn't
+       downloaded yet AND the viewer doesn't already have an active
+       request that would cover it. Skipped for admins (canGrab takes
+       over below). The series-root case targets the whole series;
+       per-season requests live in media-detail-seasons. -->
+  @if (canRequest() && !userHasOpenWholeRequest()) {
+    @let needsFile = mediaType() === 'movie' || episodeId();
+    @if (!needsFile || !selectedFileId()) {
+      <button type="button" class="dropdown-item text-white" (click)="requestMedia.emit()">
+        <svg lucideClipboardList class="h-5 w-5 shrink-0 opacity-80"></svg>
+        <span class="flex-1">{{ 'media_detail.request_media' | translate }}</span>
+      </button>
+    }
+  }
   @if (canGrab() && mediaType() !== 'series' && qualityProfileName()) {
     <button type="button" [disabled]="grabBusy() !== null" class="dropdown-item text-white" (click)="grabBest.emit()">
       @if (grabBusy() === 'best') { <span class="loading loading-spinner loading-sm"></span> }

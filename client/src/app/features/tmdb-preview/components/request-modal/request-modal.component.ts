@@ -60,6 +60,10 @@ export class RequestModalComponent {
     mediaType: MediaType;
     tmdbId: number;
     alreadyRequestedSeasons?: number[];
+    /** Pre-tick these season numbers on open (the user can still
+     *  un-tick them or add more). Filtered against
+     *  `alreadyRequestedSeasons` so we never re-add disabled rows. */
+    preselectedSeasons?: number[];
   }) {
     this.title.set(params.title);
     this.mediaType.set(params.mediaType);
@@ -80,10 +84,21 @@ export class RequestModalComponent {
 
     if (params.mediaType === 'series') {
       this.seasonsLoading.set(true);
+      const preselected = new Set(params.preselectedSeasons ?? []);
       this.metadata.getTvSeasons(params.tmdbId).then((s) => {
         this.seasons.set(s);
-        // Nothing pre-selected — the user opts in season-by-season.
-        this.selectedSeasons.set(new Set());
+        // Default empty unless the caller passed `preselectedSeasons`
+        // (e.g. the season-level Demander entry pre-fills the season
+        // it was clicked on). Already-requested rows are filtered out
+        // — they're disabled and can't be re-picked anyway.
+        const taken = this.alreadyRequestedSeasons();
+        this.selectedSeasons.set(
+          new Set(
+            s
+              .map((x) => x.seasonNumber)
+              .filter((n) => preselected.has(n) && !taken.has(n)),
+          ),
+        );
       }).catch(() => {
         this.seasons.set([]);
       }).finally(() => {
