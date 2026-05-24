@@ -14,10 +14,13 @@
   --radius-box: 0.5rem;
 }
 
-/* Thinner focus outline on form fields */
+/* Thinner focus outline on form fields. Suppress daisyUI's border on focus —
+   the focus ring (outline) is the only visual cue we want, the extra white
+   border doubled up with the ring looks noisy. */
 .select:focus, .input:focus, .textarea:focus {
   outline-width: 1px;
   outline-offset: 0px;
+  border-color: transparent;
 }
 
 /* Flex children inherit `min-width: auto`, which prevents inner text from
