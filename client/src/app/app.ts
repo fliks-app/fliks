@@ -85,14 +85,26 @@ export class App implements OnInit, OnDestroy {
 
     // Browser/desktop Escape mirrors the hardware back button: closes the
     // topmost dismissable layer (open dropdown, bottom sheet, modal) if
-    // any, else falls through to route-level back. Skip when focus is
-    // inside a text input so Escape can still e.g. cancel an inline edit
-    // without navigating away.
+    // any, else falls through to route-level back. Skip when focus is on
+    // a form control whose native Escape behaviour is preferable:
+    //  - INPUT / TEXTAREA / contentEditable: cancel inline edits without
+    //    navigating away.
+    //  - SELECT: close the native option list while keeping focus on the
+    //    select (our preventDefault would otherwise blur it, dropping
+    //    focus to <body>).
     this.escapeKeyListener = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      // Defer to the browser's default Escape when focus is on a form
+      // control. `closest()` catches the open-select case where Chrome
+      // dispatches keydown on the focused <option> rather than the
+      // <select> itself — both resolve to the same <select> ancestor.
+      // `activeElement` is a second signal in case the browser routes
+      // the event to <document> while the dropdown is open.
       const target = e.target as HTMLElement | null;
-      const tag = target?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
+      const active = document.activeElement as HTMLElement | null;
+      const isFormControl = (el: HTMLElement | null) =>
+        !!el && (el.isContentEditable || !!el.closest('select, input, textarea'));
+      if (isFormControl(target) || isFormControl(active)) return;
       e.preventDefault();
       e.stopPropagation();
       this.handleBackButton();

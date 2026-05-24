@@ -23,6 +23,15 @@
   border-color: transparent;
 }
 
+/* daisyUI ships `.tab` flat by default, which makes the global focus ring
+   (a box-shadow that traces border-radius) render as a square notched
+   into the otherwise rounded UI. Give every tab the same radius as the
+   rest of the design tokens so the ring reads consistently — inside
+   `.tabs-boxed` they still nest cleanly under the larger container. */
+.tab {
+  border-radius: var(--radius-box, 0.5rem);
+}
+
 /* Flex children inherit `min-width: auto`, which prevents inner text from
    wrapping inside DaisyUI labels — the label expands to the longest line
    instead, causing horizontal overflow. Force the side div + alt text to

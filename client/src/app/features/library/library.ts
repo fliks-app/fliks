@@ -603,4 +603,31 @@ export class LibraryComponent implements OnInit, OnDestroy {
       if (!silent) this.loading.set(false);
     }
   }
+
+  /** Series always toggleable (bulk endpoint, no file needed). Movies need
+   *  at least one local file — without it `toggleWatched` has nothing to
+   *  reference and the action would silently no-op. */
+  canMarkMediaWatched(m: Media): boolean {
+    return m.type === 'series' || !!m.files?.length;
+  }
+
+  async toggleMediaWatched(m: Media, watched: boolean) {
+    try {
+      if (m.type === 'series') {
+        await this.streamingApi.toggleSeriesWatched(m.id, watched);
+      } else {
+        const fileId = m.files?.[0]?.id;
+        if (!fileId) return;
+        await this.streamingApi.toggleWatched(m.id, fileId);
+      }
+      // Reflect new state on the visible card without a full refetch —
+      // the parent's `watchedIds` set drives the `'watched'` status badge.
+      this.watchedIds.update((set) => {
+        const next = new Set(set);
+        if (watched) next.add(m.id);
+        else next.delete(m.id);
+        return next;
+      });
+    } catch { /* global error toast */ }
+  }
 }

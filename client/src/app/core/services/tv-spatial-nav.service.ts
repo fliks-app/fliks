@@ -178,14 +178,6 @@ export class TvSpatialNavService {
     ]);
     const isInputWithNativeArrows = tag === 'INPUT' && NATIVE_INPUT_TYPES.has(inputType ?? 'text');
 
-    // `<select appTvSelect>` opts out of native arrow handling — the
-    // directive routes opens through SelectPickerService, so arrow keys
-    // should escape to spatial nav instead of silently cycling the
-    // underlying native value.
-    const isPickerSelect = tag === 'SELECT' && active?.hasAttribute('appTvSelect');
-    // Native <select> (without the picker directive): always defer to
-    // native; left/right cycles options, up/down opens the dropdown.
-    if (tag === 'SELECT' && !isPickerSelect) return;
     // Text-style inputs own horizontal arrows (caret movement) — defer
     // left/right to native UNTIL the caret hits the end of the value, at
     // which point the arrow should escape to spatial nav instead of
@@ -204,11 +196,12 @@ export class TvSpatialNavService {
       if (dir === 'right' && !atEnd) return;
       // Caret at boundary → fall through to spatial nav.
     }
-    // Native `<select>` cycles its options on arrow keys (changing the
-    // value silently). Always block that on TV. We still try to move focus
-    // — if a tree-aware neighbour exists, the user goes there; otherwise
-    // we preventDefault below and the focus stays put. Either way, the
-    // value of the select isn't mutated by a stray arrow press.
+    // Native `<select>` cycles its options on arrow keys (silently
+    // changing the value) and Alt+Down opens the dropdown. Block both:
+    // selects open via mouse / Enter / Space (see TvSelectDirective for
+    // the styled picker variant); arrows are reserved for spatial nav.
+    // If no neighbour exists, focus stays put — never a stray value
+    // mutation from an arrow press.
     if (tag === 'SELECT') {
       e.preventDefault();
     }
@@ -238,44 +231,46 @@ export class TvSpatialNavService {
     // No focusable neighbour: scroll the page manually so the user can
     // reach informational content (file infos, descriptions, etc.) that
     // sits below the last focusable card. Up/down only — left/right at a
-    // boundary should just block (intra-row). Skip when a modal trap is
-    // active (open popover / dropdown / bottom-sheet): the user hitting
-    // the boundary inside a menu shouldn't drift the page underneath.
-    const modalOpen =
-      !!document.querySelector('[data-tv-modal]') ||
-      !!document.querySelector('.dropdown-open .dropdown-content');
-    if (!modalOpen && (dir === 'down' || dir === 'up')) {
+    // boundary should just block (intra-row). Skip while a modal is open
+    // so the user hitting the boundary inside a menu doesn't drift the
+    // page underneath.
+    if (!this.openModals().length && (dir === 'down' || dir === 'up')) {
       window.scrollBy({ top: dir === 'down' ? 300 : -300, behavior: 'smooth' });
     }
   }
 
-  private findNeighbor(dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null {
-    const active = document.activeElement as HTMLElement | null;
-    // Tree-aware path runs first: if the active element sits inside a
-    // registered container, walk the logical tree (orientation-aware,
-    // last-active-child memorised). Returning the rect-based fallback only
-    // when the tree has nothing to say keeps unmigrated pages working
-    // exactly as before.
-    if (active && active !== document.body && this.containers.size > 0) {
-      const tree = this.findNeighborInTree(active, dir);
-      if (tree) return tree;
-    }
-    // Focus trap: any open dropdown / menu / bottom-sheet / always-visible
-    // pinned sidebar that opts in via `[data-tv-modal]` restricts
-    // navigation to its contents so arrow keys can't leak outside. Only
-    // applies when focus is CURRENTLY inside the modal — otherwise an
-    // always-on element (e.g. the pinned admin sidebar) would prevent
-    // ever reaching it from elsewhere on the page. The `.dropdown-open
-    // .dropdown-content` form is kept for the legacy player dropdowns
-    // that don't carry the attribute.
-    const modalCandidates: HTMLElement[] = [
+  /** Currently-open overlays that scope spatial navigation. Bottom sheets
+   *  / popovers carry `[data-tv-modal]`; daisyUI dropdowns are detected
+   *  via `.dropdown-open .dropdown-content` because their content stays
+   *  in the DOM with `display:none` when closed (a bare attribute would
+   *  falsely match). */
+  private openModals(): HTMLElement[] {
+    return [
       ...Array.from(document.querySelectorAll<HTMLElement>('[data-tv-modal]')),
       ...Array.from(
         document.querySelectorAll<HTMLElement>('.dropdown-open .dropdown-content'),
       ),
     ];
-    const openModal =
-      modalCandidates.find((m) => active && m.contains(active)) ?? null;
+  }
+
+  private findNeighbor(dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null {
+    const active = document.activeElement as HTMLElement | null;
+    // Modal trap takes precedence over tree-aware. The dropdown / sheet
+    // is a self-contained universe; walking up the container tree would
+    // bridge to whatever sits behind it on the page (a dropdown rendered
+    // inside the top-right cluster's [appTvRow] would otherwise let ↓
+    // from its first item escape down into the page section below).
+    // Prefer the modal that contains focus; fall back to the first open
+    // one so a freshly-opened dropdown still scopes arrows even before
+    // focus has settled inside it.
+    const modals = this.openModals();
+    const openModal = modals.length
+      ? modals.find((m) => active && m.contains(active)) ?? modals[0]
+      : null;
+    if (!openModal && active && active !== document.body && this.containers.size > 0) {
+      const tree = this.findNeighborInTree(active, dir);
+      if (tree) return tree;
+    }
     const all = openModal ? collectFocusables(openModal) : collectFocusables();
     if (!all.length) return null;
 
@@ -288,11 +283,13 @@ export class TvSpatialNavService {
     const fromCy = fromRect.top + fromRect.height / 2;
     const horizontal = dir === 'left' || dir === 'right';
 
-    // Scope horizontal nav to the active horizontal scroller (if any). Without
-    // this, pressing Right on the last card of a row would fall through to
-    // the `anywhere` fallback and land on a card from another row or a button
-    // elsewhere. Inside a scroller, Left/Right should stay among siblings;
-    // boundaries (first/last card) just block.
+    // Scope horizontal nav to the active horizontal scroller (if any).
+    // Without this, pressing Right on the last card of a row would fall
+    // through to the `anywhere` fallback and land on a card from another
+    // row. The restriction is applied below only to off-line / anywhere
+    // candidates — in-line (same row) candidates are always considered
+    // so the user can step out of the row toward a same-band element
+    // outside it (typically: the layout sidebar on the left).
     const activeScroller = horizontal
       ? active.closest<HTMLElement>('.flex.overflow-x-auto, [data-scroller]')
       : null;
@@ -312,11 +309,6 @@ export class TvSpatialNavService {
 
     for (const el of all) {
       if (el === active) continue;
-      // Horizontal nav inside a scroller: candidates must be siblings in the
-      // same scroller. At the last/first card the loop yields no candidates
-      // and findNeighbor returns null — D-pad Right at end-of-row blocks
-      // (no jump to a button on another row), matching TV remote convention.
-      if (activeScroller && !activeScroller.contains(el)) continue;
       const r = el.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
       if (getComputedStyle(el).pointerEvents === 'none') continue;
@@ -340,7 +332,14 @@ export class TvSpatialNavService {
       const cross   = horizontal ? Math.abs(dy) : Math.abs(dx);
 
       if (sameRowOrCol) {
+        // Same-band candidates are considered globally — this is what lets
+        // Left from the leftmost card in a row reach the sidebar without
+        // falling through to the cross-row `anywhere` fallback.
         inLine.push({ el, primary });
+      } else if (activeScroller && !activeScroller.contains(el)) {
+        // Off-line candidates outside the active row scroller would let
+        // Right on the last card jump to a card in a row below. Skip.
+        continue;
       } else if (cross <= primary) {
         offLine.push({ el, score: primary * primary + 16 * cross * cross });
       } else {

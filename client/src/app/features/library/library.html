@@ -265,11 +265,21 @@
                   (click)="$event.stopPropagation()"
                   (change)="toggleSelect(item.id)"
                 />
-                <app-media-card [media]="item" [status]="watchedIds().has(item.id) ? 'watched' : null" />
+                <app-media-card
+                  [media]="item"
+                  [status]="watchedIds().has(item.id) ? 'watched' : null"
+                  [interactiveWatched]="canMarkMediaWatched(item)"
+                  (watchedToggled)="toggleMediaWatched(item, $event)"
+                />
               </div>
             } @else {
               <div [id]="'media-' + item.id" [attr.data-library-focus]="'media:' + item.id">
-                <app-media-card [media]="item" [status]="watchedIds().has(item.id) ? 'watched' : null" />
+                <app-media-card
+                  [media]="item"
+                  [status]="watchedIds().has(item.id) ? 'watched' : null"
+                  [interactiveWatched]="canMarkMediaWatched(item)"
+                  (watchedToggled)="toggleMediaWatched(item, $event)"
+                />
               </div>
             }
           }

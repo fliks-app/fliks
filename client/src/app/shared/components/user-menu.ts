@@ -36,13 +36,18 @@ import {
         <svg lucideUser class="h-5 w-5"></svg>
       </button>
       @if (auth.user(); as user) {
-        <div class="flex items-center gap-3 px-3 py-3 border-b border-white/10">
-          <div class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-            <svg lucideUser class="h-5 w-5 text-white/60"></svg>
-          </div>
-          <a routerLink="/account" class="min-w-0 flex-1 cursor-pointer">
-            <p class="font-semibold truncate text-white">{{ user.username }}</p>
-            <p class="text-xs text-white/50">{{ user.role }}</p>
+        <div class="border-b border-white/10 pb-1 mb-1">
+          <a
+            routerLink="/account"
+            class="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-white/5"
+          >
+            <div class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+              <svg lucideUser class="h-5 w-5 text-white/60"></svg>
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="font-semibold truncate text-white">{{ user.username }}</p>
+              <p class="text-xs text-white/50">{{ user.role }}</p>
+            </div>
           </a>
         </div>
       }

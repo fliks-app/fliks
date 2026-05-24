@@ -115,7 +115,9 @@
   "display_settings": {
     "title": "Affichage",
     "home_background": "Image de fond sur l'accueil",
-    "home_background_hint": "Affiche une affiche en plein écran derrière les sections de l'accueil."
+    "home_background_hint": "Affiche une affiche en plein écran derrière les sections de l'accueil.",
+    "only_my_requests": "Afficher uniquement les médias que j'ai demandé",
+    "only_my_requests_hint": "Filtre les sections « Récemment ajoutés » et « Bientôt disponible » de l'accueil pour ne garder que les médias que vous avez demandés."
   },
   "storage_settings": {
     "clear_cache": "Vider le cache",
@@ -185,8 +187,7 @@
     "continue_watching": "Reprendre la lecture",
     "coming_soon": "Bientôt disponible",
     "recent_media": "Récemment ajoutés",
-    "recommendations": "Recommandations",
-    "only_my_requests": "Afficher uniquement les médias que j'ai demandé"
+    "recommendations": "Recommandations"
   },
   "playback_settings": {
     "title": "Paramètres de lecture",
