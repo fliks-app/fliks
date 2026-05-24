@@ -4,6 +4,8 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  OnModuleInit,
+  OnModuleDestroy,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -53,6 +55,9 @@ import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service'
 import { clearMediaCache } from '../../common/utils/media-cache.util';
 import { mapWithConcurrency } from '../../common/utils/concurrency';
 import { MediaServersService } from '../media-servers/media-servers.service';
+import { EventsService } from '../scheduler/events.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { Subscription } from 'rxjs';
 import { FfprobeService } from '../subtitles/ffprobe.service';
 import { SubtitlesService } from '../subtitles/subtitles.service';
 import * as fs from 'fs';
@@ -60,8 +65,9 @@ import * as path from 'path';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 
 @Injectable()
-export class MediaService {
+export class MediaService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger(MediaService.name);
+  private importCompleteSub?: Subscription;
 
   constructor(
     @InjectRepository(Media)
@@ -99,7 +105,27 @@ export class MediaService {
     private readonly subtitles: SubtitlesService,
     private readonly imageService: ImageService,
     private readonly subtitleStream: SubtitleStreamService,
+    private readonly events: EventsService,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  onModuleInit(): void {
+    // Listen for download completions so we can recompute the lifecycle
+    // status of every active request linked to the media. Cheap: only
+    // active requests get inspected, and most events have none.
+    this.importCompleteSub = this.events.subscribe((event) => {
+      if (event.type !== 'import.complete') return;
+      this.onMediaFilesChanged(event.mediaId).catch((err) => {
+        this.log.warn(
+          `request-lifecycle: failed to recompute on import.complete for media#${event.mediaId}: ${(err as Error).message}`,
+        );
+      });
+    });
+  }
+
+  onModuleDestroy(): void {
+    this.importCompleteSub?.unsubscribe();
+  }
 
   async importFromTmdb(
     dto: ImportTmdbDto,
@@ -2309,6 +2335,125 @@ export class MediaService {
     await this.persistMediaMetadata(saved, details);
     await this.linkOpenRequestsToImportedMedia(saved, addedByUserId ?? null);
     return this.findOne(saved.id);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Request lifecycle hooks — drive the `APPROVED → PROCESSING → AVAILABLE`
+  // progression based on auto-grab + file landing events. See issue #208 for
+  // the design rationale.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Called when a release is grabbed (sent to the download client) for
+   * `mediaId`. Flips every active `APPROVED` request linked to that
+   * media to `PROCESSING` so the user sees the download is on its way.
+   *
+   * `seasonNumber` is honoured for series: per-season requests only
+   * flip when their scope includes the grabbed season. Whole-series
+   * requests flip on any grab. Movies pass `undefined`.
+   */
+  async onReleaseGrabbedForMedia(
+    mediaId: number,
+    seasonNumber?: number,
+  ): Promise<void> {
+    const candidates = await this.requestRepo.find({
+      where: {
+        media: { id: mediaId },
+        status: RequestStatus.APPROVED,
+      },
+    });
+    if (candidates.length === 0) return;
+    const touched: FliksRequest[] = [];
+    for (const r of candidates) {
+      if (
+        seasonNumber !== undefined &&
+        r.seasons?.length &&
+        !r.seasons.includes(seasonNumber)
+      ) {
+        continue;
+      }
+      r.status = RequestStatus.PROCESSING;
+      touched.push(r);
+    }
+    if (touched.length) {
+      await this.requestRepo.save(touched);
+      for (const r of touched) {
+        void this.notifications.dispatch('request.processing', {
+          title: r.title,
+          mediaType: r.mediaType,
+        });
+      }
+    }
+  }
+
+  /**
+   * Called after one or more `MediaFile` rows are inserted for
+   * `mediaId`. Walks active `APPROVED` / `PROCESSING` requests and
+   * promotes the ones whose scope is now fully on disk to `AVAILABLE`.
+   *
+   *  - Movies: at least one file → covered.
+   *  - Series whole-request (`seasons` empty/null): every monitored
+   *    season with monitored episodes has all those episodes on disk.
+   *  - Series per-season request: every monitored episode of each
+   *    listed season has a file.
+   *
+   * Unmonitored items are ignored — the admin dropped them from the
+   * scope, they don't gate the promotion.
+   */
+  async onMediaFilesChanged(mediaId: number): Promise<void> {
+    const active = await this.requestRepo.find({
+      where: {
+        media: { id: mediaId },
+        status: In([RequestStatus.APPROVED, RequestStatus.PROCESSING]),
+      },
+    });
+    if (active.length === 0) return;
+
+    const ctx = await this.mediaRepo.findOne({
+      where: { id: mediaId },
+      relations: ['files', 'seasons', 'seasons.episodes'],
+    });
+    if (!ctx) return;
+
+    const touched: FliksRequest[] = [];
+    for (const r of active) {
+      if (!this.isRequestScopeCovered(r, ctx)) continue;
+      r.status = RequestStatus.AVAILABLE;
+      touched.push(r);
+    }
+    if (touched.length) {
+      await this.requestRepo.save(touched);
+      for (const r of touched) {
+        void this.notifications.dispatch('request.available', {
+          title: r.title,
+          mediaType: r.mediaType,
+        });
+      }
+    }
+  }
+
+  /** True when every file the request scope requires is on disk. */
+  private isRequestScopeCovered(request: FliksRequest, media: Media): boolean {
+    if (media.type === MediaType.MOVIE) {
+      return (media.files?.length ?? 0) > 0;
+    }
+    const scope = !request.seasons || request.seasons.length === 0
+      ? null
+      : new Set(request.seasons);
+    const seasons = media.seasons ?? [];
+    let anyChecked = false;
+    for (const s of seasons) {
+      if (scope && !scope.has(s.seasonNumber)) continue;
+      if (!s.monitored) continue;
+      const monitoredEps = (s.episodes ?? []).filter((e) => e.monitored);
+      if (monitoredEps.length === 0) continue;
+      anyChecked = true;
+      if (!monitoredEps.every((e) => e.hasFile)) return false;
+    }
+    // Nothing left to wait for (everything unmonitored, or scope
+    // covers seasons that don't exist) — treat as delivered rather
+    // than stranding the request in PROCESSING forever.
+    return anyChecked;
   }
 
   /**

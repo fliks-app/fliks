@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Media } from './entities/media.entity';
+import { MediaService } from './media.service';
 import { DownloadHistory } from './entities/download-history.entity';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { TorznabRelease } from '../indexers/torznab.service';
@@ -67,6 +68,8 @@ export class AutoGrabPipelineService {
     private readonly qbittorrent: QbittorrentService,
     private readonly naming: NamingService,
     private readonly qualityDefs: QualityDefinitionsService,
+    @Inject(forwardRef(() => MediaService))
+    private readonly mediaService: MediaService,
   ) {}
 
   async buildScoringContext(
@@ -149,6 +152,10 @@ export class AutoGrabPipelineService {
     runtimeMinutes: number;
     /** Per-source pending check (e.g. episode-scoped lookup). */
     pendingCheck?: () => Promise<boolean>;
+    /** Season targeted by this grab — forwarded to `grabAndRecord` so
+     *  the lifecycle hook can flip only the matching per-season
+     *  requests. Whole-series and movie grabs pass undefined. */
+    seasonNumber?: number;
   }): Promise<boolean> {
     const decision = this.classifyForSearch(args.media, args.files);
     if (decision.mode !== 'missing' && decision.mode !== 'upgrade') {
@@ -203,6 +210,7 @@ export class AutoGrabPipelineService {
       qbitClient: args.qbitClient,
       mediaType: args.mediaType,
       label: args.label,
+      seasonNumber: args.seasonNumber,
     });
   }
 
@@ -219,6 +227,11 @@ export class AutoGrabPipelineService {
     qbitClient: DownloadClient;
     mediaType: 'movie' | 'series';
     label: string;
+    /** Season number when the grabbed release targets a specific
+     *  season/episode — drives per-season request scoping for the
+     *  `APPROVED → PROCESSING` transition. Omit for whole-series and
+     *  movie grabs. */
+    seasonNumber?: number;
   }): Promise<boolean> {
     try {
       this.log.log(
@@ -244,6 +257,15 @@ export class AutoGrabPipelineService {
       this.log.log(
         `AutoGrab[${args.mediaType}]: grabbed "${args.pick.title}" for "${args.label}"`,
       );
+      // Flip linked APPROVED requests to PROCESSING. Failures don't
+      // abort the grab — best effort.
+      void this.mediaService
+        .onReleaseGrabbedForMedia(args.media.id, args.seasonNumber)
+        .catch((err) =>
+          this.log.warn(
+            `request-lifecycle: failed to flip requests to PROCESSING for media#${args.media.id}: ${(err as Error).message}`,
+          ),
+        );
       return true;
     } catch (e) {
       this.log.warn(
