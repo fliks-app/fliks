@@ -16,6 +16,9 @@ import { DismissableStackService } from '../../core/services/dismissable-stack.s
  *     <div class="dropdown-content">…</div>
  *   </div>
  */
+const MENU_FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 @Directive({
   selector: '[appDropdownToggle]',
   host: {
@@ -27,6 +30,7 @@ export class DropdownToggleDirective implements OnDestroy {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly dismissStack = inject(DismissableStackService);
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
+  private tabKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private currentClose: (() => void) | null = null;
   /** The focusable element that opened the dropdown — refocused on close so
    *  Enter / Space re-opens it without needing to Tab back. */
@@ -61,6 +65,15 @@ export class DropdownToggleDirective implements OnDestroy {
 
   private open(dropdown: HTMLElement) {
     dropdown.classList.add('dropdown-open');
+    const content = dropdown.querySelector<HTMLElement>('.dropdown-content');
+    // Move focus into the menu so arrow keys step between items
+    // (spatial-nav scopes nav to `.dropdown-open .dropdown-content`)
+    // and keyboard users can act without an extra Tab. Standard ARIA
+    // menu pattern.
+    queueMicrotask(() => {
+      const first = content?.querySelector<HTMLElement>(MENU_FOCUSABLE_SELECTOR);
+      first?.focus({ preventScroll: true });
+    });
     const close = () => {
       dropdown.classList.remove('dropdown-open');
       this.triggerEl?.focus({ preventScroll: true });
@@ -76,6 +89,37 @@ export class DropdownToggleDirective implements OnDestroy {
       if (this.host.nativeElement.contains(e.target as Node)) return;
       close();
     };
+    // Tab trap: spatial-nav already scopes arrow keys when focus is
+    // inside `.dropdown-open .dropdown-content`, but Tab uses the
+    // browser's native focus order and walks straight out. Wrap Tab /
+    // Shift+Tab at the menu boundaries so keyboard users stay inside
+    // until they explicitly dismiss (Escape via DismissableStackService,
+    // click outside, or pick an item).
+    this.tabKeyHandler = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab' || !content) return;
+      const items = Array.from(
+        content.querySelectorAll<HTMLElement>(MENU_FOCUSABLE_SELECTOR),
+      );
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      // Focus drifted outside (e.g. before the auto-focus settled) →
+      // pull it back to the natural end of the cycle.
+      if (!active || !content.contains(active)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus({ preventScroll: true });
+        return;
+      }
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus({ preventScroll: true });
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus({ preventScroll: true });
+      }
+    };
+    document.addEventListener('keydown', this.tabKeyHandler);
     setTimeout(() => {
       if (this.outsideClickHandler) {
         document.addEventListener('click', this.outsideClickHandler);
@@ -91,6 +135,10 @@ export class DropdownToggleDirective implements OnDestroy {
     if (this.outsideClickHandler) {
       document.removeEventListener('click', this.outsideClickHandler);
       this.outsideClickHandler = null;
+    }
+    if (this.tabKeyHandler) {
+      document.removeEventListener('keydown', this.tabKeyHandler);
+      this.tabKeyHandler = null;
     }
     if (this.currentClose) {
       this.dismissStack.remove(this.currentClose);
