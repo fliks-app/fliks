@@ -47,21 +47,25 @@
     </div>
   }
 
-  <!-- Track -->
+  <!-- Track. Slim by default; thickens on hover (pointer), focus-visible
+       (keyboard / TV remote), or while the user is actively dragging. -->
   <div
     class="relative w-full rounded-full overflow-hidden transition-all"
-    [class]="variant() === 'player' ? 'h-2 group-hover:h-2.5 bg-white/20' : 'h-2 bg-base-300'"
+    [class]="trackClass()"
   >
-    <!-- Buffered -->
+    <!-- Buffered. Same `rounded-l-full` treatment as the progress so its
+         right edge is a crisp vertical line, not a curved bulge. -->
     @if (showBuffered() && bufferedEnd()) {
       <div
-        class="absolute inset-y-0 left-0 bg-white/30 rounded-full"
+        class="absolute inset-y-0 left-0 bg-white/30 rounded-l-full"
         [style.width.%]="duration() ? (bufferedEnd() / duration()) * 100 : 0"
       ></div>
     }
-    <!-- Progress -->
+    <!-- Progress. `rounded-l-full` matches the track's left cap;
+         right side stays square so the progress ends on a crisp
+         vertical edge instead of a curved bulge. -->
     <div
-      class="absolute inset-y-0 left-0 rounded-full"
+      class="absolute inset-y-0 left-0 rounded-l-full"
       [class]="variant() === 'player' ? 'bg-white' : 'bg-info'"
       [style.width.%]="displayPercent()"
     ></div>
@@ -74,13 +78,4 @@
       ></div>
     }
   </div>
-
-  <!-- Thumb -->
-  @if (showThumb()) {
-    <div
-      class="seekbar-thumb absolute h-3.5 w-3.5 rounded-full bg-white shadow -translate-x-1/2 pointer-events-none group-hover:scale-125 transition-all"
-      [class.scale-125]="dragging()"
-      [style.left.%]="displayPercent()"
-    ></div>
-  }
 </div>

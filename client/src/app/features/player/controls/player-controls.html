@@ -75,7 +75,7 @@
 ></div>
 
 <!-- Mobile: big center controls (rewind / play / forward) -->
-@if (isMobileTouch() && !loading() && !buffering()) {
+@if (isMobileTouch() && !loading() && !buffering() && videoStarted()) {
   <div
     class="absolute inset-0 z-50 flex items-center justify-center pointer-events-none transition-opacity duration-200"
     [class.opacity-0]="!visible()"
@@ -119,7 +119,7 @@
        tapOverlay so the empty gap between the title and the right-aligned
        action buttons doubles as a "close controls" hit zone; the buttons
        stop propagation so their own taps don't also dismiss. -->
-  <div class="flex items-end justify-between mb-1.5 gap-2" (click)="tapOverlay.emit()">
+  <div class="flex items-end justify-between mb-0.5 gap-2" (click)="tapOverlay.emit()">
     <div class="min-w-0 shrink">
       @if (episodeTitle()) {
         <div class="text-white/60 font-semibold truncate text-base sm:text-lg">{{ episodeTitle() }}</div>
