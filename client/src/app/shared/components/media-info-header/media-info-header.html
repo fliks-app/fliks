@@ -120,7 +120,14 @@
 
     <!-- Overview -->
     @if (overview()) {
-      <p class="mt-4 text-base-content/80 leading-relaxed line-clamp-4">{{ overview() }}</p>
+      <p #overviewText
+         class="mt-4 text-base-content/80 leading-relaxed"
+         [class.line-clamp-4]="!overviewExpanded()">{{ overview() }}</p>
+      @if (overviewClamped() || overviewExpanded()) {
+        <button type="button" class="link link-primary no-underline hover:underline text-sm mt-1" (click)="toggleOverview()">
+          {{ (overviewExpanded() ? 'common.show_less' : 'common.show_more') | translate }}
+        </button>
+      }
     }
 
   </div>
