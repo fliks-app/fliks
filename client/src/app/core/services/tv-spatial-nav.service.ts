@@ -260,14 +260,12 @@ export class TvSpatialNavService {
       const tree = this.findNeighborInTree(active, dir);
       if (tree) return tree;
     }
-    // Focus trap: any open dropdown / menu / bottom-sheet / always-visible
-    // pinned sidebar that opts in via `[data-tv-modal]` restricts
-    // navigation to its contents so arrow keys can't leak outside. Only
-    // applies when focus is CURRENTLY inside the modal — otherwise an
-    // always-on element (e.g. the pinned admin sidebar) would prevent
-    // ever reaching it from elsewhere on the page. The `.dropdown-open
-    // .dropdown-content` form is kept for the legacy player dropdowns
-    // that don't carry the attribute.
+    // Focus trap: transient overlays (open dropdown / popover / bottom
+    // sheet) opt in via `[data-tv-modal]` so arrow keys can't leak out.
+    // Only applies when focus is CURRENTLY inside the modal — otherwise
+    // an open dropdown elsewhere on the page would block normal nav.
+    // The `.dropdown-open .dropdown-content` form is kept for legacy
+    // player dropdowns that don't carry the attribute.
     const modalCandidates: HTMLElement[] = [
       ...Array.from(document.querySelectorAll<HTMLElement>('[data-tv-modal]')),
       ...Array.from(
@@ -288,11 +286,13 @@ export class TvSpatialNavService {
     const fromCy = fromRect.top + fromRect.height / 2;
     const horizontal = dir === 'left' || dir === 'right';
 
-    // Scope horizontal nav to the active horizontal scroller (if any). Without
-    // this, pressing Right on the last card of a row would fall through to
-    // the `anywhere` fallback and land on a card from another row or a button
-    // elsewhere. Inside a scroller, Left/Right should stay among siblings;
-    // boundaries (first/last card) just block.
+    // Scope horizontal nav to the active horizontal scroller (if any).
+    // Without this, pressing Right on the last card of a row would fall
+    // through to the `anywhere` fallback and land on a card from another
+    // row. The restriction is applied below only to off-line / anywhere
+    // candidates — in-line (same row) candidates are always considered
+    // so the user can step out of the row toward a same-band element
+    // outside it (typically: the layout sidebar on the left).
     const activeScroller = horizontal
       ? active.closest<HTMLElement>('.flex.overflow-x-auto, [data-scroller]')
       : null;
@@ -312,11 +312,6 @@ export class TvSpatialNavService {
 
     for (const el of all) {
       if (el === active) continue;
-      // Horizontal nav inside a scroller: candidates must be siblings in the
-      // same scroller. At the last/first card the loop yields no candidates
-      // and findNeighbor returns null — D-pad Right at end-of-row blocks
-      // (no jump to a button on another row), matching TV remote convention.
-      if (activeScroller && !activeScroller.contains(el)) continue;
       const r = el.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
       if (getComputedStyle(el).pointerEvents === 'none') continue;
@@ -340,7 +335,14 @@ export class TvSpatialNavService {
       const cross   = horizontal ? Math.abs(dy) : Math.abs(dx);
 
       if (sameRowOrCol) {
+        // Same-band candidates are considered globally — this is what lets
+        // Left from the leftmost card in a row reach the sidebar without
+        // falling through to the cross-row `anywhere` fallback.
         inLine.push({ el, primary });
+      } else if (activeScroller && !activeScroller.contains(el)) {
+        // Off-line candidates outside the active row scroller would let
+        // Right on the last card jump to a card in a row below. Skip.
+        continue;
       } else if (cross <= primary) {
         offLine.push({ el, score: primary * primary + 16 * cross * cross });
       } else {
