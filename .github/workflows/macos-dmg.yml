@@ -20,6 +20,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ── Resolve version + patch Info.plist BEFORE build ──
+      # The DMG name comes from Info.plist's CFBundleShortVersionString
+      # (make-dmg.sh reads it via PlistBuddy). Without this step every
+      # build shipped as Fliks-1.0.0-arm64.dmg regardless of the tag.
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Patch Info.plist with version
+        run: |
+          RAW="${{ steps.version.outputs.version }}"
+          # CFBundleShortVersionString must be N[.N[.N]] per Apple — for
+          # dev builds drop the suffix so the plist stays valid.
+          SHORT="$(echo "$RAW" | grep -oE '^[0-9]+(\.[0-9]+){0,2}' || true)"
+          [ -z "$SHORT" ] && SHORT="0.0.0"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $SHORT" macos/Fliks/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $SHORT" macos/Fliks/Info.plist
+          echo "Patched Info.plist: CFBundleShortVersionString=$SHORT (from $RAW)"
+
       # ── Node.js for building client + backend ──
       - uses: actions/setup-node@v4
         with:
@@ -72,16 +96,6 @@ jobs:
       - name: Create DMG
         working-directory: macos
         run: ./Scripts/make-dmg.sh
-
-      # ── Extract version for artifact naming ──
-      - name: Get version
-        id: version
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=dev-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-          fi
 
       # ── Upload DMG as artifact (always) ──
       - name: Upload DMG artifact
