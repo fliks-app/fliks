@@ -227,6 +227,36 @@ html.tv-host {
 body.tv *:hover {
   background-color: revert;
 }
+/* Suppress every `:focus-visible` visual when the user isn't on a
+   keyboard / D-pad modality. Safari WebKit on iOS incorrectly fires
+   focus-visible on long-press, so a context-tap on a media card used
+   to paint the high-contrast ring. The `keyboard-modality` body
+   class is set by app.ts on the first navigation keydown and cleared
+   on the next pointer / touch interaction; TV always uses the ring
+   so it short-circuits the suppression. `transform: none` covers the
+   scale-up rule on media cards a few selectors down. */
+body:not(.keyboard-modality):not(.tv)
+  :focus-visible:not(input, textarea, select, [contenteditable]) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* iOS Safari auto-zooms the viewport when a focused input has
+   `font-size` below 16 px — Apple's anti-eyestrain default, but it
+   reads as "the page suddenly grows" when tapping the search bar.
+   Lock the in-app form fields at 16 px on the Capacitor build so
+   focus never triggers the zoom. Desktop / web is untouched. */
+body.native input,
+body.native textarea,
+body.native select {
+  font-size: 16px;
+}
+body:not(.keyboard-modality):not(.tv) app-media-card figure:focus-visible,
+body:not(.keyboard-modality):not(.tv) [data-home-focus]:focus-visible,
+body:not(.keyboard-modality):not(.tv) [data-tv-focusable]:focus-visible {
+  transform: none !important;
+}
+
 /* High-contrast primary focus ring — applies on every form factor so
    keyboard / D-pad navigation looks identical. `:focus-visible` only
    so mouse clicks on desktop don't paint a ring after activation.
