@@ -174,6 +174,10 @@ export class NotificationsService {
         return `Request approved: ${title}`;
       case 'request.declined':
         return `Request declined: ${title}`;
+      case 'request.processing':
+        return `Request downloading: ${title}`;
+      case 'request.available':
+        return `Request available: ${title}`;
       case 'grab.started':
         return `Grabbing: ${title}`;
       case 'download.complete':

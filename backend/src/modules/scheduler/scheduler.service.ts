@@ -206,6 +206,29 @@ export class SchedulerService implements OnModuleInit {
     });
   }
 
+  /**
+   * Targeted, fire-and-forget search for one or more media ids. Used
+   * by the request lifecycle right after an approval-driven import so
+   * the user doesn't wait for the next scheduled SearchMissing tick
+   * (up to 6 h). Bypasses the Command row on purpose — the audit
+   * trail for this trigger lives on the request itself, an extra
+   * Command per approval would just clutter the history.
+   *
+   * Throws on infra misconfiguration (no indexer, no download client)
+   * are swallowed and logged: a botched auto-trigger shouldn't take
+   * down the approval transaction.
+   */
+  async searchMissingForMedia(mediaIds: number[]): Promise<void> {
+    if (mediaIds.length === 0) return;
+    try {
+      await this.doSearchMissing(mediaIds);
+    } catch (e) {
+      this.log.warn(
+        `searchMissingForMedia([${mediaIds.join(', ')}]) failed: ${(e as Error).message}`,
+      );
+    }
+  }
+
   async triggerCommand(name: string): Promise<Command> {
     const known = [
       ...SchedulerService.SCHEDULERS.filter((s) => s.triggerable).map(
@@ -571,6 +594,7 @@ export class SchedulerService implements OnModuleInit {
         expectedTitle: [media.title, ...(media.alternativeTitles ?? [])],
         // Episodes are typically 20-60 min; 30 min fallback for size check.
         runtimeMinutes: media.runtime ?? 30,
+        seasonNumber: season.seasonNumber,
         pendingCheck: async () => {
           const pending = await this.historyRepo
             .createQueryBuilder('h')
@@ -855,6 +879,7 @@ export class SchedulerService implements OnModuleInit {
               mediaType: 'series',
               label: `${seriesMatch.title} S${String(parsed.season).padStart(2, '0')}`,
               runtimeMinutes: seriesMatch.runtime ?? 30,
+              seasonNumber: parsed.season,
               extraPendingCheck: () =>
                 this.hasRecentSeasonPackGrab(seriesMatch.id, parsed.season!),
             });
@@ -884,6 +909,7 @@ export class SchedulerService implements OnModuleInit {
             mediaType: 'series',
             label: `${seriesMatch.title} ${epLabel}`,
             runtimeMinutes: seriesMatch.runtime ?? 30,
+            seasonNumber: parsed.season,
             extraPendingCheck: async () => {
               // Cross-pull Phase 2: a pack was already grabbed for this
               // season in a previous pull — the episode is now redundant.
@@ -1169,6 +1195,10 @@ export class SchedulerService implements OnModuleInit {
     mediaType: 'movie' | 'series';
     label: string;
     runtimeMinutes: number;
+    /** Season targeted by the matched release — forwarded so the
+     *  request-lifecycle hook flips only the matching per-season
+     *  requests when the grab succeeds. */
+    seasonNumber?: number;
     /** Extra grab-dedup logic on top of the same-source-title check. */
     extraPendingCheck?: () => Promise<boolean>;
   }): Promise<boolean> {
@@ -1185,6 +1215,7 @@ export class SchedulerService implements OnModuleInit {
         ...(args.media.alternativeTitles ?? []),
       ],
       runtimeMinutes: args.runtimeMinutes,
+      seasonNumber: args.seasonNumber,
       pendingCheck: async () => {
         // Same release in history — happens because the same item
         // re-appears across feed polls.

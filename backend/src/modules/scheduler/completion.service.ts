@@ -32,6 +32,7 @@ import { StalledCheck } from './entities/stalled-check.entity';
 import { CleanupProfile } from '../cleanup-profiles/entities/cleanup-profile.entity';
 import { Library } from '../libraries/entities/library.entity';
 import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
+import { MarkersService } from '../markers/markers.service';
 import { FileTransferService } from '../../common/services/file-transfer.service';
 
 @Injectable()
@@ -72,7 +73,20 @@ export class CompletionService {
     private readonly thumbnailService: ThumbnailService,
     private readonly historyMatcher: TorrentHistoryMatcher,
     private readonly fileTransfer: FileTransferService,
+    private readonly markers: MarkersService,
   ) {}
+
+  /**
+   * Whether series imports trigger automatic intro / outro marker
+   * detection. Default on — most users want skip-intro working right
+   * after a series finishes downloading.
+   *
+   * TODO(#212): replace with an awaited `SettingsService.get(...)` read
+   * so the admin can opt out from the UI. Default stays `true`.
+   */
+  private autoDetectMarkersOnImport(): boolean {
+    return true;
+  }
 
   @Cron(CronExpression.EVERY_MINUTE)
   async processCompleted(): Promise<void> {
@@ -539,6 +553,37 @@ export class CompletionService {
         }
       }
     })();
+
+    // Series only: kick off intro / outro marker detection for every
+    // season whose episodes just landed. Detection runs at season
+    // granularity (it compares audio fingerprints across episodes) so
+    // we dedupe per season. Fire-and-forget; the detection itself is
+    // queued via a Command row, and the in-flight guard skips seasons
+    // already being scanned.
+    if (media.type === 'series' && this.autoDetectMarkersOnImport()) {
+      void (async () => {
+        const seasonIds = new Set<number>();
+        for (const { episodeId: epId } of importedFiles) {
+          if (epId == null) continue;
+          const ep = await this.episodeRepo.findOne({
+            where: { id: epId },
+            relations: ['season'],
+          });
+          if (ep?.season?.id) seasonIds.add(ep.season.id);
+        }
+        for (const seasonId of seasonIds) {
+          try {
+            await this.markers.detectSeason(seasonId, 'auto');
+          } catch (e) {
+            // BadRequest (already in flight) and infra errors stay
+            // out of the import path — detection is best effort.
+            this.log.debug?.(
+              `Post-import marker detection skipped season #${seasonId}: ${(e as Error).message}`,
+            );
+          }
+        }
+      })();
+    }
 
     // Generate thumbnail sprites (seekbar preview) for each imported file.
     // Runs in background — generateForFile is idempotent and ThumbnailService

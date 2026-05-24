@@ -9,7 +9,7 @@ import { MediaMetadata } from './entities/media-metadata.entity';
 import { Person } from './entities/person.entity';
 import { MediaCast } from './entities/media-cast.entity';
 import { MediaCrew } from './entities/media-crew.entity';
-import { FliksRequest } from '../requests/entities/request.entity';
+import { RequestsModule } from '../requests/requests.module';
 import { MediaService } from './media.service';
 import { MediaController } from './media.controller';
 import { AuthModule } from '../auth/auth.module';
@@ -44,8 +44,6 @@ import { StreamingModule } from '../streaming/streaming.module';
       MediaCast,
       MediaCrew,
       Library,
-      // Linked from media.service when an import resolves an open request.
-      FliksRequest,
     ]),
     AuthModule,
     MetadataProvidersModule,
@@ -57,6 +55,7 @@ import { StreamingModule } from '../streaming/streaming.module';
     SubtitlesModule,
     MediaServersModule,
     forwardRef(() => FliksSchedulerModule),
+    forwardRef(() => RequestsModule),
     ImageModule,
     StreamingModule,
     LibrariesModule,
