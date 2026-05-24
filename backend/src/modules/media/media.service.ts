@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, SelectQueryBuilder, Brackets } from 'typeorm';
+import { Repository, DataSource, SelectQueryBuilder, Brackets, In } from 'typeorm';
 import { Media } from './entities/media.entity';
 import { MediaFile } from './entities/media-file.entity';
 import { Season } from './entities/season.entity';
@@ -32,7 +32,8 @@ import {
   MetadataDetails,
   SeasonDetails,
 } from '../metadata-providers/interfaces/metadata-provider.interface';
-import { MediaType, MediaStatus } from '../../common/enums';
+import { MediaType, MediaStatus, RequestStatus } from '../../common/enums';
+import { FliksRequest } from '../requests/entities/request.entity';
 import { ProfilesService } from '../profiles/profiles.service';
 import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../profiles/entities/language-profile.entity';
@@ -84,6 +85,8 @@ export class MediaService {
     private readonly castRepo: Repository<MediaCast>,
     @InjectRepository(MediaCrew)
     private readonly crewRepo: Repository<MediaCrew>,
+    @InjectRepository(FliksRequest)
+    private readonly requestRepo: Repository<FliksRequest>,
     private readonly dataSource: DataSource,
     private readonly tmdb: TmdbProvider,
     private readonly providerRegistry: MetadataProviderRegistry,
@@ -2153,6 +2156,7 @@ export class MediaService {
     await this.downloadMediaImages(saved.id, details);
     await this.updateSearchVector(saved.id);
     await this.persistMediaMetadata(saved, details);
+    await this.linkOpenRequestsToImportedMedia(saved, addedByUserId ?? null);
     return this.findOne(saved.id);
   }
 
@@ -2209,7 +2213,71 @@ export class MediaService {
 
     await this.updateSearchVector(saved.id);
     await this.persistMediaMetadata(saved, details);
+    await this.linkOpenRequestsToImportedMedia(saved, addedByUserId ?? null);
     return this.findOne(saved.id);
+  }
+
+  /**
+   * After a manual import (admin clicks "Add to library" on /add), look
+   * at every open request on the same `tmdbId` and decide what to do
+   * with each:
+   *
+   *  - **Profile envelope covers the request** (e.g. media imported as
+   *    1080p FR-EN, request was 1080p FR): link to the media and, if
+   *    `PENDING`, flip to `APPROVED` with `approvedBy = importer`. The
+   *    new media will satisfy the request.
+   *  - **Profile envelope does NOT cover the request** (e.g. media
+   *    imported as FR, request was VO): leave the request untouched.
+   *    The user wanted something else; an admin will have to decline
+   *    or import a second profile manually. We don't silently swap
+   *    profiles on the user.
+   *
+   * `APPROVED` / `PROCESSING` requests are linked too (so they can
+   * transition to `AVAILABLE` later) but only when the envelope still
+   * covers them — same rule applies in both directions.
+   * `DECLINED` / `FAILED` / `AVAILABLE` are skipped: terminal or
+   * already resolved.
+   */
+  private async linkOpenRequestsToImportedMedia(
+    media: Media,
+    addedByUserId: number | null,
+  ): Promise<void> {
+    if (!media.tmdbId) return;
+    const open = await this.requestRepo.find({
+      where: {
+        tmdbId: media.tmdbId,
+        mediaType: media.type,
+        status: In([
+          RequestStatus.PENDING,
+          RequestStatus.APPROVED,
+          RequestStatus.PROCESSING,
+        ]),
+      },
+    });
+    if (open.length === 0) return;
+
+    const mediaEnvelope = {
+      qualityProfileId: media.qualityProfile?.id ?? null,
+      languageProfileId: media.languageProfile?.id ?? null,
+    };
+
+    const touched: FliksRequest[] = [];
+    for (const r of open) {
+      const covers = await this.profiles.envelopeCovers(mediaEnvelope, {
+        qualityProfileId: r.qualityProfileId,
+        languageProfileId: r.languageProfileId,
+      });
+      if (!covers) continue;
+      r.media = media;
+      if (r.status === RequestStatus.PENDING) {
+        r.status = RequestStatus.APPROVED;
+        if (addedByUserId) {
+          r.approvedBy = { id: addedByUserId } as User;
+        }
+      }
+      touched.push(r);
+    }
+    if (touched.length) await this.requestRepo.save(touched);
   }
 
   /**
