@@ -351,6 +351,46 @@ export class HomeComponent implements OnInit, OnDestroy {
     }, false);
   }
 
+  /** "Mark as watched" can only fire on a movie with at least one file
+   *  or a series (bulk-toggle endpoint). For lean rows that don't expose
+   *  a file (e.g. recommendations without a local copy) the action stays
+   *  hidden from the context menu. */
+  canMarkMediaWatched(m: Media): boolean {
+    return m.type === 'series' || !!m.files?.length;
+  }
+
+  async toggleContinueWatchingWatched(item: ContinueWatchingItem, watched: boolean) {
+    try {
+      await this.streamingApi.toggleWatched(item.mediaId, item.mediaFileId, item.episodeId ?? undefined);
+      // Mark-watched drops the current episode but may surface the next
+      // one in the series (the backend auto-advances continue-watching).
+      // Refetch the row instead of filtering locally so the user sees the
+      // next episode appear in place rather than the card vanishing.
+      if (watched) {
+        const list = await this.streamingApi.getContinueWatching(undefined, { force: true }).catch(() => null);
+        if (list) this.continueWatching.set(list);
+      }
+    } catch { /* global error toast */ }
+  }
+
+  async toggleRecentMediaWatched(m: Media, watched: boolean) {
+    try {
+      if (m.type === 'series') {
+        await this.streamingApi.toggleSeriesWatched(m.id, watched);
+      } else {
+        const fileId = m.files?.[0]?.id;
+        if (!fileId) return;
+        await this.streamingApi.toggleWatched(m.id, fileId);
+      }
+      if (watched) {
+        // Recently-added is loaded with excludeWatched=true, so a watched
+        // row would vanish on the next refresh anyway — remove it now to
+        // match the visible expectation.
+        this.recentMedia.update(list => list.filter(x => x.id !== m.id));
+      }
+    } catch { /* global error toast */ }
+  }
+
   async removeContinueWatching(item: ContinueWatchingItem) {
     const confirmed = await this.confirmation.confirm({
       title: 'Retirer',
