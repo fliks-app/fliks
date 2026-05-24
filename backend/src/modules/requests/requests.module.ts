@@ -7,6 +7,7 @@ import { AuthModule } from '../auth/auth.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MediaModule } from '../media/media.module';
 import { ProfilesModule } from '../profiles/profiles.module';
+import { FliksSchedulerModule } from '../scheduler/scheduler.module';
 import { RequestsService } from './requests.service';
 import { RequestLifecycleService } from './request-lifecycle.service';
 import { RequestsController } from './requests.controller';
@@ -22,6 +23,10 @@ import { AutoApprovalRulesController } from './auto-approval-rules.controller';
     // for the monitoring + 409 fallback lookups.
     forwardRef(() => MediaModule),
     ProfilesModule,
+    // forwardRef because FliksSchedulerModule itself imports MediaModule,
+    // which already imports RequestsModule via forwardRef — defensive to
+    // avoid the cycle resolver throwing on a clean cold boot.
+    forwardRef(() => FliksSchedulerModule),
   ],
   controllers: [RequestsController, AutoApprovalRulesController],
   providers: [RequestsService, RequestLifecycleService],

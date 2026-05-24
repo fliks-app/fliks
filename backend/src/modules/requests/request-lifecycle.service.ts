@@ -15,6 +15,7 @@ import { Media } from '../media/entities/media.entity';
 import { MediaService } from '../media/media.service';
 import { ProfilesService } from '../profiles/profiles.service';
 import { EventsService } from '../scheduler/events.service';
+import { SchedulerService } from '../scheduler/scheduler.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { User } from '../users/entities/user.entity';
 import {
@@ -61,8 +62,22 @@ export class RequestLifecycleService
     private readonly mediaService: MediaService,
     private readonly profiles: ProfilesService,
     private readonly events: EventsService,
+    @Inject(forwardRef(() => SchedulerService))
+    private readonly scheduler: SchedulerService,
     private readonly notifications: NotificationsService,
   ) {}
+
+  /**
+   * Whether an import driven by a request approval should kick off a
+   * targeted search immediately, or wait for the next scheduled
+   * SearchMissing tick. Default is "yes" — users expect the download
+   * to start right after the green check. A future settings toggle
+   * (e.g. `requests.autoGrabOnApproval`) will read here so the admin
+   * can opt out without changing the rest of the pipeline.
+   */
+  private autoGrabOnApproval(): boolean {
+    return true;
+  }
 
   onModuleInit(): void {
     // Files landing on disk is the canonical "request might be
@@ -143,6 +158,14 @@ export class RequestLifecycleService
       );
     }
     if (touched.length) await this.requestRepo.save(touched);
+
+    // If the import actually satisfied at least one request, kick off
+    // an immediate SearchMissing for that media so the user doesn't
+    // wait up to 6 h for the next scheduled tick. Fire-and-forget;
+    // failures (missing indexer, etc.) are logged inside the scheduler.
+    if (touched.length && this.autoGrabOnApproval()) {
+      void this.scheduler.searchMissingForMedia([media.id]);
+    }
   }
 
   // ---------------------------------------------------------------------------

@@ -206,6 +206,29 @@ export class SchedulerService implements OnModuleInit {
     });
   }
 
+  /**
+   * Targeted, fire-and-forget search for one or more media ids. Used
+   * by the request lifecycle right after an approval-driven import so
+   * the user doesn't wait for the next scheduled SearchMissing tick
+   * (up to 6 h). Bypasses the Command row on purpose — the audit
+   * trail for this trigger lives on the request itself, an extra
+   * Command per approval would just clutter the history.
+   *
+   * Throws on infra misconfiguration (no indexer, no download client)
+   * are swallowed and logged: a botched auto-trigger shouldn't take
+   * down the approval transaction.
+   */
+  async searchMissingForMedia(mediaIds: number[]): Promise<void> {
+    if (mediaIds.length === 0) return;
+    try {
+      await this.doSearchMissing(mediaIds);
+    } catch (e) {
+      this.log.warn(
+        `searchMissingForMedia([${mediaIds.join(', ')}]) failed: ${(e as Error).message}`,
+      );
+    }
+  }
+
   async triggerCommand(name: string): Promise<Command> {
     const known = [
       ...SchedulerService.SCHEDULERS.filter((s) => s.triggerable).map(
