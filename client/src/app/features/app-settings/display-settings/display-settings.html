@@ -7,5 +7,14 @@
       [label]="'display_settings.home_background' | translate"
       [hint]="'display_settings.home_background_hint' | translate"
     />
+
+    <div class="divider my-0"></div>
+
+    <app-toggle-field
+      [value]="onlyMyRequests()"
+      (valueChange)="onOnlyMyRequestsChange($event)"
+      [label]="'display_settings.only_my_requests' | translate"
+      [hint]="'display_settings.only_my_requests_hint' | translate"
+    />
   </div>
 </div>

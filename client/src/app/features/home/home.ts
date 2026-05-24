@@ -2,7 +2,6 @@ import { Component, ChangeDetectionStrategy, inject, signal, effect, OnInit, OnD
 import { ActivatedRoute, NavigationStart, Router, RouterLink } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
-import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { MediaService, Media, CalendarEntry } from '../../core/services/api/media.service';
 import { StreamingApiService, ContinueWatchingItem, RecommendationItem } from '../../core/services/api/streaming-api.service';
@@ -57,7 +56,7 @@ import { AuthService } from '../../core/services/auth.service';
 @Component({
   selector: 'app-home',
   imports: [
-    RouterLink, TranslateModule, FormsModule,
+    RouterLink, TranslateModule,
     MediaCardComponent,
     HorizontalScrollerComponent,
     LucideIconComponent,
@@ -117,9 +116,19 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
     if (pool.length) this.backgroundService.setBackgrounds(pool);
   });
-  readonly onlyMyRequests = signal(
-    localStorage.getItem('fliks.home.onlyMyRequests') === 'true',
-  );
+  /** Reactively re-filter the home rows whenever the user flips the
+   *  "only my requests" toggle in display settings. Skips the very first
+   *  invocation so we don't double-fetch on initial page load — ngOnInit
+   *  already calls loadAllSections(). */
+  private firstOnlyMyRequestsRun = true;
+  private readonly onlyMyRequestsEffect = effect(() => {
+    void this.displaySettings.settings().onlyMyRequests;
+    if (this.firstOnlyMyRequestsRun) {
+      this.firstOnlyMyRequestsRun = false;
+      return;
+    }
+    void this.loadFilteredSections();
+  });
 
   libraryUrl(lib: LibrarySummary): string {
     return `/libraries/${encodeURIComponent(lib.name)}`;
@@ -247,14 +256,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     root.querySelector<HTMLElement>(FOCUSABLE)?.focus({ preventScroll: false });
   }
 
-  async toggleOnlyMyRequests() {
-    this.onlyMyRequests.update((v) => !v);
-    localStorage.setItem('fliks.home.onlyMyRequests', String(this.onlyMyRequests()));
-    await this.loadFilteredSections();
-  }
-
   private async loadFilteredSections() {
-    const mine = this.onlyMyRequests();
+    const mine = this.displaySettings.settings().onlyMyRequests;
     const today = new Date();
     const threeDaysAgo = new Date(today);
     threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
