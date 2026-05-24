@@ -101,64 +101,16 @@
                     </td>
                     <td class="text-end">
                       @if (canGrab() && sub.providerType !== 'embedded') {
-                        <app-dropdown-menu placement="top-end">
-                          <div trigger tabindex="0" role="button" class="btn btn-ghost btn-xs" [class.btn-disabled]="subtitleActionBusy()">
-                            {{ 'media_detail.subtitle_actions' | translate }}
-                            <svg lucideChevronDown class="h-3 w-3"></svg>
-                          </div>
-                          <button type="button" class="dropdown-item text-white" (click)="openSyncModal(sub.id)">
-                            <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                            {{ 'media_detail.action_sync' | translate }}
-                          </button>
-                          <button type="button" class="dropdown-item text-white" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'removeHiTags' })">
-                            <svg lucideVolume2 class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                            {{ 'media_detail.action_remove_hi' | translate }}
-                          </button>
-                          <button type="button" class="dropdown-item text-white" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'removeStyleTags' })">
-                            <svg lucideCode class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                            {{ 'media_detail.action_remove_style' | translate }}
-                          </button>
-                          <button type="button" class="dropdown-item text-white" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'removeEmoji' })">
-                            <svg lucideSmile class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                            {{ 'media_detail.action_remove_emoji' | translate }}
-                          </button>
-                          <button type="button" class="dropdown-item text-white" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'ocrFixes' })">
-                            <svg lucideImage class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                            {{ 'media_detail.action_ocr_fixes' | translate }}
-                          </button>
-                          <button type="button" class="dropdown-item text-white" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'commonFixes' })">
-                            <svg lucideThermometer class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                            {{ 'media_detail.action_common_fixes' | translate }}
-                          </button>
-                          <button type="button" class="dropdown-item text-white" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'fixUppercase' })">
-                            <svg lucideMaximize2 class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                            {{ 'media_detail.action_fix_uppercase' | translate }}
-                          </button>
-                          <button type="button" class="dropdown-item text-white" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'reverseRtl' })">
-                            <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                            {{ 'media_detail.action_reverse_rtl' | translate }}
-                          </button>
-                          <button type="button" class="dropdown-item text-white" (click)="postProcessSubtitle({ subtitleId: sub.id, action: 'convertToSrt' })">
-                            <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                            {{ 'media_detail.action_convert_srt' | translate }}
-                          </button>
-                          <button type="button" class="dropdown-item text-white" (click)="openAdjustModal(sub.id)">
-                            <svg lucideClock class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                            {{ 'media_detail.action_adjust_times' | translate }}
-                          </button>
-                          <button type="button" class="dropdown-item text-white" (click)="openFpsModal(sub.id)">
-                            <svg lucideZap class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-                            {{ 'media_detail.action_change_fps' | translate }}
-                          </button>
-                          <button type="button" class="dropdown-item text-warning" (click)="blacklistSubtitle(sub)">
-                            <svg lucideBan class="h-4 w-4 shrink-0 opacity-80" aria-hidden="true"></svg>
-                            {{ 'media_detail.action_blacklist' | translate }}
-                          </button>
-                          <button type="button" class="dropdown-item text-error" (click)="deleteSubtitle(sub.id)">
-                            <svg lucideTrash2 class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
-                            {{ 'media_detail.action_delete' | translate }}
-                          </button>
-                        </app-dropdown-menu>
+                        <button
+                          #actionsTrigger
+                          type="button"
+                          class="btn btn-ghost btn-xs"
+                          [disabled]="subtitleActionBusy()"
+                          (click)="openSubActions(sub, actionsTrigger)"
+                        >
+                          {{ 'media_detail.subtitle_actions' | translate }}
+                          <svg lucideChevronDown class="h-3 w-3"></svg>
+                        </button>
                       }
                     </td>
                   </tr>
@@ -178,6 +130,74 @@
       }
     </section>
   </div>
+
+  <!-- Single shared Actions popover. Lives INSIDE the parent <dialog>
+       so it participates in the same top-layer once the dialog is open
+       via showModal() — otherwise the modal would paint over it
+       regardless of z-index. `position: fixed` on the popover-menu's
+       content escapes modal-box's overflow on its own. -->
+  @if (actionsSub()) {
+    <app-popover-menu
+      [open]="true"
+      [anchor]="actionsAnchor()"
+      placement="top-end"
+      (closed)="closeSubActions()"
+    >
+      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => openSyncModal(s.id))">
+        <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_sync' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => postProcessSubtitle({ subtitleId: s.id, action: 'removeHiTags' }))">
+        <svg lucideVolume2 class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_remove_hi' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => postProcessSubtitle({ subtitleId: s.id, action: 'removeStyleTags' }))">
+        <svg lucideCode class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_remove_style' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => postProcessSubtitle({ subtitleId: s.id, action: 'removeEmoji' }))">
+        <svg lucideSmile class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_remove_emoji' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => postProcessSubtitle({ subtitleId: s.id, action: 'ocrFixes' }))">
+        <svg lucideImage class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_ocr_fixes' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => postProcessSubtitle({ subtitleId: s.id, action: 'commonFixes' }))">
+        <svg lucideThermometer class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_common_fixes' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => postProcessSubtitle({ subtitleId: s.id, action: 'fixUppercase' }))">
+        <svg lucideMaximize2 class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_fix_uppercase' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => postProcessSubtitle({ subtitleId: s.id, action: 'reverseRtl' }))">
+        <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_reverse_rtl' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => postProcessSubtitle({ subtitleId: s.id, action: 'convertToSrt' }))">
+        <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_convert_srt' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => openAdjustModal(s.id))">
+        <svg lucideClock class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_adjust_times' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => openFpsModal(s.id))">
+        <svg lucideZap class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_change_fps' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-warning" (click)="runSubAction(s => blacklistSubtitle(s))">
+        <svg lucideBan class="h-4 w-4 shrink-0 opacity-80" aria-hidden="true"></svg>
+        {{ 'media_detail.action_blacklist' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-error" (click)="runSubAction(s => deleteSubtitle(s.id))">
+        <svg lucideTrash2 class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
+        {{ 'media_detail.action_delete' | translate }}
+      </button>
+    </app-popover-menu>
+  }
+
   <form method="dialog" class="modal-backdrop">
     <button>close</button>
   </form>

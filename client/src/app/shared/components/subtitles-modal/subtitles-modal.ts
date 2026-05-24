@@ -47,7 +47,7 @@ import { SseService } from '../../../core/services/sse.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { PaginationComponent } from '../pagination/pagination';
 import { MediaDetailSubtitleSearchModalComponent } from '../../../features/media-detail/components/media-detail-subtitle-search-modal/media-detail-subtitle-search-modal.component';
-import { DropdownMenuComponent } from '../dropdown-menu';
+import { PopoverMenuComponent } from '../popover-menu';
 import type { MediaInfoHeaderSubtitle } from '../media-info-header/media-info-header';
 
 interface SubtitleRow {
@@ -71,7 +71,7 @@ interface SubtitleRow {
     SubtitleFilenamePipe,
     PaginationComponent,
     MediaDetailSubtitleSearchModalComponent,
-    DropdownMenuComponent,
+    PopoverMenuComponent,
     LucideArrowRightLeft,
     LucideBan,
     LucideChevronDown,
@@ -115,6 +115,31 @@ export class SubtitlesModalComponent {
   readonly subtitles = signal<SubtitleFileRow[]>([]);
   readonly subtitlesLoading = signal(false);
   readonly subtitleActionBusy = signal(false);
+
+  /** Row whose Actions popover is currently open. `null` when closed.
+   *  A single popover instance is reused for every row; `actionsSub()`
+   *  resolves the active row's data inside the popover template. */
+  readonly actionsOpenForId = signal<number | null>(null);
+  readonly actionsAnchor = signal<HTMLElement | null>(null);
+  readonly actionsSub = computed(() => {
+    const id = this.actionsOpenForId();
+    return id == null ? null : this.subtitles().find((s) => s.id === id) ?? null;
+  });
+
+  protected openSubActions(sub: SubtitleFileRow, anchor: HTMLElement) {
+    this.actionsAnchor.set(anchor);
+    this.actionsOpenForId.set(sub.id);
+  }
+  protected closeSubActions() {
+    this.actionsOpenForId.set(null);
+    this.actionsAnchor.set(null);
+  }
+  protected runSubAction(action: (sub: SubtitleFileRow) => void): void {
+    const sub = this.actionsSub();
+    if (!sub) return;
+    this.closeSubActions();
+    action(sub);
+  }
   readonly subSearchLang = signal('en');
   readonly subSearchResults = signal<SubtitleSearchResult[]>([]);
   readonly subSearchLoading = signal(false);
