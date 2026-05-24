@@ -130,6 +130,10 @@ export class PlayerControlsComponent {
   readonly paused = input(true);
   readonly loading = input(false);
   readonly buffering = input(false);
+  /** True once the first decoded frame is on the surface. Hides the big
+   *  mobile play/pause button on cold start so it doesn't overlay the
+   *  centered loading spinner before any frame has rendered. */
+  readonly videoStarted = input(true);
   readonly currentTime = input(0);
   readonly duration = input(0);
   readonly bufferedEnd = input(0);

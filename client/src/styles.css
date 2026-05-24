@@ -88,6 +88,31 @@ body.native {
 body.native.immersive {
   padding: 0 !important;
 }
+/* Suppress browser-style text / image selection on Capacitor builds.
+   A long-press on iOS (and on some Android builds) otherwise opens the
+   system "Copy / Save Image" menu when the user just meant to focus or
+   hold a media card. Inputs, textareas and explicit `[contenteditable]`
+   regions are re-enabled below so forms and dialogs still work. The
+   `.select-text` opt-in lets specific surfaces (e.g. release notes,
+   stack traces in the debug panel) keep selection if we want it. */
+body.native,
+body.native * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+}
+body.native input,
+body.native textarea,
+body.native [contenteditable="true"],
+body.native [contenteditable=""],
+body.native .select-text,
+body.native .select-text * {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
 /* Native player (ExoPlayer/AVPlayer behind WebView) — force ALL layers transparent
    so the native video surface shows through the WebView. */
 html.native-player-active {
@@ -230,18 +255,6 @@ body.tv *:hover {
   box-shadow: none !important;
 }
 
-/* Seekbar thumb: when its parent slider has focus, paint a primary ring
-   around the white dot with a 2 px base-100 gap. Implemented as plain
-   box-shadow so the rule works on Tizen 6.5 / Chromium 85 where
-   Tailwind v4's `ring-*` utilities can lose their custom-property
-   wiring through the downlevel CSS pipeline. */
-[role="slider"]:focus .seekbar-thumb,
-[role="slider"]:focus-visible .seekbar-thumb {
-  box-shadow:
-    0 0 0 2px var(--color-base-100, #1d232a),
-    0 0 0 4px var(--color-primary, #7a3ff2);
-  transform: translateX(-50%) scale(1.25);
-}
 /* TV ghost buttons keep their transparent bg even when focused. The
    3px primary-color outline above is already a strong focus cue on a
    10-foot UI, so layering daisyUI's fill (which kicks in via the

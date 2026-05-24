@@ -21,7 +21,6 @@ export class SeekbarComponent {
   readonly spriteMetadata = input<SpriteMetadata | null>(null);
   readonly variant = input<'player' | 'cast'>('player');
   readonly showTooltip = input(true);
-  readonly showThumb = input(true);
   readonly showBuffered = input(true);
   readonly chapters = input<{ startSeconds: number; endSeconds: number; title?: string }[]>([]);
 
@@ -66,6 +65,20 @@ export class SeekbarComponent {
   readonly displayPercent = computed(() => {
     const d = this.duration() || 1;
     return (this.displayTime() / d) * 100;
+  });
+
+  /** Track height + tint class string. Slim baseline (`h-1.5`),
+   *  thickens to `h-2.5` while dragging or on group-hover / focus
+   *  (handled with the `group-hover:` / `group-focus-visible:`
+   *  utilities so we don't need a (focus)/(blur) Angular listener
+   *  on the parent slider). The dot syntax in Tailwind utilities
+   *  (`h-1.5`) can't be expressed via `[class.h-1.5]` bindings —
+   *  Angular's class-toggle syntax stops at the dot — so the class
+   *  list is assembled here. */
+  readonly trackClass = computed(() => {
+    if (this.variant() === 'cast') return 'h-1.5 bg-base-300';
+    const base = 'bg-white/20 group-hover:h-2.5 group-focus-visible:h-2.5';
+    return this.dragging() ? `${base} h-2.5` : `${base} h-1.5`;
   });
 
   // Sprite preview computeds
