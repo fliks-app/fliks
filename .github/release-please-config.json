@@ -18,7 +18,8 @@
           "jsonpath": "$.version"
         },
         "client/android/app/build.gradle",
-        "cast-receiver/index.html"
+        "cast-receiver/index.html",
+        "client/ios/App/App.xcodeproj/project.pbxproj"
       ]
     }
   }
