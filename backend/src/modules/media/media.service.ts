@@ -906,11 +906,43 @@ export class MediaService {
     const media = await this.findOne(id);
     const title = media.title;
     const mediaPath = media.path;
+    await this.declineLinkedActiveRequests(media);
     await this.mediaRepo.remove(media);
     void this.mediaServers.dispatch('media.deleted', {
       title,
       path: mediaPath,
     });
+  }
+
+  /**
+   * When the admin removes a media from the library, any request still
+   * tied to it (`PENDING` / `APPROVED` / `PROCESSING`) has no chance of
+   * being fulfilled — the row is going away. Flip them to `DECLINED`
+   * with a machine-readable reason so users see a clear "Media retiré
+   * de la bibliothèque" instead of a stale "in progress" status.
+   *
+   * `AVAILABLE` requests stay as-is: the user already had the content
+   * at some point, and a post-removal delete is part of the user's
+   * own history, not a rejection of their request.
+   */
+  private async declineLinkedActiveRequests(media: Media): Promise<void> {
+    const linked = await this.requestRepo.find({
+      where: {
+        media: { id: media.id },
+        status: In([
+          RequestStatus.PENDING,
+          RequestStatus.APPROVED,
+          RequestStatus.PROCESSING,
+        ]),
+      },
+    });
+    if (linked.length === 0) return;
+    for (const r of linked) {
+      r.status = RequestStatus.DECLINED;
+      r.declinedReason = 'Media removed from library';
+      r.media = null;
+    }
+    await this.requestRepo.save(linked);
   }
 
   // ---------------------------------------------------------------------------
