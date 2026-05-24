@@ -7,6 +7,7 @@ import {
   inject,
   input,
   output,
+  signal,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { BottomSheetComponent } from './bottom-sheet';
@@ -35,6 +36,12 @@ import { DismissableStackService } from '../../core/services/dismissable-stack.s
   standalone: true,
   imports: [BottomSheetComponent, NgTemplateOutlet],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // `display: contents` keeps the host out of its parent's layout — the
+  // backdrop + content divs are `position: fixed` so they don't need a
+  // box of their own, and the host would otherwise act as a stray grid
+  // item inside a parent like daisyUI's `.modal` (display: grid;
+  // place-items: center) and shift the modal-box off-centre.
+  styles: [':host { display: contents; }'],
   template: `
     <!-- Capture projected content in a template ref so it can be rendered
          in either the dropdown or sheet branch without hitting the
@@ -78,18 +85,31 @@ export class PopoverMenuComponent {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly dismissStack = inject(DismissableStackService);
 
+  /** Ticked on every scroll / resize while the popover is open so the
+   *  `position()` computed re-reads the anchor's `getBoundingClientRect`
+   *  and the `position: fixed` box stays glued to the trigger. */
+  private readonly viewportTick = signal(0);
+
   constructor() {
-    // Move the host to <html> on every platform that renders the sheet
-    // variant. Two separate problems both need this:
+    // Move the host out of any clipping / transformed ancestor on the
+    // sheet variant (touch / TV). Two separate problems need this:
     //   • TV → body.tv has a scale transform that re-anchors fixed
     //     descendants to body's box instead of the viewport.
     //   • Mobile → the layout's drawer-content is `position: relative`,
     //     creating a stacking context that traps z-[101] below the
     //     bottom dock (z-40 at body level).
-    // Hosting under <html> escapes both.
+    //
+    // Target: the closest open <dialog> ancestor if there is one, so we
+    // stay inside its top-layer (showModal() puts the dialog above
+    // everything else regardless of z-index); otherwise <html>.
     if (typeof document !== 'undefined' && !this.useDropdown()) {
       queueMicrotask(() => {
-        document.documentElement.appendChild(this.host.nativeElement);
+        const openDialog = this.host.nativeElement.closest<HTMLDialogElement>(
+          'dialog[open]',
+        );
+        (openDialog ?? document.documentElement).appendChild(
+          this.host.nativeElement,
+        );
       });
     }
     // Focus the first focusable inside the menu on every open. autofocus
@@ -115,19 +135,33 @@ export class PopoverMenuComponent {
       const close = () => this.close();
       this.dismissStack.push(close);
       onCleanup(() => this.dismissStack.remove(close));
+
+      // Re-tick on scroll / resize so the `position()` computed
+      // re-reads `getBoundingClientRect` and the fixed-positioned box
+      // stays glued to its trigger. `capture: true` catches scrolls in
+      // any nested overflow container, not just window.
+      if (typeof window === 'undefined' || !this.useDropdown()) return;
+      const tick = () => this.viewportTick.update((v) => v + 1);
+      window.addEventListener('scroll', tick, { capture: true, passive: true });
+      window.addEventListener('resize', tick);
+      onCleanup(() => {
+        window.removeEventListener('scroll', tick, { capture: true } as never);
+        window.removeEventListener('resize', tick);
+      });
     });
   }
 
   /** Anchored dropdown only on desktop with a mouse. TV + touch get the sheet. */
   readonly useDropdown = computed(() => !this.tv.isTv() && !this.device.isTouch());
 
-  /** Recomputed every render. The parent passes anchor by ref so we can
-   *  read its bounding box at open time without an explicit signal.
-   *  `maxHeight` is capped to the available space between the popover's
-   *  edge and the viewport edge so a long list doesn't overflow off-screen
-   *  (the internal `overflow-y-auto` only scrolls content INSIDE the box,
-   *  it doesn't help when the box itself is taller than the viewport). */
+  /** Re-reads `getBoundingClientRect` on every anchor change AND on
+   *  every viewport tick (scroll / resize) so the fixed-positioned box
+   *  follows its trigger when the page moves under it. `maxHeight` is
+   *  capped to the available space between the popover's edge and the
+   *  viewport edge so a long list doesn't overflow off-screen (the
+   *  internal `overflow-y-auto` only scrolls content INSIDE the box). */
   readonly position = computed(() => {
+    this.viewportTick(); // dependency: forces recompute on scroll / resize
     const a = this.anchor();
     if (!a) return { top: 0, left: 0, width: 0, maxHeight: 0 };
     const r = a.getBoundingClientRect();

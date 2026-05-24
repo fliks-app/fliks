@@ -410,14 +410,18 @@ body.tv .to-base-100\/50 {
 /* Shared item style for app-dropdown-menu (desktop dropdown + mobile/TV
    bottom sheet). Caller adds a colour utility (`text-white`, `text-error`,
    …) and an icon — everything else (padding, hover, focus, layout) lives
-   here so each menu item stays a one-liner. */
+   here so each menu item stays a one-liner.
+   `focus-visible` (not plain `focus`) so the highlight only shows on
+   keyboard / D-pad navigation. A touch tap auto-focuses the item which
+   would otherwise leave a lingering "selected" tint on phones and
+   tablets after the sheet closes. */
 .dropdown-item {
-  @apply w-full flex items-center gap-3 px-3 py-2 text-left text-base rounded-lg cursor-pointer hover:bg-white/5 focus:bg-white/10 focus:outline-none active:bg-white/10 disabled:opacity-40;
+  @apply w-full flex items-center gap-3 px-3 py-2 text-left text-base rounded-lg cursor-pointer hover:bg-white/5 focus-visible:bg-white/10 focus-visible:outline-none active:bg-white/10 disabled:opacity-40;
 }
 /* TV / keyboard focus: subtle hover tint isn't enough on a 10-foot UI —
    the user can't track which row is highlighted from the couch without
    a clear ring. */
-body.tv .dropdown-item:focus {
+body.tv .dropdown-item:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: -2px;
 }

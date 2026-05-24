@@ -16,7 +16,7 @@
           @let init = initials(user.username);
           <button
             type="button"
-            class="flex flex-col items-center gap-2 p-2 rounded-lg hover:bg-base-100 focus:bg-base-100 transition-colors"
+            class="flex flex-col items-center gap-2 p-2 rounded-lg hover:bg-base-100 focus-visible:bg-base-100 transition-colors"
             (click)="selectUser(user); $event.stopPropagation()"
           >
             <div class="avatar avatar-placeholder">
