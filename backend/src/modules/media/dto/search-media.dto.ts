@@ -92,6 +92,13 @@ export class SearchMediaDto {
   @Transform(({ value }) => value === 'true' || value === true)
   excludeWatched?: boolean;
 
+  /** Inverse of `excludeWatched` — only return media the current user has
+   *  finished. Mutually exclusive in practice (UI exposes a tri-state). */
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  onlyWatched?: boolean;
+
   /** Only return media that the current user requested (via the requests system). */
   @IsBoolean()
   @IsOptional()

@@ -61,6 +61,39 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 
+/**
+ * Subquery returning every media.id that the user (`:userId` bind) has
+ * finished. Used by both `excludeWatched` (NOT IN …) and `onlyWatched`
+ * (IN …) in `findAll`.
+ *
+ * - Movies: any completed playback for that media counts as watched.
+ * - Series: watched only when every episode with a file (specials, season 0,
+ *   excluded) has a completed playback row for this user. A series with no
+ *   downloaded episodes never qualifies as watched.
+ */
+const WATCHED_MEDIA_IDS_SUBQUERY = `
+  SELECT DISTINCT ps."mediaId" AS id FROM playback_states ps
+  INNER JOIN media m ON m.id = ps."mediaId"
+  WHERE ps."userId" = :userId AND ps.completed = true AND m.type = 'movie'
+  UNION
+  SELECT m2.id FROM media m2
+  WHERE m2.type = 'series'
+  AND EXISTS (
+    SELECT 1 FROM seasons s
+    JOIN episodes e ON e."seasonId" = s.id
+    WHERE s."mediaId" = m2.id AND s."seasonNumber" > 0 AND e."hasFile" = true
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM seasons s
+    JOIN episodes e ON e."seasonId" = s.id
+    WHERE s."mediaId" = m2.id AND s."seasonNumber" > 0 AND e."hasFile" = true
+    AND NOT EXISTS (
+      SELECT 1 FROM playback_states ps2
+      WHERE ps2."userId" = :userId AND ps2."episodeId" = e.id AND ps2.completed = true
+    )
+  )
+`;
+
 @Injectable()
 export class MediaService {
   private readonly log = new Logger(MediaService.name);
@@ -477,35 +510,9 @@ export class MediaService {
     this.applyLibraryAcl(qb, accessibleLibraryIds);
     this.applyFilters(qb, query);
 
-    if (query.excludeWatched && userId) {
-      // Movies: any completed playback for that media = watched.
-      // Series: watched only when every episode with hasFile has a completed playback row.
-      qb.andWhere(
-        `(media.id NOT IN (
-            SELECT DISTINCT ps."mediaId" FROM playback_states ps
-            INNER JOIN media m ON m.id = ps."mediaId"
-            WHERE ps."userId" = :userId AND ps.completed = true AND m.type = 'movie'
-          )
-          AND media.id NOT IN (
-            SELECT m2.id FROM media m2
-            WHERE m2.type = 'series'
-            AND EXISTS (
-              SELECT 1 FROM seasons s
-              JOIN episodes e ON e."seasonId" = s.id
-              WHERE s."mediaId" = m2.id AND s."seasonNumber" > 0 AND e."hasFile" = true
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM seasons s
-              JOIN episodes e ON e."seasonId" = s.id
-              WHERE s."mediaId" = m2.id AND s."seasonNumber" > 0 AND e."hasFile" = true
-              AND NOT EXISTS (
-                SELECT 1 FROM playback_states ps
-                WHERE ps."userId" = :userId AND ps."episodeId" = e.id AND ps.completed = true
-              )
-            )
-          ))`,
-        { userId },
-      );
+    if ((query.excludeWatched || query.onlyWatched) && userId) {
+      const op = query.onlyWatched ? 'IN' : 'NOT IN';
+      qb.andWhere(`media.id ${op} (${WATCHED_MEDIA_IDS_SUBQUERY})`, { userId });
     }
 
     if (query.requestedByMe && userId) {

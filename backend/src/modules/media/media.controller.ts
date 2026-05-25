@@ -92,7 +92,9 @@ export class MediaController {
       await this.libraries.getAccessibleLibraryIds(user);
     return this.mediaService.findAll(
       query,
-      query.excludeWatched || query.requestedByMe ? user?.id : undefined,
+      query.excludeWatched || query.onlyWatched || query.requestedByMe
+        ? user?.id
+        : undefined,
       accessibleLibraryIds,
     );
   }
