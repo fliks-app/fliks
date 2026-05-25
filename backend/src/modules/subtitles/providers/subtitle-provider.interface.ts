@@ -15,6 +15,10 @@ export interface SubtitleSearchParams {
    *  (release_group, source, resolution, codecs). Providers ignore
    *  this; it only matters in SubtitlesService. */
   videoReleaseName?: string;
+  /** Per-language hearing-impaired preference: `prefer` / `avoid` flip
+   *  the 1-point scorer bit; `require` / `forbid` filter candidates
+   *  in the orchestrator before scoring. Default `avoid`. */
+  hearingImpairedMode?: 'prefer' | 'avoid' | 'require' | 'forbid';
 }
 
 /**

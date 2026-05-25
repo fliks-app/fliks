@@ -11,7 +11,10 @@ import { SubtitleSyncService } from '../subtitles/subtitle-sync.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SettingsService } from '../settings/settings.service';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
-import { SubtitleLanguageItem } from '../profiles/entities/language-profile.entity';
+import {
+  SubtitleLanguageItem,
+  resolveHearingImpairedMode,
+} from '../profiles/entities/language-profile.entity';
 import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
 
@@ -129,6 +132,7 @@ export class SubtitleSchedulerService {
               videoReleaseName,
               moviehash: file.osdbHash ?? undefined,
               moviebytesize: file.osdbBytesize ?? undefined,
+              hearingImpairedMode: resolveHearingImpairedMode(langItem),
             });
 
             const best = results.find((r) => r.score >= minScore);
@@ -225,6 +229,9 @@ export class SubtitleSchedulerService {
         const videoReleaseName = fileRel
           ? path.basename(fileRel, path.extname(fileRel))
           : undefined;
+        const langItem = sub.media?.languageProfile?.subtitleLanguages?.find(
+          (l) => l.isoCode === sub.language,
+        );
         const results = await this.subtitlesService.searchSubtitles({
           imdbId: sub.media?.imdbId ?? undefined,
           tmdbId: sub.media?.tmdbId,
@@ -236,6 +243,9 @@ export class SubtitleSchedulerService {
           videoReleaseName,
           moviehash: sub.mediaFile?.osdbHash ?? undefined,
           moviebytesize: sub.mediaFile?.osdbBytesize ?? undefined,
+          hearingImpairedMode: langItem
+            ? resolveHearingImpairedMode(langItem)
+            : 'avoid',
         });
 
         // Invariant: a hash-matched sub is the perfect time sync — refuse
@@ -395,6 +405,7 @@ export class SubtitleSchedulerService {
           videoReleaseName,
           moviehash: mediaFile.osdbHash ?? undefined,
           moviebytesize: mediaFile.osdbBytesize ?? undefined,
+          hearingImpairedMode: resolveHearingImpairedMode(langItem),
         });
 
         const best = results.find((r) => r.score >= minScore);
