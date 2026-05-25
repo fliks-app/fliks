@@ -516,6 +516,8 @@ export class MediaController {
       season,
       episode,
       videoReleaseName,
+      moviehash: matchingFile?.osdbHash ?? undefined,
+      moviebytesize: matchingFile?.osdbBytesize ?? undefined,
     });
   }
 
