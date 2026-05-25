@@ -2,6 +2,7 @@ import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, LessThan, Repository } from 'typeorm';
+import * as fs from 'fs';
 import * as path from 'path';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
@@ -246,6 +247,52 @@ export class CompletionService {
     );
   }
 
+  /**
+   * Collapse duplicate `grabbed`/`failed`/`warning` rows that target the
+   * same destination (same mediaId + sourceTitle). Keeps the most
+   * recently updated row in the working set and marks the others as
+   * `completed` — they're bookkeeping artefacts from past grab retries
+   * (manual + scheduler racing), not real units of work. Without this,
+   * the import loop spends a full 25 s re-copying the same file every
+   * minute for each duplicate before they all reach `completed`.
+   */
+  private async dedupeGrabbed(
+    rows: DownloadHistory[],
+  ): Promise<DownloadHistory[]> {
+    if (rows.length < 2) return rows;
+    const byKey = new Map<string, DownloadHistory[]>();
+    for (const r of rows) {
+      const key = `${r.mediaId ?? 'no-media'}|${(r.sourceTitle ?? '').toLowerCase()}`;
+      const list = byKey.get(key) ?? [];
+      list.push(r);
+      byKey.set(key, list);
+    }
+    const keep: DownloadHistory[] = [];
+    const obsolete: number[] = [];
+    for (const group of byKey.values()) {
+      if (group.length === 1) {
+        keep.push(group[0]);
+        continue;
+      }
+      group.sort(
+        (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
+      );
+      keep.push(group[0]);
+      for (let i = 1; i < group.length; i++) obsolete.push(group[i].id);
+    }
+    if (obsolete.length) {
+      await this.historyRepo.update(obsolete, {
+        status: 'completed',
+        statusMessage:
+          'Auto-collapsed duplicate import row — keeping the most recent entry',
+      });
+      this.log.log(
+        `Import: collapsed ${obsolete.length} duplicate history row(s) (kept ${keep.length} unique)`,
+      );
+    }
+    return keep;
+  }
+
   @Cron(CronExpression.EVERY_MINUTE)
   async processCompleted(): Promise<void> {
     // Load qBit + history in this order: we want the auto-match step
@@ -261,13 +308,21 @@ export class CompletionService {
       return;
     }
 
-    const grabbed = await this.historyRepo.find({
+    const grabbedRaw = await this.historyRepo.find({
       where: [
         { status: 'grabbed' },
         { status: 'failed' },
         { status: 'warning' },
       ],
     });
+    // Deduplicate: when the same (mediaId, sourceTitle) appears multiple
+    // times in `grabbed` status the import flow used to process one row
+    // per tick, re-copying the same destination file every minute for
+    // 25–30 s of pure waste before the next duplicate was picked up. We
+    // keep the most recently updated row and flip its older siblings
+    // straight to `completed` (silent — they reference the same media
+    // and the same destination, so this is just bookkeeping).
+    const grabbed = await this.dedupeGrabbed(grabbedRaw);
 
     const allTorrents = (
       await Promise.all(
@@ -649,14 +704,32 @@ export class CompletionService {
 
       const destPath = path.join(destDir, newFilename + ext);
 
-      this.log.log(
-        `Import[${history.sourceTitle}]: copying "${path.basename(videoFile.filePath)}" → "${destPath}"`,
-      );
-      await this.fileTransfer.transferFile(
-        videoFile.filePath,
-        destPath,
-        'copy',
-      );
+      // Skip the (expensive) copy when the destination already holds a
+      // file of the same size as the source. Belt-and-braces against a
+      // duplicate history row slipping past `dedupeGrabbed` — without
+      // this guard we re-copied 5-10 GB of identical bytes every
+      // import-tick for as long as the duplicate row sat in `grabbed`.
+      let destExists = false;
+      try {
+        const stat = await fs.promises.stat(destPath);
+        destExists = stat.isFile() && stat.size === videoFile.size;
+      } catch {
+        destExists = false;
+      }
+      if (destExists) {
+        this.log.log(
+          `Import[${history.sourceTitle}]: destination already in place at "${destPath}" (${videoFile.size} bytes) — skipping copy, refreshing DB only`,
+        );
+      } else {
+        this.log.log(
+          `Import[${history.sourceTitle}]: copying "${path.basename(videoFile.filePath)}" → "${destPath}"`,
+        );
+        await this.fileTransfer.transferFile(
+          videoFile.filePath,
+          destPath,
+          'copy',
+        );
+      }
 
       // Copy companion files for this video — torrent client keeps seeding
       // from the source, so we never move.
