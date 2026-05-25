@@ -122,7 +122,6 @@ export class CompletionService {
     allTorrents: ReadonlyArray<
       QbittorrentTorrent & { _clientId: number; _client: DownloadClient }
     >,
-    grabbed: DownloadHistory[],
   ): Promise<void> {
     if (!allTorrents.length) return;
 
@@ -137,6 +136,12 @@ export class CompletionService {
       relations: ['media'],
     });
     const rowByHash = new Map<string, DownloadHistory>();
+    const activeHistory = allHistory.filter(
+      (h) =>
+        h.status === 'grabbed' ||
+        h.status === 'failed' ||
+        h.status === 'warning',
+    );
     for (const h of allHistory) {
       if (h.torrentHash) rowByHash.set(h.torrentHash.toLowerCase(), h);
     }
@@ -165,10 +170,10 @@ export class CompletionService {
     for (const torrent of candidates) {
       const existingRow = rowByHash.get(torrent.hash!.toLowerCase());
 
-      // Belt-and-braces: name-fallback against currently-grabbed rows.
+      // Belt-and-braces: name-fallback against currently-active rows.
       // Only skip if that match actually has a media reference — a
       // \`mediaId IS NULL\` ghost row would otherwise prevent the heal.
-      const fallback = this.historyMatcher.findMatch(torrent, grabbed);
+      const fallback = this.historyMatcher.findMatch(torrent, activeHistory);
       if (fallback?.history.mediaId) {
         skippedByNameFallback++;
         continue;
@@ -227,7 +232,6 @@ export class CompletionService {
             }),
           ),
         );
-        grabbed.push(row);
         bound++;
       }
 
@@ -248,26 +252,20 @@ export class CompletionService {
 
   @Cron(CronExpression.EVERY_MINUTE)
   async processCompleted(): Promise<void> {
-    // Load qBit + history in this order: we want the auto-match step
-    // to run even when `grabbed` is empty — that's PRECISELY the case
-    // an orphan-recovery flow is for (torrents in qBit with no history
-    // row at all). The previous early-return on empty `grabbed` is the
-    // reason the user reported "auto-match never logs anything"
-    // immediately after a fresh deploy.
+    // Source of truth = qBittorrent. We iterate over the torrents qBit
+    // reports, resolve each to its single canonical `DownloadHistory`
+    // row, then import the completed ones. The previous flow was
+    // history-centric (iterate every grabbed row, look for a matching
+    // torrent) which O(n)-loops over every legacy duplicate every
+    // minute. After migration 1779500000000 collapsed the legacy
+    // duplicates the matcher returns exactly one row per torrent and
+    // the loop is bounded by the qBit-torrent count.
     const clients = await this.clientRepo.find({ where: { enabled: true } });
     const qbitClients = clients.filter((c) => this.qbittorrent.supports(c));
     if (!qbitClients.length) {
       this.log.warn('Import: no enabled qBittorrent client found');
       return;
     }
-
-    const grabbed = await this.historyRepo.find({
-      where: [
-        { status: 'grabbed' },
-        { status: 'failed' },
-        { status: 'warning' },
-      ],
-    });
 
     const allTorrents = (
       await Promise.all(
@@ -278,6 +276,28 @@ export class CompletionService {
       )
     ).flat();
 
+    // Phase 1 — auto-match orphan torrents (creates history rows for
+    // qBit torrents that have no DB linkage yet).
+    await this.autoMatchOrphanTorrents(allTorrents);
+
+    // Load active rows AFTER auto-match so freshly-created rows are
+    // included. `failed` and `warning` rows stay candidates so a user
+    // who fixes the underlying issue (renamed file, edited library
+    // path…) just has to wait one tick.
+    const grabbed = await this.historyRepo.find({
+      where: [
+        { status: 'grabbed' },
+        { status: 'failed' },
+        { status: 'warning' },
+      ],
+    });
+
+    // Phase 2 — orphan-history sweep: rows whose torrent has vanished
+    // from qBit for longer than the grace period flip to `failed`.
+    // Media link is preserved.
+    await this.markStaleHistoryAsFailed(allTorrents, grabbed);
+
+    // Phase 3 — import the completed torrents.
     const completedTorrents = allTorrents.filter(
       (t) =>
         t.progress >= 1 ||
@@ -285,64 +305,7 @@ export class CompletionService {
         t.state === 'stalledUP' ||
         t.state === 'stoppedUP',
     );
-
-    // Auto-match orphan torrents — anything in qBit with no existing
-    // history row (manually added by the user, surviving a DB wipe,
-    // imported from another tool …) gets identified by name via the
-    // shared release parsers + DB lookup, then bound to its media
-    // through a freshly-created history row. New rows are appended to
-    // `grabbed` so the orphan-status check below sees them as matched
-    // and the rest of the import flow handles them like any normal
-    // grab.
-    await this.autoMatchOrphanTorrents(allTorrents, grabbed);
-
-    // Identify history rows with no matching torrent in any client right
-    // now. We do NOT delete them — even a transient mismatch (a renamed
-    // torrent, an HTML-entity decode drift, qBit briefly returning an
-    // empty list) used to wipe perfectly-linked rows, leaving "downloads
-    // not linked to a media" in the Activities view. The invariant is:
-    // once a row has a media reference it is preserved forever; the
-    // worst we can do is flip its status to `failed` so the user knows
-    // the torrent has vanished from the client.
-    const matchedHistoryIds = new Set<number>();
-    for (const t of allTorrents) {
-      const m = this.historyMatcher.findMatch(t, grabbed);
-      if (m) matchedHistoryIds.add(m.history.id);
-    }
-    const orphaned = grabbed.filter(
-      (h) => h.status === 'grabbed' && !matchedHistoryIds.has(h.id),
-    );
-    if (orphaned.length) {
-      // Only flip rows that have been disconnected for at least
-      // `ORPHAN_GRACE_MS` so we don't fail-fast on a single bad qBit
-      // call. The grace is computed off `updatedAt` because every
-      // status / hash heal write bumps it; a row whose torrent just
-      // arrived in qBit has a fresh `updatedAt`.
-      const cutoff = Date.now() - ORPHAN_GRACE_MS;
-      const expired = orphaned.filter(
-        (h) => h.updatedAt.getTime() < cutoff,
-      );
-      if (expired.length) {
-        await this.historyRepo.update(
-          expired.map((h) => h.id),
-          {
-            status: 'failed',
-            statusMessage: 'Torrent no longer present in download client',
-          },
-        );
-        this.log.warn(
-          `Import: ${expired.length} grabbed entries lost their torrent in qBittorrent for > ${ORPHAN_GRACE_MS / 60_000}min — marked failed (media link preserved)`,
-        );
-      }
-    }
-
-    const remaining = grabbed.filter(
-      (h) => matchedHistoryIds.has(h.id),
-    ).length;
-    if (!remaining || !completedTorrents.length) return;
-    this.log.log(
-      `Import: ${remaining} entries to process, ${completedTorrents.length} completed torrents`,
-    );
+    if (!completedTorrents.length) return;
 
     const formats = await this.naming.getFormats();
     const movieFormat = formats.movie;
@@ -350,31 +313,23 @@ export class CompletionService {
     const seriesFormat = formats.series;
     const seriesFolderFormat = formats.seriesFolder;
     const seasonFolderFormat = formats.seasonFolder;
-
     const libraries = await this.libraryRepo.find({ order: { path: 'ASC' } });
 
-    // Reverse-lookup: build `historyId → torrent` from the matcher (which
-    // also self-heals missing torrentHash on each history row).
-    const torrentByHistoryId = new Map<
-      number,
-      (typeof completedTorrents)[number]
-    >();
-    for (const t of completedTorrents) {
-      const matchedHistory = await this.historyMatcher.matchAndHeal(t, grabbed);
-      if (matchedHistory) torrentByHistoryId.set(matchedHistory.id, t);
-    }
-
-    for (const history of grabbed) {
-      const torrent = torrentByHistoryId.get(history.id);
-      if (!torrent) {
-        this.log.debug(
-          `Import: no completed torrent matching "${history.sourceTitle}" (mediaId=${history.mediaId})`,
-        );
+    let imported = 0;
+    for (const torrent of completedTorrents) {
+      const history = await this.historyMatcher.matchAndHeal(torrent, grabbed);
+      if (!history) continue;
+      // Already imported or in flight: leave alone.
+      if (
+        history.status !== 'grabbed' &&
+        history.status !== 'failed' &&
+        history.status !== 'warning'
+      ) {
         continue;
       }
 
       this.log.log(
-        `Import: matched "${history.sourceTitle}" → torrent "${torrent.name}" (state=${torrent.state}, progress=${torrent.progress})`,
+        `Import: torrent "${torrent.name}" → history #${history.id} (mediaId=${history.mediaId}, status=${history.status})`,
       );
 
       try {
@@ -389,6 +344,7 @@ export class CompletionService {
           seasonFolderFormat,
           libraries,
         );
+        imported++;
       } catch (e) {
         this.log.error(
           `Import: FAILED for "${history.sourceTitle}": ${(e as Error).message}`,
@@ -420,6 +376,49 @@ export class CompletionService {
         }
       }
     }
+    if (imported > 0) {
+      this.log.log(
+        `Import: processed ${imported}/${completedTorrents.length} completed torrent(s)`,
+      );
+    }
+  }
+
+  /**
+   * Flip history rows to `failed` when their torrent has been missing
+   * from qBit for at least {@link ORPHAN_GRACE_MS}. Extracted here so
+   * `processCompleted` reads as three crisp phases. The grace is
+   * measured off `updatedAt` because every status / hash heal write
+   * bumps it; a row whose torrent just arrived in qBit has a fresh
+   * timestamp and won't be flipped.
+   */
+  private async markStaleHistoryAsFailed(
+    allTorrents: ReadonlyArray<QbittorrentTorrent>,
+    grabbed: DownloadHistory[],
+  ): Promise<void> {
+    if (!grabbed.length) return;
+    const matchedHistoryIds = new Set<number>();
+    for (const t of allTorrents) {
+      const m = this.historyMatcher.findMatch(t, grabbed);
+      if (m) matchedHistoryIds.add(m.history.id);
+    }
+    const cutoff = Date.now() - ORPHAN_GRACE_MS;
+    const expired = grabbed.filter(
+      (h) =>
+        h.status === 'grabbed' &&
+        !matchedHistoryIds.has(h.id) &&
+        h.updatedAt.getTime() < cutoff,
+    );
+    if (!expired.length) return;
+    await this.historyRepo.update(
+      expired.map((h) => h.id),
+      {
+        status: 'failed',
+        statusMessage: 'Torrent no longer present in download client',
+      },
+    );
+    this.log.warn(
+      `Import: ${expired.length} grabbed entries lost their torrent in qBittorrent for > ${ORPHAN_GRACE_MS / 60_000}min — marked failed (media link preserved)`,
+    );
   }
 
   private async processOne(
