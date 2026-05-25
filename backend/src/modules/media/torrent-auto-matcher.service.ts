@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, ILike } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Media } from './entities/media.entity';
 import { Season } from './entities/season.entity';
 import { Episode } from './entities/episode.entity';
@@ -134,27 +134,50 @@ export class TorrentAutoMatcher {
   }
 
   /**
-   * Title-based media lookup. Loads candidates by case-insensitive
-   * substring on `title`, then narrows in-memory using the alphanumeric
-   * `searchKey` and (optional) year. Ambiguity → null.
+   * Title-based media lookup. SQL pre-filter compares the alphanumeric-
+   * stripped form of every known title source (\`title\`, \`originalTitle\`,
+   * \`alternativeTitles\`) against the candidate's \`searchKey\`. We can't
+   * \`ILIKE '%title%'\` directly because:
+   *  - A French-localised media (\`title = "Margo a des problèmes d'argent"\`)
+   *    with the English original (\`originalTitle = "Margo's Got Money
+   *    Troubles"\`) wouldn't match a release named after the English title.
+   *  - Punctuation in either the torrent name or the stored title (an
+   *    apostrophe, a colon, dot separators) used to block the substring
+   *    match. Stripping non-alphanumerics on both sides removes the drift.
+   *
+   * Result set is then narrowed in JS using the same normalisation. Year
+   * is a tiebreaker when multiple candidates remain.
    */
   private async lookupMedia(
     parsed: ExtractedRelease,
     type: MediaType,
   ): Promise<Media | null> {
-    // Loose SQL filter to keep the candidate set small. We refine in JS
-    // using `searchKey` which is normalisation-tolerant.
-    const titleLike = parsed.title || parsed.searchKey;
-    if (!titleLike) return null;
-    const candidates = await this.mediaRepo.find({
-      where: { type, title: ILike(`%${titleLike}%`) },
-      take: 50,
-    });
+    if (!parsed.searchKey) return null;
+    const candidates = await this.mediaRepo
+      .createQueryBuilder('m')
+      .where('m.type = :type', { type })
+      .andWhere(
+        `(
+          regexp_replace(LOWER(m.title), '[^a-z0-9]+', '', 'g') LIKE :key
+          OR regexp_replace(LOWER(COALESCE(m."originalTitle", '')), '[^a-z0-9]+', '', 'g') LIKE :key
+          OR EXISTS (
+            SELECT 1 FROM jsonb_array_elements_text(m."alternativeTitles") alt
+            WHERE regexp_replace(LOWER(alt), '[^a-z0-9]+', '', 'g') LIKE :key
+          )
+        )`,
+        { key: `%${parsed.searchKey}%`, type },
+      )
+      .take(50)
+      .getMany();
 
+    const norm = (s: string | undefined | null): string =>
+      (s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
     const matching = candidates.filter((m) => {
-      const norm = (s: string | undefined | null): string =>
-        (s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-      const candidateKeys = [norm(m.title), ...(m.alternativeTitles ?? []).map(norm)];
+      const candidateKeys = [
+        norm(m.title),
+        norm(m.originalTitle),
+        ...(m.alternativeTitles ?? []).map(norm),
+      ].filter(Boolean);
       return candidateKeys.includes(parsed.searchKey);
     });
 
