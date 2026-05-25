@@ -91,11 +91,12 @@ export class GestdownProvider implements SubtitleProviderInterface {
       .map((s) => ({
         providerFileId: s.downloadUri,
         title: [params.title, s.version, s.release].filter(Boolean).join(' - '),
+        releaseName: s.release ?? s.version ?? undefined,
         language: params.language,
         forced: false,
         hearingImpaired: s.hearingImpaired,
         downloadCount: s.downloadCount,
-        score: Math.min(100, Math.round(Math.log2(s.downloadCount + 1) * 10)),
+        score: 0,
         providerName: 'Gestdown',
         providerType: 'gestdown',
       }));

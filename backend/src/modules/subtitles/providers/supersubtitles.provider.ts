@@ -133,10 +133,11 @@ export class SupersubtitlesProvider implements SubtitleProviderInterface {
       results.push({
         providerFileId: String(item.felirat),
         title: label,
+        releaseName: item.fnev || item.nev || undefined,
         language: lang,
         forced,
         hearingImpaired: false,
-        score: 50,
+        score: 0,
         providerName: 'Supersubtitles',
         providerType: 'supersubtitles',
       });
@@ -246,13 +247,15 @@ export class SupersubtitlesProvider implements SubtitleProviderInterface {
       const forced =
         row.toLowerCase().includes('forced') || row.includes('szinkronoshoz');
 
+      const decodedLabel = this.decodeHtmlEntities(label);
       results.push({
         providerFileId: subtitleId,
-        title: this.decodeHtmlEntities(label),
+        title: decodedLabel,
+        releaseName: decodedLabel,
         language: lang,
         forced,
         hearingImpaired: false,
-        score: 50,
+        score: 0,
         providerName: 'Supersubtitles',
         providerType: 'supersubtitles',
       });

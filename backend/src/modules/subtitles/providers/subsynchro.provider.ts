@@ -70,17 +70,18 @@ export class SubsynchroProvider implements SubtitleProviderInterface {
       return [];
     }
 
-    return body.data.map((item, index) => {
+    return body.data.map((item) => {
       const label =
         item.release || item.filename || item.titre_original || item.titre;
       return {
         // Store the download URL as the provider file ID
         providerFileId: item.telechargement,
         title: label,
+        releaseName: item.release || item.filename || undefined,
         language: 'fr',
         forced: false,
         hearingImpaired: false,
-        score: Math.max(0, 50 - index),
+        score: 0,
         providerName: 'Subsynchro',
         providerType: 'subsynchro',
       };

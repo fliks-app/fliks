@@ -31,6 +31,10 @@ import {
   APP_LANGUAGES,
   ISO_639_2_TO_1,
 } from '../../common/constants/app-languages';
+import {
+  SubtitleScore,
+  scoreSubtitle,
+} from './subtitle-scorer';
 
 @Injectable()
 export class SubtitlesService {
@@ -103,7 +107,7 @@ export class SubtitlesService {
       `Subtitle search for "${params.title}" [${params.language}]: ${allResults.length} result(s) from ${providers.length} provider(s)`,
     );
 
-    // Filter out blacklisted subtitles
+    // Filter out blacklisted subtitles (composite key includes provider).
     const blacklisted = await this.blacklistRepo.find();
     const blacklistSet = new Set(
       blacklisted.map((b) => `${b.providerType}:${b.providerFileId}`),
@@ -112,8 +116,56 @@ export class SubtitlesService {
       (r) => !blacklistSet.has(`${r.providerType}:${r.providerFileId}`),
     );
 
-    filtered.sort((a, b) => b.score - a.score);
-    return filtered;
+    // Cross-provider dedup: when the same release name + language + HI
+    // flag appear from two providers, keep the first occurrence (encounter
+    // order mirrors provider priority since `findEnabled` returns by
+    // priority ASC). Providers that don't expose a releaseName fall back
+    // to the `providerType:providerFileId` axis which is already unique.
+    const seenReleaseKey = new Set<string>();
+    const deduped: SubtitleSearchResult[] = [];
+    for (const r of filtered) {
+      const releaseKey = r.releaseName
+        ? `${r.releaseName.toLowerCase()}|${r.language}|${r.hearingImpaired ? 'hi' : 'normal'}|${r.forced ? 'forced' : 'full'}`
+        : `${r.providerType}:${r.providerFileId}`;
+      if (seenReleaseKey.has(releaseKey)) continue;
+      seenReleaseKey.add(releaseKey);
+      deduped.push(r);
+    }
+
+    // Central scoring: every candidate is rescored against the video
+    // context so the comparison stays fair across providers. The
+    // per-provider `score` field is ignored (providers no longer compute
+    // it). When the caller didn't supply video context (title only), the
+    // scorer still produces a useful ranking via hash + imdb-equivalence
+    // + hearing-impaired bit.
+    const scoringCtx = {
+      kind: (params.season != null && params.episode != null
+        ? 'episode'
+        : 'movie') as 'episode' | 'movie',
+      videoReleaseName: params.videoReleaseName ?? null,
+      title: params.title,
+      year: params.year ?? null,
+      season: params.season ?? null,
+      episode: params.episode ?? null,
+      imdbId: params.imdbId ?? null,
+    };
+    const scored: (SubtitleSearchResult & { _score: SubtitleScore })[] =
+      deduped.map((r) => {
+        const s = scoreSubtitle(r, scoringCtx);
+        r.score = s.percent;
+        return Object.assign(r, { _score: s });
+      });
+
+    scored.sort((a, b) => {
+      if (a._score.percent !== b._score.percent) {
+        return b._score.percent - a._score.percent;
+      }
+      // Tie-breaker: prefer higher download count when scores are equal —
+      // it's the only popularity-style signal left after centralisation.
+      return (b.downloadCount ?? 0) - (a.downloadCount ?? 0);
+    });
+
+    return scored;
   }
 
   async autoDownload(

@@ -82,22 +82,23 @@ export class OpenSubtitlesProvider implements SubtitleProviderInterface {
           ratings: number;
           moviehash_match: boolean;
           files: { file_id: number }[];
+          feature_details?: { imdb_id?: number };
         };
       }[];
     };
 
     return body.data.map((item) => {
-      const baseScore = Math.round(
-        item.attributes.ratings * 10 + item.attributes.download_count / 100,
-      );
-      const hashBonus = item.attributes.moviehash_match ? 20 : 0;
+      const imdbRaw = item.attributes.feature_details?.imdb_id;
       return {
         providerFileId: String(item.attributes.files[0]?.file_id ?? item.id),
         title: item.attributes.release,
+        releaseName: item.attributes.release,
+        imdbId: imdbRaw != null ? String(imdbRaw) : undefined,
+        hashMatched: item.attributes.moviehash_match,
         language: item.attributes.language,
         forced: item.attributes.foreign_parts_only,
         hearingImpaired: item.attributes.hearing_impaired,
-        score: Math.min(100, baseScore + hashBonus),
+        score: 0,
         downloadCount: item.attributes.download_count,
         providerName: 'OpenSubtitles',
         providerType: PROVIDER_TYPE,

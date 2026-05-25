@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import * as path from 'path';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
@@ -60,6 +61,11 @@ export class SubtitleSchedulerService {
     const autoSearch = await this.settings.get('subtitle_auto_search');
     if (autoSearch === 'false') return;
 
+    // `subtitle_min_score` / `subtitle_upgrade_threshold` are now read as
+    // PERCENT (0-100) of the centralised scorer's max — see
+    // `subtitle-scorer.ts`. Existing rows persisted under the previous
+    // per-provider 0-100 scale stay readable; the upgrade pass naturally
+    // re-scores them via the central scorer on the next run.
     const minScore = Number(
       (await this.settings.get('subtitle_min_score')) ?? '70',
     );
@@ -70,7 +76,12 @@ export class SubtitleSchedulerService {
 
     const mediaList = await this.mediaRepo.find({
       where: { monitored: true },
-      relations: ['languageProfile', 'files'],
+      relations: [
+        'languageProfile',
+        'files',
+        'files.episode',
+        'files.episode.season',
+      ],
     });
 
     for (const media of mediaList) {
@@ -91,6 +102,13 @@ export class SubtitleSchedulerService {
           where: { mediaFile: { id: file.id } },
         });
 
+        const videoReleaseName = path.basename(
+          file.relativePath,
+          path.extname(file.relativePath),
+        );
+        const fileSeason = file.episode?.season?.seasonNumber ?? undefined;
+        const fileEpisode = file.episode?.episodeNumber ?? undefined;
+
         for (const langItem of subtitleLangs) {
           const hasSub = existingSubs.some(
             (s) =>
@@ -106,6 +124,9 @@ export class SubtitleSchedulerService {
               title: media.title,
               year: media.year ?? undefined,
               language: langItem.isoCode,
+              season: fileSeason,
+              episode: fileEpisode,
+              videoReleaseName,
             });
 
             const best = results.find((r) => r.score >= minScore);
@@ -171,6 +192,8 @@ export class SubtitleSchedulerService {
       .leftJoinAndSelect('sf.media', 'media')
       .leftJoinAndSelect('media.languageProfile', 'lp')
       .leftJoinAndSelect('sf.mediaFile', 'mf')
+      .leftJoinAndSelect('mf.episode', 'mfEpisode')
+      .leftJoinAndSelect('mfEpisode.season', 'mfSeason')
       .getMany();
 
     // Build "languages still missing on file F" map upfront so we don't pay
@@ -196,11 +219,19 @@ export class SubtitleSchedulerService {
         continue;
       }
       try {
+        const fileRel = sub.mediaFile?.relativePath;
+        const videoReleaseName = fileRel
+          ? path.basename(fileRel, path.extname(fileRel))
+          : undefined;
         const results = await this.subtitlesService.searchSubtitles({
           imdbId: sub.media?.imdbId ?? undefined,
           tmdbId: sub.media?.tmdbId,
           title: sub.media?.title ?? '',
+          year: sub.media?.year ?? undefined,
           language: sub.language,
+          season: sub.mediaFile?.episode?.season?.seasonNumber ?? undefined,
+          episode: sub.mediaFile?.episode?.episodeNumber ?? undefined,
+          videoReleaseName,
         });
 
         const better = results.find((r) => r.score > sub.score);
@@ -315,6 +346,7 @@ export class SubtitleSchedulerService {
 
     const mediaFile = await this.mediaFileRepo.findOne({
       where: { id: mediaFileId },
+      relations: ['episode', 'episode.season'],
     });
     if (!mediaFile) return;
 
@@ -325,6 +357,13 @@ export class SubtitleSchedulerService {
       (await this.settings.get('subtitle_auto_sync')) === 'true';
     const encodeUtf8 =
       (await this.settings.get('subtitle_encode_utf8')) !== 'false';
+
+    const videoReleaseName = path.basename(
+      mediaFile.relativePath,
+      path.extname(mediaFile.relativePath),
+    );
+    const fileSeason = mediaFile.episode?.season?.seasonNumber ?? undefined;
+    const fileEpisode = mediaFile.episode?.episodeNumber ?? undefined;
 
     for (const langItem of subtitleLangs) {
       if (embeddedLangs.has(langItem.isoCode)) {
@@ -340,6 +379,9 @@ export class SubtitleSchedulerService {
           title: media.title,
           year: media.year ?? undefined,
           language: langItem.isoCode,
+          season: fileSeason,
+          episode: fileEpisode,
+          videoReleaseName,
         });
 
         const best = results.find((r) => r.score >= minScore);
