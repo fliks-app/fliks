@@ -1,6 +1,7 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
   signal,
   inject,
   computed,
@@ -1008,7 +1009,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   }
 
-  readonly analyzeModalOpen = signal(false);
   readonly analyzeRunning = signal(false);
   readonly analyzeOpts = signal<{
     rescan: boolean;
@@ -1022,6 +1022,14 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return o.rescan || o.sprites || o.crop || o.subtitleCache;
   });
 
+  /** Refs to the native <dialog>. `showModal()` gives us focus trapping,
+   *  Tab cycling and Escape-to-close for free — no manual keydown
+   *  handling required. */
+  private readonly analyzeDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('analyzeDialog');
+  private readonly firstAnalyzeOption =
+    viewChild<ElementRef<HTMLInputElement>>('firstAnalyzeOption');
+
   openAnalyzeModal() {
     this.analyzeOpts.set({
       rescan: false,
@@ -1029,7 +1037,17 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       crop: false,
       subtitleCache: false,
     });
-    this.analyzeModalOpen.set(true);
+    const dlg = this.analyzeDialog()?.nativeElement;
+    if (!dlg) return;
+    dlg.showModal();
+    // Default focus on the first checkbox so the modal is immediately
+    // usable from a keyboard. showModal()'s built-in autofocus would land
+    // on the cancel button (last focusable that's also a submit-default).
+    queueMicrotask(() => this.firstAnalyzeOption()?.nativeElement.focus());
+  }
+
+  closeAnalyzeModal() {
+    this.analyzeDialog()?.nativeElement.close();
   }
 
   setAnalyzeOpt(
@@ -1060,7 +1078,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.toast.success(
         this.translate.instant('media_detail.analyze_launched'),
       );
-      this.analyzeModalOpen.set(false);
+      this.closeAnalyzeModal();
     } catch {
       this.toast.error(
         this.translate.instant('media_detail.analyze_launch_error'),

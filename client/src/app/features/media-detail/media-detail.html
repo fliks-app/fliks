@@ -347,77 +347,80 @@
   }
 </ng-template>
 
-<!-- Analyse modal — admin-only post-import analysis re-runs. Open via the
-     header's "Analyse" entry. Rescan stays separate (full-disk superset)
-     and short-circuits the granular endpoint. -->
-@if (isAdmin() && analyzeModalOpen()) {
-  <dialog class="modal modal-open" role="dialog" aria-modal="true">
-    <div class="modal-box">
-      <h3 class="text-lg font-bold mb-2">{{ 'media_detail.analyze_title' | translate }}</h3>
-      <p class="text-sm text-base-content/70 mb-4">{{ 'media_detail.analyze_hint' | translate }}</p>
-      <div class="space-y-2">
-        <label class="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox" class="checkbox checkbox-primary mt-0.5"
-            [checked]="analyzeOpts().rescan"
-            (change)="setAnalyzeOpt('rescan', $any($event.target).checked)"
-          />
-          <span>
-            <span class="font-medium block">{{ 'media_detail.analyze_rescan' | translate }}</span>
-            <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_rescan_hint' | translate }}</span>
-          </span>
-        </label>
-        <label class="flex items-start gap-3 cursor-pointer" [class.opacity-50]="analyzeOpts().rescan">
-          <input
-            type="checkbox" class="checkbox checkbox-primary mt-0.5"
-            [checked]="analyzeOpts().sprites" [disabled]="analyzeOpts().rescan"
-            (change)="setAnalyzeOpt('sprites', $any($event.target).checked)"
-          />
-          <span>
-            <span class="font-medium block">{{ 'media_detail.analyze_sprites' | translate }}</span>
-            <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_sprites_hint' | translate }}</span>
-          </span>
-        </label>
-        <label class="flex items-start gap-3 cursor-pointer" [class.opacity-50]="analyzeOpts().rescan">
-          <input
-            type="checkbox" class="checkbox checkbox-primary mt-0.5"
-            [checked]="analyzeOpts().crop" [disabled]="analyzeOpts().rescan"
-            (change)="setAnalyzeOpt('crop', $any($event.target).checked)"
-          />
-          <span>
-            <span class="font-medium block">{{ 'media_detail.analyze_crop' | translate }}</span>
-            <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_crop_hint' | translate }}</span>
-          </span>
-        </label>
-        <label class="flex items-start gap-3 cursor-pointer" [class.opacity-50]="analyzeOpts().rescan">
-          <input
-            type="checkbox" class="checkbox checkbox-primary mt-0.5"
-            [checked]="analyzeOpts().subtitleCache" [disabled]="analyzeOpts().rescan"
-            (change)="setAnalyzeOpt('subtitleCache', $any($event.target).checked)"
-          />
-          <span>
-            <span class="font-medium block">{{ 'media_detail.analyze_subtitle_cache' | translate }}</span>
-            <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_subtitle_cache_hint' | translate }}</span>
-          </span>
-        </label>
-      </div>
-      <div class="modal-action">
-        <button type="button" class="btn btn-ghost" (click)="analyzeModalOpen.set(false)">
-          {{ 'common.cancel' | translate }}
-        </button>
-        <button
-          type="button" class="btn btn-primary"
-          [disabled]="analyzeRunning() || !analyzeHasSelection()"
-          (click)="runAnalyze()"
-        >
-          @if (analyzeRunning()) { <span class="loading loading-spinner loading-sm"></span> }
-          {{ 'media_detail.analyze_apply' | translate }}
-        </button>
-      </div>
+<!-- Analyse modal — admin-only post-import analysis re-runs. Native
+     <dialog> + showModal() gives focus trapping, Tab cycling and
+     Escape-to-close for free; the <form method="dialog"> backdrop
+     dismisses on outside click. Rescan stays on /rescan (full-disk
+     superset) and disables the granular options when ticked. -->
+<dialog #analyzeDialog class="modal" role="dialog" aria-modal="true" aria-labelledby="analyze-title">
+  <div class="modal-box">
+    <h3 id="analyze-title" class="text-lg font-bold mb-2">{{ 'media_detail.analyze_title' | translate }}</h3>
+    <p class="text-sm text-base-content/70 mb-4">{{ 'media_detail.analyze_hint' | translate }}</p>
+    <div class="space-y-2">
+      <label class="flex items-start gap-3 cursor-pointer">
+        <input
+          #firstAnalyzeOption
+          type="checkbox" class="checkbox checkbox-primary mt-0.5"
+          [checked]="analyzeOpts().rescan"
+          (change)="setAnalyzeOpt('rescan', $any($event.target).checked)"
+        />
+        <span>
+          <span class="font-medium block">{{ 'media_detail.analyze_rescan' | translate }}</span>
+          <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_rescan_hint' | translate }}</span>
+        </span>
+      </label>
+      <label class="flex items-start gap-3 cursor-pointer" [class.opacity-50]="analyzeOpts().rescan">
+        <input
+          type="checkbox" class="checkbox checkbox-primary mt-0.5"
+          [checked]="analyzeOpts().sprites" [disabled]="analyzeOpts().rescan"
+          (change)="setAnalyzeOpt('sprites', $any($event.target).checked)"
+        />
+        <span>
+          <span class="font-medium block">{{ 'media_detail.analyze_sprites' | translate }}</span>
+          <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_sprites_hint' | translate }}</span>
+        </span>
+      </label>
+      <label class="flex items-start gap-3 cursor-pointer" [class.opacity-50]="analyzeOpts().rescan">
+        <input
+          type="checkbox" class="checkbox checkbox-primary mt-0.5"
+          [checked]="analyzeOpts().crop" [disabled]="analyzeOpts().rescan"
+          (change)="setAnalyzeOpt('crop', $any($event.target).checked)"
+        />
+        <span>
+          <span class="font-medium block">{{ 'media_detail.analyze_crop' | translate }}</span>
+          <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_crop_hint' | translate }}</span>
+        </span>
+      </label>
+      <label class="flex items-start gap-3 cursor-pointer" [class.opacity-50]="analyzeOpts().rescan">
+        <input
+          type="checkbox" class="checkbox checkbox-primary mt-0.5"
+          [checked]="analyzeOpts().subtitleCache" [disabled]="analyzeOpts().rescan"
+          (change)="setAnalyzeOpt('subtitleCache', $any($event.target).checked)"
+        />
+        <span>
+          <span class="font-medium block">{{ 'media_detail.analyze_subtitle_cache' | translate }}</span>
+          <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_subtitle_cache_hint' | translate }}</span>
+        </span>
+      </label>
     </div>
-    <div class="modal-backdrop" (click)="analyzeModalOpen.set(false)"></div>
-  </dialog>
-}
+    <div class="modal-action">
+      <button type="button" class="btn btn-ghost" (click)="closeAnalyzeModal()">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button
+        type="button" class="btn btn-primary"
+        [disabled]="analyzeRunning() || !analyzeHasSelection()"
+        (click)="runAnalyze()"
+      >
+        @if (analyzeRunning()) { <span class="loading loading-spinner loading-sm"></span> }
+        {{ 'media_detail.analyze_apply' | translate }}
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="submit" [attr.aria-label]="'common.close' | translate">close</button>
+  </form>
+</dialog>
 
 <!-- Request modal — only relevant for users who can request (regular
      requesters). Profiles + libraries already loaded by media-detail. -->
