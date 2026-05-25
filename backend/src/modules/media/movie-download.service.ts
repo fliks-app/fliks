@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Media } from './entities/media.entity';
 import { DownloadHistory } from './entities/download-history.entity';
+import { buildGrabHistoryRow } from './grab-history.util';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
 import { TorznabService, TorznabRelease } from '../indexers/torznab.service';
@@ -311,17 +312,19 @@ export class MovieDownloadService {
     );
     this.log.log(`Grab successful for "${sourceTitle}" (hash=${torrentHash})`);
 
-    const row = this.historyRepo.create({
-      media,
-      downloadClient: qbit,
-      sourceTitle,
-      torrentHash: torrentHash || undefined,
-      quality: parsed.quality.name,
-      status: 'grabbed',
-      grabSource,
-      indexer: indexerId != null ? ({ id: indexerId } as Indexer) : null,
-    });
-    const saved = await this.historyRepo.save(row);
+    const saved = await this.historyRepo.save(
+      this.historyRepo.create(
+        buildGrabHistoryRow({
+          media,
+          downloadClient: qbit,
+          sourceTitle,
+          torrentHash,
+          quality: parsed.quality.name,
+          grabSource,
+          indexerId,
+        }),
+      ),
+    );
 
     void this.notifications.dispatch('grab.started', {
       title: media.title,
@@ -528,17 +531,19 @@ export class MovieDownloadService {
       `Upgrade grab successful for "${sourceTitle}" (hash=${torrentHash})`,
     );
 
-    const row = this.historyRepo.create({
-      media,
-      downloadClient: qbit,
-      sourceTitle,
-      torrentHash: torrentHash || undefined,
-      quality: parsed.quality.name,
-      status: 'grabbed',
-      grabSource,
-      indexer: indexerId != null ? ({ id: indexerId } as Indexer) : null,
-    });
-    const saved = await this.historyRepo.save(row);
+    const saved = await this.historyRepo.save(
+      this.historyRepo.create(
+        buildGrabHistoryRow({
+          media,
+          downloadClient: qbit,
+          sourceTitle,
+          torrentHash,
+          quality: parsed.quality.name,
+          grabSource,
+          indexerId,
+        }),
+      ),
+    );
 
     void this.notifications.dispatch('grab.started', {
       title: media.title,

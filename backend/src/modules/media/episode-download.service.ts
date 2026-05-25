@@ -10,6 +10,7 @@ import { Media } from './entities/media.entity';
 import { Season } from './entities/season.entity';
 import { Episode } from './entities/episode.entity';
 import { DownloadHistory } from './entities/download-history.entity';
+import { buildGrabHistoryRow } from './grab-history.util';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
 import { TorznabService } from '../indexers/torznab.service';
@@ -320,17 +321,19 @@ export class EpisodeDownloadService {
     );
     this.log.log(`Grab successful for "${sourceTitle}" (hash=${torrentHash})`);
 
-    const row = this.historyRepo.create({
-      media,
-      downloadClient: qbit,
-      sourceTitle: sourceTitle,
-      torrentHash: torrentHash || undefined,
-      quality: parsed.quality.name,
-      status: 'grabbed',
-      grabSource,
-      indexer: indexerId != null ? ({ id: indexerId } as Indexer) : null,
-    });
-    const saved = await this.historyRepo.save(row);
+    const saved = await this.historyRepo.save(
+      this.historyRepo.create(
+        buildGrabHistoryRow({
+          media,
+          downloadClient: qbit,
+          sourceTitle,
+          torrentHash,
+          quality: parsed.quality.name,
+          grabSource,
+          indexerId,
+        }),
+      ),
+    );
 
     void this.notifications.dispatch('grab.started', {
       title: `${media.title} ${epLabel}`,
@@ -582,19 +585,17 @@ export class EpisodeDownloadService {
         `Grab successful for "${sourceTitle}" (hash=${torrentHash})`,
       );
       await this.historyRepo.save(
-        this.historyRepo.create({
-          media: { id: mediaId } as Media,
-          downloadClient: qbit,
-          sourceTitle,
-          torrentHash: torrentHash || undefined,
-          quality: parsed.quality.name,
-          status: 'grabbed',
-          grabSource: 'manual',
-          indexer:
-            dto?.indexerId != null
-              ? ({ id: dto.indexerId } as Indexer)
-              : null,
-        }),
+        this.historyRepo.create(
+          buildGrabHistoryRow({
+            media: { id: mediaId },
+            downloadClient: qbit,
+            sourceTitle,
+            torrentHash,
+            quality: parsed.quality.name,
+            grabSource: 'manual',
+            indexerId: dto?.indexerId,
+          }),
+        ),
       );
       void this.notifications.dispatch('grab.started', {
         title: `${media.title} S${String(season.seasonNumber).padStart(2, '0')}`,
@@ -679,16 +680,17 @@ export class EpisodeDownloadService {
         `Season pack grab successful for "${bestPack.title}" (hash=${packHash})`,
       );
       await this.historyRepo.save(
-        this.historyRepo.create({
-          media: { id: mediaId } as Media,
-          downloadClient: qbit,
-          sourceTitle: bestPack.title,
-          torrentHash: packHash || undefined,
-          quality: bestPack.qualityName,
-          status: 'grabbed',
-          grabSource: 'auto',
-          indexer: { id: bestPack.indexerId } as Indexer,
-        }),
+        this.historyRepo.create(
+          buildGrabHistoryRow({
+            media: { id: mediaId },
+            downloadClient: qbit,
+            sourceTitle: bestPack.title,
+            torrentHash: packHash,
+            quality: bestPack.qualityName,
+            grabSource: 'auto',
+            indexerId: bestPack.indexerId,
+          }),
+        ),
       );
       void this.notifications.dispatch('grab.started', {
         title: `${media.title} S${String(season.seasonNumber).padStart(2, '0')}`,
@@ -782,16 +784,17 @@ export class EpisodeDownloadService {
           `[${epLabel}] grab successful for "${pick.title}" (hash=${epHash})`,
         );
         await this.historyRepo.save(
-          this.historyRepo.create({
-            media: { id: mediaId } as Media,
-            downloadClient: qbit,
-            sourceTitle: pick.title,
-            torrentHash: epHash || undefined,
-            quality: pick.qualityName,
-            status: 'grabbed',
-            grabSource: 'auto',
-            indexer: { id: pick.indexerId } as Indexer,
-          }),
+          this.historyRepo.create(
+            buildGrabHistoryRow({
+              media: { id: mediaId },
+              downloadClient: qbit,
+              sourceTitle: pick.title,
+              torrentHash: epHash,
+              quality: pick.qualityName,
+              grabSource: 'auto',
+              indexerId: pick.indexerId,
+            }),
+          ),
         );
         grabbed++;
       } catch (e) {

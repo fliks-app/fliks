@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Media } from './entities/media.entity';
 import { RequestLifecycleService } from '../requests/request-lifecycle.service';
 import { DownloadHistory } from './entities/download-history.entity';
+import { buildGrabHistoryRow } from './grab-history.util';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { TorznabRelease } from '../indexers/torznab.service';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
@@ -157,19 +158,30 @@ export class AutoGrabPipelineService {
      *  requests. Whole-series and movie grabs pass undefined. */
     seasonNumber?: number;
   }): Promise<boolean> {
+    const logSkip = (reason: string): void =>
+      this.log.log(
+        `AutoGrab[${args.mediaType}]: "${args.label}" skipped — ${reason}`,
+      );
+
     const decision = this.classifyForSearch(args.media, args.files);
     if (decision.mode !== 'missing' && decision.mode !== 'upgrade') {
-      if (decision.mode === 'unprofiled') {
-        this.log.debug?.(
-          `AutoGrab[${args.mediaType}]: "${args.label}" has no quality/language profile — skipped`,
-        );
-      }
+      logSkip(
+        decision.mode === 'unprofiled'
+          ? 'no quality/language profile on media'
+          : `at/above cutoff (mode=${decision.mode})`,
+      );
       return false;
     }
 
-    if (!args.releases.length) return false;
+    if (!args.releases.length) {
+      logSkip('no releases returned by indexers');
+      return false;
+    }
 
-    if (args.pendingCheck && (await args.pendingCheck())) return false;
+    if (args.pendingCheck && (await args.pendingCheck())) {
+      logSkip('a grab is already pending');
+      return false;
+    }
 
     const { allowed, allowedLangs } = this.profiles.resolveAllowedForMedia(
       args.media,
@@ -198,8 +210,15 @@ export class AutoGrabPipelineService {
         r.rank <= decision.maxRankInclusive,
     );
     if (!pick) {
-      this.log.debug?.(
-        `AutoGrab[${args.mediaType}]: no eligible release for "${args.label}" (mode=${decision.mode}, ${sorted.length} checked)`,
+      const topRejections = sorted
+        .slice(0, 3)
+        .map(
+          (r) =>
+            `"${r.title}" → ${r.rejections.length ? r.rejections.join(', ') : `rank ${r.rank} out of [${decision.minRankExclusive + 1}..${decision.maxRankInclusive}]`}`,
+        )
+        .join(' | ');
+      logSkip(
+        `no eligible release (mode=${decision.mode}, ${sorted.length} checked)${topRejections ? ` — top: ${topRejections}` : ''}`,
       );
       return false;
     }
@@ -243,16 +262,17 @@ export class AutoGrabPipelineService {
         args.mediaType,
       );
       await this.historyRepo.save(
-        this.historyRepo.create({
-          media: args.media,
-          downloadClient: args.qbitClient,
-          indexer: { id: args.pick.indexerId } as Indexer,
-          sourceTitle: args.pick.title,
-          quality: this.naming.parseQuality(args.pick.title),
-          status: 'grabbed',
-          grabSource: 'auto',
-          torrentHash: torrentHash || undefined,
-        }),
+        this.historyRepo.create(
+          buildGrabHistoryRow({
+            media: args.media,
+            downloadClient: args.qbitClient,
+            sourceTitle: args.pick.title,
+            torrentHash,
+            quality: this.naming.parseQuality(args.pick.title),
+            grabSource: 'auto',
+            indexerId: args.pick.indexerId,
+          }),
+        ),
       );
       this.log.log(
         `AutoGrab[${args.mediaType}]: grabbed "${args.pick.title}" for "${args.label}"`,
