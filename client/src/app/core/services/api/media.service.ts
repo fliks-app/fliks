@@ -321,7 +321,7 @@ export class MediaService {
     return firstValueFrom(this.http.get<MovieRelease[]>(`/api/media/${id}/releases`, { params }));
   }
 
-  grabMovie(id: number, body?: { downloadUrl?: string; sourceTitle?: string }) {
+  grabMovie(id: number, body?: { downloadUrl?: string; sourceTitle?: string; indexerId?: number }) {
     return firstValueFrom(
       this.http.post<{ id: number; status: string }>(
         `/api/media/${id}/grab`,
@@ -377,7 +377,7 @@ export class MediaService {
     );
   }
 
-  grabSeason(mediaId: number, seasonId: number, body?: { downloadUrl?: string; sourceTitle?: string }) {
+  grabSeason(mediaId: number, seasonId: number, body?: { downloadUrl?: string; sourceTitle?: string; indexerId?: number }) {
     return firstValueFrom(
       this.http.post<{ grabbed: number; errors: string[] }>(
         `/api/media/${mediaId}/seasons/${seasonId}/grab`,
@@ -394,7 +394,7 @@ export class MediaService {
     );
   }
 
-  grabEpisode(mediaId: number, episodeId: number, body?: { downloadUrl?: string; sourceTitle?: string }) {
+  grabEpisode(mediaId: number, episodeId: number, body?: { downloadUrl?: string; sourceTitle?: string; indexerId?: number }) {
     return firstValueFrom(
       this.http.post<{ id: number; status: string }>(
         `/api/media/${mediaId}/episodes/${episodeId}/grab`,
@@ -411,7 +411,7 @@ export class MediaService {
     );
   }
 
-  grabUpgrade(mediaId: number, body?: { downloadUrl?: string; sourceTitle?: string }) {
+  grabUpgrade(mediaId: number, body?: { downloadUrl?: string; sourceTitle?: string; indexerId?: number }) {
     return firstValueFrom(
       this.http.post<{ id: number; status: string }>(
         `/api/media/${mediaId}/upgrade`,

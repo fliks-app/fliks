@@ -250,6 +250,7 @@ export class MovieDownloadService {
 
     let downloadUrl = dto.downloadUrl?.trim();
     let sourceTitle = dto.sourceTitle?.trim();
+    let indexerId = dto.indexerId;
     const grabSource: 'auto' | 'manual' = downloadUrl ? 'manual' : 'auto';
 
     this.log.log(
@@ -273,6 +274,7 @@ export class MovieDownloadService {
       }
       downloadUrl = pick.downloadUrl;
       sourceTitle = pick.title;
+      indexerId = pick.indexerId;
       this.log.log(`Auto-picked: "${sourceTitle}" — ${downloadUrl}`);
     } else {
       // Manual grab — still check blocklist
@@ -317,6 +319,7 @@ export class MovieDownloadService {
       quality: parsed.quality.name,
       status: 'grabbed',
       grabSource,
+      indexer: indexerId != null ? ({ id: indexerId } as Indexer) : null,
     });
     const saved = await this.historyRepo.save(row);
 
@@ -450,6 +453,7 @@ export class MovieDownloadService {
 
     let downloadUrl = dto.downloadUrl?.trim();
     let sourceTitle = dto.sourceTitle?.trim();
+    let indexerId = dto.indexerId;
     const grabSource: 'auto' | 'manual' = downloadUrl ? 'manual' : 'auto';
 
     this.log.log(
@@ -474,6 +478,7 @@ export class MovieDownloadService {
       }
       downloadUrl = pick.downloadUrl;
       sourceTitle = pick.title;
+      indexerId = pick.indexerId;
       this.log.log(`Upgrade auto-picked: "${sourceTitle}" — ${downloadUrl}`);
     } else {
       if (!sourceTitle) sourceTitle = inferTitleFromTorrentUrl(downloadUrl);
@@ -531,6 +536,7 @@ export class MovieDownloadService {
       quality: parsed.quality.name,
       status: 'grabbed',
       grabSource,
+      indexer: indexerId != null ? ({ id: indexerId } as Indexer) : null,
     });
     const saved = await this.historyRepo.save(row);
 
