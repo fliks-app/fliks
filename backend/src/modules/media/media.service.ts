@@ -2327,24 +2327,6 @@ export class MediaService {
     let streamInfo: Awaited<ReturnType<FfprobeService['detectMediaFileInfo']>>;
     try {
       streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
-      if (streamInfo?.video?.[0]) {
-        try {
-          const v = streamInfo.video[0];
-          const crop = await this.ffprobe.detectCrop(
-            absPath,
-            streamInfo.durationSeconds,
-            v.width,
-            v.height,
-            !!v.hdrFormat,
-          );
-          if (crop) v.crop = crop;
-        } catch (err) {
-          this.log.warn(
-            `enrichMediaFileFromDisk: detectCrop failed for "${normPath}" (metadata otherwise kept)`,
-            err instanceof Error ? err.stack : err,
-          );
-        }
-      }
     } catch (err) {
       this.log.error(
         `enrichMediaFileFromDisk: ffprobe failed for "${absPath}"`,
@@ -2361,31 +2343,70 @@ export class MediaService {
     dbFile.size = diskSize;
     dbFile.streamInfo = streamInfo;
     dbFile.quality = qualityName;
-    await this.mediaFileRepo.save(dbFile);
+    const saved = await this.mediaFileRepo.save(dbFile);
     this.log.log(
       `enrichMediaFileFromDisk: enriched media file #${mediaFileId} "${normPath}"`,
     );
 
-    // Pre-extract embedded text subtitles to cache so the first playback
-    // doesn't pay the extraction cost (ExoPlayer on Android pre-fetches all
-    // SubtitleConfiguration URLs at player prepare, blocking playback).
-    // Clear this file's cache subdir first in case the stream layout changed.
-    void this.subtitleStream
-      .clearMediaFileSubtitleCache(dbFile.media?.path, mediaFileId)
-      .then(() =>
-        this.subtitleStream.warmupCache(
-          absPath,
-          dbFile.media?.path,
-          mediaFileId,
-          streamInfo.subtitles,
-          dbFile.media?.title,
-        ),
-      );
+    await this.finalizeImportedFile(saved, absPath, dbFile.media);
 
     void this.mediaServers.dispatch('library.rescan', {
       title: dbFile.media.title,
       path: dbFile.media.path,
     });
+  }
+
+  /**
+   * Post-probe enrichment shared by every import path (grab→import, disk
+   * import, rescan). Runs ffmpeg `cropdetect` and stashes the result into
+   * `streamInfo.video[0].crop`, then pre-extracts embedded text subtitles
+   * to the player cache (so the first playback doesn't pay the extraction
+   * cost — ExoPlayer on Android blocks prepare until every
+   * SubtitleConfiguration URL has been fetched).
+   *
+   * Caller must have already persisted `file.streamInfo` from a fresh
+   * ffprobe of `absPath`. Best-effort: failures are logged but don't throw.
+   */
+  async finalizeImportedFile(
+    file: MediaFile,
+    absPath: string,
+    media: Media,
+  ): Promise<void> {
+    const streamInfo = file.streamInfo;
+    const v = streamInfo?.video?.[0];
+    if (v) {
+      try {
+        const crop = await this.ffprobe.detectCrop(
+          absPath,
+          streamInfo.durationSeconds,
+          v.width,
+          v.height,
+          !!v.hdrFormat,
+        );
+        if (crop) {
+          v.crop = crop;
+          file.streamInfo = streamInfo;
+          await this.mediaFileRepo.save(file);
+        }
+      } catch (err) {
+        this.log.warn(
+          `finalizeImportedFile: detectCrop failed for "${absPath}"`,
+          err instanceof Error ? err.stack : err,
+        );
+      }
+    }
+
+    void this.subtitleStream
+      .clearMediaFileSubtitleCache(media?.path, file.id)
+      .then(() =>
+        this.subtitleStream.warmupCache(
+          absPath,
+          media?.path,
+          file.id,
+          streamInfo?.subtitles,
+          media?.title,
+        ),
+      );
   }
 
   // ---------------------------------------------------------------------------
