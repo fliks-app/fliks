@@ -157,6 +157,12 @@ export class AutoGrabPipelineService {
      *  the lifecycle hook can flip only the matching per-season
      *  requests. Whole-series and movie grabs pass undefined. */
     seasonNumber?: number;
+    /** Season + episode primary keys — persisted on the
+     *  `DownloadHistory` row so Activities can show "Show — S01E03"
+     *  for a single-episode grab without joining back through the
+     *  files at import time. */
+    seasonId?: number;
+    episodeId?: number;
   }): Promise<boolean> {
     const logSkip = (reason: string): void =>
       this.log.log(
@@ -230,6 +236,8 @@ export class AutoGrabPipelineService {
       mediaType: args.mediaType,
       label: args.label,
       seasonNumber: args.seasonNumber,
+      seasonId: args.seasonId,
+      episodeId: args.episodeId,
     });
   }
 
@@ -251,6 +259,9 @@ export class AutoGrabPipelineService {
      *  `APPROVED → PROCESSING` transition. Omit for whole-series and
      *  movie grabs. */
     seasonNumber?: number;
+    /** Season + episode primary keys to persist on the history row. */
+    seasonId?: number;
+    episodeId?: number;
   }): Promise<boolean> {
     try {
       this.log.log(
@@ -271,6 +282,8 @@ export class AutoGrabPipelineService {
             quality: this.naming.parseQuality(args.pick.title),
             grabSource: 'auto',
             indexerId: args.pick.indexerId,
+            seasonId: args.seasonId,
+            episodeId: args.episodeId,
           }),
         ),
       );

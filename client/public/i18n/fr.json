@@ -802,6 +802,7 @@
     "confirm_delete_with_files": "Supprimer ce torrent et ses fichiers téléchargés ?",
     "link_media": "Associer à un média",
     "link_search_placeholder": "Rechercher un film ou une série…",
+    "season_pack": "Saison {{season}} (pack)",
     "link_no_results": "Aucun résultat dans la bibliothèque.",
     "link_confirm": "Associer",
     "queue_empty": "Aucun téléchargement actif.",

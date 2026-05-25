@@ -331,6 +331,8 @@ export class EpisodeDownloadService {
           quality: parsed.quality.name,
           grabSource,
           indexerId,
+          episodeId: episode.id,
+          seasonId: season.id,
         }),
       ),
     );
@@ -594,6 +596,7 @@ export class EpisodeDownloadService {
             quality: parsed.quality.name,
             grabSource: 'manual',
             indexerId: dto?.indexerId,
+            seasonId: season.id,
           }),
         ),
       );
@@ -689,6 +692,7 @@ export class EpisodeDownloadService {
             quality: bestPack.qualityName,
             grabSource: 'auto',
             indexerId: bestPack.indexerId,
+            seasonId: season.id,
           }),
         ),
       );
@@ -793,6 +797,8 @@ export class EpisodeDownloadService {
               quality: pick.qualityName,
               grabSource: 'auto',
               indexerId: pick.indexerId,
+              episodeId: ep.id,
+              seasonId: season.id,
             }),
           ),
         );

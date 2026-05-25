@@ -1,6 +1,8 @@
 import { DeepPartial } from 'typeorm';
 import { DownloadHistory, GrabSource } from './entities/download-history.entity';
 import { Media } from './entities/media.entity';
+import { Episode } from './entities/episode.entity';
+import { Season } from './entities/season.entity';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
 import { decodeHtmlEntities } from '../../common/utils/decode-html-entities';
@@ -25,6 +27,14 @@ export function buildGrabHistoryRow(args: {
   quality: string;
   grabSource: GrabSource;
   indexerId?: number | null;
+  /** Optional episode link — set for single-episode grabs / matches.
+   *  Null for season packs, movies, or when the episode hasn't been
+   *  identified yet. */
+  episodeId?: number | null;
+  /** Optional season link — set for season packs and single-episode
+   *  grabs (the episode's parent season). Null for movies and
+   *  unidentified series torrents. */
+  seasonId?: number | null;
 }): DeepPartial<DownloadHistory> {
   return {
     media: args.media as Media,
@@ -40,5 +50,9 @@ export function buildGrabHistoryRow(args: {
     grabSource: args.grabSource,
     indexer:
       args.indexerId != null ? ({ id: args.indexerId } as Indexer) : null,
+    episode:
+      args.episodeId != null ? ({ id: args.episodeId } as Episode) : null,
+    season:
+      args.seasonId != null ? ({ id: args.seasonId } as Season) : null,
   };
 }

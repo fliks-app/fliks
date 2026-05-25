@@ -29,6 +29,15 @@
                   class="font-medium text-sm leading-tight truncate text-primary hover:underline"
                   [title]="item.name"
                 >{{ item.name }}</a>
+                @if (item.episodeNumber != null) {
+                  <p class="text-xs text-base-content/60 truncate">
+                    S{{ item.seasonNumber ?? 0 | number:'2.0-0' }}E{{ item.episodeNumber | number:'2.0-0' }}{{ item.episodeTitle ? ' — ' + item.episodeTitle : '' }}
+                  </p>
+                } @else if (item.seasonNumber != null) {
+                  <p class="text-xs text-base-content/60 truncate">
+                    {{ 'activity.season_pack' | translate:{ season: item.seasonNumber } }}
+                  </p>
+                }
               } @else {
                 <p class="font-medium text-sm leading-tight truncate" [title]="item.name">
                   {{ item.name }}

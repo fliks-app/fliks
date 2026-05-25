@@ -16,6 +16,14 @@ export interface QueueEntry extends QbittorrentTorrent {
   mediaId?: number;
   mediaTitle?: string;
   mediaType?: 'movie' | 'series';
+  /** Resolved season (single-episode grabs include the parent season,
+   *  season packs include just this). */
+  seasonNumber?: number;
+  /** Resolved episode (single-episode grabs only — packs leave it
+   *  unset). */
+  episodeNumber?: number;
+  /** Episode title where known. */
+  episodeTitle?: string | null;
   /** Indexer the torrent was grabbed from (resolved through DownloadHistory). */
   indexerName?: string;
   /** Download client status (Downloading, Seeding, Paused, Stalled…) */
@@ -246,7 +254,7 @@ export class DownloadClientsService {
         { status: 'completed' },
         { status: 'warning' },
       ],
-      relations: ['media', 'indexer'],
+      relations: ['media', 'indexer', 'episode', 'season'],
     });
 
     for (const entry of results) {
@@ -261,6 +269,17 @@ export class DownloadClientsService {
       }
       if (match?.indexer) {
         entry.indexerName = match.indexer.name;
+      }
+      // Surface the resolved season / episode so the Activities row can
+      // render "Show — S01E03" or "Show — Saison 1" without joining
+      // back through the files. Single-episode grabs always include
+      // both fields; season packs include only `seasonNumber`.
+      if (match?.episode) {
+        entry.episodeNumber = match.episode.episodeNumber;
+        entry.episodeTitle = match.episode.title ?? null;
+      }
+      if (match?.season) {
+        entry.seasonNumber = match.season.seasonNumber;
       }
 
       // App-level status from history
