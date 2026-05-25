@@ -175,16 +175,16 @@ export class YifyProvider implements SubtitleProviderInterface {
       results.push({
         providerFileId: pagePath,
         title: releaseName,
+        releaseName,
         language,
         forced: false,
         hearingImpaired,
-        score: Math.min(100, rating * 10),
+        score: 0,
         providerName: 'YIFY',
         providerType: 'yify',
       });
     }
 
-    results.sort((a, b) => b.score - a.score);
     return results;
   }
 

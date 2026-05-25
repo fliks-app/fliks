@@ -478,6 +478,7 @@ export class MediaController {
     // season_number + episode_number (ex. S02E05 → 2 et 5), pas la clé primaire.
     let season: number | undefined;
     let episode: number | undefined;
+    let epDbIdResolved: number | undefined;
     if (episodeId != null && episodeId !== '') {
       const epDbId = Number(episodeId);
       if (Number.isFinite(epDbId)) {
@@ -486,11 +487,25 @@ export class MediaController {
           if (ep) {
             season = s.seasonNumber;
             episode = ep.episodeNumber;
+            epDbIdResolved = epDbId;
             break;
           }
         }
       }
     }
+
+    // Try to pick the file that backs the user's view so the scorer can
+    // compare release attributes (group / source / resolution / codecs).
+    // For episodes we want the file linked to the picked episode; for
+    // movies the first file (movies have at most one in practice).
+    const files = media.files ?? [];
+    const matchingFile =
+      (epDbIdResolved != null
+        ? files.find((f) => f.episodeId === epDbIdResolved)
+        : files[0]) ?? files[0];
+    const videoReleaseName = matchingFile?.relativePath
+      ? matchingFile.relativePath.split('/').pop()?.replace(/\.[^.]+$/, '')
+      : undefined;
 
     return this.subtitlesService.searchSubtitles({
       imdbId: media.imdbId ?? undefined,
@@ -500,6 +515,7 @@ export class MediaController {
       language: language ?? 'en',
       season,
       episode,
+      videoReleaseName,
     });
   }
 

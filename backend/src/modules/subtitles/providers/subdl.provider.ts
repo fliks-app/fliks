@@ -74,10 +74,11 @@ export class SubdlProvider implements SubtitleProviderInterface {
     return (body.subtitles ?? []).map((item) => ({
       providerFileId: item.url,
       title: item.release_name,
+      releaseName: item.release_name,
       language: item.language,
       forced: false,
       hearingImpaired: item.hi,
-      score: Math.min(100, Math.round((item.rating ?? 5) * 10)),
+      score: 0,
       providerName: 'Subdl',
       providerType: PROVIDER_TYPE,
     }));
