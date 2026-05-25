@@ -15,12 +15,12 @@ import { Indexer } from '../indexers/entities/indexer.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
 import { TorznabService } from '../indexers/torznab.service';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
-import { parseReleaseQuality } from './release-quality.parser';
 import {
   parseReleaseLanguage,
+  parseReleaseQuality,
+  parseSeasonEpisode,
   resolveUnknownLanguage,
-} from './release-language.parser';
-import { parseSeasonEpisode } from './release-episode.parser';
+} from '../../common/release-parsing';
 import { getAppQualityById } from '../../common/constants/app-qualities';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
 import { ProfilesService } from '../profiles/profiles.service';

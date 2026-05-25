@@ -1,4 +1,4 @@
-import { parseSeasonEpisode } from './release-episode.parser';
+import { parseSeasonEpisode } from './season-episode.parser';
 
 describe('parseSeasonEpisode', () => {
   it('parses SxxExx', () => {
