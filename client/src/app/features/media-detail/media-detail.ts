@@ -515,6 +515,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   readonly canGrab = computed(() => this.auth.hasPermission('media.grab'));
   readonly canEditProfiles = computed(() => this.auth.hasPermission('media.edit'));
+  readonly canDelete = computed(() => this.auth.hasPermission('media.delete'));
   readonly isAdmin = computed(() => this.auth.hasPermission('settings.access'));
 
   /** Regular requester (no `media.create` permission). The Demander
