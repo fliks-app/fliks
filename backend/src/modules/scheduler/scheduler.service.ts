@@ -381,6 +381,30 @@ export class SchedulerService implements OnModuleInit {
     }
   }
 
+  // Only logs when a targeted (request-driven) SearchMissing kicks off,
+  // so scheduled bulk runs don't get noisy. The hint tells the user what
+  // the candidate query is filtering on when the count is zero.
+  private logTargetedCandidateCount(
+    scope: 'movies' | 'episodes',
+    mediaIds: number[] | undefined,
+    count: number,
+  ): void {
+    if (!mediaIds?.length) return;
+    if (count > 0) {
+      this.log.log(
+        `SearchMissing[${scope}]: ${count} candidate(s) for media IDs [${mediaIds.join(', ')}]`,
+      );
+      return;
+    }
+    const hint =
+      scope === 'movies'
+        ? "check monitored flag, type=movie, and that there's no file already at cutoff"
+        : 'check that the series/seasons/episodes are monitored and have an airDate ≤ today';
+    this.log.log(
+      `SearchMissing[${scope}]: 0 candidates for media IDs [${mediaIds.join(', ')}] — ${hint}`,
+    );
+  }
+
   private async doSearchMissing(mediaIds?: number[]): Promise<void> {
     if (mediaIds?.length) {
       this.log.log(
@@ -430,6 +454,7 @@ export class SchedulerService implements OnModuleInit {
     }
     const candidates = await qb.getMany();
 
+    this.logTargetedCandidateCount('movies', mediaIds, candidates.length);
     if (!candidates.length) return;
 
     const today = new Date().toISOString().slice(0, 10);
@@ -537,6 +562,7 @@ export class SchedulerService implements OnModuleInit {
       .addSelect('lp')
       .getMany();
 
+    this.logTargetedCandidateCount('episodes', mediaIds, episodes.length);
     if (!episodes.length) return;
 
     // Batch-load the linked MediaFile quality for upgrade-candidate episodes
