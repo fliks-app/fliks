@@ -139,14 +139,28 @@ export class CompletionService {
     const candidates = allTorrents.filter(
       (t) => t.hash && !knownHashes.has(t.hash.toLowerCase()),
     );
-    if (!candidates.length) return;
+    if (!candidates.length) {
+      this.log.debug?.(
+        `Auto-match: ${allTorrents.length} qBit torrents, all hashes already in history — nothing to do`,
+      );
+      return;
+    }
+    this.log.log(
+      `Auto-match: scanning ${candidates.length}/${allTorrents.length} torrent(s) without history`,
+    );
 
+    let matched = 0;
+    let skippedByNameFallback = 0;
+    let unidentified = 0;
     for (const torrent of candidates) {
       // Cheap belt-and-braces check: a stale name fallback could
       // legitimately point at one of the existing grabbed rows even
       // when the hash isn't recorded. Skip the auto-match in that case
       // and let `matchAndHeal` write the hash on the next pass.
-      if (this.historyMatcher.findMatch(torrent, grabbed)) continue;
+      if (this.historyMatcher.findMatch(torrent, grabbed)) {
+        skippedByNameFallback++;
+        continue;
+      }
 
       let match;
       try {
@@ -157,7 +171,13 @@ export class CompletionService {
         );
         continue;
       }
-      if (!match) continue;
+      if (!match) {
+        unidentified++;
+        this.log.log(
+          `Auto-match: "${torrent.name}" — no media in library matches the parsed title (ambiguous or unknown)`,
+        );
+        continue;
+      }
 
       const quality = parseReleaseQuality(torrent.name).quality.name;
       const row = await this.historyRepo.save(
@@ -179,6 +199,7 @@ export class CompletionService {
         ),
       );
       grabbed.push(row);
+      matched++;
 
       const epLabel = match.episode
         ? ` ${match.season ? `S${String(match.season.seasonNumber).padStart(2, '0')}` : ''}E${String(match.episode.episodeNumber).padStart(2, '0')}`
@@ -189,6 +210,9 @@ export class CompletionService {
         `Auto-match: bound torrent "${torrent.name}" → ${match.media.title}${epLabel} (history #${row.id})`,
       );
     }
+    this.log.log(
+      `Auto-match: done — ${matched} bound, ${skippedByNameFallback} matched by name (will heal hash), ${unidentified} unidentified`,
+    );
   }
 
   @Cron(CronExpression.EVERY_MINUTE)
