@@ -63,6 +63,15 @@ export class SubtitleFile extends BaseEntity {
   @Column({ type: 'int', default: 0 })
   score: number;
 
+  /**
+   * True when the candidate this row was downloaded from came out of a
+   * hash-based provider lookup (e.g. OpenSubtitles moviehash). Used by
+   * the upgrade pass as a guard: a hash-matched sub is the perfect time
+   * sync, so non-hash candidates can't replace it on score alone.
+   */
+  @Column({ default: false })
+  hashMatched: boolean;
+
   @Column({ default: false })
   synced: boolean;
 

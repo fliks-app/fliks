@@ -127,6 +127,8 @@ export class SubtitleSchedulerService {
               season: fileSeason,
               episode: fileEpisode,
               videoReleaseName,
+              moviehash: file.osdbHash ?? undefined,
+              moviebytesize: file.osdbBytesize ?? undefined,
             });
 
             const best = results.find((r) => r.score >= minScore);
@@ -232,9 +234,18 @@ export class SubtitleSchedulerService {
           season: sub.mediaFile?.episode?.season?.seasonNumber ?? undefined,
           episode: sub.mediaFile?.episode?.episodeNumber ?? undefined,
           videoReleaseName,
+          moviehash: sub.mediaFile?.osdbHash ?? undefined,
+          moviebytesize: sub.mediaFile?.osdbBytesize ?? undefined,
         });
 
-        const better = results.find((r) => r.score > sub.score);
+        // Invariant: a hash-matched sub is the perfect time sync — refuse
+        // to replace it with a non-hash candidate, no matter what the
+        // score says. A non-hash sub from a slightly-better release
+        // doesn't beat a verified hash match.
+        const candidates = sub.hashMatched
+          ? results.filter((r) => r.hashMatched)
+          : results;
+        const better = candidates.find((r) => r.score > sub.score);
         if (!better) continue;
 
         await this.subtitlesService.upgradeSubtitle(sub.id, better);
@@ -382,6 +393,8 @@ export class SubtitleSchedulerService {
           season: fileSeason,
           episode: fileEpisode,
           videoReleaseName,
+          moviehash: mediaFile.osdbHash ?? undefined,
+          moviebytesize: mediaFile.osdbBytesize ?? undefined,
         });
 
         const best = results.find((r) => r.score >= minScore);

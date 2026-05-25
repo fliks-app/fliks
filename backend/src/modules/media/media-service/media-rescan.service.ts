@@ -15,6 +15,7 @@ import { Episode } from '../entities/episode.entity';
 import { MediaType } from '../../../common/enums';
 import { APP_QUALITIES } from '../../../common/constants/app-qualities';
 import { AnalyzeMediaDto } from '../dto/analyze-media.dto';
+import { computeMovieHash } from '../../subtitles/moviehash';
 import { NamingService } from '../../scheduler/naming.service';
 import { FfprobeService } from '../../subtitles/ffprobe.service';
 import { SubtitlesService } from '../../subtitles/subtitles.service';
@@ -139,7 +140,31 @@ export class MediaRescanService {
     media: Media,
   ): Promise<void> {
     await this.detectAndStoreCrop(file, absPath);
+    await this.computeAndStoreOsdbHash(file, absPath);
     this.rebuildSubtitleCacheForFile(file, absPath, media);
+  }
+
+  /**
+   * Compute the OpenSubtitles movie hash for the file and persist it on
+   * the row so subsequent subtitle searches can do a hash-based lookup —
+   * the central scorer awards near-max credit when the provider confirms
+   * a hash match. Best-effort: small or unreadable files store nulls.
+   */
+  private async computeAndStoreOsdbHash(
+    file: MediaFile,
+    absPath: string,
+  ): Promise<void> {
+    try {
+      const result = computeMovieHash(absPath);
+      file.osdbHash = result?.hash ?? null;
+      file.osdbBytesize = result?.bytesize ?? null;
+      await this.mediaFileRepo.save(file);
+    } catch (err) {
+      this.log.warn(
+        `computeAndStoreOsdbHash: failed for "${absPath}"`,
+        err instanceof Error ? err.stack : err,
+      );
+    }
   }
 
   /**

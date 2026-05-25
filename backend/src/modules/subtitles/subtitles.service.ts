@@ -313,6 +313,7 @@ export class SubtitlesService {
       relativePath,
       status: SubtitleStatus.DOWNLOADED,
       score: searchResult.score,
+      hashMatched: !!searchResult.hashMatched,
       synced: false,
     } as any);
   }
