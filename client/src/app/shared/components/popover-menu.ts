@@ -91,32 +91,35 @@ export class PopoverMenuComponent {
   private readonly viewportTick = signal(0);
 
   constructor() {
-    // Move the host out of any clipping / transformed ancestor on the
-    // sheet variant (touch / TV). Two separate problems need this:
-    //   • TV → body.tv has a scale transform that re-anchors fixed
-    //     descendants to body's box instead of the viewport.
-    //   • Mobile → the layout's drawer-content is `position: relative`,
-    //     creating a stacking context that traps z-[101] below the
-    //     bottom dock (z-40 at body level).
-    //
-    // Target: the closest open <dialog> ancestor if there is one, so we
-    // stay inside its top-layer (showModal() puts the dialog above
-    // everything else regardless of z-index); otherwise <html>.
-    if (typeof document !== 'undefined' && !this.useDropdown()) {
-      queueMicrotask(() => {
-        const openDialog = this.host.nativeElement.closest<HTMLDialogElement>(
-          'dialog[open]',
-        );
-        (openDialog ?? document.documentElement).appendChild(
-          this.host.nativeElement,
-        );
-      });
-    }
     // Focus the first focusable inside the menu on every open. autofocus
     // is unreliable on Capacitor's Android WebView for dynamically added
     // content, so we do it programmatically.
     effect((onCleanup) => {
       if (!this.open()) return;
+      // Move the host on every open so we land in the right stacking
+      // context for the *current* anchor. Three problems we sidestep:
+      //   • <dialog open> → showModal() renders in the browser top-layer,
+      //     which sits above every regular z-index. The popover host can
+      //     be mounted anywhere (e.g. the SelectPicker singleton lives
+      //     at the app root, not inside the dialog), so we walk up from
+      //     the anchor — not the host — to find the open dialog and
+      //     append into its top-layer.
+      //   • TV → body.tv has a scale transform that re-anchors fixed
+      //     descendants to body's box instead of the viewport.
+      //   • Mobile → drawer-content is `position: relative`, creating a
+      //     stacking context that traps z-[101] below the bottom dock.
+      // When no dialog is open we relocate to <html> unconditionally
+      // (dropdown variant included) so a previous dialog-scoped open
+      // doesn't leave the host orphaned inside a now-closed dialog.
+      if (typeof document !== 'undefined') {
+        const anchor = this.anchor();
+        const openDialog =
+          anchor?.closest<HTMLDialogElement>('dialog[open]') ?? null;
+        const target = openDialog ?? document.documentElement;
+        if (this.host.nativeElement.parentElement !== target) {
+          target.appendChild(this.host.nativeElement);
+        }
+      }
       queueMicrotask(() => {
         // Prefer the active item (caller marks it with `[autofocus]` or
         // `[aria-current]`) so the user lands on the current selection
