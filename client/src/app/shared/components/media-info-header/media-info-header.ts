@@ -139,6 +139,7 @@ export class MediaInfoHeaderComponent {
   // ── Inputs: permissions / loading ──
   readonly canGrab = input(false);
   readonly canEditProfiles = input(false);
+  readonly canDelete = input(false);
   readonly isAdmin = input(false);
   /** Viewer can submit a request (regular requester role). Surfaces the
    *  Demander entry in the More dropdown when the item is missing. */

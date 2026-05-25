@@ -93,10 +93,12 @@
             {{ 'downloads.download' | translate }}
           </button>
         }
-        <button class="flex flex-col items-center gap-1 text-sm text-error" (click)="onDeleteFileClick()">
-          <svg lucideTrash2 class="h-5 w-5"></svg>
-          {{ 'media_detail.delete' | translate }}
-        </button>
+        @if (canDelete()) {
+          <button class="flex flex-col items-center gap-1 text-sm text-error" (click)="onDeleteFileClick()">
+            <svg lucideTrash2 class="h-5 w-5"></svg>
+            {{ 'media_detail.delete' | translate }}
+          </button>
+        }
       }
       <app-dropdown-menu placement="bottom-end">
         <button trigger type="button" class="flex flex-col items-center gap-1 text-sm cursor-pointer">
@@ -262,7 +264,7 @@
               <svg lucideCheck class="h-4 w-4"></svg>
             </button>
           }
-          @if (mediaType() !== 'series' || episodeId()) {
+          @if ((mediaType() !== 'series' || episodeId()) && canDelete()) {
             <button type="button" class="btn btn-error btn-outline btn btn-circle" (click)="onDeleteFileClick()">
               <svg lucideTrash2 class="h-4 w-4"></svg>
             </button>
@@ -441,6 +443,8 @@
       @else { <svg lucideEye class="h-5 w-5 shrink-0 opacity-80"></svg> }
       <span class="flex-1">{{ (monitored() ? 'media_detail.unmonitor' : 'media_detail.monitor') | translate }}</span>
     </button>
+  }
+  @if (canDelete()) {
     <button type="button" [disabled]="deleteLoading()" class="dropdown-item text-error" (click)="deleteMedia.emit()">
       @if (deleteLoading()) { <span class="loading loading-spinner loading-sm"></span> }
       @else { <svg lucideTrash2 class="h-5 w-5 shrink-0"></svg> }
