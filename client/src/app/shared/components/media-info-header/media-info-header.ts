@@ -28,6 +28,7 @@ import {
   LucideFolder,
   LucidePlay,
   LucideRotateCcw,
+  LucideScanLine,
   LucideSearch,
   LucideSettings,
   LucideSkipForward,
@@ -83,8 +84,8 @@ interface AudioTrack {
     DecimalPipe, FormsModule, RouterLink, TranslateModule,
     LucideCaptions, LucideChevronLeft, LucideCheck, LucideClipboardList, LucideDownload,
     LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideFileText,
-    LucideFilm, LucideFolder, LucidePlay, LucideRotateCcw, LucideSearch,
-    LucideSettings, LucideSkipForward, LucideTrash2,
+    LucideFilm, LucideFolder, LucidePlay, LucideRotateCcw, LucideScanLine,
+    LucideSearch, LucideSettings, LucideSkipForward, LucideTrash2,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-info-header.html',
@@ -174,7 +175,7 @@ export class MediaInfoHeaderComponent {
   readonly deleteMedia = output<void>();
   readonly loadReleases = output<void>();
   readonly grabBest = output<void>();
-  readonly rescanFiles = output<void>();
+  readonly openAnalyze = output<void>();
   readonly detectIntros = output<void>();
   readonly editSubtitles = output<void>();
   /** Viewer (regular requester) asks to (re-)request the current title. */

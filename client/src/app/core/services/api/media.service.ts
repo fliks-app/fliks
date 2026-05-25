@@ -454,4 +454,13 @@ export class MediaService {
     return firstValueFrom(this.http.post<{ ok: boolean }>(`/api/media/${id}/rescan`, {}));
   }
 
+  analyzeMedia(
+    id: number,
+    opts: { sprites?: boolean; crop?: boolean; subtitleCache?: boolean },
+  ) {
+    return firstValueFrom(
+      this.http.post<{ ok: boolean }>(`/api/media/${id}/analyze`, opts),
+    );
+  }
+
 }
