@@ -188,6 +188,7 @@ export interface SearchParams {
   cutoffUnmet?: boolean;
   letter?: string;
   excludeWatched?: boolean;
+  onlyWatched?: boolean;
   libraryId?: number;
   requestedByMe?: boolean;
 }

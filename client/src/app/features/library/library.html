@@ -145,7 +145,7 @@
             }
           </button>
 
-          <div class="p-3 space-y-4 min-w-56">
+          <div class="p-3 min-w-56 space-y-4 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-x-6 lg:gap-y-4 lg:min-w-md">
           <!-- Section: Surveillance -->
           <div>
             <h4 class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-2">
@@ -178,6 +178,42 @@
                   (change)="filterMonitored.set('false'); onFilterChange()"
                 />
                 <span class="text-sm">{{ 'library.filter_unmonitored' | translate }}</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Section: Vu -->
+          <div>
+            <h4 class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-2">
+              {{ 'library.filter_watched_label' | translate }}
+            </h4>
+            <div class="space-y-1">
+              <label class="flex items-center gap-2 cursor-pointer py-1">
+                <input
+                  type="radio" name="library-filter-watched"
+                  class="radio radio-sm radio-primary"
+                  [checked]="filterWatched() === ''"
+                  (change)="filterWatched.set(''); onFilterChange()"
+                />
+                <span class="text-sm">{{ 'library.filter_disabled' | translate }}</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer py-1">
+                <input
+                  type="radio" name="library-filter-watched"
+                  class="radio radio-sm radio-primary"
+                  [checked]="filterWatched() === 'watched'"
+                  (change)="filterWatched.set('watched'); onFilterChange()"
+                />
+                <span class="text-sm">{{ 'library.filter_watched' | translate }}</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer py-1">
+                <input
+                  type="radio" name="library-filter-watched"
+                  class="radio radio-sm radio-primary"
+                  [checked]="filterWatched() === 'unwatched'"
+                  (change)="filterWatched.set('unwatched'); onFilterChange()"
+                />
+                <span class="text-sm">{{ 'library.filter_unwatched' | translate }}</span>
               </label>
             </div>
           </div>

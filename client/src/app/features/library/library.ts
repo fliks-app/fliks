@@ -44,6 +44,7 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 export type LibraryViewMode = 'all' | 'suggestions' | 'genres' | 'collections';
 export type SortOrder = 'ASC' | 'DESC';
 type FilterMonitored = '' | 'true' | 'false';
+type FilterWatched = '' | 'watched' | 'unwatched';
 
 /** Natural default order per sort field. Title reads A→Z; the three
  *  date / rating fields lead with the most recent / best value because
@@ -112,6 +113,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   readonly sortOrder = signal<SortOrder>('ASC');
   readonly filterMonitored = signal<FilterMonitored>('');
   readonly filterStatus = signal('');
+  readonly filterWatched = signal<FilterWatched>('');
   readonly viewMode = signal<LibraryViewMode>('all');
 
   // ── Suggestions view ────────────────────────────────────────────────
@@ -155,7 +157,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   readonly alphabet = ALPHABET;
   readonly hasActiveFilters = computed(() =>
-    this.filterMonitored() !== '' || this.filterStatus() !== '',
+    this.filterMonitored() !== '' ||
+    this.filterStatus() !== '' ||
+    this.filterWatched() !== '',
   );
 
   @ViewChild('sentinel') set sentinelRef(ref: ElementRef<HTMLElement> | undefined) {
@@ -231,6 +235,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
         (qp.get('monitored') ?? stored['monitored'] ?? '') as FilterMonitored,
       );
       this.filterStatus.set(qp.get('status') ?? stored['status'] ?? '');
+      this.filterWatched.set(
+        (qp.get('watched') ?? stored['watched'] ?? '') as FilterWatched,
+      );
       this.sortBy.set(qp.get('sortBy') ?? stored['sortBy'] ?? 'title');
       this.sortOrder.set(
         (qp.get('sortOrder') ?? stored['sortOrder'] ?? 'ASC') as SortOrder,
@@ -305,6 +312,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.searchQuery.set(qp.get('q') ?? '');
       this.filterMonitored.set((qp.get('monitored') ?? '') as FilterMonitored);
       this.filterStatus.set(qp.get('status') ?? '');
+      this.filterWatched.set((qp.get('watched') ?? '') as FilterWatched);
       this.sortBy.set(qp.get('sortBy') ?? 'title');
       this.sortOrder.set((qp.get('sortOrder') ?? 'ASC') as SortOrder);
       this.viewMode.set((qp.get('view') ?? 'all') as LibraryViewMode);
@@ -541,6 +549,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (this.searchQuery()) params['q'] = this.searchQuery();
     if (this.filterMonitored()) params['monitored'] = this.filterMonitored();
     if (this.filterStatus()) params['status'] = this.filterStatus();
+    if (this.filterWatched()) params['watched'] = this.filterWatched();
     if (this.sortBy() !== 'title') params['sortBy'] = this.sortBy();
     if (this.sortOrder() !== 'ASC') params['sortOrder'] = this.sortOrder();
     if (this.viewMode() !== 'all') params['view'] = this.viewMode();
@@ -560,6 +569,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (this.searchQuery()) data['q'] = this.searchQuery();
     if (this.filterMonitored()) data['monitored'] = this.filterMonitored();
     if (this.filterStatus()) data['status'] = this.filterStatus();
+    if (this.filterWatched()) data['watched'] = this.filterWatched();
     if (this.sortBy() !== 'title') data['sortBy'] = this.sortBy();
     if (this.sortOrder() !== 'ASC') data['sortOrder'] = this.sortOrder();
     if (this.viewMode() !== 'all') data['view'] = this.viewMode();
@@ -582,6 +592,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     const monitored = this.filterMonitored();
     try {
       const fs = this.filterStatus();
+      const fw = this.filterWatched();
       const [res, watchedIds] = await Promise.all([
         this.mediaService.getAll({
           libraryId,
@@ -593,6 +604,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
           monitored: monitored ? monitored === 'true' : undefined,
           missing: fs === 'missing' ? true : fs === 'downloaded' ? false : undefined,
           cutoffUnmet: fs === 'cutoffUnmet' ? true : undefined,
+          onlyWatched: fw === 'watched' ? true : undefined,
+          excludeWatched: fw === 'unwatched' ? true : undefined,
           limit: 0,
         }),
         this.streamingApi.getWatchedMediaIds().catch(() => [] as number[]),
