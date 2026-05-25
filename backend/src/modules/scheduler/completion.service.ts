@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, LessThan, Repository } from 'typeorm';
@@ -34,6 +34,7 @@ import { Library } from '../libraries/entities/library.entity';
 import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
 import { MarkersService } from '../markers/markers.service';
 import { FileTransferService } from '../../common/services/file-transfer.service';
+import { MediaService } from '../media/media.service';
 
 @Injectable()
 export class CompletionService {
@@ -74,6 +75,8 @@ export class CompletionService {
     private readonly historyMatcher: TorrentHistoryMatcher,
     private readonly fileTransfer: FileTransferService,
     private readonly markers: MarkersService,
+    @Inject(forwardRef(() => MediaService))
+    private readonly mediaService: MediaService,
   ) {}
 
   /**
@@ -366,7 +369,11 @@ export class CompletionService {
       );
     }
 
-    const importedFiles: { savedFile: MediaFile; episodeId?: number }[] = [];
+    const importedFiles: {
+      savedFile: MediaFile;
+      episodeId?: number;
+      destPath: string;
+    }[] = [];
 
     for (let idx = 0; idx < filesToImport.length; idx++) {
       const videoFile = filesToImport[idx];
@@ -514,7 +521,7 @@ export class CompletionService {
         await this.episodeRepo.update(episodeId, { hasFile: true });
       }
 
-      importedFiles.push({ savedFile, episodeId });
+      importedFiles.push({ savedFile, episodeId, destPath });
     }
 
     await this.historyRepo.update(history.id, { status: 'completed' });
@@ -539,9 +546,21 @@ export class CompletionService {
       path: media.path,
     });
 
-    // Trigger subtitle search for each imported file (sequential to avoid rate limits)
+    // Per-file post-import work: cropdetect + embedded-subtitle cache warmup
+    // via finalizeImportedFile (shared with disk import / rescan), then the
+    // external-subtitle search. Sequential to avoid hammering ffmpeg and the
+    // subtitle provider rate limits.
     void (async () => {
-      for (const { savedFile, episodeId: epId } of importedFiles) {
+      for (const { savedFile, episodeId: epId, destPath } of importedFiles) {
+        try {
+          await this.mediaService.finalizeImportedFile(
+            savedFile,
+            destPath,
+            media,
+          );
+        } catch (e) {
+          this.log.warn(`Post-import enrichment failed: ${e}`);
+        }
         try {
           await this.subtitleScheduler.onMediaFileImported(
             media.id,
