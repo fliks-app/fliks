@@ -126,38 +126,50 @@ export class CompletionService {
   ): Promise<void> {
     if (!allTorrents.length) return;
 
-    // Single SQL trip to collect every hash we've ever seen — avoids
-    // matching the same torrent again on every tick. Filter `null`
-    // hashes (legacy rows pre-PR-#82).
-    const allHashRows: { hash: string }[] = await this.historyRepo
-      .createQueryBuilder('h')
-      .select('LOWER(h.torrentHash)', 'hash')
-      .where('h.torrentHash IS NOT NULL')
-      .getRawMany();
-    const knownHashes = new Set(allHashRows.map((r) => r.hash));
+    // Index every history row by its hash so we can tell apart:
+    //  - "no row at all"            → create one.
+    //  - "row exists, media linked" → already handled by the main matcher.
+    //  - "row exists, media NULL"   → rebind the existing row (anomalous
+    //    state from past bugs; we cannot SQL-diagnose so we heal at
+    //    runtime). Updating instead of inserting keeps the row's
+    //    original \`createdAt\` / status history.
+    const allHistory = await this.historyRepo.find({
+      relations: ['media'],
+    });
+    const rowByHash = new Map<string, DownloadHistory>();
+    for (const h of allHistory) {
+      if (h.torrentHash) rowByHash.set(h.torrentHash.toLowerCase(), h);
+    }
 
-    const candidates = allTorrents.filter(
-      (t) => t.hash && !knownHashes.has(t.hash.toLowerCase()),
-    );
+    const candidates = allTorrents.filter((t) => {
+      if (!t.hash) return false;
+      const existing = rowByHash.get(t.hash.toLowerCase());
+      if (!existing) return true; // No row → candidate (create).
+      if (!existing.mediaId) return true; // Row but unlinked → candidate (rebind).
+      return false; // Row already linked → skip.
+    });
     if (!candidates.length) {
       this.log.debug?.(
-        `Auto-match: ${allTorrents.length} qBit torrents, all hashes already in history — nothing to do`,
+        `Auto-match: ${allTorrents.length} qBit torrents, all already linked — nothing to do`,
       );
       return;
     }
     this.log.log(
-      `Auto-match: scanning ${candidates.length}/${allTorrents.length} torrent(s) without history`,
+      `Auto-match: scanning ${candidates.length}/${allTorrents.length} torrent(s) without a media link`,
     );
 
-    let matched = 0;
+    let bound = 0;
+    let rebound = 0;
     let skippedByNameFallback = 0;
     let unidentified = 0;
     for (const torrent of candidates) {
-      // Cheap belt-and-braces check: a stale name fallback could
-      // legitimately point at one of the existing grabbed rows even
-      // when the hash isn't recorded. Skip the auto-match in that case
-      // and let `matchAndHeal` write the hash on the next pass.
-      if (this.historyMatcher.findMatch(torrent, grabbed)) {
+      const existingRow = rowByHash.get(torrent.hash!.toLowerCase());
+
+      // Belt-and-braces: name-fallback against currently-grabbed rows.
+      // Only skip if that match actually has a media reference — a
+      // \`mediaId IS NULL\` ghost row would otherwise prevent the heal.
+      const fallback = this.historyMatcher.findMatch(torrent, grabbed);
+      if (fallback?.history.mediaId) {
         skippedByNameFallback++;
         continue;
       }
@@ -180,38 +192,57 @@ export class CompletionService {
       }
 
       const quality = parseReleaseQuality(torrent.name).quality.name;
-      const row = await this.historyRepo.save(
-        this.historyRepo.create(
-          buildGrabHistoryRow({
-            media: match.media,
-            downloadClient: torrent._client,
-            sourceTitle: torrent.name,
-            torrentHash: torrent.hash,
-            quality,
-            // Auto-matched orphans look closer to a manual add (the
-            // user put the torrent in qBit, we just figured out which
-            // media it belongs to) than to a scheduler auto-grab.
-            grabSource: 'manual',
-            episodeId: match.episode?.id ?? null,
-            seasonId:
-              match.season?.id ?? match.episode?.season?.id ?? null,
-          }),
-        ),
-      );
-      grabbed.push(row);
-      matched++;
+      const seasonId =
+        match.season?.id ?? match.episode?.season?.id ?? null;
+      const episodeId = match.episode?.id ?? null;
+
+      let row: DownloadHistory;
+      if (existingRow) {
+        // Heal the existing orphan: assign the media + episode/season,
+        // bump quality + sourceTitle (decoded) so the next tick's
+        // matcher sees a clean row. Status / createdAt / grabSource
+        // are left intact — this is restoration, not a new grab.
+        existingRow.media = match.media;
+        existingRow.episode = match.episode ?? null;
+        existingRow.season =
+          match.season ?? match.episode?.season ?? null;
+        existingRow.quality = quality;
+        row = await this.historyRepo.save(existingRow);
+        rebound++;
+      } else {
+        row = await this.historyRepo.save(
+          this.historyRepo.create(
+            buildGrabHistoryRow({
+              media: match.media,
+              downloadClient: torrent._client,
+              sourceTitle: torrent.name,
+              torrentHash: torrent.hash,
+              quality,
+              // Auto-matched orphans look closer to a manual add (the
+              // user put the torrent in qBit, we just figured out which
+              // media it belongs to) than to a scheduler auto-grab.
+              grabSource: 'manual',
+              episodeId,
+              seasonId,
+            }),
+          ),
+        );
+        grabbed.push(row);
+        bound++;
+      }
 
       const epLabel = match.episode
         ? ` ${match.season ? `S${String(match.season.seasonNumber).padStart(2, '0')}` : ''}E${String(match.episode.episodeNumber).padStart(2, '0')}`
         : match.season
           ? ` Season ${match.season.seasonNumber}`
           : '';
+      const verb = existingRow ? 'rebound' : 'bound';
       this.log.log(
-        `Auto-match: bound torrent "${torrent.name}" → ${match.media.title}${epLabel} (history #${row.id})`,
+        `Auto-match: ${verb} torrent "${torrent.name}" → ${match.media.title}${epLabel} (history #${row.id})`,
       );
     }
     this.log.log(
-      `Auto-match: done — ${matched} bound, ${skippedByNameFallback} matched by name (will heal hash), ${unidentified} unidentified`,
+      `Auto-match: done — ${bound} created, ${rebound} healed, ${skippedByNameFallback} matched by name (will heal hash), ${unidentified} unidentified`,
     );
   }
 
