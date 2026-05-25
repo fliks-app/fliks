@@ -22,7 +22,7 @@ import { MediaType } from '../../common/enums';
 import { GrabMovieDto } from './dto/grab-movie.dto';
 import { QualityProfileItem } from '../profiles/entities/quality-profile.entity';
 import { getAppQualityById } from '../../common/constants/app-qualities';
-import { parseReleaseQuality } from './release-quality.parser';
+import { parseReleaseQuality } from '../../common/release-parsing';
 import {
   ReleaseRejection,
   buildIndexerMinSeeders,

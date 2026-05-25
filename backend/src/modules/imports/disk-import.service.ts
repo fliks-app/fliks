@@ -17,7 +17,7 @@ import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { Library } from '../libraries/entities/library.entity';
 import { MediaType } from '../../common/enums';
-import { parseReleaseQuality } from '../media/release-quality.parser';
+import { parseReleaseQuality } from '../../common/release-parsing';
 import { ImportFileEntry } from './dto/confirm-disk-import.dto';
 import { MediaService } from '../media/media.service';
 import { NamingService } from '../scheduler/naming.service';

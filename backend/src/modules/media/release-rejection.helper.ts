@@ -3,12 +3,12 @@ import { AudioLanguageItem } from '../profiles/entities/language-profile.entity'
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { TorznabRelease } from '../indexers/torznab.service';
 import { APP_LANGUAGES } from '../../common/constants/app-languages';
-import { parseReleaseQuality } from './release-quality.parser';
 import {
   parseReleaseLanguage,
+  parseReleaseQuality,
+  parseSeasonEpisode,
   resolveUnknownLanguage,
-} from './release-language.parser';
-import { parseSeasonEpisode } from './release-episode.parser';
+} from '../../common/release-parsing';
 
 /**
  * Resolve a stored media-file quality string (e.g. `"WEBDL-1080p"`,

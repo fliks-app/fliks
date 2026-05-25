@@ -1,8 +1,8 @@
 import {
   ReleaseAttributes,
   parseReleaseAttributes,
-} from '../media/release-attributes.parser';
-import { parseSeasonEpisode } from '../media/release-episode.parser';
+  parseSeasonEpisode,
+} from '../../common/release-parsing';
 
 /**
  * Bazarr-style scoring weights (mirrored from

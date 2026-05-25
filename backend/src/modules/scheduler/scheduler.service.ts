@@ -33,7 +33,7 @@ import {
 } from '../media/auto-grab-pipeline.service';
 import { MarkersService } from '../markers/markers.service';
 import { rankFromQualityString } from '../media/release-rejection.helper';
-import { parseSeasonEpisode } from '../media/release-episode.parser';
+import { parseSeasonEpisode } from '../../common/release-parsing';
 
 // Note: scoring/profile/blocklist/quality-definition wiring lives in
 // AutoGrabPipelineService. This file only orchestrates the high-level
