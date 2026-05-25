@@ -25,6 +25,11 @@ import { MovieDownloadService } from './movie-download.service';
 import { EpisodeDownloadService } from './episode-download.service';
 import { AutoGrabPipelineService } from './auto-grab-pipeline.service';
 import { NamingService } from '../scheduler/naming.service';
+import { MediaImportService } from './media-service/media-import.service';
+import { MediaMetadataService } from './media-service/media-metadata.service';
+import { MediaQueryService } from './media-service/media-query.service';
+import { MediaMutationService } from './media-service/media-mutation.service';
+import { MediaRescanService } from './media-service/media-rescan.service';
 import { Library } from '../libraries/entities/library.entity';
 import { LibrariesModule } from '../libraries/libraries.module';
 import { FliksSchedulerModule } from '../scheduler/scheduler.module';
@@ -63,6 +68,11 @@ import { StreamingModule } from '../streaming/streaming.module';
   controllers: [MediaController],
   providers: [
     MediaService,
+    MediaImportService,
+    MediaMetadataService,
+    MediaQueryService,
+    MediaMutationService,
+    MediaRescanService,
     MovieDownloadService,
     EpisodeDownloadService,
     AutoGrabPipelineService,
