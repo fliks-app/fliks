@@ -15,7 +15,7 @@
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:tizen="http://tizen.org/ns/widgets"
         id="https://fliks.media/tizen"
-        version="1.5.1"
+        version="1.7.1"
         viewmodes="maximized">
   <name>Fliks</name>
   <description>Fliks media app for Samsung Smart TV</description>

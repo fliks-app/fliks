@@ -17,6 +17,20 @@
           "path": "client/package.json",
           "jsonpath": "$.version"
         },
+        {
+          "type": "json",
+          "path": "client/webos/appinfo.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "xml",
+          "path": "client/tizen/config.xml",
+          "xpath": "//*[local-name()='widget']/@version"
+        },
+        {
+          "type": "generic",
+          "path": "macos/Fliks/Info.plist"
+        },
         "client/android/app/build.gradle",
         "cast-receiver/index.html",
         "client/ios/App/App.xcodeproj/project.pbxproj"
