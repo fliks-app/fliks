@@ -4,7 +4,9 @@ import {
   SubtitleSearchParams,
   SubtitleSearchResult,
 } from './subtitle-provider.interface';
+import { isRateLimited, rateLimitedFetch } from './rate-limiter';
 
+const PROVIDER_TYPE = 'subsynchro';
 const BASE_URL = 'https://www.subsynchro.com';
 const SEARCH_URL = `${BASE_URL}/include/ajax/subMarin.php`;
 const USER_AGENT = 'Fliks';
@@ -37,6 +39,8 @@ export class SubsynchroProvider implements SubtitleProviderInterface {
    * Based on Bazarr's implementation (subliminal_patch/providers/subsynchro.py).
    */
   async search(params: SubtitleSearchParams): Promise<SubtitleSearchResult[]> {
+    if (isRateLimited(PROVIDER_TYPE)) return [];
+
     // Subsynchro is movie-only — skip series
     if (params.season != null || params.episode != null) {
       return [];
@@ -46,16 +50,12 @@ export class SubsynchroProvider implements SubtitleProviderInterface {
     query.set('title', params.title);
     if (params.year) query.set('year', String(params.year));
 
-    let res: Response;
-    try {
-      res = await fetch(`${SEARCH_URL}?${query}`, {
-        headers: this.headers,
-      });
-    } catch (e) {
-      this.logger.warn(`Subsynchro search error: ${(e as Error).message}`);
-      return [];
-    }
-
+    const res = await rateLimitedFetch(
+      PROVIDER_TYPE,
+      `${SEARCH_URL}?${query}`,
+      { headers: this.headers },
+    );
+    if (!res) return [];
     if (!res.ok) {
       this.logger.warn(`Subsynchro search failed: ${res.status}`);
       return [];
@@ -99,9 +99,14 @@ export class SubsynchroProvider implements SubtitleProviderInterface {
       ? downloadUrl
       : `${BASE_URL}${downloadUrl.startsWith('/') ? '' : '/'}${downloadUrl}`;
 
-    const res = await fetch(url, { headers: this.headers });
-    if (!res.ok) {
-      throw new Error(`Subsynchro download failed: ${res.status}`);
+    if (isRateLimited(PROVIDER_TYPE)) {
+      throw new Error('Subsynchro is rate-limited, try again later');
+    }
+    const res = await rateLimitedFetch(PROVIDER_TYPE, url, {
+      headers: this.headers,
+    });
+    if (!res || !res.ok) {
+      throw new Error(`Subsynchro download failed: ${res?.status}`);
     }
 
     const buf = Buffer.from(await res.arrayBuffer());

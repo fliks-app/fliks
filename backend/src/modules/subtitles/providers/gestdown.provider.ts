@@ -4,11 +4,11 @@ import {
   SubtitleSearchParams,
   SubtitleSearchResult,
 } from './subtitle-provider.interface';
+import { isRateLimited, rateLimitedFetch } from './rate-limiter';
 
+const PROVIDER_TYPE = 'gestdown';
 const BASE_URL = 'https://api.gestdown.info';
 const USER_AGENT = 'Fliks/1.0';
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 5_000;
 
 // Gestdown uses Addic7ed-style language names
 const LANG_MAP: Record<string, string> = {
@@ -66,6 +66,8 @@ export class GestdownProvider implements SubtitleProviderInterface {
   private readonly logger = new Logger(GestdownProvider.name);
 
   async search(params: SubtitleSearchParams): Promise<SubtitleSearchResult[]> {
+    if (isRateLimited(PROVIDER_TYPE)) return [];
+
     // Gestdown only supports TV shows
     if (params.season == null || params.episode == null) return [];
 
@@ -79,7 +81,12 @@ export class GestdownProvider implements SubtitleProviderInterface {
     if (!showId) return [];
 
     const url = `${BASE_URL}/subtitles/get/${showId}/${params.season}/${params.episode}/${lang}`;
-    const res = await this.fetchWithRetry(url);
+    const res = await rateLimitedFetch(
+      PROVIDER_TYPE,
+      url,
+      { headers: { 'User-Agent': USER_AGENT } },
+      { defaultBackoffSec: 5 },
+    );
     if (!res || !res.ok) return [];
 
     const body = (await res.json()) as {
@@ -103,8 +110,16 @@ export class GestdownProvider implements SubtitleProviderInterface {
   }
 
   async download(result: SubtitleSearchResult): Promise<Buffer> {
+    if (isRateLimited(PROVIDER_TYPE)) {
+      throw new Error('Gestdown is rate-limited, try again later');
+    }
     const url = `${BASE_URL}${result.providerFileId}`;
-    const res = await this.fetchWithRetry(url);
+    const res = await rateLimitedFetch(
+      PROVIDER_TYPE,
+      url,
+      { headers: { 'User-Agent': USER_AGENT } },
+      { defaultBackoffSec: 5 },
+    );
     if (!res || !res.ok)
       throw new Error(`Gestdown download failed: ${res?.status}`);
     return Buffer.from(await res.arrayBuffer());
@@ -125,11 +140,14 @@ export class GestdownProvider implements SubtitleProviderInterface {
     params: SubtitleSearchParams,
   ): Promise<string | null> {
     const searchUrl = `${BASE_URL}/shows/search/${encodeURIComponent(params.title)}`;
-    const res = await fetch(searchUrl, {
-      headers: { 'User-Agent': USER_AGENT },
-    });
-    if (!res.ok) {
-      this.logger.warn(`Gestdown show search failed: ${res.status}`);
+    const res = await rateLimitedFetch(
+      PROVIDER_TYPE,
+      searchUrl,
+      { headers: { 'User-Agent': USER_AGENT } },
+      { defaultBackoffSec: 5 },
+    );
+    if (!res || !res.ok) {
+      if (res) this.logger.warn(`Gestdown show search failed: ${res.status}`);
       return null;
     }
 
@@ -147,21 +165,5 @@ export class GestdownProvider implements SubtitleProviderInterface {
 
     // Fallback to first result
     return body.shows[0].id;
-  }
-
-  /** Fetch with retry on HTTP 423 (rate-limited). */
-  private async fetchWithRetry(url: string): Promise<Response | null> {
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const res = await fetch(url, {
-        headers: { 'User-Agent': USER_AGENT },
-      });
-      if (res.status !== 423) return res;
-      this.logger.warn(
-        `Gestdown rate-limited (423), retry ${attempt + 1}/${MAX_RETRIES}`,
-      );
-      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
-    }
-    this.logger.warn('Gestdown: max retries reached');
-    return null;
   }
 }

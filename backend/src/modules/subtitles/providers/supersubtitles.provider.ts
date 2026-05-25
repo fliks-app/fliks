@@ -4,7 +4,9 @@ import {
   SubtitleSearchParams,
   SubtitleSearchResult,
 } from './subtitle-provider.interface';
+import { isRateLimited, rateLimitedFetch } from './rate-limiter';
 
+const PROVIDER_TYPE = 'supersubtitles';
 const BASE_URL = 'https://www.feliratok.eu';
 const REFERER = `${BASE_URL}/index.php`;
 
@@ -53,6 +55,8 @@ export class SupersubtitlesProvider implements SubtitleProviderInterface {
    * Based on Bazarr's implementation (subliminal_patch/providers/supersubtitles.py).
    */
   async search(params: SubtitleSearchParams): Promise<SubtitleSearchResult[]> {
+    if (isRateLimited(PROVIDER_TYPE)) return [];
+
     if (params.season != null && params.episode != null) {
       return this.searchEpisode(params);
     }
@@ -60,10 +64,15 @@ export class SupersubtitlesProvider implements SubtitleProviderInterface {
   }
 
   async download(result: SubtitleSearchResult): Promise<Buffer> {
+    if (isRateLimited(PROVIDER_TYPE)) {
+      throw new Error('Supersubtitles is rate-limited, try again later');
+    }
     const url = `${BASE_URL}/index.php?action=letolt&felirat=${result.providerFileId}`;
-    const res = await fetch(url, { headers: this.headers });
-    if (!res.ok) {
-      throw new Error(`Supersubtitles download failed: ${res.status}`);
+    const res = await rateLimitedFetch(PROVIDER_TYPE, url, {
+      headers: this.headers,
+    });
+    if (!res || !res.ok) {
+      throw new Error(`Supersubtitles download failed: ${res?.status}`);
     }
     return Buffer.from(await res.arrayBuffer());
   }
@@ -98,16 +107,10 @@ export class SupersubtitlesProvider implements SubtitleProviderInterface {
 
     // Step 2: Query subtitles for the specific episode
     const url = `${BASE_URL}/index.php?action=xbmc&sid=${seriesId}&ev=${params.season ?? 1}&rtol=${params.episode ?? 1}`;
-    let res: Response;
-    try {
-      res = await fetch(url, { headers: this.headers });
-    } catch (e) {
-      this.logger.warn(
-        `Supersubtitles episode search error: ${(e as Error).message}`,
-      );
-      return [];
-    }
-
+    const res = await rateLimitedFetch(PROVIDER_TYPE, url, {
+      headers: this.headers,
+    });
+    if (!res) return [];
     if (!res.ok) {
       this.logger.warn(`Supersubtitles episode search failed: ${res.status}`);
       return [];
@@ -151,18 +154,10 @@ export class SupersubtitlesProvider implements SubtitleProviderInterface {
    */
   private async lookupSeriesId(title: string): Promise<string | null> {
     const url = `${BASE_URL}/index.php?term=${encodeURIComponent(title)}&nyelv=0&action=autoname`;
-
-    let res: Response;
-    try {
-      res = await fetch(url, { headers: this.headers });
-    } catch (e) {
-      this.logger.warn(
-        `Supersubtitles series lookup error: ${(e as Error).message}`,
-      );
-      return null;
-    }
-
-    if (!res.ok) return null;
+    const res = await rateLimitedFetch(PROVIDER_TYPE, url, {
+      headers: this.headers,
+    });
+    if (!res || !res.ok) return null;
 
     const body = (await res.json()) as { name: string; ID: string }[];
     if (!Array.isArray(body) || !body.length) return null;
@@ -182,17 +177,10 @@ export class SupersubtitlesProvider implements SubtitleProviderInterface {
     params: SubtitleSearchParams,
   ): Promise<SubtitleSearchResult[]> {
     const url = `${BASE_URL}/index.php?search=${encodeURIComponent(params.title)}&soriSorszam=&nyelv=&tab=film`;
-
-    let res: Response;
-    try {
-      res = await fetch(url, { headers: this.headers });
-    } catch (e) {
-      this.logger.warn(
-        `Supersubtitles movie search error: ${(e as Error).message}`,
-      );
-      return [];
-    }
-
+    const res = await rateLimitedFetch(PROVIDER_TYPE, url, {
+      headers: this.headers,
+    });
+    if (!res) return [];
     if (!res.ok) {
       this.logger.warn(`Supersubtitles movie search failed: ${res.status}`);
       return [];

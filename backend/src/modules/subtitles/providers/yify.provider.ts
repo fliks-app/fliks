@@ -5,7 +5,9 @@ import {
   SubtitleSearchResult,
 } from './subtitle-provider.interface';
 import { extractSubtitleFromZip } from './zip-utils';
+import { isRateLimited, rateLimitedFetch } from './rate-limiter';
 
+const PROVIDER_TYPE = 'yify';
 const BASE_URL = 'https://yifysubtitles.ch';
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
@@ -49,16 +51,18 @@ export class YifyProvider implements SubtitleProviderInterface {
   private readonly logger = new Logger(YifyProvider.name);
 
   async search(params: SubtitleSearchParams): Promise<SubtitleSearchResult[]> {
+    if (isRateLimited(PROVIDER_TYPE)) return [];
+
     // YIFY only supports movies, searched by IMDB ID
     if (!params.imdbId) return [];
     if (params.season != null) return [];
 
     const url = `${BASE_URL}/movie-imdb/${params.imdbId}`;
-    const res = await fetch(url, {
+    const res = await rateLimitedFetch(PROVIDER_TYPE, url, {
       headers: { 'User-Agent': USER_AGENT },
       redirect: 'manual',
     });
-
+    if (!res) return [];
     // 3xx or 404 = movie not found
     if (res.status >= 300) return [];
     if (!res.ok) {
@@ -73,13 +77,16 @@ export class YifyProvider implements SubtitleProviderInterface {
   }
 
   async download(result: SubtitleSearchResult): Promise<Buffer> {
+    if (isRateLimited(PROVIDER_TYPE)) {
+      throw new Error('YIFY is rate-limited, try again later');
+    }
     // providerFileId stores the subtitle page path (e.g. /subtitles/...)
     const pageUrl = `${BASE_URL}${result.providerFileId}`;
-    const pageRes = await fetch(pageUrl, {
+    const pageRes = await rateLimitedFetch(PROVIDER_TYPE, pageUrl, {
       headers: { 'User-Agent': USER_AGENT },
     });
-    if (!pageRes.ok)
-      throw new Error(`YIFY subtitle page failed: ${pageRes.status}`);
+    if (!pageRes || !pageRes.ok)
+      throw new Error(`YIFY subtitle page failed: ${pageRes?.status}`);
 
     const pageHtml = await pageRes.text();
     const dlMatch = pageHtml.match(
@@ -89,10 +96,11 @@ export class YifyProvider implements SubtitleProviderInterface {
       throw new Error('YIFY: download link not found on subtitle page');
 
     const dlUrl = `${BASE_URL}${dlMatch[1]}`;
-    const dlRes = await fetch(dlUrl, {
+    const dlRes = await rateLimitedFetch(PROVIDER_TYPE, dlUrl, {
       headers: { 'User-Agent': USER_AGENT },
     });
-    if (!dlRes.ok) throw new Error(`YIFY download failed: ${dlRes.status}`);
+    if (!dlRes || !dlRes.ok)
+      throw new Error(`YIFY download failed: ${dlRes?.status}`);
 
     const zipBuf = Buffer.from(await dlRes.arrayBuffer());
 
