@@ -417,8 +417,13 @@
       </button>
     </div>
   </div>
+  <!-- Backdrop close: clicking outside submits the dialog-method form,
+       which the browser handles natively. The button is removed from the
+       keyboard tab/arrow order so spatial-nav doesn't pick it as a
+       neighbour (its rect spans the whole viewport, so otherwise every
+       up/down between checkboxes would land here). -->
   <form method="dialog" class="modal-backdrop">
-    <button type="submit" [attr.aria-label]="'common.close' | translate">close</button>
+    <button type="submit" tabindex="-1" aria-hidden="true">close</button>
   </form>
 </dialog>
 
