@@ -58,6 +58,9 @@ export interface QueueItem {
   mediaId?: number;
   mediaTitle?: string;
   mediaType?: MediaType;
+  seasonNumber?: number;
+  episodeNumber?: number;
+  episodeTitle?: string | null;
   indexerName?: string;
   statusMessage?: string;
 }

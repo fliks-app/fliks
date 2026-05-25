@@ -32,6 +32,9 @@ import { StalledCheck } from './entities/stalled-check.entity';
 import { CleanupProfile } from '../cleanup-profiles/entities/cleanup-profile.entity';
 import { Library } from '../libraries/entities/library.entity';
 import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
+import { TorrentAutoMatcher } from '../media/torrent-auto-matcher.service';
+import { buildGrabHistoryRow } from '../media/grab-history.util';
+import { parseReleaseQuality } from '../../common/release-parsing';
 import { MarkersService } from '../markers/markers.service';
 import { FileTransferService } from '../../common/services/file-transfer.service';
 import { MediaService } from '../media/media.service';
@@ -83,6 +86,7 @@ export class CompletionService {
     private readonly ffprobe: FfprobeService,
     private readonly thumbnailService: ThumbnailService,
     private readonly historyMatcher: TorrentHistoryMatcher,
+    private readonly autoMatcher: TorrentAutoMatcher,
     private readonly fileTransfer: FileTransferService,
     private readonly markers: MarkersService,
     @Inject(forwardRef(() => MediaService))
@@ -99,6 +103,92 @@ export class CompletionService {
    */
   private autoDetectMarkersOnImport(): boolean {
     return true;
+  }
+
+  /**
+   * For every torrent currently in qBit that has no corresponding
+   * `DownloadHistory` row (matched neither by hash nor by sourceTitle
+   * fallback), attempt to identify its media via
+   * {@link TorrentAutoMatcher} and create a fresh history row.
+   *
+   * Mutates `grabbed` in place to include any newly-created rows so
+   * the caller's downstream loops treat them like normal grab rows.
+   *
+   * Skips torrents whose hash is already referenced by ANY history row
+   * (including `completed` / `imported`) to avoid duplicating rows for
+   * torrents we've already processed.
+   */
+  private async autoMatchOrphanTorrents(
+    allTorrents: ReadonlyArray<
+      QbittorrentTorrent & { _clientId: number; _client: DownloadClient }
+    >,
+    grabbed: DownloadHistory[],
+  ): Promise<void> {
+    if (!allTorrents.length) return;
+
+    // Single SQL trip to collect every hash we've ever seen — avoids
+    // matching the same torrent again on every tick. Filter `null`
+    // hashes (legacy rows pre-PR-#82).
+    const allHashRows: { hash: string }[] = await this.historyRepo
+      .createQueryBuilder('h')
+      .select('LOWER(h.torrentHash)', 'hash')
+      .where('h.torrentHash IS NOT NULL')
+      .getRawMany();
+    const knownHashes = new Set(allHashRows.map((r) => r.hash));
+
+    const candidates = allTorrents.filter(
+      (t) => t.hash && !knownHashes.has(t.hash.toLowerCase()),
+    );
+    if (!candidates.length) return;
+
+    for (const torrent of candidates) {
+      // Cheap belt-and-braces check: a stale name fallback could
+      // legitimately point at one of the existing grabbed rows even
+      // when the hash isn't recorded. Skip the auto-match in that case
+      // and let `matchAndHeal` write the hash on the next pass.
+      if (this.historyMatcher.findMatch(torrent, grabbed)) continue;
+
+      let match;
+      try {
+        match = await this.autoMatcher.tryMatch(torrent.name);
+      } catch (err) {
+        this.log.warn(
+          `Auto-match: tryMatch threw on "${torrent.name}": ${(err as Error).message}`,
+        );
+        continue;
+      }
+      if (!match) continue;
+
+      const quality = parseReleaseQuality(torrent.name).quality.name;
+      const row = await this.historyRepo.save(
+        this.historyRepo.create(
+          buildGrabHistoryRow({
+            media: match.media,
+            downloadClient: torrent._client,
+            sourceTitle: torrent.name,
+            torrentHash: torrent.hash,
+            quality,
+            // Auto-matched orphans look closer to a manual add (the
+            // user put the torrent in qBit, we just figured out which
+            // media it belongs to) than to a scheduler auto-grab.
+            grabSource: 'manual',
+            episodeId: match.episode?.id ?? null,
+            seasonId:
+              match.season?.id ?? match.episode?.season?.id ?? null,
+          }),
+        ),
+      );
+      grabbed.push(row);
+
+      const epLabel = match.episode
+        ? ` ${match.season ? `S${String(match.season.seasonNumber).padStart(2, '0')}` : ''}E${String(match.episode.episodeNumber).padStart(2, '0')}`
+        : match.season
+          ? ` Season ${match.season.seasonNumber}`
+          : '';
+      this.log.log(
+        `Auto-match: bound torrent "${torrent.name}" → ${match.media.title}${epLabel} (history #${row.id})`,
+      );
+    }
   }
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -135,6 +225,16 @@ export class CompletionService {
         t.state === 'stalledUP' ||
         t.state === 'stoppedUP',
     );
+
+    // Auto-match orphan torrents — anything in qBit with no existing
+    // history row (manually added by the user, surviving a DB wipe,
+    // imported from another tool …) gets identified by name via the
+    // shared release parsers + DB lookup, then bound to its media
+    // through a freshly-created history row. New rows are appended to
+    // `grabbed` so the orphan-status check below sees them as matched
+    // and the rest of the import flow handles them like any normal
+    // grab.
+    await this.autoMatchOrphanTorrents(allTorrents, grabbed);
 
     // Identify history rows with no matching torrent in any client right
     // now. We do NOT delete them — even a transient mismatch (a renamed

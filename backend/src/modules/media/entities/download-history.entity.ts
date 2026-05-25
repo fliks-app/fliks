@@ -1,6 +1,8 @@
 import { Entity, Column, ManyToOne, JoinColumn, RelationId } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Media } from './media.entity';
+import { Episode } from './episode.entity';
+import { Season } from './season.entity';
 import { Indexer } from '../../indexers/entities/indexer.entity';
 import { DownloadClient } from '../../download-clients/entities/download-client.entity';
 
@@ -25,6 +27,34 @@ export class DownloadHistory extends BaseEntity {
 
   @RelationId((dh: DownloadHistory) => dh.media)
   mediaId: number;
+
+  /**
+   * Optional episode link. Set when the grabbed/auto-matched torrent
+   * targets a single episode (\`Show.S01E03\`). Null for season packs,
+   * movies, and torrents whose name didn't surface a specific episode.
+   * SET NULL on delete so a removed episode doesn't take the history
+   * row with it (the media reference must survive — see the "never
+   * unlink" invariant).
+   */
+  @ManyToOne(() => Episode, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'episodeId' })
+  episode: Episode | null;
+
+  @RelationId((dh: DownloadHistory) => dh.episode)
+  episodeId: number | null;
+
+  /**
+   * Optional season link. Set when the grabbed/auto-matched torrent
+   * targets a whole season (\`Show.S01\`) or a single episode (in
+   * which case the season is the episode's parent — stored for direct
+   * lookup so the UI doesn't need a JOIN).
+   */
+  @ManyToOne(() => Season, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'seasonId' })
+  season: Season | null;
+
+  @RelationId((dh: DownloadHistory) => dh.season)
+  seasonId: number | null;
 
   @ManyToOne(() => Indexer, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'indexerId' })
