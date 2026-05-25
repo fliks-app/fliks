@@ -263,6 +263,7 @@ export class EpisodeDownloadService {
 
     let downloadUrl = dto?.downloadUrl?.trim();
     let sourceTitle = dto?.sourceTitle?.trim();
+    let indexerId = dto?.indexerId;
     const grabSource: 'auto' | 'manual' = downloadUrl ? 'manual' : 'auto';
 
     const epLabel = `S${String(season.seasonNumber).padStart(2, '0')}E${String(episode.episodeNumber).padStart(2, '0')}`;
@@ -283,6 +284,7 @@ export class EpisodeDownloadService {
       }
       downloadUrl = pick.downloadUrl;
       sourceTitle = pick.title;
+      indexerId = pick.indexerId;
       this.log.log(`Auto-picked: "${sourceTitle}" — ${downloadUrl}`);
     } else {
       if (!sourceTitle) sourceTitle = downloadUrl.slice(0, 240);
@@ -326,6 +328,7 @@ export class EpisodeDownloadService {
       quality: parsed.quality.name,
       status: 'grabbed',
       grabSource,
+      indexer: indexerId != null ? ({ id: indexerId } as Indexer) : null,
     });
     const saved = await this.historyRepo.save(row);
 
@@ -587,6 +590,10 @@ export class EpisodeDownloadService {
           quality: parsed.quality.name,
           status: 'grabbed',
           grabSource: 'manual',
+          indexer:
+            dto?.indexerId != null
+              ? ({ id: dto.indexerId } as Indexer)
+              : null,
         }),
       );
       void this.notifications.dispatch('grab.started', {
@@ -680,6 +687,7 @@ export class EpisodeDownloadService {
           quality: bestPack.qualityName,
           status: 'grabbed',
           grabSource: 'auto',
+          indexer: { id: bestPack.indexerId } as Indexer,
         }),
       );
       void this.notifications.dispatch('grab.started', {
@@ -782,6 +790,7 @@ export class EpisodeDownloadService {
             quality: pick.qualityName,
             status: 'grabbed',
             grabSource: 'auto',
+            indexer: { id: pick.indexerId } as Indexer,
           }),
         );
         grabbed++;

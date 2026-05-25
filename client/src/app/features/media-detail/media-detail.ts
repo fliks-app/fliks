@@ -1315,7 +1315,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const key = `ep-${index}`;
     this.epGrabBusy.set(key);
     try {
-      await this.mediaService.grabEpisode(mediaId, episodeId, { downloadUrl: r.downloadUrl, sourceTitle: r.title });
+      await this.mediaService.grabEpisode(mediaId, episodeId, {
+        downloadUrl: r.downloadUrl,
+        sourceTitle: r.title,
+        indexerId: r.indexerId,
+      });
       this.epGrabState.update((s) => new Map(s).set(key, 'ok'));
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
@@ -1369,6 +1373,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       await this.mediaService.grabSeason(mediaId, season.id, {
         downloadUrl: r.downloadUrl,
         sourceTitle: r.title,
+        indexerId: r.indexerId,
       });
       this.seasonReleaseGrabState.update((s) => new Map(s).set(key, 'ok'));
       this.toast.success(this.translate.instant('media_detail.grab_success'));
@@ -1490,7 +1495,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const key = `r-${index}`;
     this.grabBusy.set(key);
     try {
-      await this.mediaService.grabMovie(m.id, { downloadUrl: r.downloadUrl, sourceTitle: r.title });
+      await this.mediaService.grabMovie(m.id, {
+        downloadUrl: r.downloadUrl,
+        sourceTitle: r.title,
+        indexerId: r.indexerId,
+      });
       this.grabState.update((s) => new Map(s).set(key, 'ok'));
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
