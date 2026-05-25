@@ -521,7 +521,20 @@ export class SchedulerService implements OnModuleInit {
         'ep.hasFile',
       ])
       .addSelect(['season.id', 'season.seasonNumber', 'season.mediaId'])
-      .addSelect(['media.id', 'media.title', 'media.year', 'media.runtime'])
+      .addSelect([
+        'media.id',
+        'media.title',
+        'media.year',
+        'media.runtime',
+        'media.tvdbId',
+        'media.imdbId',
+        'media.alternativeTitles',
+      ])
+      // Profile rows are joined for the upgrade-cutoff WHERE clause AND
+      // hydrated on the media entity so AutoGrabPipeline.classifyForSearch
+      // doesn't read them as undefined and skip with "no profile".
+      .addSelect('qp')
+      .addSelect('lp')
       .getMany();
 
     if (!episodes.length) return;
