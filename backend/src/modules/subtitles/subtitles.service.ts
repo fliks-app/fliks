@@ -116,6 +116,16 @@ export class SubtitlesService {
       (r) => !blacklistSet.has(`${r.providerType}:${r.providerFileId}`),
     );
 
+    // Hearing-impaired hard filter. `require` keeps only HI candidates,
+    // `forbid` drops them; `prefer` / `avoid` leave the candidate set
+    // intact and only nudge the 1-point bit in the scorer below.
+    const hiMode = params.hearingImpairedMode ?? 'avoid';
+    const hiFiltered = filtered.filter((r) => {
+      if (hiMode === 'require') return r.hearingImpaired;
+      if (hiMode === 'forbid') return !r.hearingImpaired;
+      return true;
+    });
+
     // Cross-provider dedup: when the same release name + language + HI
     // flag appear from two providers, keep the first occurrence (encounter
     // order mirrors provider priority since `findEnabled` returns by
@@ -123,7 +133,7 @@ export class SubtitlesService {
     // to the `providerType:providerFileId` axis which is already unique.
     const seenReleaseKey = new Set<string>();
     const deduped: SubtitleSearchResult[] = [];
-    for (const r of filtered) {
+    for (const r of hiFiltered) {
       const releaseKey = r.releaseName
         ? `${r.releaseName.toLowerCase()}|${r.language}|${r.hearingImpaired ? 'hi' : 'normal'}|${r.forced ? 'forced' : 'full'}`
         : `${r.providerType}:${r.providerFileId}`;
@@ -148,6 +158,7 @@ export class SubtitlesService {
       season: params.season ?? null,
       episode: params.episode ?? null,
       imdbId: params.imdbId ?? null,
+      hearingImpairedMode: hiMode,
     };
     const scored: (SubtitleSearchResult & { _score: SubtitleScore })[] =
       deduped.map((r) => {

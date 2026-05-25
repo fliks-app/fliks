@@ -113,15 +113,31 @@ describe('subtitle-scorer', () => {
   });
 
   describe('hearing-impaired bit', () => {
-    it('awards non-HI by default', () => {
+    it('awards non-HI by default (avoid mode)', () => {
       const s = scoreSubtitle({ hearingImpaired: false }, EPISODE_CTX);
       expect(s.matches).toContain('hearingImpaired');
     });
 
-    it('awards HI when caller prefers it', () => {
+    it('does not award HI to non-HI candidate in `prefer` mode', () => {
+      const s = scoreSubtitle(
+        { hearingImpaired: false },
+        { ...EPISODE_CTX, hearingImpairedMode: 'prefer' },
+      );
+      expect(s.matches).not.toContain('hearingImpaired');
+    });
+
+    it('awards HI when mode is `prefer`', () => {
       const s = scoreSubtitle(
         { hearingImpaired: true },
-        { ...EPISODE_CTX, preferHearingImpaired: true },
+        { ...EPISODE_CTX, hearingImpairedMode: 'prefer' },
+      );
+      expect(s.matches).toContain('hearingImpaired');
+    });
+
+    it('treats `require` like `prefer` for the bit', () => {
+      const s = scoreSubtitle(
+        { hearingImpaired: true },
+        { ...EPISODE_CTX, hearingImpairedMode: 'require' },
       );
       expect(s.matches).toContain('hearingImpaired');
     });

@@ -80,9 +80,11 @@ export interface SubtitleScoreVideoContext {
   episode?: number | null;
   /** IMDB id of the media — used by equivalence map. */
   imdbId?: string | null;
-  /** Caller preference for hearing-impaired subs (default: false → award
-   *  the bit when candidate is NOT hearing-impaired). */
-  preferHearingImpaired?: boolean;
+  /** Caller preference for hearing-impaired subs (default: `avoid` →
+   *  award the bit when candidate is NOT hearing-impaired). `require` /
+   *  `forbid` are enforced by the orchestrator before scoring; the
+   *  scorer treats them as a `prefer` / `avoid` for the bit weight. */
+  hearingImpairedMode?: 'prefer' | 'avoid' | 'require' | 'forbid';
 }
 
 export interface SubtitleScore {
@@ -240,11 +242,13 @@ export function scoreSubtitle(
     }
   }
 
-  // Hearing-impaired bit (always available — doesn't need release names).
-  // Default prefers NON-HI subs. The 1-point weight is intentionally
-  // small — it's a tie-breaker, not a filter. Real enforcement (require
-  // / forbid) belongs to the language-profile layer.
-  const prefersHI = context.preferHearingImpaired === true;
+  // Hearing-impaired bit. The 1-point weight is intentionally small —
+  // it's a tie-breaker among already-eligible candidates. Hard
+  // enforcement (`require` / `forbid`) belongs to the orchestrator
+  // which filters candidates BEFORE scoring; here we map all four
+  // modes to a binary "prefer HI?" flag for the bit award.
+  const mode = context.hearingImpairedMode ?? 'avoid';
+  const prefersHI = mode === 'prefer' || mode === 'require';
   if (prefersHI ? candidate.hearingImpaired : !candidate.hearingImpaired) {
     award('hearingImpaired', weights.hearingImpaired);
   }
