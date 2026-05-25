@@ -248,6 +248,19 @@ export class CompletionService {
 
   @Cron(CronExpression.EVERY_MINUTE)
   async processCompleted(): Promise<void> {
+    // Load qBit + history in this order: we want the auto-match step
+    // to run even when `grabbed` is empty — that's PRECISELY the case
+    // an orphan-recovery flow is for (torrents in qBit with no history
+    // row at all). The previous early-return on empty `grabbed` is the
+    // reason the user reported "auto-match never logs anything"
+    // immediately after a fresh deploy.
+    const clients = await this.clientRepo.find({ where: { enabled: true } });
+    const qbitClients = clients.filter((c) => this.qbittorrent.supports(c));
+    if (!qbitClients.length) {
+      this.log.warn('Import: no enabled qBittorrent client found');
+      return;
+    }
+
     const grabbed = await this.historyRepo.find({
       where: [
         { status: 'grabbed' },
@@ -255,14 +268,6 @@ export class CompletionService {
         { status: 'warning' },
       ],
     });
-    if (!grabbed.length) return;
-
-    const clients = await this.clientRepo.find({ where: { enabled: true } });
-    const qbitClients = clients.filter((c) => this.qbittorrent.supports(c));
-    if (!qbitClients.length) {
-      this.log.warn('Import: no enabled qBittorrent client found');
-      return;
-    }
 
     const allTorrents = (
       await Promise.all(
