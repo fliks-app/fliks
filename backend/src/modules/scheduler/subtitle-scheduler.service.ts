@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
@@ -169,10 +169,32 @@ export class SubtitleSchedulerService {
       .andWhere('sf.status != :failed', { failed: SubtitleStatus.FAILED })
       .andWhere('sf.locked = false')
       .leftJoinAndSelect('sf.media', 'media')
+      .leftJoinAndSelect('media.languageProfile', 'lp')
       .leftJoinAndSelect('sf.mediaFile', 'mf')
       .getMany();
 
+    // Build "languages still missing on file F" map upfront so we don't pay
+    // an N+1 inside the upgrade loop. A file with even one required language
+    // and zero (non-failed) subs for it counts as "still missing" — upgrade
+    // defers to the next missing-search pass on those files so we don't
+    // spend provider quota on score bumps while gaps remain.
+    const fileIds = [
+      ...new Set(
+        lowScoreSubs.map((s) => s.mediaFile?.id).filter((id): id is number => id != null),
+      ),
+    ];
+    const missingByFileId = await this.buildMissingLangsByFile(
+      fileIds,
+      lowScoreSubs,
+    );
+
     for (const sub of lowScoreSubs) {
+      if (sub.mediaFile?.id != null && missingByFileId.get(sub.mediaFile.id)) {
+        this.log.debug?.(
+          `SubtitleUpgrade: skipping sub #${sub.id} ("${sub.media?.title}", ${sub.language}) — file still has missing required languages, deferring to next missing-search pass`,
+        );
+        continue;
+      }
       try {
         const results = await this.subtitlesService.searchSubtitles({
           imdbId: sub.media?.imdbId ?? undefined,
@@ -206,6 +228,58 @@ export class SubtitleSchedulerService {
         this.log.warn(`SubtitleUpgrade: failed for sub #${sub.id}: ${err}`);
       }
     }
+  }
+
+  /**
+   * For each media file id, decides whether it still has at least one
+   * required-by-profile subtitle language with no usable file. The map
+   * value is `true` when the upgrade pass should skip the file and leave
+   * the work to the next missing-search pass.
+   */
+  private async buildMissingLangsByFile(
+    fileIds: number[],
+    candidatesWithMedia: SubtitleFile[],
+  ): Promise<Map<number, boolean>> {
+    const result = new Map<number, boolean>();
+    if (!fileIds.length) return result;
+
+    const subsByFile = new Map<number, SubtitleFile[]>();
+    const allFileSubs = await this.subtitleFileRepo.find({
+      where: { mediaFile: { id: In(fileIds) } },
+      relations: ['mediaFile'],
+    });
+    for (const s of allFileSubs) {
+      const fid = s.mediaFile?.id;
+      if (fid == null) continue;
+      const list = subsByFile.get(fid) ?? [];
+      list.push(s);
+      subsByFile.set(fid, list);
+    }
+
+    const profileByFile = new Map<number, SubtitleLanguageItem[]>();
+    for (const cand of candidatesWithMedia) {
+      const fid = cand.mediaFile?.id;
+      if (fid == null || profileByFile.has(fid)) continue;
+      profileByFile.set(
+        fid,
+        cand.media?.languageProfile?.subtitleLanguages ?? [],
+      );
+    }
+
+    for (const fid of fileIds) {
+      const required = profileByFile.get(fid) ?? [];
+      if (!required.length) {
+        result.set(fid, false);
+        continue;
+      }
+      const present = new Set(
+        (subsByFile.get(fid) ?? [])
+          .filter((s) => s.status !== SubtitleStatus.FAILED)
+          .map((s) => s.language),
+      );
+      result.set(fid, required.some((l) => !present.has(l.isoCode)));
+    }
+    return result;
   }
 
   /** Called after a media file import to trigger subtitle search */
