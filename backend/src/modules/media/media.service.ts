@@ -2184,11 +2184,24 @@ export class MediaService {
       ...(addedByUserId ? { addedBy: { id: addedByUserId } as User } : {}),
     });
     const saved = await this.mediaRepo.save(row);
+    this.logLibraryAdded('movie', saved);
     await this.downloadMediaImages(saved.id, details);
     await this.updateSearchVector(saved.id);
     await this.persistMediaMetadata(saved, details);
     await this.requestLifecycle.onMediaImported(saved, addedByUserId ?? null);
     return this.findOne(saved.id);
+  }
+
+  private logLibraryAdded(
+    kind: 'movie' | 'series',
+    media: Media,
+    extra?: string,
+  ): void {
+    const year = media.year ? ` (${media.year})` : '';
+    const tail = extra ? `, ${extra}` : '';
+    this.log.log(
+      `Library: added ${kind} "${media.title}"${year} — id=${media.id}, tmdbId=${media.tmdbId ?? '?'}${tail}`,
+    );
   }
 
   private async persistImportedSeries(
@@ -2215,6 +2228,7 @@ export class MediaService {
       ...(addedByUserId ? { addedBy: { id: addedByUserId } as User } : {}),
     });
     const saved = await this.mediaRepo.save(row);
+    this.logLibraryAdded('series', saved, `seasons=${seasons.length}`);
     await this.downloadMediaImages(saved.id, details);
 
     for (const sd of seasons) {
