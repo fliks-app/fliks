@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DownloadHistory } from './entities/download-history.entity';
+import { decodeHtmlEntities } from '../../common/utils/decode-html-entities';
 
 /** A subset of `QbittorrentTorrent` — all the matcher actually needs. */
 export interface MatchableTorrent {
@@ -28,9 +29,15 @@ export interface HistoryMatch {
  *
  * Rules, in order:
  *  1. `history.torrentHash === torrent.hash` — definitive.
- *  2. Exactly one history with `sourceTitle === torrent.name`.
- *  3. Exactly one history whose `sourceTitle` is a prefix of `torrent.name`
- *     (or vice-versa). Multiple candidates abort instead of cross-matching.
+ *  2. Exactly one history with normalised `sourceTitle === torrent.name`.
+ *  3. Exactly one history whose normalised `sourceTitle` is a prefix of the
+ *     normalised `torrent.name` (or vice-versa). Multiple candidates abort.
+ *
+ * Both name comparisons use {@link normaliseTorrentName}, which decodes HTML
+ * entities, collapses whitespace and strips noise tokens — qBittorrent
+ * decodes `&amp;`, `&#39;` etc. in the displayed name while the indexer's
+ * raw title (which we stored as `sourceTitle`) keeps them, and that drift
+ * alone used to orphan otherwise-perfectly-linked rows.
  *
  * On (2) and (3) the matched history's `torrentHash` is filled in if it
  * was null — self-healing legacy data without requiring a migration.
@@ -49,7 +56,7 @@ export class TorrentHistoryMatcher {
     histories: DownloadHistory[],
   ): HistoryMatch | null {
     const hash = torrent.hash?.toLowerCase() ?? null;
-    const name = torrent.name.toLowerCase();
+    const name = normaliseTorrentName(torrent.name);
 
     if (hash) {
       const byHash = histories.find(
@@ -59,7 +66,7 @@ export class TorrentHistoryMatcher {
     }
 
     const exact = histories.filter(
-      (h) => h.sourceTitle?.toLowerCase() === name,
+      (h) => normaliseTorrentName(h.sourceTitle ?? '') === name,
     );
     if (exact.length === 1) {
       return { history: exact[0], matchedBy: 'exact-name' };
@@ -67,14 +74,15 @@ export class TorrentHistoryMatcher {
     if (exact.length > 1) {
       // Ambiguous exact match — refuse rather than guess.
       this.log.warn(
-        `TorrentHistoryMatcher: ${exact.length} histories share sourceTitle="${torrent.name}" — refusing to cross-match`,
+        `TorrentHistoryMatcher: ${exact.length} histories share normalised sourceTitle="${name}" — refusing to cross-match`,
       );
       return null;
     }
 
     const prefix = histories.filter((h) => {
       if (!h.sourceTitle) return false;
-      const s = h.sourceTitle.toLowerCase();
+      const s = normaliseTorrentName(h.sourceTitle);
+      if (!s) return false;
       return name.startsWith(s) || s.startsWith(name);
     });
     if (prefix.length === 1) {
@@ -117,4 +125,25 @@ export class TorrentHistoryMatcher {
     }
     return match.history;
   }
+}
+
+/**
+ * Tolerant normalisation for the "is this the same release?" comparison:
+ *  - HTML entities decoded via the shared Latin-1 + numeric decoder
+ *    (handles `&amp;`, `&iacute;`, `&#39;`, `&#x27;` …). qBittorrent
+ *    decodes entities on display while the indexer's raw title (stored
+ *    as `sourceTitle`) keeps them, and a single character drift used to
+ *    send a row into the orphan pile and ultimately into
+ *    `historyRepo.remove` once the orphan-cleanup tick fired.
+ *  - Trailing `.torrent` stripped.
+ *  - `.`, `_`, multi-space all collapsed to single spaces so
+ *    `Show.S01E01-GROUP` matches `Show S01E01 GROUP`.
+ *  - Lowercased.
+ */
+export function normaliseTorrentName(raw: string): string {
+  if (!raw) return '';
+  let s = decodeHtmlEntities(raw);
+  s = s.replace(/\.torrent$/i, '');
+  s = s.replace(/[._\s]+/g, ' ').trim();
+  return s.toLowerCase();
 }
