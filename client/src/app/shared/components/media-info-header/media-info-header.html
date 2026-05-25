@@ -428,9 +428,9 @@
       <svg lucideRotateCcw class="h-5 w-5 shrink-0 opacity-80"></svg>
       <span class="flex-1">{{ 'media_detail.refresh_metadata' | translate }}</span>
     </button>
-    <button type="button" class="dropdown-item text-white" (click)="rescanFiles.emit()">
-      <svg lucideFileText class="h-5 w-5 shrink-0 opacity-80"></svg>
-      <span class="flex-1">{{ 'media_detail.rescan_files' | translate }}</span>
+    <button type="button" class="dropdown-item text-white" (click)="openAnalyze.emit()">
+      <svg lucideScanLine class="h-5 w-5 shrink-0 opacity-80"></svg>
+      <span class="flex-1">{{ 'media_detail.analyze' | translate }}</span>
     </button>
     @if (mediaType() === 'series') {
       <button type="button" class="dropdown-item text-white" (click)="detectIntros.emit()">

@@ -22,6 +22,7 @@ import { MediaCrew } from './entities/media-crew.entity';
 import { CreateMediaDto } from './dto/create-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
 import { SearchMediaDto } from './dto/search-media.dto';
+import { AnalyzeMediaDto } from './dto/analyze-media.dto';
 import { ImportTmdbDto } from './dto/import-tmdb.dto';
 import { ImportMediaDto } from './dto/import-media.dto';
 import { UpdateMediaProfilesDto } from './dto/update-media-profiles.dto';
@@ -51,6 +52,10 @@ import { rankFromQualityString } from './release-rejection.helper';
 
 import { ImageService } from '../images/image.service';
 import { SubtitleStreamService } from '../streaming/subtitle-stream.service';
+import {
+  ThumbnailService,
+  buildSpriteLabel,
+} from '../streaming/thumbnail.service';
 import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
 import { clearMediaCache } from '../../common/utils/media-cache.util';
 import { mapWithConcurrency } from '../../common/utils/concurrency';
@@ -132,6 +137,7 @@ export class MediaService {
     private readonly subtitles: SubtitlesService,
     private readonly imageService: ImageService,
     private readonly subtitleStream: SubtitleStreamService,
+    private readonly thumbnailService: ThumbnailService,
     @Inject(forwardRef(() => RequestLifecycleService))
     private readonly requestLifecycle: RequestLifecycleService,
   ) {}
@@ -2379,30 +2385,55 @@ export class MediaService {
     absPath: string,
     media: Media,
   ): Promise<void> {
+    await this.detectAndStoreCrop(file, absPath);
+    this.rebuildSubtitleCacheForFile(file, absPath, media);
+  }
+
+  /**
+   * Re-runs ffmpeg `cropdetect` for a single file and persists the result
+   * in `streamInfo.video[0].crop`. No-op when the file has no video stream.
+   * Best-effort: ffmpeg failures are logged and the row is left unchanged.
+   * The crop value is cleared when detection returns nothing so a re-encoded
+   * file that lost its letterbox doesn't keep stale crop data.
+   */
+  private async detectAndStoreCrop(
+    file: MediaFile,
+    absPath: string,
+  ): Promise<void> {
     const streamInfo = file.streamInfo;
     const v = streamInfo?.video?.[0];
-    if (v) {
-      try {
-        const crop = await this.ffprobe.detectCrop(
-          absPath,
-          streamInfo.durationSeconds,
-          v.width,
-          v.height,
-          !!v.hdrFormat,
-        );
-        if (crop) {
-          v.crop = crop;
-          file.streamInfo = streamInfo;
-          await this.mediaFileRepo.save(file);
-        }
-      } catch (err) {
-        this.log.warn(
-          `finalizeImportedFile: detectCrop failed for "${absPath}"`,
-          err instanceof Error ? err.stack : err,
-        );
-      }
+    if (!v) return;
+    try {
+      const crop = await this.ffprobe.detectCrop(
+        absPath,
+        streamInfo.durationSeconds,
+        v.width,
+        v.height,
+        !!v.hdrFormat,
+      );
+      v.crop = crop ?? undefined;
+      file.streamInfo = streamInfo;
+      await this.mediaFileRepo.save(file);
+    } catch (err) {
+      this.log.warn(
+        `detectAndStoreCrop: failed for "${absPath}"`,
+        err instanceof Error ? err.stack : err,
+      );
     }
+  }
 
+  /**
+   * Fire-and-forget clear + warmup of the embedded-subtitle cache for a
+   * file. Called after every import so the first playback doesn't pay the
+   * per-track extraction cost (very visible on ExoPlayer / Android TV,
+   * which blocks `prepare` until every SubtitleConfiguration URL has been
+   * fetched).
+   */
+  private rebuildSubtitleCacheForFile(
+    file: MediaFile,
+    absPath: string,
+    media: Media,
+  ): void {
     void this.subtitleStream
       .clearMediaFileSubtitleCache(media?.path, file.id)
       .then(() =>
@@ -2410,10 +2441,71 @@ export class MediaService {
           absPath,
           media?.path,
           file.id,
-          streamInfo?.subtitles,
+          file.streamInfo?.subtitles,
           media?.title,
         ),
       );
+  }
+
+  /**
+   * User-triggered "Analyse" action — iterates the media's files and runs
+   * each requested granular operation (cropdetect, embedded-subtitle cache
+   * rebuild, forced sprite-sheet regeneration). The full-rescan superset
+   * stays on the dedicated `rescanFiles` path so its SSE wiring lives in
+   * one place.
+   */
+  async analyzeMedia(mediaId: number, opts: AnalyzeMediaDto): Promise<void> {
+    if (!opts.sprites && !opts.crop && !opts.subtitleCache) return;
+
+    const media = await this.mediaRepo.findOne({
+      where: { id: mediaId },
+      relations: ['files', 'files.episode', 'files.episode.season'],
+    });
+    if (!media) throw new NotFoundException(`Media #${mediaId} not found`);
+    if (!media.path) {
+      throw new BadRequestException(
+        `Media #${mediaId} has no root path configured`,
+      );
+    }
+
+    const mediaDir = path.resolve(media.path);
+    const files = media.files ?? [];
+    for (const file of files) {
+      if (!file.relativePath) continue;
+      const absPath = path.join(
+        mediaDir,
+        file.relativePath.replace(/\\/g, '/'),
+      );
+      if (!fs.existsSync(absPath)) {
+        this.log.warn(
+          `analyzeMedia[#${mediaId}]: file off-disk, skipping "${absPath}"`,
+        );
+        continue;
+      }
+      if (opts.crop) {
+        await this.detectAndStoreCrop(file, absPath);
+      }
+      if (opts.subtitleCache) {
+        this.rebuildSubtitleCacheForFile(file, absPath, media);
+      }
+      if (opts.sprites) {
+        const ep = file.episode;
+        const label = buildSpriteLabel(
+          media,
+          ep
+            ? {
+                seasonNumber: ep.season?.seasonNumber,
+                episodeNumber: ep.episodeNumber,
+                title: ep.title,
+              }
+            : null,
+        );
+        // Background, force=true so the existing sprite/meta gets rebuilt.
+        void this.thumbnailService.generateForFile(file, media, label, {
+          force: true,
+        });
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------

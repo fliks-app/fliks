@@ -1,6 +1,7 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
   signal,
   inject,
   computed,
@@ -1008,18 +1009,82 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   }
 
-  async rescanFiles() {
+  readonly analyzeRunning = signal(false);
+  readonly analyzeOpts = signal<{
+    rescan: boolean;
+    sprites: boolean;
+    crop: boolean;
+    subtitleCache: boolean;
+  }>({ rescan: false, sprites: false, crop: false, subtitleCache: false });
+
+  readonly analyzeHasSelection = computed(() => {
+    const o = this.analyzeOpts();
+    return o.rescan || o.sprites || o.crop || o.subtitleCache;
+  });
+
+  /** Refs to the native <dialog>. `showModal()` gives us focus trapping,
+   *  Tab cycling and Escape-to-close for free — no manual keydown
+   *  handling required. */
+  private readonly analyzeDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('analyzeDialog');
+  private readonly firstAnalyzeOption =
+    viewChild<ElementRef<HTMLInputElement>>('firstAnalyzeOption');
+
+  openAnalyzeModal() {
+    this.analyzeOpts.set({
+      rescan: false,
+      sprites: false,
+      crop: false,
+      subtitleCache: false,
+    });
+    const dlg = this.analyzeDialog()?.nativeElement;
+    if (!dlg) return;
+    dlg.showModal();
+    // Default focus on the first checkbox so the modal is immediately
+    // usable from a keyboard. showModal()'s built-in autofocus would land
+    // on the cancel button (last focusable that's also a submit-default).
+    queueMicrotask(() => this.firstAnalyzeOption()?.nativeElement.focus());
+  }
+
+  closeAnalyzeModal() {
+    this.analyzeDialog()?.nativeElement.close();
+  }
+
+  setAnalyzeOpt(
+    key: 'rescan' | 'sprites' | 'crop' | 'subtitleCache',
+    value: boolean,
+  ) {
+    this.analyzeOpts.update((o) => ({ ...o, [key]: value }));
+  }
+
+  async runAnalyze() {
     const m = this.media();
     if (!m) return;
+    const opts = this.analyzeOpts();
+    this.analyzeRunning.set(true);
     try {
-      await this.mediaService.rescanFiles(m.id);
+      // Rescan is the superset — when checked, the granular flags are
+      // redundant because rescan re-runs everything. Hit /rescan alone so
+      // the existing SSE event stream still fires.
+      if (opts.rescan) {
+        await this.mediaService.rescanFiles(m.id);
+      } else {
+        await this.mediaService.analyzeMedia(m.id, {
+          sprites: opts.sprites,
+          crop: opts.crop,
+          subtitleCache: opts.subtitleCache,
+        });
+      }
       this.toast.success(
-        this.translate.instant('media_detail.rescan_launched'),
+        this.translate.instant('media_detail.analyze_launched'),
       );
+      this.closeAnalyzeModal();
     } catch {
       this.toast.error(
-        this.translate.instant('media_detail.rescan_launch_error'),
+        this.translate.instant('media_detail.analyze_launch_error'),
       );
+    } finally {
+      this.analyzeRunning.set(false);
     }
   }
 

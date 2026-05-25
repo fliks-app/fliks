@@ -20,6 +20,7 @@ import { EpisodeDownloadService } from './episode-download.service';
 import { CreateMediaDto } from './dto/create-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
 import { SearchMediaDto } from './dto/search-media.dto';
+import { AnalyzeMediaDto } from './dto/analyze-media.dto';
 import { ImportTmdbDto } from './dto/import-tmdb.dto';
 import { ImportMediaDto } from './dto/import-media.dto';
 import { GrabMovieDto } from './dto/grab-movie.dto';
@@ -427,6 +428,28 @@ export class MediaController {
       },
     );
 
+    return { ok: true };
+  }
+
+  @Post(':id/analyze')
+  @CheckPolicies((ability) => ability.can(Action.Update, Media))
+  async analyzeMedia(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AnalyzeMediaDto,
+    @CurrentUser() user: User,
+  ) {
+    await this.assertMediaAccessible(id, user);
+    const media = await this.mediaService.findOne(id);
+    if (!media) throw new NotFoundException(`Media #${id} not found`);
+    this.logger.log(
+      `Media analyze started (API) — id=${id} title="${media.title}" opts=${JSON.stringify(dto)}`,
+    );
+    void this.mediaService.analyzeMedia(id, dto).catch((err) => {
+      this.logger.error(
+        `Media analyze failed — id=${id} title="${media.title}" error=${(err as Error).message}`,
+        err instanceof Error ? err.stack : err,
+      );
+    });
     return { ok: true };
   }
 

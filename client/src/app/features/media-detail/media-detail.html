@@ -69,7 +69,7 @@
           (toggleMonitored)="toggleMonitored()"
           (loadReleases)="loadEpisodeReleases(m.id, s.id, ep.id)"
           (grabBest)="grabEpisodeBest(m.id, ep.id)"
-          (rescanFiles)="rescanFiles()"
+          (openAnalyze)="openAnalyzeModal()"
           (editSubtitles)="openSubtitles()"
           (episodeWatchedToggled)="onEpisodeWatchedToggledFromHeader($event)"
           (requestMedia)="openRequestForMedia()"
@@ -175,7 +175,7 @@
           (deleteMedia)="deleteMedia()"
           (loadReleases)="loadReleases()"
           (grabBest)="grabBest()"
-          (rescanFiles)="rescanFiles()"
+          (openAnalyze)="openAnalyzeModal()"
           (detectIntros)="detectIntros(m.id)"
           (seriesWatchedToggled)="onSeriesWatchedToggled($event)"
           (editSubtitles)="openSubtitles()"
@@ -346,6 +346,86 @@
     </div>
   }
 </ng-template>
+
+<!-- Analyse modal — admin-only post-import analysis re-runs. Native
+     <dialog> + showModal() gives focus trapping, Tab cycling and
+     Escape-to-close for free; the <form method="dialog"> backdrop
+     dismisses on outside click. Rescan stays on /rescan (full-disk
+     superset) and disables the granular options when ticked. -->
+<dialog #analyzeDialog class="modal" role="dialog" aria-modal="true" aria-labelledby="analyze-title">
+  <div class="modal-box">
+    <h3 id="analyze-title" class="text-lg font-bold mb-2">{{ 'media_detail.analyze_title' | translate }}</h3>
+    <p class="text-sm text-base-content/70 mb-4">{{ 'media_detail.analyze_hint' | translate }}</p>
+    <div class="space-y-2">
+      <label class="flex items-start gap-3 cursor-pointer">
+        <input
+          #firstAnalyzeOption
+          type="checkbox" class="checkbox checkbox-primary mt-0.5"
+          [checked]="analyzeOpts().rescan"
+          (change)="setAnalyzeOpt('rescan', $any($event.target).checked)"
+        />
+        <span>
+          <span class="font-medium block">{{ 'media_detail.analyze_rescan' | translate }}</span>
+          <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_rescan_hint' | translate }}</span>
+        </span>
+      </label>
+      <label class="flex items-start gap-3 cursor-pointer" [class.opacity-50]="analyzeOpts().rescan">
+        <input
+          type="checkbox" class="checkbox checkbox-primary mt-0.5"
+          [checked]="analyzeOpts().sprites" [disabled]="analyzeOpts().rescan"
+          (change)="setAnalyzeOpt('sprites', $any($event.target).checked)"
+        />
+        <span>
+          <span class="font-medium block">{{ 'media_detail.analyze_sprites' | translate }}</span>
+          <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_sprites_hint' | translate }}</span>
+        </span>
+      </label>
+      <label class="flex items-start gap-3 cursor-pointer" [class.opacity-50]="analyzeOpts().rescan">
+        <input
+          type="checkbox" class="checkbox checkbox-primary mt-0.5"
+          [checked]="analyzeOpts().crop" [disabled]="analyzeOpts().rescan"
+          (change)="setAnalyzeOpt('crop', $any($event.target).checked)"
+        />
+        <span>
+          <span class="font-medium block">{{ 'media_detail.analyze_crop' | translate }}</span>
+          <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_crop_hint' | translate }}</span>
+        </span>
+      </label>
+      <label class="flex items-start gap-3 cursor-pointer" [class.opacity-50]="analyzeOpts().rescan">
+        <input
+          type="checkbox" class="checkbox checkbox-primary mt-0.5"
+          [checked]="analyzeOpts().subtitleCache" [disabled]="analyzeOpts().rescan"
+          (change)="setAnalyzeOpt('subtitleCache', $any($event.target).checked)"
+        />
+        <span>
+          <span class="font-medium block">{{ 'media_detail.analyze_subtitle_cache' | translate }}</span>
+          <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_subtitle_cache_hint' | translate }}</span>
+        </span>
+      </label>
+    </div>
+    <div class="modal-action">
+      <button type="button" class="btn btn-ghost" (click)="closeAnalyzeModal()">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button
+        type="button" class="btn btn-primary"
+        [disabled]="analyzeRunning() || !analyzeHasSelection()"
+        (click)="runAnalyze()"
+      >
+        @if (analyzeRunning()) { <span class="loading loading-spinner loading-sm"></span> }
+        {{ 'media_detail.analyze_apply' | translate }}
+      </button>
+    </div>
+  </div>
+  <!-- Backdrop close: clicking outside submits the dialog-method form,
+       which the browser handles natively. The button is removed from the
+       keyboard tab/arrow order so spatial-nav doesn't pick it as a
+       neighbour (its rect spans the whole viewport, so otherwise every
+       up/down between checkboxes would land here). -->
+  <form method="dialog" class="modal-backdrop">
+    <button type="submit" tabindex="-1" aria-hidden="true">close</button>
+  </form>
+</dialog>
 
 <!-- Request modal — only relevant for users who can request (regular
      requesters). Profiles + libraries already loaded by media-detail. -->

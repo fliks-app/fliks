@@ -243,9 +243,12 @@ export class TvSpatialNavService {
    *  / popovers carry `[data-tv-modal]`; daisyUI dropdowns are detected
    *  via `.dropdown-open .dropdown-content` because their content stays
    *  in the DOM with `display:none` when closed (a bare attribute would
-   *  falsely match). */
+   *  falsely match). Native `<dialog>` elements opened via `showModal()`
+   *  get the `open` attribute and are picked up here so arrow keys can't
+   *  escape into the inert page underneath. */
   private openModals(): HTMLElement[] {
     return [
+      ...Array.from(document.querySelectorAll<HTMLElement>('dialog[open]')),
       ...Array.from(document.querySelectorAll<HTMLElement>('[data-tv-modal]')),
       ...Array.from(
         document.querySelectorAll<HTMLElement>('.dropdown-open .dropdown-content'),
