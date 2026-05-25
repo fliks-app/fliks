@@ -3,6 +3,7 @@ import { DownloadHistory, GrabSource } from './entities/download-history.entity'
 import { Media } from './entities/media.entity';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
+import { decodeHtmlEntities } from '../../common/utils/decode-html-entities';
 
 /**
  * Builds the partial entity for a freshly-grabbed `DownloadHistory` row.
@@ -28,7 +29,11 @@ export function buildGrabHistoryRow(args: {
   return {
     media: args.media as Media,
     downloadClient: args.downloadClient,
-    sourceTitle: args.sourceTitle,
+    // Decode HTML entities ahead of persistence so the stored title
+    // matches what qBittorrent renders (it decodes on display). Without
+    // this normalisation the matcher's fallback name comparison drifts
+    // and the orphan-handler eventually flips the row to `failed`.
+    sourceTitle: decodeHtmlEntities(args.sourceTitle),
     torrentHash: args.torrentHash || undefined,
     quality: args.quality,
     status: 'grabbed',

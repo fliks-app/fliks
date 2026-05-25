@@ -1,9 +1,41 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import * as crypto from 'crypto';
 import FormData from 'form-data';
 import { DownloadClient } from './entities/download-client.entity';
 import { decodeHtmlEntities } from '../../common/utils/decode-html-entities';
+
+/**
+ * Pull the BitTorrent info-hash out of a magnet URI. Magnets carry the
+ * hash either as a 40-char hex string or as a 32-char base32 string —
+ * the previous regex only matched hex, so trackers that advertise base32
+ * magnets (uncommon but they exist) silently fell back to the
+ * list-diff recovery path and were briefly orphaned in Activities.
+ */
+function extractMagnetInfoHash(magnet: string): string | undefined {
+  const hex = magnet.match(/xt=urn:btih:([a-fA-F0-9]{40})/)?.[1];
+  if (hex) return hex.toLowerCase();
+  const b32 = magnet.match(/xt=urn:btih:([A-Z2-7]{32})/i)?.[1];
+  if (!b32) return undefined;
+  // Decode base32 → 20 bytes, then hex-encode to match qBit's format.
+  const upper = b32.toUpperCase();
+  const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = 0;
+  let value = 0;
+  const out = Buffer.alloc(20);
+  let idx = 0;
+  for (const ch of upper) {
+    const v = ALPHABET.indexOf(ch);
+    if (v < 0) return undefined;
+    value = (value << 5) | v;
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      out[idx++] = (value >>> bits) & 0xff;
+    }
+  }
+  return out.toString('hex');
+}
 
 export interface QbittorrentTorrent {
   hash: string;
@@ -445,10 +477,16 @@ export class QbittorrentService {
     let addRes: { status: number; data: unknown };
     let infoHash: string | undefined;
 
+    // Snapshot the current torrent set BEFORE the add so we can recover
+    // the just-added torrent's hash via list-diff if the URL didn't
+    // surface one (base32-encoded magnet that an older regex didn't
+    // catch, .torrent buffers we couldn't parse, custom add endpoints
+    // returning HTML in the body, …). Cheap — qBit's `/torrents/info`
+    // is a single GET we'd run within the next 60s anyway.
+    const beforeHashes = await this.snapshotHashes(http, base, cookieHeader);
+
     if (torrentUrl.startsWith('magnet:')) {
-      // Extract info hash from magnet URI
-      const btih = torrentUrl.match(/xt=urn:btih:([a-fA-F0-9]{40})/)?.[1];
-      if (btih) infoHash = btih.toLowerCase();
+      infoHash = extractMagnetInfoHash(torrentUrl);
 
       const formAdd = new URLSearchParams({ urls: torrentUrl });
       if (category) formAdd.set('category', category);
@@ -475,8 +513,7 @@ export class QbittorrentService {
         this.log.log(
           `Indexer redirected to magnet — adding directly to qBittorrent`,
         );
-        const btih = fetched.magnet.match(/xt=urn:btih:([a-fA-F0-9]{40})/)?.[1];
-        if (btih) infoHash = btih.toLowerCase();
+        infoHash = extractMagnetInfoHash(fetched.magnet);
         const formAdd = new URLSearchParams({ urls: fetched.magnet });
         if (category) formAdd.set('category', category);
         addRes = await http.post(
@@ -518,7 +555,87 @@ export class QbittorrentService {
       );
     }
 
+    // Recovery path: when none of the upfront extractors produced a
+    // hash, ask qBit for its torrent list and diff against the snapshot
+    // we took before the add. qBit takes a few hundred ms to index a
+    // new entry, so retry a handful of times before giving up.
+    if (!infoHash) {
+      infoHash = await this.recoverNewlyAddedHash(
+        http,
+        base,
+        cookieHeader,
+        beforeHashes,
+      );
+      if (infoHash) {
+        this.log.log(
+          `qBittorrent: recovered hash=${infoHash} via list-diff after add (upfront extractor returned none)`,
+        );
+      } else {
+        this.log.warn(
+          `qBittorrent: could not recover hash for newly-added torrent — Activities row will rely on name match until next tick`,
+        );
+      }
+    }
+
     return infoHash ?? '';
+  }
+
+  /** Snapshot every torrent's hash currently known by qBit. Used as the
+   *  "before" set for {@link recoverNewlyAddedHash}. */
+  private async snapshotHashes(
+    http: AxiosInstance,
+    base: string,
+    cookieHeader: string,
+  ): Promise<Set<string>> {
+    try {
+      const res = await http.get(`${base}/api/v2/torrents/info`, {
+        headers: { Cookie: cookieHeader },
+        validateStatus: () => true,
+      });
+      if (res.status !== 200 || !Array.isArray(res.data)) return new Set();
+      return new Set(
+        (res.data as { hash?: string }[])
+          .map((t) => t.hash?.toLowerCase())
+          .filter((h): h is string => !!h),
+      );
+    } catch {
+      return new Set();
+    }
+  }
+
+  /** Poll `/torrents/info` for the newly-added torrent and return its
+   *  hash. Compares against `before` to find the diff. ~3s budget split
+   *  in retries: qBit needs a few hundred ms to register a magnet that
+   *  hasn't fetched metadata yet. */
+  private async recoverNewlyAddedHash(
+    http: AxiosInstance,
+    base: string,
+    cookieHeader: string,
+    before: Set<string>,
+  ): Promise<string | undefined> {
+    const ATTEMPTS = 6;
+    const DELAY_MS = 500;
+    for (let i = 0; i < ATTEMPTS; i++) {
+      await new Promise((r) => setTimeout(r, DELAY_MS));
+      const res = await http.get(`${base}/api/v2/torrents/info`, {
+        headers: { Cookie: cookieHeader },
+        validateStatus: () => true,
+      });
+      if (res.status !== 200 || !Array.isArray(res.data)) continue;
+      const after = res.data as { hash?: string; added_on?: number }[];
+      const fresh = after.filter(
+        (t) => t.hash && !before.has(t.hash.toLowerCase()),
+      );
+      if (fresh.length === 1) return fresh[0].hash!.toLowerCase();
+      if (fresh.length > 1) {
+        // Multiple new torrents (other consumer of the same qBit
+        // instance racing us). Pick the most recently added — best
+        // effort.
+        fresh.sort((a, b) => (b.added_on ?? 0) - (a.added_on ?? 0));
+        return fresh[0].hash!.toLowerCase();
+      }
+    }
+    return undefined;
   }
 
   /**
