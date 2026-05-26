@@ -221,6 +221,42 @@ export class AuthService {
   }
 
   /**
+   * Long-lived JWT (12h) used by the player + offline-download flow to
+   * authenticate manifest, segment, direct-play and subtitle fetches.
+   *
+   * The regular access JWT lives 1h with refresh-rotation — fine for API
+   * calls (every Angular request goes through the interceptor and can be
+   * rotated mid-flight). It is not fine for ExoPlayer / AVPlay / Shaka:
+   * those engines bake the auth header at \`engine.load()\` and never
+   * re-ask Angular for a fresh one, so a 2h film with a 1h token would
+   * break halfway. This token gives the engines a window large enough
+   * to cover essentially any single playback session.
+   */
+  generateStreamToken(user: User): string {
+    const ttl = this.config.get<string>('STREAM_TOKEN_TTL', '12h');
+    const payload: JwtPayload = { sub: user.id, username: user.username };
+    // \`expiresIn\` is typed as the \`ms\` library's \`StringValue\`, a
+    // template literal type that won't accept a bare \`string\` from
+    // env. The runtime accepts anything \`ms()\` parses ("12h", "7d",
+    // numeric seconds, …) so we widen via cast.
+    return this.jwtService.sign(payload, {
+      expiresIn: ttl as unknown as number,
+    });
+  }
+
+  /** Stream-token TTL in ms — frontend uses this to decide when to refresh. */
+  getStreamTokenTtlMs(): number {
+    const raw = this.config.get<string>('STREAM_TOKEN_TTL', '12h');
+    const m = /^(\d+)([dhms])$/i.exec(raw.trim());
+    if (!m) return 12 * 60 * 60 * 1000;
+    const n = parseInt(m[1], 10);
+    const u = m[2].toLowerCase();
+    const mult =
+      u === 'd' ? 86400000 : u === 'h' ? 3600000 : u === 'm' ? 60000 : 1000;
+    return n * mult;
+  }
+
+  /**
    * Issue a JWT for an existing user — used by the pairing flow when the user
    * has been authenticated through a different channel (approval from another
    * device) instead of a password.

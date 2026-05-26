@@ -132,4 +132,19 @@ export class AuthController {
     const streamBaseUrl = resolveStreamPublicBaseUrl(req, publicUrl);
     return { token, streamBaseUrl };
   }
+
+  /**
+   * Long-lived stream JWT (12h) used by the player + offline-download
+   * flow. The 1h access token isn't suitable for ExoPlayer / AVPlay /
+   * Shaka — they bake the auth header at \`load()\` time and never
+   * re-ask Angular, so a film longer than the token TTL would break
+   * mid-playback. See AuthService.generateStreamToken.
+   */
+  @Post('stream-token')
+  @UseGuards(JwtOrApiKeyGuard)
+  streamToken(@CurrentUser() user: User) {
+    const token = this.authService.generateStreamToken(user);
+    const ttlMs = this.authService.getStreamTokenTtlMs();
+    return { streamToken: token, expiresAt: Date.now() + ttlMs };
+  }
 }

@@ -114,6 +114,11 @@ export class DownloadManagerService {
       media: { id: meta?.mediaId ?? 0, title, posterUrl: meta?.posterUrl ?? null, type: meta?.type ?? '' },
     };
 
+    // Hydrate a fresh long-lived stream JWT before we bake the URL +
+    // header into the native download daemon — downloads can run for
+    // hours so we can't rely on the 1h access token.
+    await this.auth.ensureStreamToken();
+
     const hlsUrl = this.streamingApi.getHlsUrl(mediaFileId, quality);
     task.hlsUrl = hlsUrl;
 
@@ -122,7 +127,8 @@ export class DownloadManagerService {
     this.incActive();
 
     if (this.isNative) {
-      const token = this.auth.accessToken ?? '';
+      const token =
+        this.auth.streamToken() ?? this.auth.accessToken ?? '';
       this.notif.startDownload(String(taskId), hlsUrl, token);
     } else {
       void this.handleWebDownload(task, hlsUrl);

@@ -76,6 +76,11 @@ export class AuthService {
   /** In-flight refresh request shared across concurrent 401s so we only
    *  rotate once even when 10 parallel calls all fail at the same time. */
   private _refreshInFlight: Promise<string | null> | null = null;
+  /** Long-lived stream JWT cached for the player + URL builders. See
+   *  ensureStreamToken() for the lifecycle. */
+  private _streamToken = signal<string | null>(null);
+  private _streamTokenExpiresAt = 0;
+  private _streamTokenInFlight: Promise<string | null> | null = null;
 
   get accessToken(): string | null {
     return this._accessToken;
@@ -84,6 +89,11 @@ export class AuthService {
   get refreshToken(): string | null {
     return this._refreshToken;
   }
+
+  /** Read-only stream token signal. Cached value — call
+   *  ensureStreamToken() before starting a playback session to make
+   *  sure it isn't near expiry. */
+  readonly streamToken = this._streamToken.asReadonly();
 
   readonly user = this._user.asReadonly();
   readonly isAuthenticated = computed(() => !!this._user());
@@ -255,6 +265,44 @@ export class AuthService {
       }
     })();
     return this._refreshInFlight;
+  }
+
+  /**
+   * Ensure a fresh stream token is cached. Fetched on first call, then
+   * re-used as long as it has > 30 min of life left — playback URLs are
+   * baked at \`engine.load()\` time and can't be updated mid-stream, so
+   * we want to start every session with a fresh token whose TTL safely
+   * exceeds the longest plausible film.
+   *
+   * Single-flight: concurrent callers share the same fetch.
+   */
+  async ensureStreamToken(): Promise<string | null> {
+    const minRemaining = 30 * 60 * 1000;
+    if (
+      this._streamToken() &&
+      this._streamTokenExpiresAt - Date.now() > minRemaining
+    ) {
+      return this._streamToken();
+    }
+    if (this._streamTokenInFlight) return this._streamTokenInFlight;
+    this._streamTokenInFlight = (async () => {
+      try {
+        const res = await firstValueFrom(
+          this.http.post<{ streamToken: string; expiresAt: number }>(
+            '/api/auth/stream-token',
+            {},
+          ),
+        );
+        this._streamToken.set(res.streamToken);
+        this._streamTokenExpiresAt = res.expiresAt;
+        return res.streamToken;
+      } catch {
+        return null;
+      } finally {
+        this._streamTokenInFlight = null;
+      }
+    })();
+    return this._streamTokenInFlight;
   }
 
   register(username: string, password: string, email?: string) {
@@ -467,11 +515,13 @@ export class AuthService {
     localStorage.removeItem(AuthService.REFRESH_KEY);
   }
 
-  /** Clear both tokens (in-memory + persisted). Called when refresh
+  /** Clear all tokens (in-memory + persisted). Called when refresh
    *  fails terminally or on logout. */
   private async clearTokens(): Promise<void> {
     this._accessToken = null;
     this._refreshToken = null;
+    this._streamToken.set(null);
+    this._streamTokenExpiresAt = 0;
     await this.removeToken();
     await this.removeRefreshToken();
   }
