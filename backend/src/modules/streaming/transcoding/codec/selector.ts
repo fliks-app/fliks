@@ -116,6 +116,7 @@ export function pickVariants(
 
   const ctx: QuirkContext = {
     profile,
+    sourceWidth: source.width,
     sourceHeight: source.height,
     userAgent: userAgent.toLowerCase(),
   };

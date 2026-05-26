@@ -1,3 +1,4 @@
+import { bucketResolutionHeight } from '../../../../common/utils/resolution.util';
 import type { CodecVariant } from './types';
 import type { DeviceProfileDto } from '../../dto/device-profile.dto';
 
@@ -23,8 +24,12 @@ export interface ClientQuirk {
 
 export interface QuirkContext {
   profile: DeviceProfileDto;
-  /** Source video dimensions — required to filter "X codec but only
-   *  ≤ 1080p" quirks like CCwGTV HD silently failing HEVC Main10 @ 4K. */
+  /** Source frame dimensions. Both axes are required so resolution-
+   *  gated quirks ("X codec but only ≤ 1080p", e.g. CCwGTV HD silently
+   *  failing HEVC Main10 @ 4K) can bucket via
+   *  {@link bucketResolutionHeight} — height alone mis-classifies
+   *  anamorphic / scope crops like 1918×872. */
+  sourceWidth: number;
   sourceHeight: number;
   /** Lowercased `User-Agent` header. Optional — quirks that key on
    *  HTTP-only signals (e.g. specific Chromecast firmware versions)
@@ -37,7 +42,7 @@ const CCWGTV_HD_NO_4K_HEVC_HDR: ClientQuirk = {
   matches: (ctx) =>
     /chromecast.+google.+tv/i.test(ctx.userAgent) &&
     !/4k/i.test(ctx.userAgent) &&
-    ctx.sourceHeight > 1080,
+    bucketResolutionHeight(ctx.sourceWidth, ctx.sourceHeight) > 1080,
   filter: (variants) =>
     variants.filter((v) => !(v.codec === 'hevc' && v.hdr !== null)),
   reason:
