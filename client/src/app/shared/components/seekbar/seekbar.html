@@ -19,30 +19,38 @@
       class="absolute bottom-full mb-3 pointer-events-none z-50 -translate-x-1/2"
       [style.left]="tooltipLeft()"
     >
-      <div class="bg-neutral/95 backdrop-blur-sm rounded-lg shadow-2xl overflow-hidden">
-        @if (spriteUrl() && spriteMetadata()) {
-          <div class="relative">
-            <div
-              class="bg-no-repeat"
-              [style.width.px]="previewWidth()"
-              [style.height.px]="previewHeight()"
-              [style.background-image]="'url(' + spriteUrl() + ')'"
-              [style.background-position]="thumbnailBgPositionScaled()"
-              [style.background-size]="spriteBgSizeScaled()"
-            ></div>
-            <div class="absolute bottom-0 inset-x-0 text-center pb-1 pt-3 bg-gradient-to-t from-black/70 to-transparent">
-              <span class="text-white text-xs tabular-nums font-medium drop-shadow">
+      <div class="relative">
+        <div class="bg-neutral/95 backdrop-blur-sm rounded-lg shadow-2xl overflow-hidden">
+          @if (spriteUrl() && spriteMetadata()) {
+            <div class="relative">
+              <div
+                class="bg-no-repeat"
+                [style.width.px]="previewWidth()"
+                [style.height.px]="previewHeight()"
+                [style.background-image]="'url(' + spriteUrl() + ')'"
+                [style.background-position]="thumbnailBgPositionScaled()"
+                [style.background-size]="spriteBgSizeScaled()"
+              ></div>
+              <div class="absolute bottom-0 inset-x-0 text-center pb-0.5 pt-2 bg-gradient-to-t from-black/70 to-transparent">
+                <span class="text-white text-xs tabular-nums font-medium drop-shadow">
+                  {{ formatTime(dragging() ? dragTime() : hoverTime()) }}
+                </span>
+              </div>
+            </div>
+          } @else {
+            <div class="px-3 py-1 text-center">
+              <span class="text-white text-xs tabular-nums font-medium">
                 {{ formatTime(dragging() ? dragTime() : hoverTime()) }}
               </span>
             </div>
-          </div>
-        } @else {
-          <div class="px-3 py-1.5 text-center">
-            <span class="text-white text-xs tabular-nums font-medium">
-              {{ formatTime(dragging() ? dragTime() : hoverTime()) }}
-            </span>
-          </div>
-        }
+          }
+        </div>
+        <!-- Downward-pointing arrow: CSS triangle, sibling of the
+             rounded box so the box's overflow-hidden doesn't clip it.
+             Sits flush against the bottom edge, centered horizontally. -->
+        <div
+          class="absolute left-1/2 top-full -translate-x-1/2 w-0 h-0 border-x-[6px] border-x-transparent border-t-[6px] border-t-neutral/95"
+        ></div>
       </div>
     </div>
   }
