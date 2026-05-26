@@ -1,47 +1,5 @@
 # Changelog
 
-## [1.7.1](https://github.com/fliks-app/fliks/compare/v1.7.0...v1.7.1) (2026-05-26)
-
-
-### Features
-
-* **activities:** auto-match orphan torrents + episode/season FKs ([#241](https://github.com/fliks-app/fliks/issues/241)) ([0aead51](https://github.com/fliks-app/fliks/commit/0aead5110c93467565c52c65a2af1b0d34824c3b))
-* **auth:** refresh-token rotation for persistent native sessions ([#248](https://github.com/fliks-app/fliks/issues/248)) ([be2a7b8](https://github.com/fliks-app/fliks/commit/be2a7b888b628ae5b52a9363b185d32a350e6a42))
-* **completion:** run cropdetect and subtitle warmup after grab import ([#222](https://github.com/fliks-app/fliks/issues/222)) ([252d65b](https://github.com/fliks-app/fliks/commit/252d65b9ff4bb86efb3a4e9b99a0c1499a0ea346))
-* **library:** add watched / unwatched filter ([#224](https://github.com/fliks-app/fliks/issues/224)) ([8e196c5](https://github.com/fliks-app/fliks/commit/8e196c5a013549a2a5a880f060b25fd10e8aa7e1))
-* **media-detail:** replace rescan menu entry with an analyse modal ([#225](https://github.com/fliks-app/fliks/issues/225)) ([af9343e](https://github.com/fliks-app/fliks/commit/af9343e6b242a092b0e179de7e74981e525da71e))
-* **media:** log library imports and targeted search-missing counts ([#230](https://github.com/fliks-app/fliks/issues/230)) ([b2f3e15](https://github.com/fliks-app/fliks/commit/b2f3e151be5b188507ebbb5d052090f5a15c8a42))
-* **release-parsing:** extractMediaTitle for orphan-torrent recovery ([#240](https://github.com/fliks-app/fliks/issues/240)) ([ed636da](https://github.com/fliks-app/fliks/commit/ed636daf265d11841e6ea9882cf49e28dbd08c1e))
-* **subtitles:** centralised video-aware scoring (Bazarr-style) ([#234](https://github.com/fliks-app/fliks/issues/234)) ([dd7fc49](https://github.com/fliks-app/fliks/commit/dd7fc49ade2374b8d3a0cfebec32a42398ae0cc4))
-* **subtitles:** circuit breaker on top of provider rate-limiter ([#237](https://github.com/fliks-app/fliks/issues/237)) ([59220b6](https://github.com/fliks-app/fliks/commit/59220b6d4e09abca2a42e7b74cb13fce4e6faeca))
-* **subtitles:** defer upgrades on files that still have missing langs ([#233](https://github.com/fliks-app/fliks/issues/233)) ([3ec3f60](https://github.com/fliks-app/fliks/commit/3ec3f60dc8958fbee199410657d930a4bc7dd041))
-* **subtitles:** per-language hearing-impaired enforcement ([#236](https://github.com/fliks-app/fliks/issues/236)) ([6febd09](https://github.com/fliks-app/fliks/commit/6febd0989b3b57c66a77f05209a6bdabada0c03a))
-* **subtitles:** persist OSDb hash on MediaFile + hash-match invariant ([#235](https://github.com/fliks-app/fliks/issues/235)) ([41b82fe](https://github.com/fliks-app/fliks/commit/41b82fe9e9c9dacae6e31bba1bc01bd1a5333fbf))
-* **thumbnail:** use VAAPI/QSV to accelerate sprite extraction ([#252](https://github.com/fliks-app/fliks/issues/252)) ([c1bbf05](https://github.com/fliks-app/fliks/commit/c1bbf0585e678ce8acd37451acb5a3c80e6c5215))
-* **transcoding:** prefer HW-encodable codecs over source-codec match ([#257](https://github.com/fliks-app/fliks/issues/257)) ([d0dbdec](https://github.com/fliks-app/fliks/commit/d0dbdec3de5b318c3cd9cd0a6eb0e47d4dcc4adc))
-
-
-### Bug Fixes
-
-* **activities:** never unlink a media from its download history ([#238](https://github.com/fliks-app/fliks/issues/238)) ([590f093](https://github.com/fliks-app/fliks/commit/590f093321ed3b796a4acc7179a7943b748eec0e))
-* **auto-grab:** hydrate series quality/language profiles in SearchMissing ([#227](https://github.com/fliks-app/fliks/issues/227)) ([e7aa1f3](https://github.com/fliks-app/fliks/commit/e7aa1f3762bcb26773a30db583a580b361fa1851))
-* **auto-match:** run on empty grabbed + heal mediaId-NULL rows + match by originalTitle ([#242](https://github.com/fliks-app/fliks/issues/242)) ([1f6706f](https://github.com/fliks-app/fliks/commit/1f6706f51591cc215814bb463c346cff46cd69dd))
-* **grab:** persist indexer on download-history rows from manual grabs ([#228](https://github.com/fliks-app/fliks/issues/228)) ([df4d4a1](https://github.com/fliks-app/fliks/commit/df4d4a1b8cc66e6a4cda901bbe111c7c3d967b27))
-* **media-detail:** gate delete buttons on media.delete permission ([#220](https://github.com/fliks-app/fliks/issues/220)) ([5081449](https://github.com/fliks-app/fliks/commit/5081449f4b52a20c8d6c1d585e3218e6316d28f4))
-* **media-info-header:** label letterboxed 1080p sources correctly ([#251](https://github.com/fliks-app/fliks/issues/251)) ([dbaa296](https://github.com/fliks-app/fliks/commit/dbaa296a6d318c8dc3835e5ad08538afcf950834))
-* **media:** surface 4K releases in manual search ([#250](https://github.com/fliks-app/fliks/issues/250)) ([b75fa30](https://github.com/fliks-app/fliks/commit/b75fa3028aa4ef1ff37f9c66376393a50478bbd7))
-* **player:** keep mobile play button slot during loading ([#255](https://github.com/fliks-app/fliks/issues/255)) ([2b17506](https://github.com/fliks-app/fliks/commit/2b17506fe714d7085cd8bf2d3fd46ada4391907a))
-* **popover-menu:** keep options above &lt;dialog open&gt; top-layer ([#231](https://github.com/fliks-app/fliks/issues/231)) ([a1ac599](https://github.com/fliks-app/fliks/commit/a1ac599bf53deb961095771907c43f9f0b084f32))
-* **quality:** share resolution bucketing across backend and client ([#256](https://github.com/fliks-app/fliks/issues/256)) ([5965f64](https://github.com/fliks-app/fliks/commit/5965f6479bbc91348bfa2bdc1af07b2711da7cf5))
-* **seekbar:** revert track height on touch release ([#249](https://github.com/fliks-app/fliks/issues/249)) ([75d53d2](https://github.com/fliks-app/fliks/commit/75d53d2903fe8ec2f16961609517fc5de9959abf))
-* **seekbar:** shrink sprite preview on phones + crop letterbox from tiles ([#254](https://github.com/fliks-app/fliks/issues/254)) ([857b796](https://github.com/fliks-app/fliks/commit/857b796bb00e736f6148590245c49f3fd3ca5710))
-* **streaming:** emit av01.* CODECS for AV1 HLS variants ([#253](https://github.com/fliks-app/fliks/issues/253)) ([46d98f2](https://github.com/fliks-app/fliks/commit/46d98f2d23bd0ea3e71dca7249b2fcc31edf59c8))
-
-
-### Miscellaneous Chores
-
-* release 1.7.1 ([#223](https://github.com/fliks-app/fliks/issues/223)) ([452a0b1](https://github.com/fliks-app/fliks/commit/452a0b1a1cb2a0e453e4eb70d256b4b47024e2fc))
-
 ## [1.7.0](https://github.com/fliks-app/fliks/compare/v1.6.1...v1.7.0) (2026-05-24)
 
 
