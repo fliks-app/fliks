@@ -32,7 +32,7 @@ permissions:
 
 jobs:
   build-and-publish:
-    runs-on: macos-14
+    runs-on: macos-15
     defaults:
       run:
         working-directory: client
@@ -50,11 +50,13 @@ jobs:
           cache: npm
           cache-dependency-path: client/package-lock.json
 
-      # Pin Xcode to the same major Apple ships in App Store Connect's
-      # review environment. macos-14 image ships 15.4 by default, which
-      # is fine; bump explicitly when Apple bumps the build target.
+      # Pin Xcode to the build version Apple requires for App Store
+      # uploads. Apple raised the minimum SDK to iOS 26 (Xcode 26.x)
+      # on the 2026 cutover — anything older fails validation with
+      # "SDK version issue" at upload time. macos-15 ships Xcode
+      # 26.x; macos-14 caps out at Xcode 16.
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+        run: sudo xcode-select -s /Applications/Xcode_26.app
 
       - name: Install client dependencies
         run: npm ci
