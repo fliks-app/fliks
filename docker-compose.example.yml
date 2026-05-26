@@ -52,10 +52,22 @@ services:
       NODE_ENV: production
     volumes:
       # ---- Media library ------------------------------------------------
-      # Map your existing media tree here. Read-only is recommended; Fliks
-      # never writes to the source files. Match the path Fliks tells the
+      # Map your existing media tree here. Match the path Fliks tells the
       # user to use when adding a library in the UI.
-      - /path/to/your/media:/medias:ro
+      #
+      # Add as many of these as you need — every mount you expose here
+      # can be picked as a separate library root in Fliks (Settings →
+      # Libraries → Add). Example with a second drive:
+      #   - /path/to/your/movies:/medias/movies
+      #   - /path/to/your/series:/medias/series
+      - /path/to/your/media:/medias
+
+      # ---- Download folder ---------------------------------------------
+      # Where freshly-downloaded files land before Fliks imports them
+      # into the library above. Mount the SAME path here and on whichever
+      # download client you use so the two services share the working
+      # directory.
+      - /path/to/download/folder:/downloads
 
       # ---- App-managed storage -----------------------------------------
       # Server-side secrets auto-generated on first boot (JWT signing
