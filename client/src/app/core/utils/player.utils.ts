@@ -1,5 +1,5 @@
 import type { TranslateService } from '@ngx-translate/core';
-import { localizeLanguage } from './language.utils';
+import { localizeLanguage, normalizeLangCode } from './language.utils';
 
 /** Pixel widths backing each ladder rung id (must match the backend
  *  `PROFILES` table). Used by NativeEngine + quality-manager to set
@@ -132,12 +132,23 @@ function audioChannelsLabel(channels: number | null | undefined): string {
  *
  * Format: `"<langue> (CODEC - channels)"`, e.g. `"Français (EAC3 - 5.1)"`.
  * Codec and/or channels are dropped when missing.
+ *
+ * `trackIndex` is the 1-based position of the track in the file's audio
+ * list — used to produce a translated `Piste N` / `Audio N` head when
+ * the language tag is `und` / `xx`, so the dropdown doesn't surface
+ * `und` to the user. Omit the index to keep the literal `und` head
+ * (legacy / non-listed callers).
  */
 export function formatAudioLabel(
   audio: { language?: string; title?: string; codec?: string; channels?: number },
   translate: TranslateService,
+  trackIndex?: number,
 ): string {
-  const head = localizeLanguage(audio.language, translate);
+  const norm = normalizeLangCode(audio.language);
+  const head =
+    trackIndex != null && (norm === 'und' || norm === 'xx')
+      ? translate.instant('player.audio_track_n', { index: trackIndex })
+      : localizeLanguage(audio.language, translate);
   const codec = (audio.codec ?? '').toUpperCase().replace('TRUEHD', 'TrueHD');
   const channels = audioChannelsLabel(audio.channels);
   const tail = [codec, channels].filter(Boolean).join(' - ');
@@ -160,8 +171,13 @@ export function formatSubtitleLabel(
     relativePath?: string | null;
   },
   translate: TranslateService,
+  trackIndex?: number,
 ): string {
-  const head = localizeLanguage(sub.language, translate);
+  const norm = normalizeLangCode(sub.language);
+  const head =
+    trackIndex != null && (norm === 'und' || norm === 'xx')
+      ? translate.instant('player.subtitle_track_n', { index: trackIndex })
+      : localizeLanguage(sub.language, translate);
   const parts: string[] = [];
   if (sub.hearingImpaired) parts.push('HI');
   if (sub.forced) parts.push('Forced');

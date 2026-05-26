@@ -1224,7 +1224,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const audioList = (file?.streamInfo as any)?.audio ?? [];
       const tracks = e.tracks.map((t: any, i: number) => ({
         id: t.id,
-        label: audioList[i] ? formatAudioLabel(audioList[i], this.translate) : t.label,
+        label: audioList[i] ? formatAudioLabel(audioList[i], this.translate, i + 1) : t.label,
         language: normalizeLang(t.language),
         selected: !!t.selected,
       }));

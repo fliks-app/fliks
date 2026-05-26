@@ -263,7 +263,7 @@ export class MediaInfoHeaderComponent {
     if (!audio?.length) return [];
     return audio.map((a: any, i: number) => ({
       index: i,
-      label: formatAudioLabel(a, this.translate),
+      label: formatAudioLabel(a, this.translate, i + 1),
       language: a.language ?? 'und',
     }));
   });
