@@ -471,7 +471,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (rateMap && qId !== 'auto' && qId !== 'original' && rateMap[qId]) {
       selectedRateEntry = rateMap[qId];
     } else if (rateMap && (qId === 'auto' || qId === 'original')) {
-      const tier = urlMatch?.[1] ?? this.qualityManager.transcodeTierFromVariantHeight(activeVariant?.height ?? 0);
+      const tier = urlMatch?.[1] ?? this.qualityManager.transcodeTierFromVariantHeight(activeVariant?.height ?? 0, activeVariant?.width);
       if (tier && rateMap[tier]) selectedRateEntry = rateMap[tier];
     }
 

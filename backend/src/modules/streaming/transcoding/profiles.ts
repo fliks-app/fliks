@@ -1,3 +1,4 @@
+import { bucketResolutionHeight } from '../../../common/utils/resolution.util';
 import type { DeviceType, TranscodeProfile } from './types';
 
 /** Threshold above which source bitrate earns its own "Original" rung
@@ -209,18 +210,22 @@ export function isHdrProfile(name: string): boolean {
   return name.endsWith('-hdr');
 }
 
-/** True when a profile is small enough to encode on the source — either
- *  axis fitting is enough so cinema-aspect 4K (e.g. 3840×2024 IMAX)
- *  still gets the 2160p ladder rung. A strict `maxHeight <= sourceHeight`
- *  check drops the top rung for any source whose vertical resolution
- *  falls below the profile's category label, which is wrong for most
- *  theatrical 4K masters. */
+/** True when a profile is small enough to encode on the source. Compares
+ *  the *bucketed* heights on both sides so anamorphic / scope / IMAX
+ *  crops snap to the right rung — the previous `<=` on either axis
+ *  rescued IMAX 4K (3840×2024) but still dropped letterboxed 1080p
+ *  masters like 1918×872 to the 720p rung because both axes sat one or
+ *  two pixels under the round number. See {@link bucketResolutionHeight}
+ *  for the bucket boundaries. */
 export function profileFitsSource(
   p: { maxWidth: number; maxHeight: number },
   sourceWidth: number,
   sourceHeight: number,
 ): boolean {
-  return p.maxWidth <= sourceWidth || p.maxHeight <= sourceHeight;
+  return (
+    bucketResolutionHeight(p.maxWidth, p.maxHeight) <=
+    bucketResolutionHeight(sourceWidth, sourceHeight)
+  );
 }
 
 /** Compute output dimensions for a profile against a source. Width is

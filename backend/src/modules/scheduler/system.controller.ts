@@ -37,6 +37,7 @@ import { ActiveStreamTracker } from '../streaming/active-stream-tracker.service'
 import { PlaybackService } from '../streaming/playback.service';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';
+import { bucketResolutionLabel } from '../../common/utils/resolution.util';
 
 const APP_VERSION: string = (() => {
   try {
@@ -427,13 +428,8 @@ export class SystemController {
 
       const sourceResLabel =
         v?.width && v?.height
-          ? v.height >= 2160
-            ? '4K'
-            : v.height >= 1080
-              ? '1080p'
-              : v.height >= 720
-                ? '720p'
-                : `${v.width}x${v.height}`
+          ? (bucketResolutionLabel(v.width, v.height) ??
+            `${v.width}x${v.height}`)
           : null;
       // For transcode sessions, show the target quality, not the source resolution
       const resLabel =

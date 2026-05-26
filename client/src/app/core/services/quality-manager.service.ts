@@ -263,17 +263,20 @@ export class QualityManagerService {
   }
 
   /**
-   * Map variant track height to transcode profile name.
+   * Map a variant track's dimensions to its transcode profile name. Uses
+   * the shared {@link bucketResolutionLabel} so a letterboxed 1918×872
+   * variant maps to "1080p" instead of falling through to "720p" — same
+   * fix as the file-badge bucketing.
+   *
+   * Accepts width as well as height because Shaka variants for cropped
+   * sources expose their cropped dimensions; height alone is misleading
+   * for anamorphic / scope tracks.
    */
-  transcodeTierFromVariantHeight(h: number): string | null {
+  transcodeTierFromVariantHeight(h: number, w?: number): string | null {
     if (h <= 0) return null;
-    if (h >= 2160) return '2160p';
-    if (h >= 1080) return '1080p';
-    if (h >= 720) return '720p';
-    if (h >= 480) return '480p';
-    if (h >= 360) return '360p';
-    if (h >= 240) return '240p';
-    return '144p';
+    const label = bucketResolutionLabel(w, h);
+    if (!label) return null;
+    return label === '4K' ? '2160p' : label;
   }
 
   // ── Private helpers ──
