@@ -50,6 +50,12 @@ export function parseReleaseQuality(title: string): ParsedReleaseQuality {
     return { quality: q, label: q.name };
   }
 
+  // 'hdtv' is a reasonable fallback at 480p/720p/1080p (broadcast TV is
+  // common at those resolutions), but broadcast 2160p essentially doesn't
+  // circulate — modern 4K is almost always WEB-DL or BluRay. Defaulting
+  // sourceless 2160p+ to 'hdtv' parked legitimate `<title>.<year>.2160p
+  // .HDR.HEVC-<group>` hits into HDTV-2160p (id 20), which most Ultra HD
+  // profiles don't bother to tick → frontend silently hid them.
   let source:
     | 'remux'
     | 'bluray'
@@ -57,7 +63,7 @@ export function parseReleaseQuality(title: string): ParsedReleaseQuality {
     | 'hdtv'
     | 'dvd'
     | 'sdtv'
-    | 'workprint' = 'hdtv';
+    | 'workprint' = resolution >= 2160 ? 'web' : 'hdtv';
   if (isRemux) source = 'remux';
   else if (isBluray) source = 'bluray';
   else if (isWebDl || isWebRip) source = 'web';

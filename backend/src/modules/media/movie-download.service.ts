@@ -21,7 +21,10 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { MediaType } from '../../common/enums';
 import { GrabMovieDto } from './dto/grab-movie.dto';
 import { QualityProfileItem } from '../profiles/entities/quality-profile.entity';
-import { getAppQualityById } from '../../common/constants/app-qualities';
+import {
+  getAppQualityById,
+  maxAllowedRank,
+} from '../../common/constants/app-qualities';
 import { parseReleaseQuality } from '../../common/release-parsing';
 import {
   ReleaseRejection,
@@ -201,19 +204,23 @@ export class MovieDownloadService {
       allowedLangs,
       customTitle || resolveSearchTitles(media).expectedTitles,
     );
-    // Drop everything above the profile's cutoff. Above-cutoff qualities
-    // surfaced in manual results even when they couldn't be auto-grabbed,
-    // bloating the list with irrelevant 2160p hits when the user targets
-    // 1080p. The cutoff already gates the upgrade pipeline; mirror that
-    // contract here.
-    const cutoffRank = getAppQualityById(media.qualityProfile?.cutoff ?? 0)?.rank ?? 999;
-    const withinCutoff = rows.filter((r) => r.rank <= cutoffRank);
-    const accepted = withinCutoff.filter((r) => r.rejections.length === 0).length;
+    // Drop releases that overshoot the profile's reach. Profiles have two
+    // independent fields — `cutoff` (the auto-grab "good enough" target)
+    // and `items[].allowed` (the qualities the user is willing to accept).
+    // Filtering by cutoff strips legitimate above-cutoff hits when the
+    // user explicitly allows them (e.g. an Ultra HD profile with cutoff
+    // left at the WEBDL-1080p default still allows 2160p — those releases
+    // must surface). Use the highest allowed rank instead: it still hides
+    // 2160p noise from a 1080p-only profile because those IDs aren't in
+    // `allowed`.
+    const maxRank = maxAllowedRank(allowed);
+    const withinProfile = rows.filter((r) => r.rank <= maxRank);
+    const accepted = withinProfile.filter((r) => r.rejections.length === 0).length;
     this.log.log(
-      `[searchMovieReleases] "${media.title}" — ${withinCutoff.length} within cutoff (rank ≤ ${cutoffRank}), ${accepted} accepted, ${withinCutoff.length - accepted} rejected`,
+      `[searchMovieReleases] "${media.title}" — ${withinProfile.length} within profile (rank ≤ ${maxRank}), ${accepted} accepted, ${withinProfile.length - accepted} rejected`,
     );
-    if (accepted === 0 && withinCutoff.length > 0) {
-      const sample = withinCutoff
+    if (accepted === 0 && withinProfile.length > 0) {
+      const sample = withinProfile
         .slice(0, 5)
         .map((r) => `"${r.title}" [${r.rejections.join(', ')}]`);
       this.log.warn(
@@ -221,7 +228,7 @@ export class MovieDownloadService {
       );
     }
 
-    return sortReleasesByRelevance(withinCutoff);
+    return sortReleasesByRelevance(withinProfile);
   }
 
   async grabMovie(

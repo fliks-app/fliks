@@ -418,9 +418,15 @@ export class TorznabService {
     if (!baseUrl) return [];
 
     const useTvSearch = indexer.capsTvSearch && !indexer.capsSearchFallback;
+    // See comment in searchSeries: text-mode search needs the season tag
+    // baked into `q` so the indexer's result cap doesn't bury packs for
+    // popular shows below the cutoff.
+    const searchQ = useTvSearch
+      ? showTitle
+      : `${showTitle} S${String(season).padStart(2, '0')}`;
     const typedUrl = `${baseUrl}?${buildTorznabQuery({
       t: useTvSearch ? 'tvsearch' : 'search',
-      q: showTitle,
+      q: searchQ,
       season: useTvSearch ? season : undefined,
       cat: '5000',
       apiKey,
@@ -439,9 +445,10 @@ export class TorznabService {
       this.log.warn(
         `[${indexer.name}] tvsearch failed (${torznabError}), falling back to t=search`,
       );
+      const fallbackQ = `${showTitle} S${String(season).padStart(2, '0')}`;
       return this.retryWithSearchFallback(
         indexer,
-        `${baseUrl}?${buildTorznabQuery({ t: 'search', q: showTitle, cat: '5000', apiKey })}`,
+        `${baseUrl}?${buildTorznabQuery({ t: 'search', q: fallbackQ, cat: '5000', apiKey })}`,
         'season',
       );
     }
@@ -465,9 +472,20 @@ export class TorznabService {
     if (!baseUrl) return [];
 
     const useTvSearch = indexer.capsTvSearch && !indexer.capsSearchFallback;
+    // When using t=search (indexer can't tvsearch, or admin pinned the
+    // fallback), the indexer does a plain text match on the torrent
+    // title and applies its own result cap (often 100). With just the
+    // show title in `q`, popular series fill that cap with loud
+    // single-episode 1080p hits and season packs / 4K get crowded out.
+    // Appending the season tag narrows the result set the same way the
+    // movie search includes the year; substring-matching still catches
+    // both per-episode releases (`...S02E02...`) and packs (`...S02...`).
+    const searchQ = useTvSearch
+      ? showTitle
+      : `${showTitle} S${String(season).padStart(2, '0')}`;
     const typedUrl = `${baseUrl}?${buildTorznabQuery({
       t: useTvSearch ? 'tvsearch' : 'search',
-      q: showTitle,
+      q: searchQ,
       season: useTvSearch ? season : undefined,
       ep: useTvSearch ? episode : undefined,
       cat: '5000',
@@ -487,9 +505,10 @@ export class TorznabService {
       this.log.warn(
         `[${indexer.name}] tvsearch failed (${torznabError}), falling back to t=search`,
       );
+      const fallbackQ = `${showTitle} S${String(season).padStart(2, '0')}`;
       return this.retryWithSearchFallback(
         indexer,
-        `${baseUrl}?${buildTorznabQuery({ t: 'search', q: showTitle, cat: '5000', apiKey })}`,
+        `${baseUrl}?${buildTorznabQuery({ t: 'search', q: fallbackQ, cat: '5000', apiKey })}`,
         'tvsearch',
       );
     }

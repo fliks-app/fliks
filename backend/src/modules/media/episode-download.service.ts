@@ -21,7 +21,7 @@ import {
   parseSeasonEpisode,
   resolveUnknownLanguage,
 } from '../../common/release-parsing';
-import { getAppQualityById } from '../../common/constants/app-qualities';
+import { maxAllowedRank } from '../../common/constants/app-qualities';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
 import { ProfilesService } from '../profiles/profiles.service';
 import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
@@ -224,20 +224,20 @@ export class EpisodeDownloadService {
       }),
     );
 
-    // Drop everything above the profile's cutoff — see equivalent
+    // Drop releases that overshoot the profile — see equivalent
     // comment in MovieDownloadService.searchMovieReleases.
-    const cutoffRank = getAppQualityById(media.qualityProfile?.cutoff ?? 0)?.rank ?? 999;
-    const withinCutoff = rowsWithKind.filter((x) => x.row.rank <= cutoffRank);
+    const maxRank = maxAllowedRank(allowed);
+    const withinProfile = rowsWithKind.filter((x) => x.row.rank <= maxRank);
 
     // User is asking for ONE episode. Season packs still match, but
     // they download a whole season for a single episode — they should
     // rank below any equally-good single-episode release. Sort the two
     // groups independently then concatenate.
     const singles = sortReleasesByRelevance(
-      withinCutoff.filter((x) => !x.isPack).map((x) => x.row),
+      withinProfile.filter((x) => !x.isPack).map((x) => x.row),
     );
     const packs = sortReleasesByRelevance(
-      withinCutoff.filter((x) => x.isPack).map((x) => x.row),
+      withinProfile.filter((x) => x.isPack).map((x) => x.row),
     );
     return [...singles, ...packs];
   }
@@ -511,14 +511,14 @@ export class EpisodeDownloadService {
       }),
     );
 
-    // Drop everything above the profile's cutoff, and drop single
+    // Drop releases that overshoot the profile, and drop single
     // episodes — the user asked for a season pack, releases that
     // happen to match the show but aren't packs aren't relevant
     // here. The auto-grab path still falls back to per-episode
     // search if no pack works.
-    const cutoffRank = getAppQualityById(media.qualityProfile?.cutoff ?? 0)?.rank ?? 999;
+    const maxRank = maxAllowedRank(allowed);
     const packs = rowsWithKind
-      .filter((x) => x.isPack && x.row.rank <= cutoffRank)
+      .filter((x) => x.isPack && x.row.rank <= maxRank)
       .map((x) => x.row);
     return sortReleasesByRelevance(packs);
   }
