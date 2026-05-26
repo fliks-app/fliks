@@ -15,6 +15,20 @@ import { JwtPayload } from './strategies/jwt.strategy';
 import { MediaServerType } from '../../common/enums';
 import { DEFAULT_ROLES } from '../../common/constants/permissions';
 import type { PublicUser } from '../users/users.service';
+import { RefreshTokenService } from './refresh-token.service';
+
+export interface TokenPair {
+  accessToken: string;
+  /** Plaintext refresh token. Returned once, never again — store
+   *  client-side (Capacitor Preferences on native, localStorage web). */
+  refreshToken: string;
+  /** UNIX seconds when the access token expires. Lets the client
+   *  schedule a proactive refresh just before it does. */
+  accessTokenExpiresAt: number;
+  /** UNIX seconds when the refresh token expires. After this the user
+   *  has to log in again. */
+  refreshTokenExpiresAt: number;
+}
 
 @Injectable()
 export class AuthService {
@@ -25,6 +39,7 @@ export class AuthService {
     private readonly roleRepo: Repository<Role>,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    private readonly refreshTokenService: RefreshTokenService,
   ) {}
 
   /** Durée du cookie httpOnly (alignée sur JWT_EXPIRATION). */
@@ -142,10 +157,49 @@ export class AuthService {
     user.lastLogin = new Date();
     await this.userRepo.save(user);
 
+    const tokens = await this.issueTokenPair(user);
+    return { ...tokens, user: this.safeUser(user) };
+  }
+
+  /**
+   * Build a short-lived access token paired with a long-lived refresh
+   * token. The refresh token's plaintext is returned only here — the
+   * DB stores its hash so a leaked dump can't be replayed. Used by
+   * login, pairing approval, and the rotation endpoint.
+   */
+  async issueTokenPair(user: User, userAgent?: string): Promise<TokenPair> {
     const payload: JwtPayload = { sub: user.id, username: user.username };
     const accessToken = this.jwtService.sign(payload);
+    const accessExp = this.jwtService.decode(accessToken)?.exp;
+    const accessTokenExpiresAt =
+      typeof accessExp === 'number'
+        ? accessExp
+        : Math.floor(Date.now() / 1000) + 3600;
+    const refresh = await this.refreshTokenService.issue(user, userAgent);
+    return {
+      accessToken,
+      refreshToken: refresh.token,
+      accessTokenExpiresAt,
+      refreshTokenExpiresAt: refresh.expiresAt,
+    };
+  }
 
-    return { accessToken, user: this.safeUser(user) };
+  /**
+   * Exchange a refresh token for a fresh access + refresh pair.
+   * Rotation: the presented refresh token is revoked immediately,
+   * regardless of outcome.
+   */
+  async refresh(rawRefreshToken: string, userAgent?: string): Promise<TokenPair> {
+    const user = await this.refreshTokenService.rotate(rawRefreshToken);
+    if (!user.enabled) {
+      throw new UnauthorizedException('Account disabled');
+    }
+    return this.issueTokenPair(user, userAgent);
+  }
+
+  /** Revoke a single refresh token (logout on one device). */
+  async revokeRefreshToken(rawRefreshToken: string): Promise<void> {
+    await this.refreshTokenService.revoke(rawRefreshToken);
   }
 
   /**
@@ -164,6 +218,42 @@ export class AuthService {
   generateCastToken(user: User): string {
     const payload: JwtPayload = { sub: user.id, username: user.username };
     return this.jwtService.sign(payload, { expiresIn: '4h' });
+  }
+
+  /**
+   * Long-lived JWT (12h) used by the player + offline-download flow to
+   * authenticate manifest, segment, direct-play and subtitle fetches.
+   *
+   * The regular access JWT lives 1h with refresh-rotation — fine for API
+   * calls (every Angular request goes through the interceptor and can be
+   * rotated mid-flight). It is not fine for ExoPlayer / AVPlay / Shaka:
+   * those engines bake the auth header at \`engine.load()\` and never
+   * re-ask Angular for a fresh one, so a 2h film with a 1h token would
+   * break halfway. This token gives the engines a window large enough
+   * to cover essentially any single playback session.
+   */
+  generateStreamToken(user: User): string {
+    const ttl = this.config.get<string>('STREAM_TOKEN_TTL', '12h');
+    const payload: JwtPayload = { sub: user.id, username: user.username };
+    // \`expiresIn\` is typed as the \`ms\` library's \`StringValue\`, a
+    // template literal type that won't accept a bare \`string\` from
+    // env. The runtime accepts anything \`ms()\` parses ("12h", "7d",
+    // numeric seconds, …) so we widen via cast.
+    return this.jwtService.sign(payload, {
+      expiresIn: ttl as unknown as number,
+    });
+  }
+
+  /** Stream-token TTL in ms — frontend uses this to decide when to refresh. */
+  getStreamTokenTtlMs(): number {
+    const raw = this.config.get<string>('STREAM_TOKEN_TTL', '12h');
+    const m = /^(\d+)([dhms])$/i.exec(raw.trim());
+    if (!m) return 12 * 60 * 60 * 1000;
+    const n = parseInt(m[1], 10);
+    const u = m[2].toLowerCase();
+    const mult =
+      u === 'd' ? 86400000 : u === 'h' ? 3600000 : u === 'm' ? 60000 : 1000;
+    return n * mult;
   }
 
   /**

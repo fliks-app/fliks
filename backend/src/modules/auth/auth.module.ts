@@ -15,11 +15,13 @@ import { EventsModule } from '../scheduler/events.module';
 import { PairingRequest } from './pairing/entities/pairing-request.entity';
 import { PairingService } from './pairing/pairing.service';
 import { PairingController } from './pairing/pairing.controller';
+import { RefreshToken } from './entities/refresh-token.entity';
+import { RefreshTokenService } from './refresh-token.service';
 import { getJwtSecret } from '../../common/utils/jwt-secret';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Role, PairingRequest]),
+    TypeOrmModule.forFeature([User, Role, PairingRequest, RefreshToken]),
     forwardRef(() => SettingsModule),
     EventsModule,
     PassportModule,
@@ -32,7 +34,11 @@ import { getJwtSecret } from '../../common/utils/jwt-secret';
         // common/utils/jwt-secret.ts.
         secret: getJwtSecret(),
         signOptions: {
-          expiresIn: config.get('JWT_EXPIRATION', '7d'),
+          // 1h default — access tokens are now paired with a long-lived
+          // refresh token (\`REFRESH_TOKEN_TTL_DAYS\`, default 60d) so
+          // the user-visible session lasts effectively forever while
+          // a stolen access JWT can't be replayed for more than an hour.
+          expiresIn: config.get('JWT_EXPIRATION', '1h'),
         },
       }),
     }),
@@ -44,6 +50,7 @@ import { getJwtSecret } from '../../common/utils/jwt-secret';
     CaslAbilityFactory,
     PoliciesGuard,
     PairingService,
+    RefreshTokenService,
   ],
   exports: [AuthService, CaslAbilityFactory, PoliciesGuard, JwtModule],
 })

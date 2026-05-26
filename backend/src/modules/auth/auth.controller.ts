@@ -6,7 +6,9 @@ import {
   UseGuards,
   Res,
   Req,
+  Headers,
   HttpCode,
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
@@ -31,17 +33,67 @@ export class AuthController {
     @Body() dto: LoginDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
+    @Headers('user-agent') userAgent?: string,
   ) {
-    const { accessToken, user } = await this.authService.login(dto);
+    const result = await this.authService.login(dto);
     const maxAgeMs = this.authService.getAccessCookieMaxAgeMs();
-    res.cookie(ACCESS_TOKEN_COOKIE, accessToken, cookieOpts(req, maxAgeMs));
-    return { user, accessToken };
+    res.cookie(
+      ACCESS_TOKEN_COOKIE,
+      result.accessToken,
+      cookieOpts(req, maxAgeMs),
+    );
+    // \`accessToken\` returned in the JSON body too — native clients
+    // attach it as Bearer (they ignore the cookie). \`refreshToken\`
+    // is JSON-only (no cookie) so it never travels on regular API
+    // requests, which keeps it away from XSRF concerns.
+    return result;
+  }
+
+  /**
+   * Exchange a refresh token for a fresh access + refresh pair.
+   * The presented refresh token is invalidated atomically; the new
+   * one rotates in. Theft detection: if a previously-rotated token
+   * is replayed, every refresh token of the user is revoked and the
+   * call fails — every device has to log back in.
+   */
+  @Post('refresh')
+  async refresh(
+    @Body('refreshToken') refreshToken: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    if (!refreshToken) {
+      throw new UnauthorizedException('Missing refresh token');
+    }
+    const tokens = await this.authService.refresh(refreshToken, userAgent);
+    const maxAgeMs = this.authService.getAccessCookieMaxAgeMs();
+    res.cookie(
+      ACCESS_TOKEN_COOKIE,
+      tokens.accessToken,
+      cookieOpts(req, maxAgeMs),
+    );
+    return tokens;
   }
 
   @Post('logout')
   @HttpCode(204)
-  logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+  async logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Body('refreshToken') refreshToken?: string,
+  ) {
     res.clearCookie(ACCESS_TOKEN_COOKIE, clearOpts(req));
+    // Revoke the refresh token server-side. Best-effort: a malformed
+    // or already-revoked token is silently ignored — the cookie is
+    // gone either way and the access token will expire on its own.
+    if (refreshToken) {
+      try {
+        await this.authService.revokeRefreshToken(refreshToken);
+      } catch {
+        // ignore
+      }
+    }
   }
 
   @Post('register')
@@ -79,5 +131,20 @@ export class AuthController {
     const publicUrl = await this.settingsService.get('public_url');
     const streamBaseUrl = resolveStreamPublicBaseUrl(req, publicUrl);
     return { token, streamBaseUrl };
+  }
+
+  /**
+   * Long-lived stream JWT (12h) used by the player + offline-download
+   * flow. The 1h access token isn't suitable for ExoPlayer / AVPlay /
+   * Shaka — they bake the auth header at \`load()\` time and never
+   * re-ask Angular, so a film longer than the token TTL would break
+   * mid-playback. See AuthService.generateStreamToken.
+   */
+  @Post('stream-token')
+  @UseGuards(JwtOrApiKeyGuard)
+  streamToken(@CurrentUser() user: User) {
+    const token = this.authService.generateStreamToken(user);
+    const ttlMs = this.authService.getStreamTokenTtlMs();
+    return { streamToken: token, expiresAt: Date.now() + ttlMs };
   }
 }

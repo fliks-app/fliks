@@ -788,6 +788,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
         const mode = this.playbackMode();
 
+        // Make sure a fresh long-lived stream JWT (12h) is cached before
+        // we build the manifest/segment URLs and the Bearer headers
+        // passed to ExoPlayer / AVPlay / Shaka. Those engines bake auth
+        // at \`load()\` and never re-ask Angular for a fresh credential —
+        // the regular 1h access token would expire mid-film.
+        await this.authService.ensureStreamToken();
+
         // ── Engine selection ──
         // Native (Capacitor) always goes through the platform player —
         // ExoPlayer on Android (incl. TV), AVPlayer on iOS. They beat the
@@ -809,7 +816,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             this.mediaId, this.mediaFileId, this.streamingApi, this.media,
           );
 
-          const token = this.authService.accessToken;
+          const token =
+            this.authService.streamToken() ?? this.authService.accessToken;
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
           if (mode === 'direct') {
@@ -859,7 +867,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             .map((s) => ({ url: s.url, language: s.language, label: s.label }));
           (this.engine as NativeEngine).setPreloadedSubtitles(nonBurnInSubs);
 
-          const token = this.authService.accessToken;
+          const token =
+            this.authService.streamToken() ?? this.authService.accessToken;
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
           if (mode === 'direct') {

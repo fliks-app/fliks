@@ -106,7 +106,13 @@ export class PairingService {
   async status(
     publicId: string,
     deviceId: string,
-  ): Promise<{ status: PairingStatus; accessToken?: string }> {
+  ): Promise<{
+    status: PairingStatus;
+    accessToken?: string;
+    refreshToken?: string;
+    accessTokenExpiresAt?: number;
+    refreshTokenExpiresAt?: number;
+  }> {
     const req = await this.repo.findOne({ where: { publicId } });
     if (!req) throw new NotFoundException('Pairing request not found');
 
@@ -115,15 +121,29 @@ export class PairingService {
       await this.repo.save(req);
     }
 
+    // Single-use claim: \`accessToken='__approved__'\` is the sentinel
+    // set at \`approve\` time, cleared once the matching device polls
+    // and we issue real tokens. Keeps the issuance fresh (the access
+    // token is short-lived now — pre-issuing at approve would burn
+    // most of its lifetime before the device polled) and adds a real
+    // refresh token to the response so the TV doesn't get logged out
+    // an hour later.
     if (
       req.status === 'approved' &&
       req.deviceId === deviceId &&
-      req.accessToken
+      req.accessToken === '__approved__' &&
+      req.approvedByUserId
     ) {
-      const token = req.accessToken;
-      req.accessToken = null; // single-use
+      const user = await this.userRepo.findOne({
+        where: { id: req.approvedByUserId },
+      });
+      if (!user) {
+        return { status: req.status };
+      }
+      const tokens = await this.authService.issueTokenPair(user);
+      req.accessToken = null; // claimed
       await this.repo.save(req);
-      return { status: req.status, accessToken: token };
+      return { status: req.status, ...tokens };
     }
 
     return { status: req.status };
@@ -159,7 +179,10 @@ export class PairingService {
     }
     req.status = 'approved';
     req.approvedByUserId = user.id;
-    req.accessToken = this.authService.signTokenFor(user);
+    // Sentinel: real tokens are minted when the matching device polls
+    // \`/status\`. Pre-issuing here would waste most of an access token's
+    // 1h lifetime before the device picks it up.
+    req.accessToken = '__approved__';
     await this.repo.save(req);
   }
 

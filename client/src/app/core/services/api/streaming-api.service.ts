@@ -169,6 +169,19 @@ export class StreamingApiService {
   private readonly deviceProfileService = inject(BrowserDeviceProfileService);
 
   /**
+   * Token embedded into every streaming URL (manifest, segment, subtitle,
+   * thumbnail). Prefers the long-lived (12h) stream token when present —
+   * playback engines bake the URL at \`load()\` and can't be refreshed
+   * mid-stream, so a film longer than the 1h access-token TTL would
+   * break otherwise. Falls back to the access token before the player
+   * has had a chance to call \`AuthService.ensureStreamToken()\` (e.g.
+   * a thumbnail fetched from a list view).
+   */
+  private get playbackToken(): string | null {
+    return this.auth.streamToken() ?? this.auth.accessToken;
+  }
+
+  /**
    * Build authenticated HLS master playlist URL.
    * `startQuality` tells the backend which quality to pre-start FFmpeg at
    * (e.g. "1080p") — avoids the "first segment fetch spawns FFmpeg at a
@@ -179,7 +192,7 @@ export class StreamingApiService {
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/master.m3u8`)
       : `/api/stream/${mediaFileId}/master.m3u8`;
     const params: string[] = [];
-    const token = this.auth.accessToken;
+    const token = this.playbackToken;
     if (token) params.push(`token=${encodeURIComponent(token)}`);
     if (startQuality) params.push(`startQuality=${encodeURIComponent(startQuality)}`);
     if (startAt != null) params.push(`startAt=${startAt}`);
@@ -192,7 +205,7 @@ export class StreamingApiService {
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}`)
       : `/api/stream/${mediaFileId}`;
-    const token = this.auth.accessToken;
+    const token = this.playbackToken;
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
 
@@ -201,7 +214,7 @@ export class StreamingApiService {
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/subtitles/${subtitleId}`)
       : `/api/stream/${mediaFileId}/subtitles/${subtitleId}`;
-    const token = this.auth.accessToken;
+    const token = this.playbackToken;
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
 
@@ -210,7 +223,7 @@ export class StreamingApiService {
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/thumbnails/sprite.jpg`)
       : `/api/stream/${mediaFileId}/thumbnails/sprite.jpg`;
-    const token = this.auth.accessToken;
+    const token = this.playbackToken;
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
 
@@ -219,7 +232,7 @@ export class StreamingApiService {
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/thumbnails/sprite.json`)
       : `/api/stream/${mediaFileId}/thumbnails/sprite.json`;
-    const token = this.auth.accessToken;
+    const token = this.playbackToken;
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
 
@@ -228,7 +241,7 @@ export class StreamingApiService {
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/subtitles/embedded/${streamIndex}`)
       : `/api/stream/${mediaFileId}/subtitles/embedded/${streamIndex}`;
-    const token = this.auth.accessToken;
+    const token = this.playbackToken;
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
 
@@ -247,7 +260,7 @@ export class StreamingApiService {
   }
 
   private withToken(url: string): string {
-    const token = this.auth.accessToken;
+    const token = this.playbackToken;
     return token ? this.appendToken(url, token) : url;
   }
 
@@ -287,7 +300,7 @@ export class StreamingApiService {
     startQuality?: string,
     startAt?: number,
   ): Promise<PlaybackInfoResponse> {
-    const token = this.auth.accessToken;
+    const token = this.playbackToken;
     let params = token ? `?token=${encodeURIComponent(token)}` : '';
     if (burnInSubtitleId) {
       params += (params ? '&' : '?') + `burnInSubtitleId=${burnInSubtitleId}`;
@@ -314,7 +327,7 @@ export class StreamingApiService {
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/sessions`)
       : `/api/stream/${mediaFileId}/sessions`;
-    const token = this.auth.accessToken;
+    const token = this.playbackToken;
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
 
