@@ -92,7 +92,14 @@ export class SeekbarComponent {
   private readonly previewScale = computed(() => {
     const meta = this.spriteMetadata();
     if (!meta) return 1.5;
-    const maxW = window.innerWidth < 640 ? 176 : 224;
+    // Tighter cap on phones: the tooltip lives directly above the
+    // seekbar, which sits directly above the mobile big buttons (rewind
+    // / play / forward), and a wide thumbnail visually crowds that
+    // stack on small viewports. Gate on the SHORTER viewport dimension
+    // so landscape phones (e.g. S25 at 915×412) still get the small
+    // cap — width alone misses them because landscape > 640 px wide.
+    const shortSide = Math.min(window.innerWidth, window.innerHeight);
+    const maxW = shortSide < 640 ? 144 : 224;
     return Math.min(1.5, maxW / meta.thumbWidth);
   });
 

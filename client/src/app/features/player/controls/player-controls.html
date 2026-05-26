@@ -106,11 +106,17 @@
      branching). The inline padding-left/right/bottom uses max(--ctrl-px,
      env(safe-area-inset-...)) so a notch always wins; --ctrl-px / --ctrl-pb
      are themselves responsive via the [--var:value] arbitrary utilities. -->
+<!-- z-40 by default so the mobile big buttons (z-50) stay tappable when
+     the bottom bar grows tall. While the user is scrubbing, promote to
+     z-[55] so the sprite preview tooltip pops above those buttons —
+     they're not relevant while the user is dragging the seek thumb and
+     the preview is far more useful in that moment. -->
 <div
-  class="absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-opacity duration-300 pt-12
+  class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-opacity duration-300 pt-12
          [--ctrl-px:1rem] [--ctrl-pb:0.5rem]
          sm:[--ctrl-px:2rem] sm:[--ctrl-pb:1rem]
          lg:[--ctrl-px:2.5rem] lg:[--ctrl-pb:1rem]"
+  [class]="seekDragging() ? 'z-[55]' : 'z-40'"
   style="padding-left: max(var(--ctrl-px), env(safe-area-inset-left)); padding-right: max(var(--ctrl-px), env(safe-area-inset-right)); padding-bottom: max(var(--ctrl-pb), env(safe-area-inset-bottom));"
   [class.opacity-0]="!visible()"
   [class.pointer-events-none]="!visible()"
@@ -164,7 +170,7 @@
     [chapters]="chapters()"
     variant="player"
     (seek)="seek.emit($event)"
-    (dragChange)="seekDragChange.emit($event)"
+    (dragChange)="seekDragging.set($event); seekDragChange.emit($event)"
   />
 
   <!-- Duration row -->
