@@ -52,7 +52,9 @@
     "remux": "Remux",
     "off": "Désactivé",
     "error": "Erreur de lecture",
-    "low_bandwidth": "faible consommation"
+    "low_bandwidth": "faible consommation",
+    "audio_track_n": "Piste {{index}}",
+    "subtitle_track_n": "Sous-titre {{index}}"
   },
   "sse": {
     "subtitle_synced": "Sous-titre synchronisé avec succès.",

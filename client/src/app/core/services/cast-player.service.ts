@@ -44,7 +44,7 @@ export function buildCastAudioOptions(
     const lang = a.language ?? 'und';
     return {
       id: `audio-${i}`,
-      label: formatAudioLabel(a, translate),
+      label: formatAudioLabel(a, translate, i + 1),
       language: lang,
       name: a.title || lang,
     };

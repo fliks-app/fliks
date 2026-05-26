@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
+import { inferLanguageCodeFromTitle } from '../../common/release-parsing/language.parser';
 
 const execFileAsync = promisify(execFile);
 
@@ -124,6 +125,20 @@ interface FfprobeStream {
   };
 }
 
+/** Resolve the language code of an ffprobe stream. `tags.language` is the
+ *  authoritative source when set to anything other than `und`; otherwise
+ *  fall back to inferring from `tags.title` (Emby / Plex muxers commonly
+ *  carry the language name in the title, e.g. `"French AC3 5.1"`). Stays
+ *  on `und` when neither is conclusive — auto-pick logic downstream
+ *  handles the unknown-language case by ordering / size heuristics. */
+function resolveStreamLanguage(s: {
+  tags?: { language?: string; title?: string };
+}): string {
+  const explicit = s.tags?.language;
+  if (explicit && explicit.toLowerCase() !== 'und') return explicit;
+  return inferLanguageCodeFromTitle(s.tags?.title) ?? 'und';
+}
+
 @Injectable()
 export class FfprobeService {
   private readonly logger = new Logger(FfprobeService.name);
@@ -153,7 +168,7 @@ export class FfprobeService {
       return streams.map((s) => ({
         streamIndex: s.index,
         codec: s.codec_name ?? 'unknown',
-        language: s.tags?.language ?? 'und',
+        language: resolveStreamLanguage(s),
         forced: s.disposition?.forced === 1,
         hearingImpaired: s.disposition?.hearing_impaired === 1,
         isImageBased: IMAGE_BASED_SUBTITLE_CODECS.has(s.codec_name ?? ''),
@@ -185,7 +200,7 @@ export class FfprobeService {
           streamIndex: s.index,
           type: s.codec_type as 'audio' | 'subtitle',
           codec: s.codec_name ?? 'unknown',
-          language: s.tags?.language ?? 'und',
+          language: resolveStreamLanguage(s),
           title: s.tags?.title,
         }));
     } catch (err: unknown) {
@@ -260,7 +275,7 @@ export class FfprobeService {
         .map((s) => ({
           streamIndex: s.index,
           codec: s.codec_name ?? 'unknown',
-          language: s.tags?.language ?? 'und',
+          language: resolveStreamLanguage(s),
           title: s.tags?.title,
           channels: s.channels,
           channelLayout: s.channel_layout,
@@ -274,7 +289,7 @@ export class FfprobeService {
         .map((s) => ({
           streamIndex: s.index,
           codec: s.codec_name ?? 'unknown',
-          language: s.tags?.language ?? 'und',
+          language: resolveStreamLanguage(s),
           title: s.tags?.title,
           forced: s.disposition?.forced === 1,
           hearingImpaired: s.disposition?.hearing_impaired === 1,
