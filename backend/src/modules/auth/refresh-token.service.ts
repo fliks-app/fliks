@@ -79,7 +79,7 @@ export class RefreshTokenService {
     const hash = this.hash(raw);
     const row = await this.repo.findOne({
       where: { tokenHash: hash },
-      relations: ['user', 'user.role'],
+      relations: ['user', 'user.userRole'],
     });
     if (!row) throw new UnauthorizedException('Invalid refresh token');
 
