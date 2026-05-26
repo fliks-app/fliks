@@ -268,7 +268,10 @@ export class AuthService {
         // as transient: keep the tokens, just signal "couldn't refresh
         // right now" to the caller.
         if (status >= 400 && status < 500) {
-          await this.forceLocalLogout();
+          // Skip the /auth/logout round-trip: the server has already
+          // told us our credentials are dead, so posting them again
+          // would just 401 on top of the original failure.
+          await this.clearLocalSession();
         }
         return null;
       } finally {
@@ -276,25 +279,6 @@ export class AuthService {
       }
     })();
     return this._refreshInFlight;
-  }
-
-  /**
-   * Drop the local session without round-tripping to /auth/logout —
-   * used when the server has already told us the credentials are
-   * invalid (refresh rejected), so a logout POST would just 401 on
-   * top of the original failure. Matches the rest of \`logout()\`'s
-   * cleanup so the user lands on the picker in a clean state.
-   */
-  private async forceLocalLogout(): Promise<void> {
-    this._user.set(null);
-    await this.clearTokens();
-    try {
-      localStorage.removeItem('fliks.cachedUser');
-    } catch {
-      // ignore
-    }
-    await this.serverCache.clearAll();
-    void this.router.navigate(['/select-user'], { replaceUrl: true });
   }
 
   /**
@@ -469,13 +453,27 @@ export class AuthService {
         this.http.post('/api/auth/logout', refresh ? { refreshToken: refresh } : {}),
       );
     } finally {
-      this._user.set(null);
-      await this.clearTokens();
-      await this.serverCache.clearAll();
-      // Land on the user picker, same as a fresh visit. The password form
-      // is one tap away via the picker → user → 'Mot de passe'.
-      void this.router.navigate(['/select-user']);
+      await this.clearLocalSession();
     }
+  }
+
+  /**
+   * Wipe the local session and send the user back to the picker. Shared
+   * between the user-initiated logout (dropdown) and the auto-logout
+   * fired when the server rejects a refresh-token rotation. The picker
+   * is the canonical "fresh visit" landing — the password form is one
+   * tap away (picker → user → 'Mot de passe').
+   */
+  private async clearLocalSession(): Promise<void> {
+    this._user.set(null);
+    await this.clearTokens();
+    try {
+      localStorage.removeItem('fliks.cachedUser');
+    } catch {
+      // ignore
+    }
+    await this.serverCache.clearAll();
+    void this.router.navigate(['/select-user'], { replaceUrl: true });
   }
 
   // ---------------------------------------------------------------------------
