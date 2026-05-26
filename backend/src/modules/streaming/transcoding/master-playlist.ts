@@ -175,10 +175,10 @@ export function generateMasterPlaylist(
         defaultAudioIndex >= 0 && defaultAudioIndex < audioStreams.length
           ? defaultAudioIndex
           : 0;
+      const names = buildUniqueAudioNames(audioStreams);
       for (let i = 0; i < audioStreams.length; i++) {
         const a = audioStreams[i];
         const lang = a.language || 'und';
-        const name = a.title || lang;
         const isDefault = i === pickedIdx ? 'YES' : 'NO';
         // CHANNELS hint matches Apple's reference master and lets
         // Tizen AVPlay pre-allocate the right audio decoder before
@@ -188,7 +188,7 @@ export function generateMasterPlaylist(
         // probes the renditions, single-audio doesn't trigger the
         // probe when the hint is missing).
         lines.push(
-          `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${name}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},CHANNELS="2",URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
+          `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},CHANNELS="2",URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
         );
       }
     }
@@ -255,10 +255,10 @@ export function generateMasterPlaylist(
       defaultAudioIndex >= 0 && defaultAudioIndex < audioStreams.length
         ? defaultAudioIndex
         : 0;
+    const names = buildUniqueAudioNames(audioStreams);
     for (let i = 0; i < audioStreams.length; i++) {
       const a = audioStreams[i];
       const lang = a.language || 'und';
-      const name = a.title || lang;
       const isDefault = i === pickedIdx ? 'YES' : 'NO';
       // `CHANNELS="2"` matches what ffmpeg emits (`-ac 2`) and what
       // Apple's reference fMP4 master ships — Tizen AVPlay uses this
@@ -266,7 +266,7 @@ export function generateMasterPlaylist(
       // the rendition. Without it the single-audio variant doesn't
       // trigger a rendition probe (issue #148 bisection).
       lines.push(
-        `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${name}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},CHANNELS="2",URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
+        `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},CHANNELS="2",URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
       );
     }
   }
@@ -343,5 +343,24 @@ export function generateMasterPlaylist(
     );
   }
   return lines.join('\n');
+}
+
+/** Build a unique NAME per audio rendition for `EXT-X-MEDIA`. When two
+ *  tracks resolve to the same display string (typical case: MKV with two
+ *  audio streams both falling back to `und` because the container left
+ *  language + title empty), AVPlayer dedupes them into a single
+ *  `AVMediaSelectionOption` and the user can no longer switch between
+ *  them. Append `#2`, `#3`, … when the base name has already been used
+ *  earlier in the list. */
+function buildUniqueAudioNames(
+  streams: { language?: string; title?: string }[],
+): string[] {
+  const seen = new Map<string, number>();
+  return streams.map((s) => {
+    const base = s.title || s.language || 'und';
+    const count = (seen.get(base) ?? 0) + 1;
+    seen.set(base, count);
+    return count === 1 ? base : `${base} #${count}`;
+  });
 }
 
