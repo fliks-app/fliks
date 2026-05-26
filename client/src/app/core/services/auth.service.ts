@@ -1,5 +1,5 @@
 import { Injectable, signal, computed, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, catchError, firstValueFrom, map, of, tap } from 'rxjs';
 import { ServerConfigService } from './server-config.service';
@@ -234,9 +234,12 @@ export class AuthService {
    * all 401-ing at once) share the same in-flight promise so the
    * server only rotates the token once.
    *
-   * Returns the new access token on success, or null if no refresh
-   * token is stored / the rotation was rejected — the caller is then
-   * expected to redirect to login.
+   * Returns the new access token on success, or null if rotation is
+   * not possible (no refresh token stored, or the server rejected
+   * ours). A server rejection is treated as terminal: the local
+   * session is wiped and the user is sent back to /select-user.
+   * Network/5xx failures, by contrast, leave the tokens intact so a
+   * flaky-wifi user isn't logged out on every dropout.
    */
   async refreshAccessToken(): Promise<string | null> {
     if (this._refreshInFlight) return this._refreshInFlight;
@@ -254,17 +257,44 @@ export class AuthService {
         if (this.serverConfig.isNative) await this.saveToken(res.accessToken);
         await this.saveRefreshToken(res.refreshToken);
         return res.accessToken;
-      } catch {
-        // Refresh failed (expired, revoked, network) — clear and bail.
-        this._accessToken = null;
-        this._refreshToken = null;
-        await this.clearTokens();
+      } catch (err) {
+        const status =
+          err instanceof HttpErrorResponse ? err.status : 0;
+        // 4xx = server-side rejection (refresh token expired, revoked,
+        // or theft-detection wiped every session). Terminal — force
+        // the user back to the picker so the next action goes through
+        // a fresh login.
+        // Anything else (0 = offline, 5xx = server hiccup) is treated
+        // as transient: keep the tokens, just signal "couldn't refresh
+        // right now" to the caller.
+        if (status >= 400 && status < 500) {
+          await this.forceLocalLogout();
+        }
         return null;
       } finally {
         this._refreshInFlight = null;
       }
     })();
     return this._refreshInFlight;
+  }
+
+  /**
+   * Drop the local session without round-tripping to /auth/logout —
+   * used when the server has already told us the credentials are
+   * invalid (refresh rejected), so a logout POST would just 401 on
+   * top of the original failure. Matches the rest of \`logout()\`'s
+   * cleanup so the user lands on the picker in a clean state.
+   */
+  private async forceLocalLogout(): Promise<void> {
+    this._user.set(null);
+    await this.clearTokens();
+    try {
+      localStorage.removeItem('fliks.cachedUser');
+    } catch {
+      // ignore
+    }
+    await this.serverCache.clearAll();
+    void this.router.navigate(['/select-user'], { replaceUrl: true });
   }
 
   /**
