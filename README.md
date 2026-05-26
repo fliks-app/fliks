@@ -74,9 +74,11 @@ Chromecast receiver, FFmpeg / Shaka transcoding pipeline.
 
 ### Cross-platform
 - Web (PWA-installable).
-- Native iOS and Android.
+- Native iOS — available on the App Store.
+- Native Android — under review for Play Store release.
 - Native Android TV integration.
-- Samsung Tizen and LG webOS support.
+- Samsung Tizen — fully functional, not yet published to Samsung Apps.
+- LG webOS — code in place, not yet tested on real hardware.
 
 ### Server-side
 - Multi-user with per-user playback state and preferences.
