@@ -43,7 +43,11 @@ import { NavbarService } from '../../../core/services/navbar.service';
 import { TvService } from '../../../core/services/tv.service';
 import { MobileFanartHeroComponent } from '../mobile-fanart-hero';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
-import { formatAudioLabel } from '../../../core/utils/player.utils';
+import {
+  bucketResolutionLabel,
+  formatAudioLabel,
+  resolutionFromQualityName,
+} from '../../../core/utils/player.utils';
 import { DropdownMenuComponent } from '../dropdown-menu';
 import { ImgFadeInDirective } from '../../directives/img-fade-in.directive';
 import { TvRowDirective } from '../../directives/tv-row.directive';
@@ -375,18 +379,14 @@ export class MediaInfoHeaderComponent {
     if (!file?.streamInfo?.video?.[0]) return null;
     const v = file.streamInfo.video[0];
     const parts: string[] = [];
-    if (v.height || v.width) {
-      // Use width too so cinematic widescreen sources (e.g. 1920×960,
-      // 2.00:1 aspect) get the right label — their height alone sits
-      // below the 1080 bucket but they're still 1080p-class content.
-      const w = v.width ?? 0;
-      const h = v.height ?? 0;
-      if (w >= 3840 || h >= 2160) parts.push('4K');
-      else if (w >= 2560 || h >= 1440) parts.push('1440p');
-      else if (w >= 1920 || h >= 1080) parts.push('1080p');
-      else if (w >= 1280 || h >= 720) parts.push('720p');
-      else parts.push(`${h}p`);
-    }
+    // Prefer the parsed quality stored on the file — the backend's
+    // resolveQuality already handles letterbox crops correctly using
+    // ceilings on both axes. Fall back to dimension bucketing for
+    // files imported before the quality was parsed.
+    const res =
+      resolutionFromQualityName(file.quality) ??
+      bucketResolutionLabel(v.width, v.height);
+    if (res) parts.push(res);
     if (v.hdrFormat) parts.push(v.hdrFormat);
     else if (v.colorTransfer === 'smpte2084') parts.push('HDR10');
     else if (v.colorTransfer === 'arib-std-b67') parts.push('HLG');

@@ -29,6 +29,44 @@ export function widthForProfile(id: string): number | undefined {
   return PROFILE_WIDTHS[base];
 }
 
+/**
+ * Bucket a width × height pair to a display label (`"4K"`, `"1080p"`,
+ * `"720p"`, …). Uses ceilings on **both** axes — anamorphic and scope
+ * crops (e.g. 1918×872, 1920×800) would mis-bucket with a width-only or
+ * height-only threshold because their non-primary axis sits one or two
+ * pixels below the round number. Mirrors the backend's `resolveQuality`
+ * bucketing so the badge matches the parsed quality stored on the file.
+ *
+ * Returns null when neither dimension is known.
+ */
+export function bucketResolutionLabel(
+  width?: number | null,
+  height?: number | null,
+): string | null {
+  const w = width ?? 0;
+  const h = height ?? 0;
+  if (!w && !h) return null;
+  if (w <= 720 && h <= 576) return '480p';
+  if (w <= 1280 && h <= 962) return '720p';
+  if (w <= 1920 && h <= 1440) return '1080p';
+  if (w <= 2560 && h <= 1920) return '1440p';
+  return '4K';
+}
+
+/**
+ * Extract the resolution token (`"1080p"`, `"4K"`, …) from a parsed
+ * quality name like `"HDTV-1080p"` or `"WEBDL-2160p"`. Quality strings
+ * without a resolution suffix (`"CAM"`, `"DVD"`, …) return null so
+ * callers can fall back to dimension-based bucketing.
+ */
+export function resolutionFromQualityName(
+  quality?: string | null,
+): string | null {
+  const m = quality?.match(/-(\d+)p$/i);
+  if (!m) return null;
+  return m[1] === '2160' ? '4K' : `${m[1]}p`;
+}
+
 /** Format seconds to h:mm:ss or m:ss. */
 export function formatTime(seconds: number): string {
   if (!seconds || !isFinite(seconds)) return '0:00';
