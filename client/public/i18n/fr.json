@@ -1774,17 +1774,10 @@
     "und": "Indéterminée"
   },
   "legend": {
-    "downloaded_monitored": "Téléchargé (suivi)",
-    "downloaded_unmonitored": "Téléchargé (non suivi)",
-    "missing_monitored": "Manquant (suivi)",
-    "missing_unmonitored": "Manquant (non suivi)",
-    "unreleased": "Non sorti",
-    "movies": "Films",
-    "movie_files": "Fichiers",
-    "series": "Séries",
-    "episodes": "Épisodes",
-    "total": "Total",
-    "monitored": "Suivis",
-    "unmonitored": "Non suivis"
+    "movie_files": "Fichiers :",
+    "episodes": "Épisodes :",
+    "total": "Total :",
+    "monitored": "Surveillés :",
+    "unmonitored": "Non surveillés :"
   }
 }

@@ -395,25 +395,16 @@
     }
 
     @if (list.visible().length > 0) {
-      <div class="flex flex-wrap items-start justify-between gap-6 mt-6 px-2 py-3 border-t border-base-200 text-sm text-base-content/70">
-        <div class="flex flex-col gap-1">
-          <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-green-500"></span> {{ 'legend.downloaded_monitored' | translate }}</div>
-          <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-green-800"></span> {{ 'legend.downloaded_unmonitored' | translate }}</div>
-          <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-red-500"></span> {{ 'legend.missing_monitored' | translate }}</div>
-          <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-amber-500"></span> {{ 'legend.missing_unmonitored' | translate }}</div>
-          <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-blue-400"></span> {{ 'legend.unreleased' | translate }}</div>
-        </div>
-        <div class="flex flex-wrap gap-x-8 gap-y-1">
-          <div><span class="font-semibold">{{ 'legend.total' | translate }}</span> {{ list.total() }}</div>
-          @if (hasMovies()) {
-            <div><span class="font-semibold">{{ 'legend.movie_files' | translate }}</span> {{ movieFileCount() }}</div>
-          }
-          @if (hasSeries()) {
-            <div><span class="font-semibold">{{ 'legend.episodes' | translate }}</span> {{ downloadedEpisodes() }} / {{ totalEpisodes() }}</div>
-          }
-          <div><span class="font-semibold">{{ 'legend.monitored' | translate }}</span> {{ monitoredCount() }}</div>
-          <div><span class="font-semibold">{{ 'legend.unmonitored' | translate }}</span> {{ list.total() - monitoredCount() }}</div>
-        </div>
+      <div class="flex flex-wrap items-center justify-end gap-x-8 gap-y-1 mt-6 px-2 py-3 border-t border-base-200 text-sm text-base-content/70">
+        <div><span class="font-semibold">{{ 'legend.total' | translate }}</span> {{ list.total() }}</div>
+        @if (hasMovies()) {
+          <div><span class="font-semibold">{{ 'legend.movie_files' | translate }}</span> {{ movieFileCount() }}</div>
+        }
+        @if (hasSeries()) {
+          <div><span class="font-semibold">{{ 'legend.episodes' | translate }}</span> {{ downloadedEpisodes() }} / {{ totalEpisodes() }}</div>
+        }
+        <div><span class="font-semibold">{{ 'legend.monitored' | translate }}</span> {{ monitoredCount() }}</div>
+        <div><span class="font-semibold">{{ 'legend.unmonitored' | translate }}</span> {{ list.total() - monitoredCount() }}</div>
       </div>
     }
   } @else if (viewMode() === 'suggestions') {
