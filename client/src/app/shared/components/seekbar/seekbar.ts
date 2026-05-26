@@ -67,18 +67,25 @@ export class SeekbarComponent {
     return (this.displayTime() / d) * 100;
   });
 
-  /** Track height + tint class string. Slim baseline (`h-1.5`),
-   *  thickens to `h-2.5` while dragging or on group-hover / focus
-   *  (handled with the `group-hover:` / `group-focus-visible:`
-   *  utilities so we don't need a (focus)/(blur) Angular listener
-   *  on the parent slider). The dot syntax in Tailwind utilities
-   *  (`h-1.5`) can't be expressed via `[class.h-1.5]` bindings —
-   *  Angular's class-toggle syntax stops at the dot — so the class
-   *  list is assembled here. */
+  /** Track height + tint class string. Slim baseline (`h-1`),
+   *  thickens to `h-2.5` during interaction:
+   *  - active drag (\`dragging\`)
+   *  - mouse hover (\`hovering\` signal, driven by pointermove)
+   *  - keyboard / TV-remote focus (\`group-focus-visible:\`)
+   *
+   *  Hover is gated on the explicit signal rather than \`group-hover:\`
+   *  because mobile browsers leave \`:hover\` sticky after a tap — the
+   *  bar would stay thick after the user released. The signal is
+   *  never set during touch drag (onProgressHover early-returns) so
+   *  it cleanly reverts on touch end. The dot syntax in Tailwind
+   *  utilities (\`h-1\`) can't be expressed via \`[class.h-1]\`
+   *  bindings — Angular's class-toggle syntax stops at the dot — so
+   *  the class list is assembled here. */
   readonly trackClass = computed(() => {
-    if (this.variant() === 'cast') return 'h-1.5 bg-base-300';
-    const base = 'bg-white/20 group-hover:h-2.5 group-focus-visible:h-2.5';
-    return this.dragging() ? `${base} h-2.5` : `${base} h-1.5`;
+    if (this.variant() === 'cast') return 'h-1 bg-base-300';
+    const thick = this.dragging() || this.hovering();
+    const base = 'bg-white/20 group-focus-visible:h-2.5';
+    return `${base} ${thick ? 'h-2.5' : 'h-1'}`;
   });
 
   // Sprite preview computeds
@@ -123,7 +130,11 @@ export class SeekbarComponent {
   readonly tooltipLeft = computed(() => {
     const pct = this.dragging() ? this.displayPercent() : this.hoverPercent();
     const half = this.previewWidth() / 2 || 120;
-    return `clamp(${half}px, ${pct}%, calc(100% - ${half}px))`;
+    // No left-side clamp: at low seek positions the tooltip should
+    // happily overlap the overlay title rather than freeze at the
+    // edge. Right-side cap stays so the preview doesn't run off the
+    // player frame.
+    return `min(${pct}%, calc(100% - ${half}px))`;
   });
 
   onProgressDown(event: PointerEvent) {
