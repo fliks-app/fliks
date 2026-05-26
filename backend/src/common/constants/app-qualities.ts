@@ -56,4 +56,20 @@ export function getAppQualityById(
   return byId.get(id);
 }
 
+/**
+ * Highest rank among a set of allowed quality IDs. Used to drop search
+ * results that overshoot the profile's reach — e.g. 2160p hits for a
+ * 1080p-only profile. Returns 0 when no IDs resolve to a known quality;
+ * callers should treat that as "nothing allowed" rather than "everything
+ * allowed".
+ */
+export function maxAllowedRank(allowed: Set<number>): number {
+  let max = 0;
+  for (const id of allowed) {
+    const rank = byId.get(id)?.rank ?? 0;
+    if (rank > max) max = rank;
+  }
+  return max;
+}
+
 export const DEFAULT_MOVIE_QUALITY_PROFILE_NAME = 'HD-1080p (défaut)';
