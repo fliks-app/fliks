@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import type { PlaybackEngine } from './playback-engine/playback-engine';
-import { widthForProfile } from '../utils/player.utils';
+import { bucketResolutionLabel, widthForProfile } from '../utils/player.utils';
 
 export interface QualityOption {
   id: string;      // 'auto' | 'original' | '2160p' | '1080p' | '720p' | '480p' | ...
@@ -254,16 +254,12 @@ export class QualityManagerService {
   }
 
   /**
-   * Human-readable resolution label from width/height.
+   * Human-readable resolution label from width/height. Delegates to
+   * the shared bucketing helper so anamorphic / scope crops bucket the
+   * same way the file badge does (e.g. 1918×872 → 1080p, not 720p).
    */
   resolutionLabel(w?: number, h?: number): string {
-    if (!w || !h) return '?';
-    if (w >= 3840 || h >= 2160) return '4K';
-    if (w >= 2560 || h >= 1440) return '1440p';
-    if (w >= 1920 || h >= 1080) return '1080p';
-    if (w >= 1280 || h >= 720) return '720p';
-    if (w >= 854 || h >= 480) return '480p';
-    return `${w}x${h}`;
+    return bucketResolutionLabel(w, h) ?? (w && h ? `${w}x${h}` : '?');
   }
 
   /**
