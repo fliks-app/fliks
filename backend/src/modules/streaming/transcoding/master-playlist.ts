@@ -8,6 +8,7 @@ import {
 import type { AudioStreamMeta, DeviceType, TranscodeProfile } from './types';
 import type { CodecVariant } from './codec/types';
 import {
+  av1CodecString,
   h264CodecString,
   hevcMain10CodecString,
   hevcMainCodecString,
@@ -317,10 +318,16 @@ export function generateMasterPlaylist(
       gopSize: 0,
       frameRate: sourceFrameRate,
     };
+    // Codec string must agree with what the encoder will actually emit —
+    // mismatched CODECS makes Shaka fail with HLS_COULD_NOT_GUESS_CODECS
+    // (3014) after it tries to sniff the segment and the bitstream
+    // doesn't parse as the declared codec.
     const videoCodec =
       sdrVariant?.codec === 'hevc'
         ? hevcMainCodecString(target)
-        : h264CodecString(target);
+        : sdrVariant?.codec === 'av1'
+          ? av1CodecString(target, sdrVariant.bitDepth)
+          : h264CodecString(target);
     const codecsAttr = `,CODECS="${videoCodec}${codecsTail}"`;
     lines.push(
       `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h}${frameRateAttr},NAME="${p.name}"${codecsAttr}${audioAttr}`,
