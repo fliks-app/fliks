@@ -117,7 +117,7 @@ interface FfprobeStream {
   channels?: number;
   channel_layout?: string;
   sample_rate?: string;
-  tags?: { language?: string; title?: string };
+  tags?: Record<string, string | undefined>;
   disposition?: {
     forced?: number;
     hearing_impaired?: number;
@@ -125,18 +125,39 @@ interface FfprobeStream {
   };
 }
 
-/** Resolve the language code of an ffprobe stream. `tags.language` is the
- *  authoritative source when set to anything other than `und`; otherwise
- *  fall back to inferring from `tags.title` (Emby / Plex muxers commonly
- *  carry the language name in the title, e.g. `"French AC3 5.1"`). Stays
- *  on `und` when neither is conclusive — auto-pick logic downstream
- *  handles the unknown-language case by ordering / size heuristics. */
+/** Case-insensitive ffprobe tag lookup. Matroska stores per-stream
+ *  metadata in its container-level Tags element with UPPERCASE keys
+ *  (`LANGUAGE`, `TITLE` — common when a file has been touched by
+ *  `mkvpropedit`), while the track-header path surfaces as lowercase
+ *  (`language`, `title`). ffprobe passes both through verbatim, so a
+ *  lowercase-only read silently misses the uppercase variant and the
+ *  track falls back to `und`. */
+function tag(
+  tags: Record<string, string | undefined> | undefined,
+  key: string,
+): string | undefined {
+  if (!tags) return undefined;
+  const want = key.toLowerCase();
+  for (const k of Object.keys(tags)) {
+    if (k.toLowerCase() === want) return tags[k];
+  }
+  return undefined;
+}
+
+/** Resolve the language code of an ffprobe stream. The `language` tag is
+ *  the authoritative source when set to anything other than `und`;
+ *  otherwise fall back to inferring from the `title` tag (Emby / Plex
+ *  muxers commonly carry the language name in the title, e.g.
+ *  `"French AC3 5.1"`). Stays on `und` when neither is conclusive —
+ *  auto-pick logic downstream handles the unknown-language case by
+ *  ordering / size heuristics. Both tags are read case-insensitively
+ *  (see {@link tag}). */
 function resolveStreamLanguage(s: {
-  tags?: { language?: string; title?: string };
+  tags?: Record<string, string | undefined>;
 }): string {
-  const explicit = s.tags?.language;
+  const explicit = tag(s.tags, 'language');
   if (explicit && explicit.toLowerCase() !== 'und') return explicit;
-  return inferLanguageCodeFromTitle(s.tags?.title) ?? 'und';
+  return inferLanguageCodeFromTitle(tag(s.tags, 'title')) ?? 'und';
 }
 
 @Injectable()
@@ -201,7 +222,7 @@ export class FfprobeService {
           type: s.codec_type as 'audio' | 'subtitle',
           codec: s.codec_name ?? 'unknown',
           language: resolveStreamLanguage(s),
-          title: s.tags?.title,
+          title: tag(s.tags, 'title'),
         }));
     } catch (err: unknown) {
       const e = err as { message?: string; stderr?: string };
@@ -235,7 +256,7 @@ export class FfprobeService {
         chapters?: {
           start_time?: string;
           end_time?: string;
-          tags?: { title?: string };
+          tags?: Record<string, string | undefined>;
         }[];
       };
       const streams = parsed.streams ?? [];
@@ -276,7 +297,7 @@ export class FfprobeService {
           streamIndex: s.index,
           codec: s.codec_name ?? 'unknown',
           language: resolveStreamLanguage(s),
-          title: s.tags?.title,
+          title: tag(s.tags, 'title'),
           channels: s.channels,
           channelLayout: s.channel_layout,
           sampleRate: s.sample_rate ? Number(s.sample_rate) : undefined,
@@ -290,7 +311,7 @@ export class FfprobeService {
           streamIndex: s.index,
           codec: s.codec_name ?? 'unknown',
           language: resolveStreamLanguage(s),
-          title: s.tags?.title,
+          title: tag(s.tags, 'title'),
           forced: s.disposition?.forced === 1,
           hearingImpaired: s.disposition?.hearing_impaired === 1,
           isImageBased: IMAGE_BASED_SUBTITLE_CODECS.has(s.codec_name ?? ''),
@@ -300,7 +321,7 @@ export class FfprobeService {
         .map((c) => ({
           startSeconds: c.start_time ? Number(c.start_time) : 0,
           endSeconds: c.end_time ? Number(c.end_time) : 0,
-          title: c.tags?.title,
+          title: tag(c.tags, 'title'),
         }))
         .filter((c) => c.endSeconds > c.startSeconds);
 
