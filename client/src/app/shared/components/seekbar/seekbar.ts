@@ -68,17 +68,24 @@ export class SeekbarComponent {
   });
 
   /** Track height + tint class string. Slim baseline (`h-1.5`),
-   *  thickens to `h-2.5` while dragging or on group-hover / focus
-   *  (handled with the `group-hover:` / `group-focus-visible:`
-   *  utilities so we don't need a (focus)/(blur) Angular listener
-   *  on the parent slider). The dot syntax in Tailwind utilities
-   *  (`h-1.5`) can't be expressed via `[class.h-1.5]` bindings —
-   *  Angular's class-toggle syntax stops at the dot — so the class
-   *  list is assembled here. */
+   *  thickens to `h-2.5` during interaction:
+   *  - active drag (\`dragging\`)
+   *  - mouse hover (\`hovering\` signal, driven by pointermove)
+   *  - keyboard / TV-remote focus (\`group-focus-visible:\`)
+   *
+   *  Hover is gated on the explicit signal rather than \`group-hover:\`
+   *  because mobile browsers leave \`:hover\` sticky after a tap — the
+   *  bar would stay thick after the user released. The signal is
+   *  never set during touch drag (onProgressHover early-returns) so
+   *  it cleanly reverts on touch end. The dot syntax in Tailwind
+   *  utilities (\`h-1.5\`) can't be expressed via \`[class.h-1.5]\`
+   *  bindings — Angular's class-toggle syntax stops at the dot — so
+   *  the class list is assembled here. */
   readonly trackClass = computed(() => {
     if (this.variant() === 'cast') return 'h-1.5 bg-base-300';
-    const base = 'bg-white/20 group-hover:h-2.5 group-focus-visible:h-2.5';
-    return this.dragging() ? `${base} h-2.5` : `${base} h-1.5`;
+    const thick = this.dragging() || this.hovering();
+    const base = 'bg-white/20 group-focus-visible:h-2.5';
+    return `${base} ${thick ? 'h-2.5' : 'h-1.5'}`;
   });
 
   // Sprite preview computeds
