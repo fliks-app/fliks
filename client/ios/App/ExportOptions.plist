@@ -7,8 +7,10 @@
 	     -authenticationKey…`, this lets the CI Mac runner pull a fresh
 	     distribution cert + provisioning profile per build — no P12 / .mobile-
 	     provision artefacts to maintain in repo secrets. -->
+	<!-- `app-store-connect` is the current name; the old `app-store`
+	     value still works but xcodebuild logs a deprecation warning. -->
 	<key>method</key>
-	<string>app-store</string>
+	<string>app-store-connect</string>
 	<key>teamID</key>
 	<string>85ZC7Y8WQ2</string>
 	<key>signingStyle</key>
