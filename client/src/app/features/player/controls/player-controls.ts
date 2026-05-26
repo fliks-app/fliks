@@ -187,6 +187,11 @@ export class PlayerControlsComponent {
   readonly toggleFillScreen = output<void>();
   readonly openMedia = output<void>();
   readonly seekDragChange = output<boolean>();
+  /** Mirror of the seekbar's drag state for local layout — true while the
+   *  user is scrubbing. Drives a z-index bump on the bottom bar so the
+   *  sprite preview tooltip pops above the mobile center buttons (which
+   *  sit at z-50 to stay tappable when the bar grows tall). */
+  readonly seekDragging = signal(false);
   /**
    * Fires whenever any of the controls' own panels (desktop dropdown OR
    * mobile bottom sheet) opens or closes. Lets the parent player pause its

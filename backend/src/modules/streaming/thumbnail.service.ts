@@ -63,12 +63,24 @@ const THUMB_WIDTH = 240;
 /** Max concurrent sprite generations */
 const SPRITE_CONCURRENCY = 2;
 
+/** Optional content-area crop pre-detected by the rescan pipeline. When
+ *  set, each extracted frame is passed through `crop=W:H:X:Y` before
+ *  scaling, so the sprite tiles carry the active picture only — no
+ *  letterbox bars baked into the preview. */
+interface CropArea {
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+}
+
 interface QueueItem {
   mediaFileId: number;
   absolutePath: string;
   durationSeconds: number;
   mediaTitle?: string;
   skipTracking?: boolean;
+  crop?: CropArea;
   resolve: (meta: SpriteMetadata | null) => void;
 }
 
@@ -98,7 +110,10 @@ export class ThumbnailService {
     file: {
       id: number;
       relativePath: string;
-      streamInfo?: { durationSeconds?: number } | null;
+      streamInfo?: {
+        durationSeconds?: number;
+        video?: { crop?: CropArea }[];
+      } | null;
     },
     media: { path: string | null; title: string },
     label: string,
@@ -117,6 +132,7 @@ export class ThumbnailService {
       label,
       options.force ?? false,
       options.skipTracking ?? false,
+      file.streamInfo?.video?.[0]?.crop,
     );
   }
 
@@ -127,6 +143,7 @@ export class ThumbnailService {
     mediaTitle?: string,
     force = false,
     skipTracking = false,
+    crop?: CropArea,
   ): Promise<SpriteMetadata | null> {
     const dir = path.join(BASE_DIR, String(mediaFileId));
     const metaPath = path.join(dir, 'sprite.json');
@@ -150,6 +167,7 @@ export class ThumbnailService {
         durationSeconds,
         mediaTitle,
         skipTracking,
+        crop,
         resolve,
       });
       this.processQueue();
@@ -194,6 +212,7 @@ export class ThumbnailService {
         item.durationSeconds,
         item.mediaTitle,
         item.skipTracking,
+        item.crop,
       )
         .then((meta) => item.resolve(meta))
         .catch((err) => {
@@ -218,6 +237,7 @@ export class ThumbnailService {
     durationSeconds: number,
     mediaTitle?: string,
     skipTracking = false,
+    crop?: CropArea,
   ): Promise<SpriteMetadata | null> {
     const dir = path.join(BASE_DIR, String(mediaFileId));
     const spritePath = path.join(dir, 'sprite.jpg');
@@ -290,6 +310,7 @@ export class ThumbnailService {
             total,
             label,
             progressKey,
+            crop,
           );
 
           await this.tileSprite(framesDir, spritePath, rows);
@@ -394,6 +415,7 @@ export class ThumbnailService {
     totalSeconds: number,
     label: string,
     progressKey: string,
+    crop?: CropArea,
   ): Promise<void> {
     let completed = 0;
     let failed = 0;
@@ -412,7 +434,7 @@ export class ThumbnailService {
           `frame-${String(idx + 1).padStart(4, '0')}.jpg`,
         );
         try {
-          await this.extractFrameAt(inputPath, timestamp, outPath);
+          await this.extractFrameAt(inputPath, timestamp, outPath, crop);
           completed++;
         } catch (err) {
           failed++;
@@ -464,6 +486,7 @@ export class ThumbnailService {
     inputPath: string,
     seekSeconds: number,
     outputPath: string,
+    crop?: CropArea,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       // SW decode for thumbnails: we only decode ONE I-frame per process
@@ -489,7 +512,12 @@ export class ThumbnailService {
         '-frames:v',
         '1',
         '-vf',
-        `scale=${THUMB_WIDTH}:-1`,
+        // Strip pre-detected letterbox / pillarbox before scaling so
+        // the sprite tiles carry the active picture only. When no
+        // crop is set the source aspect goes straight through.
+        crop
+          ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${THUMB_WIDTH}:-1`
+          : `scale=${THUMB_WIDTH}:-1`,
         '-q:v',
         '5',
         '-y',
