@@ -8,6 +8,12 @@ import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { EventsService } from '../scheduler/events.service';
 import { Command } from '../scheduler/entities/command.entity';
+import {
+  describeBackends,
+  HWACCEL_AVAILABLE,
+  pickExtractor,
+  type CropArea,
+} from './thumbnail-extractors';
 
 const execFileAsync = promisify(execFile);
 
@@ -29,9 +35,11 @@ export interface SpriteMetadata {
 
 const BASE_DIR = path.join(process.cwd(), 'images', 'thumbnails');
 const FRAMES_TMP_DIR = path.join(process.cwd(), 'images', 'thumbnails-tmp');
-/** Concurrent ffmpeg `-ss` seeks per sprite. Saturates the GPU / CPU for
- *  fast extraction while leaving headroom for concurrent streams. */
-const SEEK_CONCURRENCY = 8;
+
+/** Concurrent ffmpeg `-ss` seeks per sprite. HW decode saturates much
+ *  earlier than the CPU pool — the GPU's decoder-session count caps useful
+ *  parallelism around 4. SW path keeps the previous 8-wide setting. */
+const SEEK_CONCURRENCY = HWACCEL_AVAILABLE ? 4 : 8;
 
 /**
  * Build a human-readable label for a sprite: "S01E03 — Episode Title" for a
@@ -63,17 +71,6 @@ const THUMB_WIDTH = 240;
 /** Max concurrent sprite generations */
 const SPRITE_CONCURRENCY = 2;
 
-/** Optional content-area crop pre-detected by the rescan pipeline. When
- *  set, each extracted frame is passed through `crop=W:H:X:Y` before
- *  scaling, so the sprite tiles carry the active picture only — no
- *  letterbox bars baked into the preview. */
-interface CropArea {
-  width: number;
-  height: number;
-  x: number;
-  y: number;
-}
-
 interface QueueItem {
   mediaFileId: number;
   absolutePath: string;
@@ -98,7 +95,11 @@ export class ThumbnailService {
     private readonly eventsService: EventsService,
     @InjectRepository(Command)
     private readonly commandRepo: Repository<Command>,
-  ) {}
+  ) {
+    this.log.log(
+      `Thumbnail extraction backends: ${describeBackends()} (SEEK_CONCURRENCY=${SEEK_CONCURRENCY}, SPRITE_CONCURRENCY=${SPRITE_CONCURRENCY})`,
+    );
+  }
 
   /**
    * Convenience wrapper that resolves the absolute file path + sprite label
@@ -250,8 +251,26 @@ export class ThumbnailService {
     const progressKey = `GenerateSprite:${mediaFileId}`;
     const t0 = Date.now();
 
+    // Source file size + concurrent sprite jobs: useful to correlate slow
+    // runs with I/O contention or large-file seek cost on HDD/network mounts.
+    let srcSizeMb: number | null = null;
+    try {
+      const st = await fsp.stat(absolutePath);
+      srcSizeMb = Math.round(st.size / (1024 * 1024));
+    } catch {
+      /* file disappeared or unreadable — generate() will fail with a clearer error */
+    }
+    // `this.running` was incremented in processQueue() before calling generate(),
+    // so subtract 1 to get *other* sprite jobs running in parallel with this one.
+    const otherRunning = Math.max(0, this.running - 1);
+
+    // Ask the factory which backend will run, so the log line matches
+    // exactly what ffmpeg sees per frame.
+    const decode = pickExtractor(crop).describe();
     this.log.log(
-      `Sprite START for "${label}" (file #${mediaFileId}): ${count} thumbs @ ${interval}s interval`,
+      `Sprite START for "${label}" (file #${mediaFileId}): ${count} thumbs @ ${interval}s interval, workers=${SEEK_CONCURRENCY}, decode=${decode}, otherSprites=${otherRunning}, queued=${this.queue.length}, srcSize=${srcSizeMb ?? '?'}MB, crop=${
+        crop ? `${crop.width}x${crop.height}+${crop.x},${crop.y}` : 'none'
+      }, src=${absolutePath}`,
     );
 
     // Record task in DB (skip when called from batch command)
@@ -296,12 +315,15 @@ export class ThumbnailService {
       ),
     );
 
+    let extractMs = 0;
+    let tileMs = 0;
     try {
       await Promise.race([
         (async () => {
           // Two-pass via seek: spawn N parallel `ffmpeg -ss` processes (one per
           // thumbnail timestamp) that extract a single frame each — much faster
           // than sequentially decoding the full video. Then tile the frames.
+          const tExtract = Date.now();
           await this.extractFramesBySeek(
             absolutePath,
             framesDir,
@@ -312,8 +334,21 @@ export class ThumbnailService {
             progressKey,
             crop,
           );
+          extractMs = Date.now() - tExtract;
 
+          const tTile = Date.now();
           await this.tileSprite(framesDir, spritePath, rows);
+          tileMs = Date.now() - tTile;
+          let spriteKb: number | null = null;
+          try {
+            const st = await fsp.stat(spritePath);
+            spriteKb = Math.round(st.size / 1024);
+          } catch {
+            /* sprite missing — would have thrown above */
+          }
+          this.log.log(
+            `Sprite TILE done for "${label}" in ${(tileMs / 1000).toFixed(2)}s (${count} frames → sprite.jpg, ${spriteKb ?? '?'}KB)`,
+          );
         })(),
         timeoutPromise,
       ]);
@@ -347,8 +382,9 @@ export class ThumbnailService {
       };
 
       await fsp.writeFile(metaPath, JSON.stringify(meta));
+      const totalMs = Date.now() - t0;
       this.log.log(
-        `Sprite DONE for "${label}" in ${((Date.now() - t0) / 1000).toFixed(1)}s (${count} thumbs)`,
+        `Sprite DONE for "${label}" in ${(totalMs / 1000).toFixed(1)}s (${count} thumbs) — extract ${(extractMs / 1000).toFixed(1)}s, tile ${(tileMs / 1000).toFixed(2)}s, overhead ${((totalMs - extractMs - tileMs) / 1000).toFixed(2)}s`,
       );
 
       if (cmd) {
@@ -422,6 +458,10 @@ export class ThumbnailService {
     let aborted = false;
     let nextIndex = 0;
     const MAX_FAILS = 5;
+    // Track timings keyed by frame index (= file position) so we can break
+    // them down by head/tail quartile to spot HDD seek patterns.
+    const frameTimings: { idx: number; ms: number; ts: number }[] = [];
+    const extractStart = Date.now();
 
     const runOne = async (): Promise<void> => {
       while (true) {
@@ -433,8 +473,10 @@ export class ThumbnailService {
           framesDir,
           `frame-${String(idx + 1).padStart(4, '0')}.jpg`,
         );
+        const tFrame = Date.now();
         try {
           await this.extractFrameAt(inputPath, timestamp, outPath, crop);
+          frameTimings.push({ idx, ms: Date.now() - tFrame, ts: timestamp });
           completed++;
         } catch (err) {
           failed++;
@@ -470,6 +512,38 @@ export class ThumbnailService {
 
     const workers = Math.min(SEEK_CONCURRENCY, count);
     await Promise.all(Array.from({ length: workers }, () => runOne()));
+
+    const wallMs = Date.now() - extractStart;
+    if (frameTimings.length > 0) {
+      const sortedByMs = [...frameTimings].sort((a, b) => a.ms - b.ms);
+      const msAt = (q: number) =>
+        sortedByMs[Math.min(sortedByMs.length - 1, Math.floor(sortedByMs.length * q))].ms;
+      const sumMs = sortedByMs.reduce((a, b) => a + b.ms, 0);
+      const avg = Math.round(sumMs / sortedByMs.length);
+      const fps = (sortedByMs.length / (wallMs / 1000)).toFixed(2);
+      // Wall × workers ≈ theoretical max throughput if every worker stayed
+      // busy. sumMs / (wall × workers) measures how saturated the worker
+      // pool actually was — a low ratio means workers were starved
+      // (likely I/O / scheduler contention from `ionice -c3`).
+      const saturation = Math.round((sumMs / (wallMs * workers)) * 100);
+      // Head vs tail quartile: if extracting from late in the file is
+      // markedly slower, the bottleneck is seek I/O (HDD / network mount)
+      // rather than decode CPU.
+      const byIdx = [...frameTimings].sort((a, b) => a.idx - b.idx);
+      const qSize = Math.max(1, Math.ceil(byIdx.length / 4));
+      const headAvg = Math.round(
+        byIdx.slice(0, qSize).reduce((s, x) => s + x.ms, 0) / qSize,
+      );
+      const tailAvg = Math.round(
+        byIdx.slice(-qSize).reduce((s, x) => s + x.ms, 0) /
+          Math.min(qSize, byIdx.length),
+      );
+      const slowest = sortedByMs[sortedByMs.length - 1];
+      this.log.log(
+        `Sprite EXTRACT done for "${label}" in ${(wallMs / 1000).toFixed(2)}s — ${sortedByMs.length}/${count} frames @ ${fps} fps (workers=${workers}, sat=${saturation}%, per-frame avg=${avg}ms p50=${msAt(0.5)}ms p95=${msAt(0.95)}ms max=${slowest.ms}ms @${slowest.ts}s, head25%=${headAvg}ms tail25%=${tailAvg}ms${failed > 0 ? `, failed=${failed}` : ''})`,
+      );
+    }
+
     if (failed > count * 0.1) {
       throw new Error(
         `Too many frame extractions failed (${failed}/${count}) — sprite would be mostly empty`,
@@ -481,6 +555,10 @@ export class ThumbnailService {
    * Extract a single frame at a specific timestamp via fast keyframe seek.
    * `-ss` BEFORE `-i` uses the demuxer seek (keyframe index) — much faster
    * than accurate seek, with sub-second precision sufficient for thumbnails.
+   *
+   * The actual ffmpeg argv is built by whichever backend in
+   * `./thumbnail-extractors` claims it can handle the crop config (or
+   * the lack thereof). See that folder for the per-backend rationale.
    */
   private extractFrameAt(
     inputPath: string,
@@ -489,40 +567,13 @@ export class ThumbnailService {
     crop?: CropArea,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      // SW decode for thumbnails: we only decode ONE I-frame per process
-      // (`-noaccurate_seek` lands on the keyframe, no B/P propagation).
-      // HW accel saved ~200ms of decode but cost ~200ms of init and — more
-      // critically — serialized at the GPU's decoder-session limit
-      // (2–8 on consumer HW), causing random init hangs under the 16
-      // concurrent processes we spawn for sprite generation.
-      const args = [
-        '-nostdin',
-        '-hide_banner',
-        '-loglevel',
-        'error',
-        '-noaccurate_seek',
-        '-ss',
-        String(seekSeconds),
-        '-analyzeduration',
-        '0',
-        '-probesize',
-        '200000',
-        '-i',
+      const args = pickExtractor(crop).buildArgs({
         inputPath,
-        '-frames:v',
-        '1',
-        '-vf',
-        // Strip pre-detected letterbox / pillarbox before scaling so
-        // the sprite tiles carry the active picture only. When no
-        // crop is set the source aspect goes straight through.
-        crop
-          ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${THUMB_WIDTH}:-1`
-          : `scale=${THUMB_WIDTH}:-1`,
-        '-q:v',
-        '5',
-        '-y',
+        seekSeconds,
         outputPath,
-      ];
+        crop,
+        thumbWidth: THUMB_WIDTH,
+      });
       const proc = spawnLowPriority('ffmpeg', args);
       let stderr = '';
       proc.stderr?.on('data', (chunk: Buffer) => {
