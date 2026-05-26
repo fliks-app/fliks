@@ -1,8 +1,26 @@
-import type { CodecVariant, VideoCodec } from './types';
+import type { CodecVariant, EncoderDescriptor, VideoCodec } from './types';
 import type { DeviceProfileDto } from '../../dto/device-profile.dto';
 import type { HwAccelType } from '../types';
 import { encoderRegistry } from './encoders';
 import { applyQuirks, type QuirkContext } from './fallback';
+
+/**
+ * Resolve an encoder for `variant` whose `hwAccel` matches the detected
+ * backend. Returns null when the only match would be the CPU fallback,
+ * so the selector can move on to the next codec in `codecOrder` instead
+ * of locking in a CPU encode. `hwAccel === 'none'` accepts CPU encoders
+ * unconditionally — that's the configuration of every deployment
+ * without a usable HW backend.
+ */
+function resolveHwEncoder(
+  variant: CodecVariant,
+  hwAccel: HwAccelType,
+): EncoderDescriptor | null {
+  const enc = encoderRegistry.resolve(variant, hwAccel);
+  if (!enc) return null;
+  if (hwAccel === 'none') return enc;
+  return enc.hwAccel === hwAccel ? enc : null;
+}
 
 /** Pick the codec variant(s) we'll expose to a given client. Order of
  *  preference (within each HDR/SDR group):
@@ -43,28 +61,56 @@ export function pickVariants(
 
   // HDR path — only meaningful when source is HDR AND client supports
   // an HDR display (browser caps + display gamut probe). H.264 is
-  // skipped (8-bit only). First codec with a resolvable HDR encoder
-  // (HW + HDR metadata, or CPU libx265/libsvtav1 fallback) wins.
+  // skipped (8-bit only). Two passes: the HW pass picks the first
+  // codec with a HW HDR encoder; the CPU pass runs only when no
+  // candidate codec has a HW HDR encoder — that's the CPU
+  // libx265/libsvtav1 HDR path on boxes without QSV/VAAPI/NVENC.
   if (source.hdr && profile.supportsHdr === true) {
+    const beforeHdr = candidates.length;
     for (const codec of codecOrder) {
       if (codec === 'h264') continue;
       if (!clientSupports(clientCodecs, codec)) continue;
       const variant: CodecVariant = { codec, bitDepth: 10, hdr: source.hdr };
-      if (encoderRegistry.resolve(variant, hwAccel)) {
+      if (resolveHwEncoder(variant, hwAccel)) {
         candidates.push(variant);
         break;
       }
     }
+    if (candidates.length === beforeHdr) {
+      for (const codec of codecOrder) {
+        if (codec === 'h264') continue;
+        if (!clientSupports(clientCodecs, codec)) continue;
+        const variant: CodecVariant = { codec, bitDepth: 10, hdr: source.hdr };
+        if (encoderRegistry.resolve(variant, hwAccel)) {
+          candidates.push(variant);
+          break;
+        }
+      }
+    }
   }
 
-  // SDR ladder — always present, even on HDR clients (they can tone-map
-  // for the SDR fallback when the HDR encoder path is unavailable, and
-  // they need an SDR base anyway for legacy non-HDR sources).
+  // SDR ladder — always present, even on HDR clients (they can tone-
+  // map for the SDR fallback when the HDR encoder path is unavailable,
+  // and they need an SDR base anyway for non-HDR sources). HW-first:
+  // walk `codecOrder` accepting only encoders that match the detected
+  // HW backend, so a HW runner-up beats a CPU-only source-codec match.
+  // The CPU pass underneath only runs when no candidate codec has a
+  // HW encoder at all — typical on hosts with no QSV/VAAPI/NVENC.
+  const beforeSdr = candidates.length;
   for (const codec of codecOrder) {
     if (!clientSupports(clientCodecs, codec)) continue;
     const variant: CodecVariant = { codec, bitDepth: 8, hdr: null };
-    if (encoderRegistry.resolve(variant, hwAccel)) {
+    if (resolveHwEncoder(variant, hwAccel)) {
       candidates.push(variant);
+    }
+  }
+  if (candidates.length === beforeSdr) {
+    for (const codec of codecOrder) {
+      if (!clientSupports(clientCodecs, codec)) continue;
+      const variant: CodecVariant = { codec, bitDepth: 8, hdr: null };
+      if (encoderRegistry.resolve(variant, hwAccel)) {
+        candidates.push(variant);
+      }
     }
   }
 
