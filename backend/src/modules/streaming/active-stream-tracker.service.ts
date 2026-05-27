@@ -61,6 +61,21 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
 
   unregister(userId: number, mediaFileId: number) {
     this.sessions.delete(`${userId}-${mediaFileId}`);
+    this.deviceNameCache.delete(`${userId}-${mediaFileId}`);
+  }
+
+  /** Human-readable client device captured at playback-info ("Chrome — macOS",
+   *  "iPhone", "Chromecast — Living Room"). Keyed per (user, file) so two users
+   *  watching the same file from different devices don't collide. Shown only on
+   *  the admin streams dashboard. */
+  private readonly deviceNameCache = new Map<string, string>();
+
+  setDeviceName(userId: number, mediaFileId: number, name: string) {
+    if (name) this.deviceNameCache.set(`${userId}-${mediaFileId}`, name);
+  }
+
+  getDeviceName(userId: number, mediaFileId: number): string | null {
+    return this.deviceNameCache.get(`${userId}-${mediaFileId}`) ?? null;
   }
 
   private readonly tonemappingCache = new Map<number, boolean>();
@@ -301,6 +316,7 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     for (const [key, session] of this.sessions) {
       if (session.lastActivity.getTime() <= cutoff) {
         this.sessions.delete(key);
+        this.deviceNameCache.delete(key);
       }
     }
   }
