@@ -18,6 +18,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NamingService } from './naming.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
 import { EventsService } from './events.service';
+import { SseAudienceService } from './sse-audience.service';
 import { SettingsService } from '../settings/settings.service';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
@@ -89,6 +90,7 @@ export class CompletionService {
     private readonly autoMatcher: TorrentAutoMatcher,
     private readonly fileTransfer: FileTransferService,
     private readonly markers: MarkersService,
+    private readonly sseAudience: SseAudienceService,
     @Inject(forwardRef(() => MediaService))
     private readonly mediaService: MediaService,
   ) {}
@@ -354,12 +356,16 @@ export class CompletionService {
           statusMessage: (e as Error).message,
         });
 
-        this.events.emit({
+        const failRecipients = await this.sseAudience.recipientsForMedia(
+          history.mediaId,
+        );
+        this.events.emitToUsers(failRecipients, {
           type: 'import.failed',
           mediaId: history.mediaId,
           title: history.sourceTitle,
           error: (e as Error).message,
         });
+        this.events.emit({ type: 'queue.updated' });
 
         // Auto-blocklist the failed release so it won't be grabbed again
         try {
@@ -728,7 +734,10 @@ export class CompletionService {
       quality: history.quality,
       sourceTitle: history.sourceTitle,
     });
-    this.events.emit({
+    const importRecipients = await this.sseAudience.recipientsForMedia(
+      media.id,
+    );
+    this.events.emitToUsers(importRecipients, {
       type: 'import.complete',
       mediaId: media.id,
       title: media.title,
@@ -986,7 +995,10 @@ export class CompletionService {
 
         await this.stalledCheckRepo.delete({ torrentHash: t.hash });
 
-        this.events.emit({
+        const stalledRecipients = await this.sseAudience.recipientsForMedia(
+          history.mediaId ?? null,
+        );
+        this.events.emitToUsers(stalledRecipients, {
           type: 'stalled.removed',
           title: history.sourceTitle ?? t.name,
         });

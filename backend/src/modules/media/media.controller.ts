@@ -396,13 +396,17 @@ export class MediaController {
     const title = media.title;
 
     this.logger.log(`Media rescan started (API) — id=${id} title="${title}"`);
-    this.eventsService.emit({ type: 'rescan.started', mediaId: id, title });
+    this.eventsService.emitToUser(user.id, {
+      type: 'rescan.started',
+      mediaId: id,
+      title,
+    });
 
     // Fire-and-forget: don't await. skipWarmup=true — rescan should be fast,
     // subtitle cache will warm lazily when the user actually plays the file.
     void this.mediaService.rescanFiles(id, { skipWarmup: true }).then(
       (result) => {
-        this.eventsService.emit({
+        this.eventsService.emitToUser(user.id, {
           type: 'rescan.completed',
           mediaId: id,
           title,
@@ -419,7 +423,7 @@ export class MediaController {
           `Media rescan failed — id=${id} title="${title}" error=${message}`,
           err instanceof Error ? err.stack : err,
         );
-        this.eventsService.emit({
+        this.eventsService.emitToUser(user.id, {
           type: 'rescan.failed',
           mediaId: id,
           title,

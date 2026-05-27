@@ -24,6 +24,8 @@ import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { User } from '../users/entities/user.entity';
 import { BackupService } from './backup.service';
 import { LogBufferService } from './log-buffer.service';
 import { EventsService } from './events.service';
@@ -151,8 +153,8 @@ export class SystemController {
   ) {}
 
   @Sse('events')
-  events(): Observable<MessageEvent> {
-    return this.eventsService.getStream();
+  events(@CurrentUser() user: User): Observable<MessageEvent> {
+    return this.eventsService.getStream(user.id);
   }
 
   @Get('health')
@@ -584,7 +586,7 @@ export class SystemController {
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   sendPlayerCommand(
     @Param('sessionId') sessionId: string,
-    @Body() body: { action: 'pause' | 'play' | 'stop'; message?: string },
+    @Body() body: { action: 'pause' | 'play' | 'stop' | 'message'; message?: string },
   ) {
     // Parse userId and mediaFileId from sessionId
     let userId = 0;
@@ -609,7 +611,7 @@ export class SystemController {
       throw new BadRequestException('Session not found');
     }
 
-    this.eventsService.emit({
+    this.eventsService.emitToUser(userId, {
       type: 'player.command',
       mediaFileId,
       userId,

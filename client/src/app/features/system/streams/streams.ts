@@ -8,26 +8,33 @@ import {
 } from '@angular/core';
 import { UpperCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { FormsModule } from '@angular/forms';
 import { StreamsApiService, ActiveStream } from '../../../core/services/api/streams-api.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
-import { LucidePause, LucidePlay, LucideSquare } from '@lucide/angular';
+import { ToastService } from '../../../core/services/toast.service';
+import { LucideMessageSquare, LucidePause, LucidePlay, LucideSquare } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 
 @Component({
   selector: 'app-system-streams',
-  imports: [UpperCasePipe, RouterLink, TranslateModule, ResolveUrlPipe, LucidePause, LucidePlay, LucideSquare],
+  imports: [UpperCasePipe, RouterLink, TranslateModule, FormsModule, ResolveUrlPipe, LucideMessageSquare, LucidePause, LucidePlay, LucideSquare],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './streams.html',
 })
 export class SystemStreamsComponent implements OnInit, OnDestroy {
   private readonly streamsApi = inject(StreamsApiService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly toast = inject(ToastService);
+  private readonly translate = inject(TranslateService);
   private intervalId: ReturnType<typeof setInterval> | null = null;
 
   readonly streams = signal<ActiveStream[]>([]);
   readonly loading = signal(true);
   readonly pausedSessions = signal(new Set<string>());
+  readonly messageTarget = signal<ActiveStream | null>(null);
+  readonly messageText = signal('');
+  readonly messageBusy = signal(false);
 
   ngOnInit() {
     this.refresh();
@@ -64,11 +71,42 @@ export class SystemStreamsComponent implements OnInit, OnDestroy {
     return this.pausedSessions().has(sessionId);
   }
 
+  openMessage(stream: ActiveStream) {
+    this.messageText.set('');
+    this.messageTarget.set(stream);
+  }
+
+  closeMessage() {
+    this.messageTarget.set(null);
+    this.messageText.set('');
+  }
+
+  async sendMessage() {
+    const target = this.messageTarget();
+    const text = this.messageText().trim();
+    if (!target || !text) return;
+    this.messageBusy.set(true);
+    try {
+      await this.streamsApi.sendCommand(target.sessionId, 'message', text);
+      this.toast.success(this.translate.instant('system.stream_message_sent'));
+      this.closeMessage();
+    } catch {
+      this.toast.error(this.translate.instant('system.stream_message_failed'));
+    } finally {
+      this.messageBusy.set(false);
+    }
+  }
+
   async confirmStop(stream: ActiveStream) {
     const confirmed = await this.confirmation.confirm({
-      title: 'Arrêter la lecture',
-      message: `Arrêter la lecture de "${stream.mediaTitle}"${stream.username ? ` pour ${stream.username}` : ''} ?`,
-      confirmLabel: 'Arrêter',
+      title: this.translate.instant('system.stream_stop'),
+      message: this.translate.instant(
+        stream.username
+          ? 'system.stream_stop_confirm_user'
+          : 'system.stream_stop_confirm',
+        { title: stream.mediaTitle, user: stream.username },
+      ),
+      confirmLabel: this.translate.instant('system.stream_stop_action'),
       variant: 'danger',
     });
     if (!confirmed) return;
@@ -76,24 +114,6 @@ export class SystemStreamsComponent implements OnInit, OnDestroy {
       await this.streamsApi.sendCommand(stream.sessionId, 'stop');
       this.streams.update((s) => s.filter((x) => x.sessionId !== stream.sessionId));
     } catch { /* ignore */ }
-  }
-
-  modeLabel(mode: string): string {
-    switch (mode) {
-      case 'transcode': return 'Transcodage';
-      case 'remux': return 'Remux';
-      case 'directplay': return 'Lecture directe';
-      default: return mode;
-    }
-  }
-
-  modeBadgeClass(mode: string): string {
-    switch (mode) {
-      case 'transcode': return 'badge-warning';
-      case 'remux': return 'badge-info';
-      case 'directplay': return 'badge-success';
-      default: return 'badge-ghost';
-    }
   }
 
   formatTime(seconds: number): string {
