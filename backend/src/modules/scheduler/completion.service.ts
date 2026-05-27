@@ -29,6 +29,7 @@ import {
 } from '../streaming/thumbnail.service';
 import { MediaType } from '../../common/enums';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
+import { enqueueCommand } from '../../common/utils/command-queue.util';
 import { StalledCheck } from './entities/stalled-check.entity';
 import { CleanupProfile } from '../cleanup-profiles/entities/cleanup-profile.entity';
 import { Library } from '../libraries/entities/library.entity';
@@ -369,13 +370,10 @@ export class CompletionService {
 
         // Auto-blocklist the failed release so it won't be grabbed again
         try {
-          await this.blocklist.create({
-            sourceTitle: history.sourceTitle,
-            quality: history.quality,
-            mediaId: history.mediaId,
-            indexerId: history.indexerId ?? undefined,
-            note: `Auto-blocklist: import failed — ${(e as Error).message}`,
-          });
+          await this.blocklist.createFromHistory(
+            history,
+            `Auto-blocklist: import failed — ${(e as Error).message}`,
+          );
           this.log.log(`Import: auto-blocklisted "${history.sourceTitle}"`);
         } catch {
           // ignore blocklist errors
@@ -1042,13 +1040,10 @@ export class CompletionService {
         });
         this.events.emit({ type: 'queue.updated' });
 
-        await this.blocklist.create({
-          sourceTitle: history.sourceTitle ?? t.name,
-          quality: history.quality ?? undefined,
-          mediaId: history.mediaId ?? undefined,
-          indexerId: history.indexerId ?? undefined,
-          note: `Auto-blocklist: stalled torrent (profile=${profile.key})`,
-        });
+        await this.blocklist.createFromHistory(
+          history,
+          `Auto-blocklist: stalled torrent (profile=${profile.key})`,
+        );
 
         history.status = 'failed';
         history.statusMessage = `Stalled — removed by ${profile.key} cleanup profile`;
@@ -1074,10 +1069,11 @@ export class CompletionService {
       this.log.log(
         `StalledCleanup: queueing SearchMissing for ${mediaToResearch.size} media(s)`,
       );
-      // Insert command directly to avoid circular dep with SchedulerService.
-      await this.dataSource.query(
-        `INSERT INTO commands (name, status, trigger, body) VALUES ('SearchMissing', 'queued', 'scheduled', $1)`,
-        [JSON.stringify({ mediaIds: Array.from(mediaToResearch) })],
+      await enqueueCommand(
+        this.dataSource,
+        'SearchMissing',
+        { mediaIds: Array.from(mediaToResearch) },
+        'scheduled',
       );
     }
   }

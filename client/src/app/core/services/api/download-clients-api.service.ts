@@ -138,6 +138,16 @@ export class DownloadClientsApiService {
     return firstValueFrom(this.http.post<void>(`/api/download-clients/queue/${hash}/reimport`, {}));
   }
 
+  blockTorrent(hash: string, clientId: number) {
+    return firstValueFrom(
+      this.http.post<void>(
+        `/api/download-clients/queue/${hash}/block`,
+        {},
+        { params: { clientId } },
+      ),
+    );
+  }
+
   triggerImport() {
     return firstValueFrom(this.http.post('/api/commands', { name: 'ImportCompleted' }));
   }

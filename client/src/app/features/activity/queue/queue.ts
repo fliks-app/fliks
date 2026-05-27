@@ -31,6 +31,7 @@ import {
   LucideDownload,
   LucideSearch,
   LucideTrash2,
+  LucideBan,
 } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
@@ -38,7 +39,7 @@ import { PaginationComponent } from '../../../shared/components/pagination/pagin
 
 @Component({
   selector: 'app-activity-queue',
-  imports: [TranslateModule, DecimalPipe, NgClass, RouterLink, FormsModule, ResolveUrlPipe, DropdownMenuComponent, PaginationComponent, LucideRotateCcw, LucideLink2, LucideEllipsisVertical, LucideTriangleAlert, LucideDownload, LucideSearch, LucideTrash2],
+  imports: [TranslateModule, DecimalPipe, NgClass, RouterLink, FormsModule, ResolveUrlPipe, DropdownMenuComponent, PaginationComponent, LucideRotateCcw, LucideLink2, LucideEllipsisVertical, LucideTriangleAlert, LucideDownload, LucideSearch, LucideTrash2, LucideBan],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './queue.html',
 })
@@ -184,6 +185,19 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
     try {
       await this.downloadApi.removeTorrent(item.hash, item.clientId, deleteFiles);
       this.queue.update((q) => q.filter((i) => i.hash !== item.hash));
+    } catch { /* ignore */ }
+  }
+
+  async blockTorrent(item: QueueItem) {
+    if (!await this.confirmation.confirm({
+      title: this.translate.instant('activity.block_torrent'),
+      message: this.translate.instant('activity.confirm_block'),
+      variant: 'danger',
+    })) return;
+    try {
+      await this.downloadApi.blockTorrent(item.hash, item.clientId);
+      this.queue.update((q) => q.filter((i) => i.hash !== item.hash));
+      this.toast.info(this.translate.instant('activity.block_started'));
     } catch { /* ignore */ }
   }
 

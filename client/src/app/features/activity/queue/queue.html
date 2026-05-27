@@ -116,6 +116,10 @@
                     {{ 'activity.reimport' | translate }}
                   </button>
                 }
+                <button type="button" class="dropdown-item text-white" (click)="blockTorrent(item)">
+                  <svg lucideBan class="h-4 w-4"></svg>
+                  {{ 'activity.block_torrent' | translate }}
+                </button>
                 <button type="button" class="dropdown-item text-white" (click)="removeTorrent(item, false)">
                   <svg lucideTrash2 class="h-4 w-4"></svg>
                   {{ 'activity.remove_torrent' | translate }}
