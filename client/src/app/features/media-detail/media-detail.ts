@@ -1200,7 +1200,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   filteredSeasonEpisodes(season: Season): Episode[] {
     const m = this.media();
     if (!m) return season.episodes;
-    return filterSeasonEpisodesOnDisk(season, m, this.episodesHasFileOnly());
+    return filterSeasonEpisodesOnDisk(season, this.episodesHasFileOnly());
   }
 
   activeSeason(m: Media): Season | null {

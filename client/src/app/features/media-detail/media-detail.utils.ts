@@ -40,20 +40,34 @@ export function formatMediaDetailBytes(bytes: number): string {
   return `${(n / Math.pow(1024, i)).toFixed(i >= 3 ? 1 : 0)} ${units[i]}`;
 }
 
-/** Episodes with fichier (hasFile ou fichier tracké avec episodeId). */
+/** Visible episodes of a season, optionally only those on disk (coverage). */
 export function filterSeasonEpisodesOnDisk(
   season: Season,
-  media: Media,
   onlyOnDisk: boolean,
 ): Episode[] {
   const eps = hideShadowedEpisodes(season.episodes);
   if (!onlyOnDisk) return eps;
-  const fileEpisodeIds = new Set(
-    (media.files ?? [])
-      .map((f) => f.episodeId)
-      .filter((id): id is number => id != null && id > 0),
-  );
-  return eps.filter((e) => e.hasFile || fileEpisodeIds.has(e.id));
+  const onDisk = onDiskEpisodeNumbers(season.episodes);
+  return eps.filter((e) => onDisk.has(e.episodeNumber));
+}
+
+/**
+ * Episode numbers in a season whose content is on disk — own file (`hasFile`)
+ * OR covered by a multi-episode file (inside an owner's
+ * `[episodeNumber..endEpisodeNumber]`). Mirror of the backend
+ * `episode-coverage.util`. Use this, not raw `hasFile`, for "missing" logic.
+ */
+export function onDiskEpisodeNumbers(episodes: Episode[]): Set<number> {
+  const numbers = new Set<number>();
+  for (const owner of episodes) {
+    if (!owner.hasFile) continue;
+    numbers.add(owner.episodeNumber);
+    const end = owner.endEpisodeNumber;
+    if (end != null && end > owner.episodeNumber) {
+      for (let n = owner.episodeNumber + 1; n <= end; n++) numbers.add(n);
+    }
+  }
+  return numbers;
 }
 
 /**
@@ -86,7 +100,7 @@ export function episodeBadgeLabel(ep: Episode): string {
 export function seasonsVisibleWithDiskFilter(media: Media, onlyOnDisk: boolean): Season[] {
   const list = media.seasons ?? [];
   if (!onlyOnDisk) return list;
-  return list.filter((s) => filterSeasonEpisodesOnDisk(s, media, true).length > 0);
+  return list.filter((s) => filterSeasonEpisodesOnDisk(s, true).length > 0);
 }
 
 export type MediaFileRow = NonNullable<Media['files']>[number];

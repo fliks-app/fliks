@@ -16,6 +16,10 @@ import { TorznabService, TorznabRelease } from '../indexers/torznab.service';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
 import { MediaService } from '../media/media.service';
+import {
+  onDiskSql,
+  onDiskEpisodeNumbers,
+} from '../media/episode-coverage.util';
 import { MediaType, MinimumAvailability } from '../../common/enums';
 import { ConfigService } from '@nestjs/config';
 import { CompletionService } from './completion.service';
@@ -533,7 +537,12 @@ export class SchedulerService implements OnModuleInit {
       .andWhere('ep.monitored = true')
       .andWhere('ep.airDate IS NOT NULL')
       .andWhere('ep.airDate <= :today', { today })
-      .andWhere('(ep.hasFile = false OR qp."upgradeAllowed" = true)');
+      // Missing → search when the content isn't on disk (coverage, so multi-
+      // episode shadowed episodes aren't re-searched). Upgrade → only episodes
+      // with their OWN file (hasFile); a shadowed episode upgrades via its owner.
+      .andWhere(
+        `(NOT ${onDiskSql('ep')} OR (ep.hasFile = true AND qp."upgradeAllowed" = true))`,
+      );
     if (mediaIds?.length) {
       qb.andWhere('media.id IN (:...mediaIds)', { mediaIds });
     }
@@ -905,10 +914,11 @@ export class SchedulerService implements OnModuleInit {
           );
           if (!season) continue;
           const packKey = `${seriesMatch.id}:${parsed.season}`;
+          const onDiskNums = onDiskEpisodeNumbers(season.episodes ?? []);
 
           if (parsed.isFullSeason) {
             const wanted = (season.episodes ?? []).some(
-              (e) => e.monitored && !e.hasFile,
+              (e) => e.monitored && !onDiskNums.has(e.episodeNumber),
             );
             if (!wanted) continue;
             packTriedThisPull.add(packKey);
@@ -932,7 +942,8 @@ export class SchedulerService implements OnModuleInit {
           const ep = (season.episodes ?? []).find(
             (e) => e.episodeNumber === parsed.episode,
           );
-          if (!ep || !ep.monitored || ep.hasFile) continue;
+          if (!ep || !ep.monitored || onDiskNums.has(ep.episodeNumber))
+            continue;
           // Intra-pull Phase 1: a pack for this season was already handed
           // off above; skip the individual episode.
           if (packTriedThisPull.has(packKey)) continue;
