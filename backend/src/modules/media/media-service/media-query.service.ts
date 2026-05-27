@@ -15,7 +15,7 @@ import {
 } from '../../../common/constants/app-qualities';
 import { rankFromQualityString } from '../release-rejection.helper';
 import { parseReleaseQuality } from '../../../common/release-parsing';
-import { onDiskSql } from '../episode-coverage.util';
+import { onDiskSql, shadowedEpisodeNumbers } from '../episode-coverage.util';
 
 export type CutoffState =
   | 'unmonitored'
@@ -316,15 +316,34 @@ export class MediaQueryService {
       const seriesIds = enriched
         .filter((m) => m.type === MediaType.SERIES && cutoffByMedia.has(m.id))
         .map((m) => m.id);
-      const epBestByMedia = new Map<number, Map<number, number>>();
+      // Per (media, season) → best file rank per monitored episode, plus the
+      // season's shadowed episode numbers. A shadowed episode (covered by a
+      // multi-episode file's range) has no file of its own, so evaluating it
+      // would falsely read rank 0; we skip it and rely on its owner — matching
+      // the tracking modal which hides shadowed episodes.
+      const epInfoByMedia = new Map<
+        number,
+        Map<
+          number,
+          {
+            episodeNumber: number;
+            endEpisodeNumber: number | null;
+            rank: number;
+          }
+        >
+      >();
       if (seriesIds.length) {
         const epRows: {
           mediaId: number;
           epId: number;
+          episodeNumber: number;
+          endEpisodeNumber: number | null;
           quality: string | null;
         }[] = await this.dataSource.query(
           `SELECT s."mediaId" AS "mediaId",
                   e.id      AS "epId",
+                  e."episodeNumber" AS "episodeNumber",
+                  e."endEpisodeNumber" AS "endEpisodeNumber",
                   f."quality" AS "quality"
              FROM seasons s
              JOIN episodes e ON e."seasonId" = s.id
@@ -335,14 +354,22 @@ export class MediaQueryService {
           [seriesIds],
         );
         for (const row of epRows) {
-          let byEp = epBestByMedia.get(row.mediaId);
+          let byEp = epInfoByMedia.get(row.mediaId);
           if (!byEp) {
             byEp = new Map();
-            epBestByMedia.set(row.mediaId, byEp);
+            epInfoByMedia.set(row.mediaId, byEp);
           }
           const rank = rankFromQualityString(row.quality);
           const prev = byEp.get(row.epId);
-          if (prev == null || rank > prev) byEp.set(row.epId, rank);
+          if (prev) {
+            if (rank > prev.rank) prev.rank = rank;
+          } else {
+            byEp.set(row.epId, {
+              episodeNumber: row.episodeNumber,
+              endEpisodeNumber: row.endEpisodeNumber,
+              rank,
+            });
+          }
         }
       }
       enriched = enriched.filter((m) => {
@@ -356,10 +383,13 @@ export class MediaQueryService {
           }
           return rank < cutoffRank;
         }
-        const byEp = epBestByMedia.get(m.id);
+        const byEp = epInfoByMedia.get(m.id);
         if (!byEp || byEp.size === 0) return false;
-        for (const rank of byEp.values()) {
-          if (rank < cutoffRank) return true;
+        const eps = [...byEp.values()];
+        const shadowed = shadowedEpisodeNumbers(eps);
+        for (const ep of eps) {
+          if (shadowed.has(ep.episodeNumber)) continue;
+          if (ep.rank < cutoffRank) return true;
         }
         return false;
       });
