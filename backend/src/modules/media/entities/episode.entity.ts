@@ -49,6 +49,11 @@ export class Episode extends BaseEntity {
   @Column({ default: true })
   monitored: boolean;
 
+  /** True when this episode has its OWN media file. Drives playback, intro
+   *  detection and watched tracking — things that need a directly playable
+   *  file. A shadowed episode of a multi-episode file stays `false` here; its
+   *  "on disk" status is derived via `episode-coverage.util` (coverage), not
+   *  stored. */
   @Column({ default: false })
   hasFile: boolean;
 

@@ -89,7 +89,12 @@ export class TrackingStatusModalComponent {
   });
 
   episodeLabel(ep: TrackingEpisode): string {
-    const code = `S${String(ep.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
+    const s = String(ep.seasonNumber).padStart(2, '0');
+    const e = String(ep.episodeNumber).padStart(2, '0');
+    let code = `S${s}E${e}`;
+    if (ep.endEpisodeNumber != null && ep.endEpisodeNumber > ep.episodeNumber) {
+      code += `-E${String(ep.endEpisodeNumber).padStart(2, '0')}`;
+    }
     return ep.title ? `${code} — ${ep.title}` : code;
   }
 }

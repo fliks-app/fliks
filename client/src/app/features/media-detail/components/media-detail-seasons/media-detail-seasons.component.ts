@@ -35,6 +35,7 @@ import {
   episodeBadgeLabel,
   filesForEpisode,
   filterSeasonEpisodesOnDisk,
+  onDiskEpisodeNumbers,
   seasonsVisibleWithDiskFilter,
 } from '../../media-detail.utils';
 import { PlayableMediaService } from '../../../../core/services/playable-media.service';
@@ -106,14 +107,18 @@ export class MediaDetailSeasonsComponent {
   }
 
   tabEpisodeCount(season: Season): number {
-    return filterSeasonEpisodesOnDisk(season, this.media(), this.episodesHasFileOnly()).length;
+    return filterSeasonEpisodesOnDisk(season, this.episodesHasFileOnly()).length;
   }
 
-  /** True when at least one episode of the season has no file — the
-   *  prerequisite for surfacing a Demander entry. */
+  /** True when at least one episode of the season isn't on disk — the
+   *  prerequisite for surfacing a Demander entry. Uses coverage so a season
+   *  fully covered by multi-episode files isn't flagged as missing. */
   seasonHasMissingEpisodes(season: Season | null): boolean {
     if (!season) return false;
-    return (season.episodes ?? []).some((ep) => !ep.hasFile);
+    const onDisk = onDiskEpisodeNumbers(season.episodes ?? []);
+    return (season.episodes ?? []).some(
+      (ep) => !onDisk.has(ep.episodeNumber),
+    );
   }
 
   /** True when the viewer already has an active request covering this

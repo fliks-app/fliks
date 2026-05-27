@@ -1,11 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
-  Brackets,
-  DataSource,
-  Repository,
-  SelectQueryBuilder,
-} from 'typeorm';
+import { Brackets, DataSource, Repository, SelectQueryBuilder } from 'typeorm';
 import { Media } from '../entities/media.entity';
 import { Season } from '../entities/season.entity';
 import { Episode } from '../entities/episode.entity';
@@ -20,6 +15,7 @@ import {
 } from '../../../common/constants/app-qualities';
 import { rankFromQualityString } from '../release-rejection.helper';
 import { parseReleaseQuality } from '../../../common/release-parsing';
+import { onDiskSql } from '../episode-coverage.util';
 
 export type CutoffState =
   | 'unmonitored'
@@ -41,6 +37,8 @@ export interface TrackingEpisode extends TrackingItemState {
   episodeId: number;
   seasonNumber: number;
   episodeNumber: number;
+  /** Last episode number when this row is a multi-episode file (else null). */
+  endEpisodeNumber: number | null;
   title: string | null;
 }
 
@@ -270,12 +268,14 @@ export class MediaQueryService {
     if (seriesIds.length) {
       const stats: { mediaId: number; total: string; downloaded: string }[] =
         await this.dataSource.query(
+          // "downloaded" = episodes whose content is on disk (coverage),
+          // including the shadowed episodes of a multi-episode file. Counting
+          // MediaFile rows or hasFile alone would undercount those.
           `SELECT s."mediaId",
                   COUNT(e.id) AS total,
-                  COUNT(mf.id) AS downloaded
+                  COUNT(e.id) FILTER (WHERE ${onDiskSql('e')}) AS downloaded
            FROM seasons s
            JOIN episodes e ON e."seasonId" = s.id
-           LEFT JOIN media_files mf ON mf."episodeId" = e.id
            WHERE s."mediaId" = ANY($1) AND s."seasonNumber" > 0
            GROUP BY s."mediaId"`,
           [seriesIds],
@@ -481,11 +481,11 @@ export class MediaQueryService {
           .map((f) => f.episodeId)
           .filter((id): id is number => id != null && id > 0),
       );
+      // In-memory heal of own-file hasFile from the loaded files (coverage is
+      // derived on read via episode-coverage.util, not stored here).
       for (const s of media.seasons) {
         for (const e of s.episodes ?? []) {
-          if (epIdsWithTrackedFile.has(e.id)) {
-            e.hasFile = true;
-          }
+          if (epIdsWithTrackedFile.has(e.id)) e.hasFile = true;
         }
       }
     }
@@ -517,7 +517,11 @@ export class MediaQueryService {
         if (!best || def.rank > best.rank) best = def;
       }
       if (best && best.rank >= cutoffDef.rank) {
-        return { monitored, state: 'met', currentQuality: this.qualityLabel(best) };
+        return {
+          monitored,
+          state: 'met',
+          currentQuality: this.qualityLabel(best),
+        };
       }
       // Same resolution but a lower-ranked source (e.g. HDTV-2160p vs the
       // Bluray-2160p cutoff) would render as "2160p → 2160p" and look like a
@@ -532,7 +536,9 @@ export class MediaQueryService {
             ? best.name
             : this.qualityLabel(best)
           : undefined,
-        targetQuality: sameResolution ? cutoffDef.name : targetQuality ?? undefined,
+        targetQuality: sameResolution
+          ? cutoffDef.name
+          : (targetQuality ?? undefined),
       };
     };
 
@@ -544,6 +550,9 @@ export class MediaQueryService {
       };
     }
 
+    // The multi-episode file is linked to its owner episode (E17); the shadowed
+    // episodes (E18) are hidden below, so mapping each file to its owner is
+    // enough to render the owner's state.
     const filesByEpisode = new Map<number, { quality: string }[]>();
     for (const f of media.files ?? []) {
       if (f.episodeId == null) continue;
@@ -552,16 +561,34 @@ export class MediaQueryService {
       filesByEpisode.set(f.episodeId, list);
     }
 
-    const seasons = (media.seasons ?? []).map((s) => ({
-      seasonNumber: s.seasonNumber,
-      episodes: (s.episodes ?? []).map((e) => ({
-        episodeId: e.id,
+    const seasons = (media.seasons ?? []).map((s) => {
+      // Hide shadowed episodes (covered by another episode's range) and label
+      // the owner with its range — same convention as the episode grid.
+      const shadowed = new Set<number>();
+      for (const e of s.episodes ?? []) {
+        if (
+          e.endEpisodeNumber != null &&
+          e.endEpisodeNumber > e.episodeNumber
+        ) {
+          for (let n = e.episodeNumber + 1; n <= e.endEpisodeNumber; n++) {
+            shadowed.add(n);
+          }
+        }
+      }
+      return {
         seasonNumber: s.seasonNumber,
-        episodeNumber: e.episodeNumber,
-        title: e.title,
-        ...stateOf(e.monitored, filesByEpisode.get(e.id) ?? []),
-      })),
-    }));
+        episodes: (s.episodes ?? [])
+          .filter((e) => !shadowed.has(e.episodeNumber))
+          .map((e) => ({
+            episodeId: e.id,
+            seasonNumber: s.seasonNumber,
+            episodeNumber: e.episodeNumber,
+            endEpisodeNumber: e.endEpisodeNumber ?? null,
+            title: e.title,
+            ...stateOf(e.monitored, filesByEpisode.get(e.id) ?? []),
+          })),
+      };
+    });
 
     return { type: media.type, hasProfile: !!profile, seasons };
   }
@@ -720,9 +747,16 @@ export class MediaQueryService {
           accessibleLibraryIds,
         });
       }
-      const episodes = await epQb.getMany();
+      // Compute coverage (on disk) per episode so a shadowed multi-episode
+      // entry shows as downloaded — derived in SQL, not stored.
+      epQb.addSelect(onDiskSql('ep'), 'ep_onDisk');
+      const { entities, raw } = await epQb.getRawAndEntities();
+      const onDiskByEpId = new Map<number, boolean>();
+      for (const r of raw as { ep_id: number; ep_onDisk: boolean }[]) {
+        onDiskByEpId.set(r.ep_id, r.ep_onDisk);
+      }
 
-      for (const ep of episodes) {
+      for (const ep of entities) {
         results.push({
           id: ep.id,
           mediaId: ep.season.media.id,
@@ -736,7 +770,8 @@ export class MediaQueryService {
           seasonNumber: ep.season.seasonNumber,
           episodeNumber: ep.episodeNumber,
           episodeTitle: ep.title,
-          hasFile: ep.hasFile,
+          // "downloaded" badge = content on disk (coverage).
+          hasFile: onDiskByEpId.get(ep.id) ?? ep.hasFile,
         });
       }
     }

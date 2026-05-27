@@ -57,6 +57,8 @@ export interface Episode {
   overview: string | null;
   airDate: string | null;
   monitored: boolean;
+  /** Has its own file (playback / watched). "On disk" coverage incl. multi-
+   *  episode files is derived client-side via media-detail.utils. */
   hasFile: boolean;
   runtime?: number | null;
   stillUrl?: string | null;
@@ -129,6 +131,7 @@ export interface TrackingEpisode extends TrackingItemState {
   episodeId: number;
   seasonNumber: number;
   episodeNumber: number;
+  endEpisodeNumber: number | null;
   title: string | null;
 }
 

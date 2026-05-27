@@ -11,6 +11,7 @@ import { Season } from './entities/season.entity';
 import { Episode } from './entities/episode.entity';
 import { DownloadHistory } from './entities/download-history.entity';
 import { buildGrabHistoryRow } from './grab-history.util';
+import { onDiskEpisodeNumbers } from './episode-coverage.util';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
 import { TorznabService } from '../indexers/torznab.service';
@@ -708,8 +709,13 @@ export class EpisodeDownloadService {
     this.log.log(`No season pack found, falling back to per-episode grab`);
     const today = new Date().toISOString().slice(0, 10);
     const allEpisodes = season.episodes ?? [];
+    const onDiskNums = onDiskEpisodeNumbers(allEpisodes);
     const missingEpisodes = allEpisodes.filter(
-      (ep) => ep.monitored && !ep.hasFile && ep.airDate && ep.airDate <= today,
+      (ep) =>
+        ep.monitored &&
+        !onDiskNums.has(ep.episodeNumber) &&
+        ep.airDate &&
+        ep.airDate <= today,
     );
     const skippedCount = allEpisodes.length - missingEpisodes.length;
     this.log.log(

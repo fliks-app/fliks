@@ -13,6 +13,7 @@ import { FliksRequest } from './entities/request.entity';
 import { MediaType, RequestStatus } from '../../common/enums';
 import { Media } from '../media/entities/media.entity';
 import { MediaService } from '../media/media.service';
+import { onDiskEpisodeNumbers } from '../media/episode-coverage.util';
 import { ProfilesService } from '../profiles/profiles.service';
 import { EventsService } from '../scheduler/events.service';
 import { SchedulerService } from '../scheduler/scheduler.service';
@@ -340,7 +341,11 @@ export class RequestLifecycleService
       const monitoredEps = (s.episodes ?? []).filter((e) => e.monitored);
       if (monitoredEps.length === 0) continue;
       anyChecked = true;
-      if (!monitoredEps.every((e) => e.hasFile)) return false;
+      // Coverage, not own-file: a shadowed episode of a multi-episode file is
+      // satisfied even though it has no file of its own.
+      const onDiskNums = onDiskEpisodeNumbers(s.episodes ?? []);
+      if (!monitoredEps.every((e) => onDiskNums.has(e.episodeNumber)))
+        return false;
     }
     // Nothing left to wait for (scope past the library, all unmonitored)
     // — treat as delivered rather than stranding the request forever.
