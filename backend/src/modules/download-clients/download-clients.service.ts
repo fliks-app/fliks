@@ -33,6 +33,25 @@ export interface QueueEntry extends QbittorrentTorrent {
   statusMessage?: string;
 }
 
+export interface QueueResult {
+  items: QueueEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface QueueQuery {
+  page?: number;
+  pageSize?: number;
+  /** Filter on the mapped download-client status (e.g. "Downloading"). */
+  torrentStatus?: string;
+  /** Filter on the app-level status (e.g. "Imported"). */
+  fliksStatus?: string;
+}
+
+const QUEUE_PAGE_SIZE_DEFAULT = 20;
+const QUEUE_PAGE_SIZE_MAX = 100;
+
 const QB_STATE_MAP: Record<string, string> = {
   error: 'Error',
   missingFiles: 'Missing files',
@@ -226,7 +245,14 @@ export class DownloadClientsService {
     });
   }
 
-  async getQueue(): Promise<QueueEntry[]> {
+  async getQueue(query: QueueQuery = {}): Promise<QueueResult> {
+    const pageSize = Math.min(
+      Math.max(query.pageSize ?? QUEUE_PAGE_SIZE_DEFAULT, 1),
+      QUEUE_PAGE_SIZE_MAX,
+    );
+    const page = Math.max(query.page ?? 1, 1);
+    const empty: QueueResult = { items: [], total: 0, page, pageSize };
+
     const clients = await this.repo.find({ where: { enabled: true } });
     const results: QueueEntry[] = [];
     for (const client of clients) {
@@ -243,7 +269,7 @@ export class DownloadClientsService {
       }
     }
 
-    if (results.length === 0) return results;
+    if (results.length === 0) return empty;
 
     // Match queue items with history entries to find mediaId & import status
     const historyEntries = await this.historyRepo.find({
@@ -300,6 +326,26 @@ export class DownloadClientsService {
       }
     }
 
-    return results;
+    // Filter on the resolved statuses, then sort newest-first so pagination
+    // is stable across the 10s client poll, then page.
+    let filtered = results;
+    if (query.torrentStatus) {
+      filtered = filtered.filter(
+        (r) => r.trackerStatus === query.torrentStatus,
+      );
+    }
+    if (query.fliksStatus) {
+      filtered = filtered.filter((r) => r.status === query.fliksStatus);
+    }
+    filtered.sort((a, b) => (b.added_on ?? 0) - (a.added_on ?? 0));
+
+    const total = filtered.length;
+    const start = (page - 1) * pageSize;
+    return {
+      items: filtered.slice(start, start + pageSize),
+      total,
+      page,
+      pageSize,
+    };
   }
 }

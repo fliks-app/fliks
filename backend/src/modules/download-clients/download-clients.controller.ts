@@ -43,11 +43,22 @@ export class DownloadClientsController {
     return this.service.findAll();
   }
 
-  /** Returns active torrents from all enabled qBittorrent clients */
+  /** Returns active torrents from all enabled qBittorrent clients,
+   *  filtered by torrent / Fliks status and paginated. */
   @Get('queue')
   @CheckPolicies((ability) => ability.can(Action.Read, DownloadClient))
-  queue() {
-    return this.service.getQueue();
+  queue(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('torrentStatus') torrentStatus?: string,
+    @Query('fliksStatus') fliksStatus?: string,
+  ) {
+    return this.service.getQueue({
+      page: page ? parseInt(page, 10) : undefined,
+      pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
+      torrentStatus: torrentStatus || undefined,
+      fliksStatus: fliksStatus || undefined,
+    });
   }
 
   @Post('queue/link')
