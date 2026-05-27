@@ -41,7 +41,7 @@ export class App implements OnInit, OnDestroy {
   private readonly pwaAutoUpdate = inject(PwaAutoUpdateService);
   private backButtonListener?: { remove: () => Promise<void> };
   private resumeListener?: { remove: () => Promise<void> };
-  private tizenKeyListener?: (e: KeyboardEvent) => void;
+  private tvBackKeyListener?: (e: KeyboardEvent) => void;
   private escapeKeyListener?: (e: KeyboardEvent) => void;
 
   ngOnInit() {
@@ -113,21 +113,26 @@ export class App implements OnInit, OnDestroy {
     };
     window.addEventListener('keydown', this.escapeKeyListener, true);
 
-    // Samsung Tizen "Return" remote key. Capacitor's `backButton` event
-    // never fires here (we're not running through Capacitor on Tizen), so
-    // without an explicit handler the player gets stuck on the AVPlay
-    // error screen with no way out. The Return key surfaces as keyCode
-    // 10009 on Tizen 6.5 — Smart TV remotes have no Android-style back
-    // gesture, the user hits a physical button. Same logic as the
-    // Capacitor handler, factored out into `handleBackButton`.
-    if (this.tv.tvPlatform() === 'tizen') {
+    // Smart TV "Return" remote key. Capacitor's `backButton` event never
+    // fires here (Tizen/webOS don't run through Capacitor), so without an
+    // explicit handler the player gets stuck with no way out. The button
+    // surfaces as keyCode 10009 on Tizen and 461 (`key: 'GoBack'`) on
+    // webOS — physical buttons, no Android-style back gesture. Same logic
+    // as the Capacitor handler, factored out into `handleBackButton`.
+    const platform = this.tv.tvPlatform();
+    if (platform === 'tizen' || platform === 'webos') {
       const handler = (e: KeyboardEvent) => {
-        if (e.keyCode === 10009 || e.key === 'XF86Back' || e.key === 'GoBack') {
+        if (
+          e.keyCode === 10009 ||
+          e.keyCode === 461 ||
+          e.key === 'XF86Back' ||
+          e.key === 'GoBack'
+        ) {
           e.preventDefault();
           this.handleBackButton();
         }
       };
-      this.tizenKeyListener = handler;
+      this.tvBackKeyListener = handler;
       window.addEventListener('keydown', handler);
     }
   }
@@ -206,16 +211,24 @@ export class App implements OnInit, OnDestroy {
       this.navbar.goBack();
       return;
     }
-    // Top-level with no in-app history. On Tizen we let the OS minimise
-    // the app (the default behaviour when no preventDefault was called
-    // — but we DID preventDefault above to suppress the WebApp default
-    // exit confirmation; re-fire it explicitly so the user can leave).
-    if (this.tv.tvPlatform() === 'tizen') {
+    // Top-level with no in-app history: leave the app. We preventDefault'd
+    // the Return key above (to suppress the WebApp default exit prompt), so
+    // re-fire the platform's own exit explicitly — Tizen's application.exit,
+    // webOS's platformBack (returns to the launcher / previous app).
+    const platform = this.tv.tvPlatform();
+    if (platform === 'tizen') {
       const tizen = (window as unknown as { tizen?: { application?: { getCurrentApplication: () => { exit: () => void } } } }).tizen;
       try {
         tizen?.application?.getCurrentApplication().exit();
       } catch {
         /* exit() can throw on dev profiles — ignore */
+      }
+    } else if (platform === 'webos') {
+      const sys = (window as unknown as { webOSSystem?: { platformBack?: () => void } }).webOSSystem;
+      try {
+        sys?.platformBack?.();
+      } catch {
+        /* platformBack unavailable on some firmware — ignore */
       }
     }
   }
@@ -223,8 +236,8 @@ export class App implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.backButtonListener?.remove();
     this.resumeListener?.remove();
-    if (this.tizenKeyListener) {
-      window.removeEventListener('keydown', this.tizenKeyListener);
+    if (this.tvBackKeyListener) {
+      window.removeEventListener('keydown', this.tvBackKeyListener);
     }
     if (this.escapeKeyListener) {
       window.removeEventListener('keydown', this.escapeKeyListener, true);
