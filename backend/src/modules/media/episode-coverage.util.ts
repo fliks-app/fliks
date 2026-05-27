@@ -46,6 +46,26 @@ export function isEpisodeOnDisk(
 }
 
 /**
+ * Episode numbers in a season that are "shadowed" — covered by another
+ * episode's multi-episode range `(episodeNumber..endEpisodeNumber]`. These
+ * rows are real (provider-created) but represented by their owner's file, so
+ * per-episode logic (display, cutoff evaluation) should skip them and use the
+ * owner instead. Range-only — independent of `hasFile`.
+ */
+export function shadowedEpisodeNumbers(
+  episodes: { episodeNumber: number; endEpisodeNumber?: number | null }[],
+): Set<number> {
+  const shadowed = new Set<number>();
+  for (const owner of episodes) {
+    const end = owner.endEpisodeNumber;
+    if (end != null && end > owner.episodeNumber) {
+      for (let n = owner.episodeNumber + 1; n <= end; n++) shadowed.add(n);
+    }
+  }
+  return shadowed;
+}
+
+/**
  * SQL boolean expression equivalent to {@link isEpisodeOnDisk}, for queries.
  * `epAlias` is the episodes-table alias in scope. The correlated subquery finds
  * an owner episode in the same season whose multi-episode range covers this row.
