@@ -52,12 +52,14 @@ export class DownloadClientsController {
     @Query('pageSize') pageSize?: string,
     @Query('torrentStatus') torrentStatus?: string,
     @Query('fliksStatus') fliksStatus?: string,
+    @Query('search') search?: string,
   ) {
     return this.service.getQueue({
       page: page ? parseInt(page, 10) : undefined,
       pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
       torrentStatus: torrentStatus || undefined,
       fliksStatus: fliksStatus || undefined,
+      search: search?.trim() || undefined,
     });
   }
 

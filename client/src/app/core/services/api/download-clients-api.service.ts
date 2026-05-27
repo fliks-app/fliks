@@ -77,6 +77,7 @@ export interface QueueQuery {
   pageSize?: number;
   torrentStatus?: string;
   fliksStatus?: string;
+  search?: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -118,6 +119,7 @@ export class DownloadClientsApiService {
     if (query.pageSize) params = params.set('pageSize', query.pageSize);
     if (query.torrentStatus) params = params.set('torrentStatus', query.torrentStatus);
     if (query.fliksStatus) params = params.set('fliksStatus', query.fliksStatus);
+    if (query.search) params = params.set('search', query.search);
     return firstValueFrom(
       this.http.get<QueueResult>('/api/download-clients/queue', { params }),
     );

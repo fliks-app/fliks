@@ -34,10 +34,11 @@ import {
 } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
+import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 
 @Component({
   selector: 'app-activity-queue',
-  imports: [TranslateModule, DecimalPipe, NgClass, RouterLink, FormsModule, ResolveUrlPipe, DropdownMenuComponent, LucideRotateCcw, LucideLink2, LucideEllipsisVertical, LucideTriangleAlert, LucideDownload, LucideSearch, LucideTrash2],
+  imports: [TranslateModule, DecimalPipe, NgClass, RouterLink, FormsModule, ResolveUrlPipe, DropdownMenuComponent, PaginationComponent, LucideRotateCcw, LucideLink2, LucideEllipsisVertical, LucideTriangleAlert, LucideDownload, LucideSearch, LucideTrash2],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './queue.html',
 })
@@ -58,9 +59,11 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
   // conditions below compare against).
   readonly torrentFilter = signal('');
   readonly fliksFilter = signal('');
+  readonly search = signal('');
   readonly page = signal(1);
   readonly pageSize = signal(20);
   readonly total = signal(0);
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Fixed option lists — the full set of statuses the backend can emit,
    *  so the dropdowns stay stable regardless of the current page. */
@@ -78,8 +81,24 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
     Math.max(1, Math.ceil(this.total() / this.pageSize())),
   );
   readonly hasFilter = computed(
-    () => !!this.torrentFilter() || !!this.fliksFilter(),
+    () => !!this.torrentFilter() || !!this.fliksFilter() || !!this.search(),
   );
+
+  /** Current page grouped by add date, newest first (the backend sorts by
+   *  added_on desc, so a single pass yields contiguous day groups). */
+  readonly groupedQueue = computed(() => {
+    const groups: { key: string; label: string; items: QueueItem[] }[] = [];
+    for (const item of this.queue()) {
+      const key = this.dayKey(item.added_on);
+      const last = groups[groups.length - 1];
+      if (last && last.key === key) {
+        last.items.push(item);
+      } else {
+        groups.push({ key, label: this.dayLabel(item.added_on), items: [item] });
+      }
+    }
+    return groups;
+  });
 
   // Link torrent modal
   readonly linkDialog = viewChild<ElementRef<HTMLDialogElement>>('linkModal');
@@ -99,6 +118,34 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     if (this.intervalId !== null) clearInterval(this.intervalId);
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+  }
+
+  /** Local YYYY-MM-DD key for grouping (added_on is unix seconds). */
+  private dayKey(addedOn: number): string {
+    if (!addedOn) return 'unknown';
+    const d = new Date(addedOn * 1000);
+    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  }
+
+  /** Human label for a day group: today / yesterday / localized date. */
+  private dayLabel(addedOn: number): string {
+    if (!addedOn) return '—';
+    const d = new Date(addedOn * 1000);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    const sameDay = (a: Date, b: Date) =>
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate();
+    if (sameDay(d, today)) return this.translate.instant('activity.today');
+    if (sameDay(d, yesterday)) return this.translate.instant('activity.yesterday');
+    return d.toLocaleDateString(this.translate.currentLang || undefined, {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
   }
 
   get hasImportable(): boolean {
@@ -182,6 +229,7 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
         pageSize: this.pageSize(),
         torrentStatus: this.torrentFilter() || undefined,
         fliksStatus: this.fliksFilter() || undefined,
+        search: this.search().trim() || undefined,
       });
       // A filter/deletion may have shrunk the result past the current page —
       // snap back and refetch so we never show an empty page mid-list.
@@ -210,6 +258,13 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
     this.fliksFilter.set(value);
     this.page.set(1);
     void this.refreshQueue();
+  }
+
+  onSearch(value: string) {
+    this.search.set(value);
+    this.page.set(1);
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => void this.refreshQueue(), 300);
   }
 
   goToPage(p: number) {
