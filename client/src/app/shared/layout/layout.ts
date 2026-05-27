@@ -18,7 +18,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import { MediaService } from '../../core/services/api/media.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
-import { DownloadClientsApiService } from '../../core/services/api/download-clients-api.service';
+import { DownloadClientsApiService, QueueItem } from '../../core/services/api/download-clients-api.service';
 import { RequestsService } from '../../core/services/api/requests.service';
 import { ServerCacheService } from '../../core/services/server-cache.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
@@ -230,16 +230,25 @@ export class LayoutComponent implements OnInit, OnDestroy {
       const [libs, counts, queue, requests] = await Promise.all([
         this.librariesApi.listMine(),
         this.mediaService.getCountsByLibrary(),
-        this.downloadApi.getQueue(),
+        this.downloadApi.getQueue({ pageSize: 100 }),
         this.requestsService.list({ status: 'pending', limit: 1 }),
       ]);
       this.libraries.set(libs);
       this.libraryCounts.set(counts);
-      this.queueCount.set(queue.length);
+      this.queueCount.set(queue.items.filter((q) => this.isActiveDownload(q)).length);
       this.pendingRequestCount.set(requests.total);
     } catch {
       // silently ignore — counts are non-critical
     }
+  }
+
+  /** Sidebar badge counts only torrents still doing work — excludes the
+   *  terminal Fliks states (imported, failed, quality-not-upgraded) and the
+   *  download-client error states (error, missing files). */
+  private isActiveDownload(q: QueueItem): boolean {
+    const doneStatuses = ['Imported', 'Import failed', 'Quality not upgraded'];
+    const errorTracker = ['Error', 'Missing files'];
+    return !doneStatuses.includes(q.status) && !errorTracker.includes(q.trackerStatus);
   }
 
   private async refreshMediaCounts() {
@@ -260,8 +269,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   private async refreshQueueCount() {
     try {
-      const queue = await this.downloadApi.getQueue();
-      this.queueCount.set(queue.filter(q => q.status !== 'Imported').length);
+      const queue = await this.downloadApi.getQueue({ pageSize: 100 });
+      this.queueCount.set(queue.items.filter((q) => this.isActiveDownload(q)).length);
     } catch { /* ignore */ }
   }
 

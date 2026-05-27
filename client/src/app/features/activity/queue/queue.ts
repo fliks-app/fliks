@@ -2,6 +2,7 @@ import {
   Component,
   ChangeDetectionStrategy,
   signal,
+  computed,
   inject,
   OnInit,
   OnDestroy,
@@ -51,6 +52,34 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
   readonly queueLoading = signal(true);
   readonly queueError = signal('');
   readonly importing = signal(false);
+
+  // Server-side filtering + pagination. Filters hold the raw status values
+  // (the same English strings the backend assigns and the colour/logic
+  // conditions below compare against).
+  readonly torrentFilter = signal('');
+  readonly fliksFilter = signal('');
+  readonly page = signal(1);
+  readonly pageSize = signal(20);
+  readonly total = signal(0);
+
+  /** Fixed option lists — the full set of statuses the backend can emit,
+   *  so the dropdowns stay stable regardless of the current page. */
+  readonly torrentStatusOptions = [
+    'Downloading', 'Downloading metadata', 'Seeding', 'Stalled', 'Paused',
+    'Queued', 'Checking', 'Allocating', 'Moving', 'Stopped', 'Missing files',
+    'Error', 'Unknown',
+  ];
+  readonly fliksStatusOptions = [
+    'Awaiting import', 'Importing', 'Imported', 'Quality not upgraded',
+    'Import failed',
+  ];
+
+  readonly totalPages = computed(() =>
+    Math.max(1, Math.ceil(this.total() / this.pageSize())),
+  );
+  readonly hasFilter = computed(
+    () => !!this.torrentFilter() || !!this.fliksFilter(),
+  );
 
   // Link torrent modal
   readonly linkDialog = viewChild<ElementRef<HTMLDialogElement>>('linkModal');
@@ -146,16 +175,48 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
     }
   }
 
-  async refreshQueue() {
+  async refreshQueue(): Promise<void> {
     try {
-      const items = await this.downloadApi.getQueue();
-      this.queue.set(items);
+      const res = await this.downloadApi.getQueue({
+        page: this.page(),
+        pageSize: this.pageSize(),
+        torrentStatus: this.torrentFilter() || undefined,
+        fliksStatus: this.fliksFilter() || undefined,
+      });
+      // A filter/deletion may have shrunk the result past the current page —
+      // snap back and refetch so we never show an empty page mid-list.
+      if (res.items.length === 0 && res.total > 0 && res.page > 1) {
+        this.page.set(1);
+        return this.refreshQueue();
+      }
+      this.queue.set(res.items);
+      this.total.set(res.total);
+      this.pageSize.set(res.pageSize);
       this.queueError.set('');
     } catch {
       this.queueError.set(this.translate.instant('activity.queue_error'));
     } finally {
       this.queueLoading.set(false);
     }
+  }
+
+  setTorrentFilter(value: string) {
+    this.torrentFilter.set(value);
+    this.page.set(1);
+    void this.refreshQueue();
+  }
+
+  setFliksFilter(value: string) {
+    this.fliksFilter.set(value);
+    this.page.set(1);
+    void this.refreshQueue();
+  }
+
+  goToPage(p: number) {
+    const clamped = Math.min(Math.max(p, 1), this.totalPages());
+    if (clamped === this.page()) return;
+    this.page.set(clamped);
+    void this.refreshQueue();
   }
 
   formatBytes(bytes: number): string {
@@ -189,5 +250,24 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
       case 'Import failed': return 'badge-error';
       default: return 'badge-ghost';
     }
+  }
+
+  /** Translate a raw status value for display. Backend statuses are fixed
+   *  English strings; this maps them to `activity.<prefix>_<slug>` keys and
+   *  falls back to the raw value when no translation exists. */
+  private statusLabel(prefix: 'tstatus' | 'fstatus', raw: string): string {
+    if (!raw) return '';
+    const slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const key = `activity.${prefix}_${slug}`;
+    const translated = this.translate.instant(key);
+    return translated === key ? raw : translated;
+  }
+
+  torrentStatusLabel(status: string): string {
+    return this.statusLabel('tstatus', status);
+  }
+
+  fliksStatusLabel(status: string): string {
+    return this.statusLabel('fstatus', status);
   }
 }

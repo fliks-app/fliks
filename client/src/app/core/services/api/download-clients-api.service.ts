@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
 
@@ -65,6 +65,20 @@ export interface QueueItem {
   statusMessage?: string;
 }
 
+export interface QueueResult {
+  items: QueueItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface QueueQuery {
+  page?: number;
+  pageSize?: number;
+  torrentStatus?: string;
+  fliksStatus?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class DownloadClientsApiService {
   private readonly http = inject(HttpClient);
@@ -98,8 +112,15 @@ export class DownloadClientsApiService {
     );
   }
 
-  getQueue() {
-    return firstValueFrom(this.http.get<QueueItem[]>('/api/download-clients/queue'));
+  getQueue(query: QueueQuery = {}) {
+    let params = new HttpParams();
+    if (query.page) params = params.set('page', query.page);
+    if (query.pageSize) params = params.set('pageSize', query.pageSize);
+    if (query.torrentStatus) params = params.set('torrentStatus', query.torrentStatus);
+    if (query.fliksStatus) params = params.set('fliksStatus', query.fliksStatus);
+    return firstValueFrom(
+      this.http.get<QueueResult>('/api/download-clients/queue', { params }),
+    );
   }
 
   removeTorrent(hash: string, clientId: number, deleteFiles = false) {

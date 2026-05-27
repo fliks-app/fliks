@@ -11,13 +11,42 @@
   </div>
 } @else if (queueError()) {
   <div role="alert" class="alert alert-error">{{ queueError() }}</div>
-} @else if (queue().length === 0) {
+} @else if (total() === 0 && !hasFilter()) {
   <div class="text-center py-16 text-base-content/50">
     <svg lucideDownload class="h-12 w-12 mx-auto mb-3 opacity-30"></svg>
     <p>{{ 'activity.queue_empty' | translate }}</p>
   </div>
 } @else {
   <div class="flex flex-col gap-3">
+    <div class="flex flex-wrap gap-2">
+      <select
+        class="select select-bordered select-sm min-w-40"
+        [ngModel]="torrentFilter()"
+        (ngModelChange)="setTorrentFilter($event)"
+      >
+        <option value="">{{ 'activity.filter_torrent_status' | translate }}</option>
+        @for (s of torrentStatusOptions; track s) {
+          <option [value]="s">{{ torrentStatusLabel(s) }}</option>
+        }
+      </select>
+      <select
+        class="select select-bordered select-sm min-w-40"
+        [ngModel]="fliksFilter()"
+        (ngModelChange)="setFliksFilter($event)"
+      >
+        <option value="">{{ 'activity.filter_fliks_status' | translate }}</option>
+        @for (s of fliksStatusOptions; track s) {
+          <option [value]="s">{{ fliksStatusLabel(s) }}</option>
+        }
+      </select>
+    </div>
+
+    @if (queue().length === 0) {
+      <div class="text-center py-12 text-base-content/50">
+        {{ 'activity.no_match' | translate }}
+      </div>
+    }
+
     @for (item of queue(); track item.hash) {
       <div class="card bg-base-100 border border-base-200 shadow-sm">
         <div class="card-body py-3 px-4 gap-2">
@@ -57,10 +86,10 @@
               </div>
             </div>
             <div class="flex items-center gap-1 shrink-0">
-              <span class="badge badge-sm badge-ghost">{{ item.trackerStatus }}</span>
+              <span class="badge badge-sm badge-ghost">{{ torrentStatusLabel(item.trackerStatus) }}</span>
               @if (item.status) {
                 <span class="badge badge-sm" [ngClass]="appStateClass(item.status)">
-                  {{ item.status }}
+                  {{ fliksStatusLabel(item.status) }}
                 </span>
               }
               <app-dropdown-menu placement="bottom-end">
@@ -126,6 +155,30 @@
             }
           </div>
         </div>
+      </div>
+    }
+
+    @if (totalPages() > 1) {
+      <div class="flex items-center justify-center gap-2 pt-1">
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          [disabled]="page() <= 1"
+          (click)="goToPage(page() - 1)"
+        >
+          {{ 'common.previous' | translate }}
+        </button>
+        <span class="text-sm text-base-content/60">
+          {{ 'activity.page_of' | translate:{ page: page(), total: totalPages() } }}
+        </span>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          [disabled]="page() >= totalPages()"
+          (click)="goToPage(page() + 1)"
+        >
+          {{ 'common.next' | translate }}
+        </button>
       </div>
     }
   </div>
