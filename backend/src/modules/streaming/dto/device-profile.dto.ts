@@ -77,6 +77,12 @@ export class DeviceProfileDto {
   @IsOptional()
   deviceType?: 'mobile' | 'desktop';
 
+  /** Human-readable client device for the admin streams dashboard
+   *  ("Chrome — macOS", "iPhone", "Chromecast — Living Room"). Cosmetic only. */
+  @IsString()
+  @IsOptional()
+  deviceName?: string;
+
   /**
    * Force MPEG-TS segments for every transcode session of this device.
    * Hard override, used as an emergency switch (admin / debug). The

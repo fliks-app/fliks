@@ -16,6 +16,7 @@ export interface ActiveStream {
   mode: 'transcode' | 'remux' | 'directplay';
   quality: string;
   hwAccel: string;
+  device: string | null;
   startedAt: string;
   lastActivity: string;
   positionSeconds: number;

@@ -581,6 +581,11 @@ export class StreamingController {
       mediaFileId,
       deviceProfile.deviceType ?? 'desktop',
     );
+    this.activeStreamTracker.setDeviceName(
+      (req.user as User).id,
+      mediaFileId,
+      deviceProfile.deviceName ?? '',
+    );
     // Resolve the effective `useTs`. The explicit profile flag wins as
     // an admin / debug hard override. Otherwise Tizen-style profiles
     // opt into TS only when the source has zero or one audio track

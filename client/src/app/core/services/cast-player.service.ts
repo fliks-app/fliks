@@ -154,6 +154,7 @@ export class CastPlayerService {
       maxAudioChannels: maxChannels,
       supportsHdr: cs.hdr ?? false,
       deviceType: 'desktop',
+      deviceName: deviceName ? `Chromecast — ${deviceName}` : 'Chromecast',
       // HLS-TS is disabled on Cast in every scenario. Originally
       // introduced as a workaround for the fMP4 + AAC encoder priming
       // desync (Shaka ignores the init segment `edts/elst` atom), but it

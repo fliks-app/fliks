@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { PlayerSettingsService } from './player-settings.service';
 import { DeviceService } from './device.service';
+import { getDeviceName } from '../utils/device-info';
 
 interface HdrPlugin {
   isSupported(): Promise<{ supported: boolean }>;
@@ -60,6 +61,9 @@ export interface DeviceProfile {
   /** Client device category — selects the backend bitrate ladder.
    *  Capacitor native (iOS/Android app) → 'mobile'; web (incl. Cast sender) → 'desktop'. */
   deviceType: 'mobile' | 'desktop';
+  /** Human-readable device shown on the admin streams dashboard
+   *  ("Chrome — macOS", "iPhone"). Cosmetic only. */
+  deviceName?: string;
   /** Hard force MPEG-TS HLS for every transcode session of this client.
    *  Defaults to `false`; the only switch in shipping configs is the
    *  narrower `useTsOnSingleAudio` below. Opt-in via
@@ -291,6 +295,7 @@ export class BrowserDeviceProfileService {
       maxAudioChannels,
       supportsHdr,
       deviceType: Capacitor.isNativePlatform() ? 'mobile' : 'desktop',
+      deviceName: getDeviceName(),
       useTs,
       // Tizen-style profiles opt into MPEG-TS on single-audio sources
       // (AVPlay's HLS-fMP4 rendition-probe stall, issue #148). Multi-

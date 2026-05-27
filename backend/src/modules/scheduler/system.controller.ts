@@ -66,6 +66,7 @@ export interface ActiveStreamDto {
   mode: 'transcode' | 'remux' | 'directplay';
   quality: string;
   hwAccel: string;
+  device: string | null;
   startedAt: string;
   lastActivity: string;
   // Progress
@@ -454,6 +455,9 @@ export class SystemController {
         mode: s.mode,
         quality: s.quality,
         hwAccel: s.hwAccelVal,
+        device: s.userId
+          ? this.activeStreamTracker.getDeviceName(s.userId, s.mediaFileId)
+          : null,
         startedAt: s.startedAt,
         lastActivity: s.lastActivity,
         positionSeconds,
