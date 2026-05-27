@@ -170,6 +170,16 @@ export class MediaController {
     return this.mediaService.bulkUpdate(dto);
   }
 
+  @Get(':id/tracking')
+  @CheckPolicies((ability) => ability.can(Action.Read, Media))
+  async tracking(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
+    await this.assertMediaAccessible(id, user);
+    return this.mediaService.getTrackingStatus(id);
+  }
+
   @Get(':id/releases')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
   async movieReleases(

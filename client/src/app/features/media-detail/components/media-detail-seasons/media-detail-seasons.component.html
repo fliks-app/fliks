@@ -18,6 +18,16 @@
         <span class="flex-1">{{ 'media_detail.episodes_available_only' | translate }}</span>
       </label>
       @if (selSeason) {
+        @if (selSeason.monitored) {
+          <button
+            type="button"
+            class="dropdown-item text-white"
+            (click)="viewSeasonTracking.emit(selSeason.seasonNumber)"
+          >
+            <svg lucideListChecks class="h-5 w-5 shrink-0 opacity-80"></svg>
+            <span class="flex-1">{{ 'tracking.menu_item' | translate }}</span>
+          </button>
+        }
         <button
           type="button"
           [disabled]="seasonWatchedBusyId() === selSeason.id"

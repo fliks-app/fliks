@@ -16,6 +16,7 @@ import {
   LucideEllipsisVertical,
   LucideEye,
   LucideEyeOff,
+  LucideListChecks,
   LucidePackage,
   LucideX,
 } from '@lucide/angular';
@@ -41,7 +42,7 @@ import { PlayableMediaService } from '../../../../core/services/playable-media.s
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, FormsModule, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, TvSelectDirective, TvRowDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucidePackage, LucideX],
+  imports: [TranslateModule, FormsModule, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, TvSelectDirective, TvRowDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideListChecks, LucidePackage, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
@@ -87,6 +88,8 @@ export class MediaDetailSeasonsComponent {
   readonly toggleEpisodeWatched = output<{ episode: Episode; watched: boolean }>();
   /** Viewer (regular requester) asks to (re-)request this season. */
   readonly requestSeason = output<Season>();
+  /** Open the tracking-status modal for this season (emits the season number). */
+  readonly viewSeasonTracking = output<number>();
   readonly seasonWatchedBusyId = input<number | null>(null);
 
   /** Every episode with a file in the season is in the watched set. */

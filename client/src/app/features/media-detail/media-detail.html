@@ -73,6 +73,7 @@
           (editSubtitles)="openSubtitles()"
           (episodeWatchedToggled)="onEpisodeWatchedToggledFromHeader($event)"
           (requestMedia)="openRequestForMedia()"
+          (openTracking)="openTracking({ kind: 'episode', episodeId: ep.id })"
         />
 
         @if (currentSeasonEpisodes().length > 1) {
@@ -180,6 +181,7 @@
           (seriesWatchedToggled)="onSeriesWatchedToggled($event)"
           (editSubtitles)="openSubtitles()"
           (requestMedia)="openRequestForMedia()"
+          (openTracking)="openTracking(m.type === 'movie' ? { kind: 'movie' } : { kind: 'series' })"
         />
 
         @if (m.type === 'movie') {
@@ -232,6 +234,7 @@
             (toggleSeasonWatched)="onToggleSeasonWatched(m.id, $event.season, $event.watched)"
             (toggleEpisodeWatched)="onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
             (requestSeason)="openRequestForSeason($event)"
+            (viewSeasonTracking)="openTracking({ kind: 'season', seasonNumber: $event })"
           />
         }
 
@@ -250,6 +253,7 @@
 
     <!-- Modals (shared between modes) -->
     <div>
+      <app-tracking-status-modal #trackingModal />
       <app-releases-modal #movieReleasesModal
         [title]="'media_detail.download_section' | translate"
         [releases]="releases()"

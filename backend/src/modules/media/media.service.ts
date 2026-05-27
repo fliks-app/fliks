@@ -92,6 +92,10 @@ export class MediaService {
     return this.query.findOne(id);
   }
 
+  getTrackingStatus(id: number) {
+    return this.query.getTrackingStatus(id);
+  }
+
   getCast(mediaId: number): Promise<MediaCast[]> {
     return this.query.getCast(mediaId);
   }

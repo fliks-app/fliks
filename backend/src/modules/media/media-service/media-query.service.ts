@@ -16,8 +16,42 @@ import { CalendarQueryDto } from '../dto/calendar-query.dto';
 import { MediaType } from '../../../common/enums';
 import {
   getAppQualityById,
+  AppQualityDefinition,
 } from '../../../common/constants/app-qualities';
 import { rankFromQualityString } from '../release-rejection.helper';
+import { parseReleaseQuality } from '../../../common/release-parsing';
+
+export type CutoffState =
+  | 'unmonitored'
+  | 'no-profile'
+  | 'missing'
+  | 'below'
+  | 'met';
+
+export interface TrackingItemState {
+  monitored: boolean;
+  state: CutoffState;
+  /** Resolution label of the best file on disk (e.g. "1080p"), when present. */
+  currentQuality?: string;
+  /** Profile cutoff label (e.g. "2160p"), set when state is `below`. */
+  targetQuality?: string;
+}
+
+export interface TrackingEpisode extends TrackingItemState {
+  episodeId: number;
+  seasonNumber: number;
+  episodeNumber: number;
+  title: string | null;
+}
+
+export interface TrackingStatus {
+  type: MediaType;
+  hasProfile: boolean;
+  /** Movie only. */
+  movie?: TrackingItemState;
+  /** Series only. */
+  seasons?: { seasonNumber: number; episodes: TrackingEpisode[] }[];
+}
 
 /**
  * Subquery returning every media.id that the user (`:userId` bind) has
@@ -456,6 +490,84 @@ export class MediaQueryService {
       }
     }
     return media;
+  }
+
+  /**
+   * Per-item monitoring + cutoff state for the "tracking status" modal.
+   * Movie → a single state; series → every episode grouped by season (each
+   * episode keeps its own state so the UI can show "not monitored", "cutoff
+   * met", or the reason it isn't: missing / below cutoff / no profile).
+   */
+  async getTrackingStatus(id: number): Promise<TrackingStatus> {
+    const media = await this.findOne(id);
+    const profile = media.qualityProfile;
+    const cutoffDef = profile ? getAppQualityById(profile.cutoff) : undefined;
+    const targetQuality = cutoffDef ? this.qualityLabel(cutoffDef) : null;
+
+    const stateOf = (
+      monitored: boolean,
+      files: { quality: string }[],
+    ): TrackingItemState => {
+      if (!monitored) return { monitored, state: 'unmonitored' };
+      if (!cutoffDef) return { monitored, state: 'no-profile' };
+      if (!files.length) return { monitored, state: 'missing' };
+      let best: AppQualityDefinition | undefined;
+      for (const f of files) {
+        const def = parseReleaseQuality(f.quality).quality;
+        if (!best || def.rank > best.rank) best = def;
+      }
+      if (best && best.rank >= cutoffDef.rank) {
+        return { monitored, state: 'met', currentQuality: this.qualityLabel(best) };
+      }
+      // Same resolution but a lower-ranked source (e.g. HDTV-2160p vs the
+      // Bluray-2160p cutoff) would render as "2160p → 2160p" and look like a
+      // bug — fall back to the full quality names when resolutions collide so
+      // the actual gap is visible.
+      const sameResolution = !!best && best.resolution === cutoffDef.resolution;
+      return {
+        monitored,
+        state: 'below',
+        currentQuality: best
+          ? sameResolution
+            ? best.name
+            : this.qualityLabel(best)
+          : undefined,
+        targetQuality: sameResolution ? cutoffDef.name : targetQuality ?? undefined,
+      };
+    };
+
+    if (media.type === MediaType.MOVIE) {
+      return {
+        type: media.type,
+        hasProfile: !!profile,
+        movie: stateOf(media.monitored, media.files ?? []),
+      };
+    }
+
+    const filesByEpisode = new Map<number, { quality: string }[]>();
+    for (const f of media.files ?? []) {
+      if (f.episodeId == null) continue;
+      const list = filesByEpisode.get(f.episodeId) ?? [];
+      list.push({ quality: f.quality });
+      filesByEpisode.set(f.episodeId, list);
+    }
+
+    const seasons = (media.seasons ?? []).map((s) => ({
+      seasonNumber: s.seasonNumber,
+      episodes: (s.episodes ?? []).map((e) => ({
+        episodeId: e.id,
+        seasonNumber: s.seasonNumber,
+        episodeNumber: e.episodeNumber,
+        title: e.title,
+        ...stateOf(e.monitored, filesByEpisode.get(e.id) ?? []),
+      })),
+    }));
+
+    return { type: media.type, hasProfile: !!profile, seasons };
+  }
+
+  private qualityLabel(def: AppQualityDefinition): string {
+    return def.resolution > 0 ? `${def.resolution}p` : def.name;
   }
 
   async getCalendar(
