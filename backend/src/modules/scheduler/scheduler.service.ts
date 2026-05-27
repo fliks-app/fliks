@@ -634,6 +634,7 @@ export class SchedulerService implements OnModuleInit {
         // Episodes are typically 20-60 min; 30 min fallback for size check.
         runtimeMinutes: media.runtime ?? 30,
         seasonNumber: season.seasonNumber,
+        episodeNumber: ep.episodeNumber,
         seasonId: season.id,
         episodeId: ep.id,
         pendingCheck: async () => {

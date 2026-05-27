@@ -572,6 +572,7 @@ export class CompletionService {
     const importedFiles: {
       savedFile: MediaFile;
       episodeId?: number;
+      seasonId?: number;
       destPath: string;
     }[] = [];
 
@@ -583,6 +584,7 @@ export class CompletionService {
       let newFilename: string;
       let destDir: string;
       let episodeId: number | undefined;
+      let seasonId: number | undefined;
 
       if (media.type === MediaType.MOVIE) {
         newFilename = this.naming.applyMovieFormat(movieFormat, {
@@ -614,6 +616,7 @@ export class CompletionService {
             where: { media: { id: media.id }, seasonNumber: epNums.season },
           });
           if (season) {
+            seasonId = season.id;
             const episode = await this.episodeRepo.findOne({
               where: {
                 season: { id: season.id },
@@ -721,10 +724,45 @@ export class CompletionService {
         await this.episodeRepo.update(episodeId, { hasFile: true });
       }
 
-      importedFiles.push({ savedFile, episodeId, destPath });
+      importedFiles.push({ savedFile, episodeId, seasonId, destPath });
     }
 
-    await this.historyRepo.update(history.id, { status: 'completed' });
+    // Reconcile the history row with what was actually imported. Its
+    // episode/season were set at grab time to the episode we *searched
+    // for*; a loose indexer match can land a different episode's release,
+    // leaving Activities showing the wrong episode. Re-point from the
+    // imported files: a single episode pins both; a season pack pins the
+    // season and clears the episode. This also self-heals legacy mislinked
+    // rows on re-import.
+    const completedPatch: {
+      status: 'completed';
+      episode?: Episode | null;
+      season?: Season | null;
+    } = { status: 'completed' };
+    if (media.type === MediaType.SERIES) {
+      const epIds = [
+        ...new Set(
+          importedFiles
+            .map((f) => f.episodeId)
+            .filter((id): id is number => id != null),
+        ),
+      ];
+      const seasonIds = [
+        ...new Set(
+          importedFiles
+            .map((f) => f.seasonId)
+            .filter((id): id is number => id != null),
+        ),
+      ];
+      if (epIds.length === 1 && seasonIds.length === 1) {
+        completedPatch.episode = { id: epIds[0] } as Episode;
+        completedPatch.season = { id: seasonIds[0] } as Season;
+      } else if (seasonIds.length === 1) {
+        completedPatch.episode = null;
+        completedPatch.season = { id: seasonIds[0] } as Season;
+      }
+    }
+    await this.historyRepo.update(history.id, completedPatch);
     this.log.log(
       `Import[${history.sourceTitle}]: completed successfully (${importedFiles.length} file(s))`,
     );

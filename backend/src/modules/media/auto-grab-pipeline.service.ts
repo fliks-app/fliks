@@ -7,6 +7,7 @@ import { DownloadHistory } from './entities/download-history.entity';
 import { buildGrabHistoryRow } from './grab-history.util';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { TorznabRelease } from '../indexers/torznab.service';
+import { parseSeasonEpisode } from '../../common/release-parsing';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
@@ -72,6 +73,36 @@ export class AutoGrabPipelineService {
     @Inject(forwardRef(() => RequestLifecycleService))
     private readonly requestLifecycle: RequestLifecycleService,
   ) {}
+
+  /**
+   * Keep only releases compatible with a single-episode target. A release
+   * is dropped when it positively parses to a different season, or to a
+   * different individual episode of the same season. Releases we can't pin
+   * (no parseable S/E) and full-season packs of the right season are kept.
+   * No-op unless both `seasonNumber` and `episodeNumber` are provided.
+   */
+  private filterToTargetEpisode(
+    releases: TorznabRelease[],
+    seasonNumber: number | undefined,
+    episodeNumber: number | undefined,
+    label: string,
+  ): TorznabRelease[] {
+    if (seasonNumber == null || episodeNumber == null) return releases;
+    const kept = releases.filter((r) => {
+      const p = parseSeasonEpisode(r.title);
+      if (p.season == null) return true; // unparseable — leave to the scorer
+      if (p.season !== seasonNumber) return false;
+      if (p.episode != null && p.episode !== episodeNumber) return false;
+      return true;
+    });
+    const dropped = releases.length - kept.length;
+    if (dropped) {
+      this.log.log(
+        `AutoGrab[series]: "${label}" — dropped ${dropped} release(s) belonging to another episode`,
+      );
+    }
+    return kept;
+  }
 
   async buildScoringContext(
     indexers: Indexer[],
@@ -157,6 +188,11 @@ export class AutoGrabPipelineService {
      *  the lifecycle hook can flip only the matching per-season
      *  requests. Whole-series and movie grabs pass undefined. */
     seasonNumber?: number;
+    /** Episode number targeted by this grab. When set together with
+     *  `seasonNumber`, releases that positively parse to a *different*
+     *  episode are rejected — indexer text search is loose and routinely
+     *  returns sibling episodes for a single-episode query. */
+    episodeNumber?: number;
     /** Season + episode primary keys — persisted on the
      *  `DownloadHistory` row so Activities can show "Show — S01E03"
      *  for a single-episode grab without joining back through the
@@ -189,11 +225,27 @@ export class AutoGrabPipelineService {
       return false;
     }
 
+    // Episode-targeted search: drop releases that positively belong to a
+    // different episode. Indexer text search is loose and returns sibling
+    // episodes (and the scorer would happily pick the highest-quality one,
+    // recording it under the searched episode). Season packs of the right
+    // season are kept — they cover the episode and import per-file.
+    const releases = this.filterToTargetEpisode(
+      args.releases,
+      args.seasonNumber,
+      args.episodeNumber,
+      args.label,
+    );
+    if (!releases.length) {
+      logSkip('no release matched the targeted episode');
+      return false;
+    }
+
     const { allowed, allowedLangs } = this.profiles.resolveAllowedForMedia(
       args.media,
     );
     const sorted = await scoreAndSortReleases(
-      args.releases,
+      releases,
       {
         allowed,
         allowedLangs,
