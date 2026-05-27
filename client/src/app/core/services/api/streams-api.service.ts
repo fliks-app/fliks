@@ -59,9 +59,16 @@ export class StreamsApiService {
     );
   }
 
-  sendCommand(sessionId: string, action: 'pause' | 'play' | 'stop') {
+  sendCommand(
+    sessionId: string,
+    action: 'pause' | 'play' | 'stop' | 'message',
+    message?: string,
+  ) {
     return firstValueFrom(
-      this.http.post<void>(`/api/system/streams/${sessionId}/command`, { action }),
+      this.http.post<void>(`/api/system/streams/${sessionId}/command`, {
+        action,
+        message,
+      }),
     );
   }
 }

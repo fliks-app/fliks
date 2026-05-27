@@ -152,12 +152,13 @@ export class LayoutComponent implements OnInit, OnDestroy {
     const event = this.sse.lastEvent();
     if (!event) return;
     switch (event.type) {
-      case 'import.complete':
-      case 'import.failed':
+      // import.complete / import.failed are user-targeted (only the requester
+      // receives them), so library counts ride the broadcast queue.updated that
+      // follows every import — otherwise non-requesters' sidebars go stale.
+      case 'queue.updated':
         this.refreshMediaCounts();
         this.refreshQueueCount();
         break;
-      case 'queue.updated':
       case 'stalled.removed':
         this.refreshQueueCount();
         break;

@@ -67,6 +67,26 @@
     </div>
   }
 
+  @if (adminMessage(); as msg) {
+    <div
+      class="absolute left-1/2 -translate-x-1/2 z-[60] w-[min(90%,28rem)]"
+      style="top: max(1.5rem, env(safe-area-inset-top))"
+    >
+      <div class="alert alert-info shadow-lg">
+        <svg lucideInfo class="h-5 w-5 shrink-0"></svg>
+        <span class="text-sm flex-1 break-words">{{ msg }}</span>
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs btn-square"
+          (click)="dismissAdminMessage()"
+          [attr.aria-label]="'common.close_notification' | translate"
+        >
+          <svg lucideX class="h-4 w-4"></svg>
+        </button>
+      </div>
+    </div>
+  }
+
   @if (!inPipMode()) {
   <app-player-controls
     [visible]="controlsVisible()"

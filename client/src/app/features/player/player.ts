@@ -67,12 +67,12 @@ interface PipPlugin {
 }
 const Pip = registerPlugin<PipPlugin>('Pip');
 
-import { LucideCircleAlert } from '@lucide/angular';
+import { LucideCircleAlert, LucideInfo, LucideX } from '@lucide/angular';
 import { PlayerControlsComponent } from './controls/player-controls';
 import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
 
 @Component({
-  imports: [TranslateModule, LucideCircleAlert, PlayerControlsComponent, PlayerStatsOverlayComponent],
+  imports: [TranslateModule, LucideCircleAlert, LucideInfo, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player.html',
   encapsulation: ViewEncapsulation.None,
@@ -300,6 +300,24 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.wasCasting = casting;
   });
 
+  // Admin message overlay — rendered inside the player container so it stays
+  // visible in browser fullscreen (the global toast layer sits outside the
+  // fullscreened element and gets clipped).
+  readonly adminMessage = signal<string | null>(null);
+  private adminMessageTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private showAdminMessage(text: string) {
+    if (this.adminMessageTimer) clearTimeout(this.adminMessageTimer);
+    this.adminMessage.set(text);
+    this.adminMessageTimer = setTimeout(() => this.adminMessage.set(null), 6000);
+  }
+
+  dismissAdminMessage() {
+    if (this.adminMessageTimer) clearTimeout(this.adminMessageTimer);
+    this.adminMessageTimer = null;
+    this.adminMessage.set(null);
+  }
+
   // Remote control: listen for admin commands via SSE
   private readonly remoteCommandEffect = effect(() => {
     const event = this.sseService.lastEvent();
@@ -307,6 +325,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const cmd = event as any;
     const currentUserId = this.authService.user()?.id;
     if (cmd.mediaFileId !== this.mediaFileId || cmd.userId !== currentUserId) return;
+
+    if (cmd.action === 'message') {
+      const text = (cmd.message as string)?.trim();
+      if (text) this.showAdminMessage(text);
+      return;
+    }
 
     if (this.castService.isConnected()) {
       if (cmd.action === 'pause') this.castService.pause();
@@ -1102,6 +1126,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.saveInterval) clearInterval(this.saveInterval);
     if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
     if (this.statsInterval) clearInterval(this.statsInterval);
+    if (this.adminMessageTimer) clearTimeout(this.adminMessageTimer);
     document.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('beforeunload', this.onBeforeUnload);
     window.removeEventListener('app:playerBack', this.onPlayerBackEvent);

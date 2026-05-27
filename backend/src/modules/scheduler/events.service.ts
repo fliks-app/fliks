@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Subject, Observable, Subscription } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { filter, map } from 'rxjs/operators';
 
 export type SseEvent =
   | {
@@ -111,22 +111,45 @@ export type SseEvent =
       deviceId: string;
     };
 
+/**
+ * Wraps an `SseEvent` with its delivery audience. `audience: null` is a
+ * broadcast (everyone connected); a numeric array restricts the SSE push to
+ * those user IDs. Backend-internal `subscribe()` listeners ignore the audience
+ * and always see the event — the audience only gates the client-facing stream.
+ */
+interface SseEnvelope {
+  audience: number[] | null;
+  event: SseEvent;
+}
+
 @Injectable()
 export class EventsService {
-  private readonly subject = new Subject<SseEvent>();
+  private readonly subject = new Subject<SseEnvelope>();
 
+  /** Broadcast to every connected client. */
   emit(event: SseEvent): void {
-    this.subject.next(event);
+    this.subject.next({ audience: null, event });
   }
 
-  getStream(): Observable<MessageEvent> {
-    return this.subject
-      .asObservable()
-      .pipe(map((data) => ({ data: JSON.stringify(data) }) as MessageEvent));
+  /** Deliver only to the given user's SSE connections. */
+  emitToUser(userId: number, event: SseEvent): void {
+    this.subject.next({ audience: [userId], event });
+  }
+
+  /** Deliver only to the given users' SSE connections. Empty list = nobody. */
+  emitToUsers(userIds: number[], event: SseEvent): void {
+    this.subject.next({ audience: userIds, event });
+  }
+
+  getStream(userId: number): Observable<MessageEvent> {
+    return this.subject.asObservable().pipe(
+      filter((env) => env.audience === null || env.audience.includes(userId)),
+      map((env) => ({ data: JSON.stringify(env.event) }) as MessageEvent),
+    );
   }
 
   /** Backend-internal listener — used by services that react to other modules' events. */
   subscribe(handler: (event: SseEvent) => void): Subscription {
-    return this.subject.subscribe(handler);
+    return this.subject.subscribe((env) => handler(env.event));
   }
 }
