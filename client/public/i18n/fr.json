@@ -854,6 +854,17 @@
     "fstatus_quality_not_upgraded": "Qualité non améliorée",
     "fstatus_import_failed": "Échec de l'import"
   },
+  "tracking": {
+    "menu_item": "Voir l'état du suivi",
+    "title": "État du suivi",
+    "this_movie": "Ce film",
+    "season": "Saison {{number}}",
+    "not_monitored": "Non surveillé",
+    "cutoff_met": "Cutoff atteint",
+    "missing": "Manquant",
+    "no_profile": "Aucun profil qualité",
+    "empty": "Rien à afficher"
+  },
   "calendar": {
     "title": "Calendrier",
     "load_error": "Impossible de charger le calendrier.",

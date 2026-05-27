@@ -40,6 +40,10 @@ import { SubtitlesModalComponent } from '../../shared/components/subtitles-modal
 import { MediaFileInfoComponent } from '../../shared/components/media-file-info';
 import { MediaDetailSeasonsComponent } from './components/media-detail-seasons/media-detail-seasons.component';
 import { ReleasesModalComponent } from './components/releases-modal/releases-modal.component';
+import {
+  TrackingStatusModalComponent,
+  TrackingScope,
+} from '../../shared/components/tracking-status-modal/tracking-status-modal';
 import { MediaDetailProfilesModalComponent } from './components/media-detail-profiles-modal/media-detail-profiles-modal.component';
 import { MediaDetailLibraryModalComponent } from './components/media-detail-library-modal/media-detail-library-modal.component';
 import { RequestModalComponent } from '../tmdb-preview/components/request-modal/request-modal.component';
@@ -83,6 +87,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     MediaFileInfoComponent,
     MediaDetailSeasonsComponent,
     ReleasesModalComponent,
+    TrackingStatusModalComponent,
     MediaDetailProfilesModalComponent,
     MediaDetailLibraryModalComponent,
     RequestModalComponent,
@@ -590,6 +595,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly profilesModal = viewChild(MediaDetailProfilesModalComponent);
   readonly libraryModal = viewChild(MediaDetailLibraryModalComponent);
   readonly subtitleSection = viewChild(SubtitlesModalComponent);
+  readonly trackingModal = viewChild(TrackingStatusModalComponent);
+
+  openTracking(scope: TrackingScope): void {
+    const id = this.media()?.id;
+    if (id == null) return;
+    void this.trackingModal()?.open(id, scope);
+  }
 
   readonly episodeDialogFiles = computed(() => {
     const c = this.episodeDrawerContext();

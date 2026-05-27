@@ -374,6 +374,12 @@
       <span class="flex-1">{{ (watched() ? 'media_detail.mark_series_unwatched' : 'media_detail.mark_series_watched') | translate }}</span>
     </button>
   }
+  @if (monitored()) {
+    <button type="button" class="dropdown-item text-white" (click)="openTracking.emit()">
+      <svg lucideListChecks class="h-5 w-5 shrink-0 opacity-80"></svg>
+      <span class="flex-1">{{ 'tracking.menu_item' | translate }}</span>
+    </button>
+  }
   <!-- Grab + Search releases are per-unit (movie or single episode). Hide
        on the series-level header — the user picks a specific episode
        from the seasons grid first, which renders its own header with

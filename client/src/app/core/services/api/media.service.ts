@@ -111,6 +111,34 @@ export interface Media {
   metadata?: MediaMetadataBrief | null;
 }
 
+export type CutoffState =
+  | 'unmonitored'
+  | 'no-profile'
+  | 'missing'
+  | 'below'
+  | 'met';
+
+export interface TrackingItemState {
+  monitored: boolean;
+  state: CutoffState;
+  currentQuality?: string;
+  targetQuality?: string;
+}
+
+export interface TrackingEpisode extends TrackingItemState {
+  episodeId: number;
+  seasonNumber: number;
+  episodeNumber: number;
+  title: string | null;
+}
+
+export interface TrackingStatus {
+  type: 'movie' | 'series';
+  hasProfile: boolean;
+  movie?: TrackingItemState;
+  seasons?: { seasonNumber: number; episodes: TrackingEpisode[] }[];
+}
+
 /** Extended TMDB fields rendered in the media-detail info panel. */
 export interface MediaMetadataBrief {
   budget: number | null;
@@ -289,6 +317,12 @@ export class MediaService {
 
   getOne(id: number) {
     return firstValueFrom(this.http.get<Media>(`/api/media/${id}`));
+  }
+
+  getTracking(id: number) {
+    return firstValueFrom(
+      this.http.get<TrackingStatus>(`/api/media/${id}/tracking`),
+    );
   }
 
   getCast(id: number) {

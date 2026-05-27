@@ -26,6 +26,7 @@ import {
   LucideFileText,
   LucideFilm,
   LucideFolder,
+  LucideListChecks,
   LucidePlay,
   LucideRotateCcw,
   LucideScanLine,
@@ -88,7 +89,7 @@ interface AudioTrack {
     DecimalPipe, FormsModule, RouterLink, TranslateModule,
     LucideCaptions, LucideChevronLeft, LucideCheck, LucideClipboardList, LucideDownload,
     LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideFileText,
-    LucideFilm, LucideFolder, LucidePlay, LucideRotateCcw, LucideScanLine,
+    LucideFilm, LucideFolder, LucideListChecks, LucidePlay, LucideRotateCcw, LucideScanLine,
     LucideSearch, LucideSettings, LucideSkipForward, LucideTrash2,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -182,6 +183,9 @@ export class MediaInfoHeaderComponent {
   readonly openAnalyze = output<void>();
   readonly detectIntros = output<void>();
   readonly editSubtitles = output<void>();
+  /** Open the tracking-status modal scoped to this header's context
+   *  (whole series / the movie / the current episode). */
+  readonly openTracking = output<void>();
   /** Viewer (regular requester) asks to (re-)request the current title. */
   readonly requestMedia = output<void>();
   /** Emitted after a series-level bulk watched toggle. Parent should refresh its episode watched list. */
