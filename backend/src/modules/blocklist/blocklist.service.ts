@@ -6,6 +6,7 @@ import { CreateBlocklistEntryDto } from './dto/create-blocklist-entry.dto';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { Media } from '../media/entities/media.entity';
 import { User } from '../users/entities/user.entity';
+import { DownloadHistory } from '../media/entities/download-history.entity';
 
 @Injectable()
 export class BlocklistService {
@@ -31,6 +32,22 @@ export class BlocklistService {
       user: userId ? ({ id: userId } as User) : null,
     });
     return this.repo.save(row);
+  }
+
+  /** Blocklist the release behind a download-history row. Single source of
+   *  truth for the field mapping shared by failed-import, stalled-cleanup and
+   *  the manual "block torrent" action. */
+  createFromHistory(
+    history: DownloadHistory,
+    note: string,
+  ): Promise<BlocklistEntry> {
+    return this.create({
+      sourceTitle: history.sourceTitle,
+      quality: history.quality ?? undefined,
+      mediaId: history.mediaId ?? undefined,
+      indexerId: history.indexerId ?? undefined,
+      note,
+    });
   }
 
   async findAll(

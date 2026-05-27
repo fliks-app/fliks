@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { DownloadClient } from './entities/download-client.entity';
 import { DownloadHistory } from '../media/entities/download-history.entity';
 import { Media } from '../media/entities/media.entity';
@@ -9,6 +9,8 @@ import { CreateDownloadClientDto } from './dto/create-download-client.dto';
 import { UpdateDownloadClientDto } from './dto/update-download-client.dto';
 import { TestDownloadClientDto } from './dto/test-download-client.dto';
 import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
+import { BlocklistService } from '../blocklist/blocklist.service';
+import { enqueueCommand } from '../../common/utils/command-queue.util';
 
 export interface QueueEntry extends QbittorrentTorrent {
   clientId: number;
@@ -88,6 +90,8 @@ export class DownloadClientsService {
     private readonly historyRepo: Repository<DownloadHistory>,
     private readonly qbittorrent: QbittorrentService,
     private readonly historyMatcher: TorrentHistoryMatcher,
+    private readonly blocklist: BlocklistService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async testConnection(
@@ -146,6 +150,84 @@ export class DownloadClientsService {
       throw new NotFoundException('Client does not support torrent deletion');
     }
     await this.qbittorrent.deleteTorrent(client, hash, deleteFiles);
+  }
+
+  /**
+   * Blocklist a torrent's release so it can't be grabbed again, remove it
+   * (with its files) from the client, mark the history row failed, and queue
+   * a scoped SearchMissing for its media. The re-grab is best-effort and only
+   * acts when the configured rules allow it (media monitored, has a profile,
+   * still missing) — SearchMissing classifies and skips otherwise, and the
+   * blocklist row excludes the release we just removed.
+   */
+  async blockTorrent(clientId: number, hash: string): Promise<void> {
+    const client = await this.findOne(clientId);
+    if (!this.qbittorrent.supports(client)) {
+      throw new NotFoundException('Client does not support torrent deletion');
+    }
+
+    const entry = await this.findHistoryByHash(hash);
+    if (entry) {
+      try {
+        await this.blocklist.createFromHistory(
+          entry,
+          'Blocked from the activity queue',
+        );
+      } catch {
+        // Already blocklisted — fine, continue with removal.
+      }
+    }
+
+    await this.qbittorrent.deleteTorrent(client, hash, true);
+
+    if (entry) {
+      await this.historyRepo.update(entry.id, {
+        status: 'failed',
+        statusMessage: 'Blocked from the activity queue',
+      });
+    }
+
+    // Potentially re-grab a replacement per the configured rules: queue a
+    // scoped SearchMissing. The scheduler decides whether anything is grabbed
+    // (monitored + profiled + missing), and the blocklist row excludes the
+    // release we just removed.
+    if (entry?.mediaId) {
+      await enqueueCommand(this.dataSource, 'SearchMissing', {
+        mediaIds: [entry.mediaId],
+      });
+    }
+  }
+
+  /** Resolve a DownloadHistory row from a torrent hash, falling back to a
+   *  name match across enabled clients when the hash isn't stored yet. */
+  private async findHistoryByHash(
+    hash: string,
+  ): Promise<DownloadHistory | null> {
+    const byHash = await this.historyRepo.findOne({
+      where: { torrentHash: hash },
+      order: { createdAt: 'DESC' },
+    });
+    if (byHash) return byHash;
+
+    const clients = await this.repo.find({ where: { enabled: true } });
+    for (const client of clients) {
+      if (!this.qbittorrent.supports(client)) continue;
+      try {
+        const torrents = await this.qbittorrent.getTorrents(client);
+        const t = torrents.find(
+          (t) => t.hash?.toLowerCase() === hash.toLowerCase(),
+        );
+        if (t) {
+          return this.historyRepo.findOne({
+            where: { sourceTitle: t.name },
+            order: { createdAt: 'DESC' },
+          });
+        }
+      } catch {
+        continue;
+      }
+    }
+    return null;
   }
 
   async linkTorrentToMedia(
