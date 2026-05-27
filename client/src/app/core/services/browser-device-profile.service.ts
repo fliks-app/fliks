@@ -180,6 +180,7 @@ export class BrowserDeviceProfileService {
     // the backend pick HEVC again skips a transcode for HEVC sources on
     // Q-series TVs.
     const isTv = this.device.isTv();
+    const tvPlatform = this.device.tvPlatform();
     if (
       this.testCodec(video, hasMSE, 'video/mp4', 'hvc1.1.6.L120.B0') ||
       this.testCodec(video, hasMSE, 'video/mp4', 'hev1.1.6.L120.B0')
@@ -259,6 +260,16 @@ export class BrowserDeviceProfileService {
     if (this.nativeAudio) {
       maxAudioChannels = Math.max(maxAudioChannels, this.nativeAudio.maxChannels);
     }
+    // webOS: the WebView's AudioContext caps at 2ch, but the native <video>
+    // pipeline decodes Dolby and renders/passes it (TV speakers downmix, eARC
+    // passes through). Declaring 5.1 when AC3/EAC3 is supported lets the
+    // backend DirectStream multichannel Dolby instead of downmixing to stereo.
+    if (
+      tvPlatform === 'webos' &&
+      (audioCodecs.includes('eac3') || audioCodecs.includes('ac3'))
+    ) {
+      maxAudioChannels = Math.max(maxAudioChannels, 6);
+    }
 
     // --- HDR support ---
     let supportsHdr: boolean;
@@ -297,13 +308,13 @@ export class BrowserDeviceProfileService {
       deviceType: Capacitor.isNativePlatform() ? 'mobile' : 'desktop',
       deviceName: getDeviceName(),
       useTs,
-      // Tizen-style profiles opt into MPEG-TS on single-audio sources
-      // (AVPlay's HLS-fMP4 rendition-probe stall, issue #148). Multi-
-      // audio sources stay on fMP4 + var_stream_map — that path works
-      // because the master exposes ≥2 audio renditions and AVPlay
-      // engages its probe. Browser, Cast and native mobile leave the
-      // flag off and consume muxed fMP4 across the board.
-      useTsOnSingleAudio: isTv,
+      // Tizen opts into MPEG-TS on single-audio sources (AVPlay's HLS-fMP4
+      // rendition-probe stall, issue #148). Multi-audio sources stay on
+      // fMP4 + var_stream_map — that path works because the master exposes
+      // ≥2 audio renditions and AVPlay engages its probe. webOS, browser,
+      // Cast and native mobile consume muxed fMP4 across the board (webOS's
+      // native <video> has no such stall and fMP4 keeps Dolby pass-through).
+      useTsOnSingleAudio: tvPlatform === 'tizen',
     };
   }
 

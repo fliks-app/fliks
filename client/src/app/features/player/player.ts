@@ -45,6 +45,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 import { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import { ShakaEngine } from '../../core/services/playback-engine/shaka-engine';
 import { TizenEngine, isTizenAvplayAvailable } from '../../core/services/playback-engine/tizen-engine';
+import { WebOsEngine } from '../../core/services/playback-engine/webos-engine';
 import { NativePlayer } from '../../core/plugins/native-player.plugin';
 import { NativeEngine } from '../../core/services/playback-engine/native-engine';
 import { PlayerStateService } from '../../core/services/player-state.service';
@@ -190,6 +191,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  from `isNative` (Capacitor) and from `device.isTv()` (which is true
    *  on any TV form factor including the placeholder browser preview). */
   readonly isTizen = isTizenAvplayAvailable();
+  /** LG webOS TV. Plays through the native `<video>` media pipeline
+   *  (HW HEVC/AV1, Dolby, HDR, native HLS) — a regular in-WebView element,
+   *  so it groups with the Shaka UX, not the transparent-plane native one. */
+  readonly isWebOs = this.device.tvPlatform() === 'webos';
 
   /** Template binding — true when using native (ExoPlayer/AVPlayer) engine. */
   get nativeEngine(): boolean {
@@ -829,17 +834,28 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // the WebView — Shaka chokes on Tizen 6.5 MSE: e.g. EAC3 audio
         // claims support but `addSourceBuffer` throws).
         // Web (browser) keeps the Shaka path.
-        if (this.isTizen) {
-          await this.createTizenEngine();
+        if (this.isTizen || this.isWebOs) {
+          // Both TV pipelines (Samsung AVPlay, LG native <video>) share the
+          // same shape: a native HW decoder with a DOM subtitle overlay and
+          // the streamInfo audio fallback — no Shaka/MSE. They differ only in
+          // the engine instance.
+          if (this.isWebOs) {
+            await this.createWebOsEngine();
+          } else {
+            await this.createTizenEngine();
+          }
+          this.applyNativeSubtitleStyle();
 
           // Subtitle fetch in parallel with engine load — AVPlay's
           // `setExternalSubtitlePath` waits for the player to be in
           // READY/PLAYING state, so we load(...) first, then attach
           // the active subtitle after prepareAsync resolves.
-          const tizenSubsPromise = this.trackManager.loadSubtitles(
+          const tvSubsPromise = this.trackManager.loadSubtitles(
             this.mediaId, this.mediaFileId, this.streamingApi, this.media,
           );
 
+          // Auth rides in the URL query (?token=); the Bearer header is for
+          // AVPlay/ExoPlayer only — the webOS <video> ignores it.
           const token =
             this.authService.streamToken() ?? this.authService.accessToken;
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
@@ -857,7 +873,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           // Subtitles loaded — expose to the picker. The full auto-pick
           // path (remembered selection, language match, forced subs) is
           // shared with native/Shaka further down, via `autoSelectSubtitle`.
-          const subs = await tizenSubsPromise;
+          const subs = await tvSubsPromise;
           this.availableSubtitles.set(subs);
           await this.trackManager.autoSelectSubtitle(
             subs,
@@ -1163,6 +1179,31 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.volume.set(video.muted ? 0 : video.volume);
     });
     // durationchange fallback: only use if we don't already have a reliable duration
+    video.addEventListener('durationchange', () => {
+      const current = this.state.duration();
+      if (!current && isFinite(video.duration) && video.duration > 0) {
+        this.state.duration.set(video.duration);
+      }
+    });
+  }
+
+  private async createWebOsEngine(): Promise<void> {
+    const video = this.videoEl()!.nativeElement;
+    // webOS plays through the same visible <video> the Shaka path uses —
+    // the platform pipeline decodes natively. No transparent hardware
+    // plane (Tizen/Capacitor), so the Shaka UX (isNativeEngine=false) fits.
+    const engine = new WebOsEngine();
+    await engine.init(video);
+    this.engine = engine;
+    this.isNativeEngine.set(false);
+    this.state.bindEngine(engine);
+
+    engine.on('firstFrame', () => {
+      this.state.videoStarted.set(true);
+    });
+    video.addEventListener('volumechange', () => {
+      this.state.volume.set(video.muted ? 0 : video.volume);
+    });
     video.addEventListener('durationchange', () => {
       const current = this.state.duration();
       if (!current && isFinite(video.duration) && video.duration > 0) {
