@@ -19,6 +19,16 @@
 } @else {
   <div class="flex flex-col gap-3">
     <div class="flex flex-wrap gap-2">
+      <div class="relative flex-1 min-w-48">
+        <svg lucideSearch class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-base-content/40 pointer-events-none z-10"></svg>
+        <input
+          type="text"
+          [placeholder]="'common.search' | translate"
+          class="input input-bordered input-sm w-full pl-9"
+          [ngModel]="search()"
+          (ngModelChange)="onSearch($event)"
+        />
+      </div>
       <select
         class="select select-bordered select-sm min-w-40"
         [ngModel]="torrentFilter()"
@@ -47,7 +57,11 @@
       </div>
     }
 
-    @for (item of queue(); track item.hash) {
+    @for (group of groupedQueue(); track group.key) {
+      <div class="text-xs font-semibold uppercase tracking-wide text-base-content/50 pt-2 first:pt-0">
+        {{ group.label }}
+      </div>
+      @for (item of group.items; track item.hash) {
       <div class="card bg-base-100 border border-base-200 shadow-sm">
         <div class="card-body py-3 px-4 gap-2">
           <div class="flex flex-wrap items-start justify-between gap-2">
@@ -156,30 +170,16 @@
           </div>
         </div>
       </div>
+      }
     }
 
     @if (totalPages() > 1) {
-      <div class="flex items-center justify-center gap-2 pt-1">
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm"
-          [disabled]="page() <= 1"
-          (click)="goToPage(page() - 1)"
-        >
-          {{ 'common.previous' | translate }}
-        </button>
-        <span class="text-sm text-base-content/60">
-          {{ 'activity.page_of' | translate:{ page: page(), total: totalPages() } }}
-        </span>
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm"
-          [disabled]="page() >= totalPages()"
-          (click)="goToPage(page() + 1)"
-        >
-          {{ 'common.next' | translate }}
-        </button>
-      </div>
+      <app-pagination
+        class="pt-1"
+        [current]="page()"
+        [total]="totalPages()"
+        (pageChange)="goToPage($event)"
+      />
     }
   </div>
 }

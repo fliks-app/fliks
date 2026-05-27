@@ -47,6 +47,8 @@ export interface QueueQuery {
   torrentStatus?: string;
   /** Filter on the app-level status (e.g. "Imported"). */
   fliksStatus?: string;
+  /** Case-insensitive substring match on the release name or media title. */
+  search?: string;
 }
 
 const QUEUE_PAGE_SIZE_DEFAULT = 20;
@@ -336,6 +338,14 @@ export class DownloadClientsService {
     }
     if (query.fliksStatus) {
       filtered = filtered.filter((r) => r.status === query.fliksStatus);
+    }
+    if (query.search) {
+      const needle = query.search.toLowerCase();
+      filtered = filtered.filter(
+        (r) =>
+          r.name.toLowerCase().includes(needle) ||
+          (r.mediaTitle?.toLowerCase().includes(needle) ?? false),
+      );
     }
     filtered.sort((a, b) => (b.added_on ?? 0) - (a.added_on ?? 0));
 
