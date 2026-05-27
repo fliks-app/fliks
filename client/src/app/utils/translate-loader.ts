@@ -13,7 +13,11 @@ export function translateBrowserLoaderFactory(
   const http = new HttpClient(backend);
   return {
     getTranslation(lang: string): Observable<TranslationObject> {
-      return http.get<TranslationObject>(`/i18n/${lang}.json?v=${Date.now()}`);
+      // Relative to <base href> so it resolves against the app bundle: on
+      // web that's the server root, on Smart TV (file:// with baseHref "./")
+      // it's the app directory where the JSON ships. A leading "/" resolves
+      // to the filesystem root on TV and 404s.
+      return http.get<TranslationObject>(`i18n/${lang}.json?v=${Date.now()}`);
     },
   };
 }
