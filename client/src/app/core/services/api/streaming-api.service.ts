@@ -196,15 +196,25 @@ export class StreamingApiService {
    * Build authenticated HLS master playlist URL.
    * `startQuality` tells the backend which quality to pre-start FFmpeg at
    * (e.g. "1080p") — avoids the "first segment fetch spawns FFmpeg at a
-   * wrong variant Shaka probed during load" waste.
+   * wrong variant Shaka probed during load" waste. `sessionId` is the
+   * live-session handle the backend issued from `playback-info`; baking
+   * it into this URL makes the master playlist propagate `?sid=...` into
+   * every variant + segment URL so segment fetches route to the exact
+   * `(file, user, profileHash)` transcode session.
    */
-  getHlsUrl(mediaFileId: number, startQuality?: string, startAt?: number): string {
+  getHlsUrl(
+    mediaFileId: number,
+    startQuality?: string,
+    startAt?: number,
+    sessionId?: string,
+  ): string {
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/master.m3u8`)
       : `/api/stream/${mediaFileId}/master.m3u8`;
     const params: string[] = [];
     const token = this.playbackToken;
     if (token) params.push(`token=${encodeURIComponent(token)}`);
+    if (sessionId) params.push(`sid=${encodeURIComponent(sessionId)}`);
     if (startQuality) params.push(`startQuality=${encodeURIComponent(startQuality)}`);
     if (startAt != null) params.push(`startAt=${startAt}`);
     params.push(`device=${this.deviceProfileService.getProfile().deviceType}`);

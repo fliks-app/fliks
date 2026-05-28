@@ -850,7 +850,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           } else {
             const savedQualityId = this.activeQualityId();
             const tvStartQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-            const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId, tvStartQuality, startTime);
+            const hlsUrl = this.streamingApi.getHlsUrl(
+              this.mediaFileId,
+              tvStartQuality,
+              startTime,
+              this.playbackInfo?.sessionId,
+            );
             await this.engine!.load(hlsUrl, startTime, undefined, headers);
           }
 
@@ -922,7 +927,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
               (this.engine as NativeEngine).selectVariantTrack({ width: w, height: h });
             }
             const nativeStartQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-            const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId, nativeStartQuality, startTime);
+            const hlsUrl = this.streamingApi.getHlsUrl(
+              this.mediaFileId,
+              nativeStartQuality,
+              startTime,
+              this.playbackInfo?.sessionId,
+            );
             await this.engine!.load(hlsUrl, startTime, undefined, headers);
           }
         } else {
@@ -981,7 +991,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             // the right profile + applies the quality-change grace period to
             // protect the session from Shaka's startup bandwidth probe.
             const startQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-            const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId, startQuality, startTime);
+            const hlsUrl = this.streamingApi.getHlsUrl(
+              this.mediaFileId,
+              startQuality,
+              startTime,
+              this.playbackInfo?.sessionId,
+            );
             await this.engine!.load(hlsUrl, startTime);
           }
 
