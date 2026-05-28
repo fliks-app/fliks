@@ -7,6 +7,7 @@ import {
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { TRANSCODE_DIR } from '../../../common/constants/paths';
+import { StreamLifetime } from '../lifetime-constants';
 
 /**
  * Index entry for one cache directory. A cache directory holds every
@@ -33,26 +34,13 @@ export interface QualityCache {
 
 const CACHE_LAYOUT_ROOT = path.join(TRANSCODE_DIR, 'cache');
 
-/** Default 4 h since last access. */
-const DEFAULT_CACHE_TTL_MS = 4 * 60 * 60 * 1000;
-/** Default 20 GB. */
-const DEFAULT_CACHE_MAX_BYTES = 20 * 1024 * 1024 * 1024;
-/** Default GC tick 5 min. */
-const DEFAULT_CACHE_GC_INTERVAL_MS = 5 * 60 * 1000;
-
-function readEnvInt(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 /**
  * In-memory index of the on-disk transcode cache. Scans the cache root
  * at boot, tracks segment / init writes as `TranscodingService` fans
  * them out, evicts entries by TTL + LRU. `lookup` returns the
  * authoritative entry the streaming controller can serve from before
- * spawning a fresh ffmpeg.
+ * spawning a fresh ffmpeg. TTL / max-bytes / GC cadence come from
+ * `TRANSCODE_CACHE_*` env vars — see lifetime-constants.ts.
  */
 @Injectable()
 export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
@@ -60,18 +48,9 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
   private readonly entries = new Map<string, CacheEntry>();
   private gcTimer: ReturnType<typeof setInterval> | null = null;
 
-  private readonly ttlMs = readEnvInt(
-    'TRANSCODE_CACHE_TTL_MS',
-    DEFAULT_CACHE_TTL_MS,
-  );
-  private readonly maxBytes = readEnvInt(
-    'TRANSCODE_CACHE_MAX_BYTES',
-    DEFAULT_CACHE_MAX_BYTES,
-  );
-  private readonly gcIntervalMs = readEnvInt(
-    'TRANSCODE_CACHE_GC_INTERVAL_MS',
-    DEFAULT_CACHE_GC_INTERVAL_MS,
-  );
+  private readonly ttlMs = StreamLifetime.cacheTtlMs();
+  private readonly maxBytes = StreamLifetime.cacheMaxBytes();
+  private readonly gcIntervalMs = StreamLifetime.cacheGcIntervalMs();
 
   async onModuleInit(): Promise<void> {
     await fsp.mkdir(CACHE_LAYOUT_ROOT, { recursive: true });

@@ -5,6 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { StreamLifetime } from './lifetime-constants';
 
 export type PlaybackState = 'playing' | 'paused' | 'buffering';
 export type SessionKind = 'transcode' | 'remux' | 'directplay';
@@ -46,26 +47,15 @@ export interface LiveSessionSnapshot extends Omit<
   lastBeat: Date;
 }
 
-/** A live session is considered dead this long after the last
- *  heartbeat. 30 s = three missed beats at the client's 10 s cadence,
- *  enough to absorb transient network hiccups without dragging the
- *  ffmpeg keep-alive window. */
-const DEFAULT_TTL_MS = 30_000;
-const DEFAULT_GC_INTERVAL_MS = 5_000;
-
-function readEnvInt(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 /**
  * In-memory registry of "currently watching" sessions. One entry per
  * sessionId emitted by `playback-info`. Refreshed by the heartbeat
  * piggybacked on `PUT /api/playback/media/:id/state`; explicit stop
  * via `DELETE /api/stream/sessions/:sessionId`. GC drops entries that
- * haven't been beaten in {@link DEFAULT_TTL_MS}.
+ * haven't been beaten inside `STREAM_LIVE_SESSION_TTL_MS` (30 s
+ * default — three missed beats at the client's 10 s cadence, enough
+ * to absorb transient network hiccups without dragging the ffmpeg
+ * keep-alive window).
  *
  * Drives the admin "now watching" dashboard and the ffmpeg job grace
  * window — `listForJob` reports whether a given encoder still has any
@@ -77,14 +67,8 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
   private readonly sessions = new Map<string, LiveSession>();
   private gcTimer: ReturnType<typeof setInterval> | null = null;
 
-  private readonly ttlMs = readEnvInt(
-    'STREAM_LIVE_SESSION_TTL_MS',
-    DEFAULT_TTL_MS,
-  );
-  private readonly gcIntervalMs = readEnvInt(
-    'STREAM_LIVE_SESSION_GC_INTERVAL_MS',
-    DEFAULT_GC_INTERVAL_MS,
-  );
+  private readonly ttlMs = StreamLifetime.liveSessionTtlMs();
+  private readonly gcIntervalMs = StreamLifetime.liveSessionGcIntervalMs();
 
   onModuleInit(): void {
     this.gcTimer = setInterval(() => this.runGc(), this.gcIntervalMs);
