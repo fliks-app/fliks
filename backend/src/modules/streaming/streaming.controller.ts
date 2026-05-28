@@ -134,6 +134,28 @@ function sendTransientUnavailable(res: Response, retryAfterSec: number = 2): voi
   res.status(503).end();
 }
 
+/**
+ * Some native HLS players (LG webOS `<video>`) DON'T retry a 503 — the
+ * `seeking` state freezes forever instead. For those clients the segment
+ * endpoint must hold the connection open until the segment is actually
+ * ready, rather than 503 early and let the player handle the retry. Detect
+ * them by User-Agent and hand the segment wait a generous timeout that
+ * still stays under typical socket / proxy idle limits.
+ *
+ * Other clients (Shaka, ExoPlayer, browser MSE) keep the default 60 s + 503
+ * behaviour: they re-fetch on 503 and don't need us to long-poll for them.
+ */
+const NON_RETRYING_NATIVE_UA = /\bWeb0S\b|\bwebOS\b/i;
+function isNonRetryingNativeClient(req: Request): boolean {
+  const ua = req.headers['user-agent'];
+  return typeof ua === 'string' && NON_RETRYING_NATIVE_UA.test(ua);
+}
+/** Long-poll cap for non-retrying native clients. ~90 s sits between the
+ *  default getSegmentPath wait (60 s, tuned for MSE retries) and the lower
+ *  edge of common HTTP idle timeouts (~120 s), so the segment endpoint can
+ *  ride out a slow ffmpeg respawn without dropping the connection. */
+const NATIVE_LONG_POLL_TIMEOUT_MS = 90_000;
+
 /** Generate a VOD HLS playlist for a given duration and segment URL pattern.
  *  Uniform segment grid: each segment is SEG_DURATION seconds, seg-N covers
  *  `[N*SEG, (N+1)*SEG)`. The EXTINF values mirror what FFmpeg actually emits
@@ -1135,6 +1157,7 @@ export class StreamingController {
       segPath = await this.transcodingService.getSegmentPath(
         videoSession,
         varStreamPath,
+        isNonRetryingNativeClient(req) ? NATIVE_LONG_POLL_TIMEOUT_MS : undefined,
       );
     }
 
@@ -1318,6 +1341,7 @@ export class StreamingController {
         const initPath = await this.transcodingService.getSegmentPath(
           src,
           initFile,
+          isNonRetryingNativeClient(req) ? NATIVE_LONG_POLL_TIMEOUT_MS : undefined,
         );
         if (!initPath) continue;
         // 0-byte init.mp4: ffmpeg races between `creat()` and the first
@@ -1453,6 +1477,7 @@ export class StreamingController {
     const segPath = await this.transcodingService.getSegmentPath(
       session,
       segName,
+      isNonRetryingNativeClient(req) ? NATIVE_LONG_POLL_TIMEOUT_MS : undefined,
     );
     if (!segPath) {
       // ffmpeg session is healthy (exitCode === null) → segment will
