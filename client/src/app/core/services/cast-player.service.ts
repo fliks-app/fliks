@@ -408,7 +408,7 @@ export class CastPlayerService {
    */
   private async dispatchLoad(
     mfId: number,
-    pi: { playMethod: string },
+    pi: { playMethod: string; sessionId?: string },
     currentPos: number,
     transcodeQuality: string | undefined,
     castInfo: { token: string; streamBaseUrl: string },
@@ -435,15 +435,22 @@ export class CastPlayerService {
     let contentType: string;
     const tokenQ = encodeURIComponent(castToken);
     const startAtParam = `&startAt=${Math.floor(currentPos)}`;
+    const sidParam = pi.sessionId
+      ? `&sid=${encodeURIComponent(pi.sessionId)}`
+      : '';
     if (castMode === 'direct') {
-      castUrl = this.streamingApi.getAbsoluteStreamUrl(mfId, castToken);
+      castUrl = this.streamingApi.getAbsoluteStreamUrl(
+        mfId,
+        castToken,
+        pi.sessionId,
+      );
       contentType = 'video/mp4';
     } else if (castMode === 'remux') {
-      castUrl = `${lanUrl}/api/stream/${mfId}/master.m3u8?token=${tokenQ}&remux=1${startAtParam}`;
+      castUrl = `${lanUrl}/api/stream/${mfId}/master.m3u8?token=${tokenQ}${sidParam}&remux=1${startAtParam}`;
       contentType = 'application/x-mpegurl';
     } else {
       const q = transcodeQuality ?? '1080p';
-      castUrl = `${lanUrl}/api/stream/${mfId}/master.m3u8?token=${tokenQ}&startQuality=${q}${startAtParam}`;
+      castUrl = `${lanUrl}/api/stream/${mfId}/master.m3u8?token=${tokenQ}${sidParam}&startQuality=${q}${startAtParam}`;
       contentType = 'application/x-mpegurl';
     }
 

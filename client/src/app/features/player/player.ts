@@ -845,7 +845,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
           if (mode === 'direct') {
-            const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
+            const streamUrl = this.streamingApi.getStreamUrl(
+              this.mediaFileId,
+              this.playbackInfo?.sessionId,
+            );
             await this.engine!.load(streamUrl, startTime, 'video/mp4', headers);
           } else {
             const savedQualityId = this.activeQualityId();
@@ -903,7 +906,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           if (mode === 'direct') {
             // Progressive MP4 — Media3 detects the container, no quality
             // ladder to constrain (DirectPlay = single source variant).
-            const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
+            const streamUrl = this.streamingApi.getStreamUrl(
+              this.mediaFileId,
+              this.playbackInfo?.sessionId,
+            );
             await this.engine!.load(streamUrl, startTime, 'video/mp4', headers);
           } else {
             // HLS transcode/remux — apply quality constraint before load to
@@ -944,7 +950,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           );
 
           if (mode === 'direct') {
-            const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
+            const streamUrl = this.streamingApi.getStreamUrl(
+              this.mediaFileId,
+              this.playbackInfo?.sessionId,
+            );
             await this.engine!.load(streamUrl, startTime, 'video/mp4');
           } else {
             const savedQualityId = this.activeQualityId();
@@ -1748,9 +1757,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const startQuality = mode !== 'direct' && savedQualityId !== 'auto'
           ? savedQualityId
           : undefined;
+        const sid = this.playbackInfo?.sessionId;
         const url = mode === 'direct'
-          ? this.streamingApi.getStreamUrl(this.mediaFileId)
-          : this.streamingApi.getHlsUrl(this.mediaFileId, startQuality);
+          ? this.streamingApi.getStreamUrl(this.mediaFileId, sid)
+          : this.streamingApi.getHlsUrl(this.mediaFileId, startQuality, undefined, sid);
         const mimeType = mode === 'direct' ? 'video/mp4' : undefined;
         await this.engine.load(url, castPos > 0 ? castPos : undefined, mimeType);
         this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
@@ -2284,11 +2294,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     const mode = this.playbackMode();
     if (mode === 'direct') {
-      await this.engine.load(this.streamingApi.getStreamUrl(this.mediaFileId), currentPos, 'video/mp4');
+      await this.engine.load(
+        this.streamingApi.getStreamUrl(this.mediaFileId, this.playbackInfo?.sessionId),
+        currentPos,
+        'video/mp4',
+      );
     } else {
       const savedQualityId = this.activeQualityId();
       const startQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-      await this.engine.load(this.streamingApi.getHlsUrl(this.mediaFileId, startQuality, currentPos), currentPos);
+      await this.engine.load(
+        this.streamingApi.getHlsUrl(
+          this.mediaFileId,
+          startQuality,
+          currentPos,
+          pi.sessionId,
+        ),
+        currentPos,
+      );
     }
 
     this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);

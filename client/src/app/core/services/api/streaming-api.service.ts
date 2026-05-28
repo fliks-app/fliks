@@ -222,12 +222,22 @@ export class StreamingApiService {
   }
 
   /** Build authenticated stream URL for direct play */
-  getStreamUrl(mediaFileId: number): string {
+  getStreamUrl(mediaFileId: number, sessionId?: string): string {
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}`)
       : `/api/stream/${mediaFileId}`;
+    const url = this.withTokenAndSid(base, sessionId);
+    return url;
+  }
+
+  /** Internal helper for getStreamUrl — keeps the token+sid query
+   *  composition consistent with `getHlsUrl`. */
+  private withTokenAndSid(base: string, sessionId?: string): string {
+    const params: string[] = [];
     const token = this.playbackToken;
-    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+    if (token) params.push(`token=${encodeURIComponent(token)}`);
+    if (sessionId) params.push(`sid=${encodeURIComponent(sessionId)}`);
+    return params.length ? `${base}?${params.join('&')}` : base;
   }
 
   /** Build authenticated subtitle URL */
@@ -280,18 +290,46 @@ export class StreamingApiService {
     return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
   }
 
+  private appendSid(url: string, sid: string | undefined): string {
+    if (!sid) return url;
+    return `${url}${url.includes('?') ? '&' : '?'}sid=${encodeURIComponent(sid)}`;
+  }
+
   private withToken(url: string): string {
     const token = this.playbackToken;
     return token ? this.appendToken(url, token) : url;
   }
 
-  /** Build Cast URLs with a temporary token */
-  getAbsoluteHlsUrl(mediaFileId: number, castToken: string): string {
-    return this.appendToken(this.absoluteUrl(`/api/stream/${mediaFileId}/master.m3u8`), castToken);
+  /** Build Cast URLs with a temporary token. `sessionId` is the live
+   *  session handle the Cast device received from its own `playback-info`
+   *  call; baking it here propagates the same sid into the variant +
+   *  segment URLs so segments route to the Cast-specific transcode job. */
+  getAbsoluteHlsUrl(
+    mediaFileId: number,
+    castToken: string,
+    sessionId?: string,
+  ): string {
+    return this.appendSid(
+      this.appendToken(
+        this.absoluteUrl(`/api/stream/${mediaFileId}/master.m3u8`),
+        castToken,
+      ),
+      sessionId,
+    );
   }
 
-  getAbsoluteStreamUrl(mediaFileId: number, castToken: string): string {
-    return this.appendToken(this.absoluteUrl(`/api/stream/${mediaFileId}`), castToken);
+  getAbsoluteStreamUrl(
+    mediaFileId: number,
+    castToken: string,
+    sessionId?: string,
+  ): string {
+    return this.appendSid(
+      this.appendToken(
+        this.absoluteUrl(`/api/stream/${mediaFileId}`),
+        castToken,
+      ),
+      sessionId,
+    );
   }
 
   getAbsoluteSubtitleUrl(mediaFileId: number, subtitleId: number, castToken: string): string {

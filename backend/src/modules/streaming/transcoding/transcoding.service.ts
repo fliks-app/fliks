@@ -8,8 +8,6 @@ import { ChildProcess, spawn } from 'child_process';
 import { existsSync, watch, FSWatcher } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
-import { TRANSCODE_DIR } from '../../../common/constants/paths';
-
 import {
   SEEK_WAIT_THRESHOLD,
   SESSION_TIMEOUT_MS,
@@ -73,40 +71,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   private readonly locks = new Map<string, Promise<void>>();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private detectedHwAccel: HwAccelType = 'none';
-  /** Legacy on-disk cache root, kept around solely to wipe leftovers from
-   *  pre-refactor deployments. The new layout lives under
-   *  {@link TranscodeCacheService.cacheRoot}. */
-  private readonly legacyCachePath = path.join(TRANSCODE_DIR, 'stream');
-
   constructor(private readonly cacheService: TranscodeCacheService) {}
 
   async onModuleInit() {
-    // Wipe the legacy /tmp/transcode/stream directory from older
-    // deployments. The new TranscodeCacheService owns
-    // /tmp/transcode/cache and manages its own lifecycle.
-    try {
-      const entries = await fsp.readdir(this.legacyCachePath);
-      if (entries.length) {
-        await Promise.all(
-          entries.map((e) =>
-            fsp.rm(path.join(this.legacyCachePath, e), {
-              recursive: true,
-              force: true,
-            }),
-          ),
-        );
-        this.log.log(
-          `[disk] legacy wipe: removed ${entries.length} orphan dir(s) from /tmp/transcode/stream`,
-        );
-      }
-      await fsp.rm(this.legacyCachePath, { recursive: true, force: true });
-    } catch (err) {
-      // Directory may not exist — fine, nothing to clean up.
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code !== 'ENOENT') {
-        this.log.warn(`[disk] legacy wipe failed: ${(err as Error).message}`);
-      }
-    }
 
     this.detectedHwAccel = await detectHwAccel(this.log);
     this.log.log(`Hardware acceleration: ${this.detectedHwAccel}`);
