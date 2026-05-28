@@ -343,9 +343,20 @@ export class RequestsService {
       .createQueryBuilder('r')
       .leftJoinAndSelect('r.user', 'user')
       .leftJoinAndSelect('r.approvedBy', 'approvedBy')
-      // Joined so the UI can display the live media title (the cached
-      // `request.title` may be empty for Seerr-imported orphans).
-      .leftJoinAndSelect('r.media', 'media')
+      // Resolve the linked library media by (tmdbId, type) rather than the
+      // request's FK so partial-library titles (another user's request
+      // already brought it in, or only some seasons are present) surface a
+      // `media` object. The UI routes to the library detail when any match
+      // exists; the FK `mediaId` is left untouched for lifecycle bookkeeping.
+      .leftJoinAndMapOne(
+        'r.media',
+        Media,
+        'media',
+        // `media.type` and `r.mediaType` are declared as two distinct Postgres
+        // enums (each entity got its own `*_enum` type at migration time), so
+        // they need an explicit text cast for the equality to type-check.
+        'media."tmdbId" = r."tmdbId" AND media.type::text = r."mediaType"::text',
+      )
       .orderBy('r.createdAt', 'DESC');
 
     if (!this.canManageRequests(user)) {

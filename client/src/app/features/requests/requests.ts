@@ -284,10 +284,14 @@ export class RequestsComponent implements OnInit {
   }
 
   mediaLink(row: FliksRequestRow): (string | number)[] {
-    if (row.mediaId) {
+    // `row.media` is resolved by the backend via (tmdbId, type) so it surfaces
+    // even when the request's FK `mediaId` is still null (pending request on a
+    // title another user already brought in, or partially-imported series).
+    const libraryId = row.media?.id;
+    if (libraryId) {
       return row.mediaType === 'movie'
-        ? ['/movies', row.mediaId]
-        : ['/series', row.mediaId];
+        ? ['/movies', libraryId]
+        : ['/series', libraryId];
     }
     return row.mediaType === 'movie'
       ? ['/add', 'movie', row.tmdbId]
