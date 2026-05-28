@@ -33,10 +33,14 @@ import { Observable } from 'rxjs';
 import {
   HW_ACCEL_LABEL,
   type HwAccelType,
+  type TranscodeSession,
   TranscodingService,
 } from '../streaming/transcoding';
 import { ActiveStreamTracker } from '../streaming/active-stream-tracker.service';
-import { LiveSessionRegistry } from '../streaming/live-session.service';
+import {
+  type LiveSessionSnapshot,
+  LiveSessionRegistry,
+} from '../streaming/live-session.service';
 import { PlaybackService } from '../streaming/playback.service';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';
@@ -304,8 +308,42 @@ export class SystemController {
     const hwAccel = this.transcodingService.getDetectedHwAccel();
     const streams: ActiveStreamDto[] = [];
 
-    // Collect all mediaFileIds to batch-load streamInfo and playback state
-    const allSessions: {
+    // LiveSessionRegistry is the single source of truth for "who is
+    // currently watching". Each playback gets its own sid, so two
+    // devices on the same (user, file) coexist as two distinct
+    // entries — no clobber, no dedup destroying multi-device.
+    const live = this.liveSessions.list();
+    const transcodeSessions = this.transcodingService.getActiveSessions();
+    const findTranscodeSession = (
+      userId: number | null,
+      mediaFileId: number,
+      profileHash: string | null,
+    ): TranscodeSession | undefined => {
+      if (profileHash == null) return undefined;
+      return transcodeSessions.find(
+        (ts) =>
+          ts.userId === userId &&
+          ts.mediaFileId === mediaFileId &&
+          ts.baseProfileHash === profileHash,
+      );
+    };
+
+    // Collect lookups before the per-session loop so we batch DB hits.
+    const mediaFileIds = [
+      ...new Set([
+        ...live.map((s) => s.mediaFileId),
+        // Legacy direct-play paths that bypass playback-info still
+        // surface here; their (user, file) pair isn't represented by
+        // any LiveSession so we have to read from the tracker.
+        ...this.activeStreamTracker.getActive().map((s) => s.mediaFileId),
+      ]),
+    ];
+    const mediaFiles = mediaFileIds.length
+      ? await this.mediaFileRepo.findByIds(mediaFileIds)
+      : [];
+    const mediaFileMap = new Map(mediaFiles.map((mf) => [mf.id, mf]));
+
+    type StreamWorkItem = {
       sessionId: string;
       userId: number | null;
       username: string | null;
@@ -318,53 +356,93 @@ export class SystemController {
       hwAccelVal: string;
       startedAt: string;
       lastActivity: string;
-    }[] = [];
+      deviceLabel: string | null;
+      transcodeSession: TranscodeSession | undefined;
+      audioPlan: LiveSessionSnapshot['audioPlan'];
+    };
 
-    for (const s of this.transcodingService.getActiveSessions()) {
-      allSessions.push({
-        sessionId: s.id,
-        userId: s.userId ?? null,
-        username: s.username ?? null,
-        mediaFileId: s.mediaFileId,
-        mediaTitle: s.mediaTitle ?? '',
-        mediaType: s.mediaType ?? '',
-        posterUrl: s.posterUrl ?? null,
-        mode: s.remux ? 'remux' : 'transcode',
-        quality: s.quality,
-        hwAccelVal: s.remux ? 'none' : (s.actualHwAccel ?? hwAccel),
-        startedAt: (s.startedAt ?? new Date()).toISOString(),
-        lastActivity: new Date(s.lastAccess).toISOString(),
+    const work: StreamWorkItem[] = [];
+
+    for (const session of live) {
+      const ts = findTranscodeSession(
+        session.userId,
+        session.mediaFileId,
+        session.profileHash,
+      );
+      const mode: 'transcode' | 'remux' | 'directplay' =
+        session.kind === 'directplay'
+          ? 'directplay'
+          : session.kind === 'remux'
+            ? 'remux'
+            : 'transcode';
+      const quality =
+        mode === 'directplay'
+          ? 'original'
+          : (ts?.quality ?? session.quality ?? 'original');
+      const hwAccelVal =
+        mode === 'directplay' || mode === 'remux'
+          ? 'none'
+          : (ts?.actualHwAccel ?? hwAccel);
+      work.push({
+        sessionId: session.sessionId,
+        userId: session.userId,
+        username: session.username,
+        mediaFileId: session.mediaFileId,
+        mediaTitle: session.mediaTitle ?? '',
+        mediaType: session.mediaType ?? '',
+        posterUrl: session.posterUrl,
+        mode,
+        quality,
+        hwAccelVal,
+        startedAt: session.startedAt.toISOString(),
+        lastActivity: session.lastBeat.toISOString(),
+        deviceLabel:
+          session.deviceLabel ??
+          (session.userId != null
+            ? this.activeStreamTracker.getDeviceName(
+                session.userId,
+                session.mediaFileId,
+              )
+            : null),
+        transcodeSession: ts,
+        audioPlan: session.audioPlan,
       });
     }
 
-    for (const s of this.activeStreamTracker.getActive()) {
-      allSessions.push({
-        sessionId: `dp-${s.userId}-${s.mediaFileId}`,
-        userId: s.userId,
-        username: s.username,
-        mediaFileId: s.mediaFileId,
-        mediaTitle: s.mediaTitle,
-        mediaType: s.mediaType,
-        posterUrl: s.posterUrl,
+    // Legacy direct-play fallback: tracker entries without a matching
+    // LiveSession (typically clients that hit /stream/:mediaFileId
+    // without a prior playback-info call).
+    const liveByKey = new Set(
+      live.map((s) => `${s.userId ?? 0}-${s.mediaFileId}`),
+    );
+    for (const dp of this.activeStreamTracker.getActive()) {
+      const key = `${dp.userId}-${dp.mediaFileId}`;
+      if (liveByKey.has(key)) continue;
+      work.push({
+        sessionId: `dp-${dp.userId}-${dp.mediaFileId}`,
+        userId: dp.userId,
+        username: dp.username,
+        mediaFileId: dp.mediaFileId,
+        mediaTitle: dp.mediaTitle,
+        mediaType: dp.mediaType,
+        posterUrl: dp.posterUrl,
         mode: 'directplay',
         quality: 'original',
         hwAccelVal: 'none',
-        startedAt: s.startedAt.toISOString(),
-        lastActivity: s.lastActivity.toISOString(),
+        startedAt: dp.startedAt.toISOString(),
+        lastActivity: dp.lastActivity.toISOString(),
+        deviceLabel: this.activeStreamTracker.getDeviceName(
+          dp.userId,
+          dp.mediaFileId,
+        ),
+        transcodeSession: undefined,
+        audioPlan: null,
       });
     }
 
-    // Track episodeId per stream index for resolution later
     const streamEpisodeIds: (number | null)[] = [];
 
-    // Batch-load media files for streamInfo
-    const mediaFileIds = [...new Set(allSessions.map((s) => s.mediaFileId))];
-    const mediaFiles = mediaFileIds.length
-      ? await this.mediaFileRepo.findByIds(mediaFileIds)
-      : [];
-    const mediaFileMap = new Map(mediaFiles.map((mf) => [mf.id, mf]));
-
-    for (const s of allSessions) {
+    for (const s of work) {
       const mf = mediaFileMap.get(s.mediaFileId);
       const si = mf?.streamInfo;
       const v = si?.video?.[0];
@@ -395,22 +473,15 @@ export class SystemController {
         }
       }
 
-      // Determine playback modes
+      // Output decisions: the LiveSession holds the authoritative
+      // `audioPlan`; mode/codec/bitrate read directly.
       let videoPlaybackMode = 'Lecture directe';
       let outputContainer: string | null = null;
       let outputBitrate: number | null = null;
       let audioOutputCodec: string | null = null;
       let audioOutputBitrateBps: number | null = null;
       let audioMode: 'direct' | 'copy' | 'transcode' = 'direct';
-      // Single source of truth: the audio plan stream-builder stored
-      // on the LiveSession at playback-info time. mode/codec/bitrate
-      // are read directly — no re-derivation, no string comparison
-      // gymnastics.
-      const liveForSession =
-        s.userId != null
-          ? this.liveSessions.findCurrent(s.userId, s.mediaFileId)
-          : null;
-      const audioPlan = liveForSession?.audioPlan ?? null;
+      const audioPlan = s.audioPlan;
 
       if (s.mode === 'transcode') {
         videoPlaybackMode = `Transcodage (${HW_ACCEL_LABEL[hwAccel] ?? hwAccel.toUpperCase()})`;
@@ -462,16 +533,7 @@ export class SystemController {
         mode: s.mode,
         quality: s.quality,
         hwAccel: s.hwAccelVal,
-        device:
-          this.liveSessions
-            .list()
-            .find(
-              (ls) =>
-                ls.userId === s.userId && ls.mediaFileId === s.mediaFileId,
-            )?.deviceLabel ??
-          (s.userId
-            ? this.activeStreamTracker.getDeviceName(s.userId, s.mediaFileId)
-            : null),
+        device: s.deviceLabel,
         startedAt: s.startedAt,
         lastActivity: s.lastActivity,
         positionSeconds,
@@ -523,63 +585,38 @@ export class SystemController {
       }
     }
 
-    // Fill transcode progress for non-directplay sessions
-    const transcodeSessions = this.transcodingService.getActiveSessions();
-    for (const stream of streams) {
-      if (stream.mode !== 'directplay') {
-        const ts = transcodeSessions.find((s) => s.id === stream.sessionId);
-        if (ts) {
-          if (stream.durationSeconds > 0) {
-            stream.transcodePercent =
-              await this.transcodingService.getTranscodePercent(
-                ts,
-                stream.durationSeconds,
-              );
-          }
-          // Deduplicate by flag (reasons can be pushed from multiple code paths)
-          const seen = new Set<string>();
-          const reasons = (ts.transcodeReasons ?? []).filter((r) => {
-            if (seen.has(r.flag)) return false;
-            seen.add(r.flag);
-            return true;
-          });
-          stream.videoReasons = reasons
-            .filter((r) => r.flag.startsWith('Video'))
-            .map((r) => r.message);
-          stream.audioReasons = reasons
-            .filter((r) => r.flag.startsWith('Audio'))
-            .map((r) => r.message);
-          stream.containerReasons = reasons
-            .filter((r) => r.flag.startsWith('Container'))
-            .map((r) => r.message);
-        }
+    // Fill transcode progress / reasons for sessions that have a
+    // matching ffmpeg session.
+    for (let i = 0; i < streams.length; i++) {
+      const stream = streams[i];
+      const ts = work[i].transcodeSession;
+      if (!ts || stream.mode === 'directplay') continue;
+      if (stream.durationSeconds > 0) {
+        stream.transcodePercent =
+          await this.transcodingService.getTranscodePercent(
+            ts,
+            stream.durationSeconds,
+          );
       }
+      // Deduplicate by flag (reasons can be pushed from multiple code paths)
+      const seen = new Set<string>();
+      const reasons = (ts.transcodeReasons ?? []).filter((r) => {
+        if (seen.has(r.flag)) return false;
+        seen.add(r.flag);
+        return true;
+      });
+      stream.videoReasons = reasons
+        .filter((r) => r.flag.startsWith('Video'))
+        .map((r) => r.message);
+      stream.audioReasons = reasons
+        .filter((r) => r.flag.startsWith('Audio'))
+        .map((r) => r.message);
+      stream.containerReasons = reasons
+        .filter((r) => r.flag.startsWith('Container'))
+        .map((r) => r.message);
     }
 
-    // Deduplicate: when a user switches quality, multiple transcode sessions
-    // exist for the same file. Keep only the most recently accessed one per user+file.
-    // Also prefer sessions accessed in the last 15s over stale ones.
-    const deduped = new Map<string, ActiveStreamDto>();
-    const recentCutoff = new Date(Date.now() - 15_000).toISOString();
-    for (const stream of streams) {
-      const key = `${stream.userId ?? 0}-${stream.mediaFileId}`;
-      const existing = deduped.get(key);
-      if (!existing) {
-        deduped.set(key, stream);
-      } else {
-        // Prefer the recently active session; if both recent or both stale, pick latest
-        const existingRecent = existing.lastActivity > recentCutoff;
-        const streamRecent = stream.lastActivity > recentCutoff;
-        if (
-          (!existingRecent && streamRecent) ||
-          stream.lastActivity > existing.lastActivity
-        ) {
-          deduped.set(key, stream);
-        }
-      }
-    }
-
-    return Array.from(deduped.values());
+    return streams;
   }
 
   @Delete('streams/:sessionId')

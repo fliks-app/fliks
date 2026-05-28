@@ -1662,6 +1662,14 @@ export class StreamingController {
         resolved.media?.posterUrl ?? null,
       );
     }
+    // Keep the LiveSession alive while the Range chunks roll in —
+    // the heartbeat endpoint only fires on HLS/transcode paths, so
+    // without this every direct-play would get GC'd 30 s after
+    // playback-info and disappear from the dashboard.
+    const sid = firstQueryString(req.query, 'sid');
+    if (sid) {
+      this.liveSessions.heartbeat(sid, {});
+    }
 
     const duration = resolved.mediaFile.streamInfo?.durationSeconds;
     if (duration) {
