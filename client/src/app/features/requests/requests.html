@@ -28,11 +28,25 @@
     <div class="flex flex-col gap-3">
       @for (row of rows(); track row.id) {
         <article
-          class="card bg-base-100 shadow-md border border-base-200 flex flex-row overflow-hidden rounded-box"
+          class="relative card bg-base-100 shadow-md border border-base-200 flex flex-row overflow-hidden rounded-box"
           [attr.title]="row.title"
         >
+          <!-- Mobile-only fanart backdrop with a dimming gradient so the
+               foreground content stays legible (à la Overseerr). -->
+          <div class="absolute inset-0 sm:hidden" aria-hidden="true">
+            @defer (on viewport) {
+              <app-request-poster
+                class="absolute inset-0"
+                [tmdbId]="row.tmdbId"
+                [mediaType]="row.mediaType"
+                mode="backdrop"
+              />
+            }
+            <div class="absolute inset-0 bg-gradient-to-b from-base-100/45 via-base-100/80 to-base-100"></div>
+          </div>
+
           <figure
-            class="relative w-20 sm:w-24 md:w-28 shrink-0 aspect-2/3 bg-base-300 overflow-hidden"
+            class="relative hidden sm:flex w-24 md:w-28 shrink-0 aspect-2/3 bg-base-300 overflow-hidden"
           >
             @defer (on viewport) {
               <app-request-poster
@@ -47,17 +61,35 @@
           </figure>
 
           <div
-            class="card-body p-3 sm:p-4 flex-1 min-w-0 flex flex-col sm:flex-row sm:items-stretch gap-3"
+            class="relative card-body p-3 sm:p-4 flex-1 min-w-0 flex flex-col sm:flex-row sm:items-stretch gap-3"
           >
             <div class="min-w-0 flex-1 flex flex-col gap-1.5 justify-center">
-              <h2 class="text-base font-semibold leading-snug line-clamp-2 m-0">
-                <a
-                  [routerLink]="mediaLink(row)"
-                  class="link link-hover text-base-content hover:opacity-80 font-semibold text-left"
+              <div class="flex items-start gap-3">
+                <!-- Mobile chip poster: appears next to the title when the
+                     desktop side poster is hidden. -->
+                <figure
+                  class="relative sm:hidden w-14 aspect-2/3 shrink-0 bg-base-300 rounded overflow-hidden ring-1 ring-base-content/10 shadow"
                 >
-                  {{ row.title }}
-                </a>
-              </h2>
+                  @defer (on viewport) {
+                    <app-request-poster
+                      class="absolute inset-0"
+                      [tmdbId]="row.tmdbId"
+                      [mediaType]="row.mediaType"
+                      [titleText]="row.title"
+                    />
+                  } @placeholder {
+                    <div class="absolute inset-0 skeleton rounded-none"></div>
+                  }
+                </figure>
+                <h2 class="flex-1 text-base font-semibold leading-snug line-clamp-2 m-0">
+                  <a
+                    [routerLink]="mediaLink(row)"
+                    class="link link-hover text-base-content hover:opacity-80 font-semibold text-left"
+                  >
+                    {{ row.title }}
+                  </a>
+                </h2>
+              </div>
 
               <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/70">
                 <span

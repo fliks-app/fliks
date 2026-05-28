@@ -4,24 +4,34 @@ import {
   inject,
   input,
   signal,
+  computed,
   OnInit,
 } from '@angular/core';
 import { MetadataService } from '../../core/services/api/metadata.service';
 import { MediaType } from '../../core/enums/media-type.enum';
+
+/** Per-process cache for the metadata detail fetch — multiple instances of
+ *  `app-request-poster` on the same row (poster chip + mobile backdrop)
+ *  share one HTTP round-trip. Holds the in-flight promise so concurrent
+ *  ngOnInit calls don't race. */
+const detailsCache = new Map<
+  string,
+  Promise<{ posterUrl: string | null; fanartUrl: string | null }>
+>();
 
 @Component({
   selector: 'app-request-poster',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block w-full h-full min-h-0' },
   template: `
-    @if (posterUrl()) {
+    @if (imageUrl()) {
       <img
-        [src]="posterUrl()!"
+        [src]="imageUrl()!"
         [alt]="titleText()"
         class="w-full h-full object-cover"
         loading="lazy"
       />
-    } @else if (loaded()) {
+    } @else if (loaded() && mode() === 'poster') {
       <div
         class="flex items-center justify-center w-full h-full min-h-[10rem] bg-base-300 text-base-content/25"
         aria-hidden="true"
@@ -41,7 +51,7 @@ import { MediaType } from '../../core/enums/media-type.enum';
           />
         </svg>
       </div>
-    } @else {
+    } @else if (!loaded() && mode() === 'poster') {
       <div class="skeleton w-full h-full min-h-[10rem] rounded-none"></div>
     }
   `,
@@ -52,21 +62,36 @@ export class RequestPosterComponent implements OnInit {
   readonly tmdbId = input.required<number>();
   readonly mediaType = input.required<MediaType>();
   readonly titleText = input<string>('');
+  /** `poster` (default) shows the title's portrait poster with a placeholder
+   *  fallback when no art is available; `backdrop` shows the landscape fanart
+   *  with no fallback — meant to sit behind a gradient and stay silent when
+   *  there's nothing to render. */
+  readonly mode = input<'poster' | 'backdrop'>('poster');
 
   readonly posterUrl = signal<string | null>(null);
+  readonly fanartUrl = signal<string | null>(null);
   readonly loaded = signal(false);
 
+  readonly imageUrl = computed(() =>
+    this.mode() === 'backdrop' ? this.fanartUrl() : this.posterUrl(),
+  );
+
   async ngOnInit() {
-    try {
-      const details =
+    const key = `${this.mediaType()}:${this.tmdbId()}`;
+    let promise = detailsCache.get(key);
+    if (!promise) {
+      promise = (
         this.mediaType() === 'movie'
-          ? await this.metadata.getMovieDetails(this.tmdbId())
-          : await this.metadata.getTvDetails(this.tmdbId());
-      this.posterUrl.set(details.posterUrl);
-    } catch {
-      /* keep poster empty */
-    } finally {
-      this.loaded.set(true);
+          ? this.metadata.getMovieDetails(this.tmdbId())
+          : this.metadata.getTvDetails(this.tmdbId())
+      )
+        .then((d) => ({ posterUrl: d.posterUrl, fanartUrl: d.fanartUrl }))
+        .catch(() => ({ posterUrl: null, fanartUrl: null }));
+      detailsCache.set(key, promise);
     }
+    const details = await promise;
+    this.posterUrl.set(details.posterUrl);
+    this.fanartUrl.set(details.fanartUrl);
+    this.loaded.set(true);
   }
 }
