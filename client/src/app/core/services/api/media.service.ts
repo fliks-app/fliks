@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
+import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
 
 export interface QualityProfileBrief {
   id: number;
@@ -318,8 +319,11 @@ export class MediaService {
     return firstValueFrom(this.http.get<MediaPage>('/api/media', { params: httpParams }));
   }
 
-  getOne(id: number) {
-    return firstValueFrom(this.http.get<Media>(`/api/media/${id}`));
+  getOne(id: number, opts: { force?: boolean } = {}) {
+    const headers = opts.force ? { [CACHE_BYPASS_HEADER]: '1' } : undefined;
+    return firstValueFrom(
+      this.http.get<Media>(`/api/media/${id}`, headers ? { headers } : {}),
+    );
   }
 
   getTracking(id: number) {

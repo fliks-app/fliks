@@ -679,6 +679,14 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         return;
       }
       this.media.set(m);
+      queueMicrotask(() => {
+        void this.mediaService
+          .getOne(id, { force: true })
+          .then((fresh) => {
+            if (fresh.type === kind) this.media.set(fresh);
+          })
+          .catch(() => { /* network failure — cached body keeps showing */ });
+      });
 
       // Episode focus (series/:id/episode/:episodeId) is applied reactively
       // by episodeFocusEffect as soon as `media` is set, so no imperative
