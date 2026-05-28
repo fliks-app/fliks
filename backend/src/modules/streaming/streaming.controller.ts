@@ -31,6 +31,7 @@ import {
   computeProfileHash,
   buildPlaybackProfileFromContext,
 } from './transcoding';
+import type { TranscodeSession } from './transcoding/types';
 import {
   getSegmentDuration,
   secondsToSegmentIndex,
@@ -68,6 +69,33 @@ function withTimestampMap(vtt: string | Buffer): string {
 
 /** Default segment duration — overridden by admin streaming settings. */
 let SEG_DURATION = 3;
+
+/**
+ * Build the `?token=...&sid=...` query suffix that every URL emitted by
+ * playback-info / manifest endpoints carries. The token authenticates
+ * the request; the sid binds the request to a specific
+ * {@link LiveSessionRegistry} entry so segment endpoints can route to
+ * the exact `(file, user, profileHash)` transcode session instead of
+ * the most-recently-accessed heuristic fallback.
+ */
+function buildStreamQuery(
+  token: string | null | undefined,
+  sid: string | null | undefined,
+): string {
+  const params: string[] = [];
+  if (token) params.push(`token=${encodeURIComponent(token)}`);
+  if (sid) params.push(`sid=${encodeURIComponent(sid)}`);
+  return params.length ? `?${params.join('&')}` : '';
+}
+
+/** Append `&sid=...` (or `?sid=...` when the URL has no query string) to
+ *  a URL produced by `stream-builder`. The builder doesn't know the
+ *  sessionId — `playback-info` issues it after evaluation and threads
+ *  it into the playUrl right before returning to the client. */
+function appendSidToUrl(url: string, sid: string): string {
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}sid=${encodeURIComponent(sid)}`;
+}
 
 /** Pick the right HLS segment Content-Type. fMP4 (.m4s / .mp4) → video/mp4,
  *  MPEG-TS (.ts, used as the explicit `useTs` fallback for Tizen TVs on
@@ -193,6 +221,56 @@ function firstQueryString(
 @UseGuards(JwtOrApiKeyGuard)
 export class StreamingController {
   private readonly log = new Logger(StreamingController.name);
+
+  /** Resolve the exact transcode session for a request: prefer the
+   *  `(file, user, profileHash)` triple derived from the request's
+   *  `?sid=` query — that's what manifest URLs bake in so segment
+   *  fetches route to the right ffmpeg even when a single user is
+   *  watching the same file on multiple devices with different
+   *  profiles. Falls back to the "most recently accessed" heuristic
+   *  when no sid is provided or the live session has expired. */
+  private resolveSession(
+    mediaFileId: number,
+    userId: number | undefined,
+    req: Request,
+  ): TranscodeSession | undefined {
+    const sid = firstQueryString(req.query, 'sid');
+    if (sid) {
+      const live = this.liveSessions.get(sid);
+      if (live && live.profileHash) {
+        const exact = this.transcodingService.getExistingSession(
+          mediaFileId,
+          userId,
+          live.profileHash,
+        );
+        if (exact) return exact;
+      }
+    }
+    return this.transcodingService.findCurrentSession(mediaFileId, userId);
+  }
+
+  /** Same routing as {@link resolveSession} for the early-segment
+   *  companion. The LiveSessionRegistry tracks the base profile hash;
+   *  `getExistingEarlySession` adds the `-early` discriminator itself. */
+  private resolveEarlySession(
+    mediaFileId: number,
+    userId: number | undefined,
+    req: Request,
+  ): TranscodeSession | undefined {
+    const sid = firstQueryString(req.query, 'sid');
+    if (sid) {
+      const live = this.liveSessions.get(sid);
+      if (live && live.profileHash) {
+        const exact = this.transcodingService.getExistingEarlySession(
+          mediaFileId,
+          userId,
+          live.profileHash,
+        );
+        if (exact) return exact;
+      }
+    }
+    return this.transcodingService.findCurrentEarlySession(mediaFileId, userId);
+  }
 
   constructor(
     private readonly streamingService: StreamingService,
@@ -542,7 +620,8 @@ export class StreamingController {
       req.user as User,
     );
     const token = firstQueryString(req.query, 'token');
-    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+    const sid = firstQueryString(req.query, 'sid');
+    const tokenParam = buildStreamQuery(token, sid);
     const burnInSubtitleRaw = firstQueryString(req.query, 'burnInSubtitleId');
     const burnInSubtitleId = burnInSubtitleRaw
       ? parseInt(burnInSubtitleRaw, 10)
@@ -765,8 +844,19 @@ export class StreamingController {
       position: startAt ?? 0,
     });
 
+    // Bake the sessionId into the playUrl so every subsequent manifest /
+    // segment request the player issues carries it. Manifest endpoints
+    // propagate the same `sid` into the variant + segment URLs they
+    // generate, so the segment-serving routes can look up the exact
+    // `(file, user, profileHash)` session without heuristics.
+    const playUrlWithSid = appendSidToUrl(
+      result.playUrl,
+      liveSession.sessionId,
+    );
+
     return {
       ...result,
+      playUrl: playUrlWithSid,
       tonemapAlgo,
       durationSeconds: duration,
       markers,
@@ -849,7 +939,8 @@ export class StreamingController {
     const h = crop?.height ?? v?.height ?? 1080;
 
     const token = firstQueryString(req.query, 'token');
-    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+    const sid = firstQueryString(req.query, 'sid');
+    const tokenParam = buildStreamQuery(token, sid);
 
     const includeRemux = firstQueryString(req.query, 'remux') === '1';
     const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
@@ -1028,7 +1119,8 @@ export class StreamingController {
     }
 
     const token = firstQueryString(req.query, 'token');
-    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+    const sid = firstQueryString(req.query, 'sid');
+    const tokenParam = buildStreamQuery(token, sid);
     const basePath = `/api/stream/${mediaFileId}/audio/${audioIndex}`;
     const useTs = this.activeStreamTracker.getUseTs(mediaFileId);
     const segExt = useTs ? 'ts' : 'm4s';
@@ -1072,10 +1164,7 @@ export class StreamingController {
     // on a multi-audio video session (master.m3u8 only emits EXT-X-MEDIA when
     // `audioStreams.length > 1`), so we don't need a separate audio-only path —
     // any segment Shaka asks for here is in `<videoSession.cachePath>/<varStreamPath>`.
-    let videoSession = this.transcodingService.findCurrentSession(
-      mediaFileId,
-      user?.id,
-    );
+    let videoSession = this.resolveSession(mediaFileId, user?.id, req);
     if (!videoSession) {
       const resolved = await this.streamingService.resolveFile(
         mediaFileId,
@@ -1119,10 +1208,7 @@ export class StreamingController {
     // parallel with main, so it lands first. Use a short timeout — main
     // covers the same files behind it, so wasting 60s on early when it has
     // already exited adds latency for nothing.
-    const earlySession = this.transcodingService.findCurrentEarlySession(
-      mediaFileId,
-      user?.id,
-    );
+    const earlySession = this.resolveEarlySession(mediaFileId, user?.id, req);
     const useEarly =
       earlySession != null &&
       videoSession.startSegment != null &&
@@ -1194,10 +1280,7 @@ export class StreamingController {
     // Exception: Cast passes startAt for resume position — pre-start for Cast/remux only.
     const startAtRaw = firstQueryString(req.query, 'startAt');
     if (startAtRaw) {
-      const existing = this.transcodingService.findCurrentSession(
-        mediaFileId,
-        req.user?.id,
-      );
+      const existing = this.resolveSession(mediaFileId, req.user?.id, req);
       if (!existing || existing.process.exitCode !== null) {
         const startAtSec = parseInt(startAtRaw, 10);
         const startSegment = secondsToSegmentIndex(startAtSec);
@@ -1225,7 +1308,8 @@ export class StreamingController {
     }
 
     const token = firstQueryString(req.query, 'token');
-    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+    const sid = firstQueryString(req.query, 'sid');
+    const tokenParam = buildStreamQuery(token, sid);
     const basePath = `/api/stream/${mediaFileId}/${quality}`;
     // Use the master.m3u8 decision — must match to avoid init filename mismatch.
     const multiAudio = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
@@ -1287,10 +1371,7 @@ export class StreamingController {
     // Fast path: if a session already exists, skip the DB query — we only
     // need resolveFile for absolutePath + context when creating a NEW session.
     // Saves ~15-25ms per segment (a 2h file = ~2400 segments = ~40s saved).
-    const existing = this.transcodingService.findCurrentSession(
-      mediaFileId,
-      req.user?.id,
-    );
+    const existing = this.resolveSession(mediaFileId, req.user?.id, req);
 
     // For init.mp4: serve from the early session when it exists with matching
     // quality. Its init bytes are byte-identical to main's (same encoder
@@ -1315,9 +1396,10 @@ export class StreamingController {
       // Same caveat as the segment path: remux video-only doesn't use
       // var_stream_map, so the `0/` prefix would 404 on the init lookup.
       const initFile = ma && quality !== 'remux' ? `0/${segment}` : segment;
-      const earlySession = this.transcodingService.findCurrentEarlySession(
+      const earlySession = this.resolveEarlySession(
         mediaFileId,
         req.user?.id,
+        req,
       );
       const sources =
         earlySession && earlySession.quality === existing.quality
@@ -1406,9 +1488,10 @@ export class StreamingController {
       existing.startSegment > 0 &&
       segIndex < existing.startSegment;
     if (isEarlyProbe) {
-      const earlySession = this.transcodingService.findCurrentEarlySession(
+      const earlySession = this.resolveEarlySession(
         mediaFileId,
         req.user?.id,
+        req,
       );
       if (earlySession && earlySession.quality === quality) {
         const varStreamMap =
