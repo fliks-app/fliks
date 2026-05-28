@@ -421,6 +421,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   });
   private playbackInfo: PlaybackInfoResponse | null = null;
 
+  /** Live-session id to bind the next stream request to. While casting
+   *  the receiver's session id wins (its segments come from a separate
+   *  ffmpeg job under the cast device profile); otherwise the local
+   *  browser's session id. */
+  private activeSessionId(): string | undefined {
+    if (this.castService.isConnected()) {
+      return (
+        this.castPlayerService.liveSessionId() ?? this.playbackInfo?.sessionId
+      );
+    }
+    return this.playbackInfo?.sessionId;
+  }
+
   readonly playerStats = computed<PlayerStats | null>(() => {
     if (!this.statsVisible()) return null;
 
@@ -2331,10 +2344,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private fireAndForgetStopSessions() {
     if (!this.mediaFileId || this.playbackMode() === 'direct') return;
-    const sid = this.castService.isConnected()
-      ? (this.castPlayerService.liveSessionId() ?? this.playbackInfo?.sessionId)
-      : this.playbackInfo?.sessionId;
-    const url = this.streamingApi.getStopSessionsUrl(this.mediaFileId, sid);
+    const url = this.streamingApi.getStopSessionsUrl(
+      this.mediaFileId,
+      this.activeSessionId(),
+    );
     fetch(url, { method: 'DELETE', keepalive: true }).catch(() => {});
   }
 
@@ -2354,10 +2367,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private stopStreamingSessions() {
     if (!this.mediaFileId || this.playbackMode() === 'direct') return;
-    const sid = this.castService.isConnected()
-      ? (this.castPlayerService.liveSessionId() ?? this.playbackInfo?.sessionId)
-      : this.playbackInfo?.sessionId;
-    this.streamingApi.stopSessions(this.mediaFileId, sid).catch(() => {});
+    this.streamingApi
+      .stopSessions(this.mediaFileId, this.activeSessionId())
+      .catch(() => {});
   }
 
   /** Wall-clock timestamp (ms) of the last PUT to /state. Used to dedup
@@ -2405,13 +2417,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       episodeId: this.episodeId,
     };
 
-    // Prefer the Cast live-session id when the user has handed off to a
-    // receiver — its segments are produced by a separate ffmpeg job
-    // under the Cast device profile. The local sender's sid would beat
-    // a now-paused browser session and let the Cast one expire.
-    const sessionId = this.castService.isConnected()
-      ? (this.castPlayerService.liveSessionId() ?? this.playbackInfo?.sessionId)
-      : this.playbackInfo?.sessionId;
+    const sessionId = this.activeSessionId();
     if (sessionId) {
       payload.sessionId = sessionId;
       payload.state = this.paused() ? 'paused' : 'playing';

@@ -49,12 +49,19 @@ import {
   firstMissingSegment,
   segmentNearby,
 } from './segment-utils';
-import { audioSessionKey, earlySessionKey, sessionKey } from './session-key';
+import { sessionKey } from './session-key';
 import {
   buildPlaybackProfileFromContext,
   computeProfileHash,
 } from './profile-hash';
 import { TranscodeCacheService } from './transcode-cache.service';
+import {
+  VARIANT_EARLY,
+  VARIANT_MAIN,
+  VARIANT_REMUX,
+  type SessionVariant,
+  variantHash,
+} from './variant';
 import type {
   BurnInSubtitle,
   DeviceType,
@@ -121,26 +128,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 10_000);
   }
 
-  /** Get an existing session for an exact `(file, user, profile)` triple.
-   *  Returns `undefined` if no matching session is registered — caller
-   *  should fall back to creating one. */
+  /** Get an existing session for an exact `(file, user, base hash,
+   *  variant)` tuple. Variant defaults to `main`; pass {@link VARIANT_EARLY}
+   *  for the early companion, etc. */
   getExistingSession(
     mediaFileId: number,
     userId: number | undefined,
-    profileHash: string,
+    baseHash: string,
+    variant: SessionVariant = VARIANT_MAIN,
   ): TranscodeSession | undefined {
-    return this.sessions.get(sessionKey(mediaFileId, userId, profileHash));
-  }
-
-  /** Get the short-lived early-segment companion session (if any). Lives in
-   *  parallel to the main session during a mid-file resume — same profile
-   *  hash as its main counterpart, scoped on its own map entry. */
-  getExistingEarlySession(
-    mediaFileId: number,
-    userId: number | undefined,
-    profileHash: string,
-  ): TranscodeSession | undefined {
-    return this.sessions.get(earlySessionKey(mediaFileId, userId, profileHash));
+    return this.sessions.get(
+      sessionKey(mediaFileId, userId, variantHash(baseHash, variant)),
+    );
   }
 
   /** All transcode sessions registered for a given `(file, user)` pair —
@@ -179,10 +178,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     mediaFileId: number,
     ctx: SessionContext | undefined,
   ): TranscodeSession | undefined {
-    return this.getExistingEarlySession(
+    return this.getExistingSession(
       mediaFileId,
       ctx?.userId,
       this.computeProfileHashForCtx(ctx),
+      VARIANT_EARLY,
     );
   }
 
@@ -215,7 +215,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       if (
         s.mediaFileId === mediaFileId &&
         s.userId === userId &&
-        s.id.endsWith('-early')
+        s.variant?.kind === 'early'
       ) {
         if (!best || s.lastAccess > best.lastAccess) best = s;
       }
@@ -283,29 +283,25 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   /**
    * Resolve the on-disk cache directory for a session variant. Wraps
    * the {@link TranscodeCacheService} layout so every spawn site goes
-   * through one place. Returns both the directory and the profile hash
-   * that produced it — the hash is stashed on the session for later
-   * lookups.
+   * through one place. Returns the directory and the client-level
+   * base profile hash; the caller already holds the `SessionVariant`,
+   * so storing both `baseProfileHash` and `variant` on the session is
+   * enough to recover the cache key via `variantHash`.
    */
   private cacheDirFor(
     ctx: SessionContext | undefined,
     mediaFileId: number,
-    variant: 'main' | 'early' | 'remux' | { audio: number },
+    variant: SessionVariant,
     quality?: string,
-  ): { dir: string; profileHash: string } {
+  ): { dir: string; baseHash: string } {
     const baseHash = this.computeProfileHashForCtx(ctx);
-    let hash: string;
-    if (variant === 'main') hash = baseHash;
-    else if (variant === 'early') hash = `${baseHash}-early`;
-    else if (variant === 'remux') hash = `${baseHash}-remux`;
-    else hash = `${baseHash}-a${variant.audio}`;
     const dir = this.cacheService.cachePathFor(
       ctx?.userId ?? null,
       mediaFileId,
-      hash,
+      variantHash(baseHash, variant),
       quality,
     );
-    return { dir, profileHash: hash };
+    return { dir, baseHash };
   }
 
   /** Absolute path to the `(userId, mediaFileId)` parent dir under the
@@ -569,10 +565,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         );
         if (resolved) return resolved;
         const restartAt = existing.startSegment ?? requestedSegment;
-        const { dir, profileHash } = this.cacheDirFor(
+        const { dir, baseHash } = this.cacheDirFor(
           ctx,
           mediaFileId,
-          'main',
+          VARIANT_MAIN,
           quality,
         );
         await fsp.mkdir(dir, { recursive: true });
@@ -590,7 +586,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           restartAt,
           ctx,
         );
-        restarted.profileHash = profileHash;
+        restarted.baseProfileHash = baseHash;
+        restarted.variant = VARIANT_MAIN;
         return restarted;
       }
     }
@@ -599,10 +596,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ? getHdrLadderForDevice(ctx?.deviceType)
       : getLadderForDevice(ctx?.deviceType);
     const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
-    const { dir: sessionDir, profileHash } = this.cacheDirFor(
+    const { dir: sessionDir, baseHash } = this.cacheDirFor(
       ctx,
       mediaFileId,
-      'main',
+      VARIANT_MAIN,
       quality,
     );
     const dirExisted = existsSync(sessionDir);
@@ -627,7 +624,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       requestedSegment,
       ctx,
     );
-    session.profileHash = profileHash;
+    session.baseProfileHash = baseHash;
+    session.variant = VARIANT_MAIN;
     this.applyContext(session, ctx);
 
     return session;
@@ -736,8 +734,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     absolutePath: string,
     ctx?: SessionContext,
   ): Promise<TranscodeSession> {
-    const profileHash = this.computeProfileHashForCtx(ctx);
-    const id = earlySessionKey(mediaFileId, ctx?.userId, profileHash);
+    const baseHash = this.computeProfileHashForCtx(ctx);
+    const id = sessionKey(
+      mediaFileId,
+      ctx?.userId,
+      variantHash(baseHash, VARIANT_EARLY),
+    );
     return this.withLock(id, async () => {
       const existing = this.sessions.get(id);
       if (existing) {
@@ -758,10 +760,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         ? getHdrLadderForDevice(ctx?.deviceType)
         : getLadderForDevice(ctx?.deviceType);
       const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
-      const { dir: sessionDir, profileHash } = this.cacheDirFor(
+      const { dir: sessionDir, baseHash } = this.cacheDirFor(
         ctx,
         mediaFileId,
-        'early',
+        VARIANT_EARLY,
         quality,
       );
       const dirExisted = existsSync(sessionDir);
@@ -829,7 +831,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         segSubDir: usesVarStreamMap ? '0' : undefined,
         extra: { actualHwAccel: this.detectedHwAccel },
       });
-      session.profileHash = profileHash;
+      session.baseProfileHash = baseHash;
+      session.variant = VARIANT_EARLY;
       this.applyContext(session, ctx);
       return session;
     });
@@ -1212,10 +1215,15 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     requestedSegment = 0,
     ctx?: SessionContext,
   ): Promise<TranscodeSession> {
-    // Remux variant lives under its own profile bucket so the cache
-    // path matches `cacheDirFor(..., 'remux')`'s `${baseHash}-remux`.
-    const remuxHash = `${this.computeProfileHashForCtx(ctx)}-remux`;
-    const key = sessionKey(mediaFileId, ctx?.userId, remuxHash);
+    // Remux variant lives in its own session-map bucket so its cache
+    // path doesn't collide with a main session for the same base
+    // profile hash.
+    const baseHash = this.computeProfileHashForCtx(ctx);
+    const key = sessionKey(
+      mediaFileId,
+      ctx?.userId,
+      variantHash(baseHash, VARIANT_REMUX),
+    );
     return this.withLock(key, () =>
       this.doGetOrCreateRemuxSession(
         key,
@@ -1257,10 +1265,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const { dir: sessionDir, profileHash } = this.cacheDirFor(
+    const { dir: sessionDir, baseHash: remuxBaseHash } = this.cacheDirFor(
       ctx,
       mediaFileId,
-      'remux',
+      VARIANT_REMUX,
       'remux',
     );
     await fsp.mkdir(sessionDir, { recursive: true });
@@ -1289,7 +1297,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       startSegment: requestedSegment,
       extra: { remux: true },
     });
-    session.profileHash = profileHash;
+    session.baseProfileHash = remuxBaseHash;
+    session.variant = VARIANT_REMUX;
 
     this.applyContext(session, ctx);
     return session;
@@ -1306,12 +1315,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     requestedSegment = 0,
     ctx?: SessionContext,
   ): Promise<TranscodeSession> {
-    const audioHash = `${this.computeProfileHashForCtx(ctx)}-a${audioIndex}`;
-    const key = audioSessionKey(
+    const baseHash = this.computeProfileHashForCtx(ctx);
+    const variant: SessionVariant = { kind: 'audio', audioIndex };
+    const key = sessionKey(
       mediaFileId,
-      audioIndex,
       ctx?.userId,
-      audioHash,
+      variantHash(baseHash, variant),
     );
     return this.withLock(key, () =>
       this.doGetOrCreateAudioSession(
@@ -1365,10 +1374,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const { dir: sessionDir, profileHash } = this.cacheDirFor(
+    const { dir: sessionDir, baseHash: audioBaseHash } = this.cacheDirFor(
       ctx,
       mediaFileId,
-      { audio: audioIndex },
+      { kind: 'audio', audioIndex },
       'audio',
     );
     await fsp.mkdir(sessionDir, { recursive: true });
@@ -1395,7 +1404,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       segExt: ctx?.useTs ? '.ts' : undefined,
       extra: { isAudioOnly: true },
     });
-    session.profileHash = profileHash;
+    session.baseProfileHash = audioBaseHash;
+    session.variant = { kind: 'audio', audioIndex };
 
     this.applyContext(session, ctx);
     return session;
@@ -1427,14 +1437,14 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   private cleanupStaleSessions() {
     const now = Date.now();
     for (const [id, session] of this.sessions) {
-      if (!session.profileHash) {
+      if (!session.baseProfileHash) {
         this.fallbackIdleCleanup(now, id, session);
         continue;
       }
       const matching = this.liveSessions.listForJob(
         session.userId ?? null,
         session.mediaFileId,
-        baseProfileHash(session.profileHash),
+        session.baseProfileHash,
       );
       if (matching.length > 0) {
         session.seenAnyLiveSession = true;
@@ -1584,13 +1594,3 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   }
 }
 
-/**
- * Strip a variant suffix (`-early`, `-remux`, `-a<N>`) off a session's
- * profileHash to recover the base hash that the live-session registry
- * tracks. The registry has one entry per client, so every ffmpeg
- * variant produced for that client (main, early, remux, per-audio)
- * should match the same live session by base hash.
- */
-function baseProfileHash(sessionHash: string): string {
-  return sessionHash.replace(/-(?:early|remux|a\d+)$/, '');
-}

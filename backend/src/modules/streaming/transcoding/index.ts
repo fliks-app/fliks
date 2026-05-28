@@ -16,7 +16,17 @@ export {
 export { requestedHwAccelFor } from './hw-detect';
 export { resolveTonemapPath, type ResolvedTonemapPath } from './tonemap-path';
 export { encoderRegistry } from './codec/encoders';
-export { audioSessionKey, earlySessionKey, sessionKey } from './session-key';
+export { sessionKey } from './session-key';
+export {
+  VARIANT_EARLY,
+  VARIANT_MAIN,
+  VARIANT_REMUX,
+  baseProfileHash,
+  isVariantOf,
+  variantHash,
+  variantSuffix,
+} from './variant';
+export type { SessionVariant } from './variant';
 export {
   generateMasterPlaylist,
   getAvailableProfiles,

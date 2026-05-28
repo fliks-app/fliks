@@ -27,6 +27,7 @@ import {
   PROFILES,
   DESKTOP_HDR_PROFILES,
   SessionContext,
+  VARIANT_EARLY,
   profileFitsSource,
   computeProfileHash,
   buildPlaybackProfileFromContext,
@@ -71,30 +72,31 @@ function withTimestampMap(vtt: string | Buffer): string {
 let SEG_DURATION = 3;
 
 /**
- * Build the `?token=...&sid=...` query suffix that every URL emitted by
- * playback-info / manifest endpoints carries. The token authenticates
- * the request; the sid binds the request to a specific
+ * Compose / append the `token=...` + `sid=...` query pair that every
+ * streaming URL (manifest, variant, segment, audio) carries. The token
+ * authenticates the request; the sid binds it to a
  * {@link LiveSessionRegistry} entry so segment endpoints can route to
  * the exact `(file, user, profileHash)` transcode session instead of
  * the most-recently-accessed heuristic fallback.
+ *
+ * When `base` is omitted the result is a leading query suffix
+ * (`?token=...&sid=...` or empty); when supplied the params are
+ * appended to the existing URL with the correct separator.
  */
-function buildStreamQuery(
-  token: string | null | undefined,
-  sid: string | null | undefined,
+function streamQuery(
+  params: {
+    token?: string | null;
+    sid?: string | null;
+  },
+  base?: string,
 ): string {
-  const params: string[] = [];
-  if (token) params.push(`token=${encodeURIComponent(token)}`);
-  if (sid) params.push(`sid=${encodeURIComponent(sid)}`);
-  return params.length ? `?${params.join('&')}` : '';
-}
-
-/** Append `&sid=...` (or `?sid=...` when the URL has no query string) to
- *  a URL produced by `stream-builder`. The builder doesn't know the
- *  sessionId — `playback-info` issues it after evaluation and threads
- *  it into the playUrl right before returning to the client. */
-function appendSidToUrl(url: string, sid: string): string {
-  const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}sid=${encodeURIComponent(sid)}`;
+  const parts: string[] = [];
+  if (params.token) parts.push(`token=${encodeURIComponent(params.token)}`);
+  if (params.sid) parts.push(`sid=${encodeURIComponent(params.sid)}`);
+  if (!parts.length) return base ?? '';
+  if (base == null) return `?${parts.join('&')}`;
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}${parts.join('&')}`;
 }
 
 /** Pick the right HLS segment Content-Type. fMP4 (.m4s / .mp4) → video/mp4,
@@ -250,8 +252,8 @@ export class StreamingController {
   }
 
   /** Same routing as {@link resolveSession} for the early-segment
-   *  companion. The LiveSessionRegistry tracks the base profile hash;
-   *  `getExistingEarlySession` adds the `-early` discriminator itself. */
+   *  companion — the base profile hash is the same; only the variant
+   *  differs. */
   private resolveEarlySession(
     mediaFileId: number,
     userId: number | undefined,
@@ -261,10 +263,11 @@ export class StreamingController {
     if (sid) {
       const live = this.liveSessions.get(sid);
       if (live && live.profileHash) {
-        const exact = this.transcodingService.getExistingEarlySession(
+        const exact = this.transcodingService.getExistingSession(
           mediaFileId,
           userId,
           live.profileHash,
+          VARIANT_EARLY,
         );
         if (exact) return exact;
       }
@@ -621,7 +624,7 @@ export class StreamingController {
     );
     const token = firstQueryString(req.query, 'token');
     const sid = firstQueryString(req.query, 'sid');
-    const tokenParam = buildStreamQuery(token, sid);
+    const tokenParam = streamQuery({ token, sid });
     const burnInSubtitleRaw = firstQueryString(req.query, 'burnInSubtitleId');
     const burnInSubtitleId = burnInSubtitleRaw
       ? parseInt(burnInSubtitleRaw, 10)
@@ -849,9 +852,9 @@ export class StreamingController {
     // propagate the same `sid` into the variant + segment URLs they
     // generate, so the segment-serving routes can look up the exact
     // `(file, user, profileHash)` session without heuristics.
-    const playUrlWithSid = appendSidToUrl(
+    const playUrlWithSid = streamQuery(
+      { sid: liveSession.sessionId },
       result.playUrl,
-      liveSession.sessionId,
     );
 
     return {
@@ -897,11 +900,8 @@ export class StreamingController {
       live.mediaFileId,
       userId,
     );
-    const variantPrefix = `${live.profileHash}-`;
     const toKill = matching.filter(
-      (s) =>
-        s.profileHash === live.profileHash ||
-        (s.profileHash != null && s.profileHash.startsWith(variantPrefix)),
+      (s) => s.baseProfileHash === live.profileHash,
     );
     for (const s of toKill) {
       this.transcodingService.killSessionById(s.id);
@@ -970,7 +970,7 @@ export class StreamingController {
 
     const token = firstQueryString(req.query, 'token');
     const sid = firstQueryString(req.query, 'sid');
-    const tokenParam = buildStreamQuery(token, sid);
+    const tokenParam = streamQuery({ token, sid });
 
     const includeRemux = firstQueryString(req.query, 'remux') === '1';
     const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
@@ -1150,7 +1150,7 @@ export class StreamingController {
 
     const token = firstQueryString(req.query, 'token');
     const sid = firstQueryString(req.query, 'sid');
-    const tokenParam = buildStreamQuery(token, sid);
+    const tokenParam = streamQuery({ token, sid });
     const basePath = `/api/stream/${mediaFileId}/audio/${audioIndex}`;
     const useTs = this.activeStreamTracker.getUseTs(mediaFileId);
     const segExt = useTs ? 'ts' : 'm4s';
@@ -1339,7 +1339,7 @@ export class StreamingController {
 
     const token = firstQueryString(req.query, 'token');
     const sid = firstQueryString(req.query, 'sid');
-    const tokenParam = buildStreamQuery(token, sid);
+    const tokenParam = streamQuery({ token, sid });
     const basePath = `/api/stream/${mediaFileId}/${quality}`;
     // Use the master.m3u8 decision — must match to avoid init filename mismatch.
     const multiAudio = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
