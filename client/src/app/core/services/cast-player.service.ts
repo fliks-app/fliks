@@ -280,6 +280,12 @@ export class CastPlayerService {
   readonly hasMedia = signal(false);
   /** Whether the Cast overlay card is expanded. */
   readonly expanded = signal(false);
+  /** Server-issued live session id for the currently-playing Cast stream.
+   *  Distinct from the sender's local sid: the receiver's profile (cast
+   *  codec capabilities) and the resulting transcode session live under
+   *  this id, so the sender heartbeats it instead of its local sid while
+   *  the cast is connected. */
+  readonly liveSessionId = signal<string | null>(null);
 
   /**
    * Initialize a Cast session with media data from the player.
@@ -340,11 +346,15 @@ export class CastPlayerService {
    *  encoder slots and disk cache. */
   clear() {
     const mfId = this.mediaFileId();
+    const castSid = this.liveSessionId();
     this.saveCastPosition(); // Save final position before clearing
     this.stopPositionSaving();
     if (mfId) {
-      this.streamingApi.stopSessions(mfId).catch(() => {});
+      // Sid-scoped kill so a sender that's still watching locally on a
+      // different profile isn't torn down by the cast stop.
+      this.streamingApi.stopSessions(mfId, castSid ?? undefined).catch(() => {});
     }
+    this.liveSessionId.set(null);
     this.hasMedia.set(false);
     this.expanded.set(false);
     this.mediaFileId.set(0);
@@ -408,7 +418,7 @@ export class CastPlayerService {
    */
   private async dispatchLoad(
     mfId: number,
-    pi: { playMethod: string },
+    pi: { playMethod: string; sessionId?: string },
     currentPos: number,
     transcodeQuality: string | undefined,
     castInfo: { token: string; streamBaseUrl: string },
@@ -435,17 +445,29 @@ export class CastPlayerService {
     let contentType: string;
     const tokenQ = encodeURIComponent(castToken);
     const startAtParam = `&startAt=${Math.floor(currentPos)}`;
+    const sidParam = pi.sessionId
+      ? `&sid=${encodeURIComponent(pi.sessionId)}`
+      : '';
     if (castMode === 'direct') {
-      castUrl = this.streamingApi.getAbsoluteStreamUrl(mfId, castToken);
+      castUrl = this.streamingApi.getAbsoluteStreamUrl(
+        mfId,
+        castToken,
+        pi.sessionId,
+      );
       contentType = 'video/mp4';
     } else if (castMode === 'remux') {
-      castUrl = `${lanUrl}/api/stream/${mfId}/master.m3u8?token=${tokenQ}&remux=1${startAtParam}`;
+      castUrl = `${lanUrl}/api/stream/${mfId}/master.m3u8?token=${tokenQ}${sidParam}&remux=1${startAtParam}`;
       contentType = 'application/x-mpegurl';
     } else {
       const q = transcodeQuality ?? '1080p';
-      castUrl = `${lanUrl}/api/stream/${mfId}/master.m3u8?token=${tokenQ}&startQuality=${q}${startAtParam}`;
+      castUrl = `${lanUrl}/api/stream/${mfId}/master.m3u8?token=${tokenQ}${sidParam}&startQuality=${q}${startAtParam}`;
       contentType = 'application/x-mpegurl';
     }
+
+    // Stash the Cast live-session id so the sender's heartbeat loop
+    // (`savePosition` in the local player) keeps the receiver's
+    // session warm instead of beating the now-paused browser session.
+    this.liveSessionId.set(pi.sessionId ?? null);
 
     const subtitles = this.subtitleInfos
       .filter(s => !s.burnIn && s.subtitleDbId)

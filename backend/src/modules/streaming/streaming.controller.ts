@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   Post,
   Req,
@@ -26,11 +27,17 @@ import {
   PROFILES,
   DESKTOP_HDR_PROFILES,
   SessionContext,
-  getHdrLadderForDevice,
-  getLadderForDevice,
+  VARIANT_EARLY,
   profileFitsSource,
+  computeProfileHash,
+  buildPlaybackProfileFromContext,
 } from './transcoding';
-import { secondsToSegmentIndex } from './transcoding/constants';
+import type { TranscodeSession } from './transcoding/types';
+import {
+  getSegmentDuration,
+  secondsToSegmentIndex,
+} from './transcoding/constants';
+import { LiveSessionRegistry } from './live-session.service';
 import { readAndRewriteCmaf } from './transcoding/cmaf-rewrite';
 import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { ThumbnailService } from './thumbnail.service';
@@ -63,6 +70,34 @@ function withTimestampMap(vtt: string | Buffer): string {
 
 /** Default segment duration — overridden by admin streaming settings. */
 let SEG_DURATION = 3;
+
+/**
+ * Compose / append the `token=...` + `sid=...` query pair that every
+ * streaming URL (manifest, variant, segment, audio) carries. The token
+ * authenticates the request; the sid binds it to a
+ * {@link LiveSessionRegistry} entry so segment endpoints can route to
+ * the exact `(file, user, profileHash)` transcode session instead of
+ * the most-recently-accessed heuristic fallback.
+ *
+ * When `base` is omitted the result is a leading query suffix
+ * (`?token=...&sid=...` or empty); when supplied the params are
+ * appended to the existing URL with the correct separator.
+ */
+function streamQuery(
+  params: {
+    token?: string | null;
+    sid?: string | null;
+  },
+  base?: string,
+): string {
+  const parts: string[] = [];
+  if (params.token) parts.push(`token=${encodeURIComponent(params.token)}`);
+  if (params.sid) parts.push(`sid=${encodeURIComponent(params.sid)}`);
+  if (!parts.length) return base ?? '';
+  if (base == null) return `?${parts.join('&')}`;
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}${parts.join('&')}`;
+}
 
 /** Pick the right HLS segment Content-Type. fMP4 (.m4s / .mp4) → video/mp4,
  *  MPEG-TS (.ts, used as the explicit `useTs` fallback for Tizen TVs on
@@ -189,6 +224,57 @@ function firstQueryString(
 export class StreamingController {
   private readonly log = new Logger(StreamingController.name);
 
+  /** Resolve the exact transcode session for a request: prefer the
+   *  `(file, user, profileHash)` triple derived from the request's
+   *  `?sid=` query — that's what manifest URLs bake in so segment
+   *  fetches route to the right ffmpeg even when a single user is
+   *  watching the same file on multiple devices with different
+   *  profiles. Falls back to the "most recently accessed" heuristic
+   *  when no sid is provided or the live session has expired. */
+  private resolveSession(
+    mediaFileId: number,
+    userId: number | undefined,
+    req: Request,
+  ): TranscodeSession | undefined {
+    const sid = firstQueryString(req.query, 'sid');
+    if (sid) {
+      const live = this.liveSessions.get(sid);
+      if (live && live.profileHash) {
+        const exact = this.transcodingService.getExistingSession(
+          mediaFileId,
+          userId,
+          live.profileHash,
+        );
+        if (exact) return exact;
+      }
+    }
+    return this.transcodingService.findCurrentSession(mediaFileId, userId);
+  }
+
+  /** Same routing as {@link resolveSession} for the early-segment
+   *  companion — the base profile hash is the same; only the variant
+   *  differs. */
+  private resolveEarlySession(
+    mediaFileId: number,
+    userId: number | undefined,
+    req: Request,
+  ): TranscodeSession | undefined {
+    const sid = firstQueryString(req.query, 'sid');
+    if (sid) {
+      const live = this.liveSessions.get(sid);
+      if (live && live.profileHash) {
+        const exact = this.transcodingService.getExistingSession(
+          mediaFileId,
+          userId,
+          live.profileHash,
+          VARIANT_EARLY,
+        );
+        if (exact) return exact;
+      }
+    }
+    return this.transcodingService.findCurrentEarlySession(mediaFileId, userId);
+  }
+
   constructor(
     private readonly streamingService: StreamingService,
     private readonly subtitleStreamService: SubtitleStreamService,
@@ -200,12 +286,12 @@ export class StreamingController {
     private readonly playbackService: PlaybackService,
     private readonly markersService: MarkersService,
     private readonly streamingSettingsCache: StreamingSettingsCache,
+    private readonly liveSessions: LiveSessionRegistry,
   ) {}
 
   private getStreamingSettings() {
     return this.streamingSettingsCache.get();
   }
-
 
   private buildSessionContext(
     req: Request,
@@ -325,12 +411,14 @@ export class StreamingController {
         }
         effectiveStartAt = effectiveStartAt ?? 0;
       }
+      const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+      const profileHash = this.transcodingService.computeProfileHashForCtx(ctx);
       const existing = this.transcodingService.getExistingSession(
         mediaFileId,
         req.user?.id,
+        profileHash,
       );
       if (existing && existing.process.exitCode === null) return;
-      const ctx = this.buildSessionContext(req, resolved, mediaFileId);
 
       // `remux` / `original` resolve to the player's actual rung only
       // after the manifest loads — Shaka filters variants whose
@@ -535,7 +623,8 @@ export class StreamingController {
       req.user as User,
     );
     const token = firstQueryString(req.query, 'token');
-    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+    const sid = firstQueryString(req.query, 'sid');
+    const tokenParam = streamQuery({ token, sid });
     const burnInSubtitleRaw = firstQueryString(req.query, 'burnInSubtitleId');
     const burnInSubtitleId = burnInSubtitleRaw
       ? parseInt(burnInSubtitleRaw, 10)
@@ -630,66 +719,21 @@ export class StreamingController {
       sv?.height ?? 0,
     );
 
-    // Device-profile drift detection. A single user can hop between a
-    // browser tab (which accepts EAC-3 copy on 2-ch) and the Chromecast
-    // (AAC transcode only) without unloading the file. The session map
-    // is keyed (mediaFileId, userId), so both hops share the same
-    // entry — and prewarm short-circuits on `existing.exitCode === null`
-    // without comparing plans. The result is a manifest advertising the
-    // new codec while ffmpeg keeps writing segments in the old one,
-    // tripping Shaka 4032 (CONTENT_UNSUPPORTED_BY_BROWSER) on Cast.
-    // Kill the running session whenever the new audio plan, the new
-    // video variant or the new mux flavour (Tizen hopping TS ↔ fmp4)
-    // disagrees with what it was spawned for; the prewarm immediately
-    // below then respawns with the up-to-date plan.
-    const newAudioCodec = result.audioPlan?.codec;
-    const newVideoCodec = this.activeStreamTracker
-      .getVideoVariant(mediaFileId)
-      ?.codec;
-    const newMuxFlavour: 'ts' | 'fmp4' = effectiveUseTs ? 'ts' : 'fmp4';
-    // Audio layout the *next* session would be spawned with. Mirrors
-    // the gate in `buildSessionContext` so flipping `useTs` (which
-    // toggles muxed-vs-separated audio under us) kills the running
-    // session instead of leaving an EXT-X-MEDIA master pointing at a
-    // `var_stream_map`-less segment tree.
-    const trackedAudioCount =
-      this.activeStreamTracker.getAudioStreamCount(mediaFileId);
-    const newAudioLayout: 'inline' | 'var-stream-map' = pickAudioLayout(
-      trackedAudioCount,
-      newMuxFlavour,
-    );
-    const existingForDrift = this.transcodingService.getExistingSession(
-      mediaFileId,
-      req.user?.id,
-    );
-    if (
-      existingForDrift &&
-      existingForDrift.process.exitCode === null &&
-      (existingForDrift.audioPlan?.codec !== newAudioCodec ||
-        existingForDrift.videoVariant?.codec !== newVideoCodec ||
-        (existingForDrift.muxFlavour &&
-          existingForDrift.muxFlavour !== newMuxFlavour) ||
-        (existingForDrift.audioLayout &&
-          existingForDrift.audioLayout !== newAudioLayout))
-    ) {
-      this.log.log(
-        `[playback-info] profile drift on file ${mediaFileId} — killing session ` +
-          `(audio: ${existingForDrift.audioPlan?.codec ?? '∅'} → ${newAudioCodec ?? '∅'}, ` +
-          `video: ${existingForDrift.videoVariant?.codec ?? '∅'} → ${newVideoCodec ?? '∅'}, ` +
-          `mux: ${existingForDrift.muxFlavour ?? '∅'} → ${newMuxFlavour}, ` +
-          `audioLayout: ${existingForDrift.audioLayout ?? '∅'} → ${newAudioLayout})`,
-      );
-      await this.transcodingService.killSession(mediaFileId, req.user?.id);
-    }
+    // Different device profiles (codec / mux / audio layout) hash to
+    // different session-map keys, so multi-device playback of the same
+    // file lands on coexisting sessions instead of mutually killing one
+    // another. No drift kill needed: a hop from browser → cast spawns a
+    // new session under the cast's profileHash and leaves the browser's
+    // session untouched.
 
     // Pre-spawn ffmpeg as early as possible — the client will GET master.m3u8
     // next (~100–300ms later) and then seg-0. Starting ffmpeg here overlaps
     // that gap with encoder init so segment 0 is usually already on disk
     // (or streaming) when requested. No-op for DirectPlay or auto quality.
+    const startQuality = firstQueryString(req.query, 'startQuality');
+    const startAtRaw = firstQueryString(req.query, 'startAt');
+    const startAt = startAtRaw != null ? parseFloat(startAtRaw) : undefined;
     if (result.playMethod !== 'DirectPlay') {
-      const startQuality = firstQueryString(req.query, 'startQuality');
-      const startAtRaw = firstQueryString(req.query, 'startAt');
-      const startAt = startAtRaw != null ? parseFloat(startAtRaw) : undefined;
       // Await prewarm before responding so the session is registered in the
       // map when the frontend's subsequent master.m3u8/seg-0 requests
       // arrive — prevents a race where hlsSegment would spawn a duplicate
@@ -767,13 +811,101 @@ export class StreamingController {
       ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop })
       : null;
 
+    // Issue a live-session handle the client embeds in every subsequent
+    // heartbeat (PUT /playback/media/:id/state). The profile hash is
+    // computed from the same SessionContext the transcoding service
+    // will use to spawn ffmpeg, so multi-device dashboards can match
+    // a LiveSession back to its on-disk cache directory.
+    const sessionCtx = this.buildSessionContext(req, resolved, mediaFileId);
+    const profileHash =
+      result.playMethod === 'DirectPlay'
+        ? null
+        : computeProfileHash(
+            buildPlaybackProfileFromContext(
+              sessionCtx,
+              getSegmentDuration() * 1000,
+            ),
+          );
+    const kind =
+      result.playMethod === 'DirectPlay'
+        ? 'directplay'
+        : result.playMethod === 'DirectStream'
+          ? 'remux'
+          : 'transcode';
+    const deviceLabel: string | null = req.get('user-agent') ?? null;
+    const liveSession = this.liveSessions.create({
+      userId: user?.id ?? null,
+      username: user?.username ?? null,
+      mediaFileId,
+      mediaTitle: resolved.media?.title ?? null,
+      mediaType: resolved.media?.type ?? null,
+      posterUrl: resolved.media?.posterUrl ?? null,
+      profileHash,
+      quality: typeof startQuality === 'string' ? startQuality : null,
+      kind,
+      deviceLabel,
+      position: startAt ?? 0,
+    });
+
+    // Bake the sessionId into the playUrl so every subsequent manifest /
+    // segment request the player issues carries it. Manifest endpoints
+    // propagate the same `sid` into the variant + segment URLs they
+    // generate, so the segment-serving routes can look up the exact
+    // `(file, user, profileHash)` session without heuristics.
+    const playUrlWithSid = streamQuery(
+      { sid: liveSession.sessionId },
+      result.playUrl,
+    );
+
     return {
       ...result,
+      playUrl: playUrlWithSid,
       tonemapAlgo,
       durationSeconds: duration,
       markers,
       chapters,
+      sessionId: liveSession.sessionId,
+      profileHash,
     };
+  }
+
+  /**
+   * Explicit stop signal from the client (player destroy / page unload,
+   * fetched with `keepalive: true`). Drops the live-session entry AND
+   * kills the matching ffmpeg job — scoped to the `(user, file,
+   * profileHash)` carried by the session, so a multi-device viewer
+   * closing one device leaves every other device's stream untouched.
+   * Cache is preserved across the kill. Idempotent — silently 204 on
+   * unknown sessionIds.
+   */
+  @Delete('sessions/:sessionId')
+  @HttpCode(204)
+  stopLiveSession(@Param('sessionId') sessionId: string) {
+    const live = this.liveSessions.get(sessionId);
+    this.liveSessions.stop(sessionId);
+    if (!live || !live.profileHash) return;
+    // Only kill the underlying ffmpeg job(s) when no other live
+    // session is still referencing this (user, file, profileHash) —
+    // multi-tab or multi-device viewers sharing one ffmpeg should keep
+    // it alive while at least one consumer remains. The cleanup loop
+    // will reap the job 60 s after the last viewer leaves.
+    const remaining = this.liveSessions.listForJob(
+      live.userId,
+      live.mediaFileId,
+      live.profileHash,
+    );
+    if (remaining.length > 0) return;
+    const userId = live.userId ?? undefined;
+    const matching = this.transcodingService.getSessionsForFileUser(
+      live.mediaFileId,
+      userId,
+    );
+    const toKill = matching.filter(
+      (s) => s.baseProfileHash === live.profileHash,
+    );
+    for (const s of toKill) {
+      this.transcodingService.killSessionById(s.id);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -837,7 +969,8 @@ export class StreamingController {
     const h = crop?.height ?? v?.height ?? 1080;
 
     const token = firstQueryString(req.query, 'token');
-    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+    const sid = firstQueryString(req.query, 'sid');
+    const tokenParam = streamQuery({ token, sid });
 
     const includeRemux = firstQueryString(req.query, 'remux') === '1';
     const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
@@ -1016,7 +1149,8 @@ export class StreamingController {
     }
 
     const token = firstQueryString(req.query, 'token');
-    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+    const sid = firstQueryString(req.query, 'sid');
+    const tokenParam = streamQuery({ token, sid });
     const basePath = `/api/stream/${mediaFileId}/audio/${audioIndex}`;
     const useTs = this.activeStreamTracker.getUseTs(mediaFileId);
     const segExt = useTs ? 'ts' : 'm4s';
@@ -1060,10 +1194,7 @@ export class StreamingController {
     // on a multi-audio video session (master.m3u8 only emits EXT-X-MEDIA when
     // `audioStreams.length > 1`), so we don't need a separate audio-only path —
     // any segment Shaka asks for here is in `<videoSession.cachePath>/<varStreamPath>`.
-    let videoSession = this.transcodingService.getExistingSession(
-      mediaFileId,
-      user?.id,
-    );
+    let videoSession = this.resolveSession(mediaFileId, user?.id, req);
     if (!videoSession) {
       const resolved = await this.streamingService.resolveFile(
         mediaFileId,
@@ -1107,10 +1238,7 @@ export class StreamingController {
     // parallel with main, so it lands first. Use a short timeout — main
     // covers the same files behind it, so wasting 60s on early when it has
     // already exited adds latency for nothing.
-    const earlySession = this.transcodingService.getExistingEarlySession(
-      mediaFileId,
-      user?.id,
-    );
+    const earlySession = this.resolveEarlySession(mediaFileId, user?.id, req);
     const useEarly =
       earlySession != null &&
       videoSession.startSegment != null &&
@@ -1182,10 +1310,7 @@ export class StreamingController {
     // Exception: Cast passes startAt for resume position — pre-start for Cast/remux only.
     const startAtRaw = firstQueryString(req.query, 'startAt');
     if (startAtRaw) {
-      const existing = this.transcodingService.getExistingSession(
-        mediaFileId,
-        req.user?.id,
-      );
+      const existing = this.resolveSession(mediaFileId, req.user?.id, req);
       if (!existing || existing.process.exitCode !== null) {
         const startAtSec = parseInt(startAtRaw, 10);
         const startSegment = secondsToSegmentIndex(startAtSec);
@@ -1213,7 +1338,8 @@ export class StreamingController {
     }
 
     const token = firstQueryString(req.query, 'token');
-    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+    const sid = firstQueryString(req.query, 'sid');
+    const tokenParam = streamQuery({ token, sid });
     const basePath = `/api/stream/${mediaFileId}/${quality}`;
     // Use the master.m3u8 decision — must match to avoid init filename mismatch.
     const multiAudio = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
@@ -1275,10 +1401,7 @@ export class StreamingController {
     // Fast path: if a session already exists, skip the DB query — we only
     // need resolveFile for absolutePath + context when creating a NEW session.
     // Saves ~15-25ms per segment (a 2h file = ~2400 segments = ~40s saved).
-    const existing = this.transcodingService.getExistingSession(
-      mediaFileId,
-      req.user?.id,
-    );
+    const existing = this.resolveSession(mediaFileId, req.user?.id, req);
 
     // For init.mp4: serve from the early session when it exists with matching
     // quality. Its init bytes are byte-identical to main's (same encoder
@@ -1303,9 +1426,10 @@ export class StreamingController {
       // Same caveat as the segment path: remux video-only doesn't use
       // var_stream_map, so the `0/` prefix would 404 on the init lookup.
       const initFile = ma && quality !== 'remux' ? `0/${segment}` : segment;
-      const earlySession = this.transcodingService.getExistingEarlySession(
+      const earlySession = this.resolveEarlySession(
         mediaFileId,
         req.user?.id,
+        req,
       );
       const sources =
         earlySession && earlySession.quality === existing.quality
@@ -1383,9 +1507,9 @@ export class StreamingController {
 
     // Early probe routing: when Shaka requests a segment before the main
     // session's startSegment (typical Shaka VOD behavior on resume), route
-    // to the early companion if it exists. 10s timeout safety net : si
-    // early hang (régression du fix Phase 2), fall through au slow path
-    // standard rather than blocking 60s.
+    // to the early companion if it exists. 10 s timeout safety net — if
+    // the early session hangs we fall through to the slow path rather
+    // than blocking on a 60 s waitForSegment.
     const isEarlyProbe =
       quality !== 'remux' &&
       existing != null &&
@@ -1394,9 +1518,10 @@ export class StreamingController {
       existing.startSegment > 0 &&
       segIndex < existing.startSegment;
     if (isEarlyProbe) {
-      const earlySession = this.transcodingService.getExistingEarlySession(
+      const earlySession = this.resolveEarlySession(
         mediaFileId,
         req.user?.id,
+        req,
       );
       if (earlySession && earlySession.quality === quality) {
         const varStreamMap =
@@ -1494,6 +1619,16 @@ export class StreamingController {
     await this.transcodingService.killSession(mediaFileId, user?.id);
     if (user) {
       this.activeStreamTracker.unregister(user.id, mediaFileId);
+    }
+    // Drop any live-session entries for this (user, file) so the
+    // dashboard stops surfacing the row immediately instead of waiting
+    // for the heartbeat ttl. Multi-device clean-up: we only touch
+    // sessions that match `user.id`, leaving other devices alive.
+    const userId = user?.id ?? null;
+    for (const s of this.liveSessions.list()) {
+      if (s.mediaFileId === mediaFileId && s.userId === userId) {
+        this.liveSessions.stop(s.sessionId);
+      }
     }
     return { ok: true };
   }

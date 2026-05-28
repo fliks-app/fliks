@@ -36,6 +36,7 @@ import {
   TranscodingService,
 } from '../streaming/transcoding';
 import { ActiveStreamTracker } from '../streaming/active-stream-tracker.service';
+import { LiveSessionRegistry } from '../streaming/live-session.service';
 import { PlaybackService } from '../streaming/playback.service';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';
@@ -146,6 +147,7 @@ export class SystemController {
     private readonly eventsService: EventsService,
     private readonly transcodingService: TranscodingService,
     private readonly activeStreamTracker: ActiveStreamTracker,
+    private readonly liveSessions: LiveSessionRegistry,
     private readonly playbackService: PlaybackService,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
@@ -455,9 +457,16 @@ export class SystemController {
         mode: s.mode,
         quality: s.quality,
         hwAccel: s.hwAccelVal,
-        device: s.userId
-          ? this.activeStreamTracker.getDeviceName(s.userId, s.mediaFileId)
-          : null,
+        device:
+          this.liveSessions
+            .list()
+            .find(
+              (ls) =>
+                ls.userId === s.userId && ls.mediaFileId === s.mediaFileId,
+            )?.deviceLabel ??
+          (s.userId
+            ? this.activeStreamTracker.getDeviceName(s.userId, s.mediaFileId)
+            : null),
         startedAt: s.startedAt,
         lastActivity: s.lastActivity,
         positionSeconds,

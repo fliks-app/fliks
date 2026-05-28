@@ -421,6 +421,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   });
   private playbackInfo: PlaybackInfoResponse | null = null;
 
+  /** Live-session id to bind the next stream request to. While casting
+   *  the receiver's session id wins (its segments come from a separate
+   *  ffmpeg job under the cast device profile); otherwise the local
+   *  browser's session id. */
+  private activeSessionId(): string | undefined {
+    if (this.castService.isConnected()) {
+      return (
+        this.castPlayerService.liveSessionId() ?? this.playbackInfo?.sessionId
+      );
+    }
+    return this.playbackInfo?.sessionId;
+  }
+
   readonly playerStats = computed<PlayerStats | null>(() => {
     if (!this.statsVisible()) return null;
 
@@ -845,12 +858,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
           if (mode === 'direct') {
-            const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
+            const streamUrl = this.streamingApi.getStreamUrl(
+              this.mediaFileId,
+              this.playbackInfo?.sessionId,
+            );
             await this.engine!.load(streamUrl, startTime, 'video/mp4', headers);
           } else {
             const savedQualityId = this.activeQualityId();
             const tvStartQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-            const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId, tvStartQuality, startTime);
+            const hlsUrl = this.streamingApi.getHlsUrl(
+              this.mediaFileId,
+              tvStartQuality,
+              startTime,
+              this.playbackInfo?.sessionId,
+            );
             await this.engine!.load(hlsUrl, startTime, undefined, headers);
           }
 
@@ -898,7 +919,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           if (mode === 'direct') {
             // Progressive MP4 — Media3 detects the container, no quality
             // ladder to constrain (DirectPlay = single source variant).
-            const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
+            const streamUrl = this.streamingApi.getStreamUrl(
+              this.mediaFileId,
+              this.playbackInfo?.sessionId,
+            );
             await this.engine!.load(streamUrl, startTime, 'video/mp4', headers);
           } else {
             // HLS transcode/remux — apply quality constraint before load to
@@ -922,7 +946,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
               (this.engine as NativeEngine).selectVariantTrack({ width: w, height: h });
             }
             const nativeStartQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-            const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId, nativeStartQuality, startTime);
+            const hlsUrl = this.streamingApi.getHlsUrl(
+              this.mediaFileId,
+              nativeStartQuality,
+              startTime,
+              this.playbackInfo?.sessionId,
+            );
             await this.engine!.load(hlsUrl, startTime, undefined, headers);
           }
         } else {
@@ -934,7 +963,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           );
 
           if (mode === 'direct') {
-            const streamUrl = this.streamingApi.getStreamUrl(this.mediaFileId);
+            const streamUrl = this.streamingApi.getStreamUrl(
+              this.mediaFileId,
+              this.playbackInfo?.sessionId,
+            );
             await this.engine!.load(streamUrl, startTime, 'video/mp4');
           } else {
             const savedQualityId = this.activeQualityId();
@@ -981,7 +1013,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             // the right profile + applies the quality-change grace period to
             // protect the session from Shaka's startup bandwidth probe.
             const startQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-            const hlsUrl = this.streamingApi.getHlsUrl(this.mediaFileId, startQuality, startTime);
+            const hlsUrl = this.streamingApi.getHlsUrl(
+              this.mediaFileId,
+              startQuality,
+              startTime,
+              this.playbackInfo?.sessionId,
+            );
             await this.engine!.load(hlsUrl, startTime);
           }
 
@@ -1733,9 +1770,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const startQuality = mode !== 'direct' && savedQualityId !== 'auto'
           ? savedQualityId
           : undefined;
+        const sid = this.playbackInfo?.sessionId;
         const url = mode === 'direct'
-          ? this.streamingApi.getStreamUrl(this.mediaFileId)
-          : this.streamingApi.getHlsUrl(this.mediaFileId, startQuality);
+          ? this.streamingApi.getStreamUrl(this.mediaFileId, sid)
+          : this.streamingApi.getHlsUrl(this.mediaFileId, startQuality, undefined, sid);
         const mimeType = mode === 'direct' ? 'video/mp4' : undefined;
         await this.engine.load(url, castPos > 0 ? castPos : undefined, mimeType);
         this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
@@ -2247,8 +2285,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await NativePlayer.stop().catch(() => {});
     }
 
-    // Await stop so the backend finishes cleaning the cache dir before we start a new session
-    await this.streamingApi.stopSessions(this.mediaFileId).catch(() => {});
+    // Stop only this device's session — multi-device viewers on the
+    // same file with a different profile should stay alive.
+    await this.streamingApi
+      .stopSessions(this.mediaFileId, this.playbackInfo?.sessionId)
+      .catch(() => {});
 
     const deviceProfile = this.deviceProfileService.getProfile();
     this.playbackInfo = await this.streamingApi.getPlaybackInfo(
@@ -2269,11 +2310,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     const mode = this.playbackMode();
     if (mode === 'direct') {
-      await this.engine.load(this.streamingApi.getStreamUrl(this.mediaFileId), currentPos, 'video/mp4');
+      await this.engine.load(
+        this.streamingApi.getStreamUrl(this.mediaFileId, this.playbackInfo?.sessionId),
+        currentPos,
+        'video/mp4',
+      );
     } else {
       const savedQualityId = this.activeQualityId();
       const startQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-      await this.engine.load(this.streamingApi.getHlsUrl(this.mediaFileId, startQuality, currentPos), currentPos);
+      await this.engine.load(
+        this.streamingApi.getHlsUrl(
+          this.mediaFileId,
+          startQuality,
+          currentPos,
+          pi.sessionId,
+        ),
+        currentPos,
+      );
     }
 
     this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
@@ -2291,7 +2344,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private fireAndForgetStopSessions() {
     if (!this.mediaFileId || this.playbackMode() === 'direct') return;
-    const url = this.streamingApi.getStopSessionsUrl(this.mediaFileId);
+    const url = this.streamingApi.getStopSessionsUrl(
+      this.mediaFileId,
+      this.activeSessionId(),
+    );
     fetch(url, { method: 'DELETE', keepalive: true }).catch(() => {});
   }
 
@@ -2311,14 +2367,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private stopStreamingSessions() {
     if (!this.mediaFileId || this.playbackMode() === 'direct') return;
-    this.streamingApi.stopSessions(this.mediaFileId).catch(() => {});
+    this.streamingApi
+      .stopSessions(this.mediaFileId, this.activeSessionId())
+      .catch(() => {});
   }
 
-  /** Last second-rounded position we PUT to /state. Used to dedup the
-   *  3 saves that fire on exit (onBack, ngOnDestroy, savePosition
-   *  interval): all three see the same `currentTime`, so only the first
-   *  hits the network. */
-  private lastSavedPosition: number | null = null;
+  /** Wall-clock timestamp (ms) of the last PUT to /state. Used to dedup
+   *  the cluster of saves that fire on exit (onBack, ngOnDestroy, the
+   *  savePosition interval and the 'seeked' event all hit savePosition
+   *  within the same tick). Time-based instead of position-based so a
+   *  paused player still emits a heartbeat every 10 s — the backend's
+   *  {@link LiveSessionRegistry} relies on it to keep the session warm. */
+  private lastSaveAt = 0;
 
   private async savePosition() {
     if (!this.mediaId) return;
@@ -2338,25 +2398,50 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     if (!pos) return;
 
-    const rounded = Math.floor(pos);
-    if (this.lastSavedPosition === rounded) return;
-    this.lastSavedPosition = rounded;
+    const now = Date.now();
+    if (now - this.lastSaveAt < 2_000) return;
+    this.lastSaveAt = now;
 
-    const payload = {
+    const payload: {
+      positionSeconds: number;
+      durationSeconds: number;
+      mediaFileId: number;
+      episodeId?: number;
+      sessionId?: string;
+      state?: 'playing' | 'paused' | 'buffering';
+      quality?: string | null;
+    } = {
       positionSeconds: pos,
       durationSeconds: dur || 0,
       mediaFileId: this.mediaFileId,
       episodeId: this.episodeId,
     };
 
+    const sessionId = this.activeSessionId();
+    if (sessionId) {
+      payload.sessionId = sessionId;
+      payload.state = this.paused() ? 'paused' : 'playing';
+      payload.quality = this.activeQualityId() ?? null;
+    }
+
+    // Offline queue persists position only — the heartbeat-related
+    // fields (sessionId / state / quality) are pointless once the
+    // backend session has already expired by the time we reconnect.
+    const offlinePayload = {
+      mediaId: this.mediaId,
+      mediaFileId: this.mediaFileId,
+      episodeId: this.episodeId,
+      positionSeconds: payload.positionSeconds,
+      durationSeconds: payload.durationSeconds,
+    };
     if (this.network.isOnline()) {
       try {
         await this.streamingApi.updatePlaybackState(this.mediaId, payload);
       } catch {
-        this.offlineSync.queue({ mediaId: this.mediaId, ...payload });
+        this.offlineSync.queue(offlinePayload);
       }
     } else {
-      this.offlineSync.queue({ mediaId: this.mediaId, ...payload });
+      this.offlineSync.queue(offlinePayload);
     }
   }
 

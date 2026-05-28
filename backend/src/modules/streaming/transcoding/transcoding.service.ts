@@ -8,15 +8,15 @@ import { ChildProcess, spawn } from 'child_process';
 import { existsSync, watch, FSWatcher } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
-import { TRANSCODE_DIR } from '../../../common/constants/paths';
-
 import {
+  JOB_GRACE_MS,
   SEEK_WAIT_THRESHOLD,
   SESSION_TIMEOUT_MS,
   getSegmentDuration,
   segmentIndexToSeconds,
   setSegmentDuration as applySegmentDuration,
 } from './constants';
+import { LiveSessionRegistry } from '../live-session.service';
 import {
   getHdrLadderForDevice,
   getLadderForDevice,
@@ -49,7 +49,19 @@ import {
   firstMissingSegment,
   segmentNearby,
 } from './segment-utils';
-import { audioSessionKey, earlySessionKey, sessionKey } from './session-key';
+import { sessionKey } from './session-key';
+import {
+  buildPlaybackProfileFromContext,
+  computeProfileHash,
+} from './profile-hash';
+import { TranscodeCacheService } from './transcode-cache.service';
+import {
+  VARIANT_EARLY,
+  VARIANT_MAIN,
+  VARIANT_REMUX,
+  type SessionVariant,
+  variantHash,
+} from './variant';
 import type {
   BurnInSubtitle,
   DeviceType,
@@ -68,36 +80,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   private readonly locks = new Map<string, Promise<void>>();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private detectedHwAccel: HwAccelType = 'none';
-  private cachePath = path.join(TRANSCODE_DIR, 'stream');
+  constructor(
+    private readonly cacheService: TranscodeCacheService,
+    private readonly liveSessions: LiveSessionRegistry,
+  ) {}
 
   async onModuleInit() {
-    await fsp.mkdir(this.cachePath, { recursive: true });
-
-    // The in-memory `sessions` map only knows about live sessions. After a
-    // backend restart the map starts empty, so any directory still under
-    // `cachePath` is an orphan — written by a previous process that is no
-    // longer alive to evict it. Wipe them so a re-load on the same
-    // (mediaFileId, userId) starts from a clean slate instead of inheriting
-    // partial / overflow segments from the previous run.
-    try {
-      const entries = await fsp.readdir(this.cachePath);
-      if (entries.length) {
-        await Promise.all(
-          entries.map((e) =>
-            fsp.rm(path.join(this.cachePath, e), {
-              recursive: true,
-              force: true,
-            }),
-          ),
-        );
-        this.log.log(
-          `[disk] init wipe: removed ${entries.length} orphan session dir(s)`,
-        );
-      }
-    } catch (err) {
-      this.log.warn(`[disk] init wipe failed: ${(err as Error).message}`);
-    }
-
     this.detectedHwAccel = await detectHwAccel(this.log);
     this.log.log(`Hardware acceleration: ${this.detectedHwAccel}`);
 
@@ -134,25 +122,105 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       void runTonemapOpenclProbe(this.log);
     }
 
-    this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 30_000);
+    // Tight cleanup cadence — paired with the live-session 30 s TTL +
+    // 60 s job grace, this puts ffmpeg death within ~100 s of the last
+    // viewer disappearing.
+    this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 10_000);
   }
 
-  /** Get an existing session without creating or modifying it. */
+  /** Get an existing session for an exact `(file, user, base hash,
+   *  variant)` tuple. Variant defaults to `main`; pass {@link VARIANT_EARLY}
+   *  for the early companion, etc. */
   getExistingSession(
     mediaFileId: number,
-    userId?: number,
+    userId: number | undefined,
+    baseHash: string,
+    variant: SessionVariant = VARIANT_MAIN,
   ): TranscodeSession | undefined {
-    const key = sessionKey(mediaFileId, userId);
-    return this.sessions.get(key);
+    return this.sessions.get(
+      sessionKey(mediaFileId, userId, variantHash(baseHash, variant)),
+    );
   }
 
-  /** Get the short-lived early-segment companion session (if any). Lives in
-   *  parallel to the main session during a mid-file resume. */
-  getExistingEarlySession(
+  /** All transcode sessions registered for a given `(file, user)` pair —
+   *  one per profile variant. Used by full-file cleanup (`killSession`)
+   *  and by the admin dashboard. */
+  getSessionsForFileUser(
     mediaFileId: number,
-    userId?: number,
+    userId: number | undefined,
+  ): TranscodeSession[] {
+    const matches: TranscodeSession[] = [];
+    for (const s of this.sessions.values()) {
+      if (s.mediaFileId === mediaFileId && s.userId === userId) {
+        matches.push(s);
+      }
+    }
+    return matches;
+  }
+
+  /** Convenience lookup: derives the profile hash from the supplied
+   *  context and returns the matching session, if any. Use this from
+   *  segment-serving routes where the controller has just rebuilt the
+   *  session context from the request. */
+  findSessionByCtx(
+    mediaFileId: number,
+    ctx: SessionContext | undefined,
   ): TranscodeSession | undefined {
-    return this.sessions.get(earlySessionKey(mediaFileId, userId));
+    return this.getExistingSession(
+      mediaFileId,
+      ctx?.userId,
+      this.computeProfileHashForCtx(ctx),
+    );
+  }
+
+  /** Same as {@link findSessionByCtx} for the early-segment companion. */
+  findEarlySessionByCtx(
+    mediaFileId: number,
+    ctx: SessionContext | undefined,
+  ): TranscodeSession | undefined {
+    return this.getExistingSession(
+      mediaFileId,
+      ctx?.userId,
+      this.computeProfileHashForCtx(ctx),
+      VARIANT_EARLY,
+    );
+  }
+
+  /** Most-recently-accessed transcode session for this `(file, user)`
+   *  pair across every profile variant. Used by segment-serving routes
+   *  that can't cheaply reconstruct the session context — when only one
+   *  device is active this is exactly the session driving the playback,
+   *  and the multi-profile edge case (two devices, two profiles)
+   *  resolves to whichever side last fetched a segment. */
+  findCurrentSession(
+    mediaFileId: number,
+    userId: number | undefined,
+  ): TranscodeSession | undefined {
+    const sessions = this.getSessionsForFileUser(mediaFileId, userId);
+    if (sessions.length === 0) return undefined;
+    let best = sessions[0];
+    for (const s of sessions) {
+      if (s.lastAccess > best.lastAccess) best = s;
+    }
+    return best;
+  }
+
+  /** Companion of {@link findCurrentSession} for early sessions. */
+  findCurrentEarlySession(
+    mediaFileId: number,
+    userId: number | undefined,
+  ): TranscodeSession | undefined {
+    let best: TranscodeSession | undefined;
+    for (const s of this.sessions.values()) {
+      if (
+        s.mediaFileId === mediaFileId &&
+        s.userId === userId &&
+        s.variant?.kind === 'early'
+      ) {
+        if (!best || s.lastAccess > best.lastAccess) best = s;
+      }
+    }
+    return best;
   }
 
   async onModuleDestroy() {
@@ -200,6 +268,55 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
   getActiveSessions(): TranscodeSession[] {
     return Array.from(this.sessions.values());
+  }
+
+  /** Profile hash for the given session context — derived from the same
+   *  fields {@link buildPlaybackProfileFromContext} consumes. Stashed on
+   *  the session and reused as the session-map key segment so multiple
+   *  profile variants of the same `(file, user)` coexist as siblings. */
+  computeProfileHashForCtx(ctx: SessionContext | undefined): string {
+    return computeProfileHash(
+      buildPlaybackProfileFromContext(ctx, getSegmentDuration() * 1000),
+    );
+  }
+
+  /**
+   * Resolve the on-disk cache directory for a session variant. Wraps
+   * the {@link TranscodeCacheService} layout so every spawn site goes
+   * through one place. Returns the directory and the client-level
+   * base profile hash; the caller already holds the `SessionVariant`,
+   * so storing both `baseProfileHash` and `variant` on the session is
+   * enough to recover the cache key via `variantHash`.
+   */
+  private cacheDirFor(
+    ctx: SessionContext | undefined,
+    mediaFileId: number,
+    variant: SessionVariant,
+    quality?: string,
+  ): { dir: string; baseHash: string } {
+    const baseHash = this.computeProfileHashForCtx(ctx);
+    const dir = this.cacheService.cachePathFor(
+      ctx?.userId ?? null,
+      mediaFileId,
+      variantHash(baseHash, variant),
+      quality,
+    );
+    return { dir, baseHash };
+  }
+
+  /** Absolute path to the `(userId, mediaFileId)` parent dir under the
+   *  new cache root. Used by full-session cleanup which wipes every
+   *  profile variant for a given user-file pair. */
+  private userFileParentDir(
+    mediaFileId: number,
+    userId: number | undefined,
+  ): string {
+    const userSeg = userId == null ? 'anon' : `u${userId}`;
+    return path.join(
+      this.cacheService.cacheRoot(),
+      userSeg,
+      String(mediaFileId),
+    );
   }
 
   /**
@@ -382,7 +499,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     ctx?: SessionContext,
     skipVerify = false,
   ): Promise<TranscodeSession> {
-    const key = sessionKey(mediaFileId, ctx?.userId);
+    const profileHash = this.computeProfileHashForCtx(ctx);
+    const key = sessionKey(mediaFileId, ctx?.userId, profileHash);
     const session = await this.withLock(key, () =>
       this.doGetOrCreateSession(
         key,
@@ -447,14 +565,19 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         );
         if (resolved) return resolved;
         const restartAt = existing.startSegment ?? requestedSegment;
-        const dir = path.join(this.cachePath, key, quality);
+        const { dir, baseHash } = this.cacheDirFor(
+          ctx,
+          mediaFileId,
+          VARIANT_MAIN,
+          quality,
+        );
         await fsp.mkdir(dir, { recursive: true });
         if (useVarStreamMap) {
           for (let i = 0; i <= ctxAudioStreams.length; i++) {
             await fsp.mkdir(path.join(dir, String(i)), { recursive: true });
           }
         }
-        return this.startSeekSession(
+        const restarted = this.startSeekSession(
           key,
           mediaFileId,
           quality,
@@ -463,6 +586,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           restartAt,
           ctx,
         );
+        restarted.baseProfileHash = baseHash;
+        restarted.variant = VARIANT_MAIN;
+        return restarted;
       }
     }
 
@@ -470,7 +596,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ? getHdrLadderForDevice(ctx?.deviceType)
       : getLadderForDevice(ctx?.deviceType);
     const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
-    const sessionDir = path.join(this.cachePath, key, quality);
+    const { dir: sessionDir, baseHash } = this.cacheDirFor(
+      ctx,
+      mediaFileId,
+      VARIANT_MAIN,
+      quality,
+    );
     const dirExisted = existsSync(sessionDir);
     await fsp.mkdir(sessionDir, { recursive: true });
     this.log.log(
@@ -493,6 +624,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       requestedSegment,
       ctx,
     );
+    session.baseProfileHash = baseHash;
+    session.variant = VARIANT_MAIN;
     this.applyContext(session, ctx);
 
     return session;
@@ -601,7 +734,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     absolutePath: string,
     ctx?: SessionContext,
   ): Promise<TranscodeSession> {
-    const id = earlySessionKey(mediaFileId, ctx?.userId);
+    const baseHash = this.computeProfileHashForCtx(ctx);
+    const id = sessionKey(
+      mediaFileId,
+      ctx?.userId,
+      variantHash(baseHash, VARIANT_EARLY),
+    );
     return this.withLock(id, async () => {
       const existing = this.sessions.get(id);
       if (existing) {
@@ -622,7 +760,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         ? getHdrLadderForDevice(ctx?.deviceType)
         : getLadderForDevice(ctx?.deviceType);
       const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
-      const sessionDir = path.join(this.cachePath, id, quality);
+      const { dir: sessionDir, baseHash } = this.cacheDirFor(
+        ctx,
+        mediaFileId,
+        VARIANT_EARLY,
+        quality,
+      );
       const dirExisted = existsSync(sessionDir);
       await fsp.mkdir(sessionDir, { recursive: true });
       this.log.log(
@@ -688,6 +831,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         segSubDir: usesVarStreamMap ? '0' : undefined,
         extra: { actualHwAccel: this.detectedHwAccel },
       });
+      session.baseProfileHash = baseHash;
+      session.variant = VARIANT_EARLY;
       this.applyContext(session, ctx);
       return session;
     });
@@ -1020,79 +1165,41 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return session;
   }
 
+  /** Stop every ffmpeg job for this `(file, user)` pair across all
+   *  profile variants. The on-disk cache **stays** — `TranscodeCacheService`
+   *  owns its lifecycle and will evict on TTL / LRU. A subsequent fresh
+   *  play (same profile) reattaches to the existing segments instead of
+   *  retranscoding from scratch. */
   async killSession(mediaFileId: number, userId?: number) {
-    const key = sessionKey(mediaFileId, userId);
-    const earlyKey = earlySessionKey(mediaFileId, userId);
-    const promises: Promise<void>[] = [];
-    const session = this.sessions.get(key);
-    if (session) {
-      this.log.log(`Kill session [${key}] (quality: ${session.quality})`);
-      this.sessions.delete(key);
-      promises.push(
-        this.killAndClean(session.process, session.cachePath, session.id),
-      );
+    const sessions = this.getSessionsForFileUser(mediaFileId, userId);
+    if (sessions.length === 0) return;
+    for (const s of sessions) {
+      this.log.log(`Kill session [${s.id}] (quality: ${s.quality})`);
+      this.sessions.delete(s.id);
+      s.intentionallyKilled = true;
     }
-    const earlySession = this.sessions.get(earlyKey);
-    if (earlySession) {
-      this.sessions.delete(earlyKey);
-      promises.push(
-        this.killAndClean(
-          earlySession.process,
-          earlySession.cachePath,
-          earlySession.id,
-        ),
-      );
-    }
-    const audioPrefix = `${key}-a`;
-    for (const [id, s] of this.sessions) {
-      if (id.startsWith(audioPrefix)) {
-        this.sessions.delete(id);
-        promises.push(this.killAndClean(s.process, s.cachePath, s.id));
-      }
-    }
-    await Promise.all(promises);
-    // Parent-dir rm is serialised under the same per-key lock as
-    // getOrCreate to close a race: without the lock, a new session
-    // could enter getOrCreate between the `has(key)` probe below and
-    // the (previously async, fire-and-forget) rm completing, and the
-    // recursive rm would then wipe the new session's fresh segments.
-    // The lock makes "either rm the parent OR start a new session"
-    // atomic per key.
-    await this.removeParentDirIfIdle(key);
-    await this.removeParentDirIfIdle(earlyKey);
+    await Promise.all(sessions.map((s) => this.killProcess(s.process)));
   }
 
-  private async removeParentDirIfIdle(key: string): Promise<void> {
-    await this.withLock(key, async () => {
-      if (this.sessions.has(key)) {
-        const parentDir = path.join(this.cachePath, key);
-        this.log.log(
-          `[disk] skip rm parent ${parentDir} — session ${key} replaced`,
-        );
-        return;
-      }
-      const parentDir = path.join(this.cachePath, key);
-      const existed = existsSync(parentDir);
-      this.log.log(`[disk] rm parent ${parentDir} (existed=${existed})`);
-      await fsp.rm(parentDir, { recursive: true, force: true }).catch(() => {});
-    });
-  }
-
-  /** Kill a session by its map key (used by admin dashboard). */
+  /** Kill a session by its map key (used by admin dashboard). The cache
+   *  directory stays — the admin can purge it separately via a future
+   *  cache-eviction action; killing a job mid-stream just frees CPU. */
   killSessionById(id: string) {
     const session = this.sessions.get(id);
     if (!session) return;
     this.sessions.delete(id);
-    this.gracefulKill(session);
+    session.intentionallyKilled = true;
+    void this.killProcess(session.process);
   }
 
-  /** Kill all sessions for a given media file (used on player close / page unload). */
+  /** Kill every session for a given media file across all users / profiles. */
   killAllSessionsForFile(mediaFileId: number) {
     for (const [id, session] of this.sessions) {
       if (session.mediaFileId === mediaFileId) {
         this.log.log(`Killing session ${id} for media file ${mediaFileId}`);
         this.sessions.delete(id);
-        this.gracefulKill(session);
+        session.intentionallyKilled = true;
+        void this.killProcess(session.process);
       }
     }
   }
@@ -1108,7 +1215,15 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     requestedSegment = 0,
     ctx?: SessionContext,
   ): Promise<TranscodeSession> {
-    const key = sessionKey(mediaFileId, ctx?.userId);
+    // Remux variant lives in its own session-map bucket so its cache
+    // path doesn't collide with a main session for the same base
+    // profile hash.
+    const baseHash = this.computeProfileHashForCtx(ctx);
+    const key = sessionKey(
+      mediaFileId,
+      ctx?.userId,
+      variantHash(baseHash, VARIANT_REMUX),
+    );
     return this.withLock(key, () =>
       this.doGetOrCreateRemuxSession(
         key,
@@ -1150,7 +1265,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const sessionDir = path.join(this.cachePath, key, 'remux');
+    const { dir: sessionDir, baseHash: remuxBaseHash } = this.cacheDirFor(
+      ctx,
+      mediaFileId,
+      VARIANT_REMUX,
+      'remux',
+    );
     await fsp.mkdir(sessionDir, { recursive: true });
 
     const isVideoOnly = ctx?.videoOnly ?? false;
@@ -1177,6 +1297,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       startSegment: requestedSegment,
       extra: { remux: true },
     });
+    session.baseProfileHash = remuxBaseHash;
+    session.variant = VARIANT_REMUX;
 
     this.applyContext(session, ctx);
     return session;
@@ -1193,7 +1315,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     requestedSegment = 0,
     ctx?: SessionContext,
   ): Promise<TranscodeSession> {
-    const key = audioSessionKey(mediaFileId, audioIndex, ctx?.userId);
+    const baseHash = this.computeProfileHashForCtx(ctx);
+    const variant: SessionVariant = { kind: 'audio', audioIndex };
+    const key = sessionKey(
+      mediaFileId,
+      ctx?.userId,
+      variantHash(baseHash, variant),
+    );
     return this.withLock(key, () =>
       this.doGetOrCreateAudioSession(
         key,
@@ -1246,7 +1374,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const sessionDir = path.join(this.cachePath, key, 'audio');
+    const { dir: sessionDir, baseHash: audioBaseHash } = this.cacheDirFor(
+      ctx,
+      mediaFileId,
+      { kind: 'audio', audioIndex },
+      'audio',
+    );
     await fsp.mkdir(sessionDir, { recursive: true });
 
     const args = buildAudioOnlyFfmpegArgs(
@@ -1271,20 +1404,92 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       segExt: ctx?.useTs ? '.ts' : undefined,
       extra: { isAudioOnly: true },
     });
+    session.baseProfileHash = audioBaseHash;
+    session.variant = { kind: 'audio', audioIndex };
 
     this.applyContext(session, ctx);
     return session;
   }
 
+  /**
+   * Reap transcode sessions whose viewers have all gone. Two regimes:
+   *
+   * 1. Sessions paired with a live session ride the heartbeat-driven
+   *    grace timer: as long as `LiveSessionRegistry.listForJob` returns
+   *    at least one entry, the ffmpeg job is kept warm. When the count
+   *    drops to zero, JOB_GRACE_MS later the ffmpeg process is killed.
+   *
+   * 2. Sessions that were never seen with a live session (legacy URL
+   *    fetches, admin scrubbing) fall back to the SESSION_TIMEOUT_MS
+   *    idle window — safe default that mirrors the pre-heartbeat
+   *    behaviour.
+   *
+   * The on-disk cache directory is preserved in both cases.
+   * `TranscodeCacheService` owns the disk lifecycle (TTL + LRU); a
+   * fresh play that lands on the same (user, file, profileHash)
+   * reattaches to the existing segments without retranscoding.
+   *
+   * Variant sessions (`-early`, `-remux`, `-a<N>`) ride on the same
+   * live session as their main counterpart — the LiveSessionRegistry
+   * tracks one entry per client, not one per ffmpeg variant — so the
+   * lookup strips the variant suffix before querying.
+   */
   private cleanupStaleSessions() {
     const now = Date.now();
     for (const [id, session] of this.sessions) {
-      const processDone = session.process.exitCode !== null;
-      if (now - session.lastAccess > SESSION_TIMEOUT_MS && processDone) {
-        this.log.log(`Cleanup stale session: ${id}`);
-        this.sessions.delete(id);
-        this.gracefulKill(session);
+      if (!session.baseProfileHash) {
+        this.fallbackIdleCleanup(now, id, session);
+        continue;
       }
+      const matching = this.liveSessions.listForJob(
+        session.userId ?? null,
+        session.mediaFileId,
+        session.baseProfileHash,
+      );
+      if (matching.length > 0) {
+        session.seenAnyLiveSession = true;
+        session.zeroLiveSince = null;
+        continue;
+      }
+      // A recent segment fetch keeps the job alive even when the
+      // live-session count is zero — covers transient heartbeat
+      // failures (network blip, throttled background tab) where the
+      // client is still actively pulling bytes.
+      if (now - session.lastAccess < JOB_GRACE_MS) {
+        session.zeroLiveSince = null;
+        continue;
+      }
+      if (!session.seenAnyLiveSession) {
+        this.fallbackIdleCleanup(now, id, session);
+        continue;
+      }
+      if (session.zeroLiveSince == null) {
+        session.zeroLiveSince = now;
+        continue;
+      }
+      if (now - session.zeroLiveSince < JOB_GRACE_MS) continue;
+      this.log.log(
+        `Cleanup session ${id}: no live viewer for ${Math.round(
+          (now - session.zeroLiveSince) / 1000,
+        )}s, killing ffmpeg (cache preserved)`,
+      );
+      this.sessions.delete(id);
+      session.intentionallyKilled = true;
+      void this.killProcess(session.process);
+    }
+  }
+
+  /** Idle-timeout fallback for transcode sessions without a tracked
+   *  live session — kept on the legacy SESSION_TIMEOUT_MS window. */
+  private fallbackIdleCleanup(
+    now: number,
+    id: string,
+    session: TranscodeSession,
+  ): void {
+    const processDone = session.process.exitCode !== null;
+    if (now - session.lastAccess > SESSION_TIMEOUT_MS && processDone) {
+      this.log.log(`Cleanup stale (fallback) session: ${id}`);
+      this.sessions.delete(id);
     }
   }
 
@@ -1388,3 +1593,4 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return { resolve, promise };
   }
 }
+

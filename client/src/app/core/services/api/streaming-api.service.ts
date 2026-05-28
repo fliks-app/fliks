@@ -82,7 +82,18 @@ export interface PlaybackInfoResponse {
   };
   /** Embedded chapters from the container (MKV/MP4). */
   chapters?: { startSeconds: number; endSeconds: number; title?: string }[];
+  /** Server-issued live-session identifier. The client embeds it in every
+   *  subsequent `PUT /api/playback/media/:id/state` (heartbeat) and on
+   *  the `DELETE /api/stream/:mediaFileId/sessions` unload signal so the
+   *  backend can match the client back to its in-memory session record. */
+  sessionId?: string;
+  /** Profile hash this session's transcode cache is keyed under, or
+   *  `null` for DirectPlay. Surfaced for the admin dashboard and for
+   *  future multi-device match logic; not required by the player. */
+  profileHash?: string | null;
 }
+
+export type LivePlaybackState = 'playing' | 'paused' | 'buffering';
 
 export interface MediaResumeInfo {
   mediaFileId: number;
@@ -185,15 +196,25 @@ export class StreamingApiService {
    * Build authenticated HLS master playlist URL.
    * `startQuality` tells the backend which quality to pre-start FFmpeg at
    * (e.g. "1080p") — avoids the "first segment fetch spawns FFmpeg at a
-   * wrong variant Shaka probed during load" waste.
+   * wrong variant Shaka probed during load" waste. `sessionId` is the
+   * live-session handle the backend issued from `playback-info`; baking
+   * it into this URL makes the master playlist propagate `?sid=...` into
+   * every variant + segment URL so segment fetches route to the exact
+   * `(file, user, profileHash)` transcode session.
    */
-  getHlsUrl(mediaFileId: number, startQuality?: string, startAt?: number): string {
+  getHlsUrl(
+    mediaFileId: number,
+    startQuality?: string,
+    startAt?: number,
+    sessionId?: string,
+  ): string {
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/master.m3u8`)
       : `/api/stream/${mediaFileId}/master.m3u8`;
     const params: string[] = [];
     const token = this.playbackToken;
     if (token) params.push(`token=${encodeURIComponent(token)}`);
+    if (sessionId) params.push(`sid=${encodeURIComponent(sessionId)}`);
     if (startQuality) params.push(`startQuality=${encodeURIComponent(startQuality)}`);
     if (startAt != null) params.push(`startAt=${startAt}`);
     params.push(`device=${this.deviceProfileService.getProfile().deviceType}`);
@@ -201,12 +222,22 @@ export class StreamingApiService {
   }
 
   /** Build authenticated stream URL for direct play */
-  getStreamUrl(mediaFileId: number): string {
+  getStreamUrl(mediaFileId: number, sessionId?: string): string {
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}`)
       : `/api/stream/${mediaFileId}`;
+    const url = this.withTokenAndSid(base, sessionId);
+    return url;
+  }
+
+  /** Internal helper for getStreamUrl — keeps the token+sid query
+   *  composition consistent with `getHlsUrl`. */
+  private withTokenAndSid(base: string, sessionId?: string): string {
+    const params: string[] = [];
     const token = this.playbackToken;
-    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+    if (token) params.push(`token=${encodeURIComponent(token)}`);
+    if (sessionId) params.push(`sid=${encodeURIComponent(sessionId)}`);
+    return params.length ? `${base}?${params.join('&')}` : base;
   }
 
   /** Build authenticated subtitle URL */
@@ -259,18 +290,46 @@ export class StreamingApiService {
     return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
   }
 
+  private appendSid(url: string, sid: string | undefined): string {
+    if (!sid) return url;
+    return `${url}${url.includes('?') ? '&' : '?'}sid=${encodeURIComponent(sid)}`;
+  }
+
   private withToken(url: string): string {
     const token = this.playbackToken;
     return token ? this.appendToken(url, token) : url;
   }
 
-  /** Build Cast URLs with a temporary token */
-  getAbsoluteHlsUrl(mediaFileId: number, castToken: string): string {
-    return this.appendToken(this.absoluteUrl(`/api/stream/${mediaFileId}/master.m3u8`), castToken);
+  /** Build Cast URLs with a temporary token. `sessionId` is the live
+   *  session handle the Cast device received from its own `playback-info`
+   *  call; baking it here propagates the same sid into the variant +
+   *  segment URLs so segments route to the Cast-specific transcode job. */
+  getAbsoluteHlsUrl(
+    mediaFileId: number,
+    castToken: string,
+    sessionId?: string,
+  ): string {
+    return this.appendSid(
+      this.appendToken(
+        this.absoluteUrl(`/api/stream/${mediaFileId}/master.m3u8`),
+        castToken,
+      ),
+      sessionId,
+    );
   }
 
-  getAbsoluteStreamUrl(mediaFileId: number, castToken: string): string {
-    return this.appendToken(this.absoluteUrl(`/api/stream/${mediaFileId}`), castToken);
+  getAbsoluteStreamUrl(
+    mediaFileId: number,
+    castToken: string,
+    sessionId?: string,
+  ): string {
+    return this.appendSid(
+      this.appendToken(
+        this.absoluteUrl(`/api/stream/${mediaFileId}`),
+        castToken,
+      ),
+      sessionId,
+    );
   }
 
   getAbsoluteSubtitleUrl(mediaFileId: number, subtitleId: number, castToken: string): string {
@@ -322,8 +381,19 @@ export class StreamingApiService {
     );
   }
 
-  /** Build the URL for stopping sessions (used with sendBeacon on unload). */
-  getStopSessionsUrl(mediaFileId: number): string {
+  /** Build the URL for stopping sessions (used with sendBeacon on unload).
+   *  Prefer the sid-scoped variant when a sessionId is available — the
+   *  bulk path kills every profile for the (user, file) pair, which
+   *  would tear down other devices watching the same title. */
+  getStopSessionsUrl(mediaFileId: number, sessionId?: string): string {
+    if (sessionId) {
+      const path = `/api/stream/sessions/${encodeURIComponent(sessionId)}`;
+      const base = this.serverConfig.isNative
+        ? this.serverConfig.resolveUrl(path)
+        : path;
+      const token = this.playbackToken;
+      return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+    }
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/sessions`)
       : `/api/stream/${mediaFileId}/sessions`;
@@ -331,7 +401,14 @@ export class StreamingApiService {
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
 
-  stopSessions(mediaFileId: number) {
+  stopSessions(mediaFileId: number, sessionId?: string) {
+    if (sessionId) {
+      return firstValueFrom(
+        this.http.delete(
+          `/api/stream/sessions/${encodeURIComponent(sessionId)}`,
+        ),
+      );
+    }
     return firstValueFrom(
       this.http.delete(`/api/stream/${mediaFileId}/sessions`),
     );
@@ -371,10 +448,21 @@ export class StreamingApiService {
       durationSeconds: number;
       mediaFileId: number;
       episodeId?: number;
+      // Live-session heartbeat fields. Only present once the player has
+      // received a `sessionId` from `getPlaybackInfo`; the backend
+      // tolerates their absence (legacy / unauthenticated paths).
+      sessionId?: string;
+      state?: LivePlaybackState;
+      quality?: string | null;
+      audioTrackIndex?: number | null;
+      subtitleTrackIndex?: number | null;
     },
   ) {
     return firstValueFrom(
-      this.http.put<PlaybackState>(`/api/playback/media/${mediaId}/state`, body),
+      this.http.put<PlaybackState | null>(
+        `/api/playback/media/${mediaId}/state`,
+        body,
+      ),
     );
   }
 

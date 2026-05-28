@@ -245,4 +245,26 @@ export interface TranscodeSession {
    *  drift detection: flipping the flag mid-stream must kill+respawn
    *  the session because the on-disk layout differs. */
   audioLayout?: 'inline' | 'var-stream-map';
+  /** Client-level base profile hash — matches the
+   *  `LiveSession.profileHash` the client beats. Every variant for
+   *  the same client (main / early / remux / per-audio) shares this
+   *  value. The cache directory layout adds the variant suffix on
+   *  top via `variantHash`, the cleanup loop reads it directly when
+   *  querying the live-session registry. */
+  baseProfileHash?: string;
+  /** Output flavour this session produces — disambiguates the cache
+   *  bucket among siblings of the same `baseProfileHash`. Combine via
+   *  `variantHash(baseProfileHash, variant)` to recover the cache key
+   *  (= directory segment + session-map key fragment). */
+  variant?: import('./variant').SessionVariant;
+  /** Set to true the first time the GC loop observed a matching live
+   *  session for this (user, file, profileHash). Gates the
+   *  heartbeat-driven grace timer: a session that has never had a
+   *  live session falls back to the longer SESSION_TIMEOUT_MS idle
+   *  window. */
+  seenAnyLiveSession?: boolean;
+  /** When the GC loop first observed zero matching live sessions for
+   *  this transcode session. Reset to `null` whenever a live session
+   *  reappears. Used to enforce the JOB_GRACE_MS window. */
+  zeroLiveSince?: number | null;
 }
