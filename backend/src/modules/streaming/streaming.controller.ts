@@ -37,7 +37,7 @@ import {
   getSegmentDuration,
   secondsToSegmentIndex,
 } from './transcoding/constants';
-import { LiveSessionRegistry } from './live-session.service';
+import { LiveSession, LiveSessionRegistry } from './live-session.service';
 import { readAndRewriteCmaf } from './transcoding/cmaf-rewrite';
 import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { ThumbnailService } from './thumbnail.service';
@@ -293,57 +293,66 @@ export class StreamingController {
     return this.streamingSettingsCache.get();
   }
 
+  /**
+   * Resolve the LiveSession this request belongs to. Honoured order:
+   *  1. `?sid=` on the URL (set by playback-info, threaded by manifests).
+   *  2. Most-recently-active session for (user, file) — fallback for
+   *     legacy callers that never sent `sid` (e.g. direct-URL fetches).
+   * Returns null when nothing matches — caller is expected to fall
+   * back to safe defaults.
+   */
+  private findRequestSession(
+    req: Request,
+    mediaFileId: number,
+  ): LiveSession | null {
+    const sid = firstQueryString(req.query, 'sid');
+    if (sid) {
+      const direct = this.liveSessions.get(sid);
+      if (direct) return direct;
+    }
+    const userId = (req.user as User | undefined)?.id;
+    if (userId == null) return null;
+    return this.liveSessions.findCurrent(userId, mediaFileId);
+  }
+
   private buildSessionContext(
     req: Request,
     resolved: ResolvedFile,
     mediaFileId: number,
   ): SessionContext {
-    const user = req.user;
+    const user = req.user as User | undefined;
     const si = resolved.mediaFile.streamInfo;
-    // Ensure audio stream count is set from streamInfo if the tracker lost it
-    // (e.g. after backend restart, Shaka may replay cached manifest segments
-    // without re-fetching master.m3u8).
+    const live = this.findRequestSession(req, mediaFileId);
+    // var_stream_map decision: same logic as playback-info — relies on
+    // the file's intrinsic audio-stream count, which doesn't drift
+    // across sessions.
     const audioCount = si?.audio?.length ?? 0;
-    if (
-      audioCount > 0 &&
-      this.activeStreamTracker.getAudioStreamCount(mediaFileId) === 0
-    ) {
-      this.activeStreamTracker.setAudioStreamCount(mediaFileId, audioCount);
-    }
-    const trackedAudioCount =
-      this.activeStreamTracker.getAudioStreamCount(mediaFileId);
-    const muxFlavour: 'ts' | 'fmp4' = this.activeStreamTracker.getUseTs(
-      mediaFileId,
-    )
-      ? 'ts'
-      : 'fmp4';
+    const useTs = live?.useTs ?? false;
     const useMultiAudioLayout =
-      pickAudioLayout(trackedAudioCount, muxFlavour) === 'var-stream-map';
+      pickAudioLayout(audioCount, useTs ? 'ts' : 'fmp4') === 'var-stream-map';
     return {
       userId: user?.id,
       username: user?.username,
       mediaTitle: resolved.media?.title,
       mediaType: resolved.media?.type,
       posterUrl: resolved.media?.posterUrl ?? null,
-      transcodeReasons:
-        this.activeStreamTracker.getTranscodeReasons(mediaFileId),
-      tonemap: this.activeStreamTracker.getTonemapping(mediaFileId),
-      burnInSubtitle: this.activeStreamTracker.getBurnIn(mediaFileId),
-      audioStreamIndex:
-        this.activeStreamTracker.getAudioStreamIndex(mediaFileId),
+      transcodeReasons: live?.transcodeReasons ?? [],
+      tonemap: live?.tonemapping ?? false,
+      burnInSubtitle: live?.burnIn ?? undefined,
+      audioStreamIndex: live?.audioStreamIndex ?? undefined,
       crop: si?.video?.[0]?.crop ?? undefined,
       // Multi-audio: produce video-only segments and let ffmpeg's var_stream_map
       // emit one audio rendition per track (subdirs 1..N) so Shaka can switch
       // client-side via EXT-X-MEDIA.
       videoOnly: useMultiAudioLayout,
-      // Always plumb the cached audio streams (incl. `streamIndex`) so the
+      // Always plumb the audio streams (incl. `streamIndex`) so the
       // single-track path can also resolve `-map 0:<abs>` and skip FFmpeg's
       // audio enumeration. `useMultiAudioLayout` only gates the var_stream_map
       // branch, not the presence of the data.
       audioStreams: si?.audio ?? undefined,
-      deviceType: this.activeStreamTracker.getDeviceType(mediaFileId),
-      useTs: this.activeStreamTracker.getUseTs(mediaFileId),
-      encoderPreset: this.activeStreamTracker.getEncoderPreset(mediaFileId),
+      deviceType: live?.deviceType ?? 'desktop',
+      useTs,
+      encoderPreset: live?.encoderPreset ?? 'faster',
       qsvOptions: this.activeStreamTracker.getQsvOptions(),
       tonemapAlgo: this.activeStreamTracker.getTonemapAlgo(),
       // Source framerate (e.g. "24", "23.976", "29.97") — used to compute an
@@ -353,11 +362,10 @@ export class StreamingController {
       // ffprobe ran at import/rescan and the result is cached in streamInfo —
       // tell FFmpeg to skip its own redundant avformat_find_stream_info scan.
       trustedStreamInfo: !!si?.video?.[0]?.codec,
-      // Canonical audio decision — computed once in stream-builder, lives
-      // in the tracker, threaded through here so respawns / quality
-      // switches stay coherent with what playback-info promised.
-      audioPlan:
-        this.activeStreamTracker.getAudioPlan(mediaFileId) ?? undefined,
+      // Canonical audio decision — computed once in stream-builder,
+      // stored on the LiveSession, threaded through here so respawns /
+      // quality switches stay coherent with what playback-info promised.
+      audioPlan: live?.audioPlan ?? undefined,
       sourceVideoCodec:
         (si?.video?.[0]?.codec ?? '').toLowerCase() || undefined,
       sourceWidth: si?.video?.[0]?.width,
@@ -365,12 +373,12 @@ export class StreamingController {
       isSourceHdr: !!si?.video?.[0]?.hdrFormat,
       // Variant chosen by stream-builder's codec selector at
       // playback-info time, threaded through every session spawn so
-      // ffmpeg-args resolves the matching encoder descriptor.
-      // ActiveStreamTracker holds it after a successful playback-info;
-      // a segment request that arrives before playback-info has populated
-      // the tracker hits `buildFfmpegArgs`'s explicit throw, which surfaces
-      // as a 5xx the player retries after the next playback-info call.
-      videoVariant: this.activeStreamTracker.getVideoVariant(mediaFileId),
+      // ffmpeg-args resolves the matching encoder descriptor. A
+      // segment request that arrives before playback-info has created
+      // the LiveSession hits `buildFfmpegArgs`'s explicit throw, which
+      // surfaces as a 5xx the player retries after the next
+      // playback-info call.
+      videoVariant: live?.videoVariant ?? undefined,
     };
   }
 
@@ -435,7 +443,7 @@ export class StreamingController {
       // doesn't spawn a doomed SDR session that the player will
       // immediately kill and replace with the matching HDR rung.
       const targetQuality =
-        this.activeStreamTracker.getHdrLadder(mediaFileId) &&
+        (this.findRequestSession(req, mediaFileId)?.hdrLadder ?? false) &&
         !startQuality.endsWith('-hdr')
           ? `${startQuality}-hdr`
           : startQuality;
@@ -634,47 +642,16 @@ export class StreamingController {
       audioStreamRaw != null ? parseInt(audioStreamRaw, 10) : undefined;
 
     const ss = await this.getStreamingSettings();
+    const user = req.user as User;
+    const userId = user.id;
 
-    const result = this.streamBuilder.evaluate(
+    const evaluateResult = this.streamBuilder.evaluate(
       resolved,
       deviceProfile,
       tokenParam,
       burnInSubtitleId,
     );
-    // Cache transcode reasons for the admin dashboard
-    if (result.transcodeReasons.length) {
-      this.activeStreamTracker.setTranscodeReasons(
-        mediaFileId,
-        result.transcodeReasons,
-      );
-    }
-    this.activeStreamTracker.setTonemapping(mediaFileId, result.tonemapping);
-    // Cache burn-in info for HLS endpoints
-    if (burnInSubtitleId) {
-      this.subtitleBurnIn
-        .resolve(burnInSubtitleId, mediaFileId)
-        .then((info) => {
-          const filter = this.subtitleBurnIn.buildFilter(info);
-          this.activeStreamTracker.setBurnIn(mediaFileId, {
-            filter,
-            streamIndex: info.streamIndex,
-            type: info.type,
-          });
-        })
-        .catch(() => {});
-    } else {
-      this.activeStreamTracker.setBurnIn(mediaFileId, undefined);
-    }
-    this.activeStreamTracker.setAudioStreamIndex(mediaFileId, audioStreamIndex);
-    this.activeStreamTracker.setDeviceType(
-      mediaFileId,
-      deviceProfile.deviceType ?? 'desktop',
-    );
-    this.activeStreamTracker.setDeviceName(
-      (req.user as User).id,
-      mediaFileId,
-      deviceProfile.deviceName ?? '',
-    );
+    const { response, useHdrLadder, videoVariant } = evaluateResult;
     // Resolve the effective `useTs`. The explicit profile flag wins as
     // an admin / debug hard override. Otherwise Tizen-style profiles
     // opt into TS only when the source has zero or one audio track
@@ -684,34 +661,23 @@ export class StreamingController {
     const effectiveUseTs =
       !!deviceProfile.useTs ||
       (!!deviceProfile.useTsOnSingleAudio && sourceAudioCount <= 1);
-    this.activeStreamTracker.setUseTs(mediaFileId, effectiveUseTs);
+    const deviceType = deviceProfile.deviceType ?? 'desktop';
+    const useExtXMedia =
+      pickAudioLayout(sourceAudioCount, effectiveUseTs ? 'ts' : 'fmp4') ===
+      'var-stream-map';
+
+    // File-scoped + global tracker state (kept in the tracker because
+    // these don't vary per playback session).
     this.activeStreamTracker.setStreamingDuration(ss.segmentDuration);
-    // Update module-level constants used by buildVodPlaylist and transcoding
     SEG_DURATION = ss.segmentDuration;
     this.transcodingService.setSegmentDuration(ss.segmentDuration);
-
-    // Persist encoder preset + QSV advanced options for downstream sessions.
-    this.activeStreamTracker.setEncoderPreset(mediaFileId, ss.qsvPreset);
-    this.activeStreamTracker.setQsvOptions({
-      lowPower: ss.qsvLowPower,
-    });
+    this.activeStreamTracker.setQsvOptions({ lowPower: ss.qsvLowPower });
     this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
-
-    // Persist source→client codec compatibility so hlsMaster can pick a
-    // smart-remux variant when the user's quality lock matches the source
-    // resolution (and video codec is copy-compatible).
-    this.activeStreamTracker.setCanCopyVideo(
+    this.activeStreamTracker.setDeviceName(
+      userId,
       mediaFileId,
-      result.videoCopyStream,
+      deviceProfile.deviceName ?? '',
     );
-    this.activeStreamTracker.setCanCopyAudio(
-      mediaFileId,
-      result.audioCopyStream,
-    );
-    // Canonical audio decision computed by stream-builder. Drives the
-    // ffmpeg-args codec branch, master-playlist CODECS string and admin
-    // dashboard rendering — single source of truth.
-    this.activeStreamTracker.setAudioPlan(mediaFileId, result.audioPlan);
     const sv = resolved.mediaFile.streamInfo?.video?.[0];
     this.activeStreamTracker.setSourceDimensions(
       mediaFileId,
@@ -725,32 +691,12 @@ export class StreamingController {
     // another. No drift kill needed: a hop from browser → cast spawns a
     // new session under the cast's profileHash and leaves the browser's
     // session untouched.
-
-    // Pre-spawn ffmpeg as early as possible — the client will GET master.m3u8
-    // next (~100–300ms later) and then seg-0. Starting ffmpeg here overlaps
-    // that gap with encoder init so segment 0 is usually already on disk
-    // (or streaming) when requested. No-op for DirectPlay or auto quality.
     const startQuality = firstQueryString(req.query, 'startQuality');
     const startAtRaw = firstQueryString(req.query, 'startAt');
     const startAt = startAtRaw != null ? parseFloat(startAtRaw) : undefined;
-    if (result.playMethod !== 'DirectPlay') {
-      // Await prewarm before responding so the session is registered in the
-      // map when the frontend's subsequent master.m3u8/seg-0 requests
-      // arrive — prevents a race where hlsSegment would spawn a duplicate
-      // main at start_number=0 and force a kill+restart.
-      await this.prewarmTranscodeSession(
-        mediaFileId,
-        resolved,
-        req,
-        startQuality,
-        startAt,
-        deviceProfile.deviceType ?? 'desktop',
-      );
-    }
 
     // Mark a new watch-history entry (history = sessions started).
     // Fire-and-forget — a DB hiccup should not block stream start.
-    const user = req.user as User;
     if (user?.id && resolved.mediaFile.mediaId) {
       this.playbackService
         .markSessionStarted(
@@ -807,35 +753,45 @@ export class StreamingController {
     // running, not what was originally requested.
     const hasCrop =
       resolved.mediaFile.streamInfo?.video?.[0]?.crop != null;
-    const tonemapAlgo = result.tonemapping
+    const tonemapAlgo = response.tonemapping
       ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop })
       : null;
 
-    // Issue a live-session handle the client embeds in every subsequent
-    // heartbeat (PUT /playback/media/:id/state). The profile hash is
-    // computed from the same SessionContext the transcoding service
-    // will use to spawn ffmpeg, so multi-device dashboards can match
-    // a LiveSession back to its on-disk cache directory.
-    const sessionCtx = this.buildSessionContext(req, resolved, mediaFileId);
+    // Compute the profile hash from the inputs we just derived — no
+    // tracker round-trip needed. The hash drives the cache directory
+    // shape and is matched against the same hash recomputed at every
+    // HLS request via the LiveSession we're about to create.
     const profileHash =
-      result.playMethod === 'DirectPlay'
+      response.playMethod === 'DirectPlay'
         ? null
         : computeProfileHash(
             buildPlaybackProfileFromContext(
-              sessionCtx,
-              getSegmentDuration() * 1000,
+              {
+                userId,
+                username: user.username,
+                audioPlan: response.audioPlan,
+                videoVariant: videoVariant ?? undefined,
+                useTs: effectiveUseTs,
+                videoOnly: useExtXMedia,
+                audioStreams: resolved.mediaFile.streamInfo?.audio,
+              },
+              ss.segmentDuration * 1000,
             ),
           );
     const kind =
-      result.playMethod === 'DirectPlay'
+      response.playMethod === 'DirectPlay'
         ? 'directplay'
-        : result.playMethod === 'DirectStream'
+        : response.playMethod === 'DirectStream'
           ? 'remux'
           : 'transcode';
     const deviceLabel: string | null = req.get('user-agent') ?? null;
+
+    // The LiveSession owns every per-playback setting: future HLS
+    // requests resolve it via `?sid=...` and read settings straight off
+    // this entry — no shared per-file mutable state to clobber.
     const liveSession = this.liveSessions.create({
-      userId: user?.id ?? null,
-      username: user?.username ?? null,
+      userId: userId ?? null,
+      username: user.username ?? null,
       mediaFileId,
       mediaTitle: resolved.media?.title ?? null,
       mediaType: resolved.media?.type ?? null,
@@ -845,7 +801,55 @@ export class StreamingController {
       kind,
       deviceLabel,
       position: startAt ?? 0,
+      useTs: effectiveUseTs,
+      audioPlan: response.audioPlan,
+      audioStreamIndex: audioStreamIndex ?? null,
+      audioStreamCount: sourceAudioCount,
+      useExtXMedia,
+      deviceType,
+      hdrLadder: useHdrLadder,
+      videoVariant,
+      tonemapping: response.tonemapping,
+      transcodeReasons: response.transcodeReasons,
+      burnIn: null,
+      encoderPreset: ss.qsvPreset,
+      canCopyVideo: response.videoCopyStream,
+      canCopyAudio: response.audioCopyStream,
     });
+
+    // Burn-in subtitle resolves async (PGS extraction + filter build);
+    // patch the LiveSession when ready.
+    if (burnInSubtitleId) {
+      this.subtitleBurnIn
+        .resolve(burnInSubtitleId, mediaFileId)
+        .then((info) => {
+          const filter = this.subtitleBurnIn.buildFilter(info);
+          this.liveSessions.update(liveSession.sessionId, {
+            burnIn: {
+              filter,
+              streamIndex: info.streamIndex,
+              type: info.type,
+            },
+          });
+        })
+        .catch(() => {});
+    }
+
+    // Pre-spawn ffmpeg as early as possible — the client will GET master.m3u8
+    // next (~100–300ms later) and then seg-0. Starting ffmpeg here overlaps
+    // that gap with encoder init so segment 0 is usually already on disk
+    // (or streaming) when requested. No-op for DirectPlay or auto quality.
+    // Runs after LiveSession creation so buildSessionContext can find it.
+    if (response.playMethod !== 'DirectPlay') {
+      await this.prewarmTranscodeSession(
+        mediaFileId,
+        resolved,
+        req,
+        startQuality,
+        startAt,
+        deviceType,
+      );
+    }
 
     // Bake the sessionId into the playUrl so every subsequent manifest /
     // segment request the player issues carries it. Manifest endpoints
@@ -854,11 +858,11 @@ export class StreamingController {
     // `(file, user, profileHash)` session without heuristics.
     const playUrlWithSid = streamQuery(
       { sid: liveSession.sessionId },
-      result.playUrl,
+      response.playUrl,
     );
 
     return {
-      ...result,
+      ...response,
       playUrl: playUrlWithSid,
       tonemapAlgo,
       durationSeconds: duration,
@@ -974,13 +978,14 @@ export class StreamingController {
 
     const includeRemux = firstQueryString(req.query, 'remux') === '1';
     const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
+    const live = this.findRequestSession(req, mediaFileId);
     // HDR ladder eligibility — decided by stream-builder at playback-info
-    // time and cached in the tracker. Independent from `includeRemux`:
+    // time and stored on the LiveSession. Independent from `includeRemux`:
     // even a /master.m3u8 without `?remux=1` should emit the HDR ladder
     // when the source + client combination warrant it.
     const sourceHdrFormat = v?.hdrFormat as 'HDR10' | 'HLG' | undefined;
     const hdrPassThrough =
-      this.activeStreamTracker.getHdrLadder(mediaFileId) && sourceHdrFormat
+      (live?.hdrLadder ?? false) && sourceHdrFormat
         ? {
             hdrFormat: sourceHdrFormat,
             videoBitRateBps: v?.bitRate ?? undefined,
@@ -992,12 +997,8 @@ export class StreamingController {
     // player can switch audio client-side without a reload. Every rendition
     // is listed even when the user has picked a specific track — the picked
     // track is marked DEFAULT=YES so the player preselects it.
-    const pickedIdx = this.activeStreamTracker.getAudioStreamIndex(mediaFileId);
-    const muxFlavour: 'ts' | 'fmp4' = this.activeStreamTracker.getUseTs(
-      mediaFileId,
-    )
-      ? 'ts'
-      : 'fmp4';
+    const pickedIdx = live?.audioStreamIndex ?? null;
+    const muxFlavour: 'ts' | 'fmp4' = (live?.useTs ?? false) ? 'ts' : 'fmp4';
     const useExtXMedia =
       pickAudioLayout(audioStreams.length, muxFlavour) === 'var-stream-map';
     const onlyQuality = firstQueryString(req.query, 'startQuality');
@@ -1007,10 +1008,19 @@ export class StreamingController {
     const deviceType: 'mobile' | 'desktop' =
       deviceParam === 'mobile' || deviceParam === 'desktop'
         ? deviceParam
-        : this.activeStreamTracker.getDeviceType(mediaFileId);
-    this.activeStreamTracker.setDeviceType(mediaFileId, deviceType);
+        : (live?.deviceType ?? 'desktop');
+    // Persist the master.m3u8 decisions back on the session so segment
+    // requests stay coherent (especially for the URL-override device
+    // and the audio layout that callers downstream gate on).
+    if (live) {
+      this.liveSessions.update(live.sessionId, {
+        deviceType,
+        audioStreamCount: audioStreams.length,
+        useExtXMedia,
+      });
+    }
 
-    const sdrVariant = this.activeStreamTracker.getVideoVariant(mediaFileId);
+    const sdrVariant = live?.videoVariant ?? null;
     const sourceFrameRate = parseFloat(v?.frameRate ?? '') || undefined;
     const playlist = this.transcodingService.generateMasterPlaylist(
       mediaFileId,
@@ -1028,22 +1038,13 @@ export class StreamingController {
       onlyQuality,
       pickedIdx ?? 0,
       deviceType,
-      (this.activeStreamTracker.getAudioPlan(mediaFileId)?.codec ?? 'aac') as
-        | 'aac'
-        | 'ac3'
-        | 'eac3',
+      (live?.audioPlan?.codec ?? 'aac') as 'aac' | 'ac3' | 'eac3',
       hdrPassThrough,
       // Only the SDR ladder branch consumes this — the HDR branch
       // already drives its codec strings from `hdrPassThrough`.
       sdrVariant && sdrVariant.hdr == null ? sdrVariant : undefined,
       sourceFrameRate,
     );
-
-    this.activeStreamTracker.setAudioStreamCount(
-      mediaFileId,
-      audioStreams.length,
-    );
-    this.activeStreamTracker.setUseExtXMedia(mediaFileId, useExtXMedia);
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1135,8 +1136,8 @@ export class StreamingController {
     // fMP4 source with audio (issue #148, Tizen) and for multi-audio
     // sources regardless of mux flavour. Only the muxed TS / muxed-fMP4
     // legacy path needs a separate audio-only session as a fallback.
-    const useExtXMedia =
-      this.activeStreamTracker.getUseExtXMedia(mediaFileId);
+    const live = this.findRequestSession(req, mediaFileId);
+    const useExtXMedia = live?.useExtXMedia ?? false;
     if (!useExtXMedia) {
       const user = req.user;
       void this.transcodingService.getOrCreateAudioSession(
@@ -1152,7 +1153,7 @@ export class StreamingController {
     const sid = firstQueryString(req.query, 'sid');
     const tokenParam = streamQuery({ token, sid });
     const basePath = `/api/stream/${mediaFileId}/audio/${audioIndex}`;
-    const useTs = this.activeStreamTracker.getUseTs(mediaFileId);
+    const useTs = live?.useTs ?? false;
     const segExt = useTs ? 'ts' : 'm4s';
     const playlist = buildVodPlaylist(
       duration,
@@ -1201,8 +1202,8 @@ export class StreamingController {
         req.user as User,
       );
       const ctx = this.buildSessionContext(req, resolved, mediaFileId);
-      const deviceType =
-        this.activeStreamTracker.getDeviceType(mediaFileId) ?? 'desktop';
+      const live = this.findRequestSession(req, mediaFileId);
+      const deviceType = live?.deviceType ?? 'desktop';
       const sourceW =
         this.activeStreamTracker.getSourceWidth(mediaFileId) || 1920;
       const sourceH =
@@ -1220,7 +1221,7 @@ export class StreamingController {
       // quality-change path. Translate to the HDR rung when the master
       // is publishing the HDR ladder so the spawned session matches.
       const quality =
-        this.activeStreamTracker.getHdrLadder(mediaFileId) &&
+        (live?.hdrLadder ?? false) &&
         !baseQuality.endsWith('-hdr')
           ? `${baseQuality}-hdr`
           : baseQuality;
@@ -1342,8 +1343,9 @@ export class StreamingController {
     const tokenParam = streamQuery({ token, sid });
     const basePath = `/api/stream/${mediaFileId}/${quality}`;
     // Use the master.m3u8 decision — must match to avoid init filename mismatch.
-    const multiAudio = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
-    const useTs = this.activeStreamTracker.getUseTs(mediaFileId);
+    const live = this.findRequestSession(req, mediaFileId);
+    const multiAudio = live?.useExtXMedia ?? false;
+    const useTs = live?.useTs ?? false;
     // Tizen TV sessions can opt into MPEG-TS segments (no init segment)
     // to bypass AVPlay's HLS-fMP4 rejection (issue #148). The fMP4 path
     // is post-processed to CMAF (`cmaf-rewrite.ts`) so it works on
@@ -1397,6 +1399,7 @@ export class StreamingController {
         `[request] ${segment} mfid=${mediaFileId} quality=${quality}`,
       );
     }
+    const live = this.findRequestSession(req, mediaFileId);
 
     // Fast path: if a session already exists, skip the DB query — we only
     // need resolveFile for absolutePath + context when creating a NEW session.
@@ -1422,7 +1425,7 @@ export class StreamingController {
       existing != null &&
       (quality === 'remux' ? !!existing.remux : existing.quality === quality);
     if (segment.startsWith('init') && existing && sessionQualityMatches) {
-      const ma = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
+      const ma = live?.useExtXMedia ?? false;
       // Same caveat as the segment path: remux video-only doesn't use
       // var_stream_map, so the `0/` prefix would 404 on the init lookup.
       const initFile = ma && quality !== 'remux' ? `0/${segment}` : segment;
@@ -1472,8 +1475,7 @@ export class StreamingController {
     // serve it without any DB query or session management. Completed sessions
     // (exitCode !== null) still have valid segments in cache — don't skip them.
     if (existing && existing.quality === quality) {
-      const varStreamMap =
-        this.activeStreamTracker.getUseExtXMedia(mediaFileId);
+      const varStreamMap = live?.useExtXMedia ?? false;
       const segName =
         varStreamMap && quality !== 'remux' ? `0/${segment}` : segment;
       const segPath = `${existing.cachePath}/${segName}`;
@@ -1524,8 +1526,7 @@ export class StreamingController {
         req,
       );
       if (earlySession && earlySession.quality === quality) {
-        const varStreamMap =
-          this.activeStreamTracker.getUseExtXMedia(mediaFileId);
+        const varStreamMap = live?.useExtXMedia ?? false;
         const segName = varStreamMap ? `0/${segment}` : segment;
         const segPath = await this.transcodingService.getSegmentPath(
           earlySession,
@@ -1550,7 +1551,7 @@ export class StreamingController {
 
     // For remux sessions, copy audio only when the source codec is compatible
     // (captured at playback-info); otherwise transcode audio to AAC.
-    const copyAudio = this.activeStreamTracker.getCanCopyAudio(mediaFileId);
+    const copyAudio = live?.canCopyAudio ?? false;
     const session =
       quality === 'remux'
         ? await this.transcodingService.getOrCreateRemuxSession(
@@ -1571,7 +1572,7 @@ export class StreamingController {
     // With var_stream_map (fMP4 + multi-audio), video segments are in
     // subdirectory "0/". The remux session keeps a flat layout (no
     // var_stream_map), so the `0/` prefix would 404 there.
-    const varStreamMap = this.activeStreamTracker.getUseExtXMedia(mediaFileId);
+    const varStreamMap = live?.useExtXMedia ?? false;
     const usesVarStreamMapLayout = varStreamMap && quality !== 'remux';
     const segName = usesVarStreamMapLayout ? `0/${segment}` : segment;
 

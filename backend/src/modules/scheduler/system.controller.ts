@@ -402,10 +402,15 @@ export class SystemController {
       let audioOutputCodec: string | null = null;
       let audioOutputBitrateBps: number | null = null;
       let audioMode: 'direct' | 'copy' | 'transcode' = 'direct';
-      // Single source of truth: the audio plan stream-builder stored at
-      // playback-info time. mode/codec/bitrate are read directly — no
-      // re-derivation, no string comparison gymnastics.
-      const audioPlan = this.activeStreamTracker.getAudioPlan(s.mediaFileId);
+      // Single source of truth: the audio plan stream-builder stored
+      // on the LiveSession at playback-info time. mode/codec/bitrate
+      // are read directly — no re-derivation, no string comparison
+      // gymnastics.
+      const liveForSession =
+        s.userId != null
+          ? this.liveSessions.findCurrent(s.userId, s.mediaFileId)
+          : null;
+      const audioPlan = liveForSession?.audioPlan ?? null;
 
       if (s.mode === 'transcode') {
         videoPlaybackMode = `Transcodage (${HW_ACCEL_LABEL[hwAccel] ?? hwAccel.toUpperCase()})`;

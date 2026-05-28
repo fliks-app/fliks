@@ -5,7 +5,6 @@ import {
   QualityOption,
   TranscodeReason,
 } from './dto/playback-info.dto';
-import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { ResolvedFile } from './streaming.service';
 import {
   DeviceType,
@@ -26,6 +25,17 @@ import { pickPrimaryVariant } from './transcoding/codec/selector';
 import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
 
 /**
+ * What stream-builder hands back: the public playback-info response,
+ * plus the two side-band decisions the controller threads onto the
+ * LiveSession (no more tracker side-effects from this service).
+ */
+export interface EvaluateResult {
+  response: PlaybackInfoResponse;
+  useHdrLadder: boolean;
+  videoVariant: CodecVariant | null;
+}
+
+/**
  * Decides how a media file should be played: DirectPlay, DirectStream (remux), or Transcode.
  *
  * Decision tree:
@@ -41,7 +51,6 @@ export class StreamBuilderService {
 
   constructor(
     private readonly transcodingService: TranscodingService,
-    private readonly activeStreamTracker: ActiveStreamTracker,
   ) {}
 
   /**
@@ -52,7 +61,7 @@ export class StreamBuilderService {
     profile: DeviceProfileDto,
     tokenParam: string,
     burnInSubtitleId?: number,
-  ): PlaybackInfoResponse {
+  ): EvaluateResult {
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
     const a = si?.audio?.[0];
@@ -130,7 +139,6 @@ export class StreamBuilderService {
     // HDR ladder. Anything that re-encodes via H.264 needs the tonemap
     // filter or AVPlayer rejects with -12927 (mismatched VUI vs codec).
     const needsTonemapping = isSourceHdr && !useHdrLadder;
-    this.activeStreamTracker.setHdrLadder(resolved.mediaFile.id, useHdrLadder);
 
     // Codec selector: picks the variant the encoder pipeline will produce
     // when the playback path lands on transcode. The result is stored in
@@ -154,10 +162,14 @@ export class StreamBuilderService {
       detectedHwAccel,
       userAgent,
     );
-    this.activeStreamTracker.setVideoVariant(
-      resolved.mediaFile.id,
-      selectedVariant,
-    );
+    // useHdrLadder and selectedVariant are returned to the controller
+    // via EvaluateResult; the controller threads them onto the live
+    // session rather than the service writing side-effects.
+    const wrap = (response: PlaybackInfoResponse): EvaluateResult => ({
+      response,
+      useHdrLadder,
+      videoVariant: selectedVariant,
+    });
     const needsBurnIn = !!burnInSubtitleId;
     const needsCrop = !!v?.crop;
 
@@ -224,7 +236,7 @@ export class StreamBuilderService {
         `DirectPlay for file ${resolved.mediaFile.id}: ${sourceContainer}/${sourceVideoCodec}/${sourceAudioCodec}`,
       );
       const url = `/api/stream/${resolved.mediaFile.id}${tokenParam}`;
-      return {
+      return wrap({
         mediaFileId: resolved.mediaFile.id,
         playMethod: 'DirectPlay',
         playUrl: url,
@@ -240,7 +252,7 @@ export class StreamBuilderService {
         tonemapping: false,
         qualities: this.buildQualityList(source, 'DirectPlay', true, qualityLadder),
         source,
-      };
+      });
     }
 
     // --- Step 2: Try DirectStream (remux) ---
@@ -304,7 +316,7 @@ export class StreamBuilderService {
           totalBitrateBps: v + a,
         };
       }
-      return {
+      return wrap({
         mediaFileId: resolved.mediaFile.id,
         playMethod: 'DirectStream',
         playUrl: url,
@@ -334,7 +346,7 @@ export class StreamBuilderService {
         transcodeBitrateByQuality,
         qualities: this.buildQualityList(source, 'DirectStream', true, qualityLadder),
         source,
-      };
+      });
     }
 
     // --- Step 3: Full Transcode ---
@@ -442,7 +454,7 @@ export class StreamBuilderService {
         totalBitrateBps: v + a,
       };
     }
-    return {
+    return wrap({
       mediaFileId: resolved.mediaFile.id,
       playMethod: 'Transcode',
       playUrl: url,
@@ -465,7 +477,7 @@ export class StreamBuilderService {
       transcodeBitrateByQuality,
       qualities: this.buildQualityList(source, 'Transcode', false, qualityLadder),
       source,
-    };
+    });
   }
 
   /**

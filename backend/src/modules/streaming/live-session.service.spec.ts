@@ -77,6 +77,106 @@ describe('LiveSessionRegistry', () => {
     expect(snapshots[0].startedAt).toBeInstanceOf(Date);
     expect(snapshots[0].lastBeat).toBeInstanceOf(Date);
   });
+
+  it('create stores per-session settings inline', () => {
+    const session = svc.create({
+      ...BASE,
+      useTs: true,
+      audioPlan: { mode: 'copy', codec: 'eac3' },
+      deviceType: 'mobile',
+      hdrLadder: true,
+      audioStreamCount: 3,
+    });
+    expect(session.useTs).toBe(true);
+    expect(session.audioPlan).toEqual({ mode: 'copy', codec: 'eac3' });
+    expect(session.deviceType).toBe('mobile');
+    expect(session.hdrLadder).toBe(true);
+    expect(session.audioStreamCount).toBe(3);
+    // Defaults apply for fields not supplied.
+    expect(session.useExtXMedia).toBe(false);
+    expect(session.canCopyVideo).toBe(false);
+    expect(session.canCopyAudio).toBe(false);
+    expect(session.transcodeReasons).toEqual([]);
+  });
+
+  it('update mutates supplied fields and leaves the rest alone', () => {
+    const session = svc.create({
+      ...BASE,
+      useTs: true,
+      audioStreamCount: 0,
+    });
+    const updated = svc.update(session.sessionId, {
+      audioStreamCount: 2,
+      useExtXMedia: true,
+    });
+    expect(updated).not.toBeNull();
+    expect(updated!.audioStreamCount).toBe(2);
+    expect(updated!.useExtXMedia).toBe(true);
+    expect(updated!.useTs).toBe(true);
+  });
+
+  it('update on an unknown sid returns null', () => {
+    expect(svc.update('missing', { useTs: true })).toBeNull();
+  });
+
+  it('findCurrent returns the most-recently-active session for (user, file)', async () => {
+    const older = svc.create(BASE);
+    await new Promise((r) => setTimeout(r, 5));
+    const newer = svc.create(BASE);
+    // Heartbeat older to reorder — newer was inserted last but older
+    // just sent a beat.
+    await new Promise((r) => setTimeout(r, 5));
+    svc.heartbeat(older.sessionId, { position: 1 });
+    const current = svc.findCurrent(BASE.userId, BASE.mediaFileId);
+    expect(current?.sessionId).toBe(older.sessionId);
+    // Brand new heartbeat on newer makes it win again.
+    await new Promise((r) => setTimeout(r, 5));
+    svc.heartbeat(newer.sessionId, { position: 1 });
+    expect(svc.findCurrent(BASE.userId, BASE.mediaFileId)?.sessionId).toBe(
+      newer.sessionId,
+    );
+  });
+
+  it('findCurrent isolates by (user, file) — does not bleed across users', () => {
+    const aliceSession = svc.create(BASE);
+    svc.create({ ...BASE, userId: 99, username: 'bob' });
+    expect(svc.findCurrent(BASE.userId, BASE.mediaFileId)?.sessionId).toBe(
+      aliceSession.sessionId,
+    );
+    expect(svc.findCurrent(99, BASE.mediaFileId)?.userId).toBe(99);
+    // Different file → no match.
+    expect(svc.findCurrent(BASE.userId, 999)).toBeNull();
+  });
+
+  it('same user on two devices for the same file keeps both states isolated', () => {
+    // Alice opens her browser (fMP4, desktop ladder) AND her Tizen TV
+    // (TS container, no HDR ladder) on the same file. Each session
+    // carries its own settings — there is no shared per-(user, file)
+    // state that the second playback-info could clobber.
+    const browser = svc.create({
+      ...BASE,
+      profileHash: 'browser-hash',
+      useTs: false,
+      deviceType: 'desktop',
+      hdrLadder: true,
+    });
+    const tv = svc.create({
+      ...BASE,
+      profileHash: 'tizen-hash',
+      useTs: true,
+      deviceType: 'desktop',
+      hdrLadder: false,
+    });
+    expect(browser.useTs).toBe(false);
+    expect(browser.hdrLadder).toBe(true);
+    expect(tv.useTs).toBe(true);
+    expect(tv.hdrLadder).toBe(false);
+    // listForJob also keeps them apart via profileHash.
+    expect(svc.listForJob(BASE.userId, BASE.mediaFileId, 'browser-hash'))
+      .toHaveLength(1);
+    expect(svc.listForJob(BASE.userId, BASE.mediaFileId, 'tizen-hash'))
+      .toHaveLength(1);
+  });
 });
 
 describe('LiveSessionRegistry GC', () => {
