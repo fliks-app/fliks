@@ -381,8 +381,19 @@ export class StreamingApiService {
     );
   }
 
-  /** Build the URL for stopping sessions (used with sendBeacon on unload). */
-  getStopSessionsUrl(mediaFileId: number): string {
+  /** Build the URL for stopping sessions (used with sendBeacon on unload).
+   *  Prefer the sid-scoped variant when a sessionId is available — the
+   *  bulk path kills every profile for the (user, file) pair, which
+   *  would tear down other devices watching the same title. */
+  getStopSessionsUrl(mediaFileId: number, sessionId?: string): string {
+    if (sessionId) {
+      const path = `/api/stream/sessions/${encodeURIComponent(sessionId)}`;
+      const base = this.serverConfig.isNative
+        ? this.serverConfig.resolveUrl(path)
+        : path;
+      const token = this.playbackToken;
+      return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+    }
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/sessions`)
       : `/api/stream/${mediaFileId}/sessions`;
@@ -390,7 +401,14 @@ export class StreamingApiService {
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
 
-  stopSessions(mediaFileId: number) {
+  stopSessions(mediaFileId: number, sessionId?: string) {
+    if (sessionId) {
+      return firstValueFrom(
+        this.http.delete(
+          `/api/stream/sessions/${encodeURIComponent(sessionId)}`,
+        ),
+      );
+    }
     return firstValueFrom(
       this.http.delete(`/api/stream/${mediaFileId}/sessions`),
     );

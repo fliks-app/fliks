@@ -868,14 +868,44 @@ export class StreamingController {
 
   /**
    * Explicit stop signal from the client (player destroy / page unload,
-   * fetched with `keepalive: true`). Drops the live-session entry.
-   * Idempotent — silently 204 even for unknown ids so a duplicate
-   * unload doesn't surface as an error.
+   * fetched with `keepalive: true`). Drops the live-session entry AND
+   * kills the matching ffmpeg job — scoped to the `(user, file,
+   * profileHash)` carried by the session, so a multi-device viewer
+   * closing one device leaves every other device's stream untouched.
+   * Cache is preserved across the kill. Idempotent — silently 204 on
+   * unknown sessionIds.
    */
   @Delete('sessions/:sessionId')
   @HttpCode(204)
   stopLiveSession(@Param('sessionId') sessionId: string) {
+    const live = this.liveSessions.get(sessionId);
     this.liveSessions.stop(sessionId);
+    if (!live || !live.profileHash) return;
+    // Only kill the underlying ffmpeg job(s) when no other live
+    // session is still referencing this (user, file, profileHash) —
+    // multi-tab or multi-device viewers sharing one ffmpeg should keep
+    // it alive while at least one consumer remains. The cleanup loop
+    // will reap the job 60 s after the last viewer leaves.
+    const remaining = this.liveSessions.listForJob(
+      live.userId,
+      live.mediaFileId,
+      live.profileHash,
+    );
+    if (remaining.length > 0) return;
+    const userId = live.userId ?? undefined;
+    const matching = this.transcodingService.getSessionsForFileUser(
+      live.mediaFileId,
+      userId,
+    );
+    const variantPrefix = `${live.profileHash}-`;
+    const toKill = matching.filter(
+      (s) =>
+        s.profileHash === live.profileHash ||
+        (s.profileHash != null && s.profileHash.startsWith(variantPrefix)),
+    );
+    for (const s of toKill) {
+      this.transcodingService.killSessionById(s.id);
+    }
   }
 
   // ---------------------------------------------------------------------------

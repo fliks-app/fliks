@@ -2272,8 +2272,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await NativePlayer.stop().catch(() => {});
     }
 
-    // Await stop so the backend finishes cleaning the cache dir before we start a new session
-    await this.streamingApi.stopSessions(this.mediaFileId).catch(() => {});
+    // Stop only this device's session — multi-device viewers on the
+    // same file with a different profile should stay alive.
+    await this.streamingApi
+      .stopSessions(this.mediaFileId, this.playbackInfo?.sessionId)
+      .catch(() => {});
 
     const deviceProfile = this.deviceProfileService.getProfile();
     this.playbackInfo = await this.streamingApi.getPlaybackInfo(
@@ -2328,7 +2331,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private fireAndForgetStopSessions() {
     if (!this.mediaFileId || this.playbackMode() === 'direct') return;
-    const url = this.streamingApi.getStopSessionsUrl(this.mediaFileId);
+    const sid = this.castService.isConnected()
+      ? (this.castPlayerService.liveSessionId() ?? this.playbackInfo?.sessionId)
+      : this.playbackInfo?.sessionId;
+    const url = this.streamingApi.getStopSessionsUrl(this.mediaFileId, sid);
     fetch(url, { method: 'DELETE', keepalive: true }).catch(() => {});
   }
 
@@ -2348,7 +2354,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private stopStreamingSessions() {
     if (!this.mediaFileId || this.playbackMode() === 'direct') return;
-    this.streamingApi.stopSessions(this.mediaFileId).catch(() => {});
+    const sid = this.castService.isConnected()
+      ? (this.castPlayerService.liveSessionId() ?? this.playbackInfo?.sessionId)
+      : this.playbackInfo?.sessionId;
+    this.streamingApi.stopSessions(this.mediaFileId, sid).catch(() => {});
   }
 
   /** Wall-clock timestamp (ms) of the last PUT to /state. Used to dedup
@@ -2396,7 +2405,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       episodeId: this.episodeId,
     };
 
-    const sessionId = this.playbackInfo?.sessionId;
+    // Prefer the Cast live-session id when the user has handed off to a
+    // receiver — its segments are produced by a separate ffmpeg job
+    // under the Cast device profile. The local sender's sid would beat
+    // a now-paused browser session and let the Cast one expire.
+    const sessionId = this.castService.isConnected()
+      ? (this.castPlayerService.liveSessionId() ?? this.playbackInfo?.sessionId)
+      : this.playbackInfo?.sessionId;
     if (sessionId) {
       payload.sessionId = sessionId;
       payload.state = this.paused() ? 'paused' : 'playing';

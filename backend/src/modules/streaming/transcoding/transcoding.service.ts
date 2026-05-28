@@ -1418,21 +1418,34 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    * `TranscodeCacheService` owns the disk lifecycle (TTL + LRU); a
    * fresh play that lands on the same (user, file, profileHash)
    * reattaches to the existing segments without retranscoding.
+   *
+   * Variant sessions (`-early`, `-remux`, `-a<N>`) ride on the same
+   * live session as their main counterpart — the LiveSessionRegistry
+   * tracks one entry per client, not one per ffmpeg variant — so the
+   * lookup strips the variant suffix before querying.
    */
   private cleanupStaleSessions() {
     const now = Date.now();
     for (const [id, session] of this.sessions) {
-      if (session.userId == null || !session.profileHash) {
+      if (!session.profileHash) {
         this.fallbackIdleCleanup(now, id, session);
         continue;
       }
       const matching = this.liveSessions.listForJob(
-        session.userId,
+        session.userId ?? null,
         session.mediaFileId,
-        session.profileHash,
+        baseProfileHash(session.profileHash),
       );
       if (matching.length > 0) {
         session.seenAnyLiveSession = true;
+        session.zeroLiveSince = null;
+        continue;
+      }
+      // A recent segment fetch keeps the job alive even when the
+      // live-session count is zero — covers transient heartbeat
+      // failures (network blip, throttled background tab) where the
+      // client is still actively pulling bytes.
+      if (now - session.lastAccess < JOB_GRACE_MS) {
         session.zeroLiveSince = null;
         continue;
       }
@@ -1569,4 +1582,15 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     });
     return { resolve, promise };
   }
+}
+
+/**
+ * Strip a variant suffix (`-early`, `-remux`, `-a<N>`) off a session's
+ * profileHash to recover the base hash that the live-session registry
+ * tracks. The registry has one entry per client, so every ffmpeg
+ * variant produced for that client (main, early, remux, per-audio)
+ * should match the same live session by base hash.
+ */
+function baseProfileHash(sessionHash: string): string {
+  return sessionHash.replace(/-(?:early|remux|a\d+)$/, '');
 }
