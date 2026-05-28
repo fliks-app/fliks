@@ -115,6 +115,19 @@ export interface PlaybackState {
   lastPlayedAt: string;
 }
 
+/**
+ * Response from the heartbeat endpoint (PUT /playback/media/:id/state).
+ * `sessionLost: true` means the carried `sid` is no longer known to
+ * the backend (restart, GC, …) — caller must re-issue `playback-info`
+ * and reload the stream URL with the fresh sid. `state` carries the
+ * persisted PlaybackState row when the call flushed to the DB
+ * (debounced); the field is omitted on a no-op tick.
+ */
+export interface HeartbeatResponse {
+  sessionLost?: true;
+  state?: PlaybackState;
+}
+
 export interface WatchHistoryItem {
   id: number;
   mediaId: number;
@@ -459,7 +472,7 @@ export class StreamingApiService {
     },
   ) {
     return firstValueFrom(
-      this.http.put<PlaybackState | null>(
+      this.http.put<HeartbeatResponse | null>(
         `/api/playback/media/${mediaId}/state`,
         body,
       ),

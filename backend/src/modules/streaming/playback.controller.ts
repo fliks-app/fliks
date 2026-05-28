@@ -178,7 +178,13 @@ export class PlaybackController {
    *  refreshes the in-memory {@link LiveSessionRegistry} on every call
    *  and debounces the actual DB write to one every
    *  {@link STATE_DB_WRITE_INTERVAL_MS}. State transitions
-   *  (`playing` ↔ `paused`) and completion always force a flush. */
+   *  (`playing` ↔ `paused`) and completion always force a flush.
+   *
+   *  When the carried `sessionId` is unknown to the registry (backend
+   *  restart, GC after a long idle, …) the response carries
+   *  `{ sessionLost: true }` so the client knows to recover by
+   *  re-issuing `playback-info` and reloading the stream URL with
+   *  the fresh sid. */
   @Put('media/:mediaId/state')
   async updateState(
     @Req() req: Request,
@@ -197,10 +203,11 @@ export class PlaybackController {
       audioTrackIndex?: number | null;
       subtitleTrackIndex?: number | null;
     },
-  ) {
+  ): Promise<{ sessionLost?: true; state?: unknown } | null> {
     const user = req.user as User;
 
     let stateChanged = false;
+    let sessionLost = false;
     if (body.sessionId) {
       const before = this.liveSessions.get(body.sessionId);
       const previousState = before?.state;
@@ -212,6 +219,9 @@ export class PlaybackController {
         subtitleTrackIndex: body.subtitleTrackIndex,
       });
       stateChanged = !!updated && !!body.state && previousState !== body.state;
+      // The client believes the session is alive but the registry
+      // doesn't know it — surface that so the client can recover.
+      sessionLost = !updated;
     }
 
     const dbKey = `${user.id}:${mediaId}:${body.episodeId ?? 0}`;
@@ -226,15 +236,17 @@ export class PlaybackController {
       now - lastWrite >= STATE_DB_WRITE_INTERVAL_MS;
 
     if (!shouldFlushDb) {
-      return null;
+      return sessionLost ? { sessionLost: true } : null;
     }
     this.lastDbWriteAt.set(dbKey, now);
-    return this.playbackService.updateState(user.id, mediaId, {
+    const state = await this.playbackService.updateState(user.id, mediaId, {
       positionSeconds: body.positionSeconds,
       durationSeconds: body.durationSeconds,
       mediaFileId: body.mediaFileId,
       episodeId: body.episodeId,
     });
+    if (sessionLost) return { sessionLost: true, state };
+    return { state };
   }
 
   /** Toggle watched/unwatched for a media or episode. */
