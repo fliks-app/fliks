@@ -857,23 +857,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             this.authService.streamToken() ?? this.authService.accessToken;
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
-          if (mode === 'direct') {
-            const streamUrl = this.streamingApi.getStreamUrl(
-              this.mediaFileId,
-              this.playbackInfo?.sessionId,
-            );
-            await this.engine!.load(streamUrl, startTime, 'video/mp4', headers);
-          } else {
-            const savedQualityId = this.activeQualityId();
-            const tvStartQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-            const hlsUrl = this.streamingApi.getHlsUrl(
-              this.mediaFileId,
-              tvStartQuality,
-              startTime,
-              this.playbackInfo?.sessionId,
-            );
-            await this.engine!.load(hlsUrl, startTime, undefined, headers);
-          }
+          const { url: tizenUrl, mimeType: tizenMimeType } = this.buildPlayUrl({
+            startTime,
+          });
+          await this.engine!.load(tizenUrl, startTime, tizenMimeType, headers);
 
           // Subtitles loaded — expose to the picker. The full auto-pick
           // path (remembered selection, language match, forced subs) is
@@ -916,21 +903,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             this.authService.streamToken() ?? this.authService.accessToken;
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
-          if (mode === 'direct') {
-            // Progressive MP4 — Media3 detects the container, no quality
-            // ladder to constrain (DirectPlay = single source variant).
-            const streamUrl = this.streamingApi.getStreamUrl(
-              this.mediaFileId,
-              this.playbackInfo?.sessionId,
-            );
-            await this.engine!.load(streamUrl, startTime, 'video/mp4', headers);
-          } else {
-            // HLS transcode/remux — apply quality constraint before load to
-            // stop ExoPlayer from picking 4K on a phone (slow transcode →
-            // A/V desync). `auto`: no constraint, ExoPlayer's ABR picks
-            // adaptively. `original`: pin to source dimensions so ABR
-            // can't downgrade (the user explicitly forced top quality).
-            // Specific rung: pin to that rung's width/height.
+          // HLS transcode/remux — apply quality constraint before load to
+          // stop ExoPlayer from picking 4K on a phone (slow transcode →
+          // A/V desync). `auto`: no constraint, ExoPlayer's ABR picks
+          // adaptively. `original`: pin to source dimensions so ABR
+          // can't downgrade (the user explicitly forced top quality).
+          // Specific rung: pin to that rung's width/height.
+          if (mode !== 'direct') {
             const savedQualityId = this.activeQualityId();
             if (savedQualityId !== 'auto') {
               let w: number;
@@ -945,15 +924,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
               }
               (this.engine as NativeEngine).selectVariantTrack({ width: w, height: h });
             }
-            const nativeStartQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-            const hlsUrl = this.streamingApi.getHlsUrl(
-              this.mediaFileId,
-              nativeStartQuality,
-              startTime,
-              this.playbackInfo?.sessionId,
-            );
-            await this.engine!.load(hlsUrl, startTime, undefined, headers);
           }
+          const { url: nativeUrl, mimeType: nativeMimeType } = this.buildPlayUrl({
+            startTime,
+          });
+          await this.engine!.load(nativeUrl, startTime, nativeMimeType, headers);
         } else {
           await this.createShakaEngine();
 
@@ -962,13 +937,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             this.mediaId, this.mediaFileId, this.streamingApi, this.media,
           );
 
-          if (mode === 'direct') {
-            const streamUrl = this.streamingApi.getStreamUrl(
-              this.mediaFileId,
-              this.playbackInfo?.sessionId,
-            );
-            await this.engine!.load(streamUrl, startTime, 'video/mp4');
-          } else {
+          if (mode !== 'direct') {
             const savedQualityId = this.activeQualityId();
             if (savedQualityId === 'auto') {
               this.qualityManager.selectQuality(
@@ -1008,21 +977,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
               },
               ...(preferredLang ? { preferredAudioLanguage: preferredLang } : {}),
             });
-
-            // Tell the backend the target quality so it pre-starts FFmpeg at
-            // the right profile + applies the quality-change grace period to
-            // protect the session from Shaka's startup bandwidth probe.
-            const startQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-            const hlsUrl = this.streamingApi.getHlsUrl(
-              this.mediaFileId,
-              startQuality,
-              startTime,
-              this.playbackInfo?.sessionId,
-            );
-            await this.engine!.load(hlsUrl, startTime);
           }
 
-
+          // `buildPlayUrl` threads `startTime` into HLS URLs so the
+          // backend pre-spawns FFmpeg at the right offset + applies the
+          // quality-change grace period; direct play gets the explicit
+          // `video/mp4` mimeType for Shaka.
+          const { url: shakaUrl, mimeType: shakaMimeType } = this.buildPlayUrl({
+            startTime,
+          });
+          await this.engine!.load(shakaUrl, startTime, shakaMimeType);
         }
       }
 
@@ -1761,6 +1725,76 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /**
+   * Compose the engine's stream URL for the current `playbackMode`.
+   * Returns `{ url, mimeType }` — direct play needs the explicit
+   * `video/mp4` content type for native + Tizen engines, HLS lets the
+   * engine sniff. `startTime` is only consumed by HLS (lets the
+   * backend pre-spawn ffmpeg at the right offset); reload paths
+   * intentionally omit it because the engine seeks after `load`.
+   */
+  private buildPlayUrl(opts: {
+    sid?: string | null;
+    startTime?: number;
+  } = {}): { url: string; mimeType?: string } {
+    const mode = this.playbackMode();
+    const sid = opts.sid ?? this.playbackInfo?.sessionId;
+    if (mode === 'direct') {
+      return {
+        url: this.streamingApi.getStreamUrl(this.mediaFileId, sid),
+        mimeType: 'video/mp4',
+      };
+    }
+    const savedQualityId = this.activeQualityId();
+    const startQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
+    return {
+      url: this.streamingApi.getHlsUrl(
+        this.mediaFileId,
+        startQuality,
+        opts.startTime,
+        sid,
+      ),
+    };
+  }
+
+  /**
+   * Mint a fresh LiveSession via `playback-info` and reload the
+   * engine at `pos` with the new sid. Shared body between
+   * {@link resumeLocalAfterCast} (Cast disconnect — also unmutes) and
+   * {@link recoverFromLostSession} (heartbeat said sid is unknown —
+   * preserves a pre-existing pause). HLS routes intentionally drop
+   * `startTime` on the URL because the engine handles the seek after
+   * `load`.
+   */
+  private async refreshSidAndReload(
+    pos: number,
+    opts: { preservePause: boolean; unmute: boolean },
+  ): Promise<void> {
+    if (!this.engine || !this.mediaFileId) return;
+    if (opts.unmute) this.engine.muted = false;
+    const wasPaused = opts.preservePause ? this.paused() : false;
+    const deviceProfile = this.deviceProfileService.getProfile();
+    this.playbackInfo = await this.streamingApi.getPlaybackInfo(
+      this.mediaFileId,
+      deviceProfile,
+      this.activeBurnInId ?? undefined,
+      this.activeAudioStreamIndex ?? undefined,
+      undefined,
+      pos > 0 ? Math.floor(pos) : undefined,
+    );
+    const { url, mimeType } = this.buildPlayUrl({
+      sid: this.playbackInfo.sessionId,
+    });
+    await this.engine.load(url, pos > 0 ? pos : undefined, mimeType);
+    this.qualityManager.applyQualityPreferenceAfterLoad(
+      this.engine,
+      this.playbackMode(),
+    );
+    if (!wasPaused) {
+      this.engine.play().catch(() => {});
+    }
+  }
+
+  /**
    * Guard so a slow recovery (~1-2 s of playback-info + reload) can't
    * race against the next 10-second heartbeat: we only fire one
    * recoverFromLostSession at a time, no matter how many heartbeats
@@ -1781,70 +1815,27 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!this.engine || !this.mediaFileId) return;
     this.recoveringFromLostSession = true;
     try {
-      const currentPos = this.engine.currentTime || 0;
-      const deviceProfile = this.deviceProfileService.getProfile();
-      this.playbackInfo = await this.streamingApi.getPlaybackInfo(
-        this.mediaFileId,
-        deviceProfile,
-        this.activeBurnInId ?? undefined,
-        this.activeAudioStreamIndex ?? undefined,
-        undefined,
-        currentPos > 0 ? Math.floor(currentPos) : undefined,
-      );
-      const sid = this.playbackInfo.sessionId;
-      const mode = this.playbackMode();
-      const savedQualityId = this.activeQualityId();
-      const startQuality = mode !== 'direct' && savedQualityId !== 'auto'
-        ? savedQualityId
-        : undefined;
-      const url = mode === 'direct'
-        ? this.streamingApi.getStreamUrl(this.mediaFileId, sid)
-        : this.streamingApi.getHlsUrl(this.mediaFileId, startQuality, undefined, sid);
-      const mimeType = mode === 'direct' ? 'video/mp4' : undefined;
-      const wasPaused = this.paused();
-      await this.engine.load(url, currentPos > 0 ? currentPos : undefined, mimeType);
-      this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
-      if (!wasPaused) {
-        this.engine.play().catch(() => {});
-      }
+      await this.refreshSidAndReload(this.engine.currentTime || 0, {
+        preservePause: true,
+        unmute: false,
+      });
     } catch { /* heartbeat is fire-and-forget; next one retries */ }
     finally {
       this.recoveringFromLostSession = false;
     }
   }
 
-  /** Reload local engine and resume after Cast disconnect. */
+  /** Reload local engine and resume after Cast disconnect. The
+   *  browser's pre-cast LiveSession was GC'd while the cast receiver
+   *  held the only live entry, so we mint a fresh sid before
+   *  reloading — reusing `this.playbackInfo?.sessionId` would race
+   *  against the heartbeat fallback path and flash a reload. */
   private async resumeLocalAfterCast(castPos: number) {
     try {
-      if (this.engine) this.engine.muted = false;
-      if (this.engine && this.mediaFileId) {
-        // Mint a fresh sid: the browser's pre-cast LiveSession was
-        // GC'd while the cast receiver held the only live entry, so
-        // reusing `this.playbackInfo?.sessionId` would race against
-        // the heartbeat fallback path and flash a reload.
-        const deviceProfile = this.deviceProfileService.getProfile();
-        this.playbackInfo = await this.streamingApi.getPlaybackInfo(
-          this.mediaFileId,
-          deviceProfile,
-          this.activeBurnInId ?? undefined,
-          this.activeAudioStreamIndex ?? undefined,
-          undefined,
-          castPos > 0 ? Math.floor(castPos) : undefined,
-        );
-        const sid = this.playbackInfo.sessionId;
-        const mode = this.playbackMode();
-        const savedQualityId = this.activeQualityId();
-        const startQuality = mode !== 'direct' && savedQualityId !== 'auto'
-          ? savedQualityId
-          : undefined;
-        const url = mode === 'direct'
-          ? this.streamingApi.getStreamUrl(this.mediaFileId, sid)
-          : this.streamingApi.getHlsUrl(this.mediaFileId, startQuality, undefined, sid);
-        const mimeType = mode === 'direct' ? 'video/mp4' : undefined;
-        await this.engine.load(url, castPos > 0 ? castPos : undefined, mimeType);
-        this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
-        this.engine.play().catch(() => {});
-      }
+      await this.refreshSidAndReload(castPos, {
+        preservePause: false,
+        unmute: true,
+      });
     } catch { /* ignore */ }
   }
 
@@ -2375,25 +2366,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.qualityManager.buildQualityOptions(pi);
 
     const mode = this.playbackMode();
-    if (mode === 'direct') {
-      await this.engine.load(
-        this.streamingApi.getStreamUrl(this.mediaFileId, this.playbackInfo?.sessionId),
-        currentPos,
-        'video/mp4',
-      );
-    } else {
-      const savedQualityId = this.activeQualityId();
-      const startQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-      await this.engine.load(
-        this.streamingApi.getHlsUrl(
-          this.mediaFileId,
-          startQuality,
-          currentPos,
-          pi.sessionId,
-        ),
-        currentPos,
-      );
-    }
+    const { url, mimeType } = this.buildPlayUrl({ startTime: currentPos });
+    await this.engine.load(url, currentPos, mimeType);
 
     this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
     this.engine.play().catch(() => {});
