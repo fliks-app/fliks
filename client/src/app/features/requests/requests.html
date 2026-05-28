@@ -28,7 +28,7 @@
     <div class="flex flex-col gap-3">
       @for (row of rows(); track row.id) {
         <article
-          class="relative card bg-base-100 shadow-md border border-base-200 flex flex-row overflow-hidden rounded-box"
+          class="relative card bg-base-100 shadow-md border border-base-200 grid grid-cols-1 sm:grid-cols-[auto_1fr] items-stretch overflow-hidden rounded-box"
           [attr.title]="row.title"
         >
           <!-- Mobile-only fanart backdrop with a dimming gradient so the
@@ -43,50 +43,83 @@
             <div class="absolute inset-0 bg-gradient-to-b from-base-100/45 via-base-100/80 to-base-100"></div>
           </div>
 
-          @if (mobileActionsAvailable(row)) {
-            <div class="absolute top-2 right-2 z-20 sm:hidden">
-              <app-dropdown-menu placement="bottom-end">
+          @if (mobileActionsAvailable(row) || (row.status === 'declined' && row.declinedReason?.trim())) {
+            <!-- Corner action cluster: primary buttons (sm-only, surfaced on
+                 landscape phones / small tablets) + kebab for the secondary
+                 ones. Hidden on lg+ where the dedicated sidebar column owns
+                 every action inline. -->
+            <div class="absolute top-2 right-2 z-20 lg:hidden flex items-center gap-1">
+              @if (row.status === 'pending' && auth.hasPermission('requests.manage')) {
                 <button
-                  trigger
                   type="button"
-                  class="btn btn-ghost btn-xs btn-circle"
-                  [attr.aria-label]="'common.actions' | translate"
+                  class="hidden sm:inline-flex btn btn-success btn-sm"
+                  [disabled]="actionBusyId() === row.id"
+                  (click)="approve(row.id)"
                 >
-                  <svg lucideEllipsisVertical class="h-4 w-4"></svg>
+                  {{ 'requests.approve' | translate }}
                 </button>
-                @if (canEdit(row)) {
-                  <button type="button" class="dropdown-item text-white" (click)="openEdit(row)">
-                    <svg lucidePencil class="h-4 w-4"></svg>
-                    {{ 'requests.edit' | translate }}
-                  </button>
-                }
-                @if (canDeleteRequest(row)) {
+                <button
+                  type="button"
+                  class="hidden sm:inline-flex btn btn-warning btn-sm"
+                  [disabled]="actionBusyId() === row.id"
+                  (click)="openDecline(row.id)"
+                >
+                  {{ 'requests.decline' | translate }}
+                </button>
+              }
+              @if (row.status === 'declined' && row.declinedReason?.trim()) {
+                <button
+                  type="button"
+                  class="hidden sm:inline-flex btn btn-outline btn-primary btn-sm"
+                  (click)="openViewDeclineReason(row)"
+                >
+                  {{ 'requests.view_decline' | translate }}
+                </button>
+              }
+              @if (mobileActionsAvailable(row)) {
+                <app-dropdown-menu placement="bottom-end">
                   <button
+                    trigger
                     type="button"
-                    class="dropdown-item text-error"
-                    [disabled]="actionBusyId() === row.id"
-                    (click)="removeRequest(row)"
+                    class="btn btn-ghost btn-xs btn-circle"
+                    [attr.aria-label]="'common.actions' | translate"
                   >
-                    <svg lucideTrash2 class="h-4 w-4"></svg>
-                    {{ 'requests.delete' | translate }}
+                    <svg lucideEllipsisVertical class="h-4 w-4"></svg>
                   </button>
-                } @else if (row.status === 'pending' && canCancel(row)) {
-                  <button
-                    type="button"
-                    class="dropdown-item text-error"
-                    [disabled]="actionBusyId() === row.id"
-                    (click)="removeRequest(row)"
-                  >
-                    <svg lucideTrash2 class="h-4 w-4"></svg>
-                    {{ 'requests.cancel' | translate }}
-                  </button>
-                }
-              </app-dropdown-menu>
+                  @if (canEdit(row)) {
+                    <button type="button" class="dropdown-item text-white" (click)="openEdit(row)">
+                      <svg lucidePencil class="h-4 w-4"></svg>
+                      {{ 'requests.edit' | translate }}
+                    </button>
+                  }
+                  @if (canDeleteRequest(row)) {
+                    <button
+                      type="button"
+                      class="dropdown-item text-error"
+                      [disabled]="actionBusyId() === row.id"
+                      (click)="removeRequest(row)"
+                    >
+                      <svg lucideTrash2 class="h-4 w-4"></svg>
+                      {{ 'requests.delete' | translate }}
+                    </button>
+                  } @else if (row.status === 'pending' && canCancel(row)) {
+                    <button
+                      type="button"
+                      class="dropdown-item text-error"
+                      [disabled]="actionBusyId() === row.id"
+                      (click)="removeRequest(row)"
+                    >
+                      <svg lucideTrash2 class="h-4 w-4"></svg>
+                      {{ 'requests.cancel' | translate }}
+                    </button>
+                  }
+                </app-dropdown-menu>
+              }
             </div>
           }
 
           <figure
-            class="relative hidden sm:flex w-24 lg:w-40 shrink-0 aspect-2/3 bg-base-300 overflow-hidden"
+            class="relative hidden sm:block self-start aspect-2/3 w-24 lg:w-32 m-3 me-1 overflow-hidden rounded-lg"
           >
             @defer (on viewport) {
               <app-request-poster
@@ -172,7 +205,7 @@
 
             @if (row.status === 'declined' && row.declinedReason?.trim()) {
               <div
-                class="flex flex-wrap items-center justify-end gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
+                class="flex sm:hidden lg:flex flex-wrap items-center justify-end gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
               >
                 <button
                   type="button"
@@ -196,7 +229,7 @@
 
             @if (row.status === 'pending') {
               <div
-                class="flex flex-wrap items-center lg:items-end lg:justify-end content-start gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
+                class="flex sm:hidden lg:flex flex-wrap items-center lg:items-end lg:justify-end content-start gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
               >
                 @if (auth.hasPermission('requests.manage')) {
                   <button
@@ -245,7 +278,7 @@
 
             @if (showOrphanDeleteColumn(row)) {
               <div
-                class="hidden sm:flex flex-wrap items-center justify-end gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
+                class="hidden lg:flex flex-wrap items-center justify-end gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
               >
                 <button
                   type="button"
