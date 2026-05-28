@@ -49,32 +49,35 @@
                 <button
                   trigger
                   type="button"
-                  class="btn btn-circle btn-sm bg-base-100/70 border-0 backdrop-blur-sm text-base-content"
+                  class="btn btn-ghost btn-xs btn-circle"
                   [attr.aria-label]="'common.actions' | translate"
                 >
                   <svg lucideEllipsisVertical class="h-4 w-4"></svg>
                 </button>
                 @if (canEdit(row)) {
-                  <button type="button" class="btn btn-ghost btn-sm justify-start" (click)="openEdit(row)">
+                  <button type="button" class="dropdown-item text-white" (click)="openEdit(row)">
+                    <svg lucidePencil class="h-4 w-4"></svg>
                     {{ 'requests.edit' | translate }}
                   </button>
                 }
                 @if (canDeleteRequest(row)) {
                   <button
                     type="button"
-                    class="btn btn-ghost btn-sm justify-start text-error"
+                    class="dropdown-item text-error"
                     [disabled]="actionBusyId() === row.id"
                     (click)="removeRequest(row)"
                   >
+                    <svg lucideTrash2 class="h-4 w-4"></svg>
                     {{ 'requests.delete' | translate }}
                   </button>
                 } @else if (row.status === 'pending' && canCancel(row)) {
                   <button
                     type="button"
-                    class="btn btn-ghost btn-sm justify-start text-error"
+                    class="dropdown-item text-error"
                     [disabled]="actionBusyId() === row.id"
                     (click)="removeRequest(row)"
                   >
+                    <svg lucideTrash2 class="h-4 w-4"></svg>
                     {{ 'requests.cancel' | translate }}
                   </button>
                 }

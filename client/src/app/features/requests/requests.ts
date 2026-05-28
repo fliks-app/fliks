@@ -25,7 +25,7 @@ import { RequestDeclineModalComponent } from './request-decline-modal/request-de
 import { RequestViewDeclineModalComponent } from './request-view-decline-modal/request-view-decline-modal.component';
 import { RequestEditModalComponent } from './request-edit-modal/request-edit-modal.component';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
-import { LucideEllipsisVertical } from '@lucide/angular';
+import { LucideEllipsisVertical, LucidePencil, LucideTrash2 } from '@lucide/angular';
 
 @Component({
   selector: 'app-requests',
@@ -40,6 +40,8 @@ import { LucideEllipsisVertical } from '@lucide/angular';
     RequestEditModalComponent,
     DropdownMenuComponent,
     LucideEllipsisVertical,
+    LucidePencil,
+    LucideTrash2,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './requests.html',
