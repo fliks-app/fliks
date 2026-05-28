@@ -1765,12 +1765,25 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     try {
       if (this.engine) this.engine.muted = false;
       if (this.engine && this.mediaFileId) {
+        // Mint a fresh sid: the browser's pre-cast LiveSession was
+        // GC'd while the cast receiver held the only live entry, so
+        // reusing `this.playbackInfo?.sessionId` would race against
+        // the heartbeat fallback path and flash a reload.
+        const deviceProfile = this.deviceProfileService.getProfile();
+        this.playbackInfo = await this.streamingApi.getPlaybackInfo(
+          this.mediaFileId,
+          deviceProfile,
+          this.activeBurnInId ?? undefined,
+          this.activeAudioStreamIndex ?? undefined,
+          undefined,
+          castPos > 0 ? Math.floor(castPos) : undefined,
+        );
+        const sid = this.playbackInfo.sessionId;
         const mode = this.playbackMode();
         const savedQualityId = this.activeQualityId();
         const startQuality = mode !== 'direct' && savedQualityId !== 'auto'
           ? savedQualityId
           : undefined;
-        const sid = this.playbackInfo?.sessionId;
         const url = mode === 'direct'
           ? this.streamingApi.getStreamUrl(this.mediaFileId, sid)
           : this.streamingApi.getHlsUrl(this.mediaFileId, startQuality, undefined, sid);
