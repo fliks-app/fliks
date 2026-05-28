@@ -215,6 +215,17 @@ public class NativePlayerPlugin extends Plugin {
         mainHandler.post(() -> {
             if (player != null) player.release();
 
+            // SubtitleView holds whatever cues the previous player last emitted —
+            // ExoPlayer.release() doesn't drop them, and a fresh load (especially
+            // the silent session-expired recovery, which keeps the same view
+            // and just swaps the source URL) starts with text rendering
+            // disabled by default. The stale cue then sits on screen until the
+            // user manually seeks (which already clears it below) — clear here
+            // too so a load looks identical from the user's perspective.
+            if (subtitleView != null) {
+                subtitleView.setCues(java.util.Collections.emptyList());
+            }
+
             // HTTP data source with auth headers
             Map<String, String> headerMap = new HashMap<>();
             if (headers != null) {
