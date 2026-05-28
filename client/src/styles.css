@@ -205,15 +205,25 @@ body.tv {
    drifted up as the user scrolled (the body's transform scaled the
    scroll-relative offset). Modern TVs overscan horizontally far more
    than vertically; the vertical edge isn't worth the positioning
-   headaches. Excluded on Tizen: the Samsung WebView already trims
-   ~4% on each axis, so adding our own margin would double-clip. */
-body.tv:not(.tv-tizen) {
+   headaches. Excluded on Smart TVs (Tizen, webOS): their WebViews
+   already trim ~4% on each axis, so adding our own margin would
+   double-clip. Only AndroidTV needs the compensation. */
+body.tv:not(.tv-tizen):not(.tv-webos) {
   transform: scaleX(0.96);
   transform-origin: top center;
 }
 /* Player (immersive) needs the full screen — no overscan compensation */
 body.tv.immersive {
   transform: none;
+}
+/* webOS lays the app out at a 1920×1080 logical viewport, whereas the
+   Tizen WebView reports ~1280×720. At 1920 every element is ~⅔ the
+   physical size of its Tizen counterpart, so the 10-foot UI reads as
+   tiny from the couch. Zoom 1.5 (1920÷1280) brings the effective density
+   back in line with Tizen. Excluded while immersive so the fullscreen
+   player isn't scaled past the panel edges. */
+body.tv-webos:not(.immersive) {
+  zoom: 1.5;
 }
 /* Backfill html so the WebView doesn't show its default white during route
    transitions, before bootstrap, or in the 4% bottom band the scale leaves.

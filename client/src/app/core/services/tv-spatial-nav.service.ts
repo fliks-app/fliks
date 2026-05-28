@@ -65,6 +65,16 @@ export class TvSpatialNavService {
     // skip every other card on horizontal nav.
     window.addEventListener('keydown', handler, { capture: true });
     this.destroyRef.onDestroy(() => window.removeEventListener('keydown', handler, { capture: true } as any));
+    // The LG Magic Remote's scroll wheel emits standard `wheel` events
+    // (deltaY ±120 per notch) but the webOS WebView never scrolls the page
+    // in response, so the wheel feels dead. Translate vertical wheel into
+    // the same up/down focus moves the D-pad makes — TV only, so the mouse
+    // wheel keeps its native page-scroll on desktop. Non-passive so the
+    // (no-op on webOS) default can be suppressed and double-scroll avoided
+    // on any platform that does scroll natively.
+    const wheelHandler = (e: WheelEvent) => this.onWheel(e);
+    window.addEventListener('wheel', wheelHandler, { capture: true, passive: false });
+    this.destroyRef.onDestroy(() => window.removeEventListener('wheel', wheelHandler, { capture: true } as any));
     // Track the deepest focused element inside each registered container so
     // re-entering a container can dig back to the same leaf (last-active-child
     // memory). Bubble phase is fine: focusin always reaches the document.
@@ -235,6 +245,41 @@ export class TvSpatialNavService {
     // so the user hitting the boundary inside a menu doesn't drift the
     // page underneath.
     if (!this.openModals().length && (dir === 'down' || dir === 'up')) {
+      window.scrollBy({ top: dir === 'down' ? 300 : -300, behavior: 'smooth' });
+    }
+  }
+
+  /** Accumulated wheel deltaY between focus-step emissions, so one notch
+   *  (≈120) maps to exactly one up/down move regardless of the platform's
+   *  delta granularity. */
+  private wheelAcc = 0;
+
+  private onWheel(e: WheelEvent) {
+    if (!this.tv.isTv()) return;
+    // Ignore predominantly-horizontal wheels (trackpads, tilt) — those
+    // belong to the horizontal-scroller rows, not vertical navigation.
+    if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
+    e.preventDefault();
+    this.wheelAcc += e.deltaY;
+    const STEP = 100;
+    while (Math.abs(this.wheelAcc) >= STEP) {
+      const dir = this.wheelAcc > 0 ? 'down' : 'up';
+      this.wheelAcc -= dir === 'down' ? STEP : -STEP;
+      this.navigateVertical(dir);
+    }
+  }
+
+  /** Move focus to the up/down neighbour, falling back to a manual page
+   *  scroll when none exists. Mirrors the up/down tail of {@link onKey} so
+   *  the wheel and the D-pad share one notion of "scroll vertically". */
+  private navigateVertical(dir: 'up' | 'down') {
+    const next = this.findNeighbor(dir);
+    if (next) {
+      next.focus({ preventScroll: true });
+      next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      return;
+    }
+    if (!this.openModals().length) {
       window.scrollBy({ top: dir === 'down' ? 300 : -300, behavior: 'smooth' });
     }
   }

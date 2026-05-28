@@ -5,12 +5,7 @@ import {
   PlaybackEngine,
   PlaybackState,
 } from './playback-engine';
-import {
-  SUBTITLE_SIZE_MAP,
-  SUBTITLE_COLOR_MAP,
-  SUBTITLE_SHADOW_MAP,
-  SUBTITLE_BG_MAP,
-} from '../player-settings.service';
+import { SubtitleOverlay } from './subtitle-overlay.util';
 
 /**
  * Samsung Tizen AVPlay backend.
@@ -69,12 +64,6 @@ export const isTizenAvplayAvailable = (): boolean => {
   );
 };
 
-interface VttCue {
-  start: number;
-  end: number;
-  text: string;
-}
-
 export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngine {
   /** Most recently `init()`'d instance. The shared AVPlay surface and
    *  native listener fan out to whoever holds this slot. */
@@ -102,13 +91,10 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   private _seekInFlight = false;
   private _pendingSeek: number | null = null;
 
-  /** DOM-rendered subtitle overlay. AVPlay's `setExternalSubtitlePath`
-   *  only accepts local file paths, not HTTPS — we parse VTT
-   *  ourselves and render into a positioned div. */
-  private subtitleEl: HTMLDivElement | null = null;
-  private parsedCues: VttCue[] = [];
-  private subtitleVisible = false;
-  private lastCueText = '';
+  /** DOM-rendered subtitle overlay shared with the webOS engine. AVPlay's
+   *  `setExternalSubtitlePath` only accepts local file paths, not HTTPS,
+   *  so we parse VTT ourselves and paint cues into a positioned div. */
+  private readonly subtitles = new SubtitleOverlay();
 
   // ── Lifecycle ───────────────────────────────────────────────────────
 
@@ -142,13 +128,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       TizenEngine.activeEngine = null;
     }
     this.avObject = null;
-    if (this.subtitleEl?.parentElement) {
-      this.subtitleEl.parentElement.removeChild(this.subtitleEl);
-    }
-    this.subtitleEl = null;
-    this.parsedCues = [];
-    this.subtitleVisible = false;
-    this.lastCueText = '';
+    this.subtitles.destroy();
     this.clearHandlers();
   }
 
@@ -293,7 +273,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       duration: this._duration,
       buffered: this._buffered,
     });
-    this.updateSubtitleAt(this._currentTime);
+    this.subtitles.updateAt(this._currentTime);
     if (!this.firstFrameEmitted && ms > 0) {
       this.firstFrameEmitted = true;
       this.emit('firstFrame', undefined);
@@ -489,20 +469,15 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   selectTextTrack(track: unknown): void {
     if (!track || typeof track !== 'object') {
-      this.subtitleVisible = false;
-      this.parsedCues = [];
-      this.renderSubtitle('');
+      this.subtitles.clear();
       return;
     }
     const url = (track as { url?: string }).url;
-    if (!url) return;
-    this.subtitleVisible = true;
-    void this.loadVttCues(url);
+    if (url) void this.subtitles.show(url);
   }
 
   setTextVisibility(visible: boolean): void {
-    this.subtitleVisible = visible;
-    if (!visible) this.renderSubtitle('');
+    this.subtitles.setVisible(visible);
   }
 
   /** Same preset enums Shaka consumes from `player-settings.service`. */
@@ -513,122 +488,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     background?: string;
     bottomMargin?: number;
   }): void {
-    const el = this.ensureSubtitleEl();
-    if (!el) return;
-    if (style.size) {
-      el.style.fontSize = SUBTITLE_SIZE_MAP[style.size] ?? SUBTITLE_SIZE_MAP['normal'];
-    }
-    if (style.color) {
-      el.style.color = SUBTITLE_COLOR_MAP[style.color] ?? SUBTITLE_COLOR_MAP['white'];
-    }
-    if (style.shadow) {
-      el.style.textShadow = SUBTITLE_SHADOW_MAP[style.shadow] ?? SUBTITLE_SHADOW_MAP['drop'];
-    }
-    if (style.background) {
-      el.style.background = SUBTITLE_BG_MAP[style.background] ?? SUBTITLE_BG_MAP['transparent'];
-    }
-    if (typeof style.bottomMargin === 'number') {
-      el.style.bottom = `${Math.max(0, style.bottomMargin)}vh`;
-    }
-  }
-
-  private async loadVttCues(url: string): Promise<void> {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('VTT fetch ' + res.status);
-      const raw = await res.text();
-      this.parsedCues = this.parseVtt(raw);
-    } catch {
-      this.parsedCues = [];
-    }
-  }
-
-  private ensureSubtitleEl(): HTMLDivElement | null {
-    if (this.subtitleEl?.isConnected) return this.subtitleEl;
-    if (typeof document === 'undefined') return null;
-    const el = document.createElement('div');
-    el.id = 'fliks-avplay-subtitle';
-    el.style.cssText = [
-      'position: fixed',
-      'left: 50%',
-      'bottom: 10vh',
-      'transform: translateX(-50%)',
-      'max-width: 80vw',
-      'padding: 6px 14px',
-      'background: transparent',
-      'color: #fff',
-      'font-size: 3vh',
-      'font-weight: 500',
-      'line-height: 1.3',
-      'text-align: center',
-      'text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9)',
-      'pointer-events: none',
-      'z-index: 1000',
-      'white-space: pre-wrap',
-      'display: none',
-    ].join(';');
-    document.body.appendChild(el);
-    this.subtitleEl = el;
-    return el;
-  }
-
-  private renderSubtitle(text: string): void {
-    const el = this.ensureSubtitleEl();
-    if (!el) return;
-    if (text === this.lastCueText) return;
-    this.lastCueText = text;
-    if (text) {
-      el.innerHTML = text;
-      el.style.display = 'block';
-    } else {
-      el.style.display = 'none';
-    }
-  }
-
-  private updateSubtitleAt(timeSec: number): void {
-    if (!this.subtitleVisible) {
-      if (this.lastCueText) this.renderSubtitle('');
-      return;
-    }
-    const cues = this.parsedCues;
-    if (!cues.length) return;
-    const active = cues.find((c) => timeSec >= c.start && timeSec <= c.end);
-    this.renderSubtitle(active?.text ?? '');
-  }
-
-  private parseVtt(raw: string): VttCue[] {
-    const cues: VttCue[] = [];
-    const blocks = raw.replace(/\r\n/g, '\n').split('\n\n');
-    for (const block of blocks) {
-      const lines = block.trim().split('\n');
-      const timeLine = lines.find((l) => l.includes('-->'));
-      if (!timeLine) continue;
-      const [startStr, endStr] = timeLine.split('-->').map((s) => s.trim());
-      const start = this.vttTimeToSec(startStr);
-      const end = this.vttTimeToSec(endStr);
-      if (isNaN(start) || isNaN(end)) continue;
-      const textLines = lines.slice(lines.indexOf(timeLine) + 1);
-      // Allow <b>, <i>, <u>, <br> so `innerHTML` is safe (third-party
-      // sub files; backend just proxies).
-      const text = textLines.join('<br>').replace(/<\/?[^>]*>/g, (tag) => {
-        if (/^<\/?(b|i|u|br)\s*\/?>$/i.test(tag)) return tag;
-        return '';
-      });
-      if (text) cues.push({ start, end, text });
-    }
-    return cues;
-  }
-
-  private vttTimeToSec(ts: string): number {
-    const clean = ts.split(' ')[0];
-    const parts = clean.split(':');
-    if (parts.length === 3) {
-      return +parts[0] * 3600 + +parts[1] * 60 + parseFloat(parts[2]);
-    }
-    if (parts.length === 2) {
-      return +parts[0] * 60 + parseFloat(parts[1]);
-    }
-    return NaN;
+    this.subtitles.setStyle(style);
   }
 
   // ── Quality — AVPlay handles ABR internally ────────────────────────
