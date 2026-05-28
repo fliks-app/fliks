@@ -43,8 +43,47 @@
             <div class="absolute inset-0 bg-gradient-to-b from-base-100/45 via-base-100/80 to-base-100"></div>
           </div>
 
+          @if (mobileActionsAvailable(row)) {
+            <div class="absolute top-2 right-2 z-20 sm:hidden">
+              <app-dropdown-menu placement="bottom-end">
+                <button
+                  trigger
+                  type="button"
+                  class="btn btn-circle btn-sm bg-base-100/70 border-0 backdrop-blur-sm text-base-content"
+                  [attr.aria-label]="'common.actions' | translate"
+                >
+                  <svg lucideEllipsisVertical class="h-4 w-4"></svg>
+                </button>
+                @if (canEdit(row)) {
+                  <button type="button" class="btn btn-ghost btn-sm justify-start" (click)="openEdit(row)">
+                    {{ 'requests.edit' | translate }}
+                  </button>
+                }
+                @if (canDeleteRequest(row)) {
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm justify-start text-error"
+                    [disabled]="actionBusyId() === row.id"
+                    (click)="removeRequest(row)"
+                  >
+                    {{ 'requests.delete' | translate }}
+                  </button>
+                } @else if (row.status === 'pending' && canCancel(row)) {
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm justify-start text-error"
+                    [disabled]="actionBusyId() === row.id"
+                    (click)="removeRequest(row)"
+                  >
+                    {{ 'requests.cancel' | translate }}
+                  </button>
+                }
+              </app-dropdown-menu>
+            </div>
+          }
+
           <figure
-            class="relative hidden sm:flex w-24 md:w-28 shrink-0 aspect-2/3 bg-base-300 overflow-hidden"
+            class="relative hidden sm:flex w-32 md:w-40 shrink-0 aspect-2/3 bg-base-300 overflow-hidden"
           >
             @defer (on viewport) {
               <app-request-poster
@@ -142,7 +181,7 @@
                 @if (auth.hasPermission('requests.manage')) {
                   <button
                     type="button"
-                    class="btn btn-ghost btn-sm text-error"
+                    class="hidden sm:inline-flex btn btn-ghost btn-sm text-error"
                     [disabled]="actionBusyId() === row.id"
                     (click)="removeRequest(row)"
                   >
@@ -175,14 +214,14 @@
                   </button>
                 }
                 @if (canEdit(row)) {
-                  <button type="button" class="btn btn-ghost btn-sm" (click)="openEdit(row)">
+                  <button type="button" class="hidden sm:inline-flex btn btn-ghost btn-sm" (click)="openEdit(row)">
                     {{ 'requests.edit' | translate }}
                   </button>
                 }
                 @if (auth.hasPermission('requests.manage')) {
                   <button
                     type="button"
-                    class="btn btn-ghost btn-sm text-error"
+                    class="hidden sm:inline-flex btn btn-ghost btn-sm text-error"
                     [disabled]="actionBusyId() === row.id"
                     (click)="removeRequest(row)"
                   >
@@ -191,7 +230,7 @@
                 } @else if (canCancel(row)) {
                   <button
                     type="button"
-                    class="btn btn-ghost btn-sm text-error"
+                    class="hidden sm:inline-flex btn btn-ghost btn-sm text-error"
                     [disabled]="actionBusyId() === row.id"
                     (click)="removeRequest(row)"
                   >
@@ -203,7 +242,7 @@
 
             @if (showOrphanDeleteColumn(row)) {
               <div
-                class="flex flex-wrap items-center justify-end gap-1 shrink-0 sm:border-s sm:border-base-200 sm:ps-4 sm:min-w-[min(100%,12rem)]"
+                class="hidden sm:flex flex-wrap items-center justify-end gap-1 shrink-0 sm:border-s sm:border-base-200 sm:ps-4 sm:min-w-[min(100%,12rem)]"
               >
                 <button
                   type="button"

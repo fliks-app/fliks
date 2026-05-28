@@ -24,6 +24,8 @@ import { RequestPosterComponent } from './request-poster';
 import { RequestDeclineModalComponent } from './request-decline-modal/request-decline-modal.component';
 import { RequestViewDeclineModalComponent } from './request-view-decline-modal/request-view-decline-modal.component';
 import { RequestEditModalComponent } from './request-edit-modal/request-edit-modal.component';
+import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
+import { LucideEllipsisVertical } from '@lucide/angular';
 
 @Component({
   selector: 'app-requests',
@@ -36,6 +38,8 @@ import { RequestEditModalComponent } from './request-edit-modal/request-edit-mod
     RequestDeclineModalComponent,
     RequestViewDeclineModalComponent,
     RequestEditModalComponent,
+    DropdownMenuComponent,
+    LucideEllipsisVertical,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './requests.html',
@@ -150,6 +154,22 @@ export class RequestsComponent implements OnInit {
     if (row.status === 'pending') return false;
     if (row.status === 'declined' && row.declinedReason?.trim()) return false;
     return true;
+  }
+
+  /** Admin (or pending owner) can hard-delete the request. Distinct from
+   *  `canCancel`, which is the owner-on-a-pending wording used in the UI. */
+  canDeleteRequest(row: FliksRequestRow): boolean {
+    return this.auth.hasPermission('requests.manage');
+  }
+
+  /** Whether the mobile kebab dropdown should render at all — hide it
+   *  entirely on rows where no actionable item would appear. */
+  mobileActionsAvailable(row: FliksRequestRow): boolean {
+    return (
+      this.canEdit(row) ||
+      this.canDeleteRequest(row) ||
+      this.canCancel(row)
+    );
   }
 
   openDecline(id: number) {
