@@ -3,6 +3,8 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -48,6 +50,10 @@ export class MediaMetadataService {
     private readonly tmdb: TmdbProvider,
     private readonly providerRegistry: MetadataProviderRegistry,
     private readonly imageService: ImageService,
+    // forwardRef: MediaModule ↔ FliksSchedulerModule is a mutual-forwardRef
+    // cycle; without the class-level forwardRef Nest tries to resolve
+    // SchedulerService while the scheduler module isn't ready yet.
+    @Inject(forwardRef(() => SchedulerService))
     private readonly scheduler: SchedulerService,
   ) {}
 
