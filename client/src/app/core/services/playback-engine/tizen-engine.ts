@@ -91,6 +91,15 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   private _seekInFlight = false;
   private _pendingSeek: number | null = null;
 
+  /** One-shot guard for the optimistic-recovery branch in
+   *  {@link handleError}. AVPlay can't surface HTTP status, so the
+   *  first network-shaped error during stable playback is treated as a
+   *  possible session-expired event and emits `sessionExpired` instead
+   *  of a fatal `error`. Subsequent errors fall through normally. Reset
+   *  on every {@link load} so a fresh playback starts with a fresh
+   *  budget. */
+  private recoveryAttempted = false;
+
   /** DOM-rendered subtitle overlay shared with the webOS engine. AVPlay's
    *  `setExternalSubtitlePath` only accepts local file paths, not HTTPS,
    *  so we parse VTT ourselves and paint cues into a positioned div. */
@@ -150,6 +159,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   ): Promise<void> {
     this._lastLoadedUrl = url;
     this.firstFrameEmitted = false;
+    this.recoveryAttempted = false;
     this._currentTime = 0;
     this._duration = 0;
 
@@ -287,6 +297,24 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     if (this._seekInFlight) return;
     const msg = String(err);
     if (msg.includes('SEEK_FAILED')) return;
+
+    // AVPlay swallows the HTTP status of the failed segment fetch — we
+    // can't tell a 410 (session expired) from a 500 (ffmpeg crash) from
+    // here. Heuristic: if playback was healthy (firstFrame fired, no
+    // pending seek) and the connection errored mid-stream, optimistically
+    // ask the player for one cheap recovery attempt before surfacing the
+    // fatal error. If recovery succeeds the engine reloads transparently;
+    // if it fails the next error after `recoveryAttempted` falls through
+    // to the regular error path.
+    if (
+      this.firstFrameEmitted &&
+      !this.recoveryAttempted &&
+      /CONNECTION|HTTP|NETWORK|PLAYER_ERROR_INVALID_URI/i.test(msg)
+    ) {
+      this.recoveryAttempted = true;
+      this.emit('sessionExpired', undefined);
+      return;
+    }
     this.emit('error', { code: -1, message: msg });
     this.emit('stateChanged', { state: 'error' });
   }

@@ -51,6 +51,17 @@ export type EngineEventMap = {
    *  Distinct from `stateChanged: 'playing'` which fires on play() (the
    *  user-facing first frame is what matters for the loading veil). */
   firstFrame: void;
+  /** Backend returned 410 Gone with `code: 'session_expired'` on a
+   *  segment / playlist request — the LiveSession registered at
+   *  /playback-info is gone (typical after a backend restart or a
+   *  long-idle GC). The player should mint a fresh sid via a new
+   *  /playback-info call and reload the engine. Shaka detects this via
+   *  a NetworkingEngine response filter; native players (AVPlay / iOS /
+   *  Android) can't read the response body so they translate any
+   *  segment-level HTTP error during stable playback into this event
+   *  and the player tries one cheap recovery before surfacing a fatal
+   *  error to the UI. */
+  sessionExpired: void;
 };
 
 export type EngineEvent = keyof EngineEventMap;

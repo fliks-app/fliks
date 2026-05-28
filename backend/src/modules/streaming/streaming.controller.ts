@@ -43,6 +43,7 @@ import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
+import { SessionExpiredException } from './session-expired.exception';
 import { SubtitleBurnInService } from './subtitle-burn-in.service';
 import { PlaybackService } from './playback.service';
 import { MarkersService } from '../markers/markers.service';
@@ -325,6 +326,27 @@ export class StreamingController {
     return this.liveSessions.findCurrent(userId, mediaFileId);
   }
 
+  /**
+   * 410-gate HLS routes against a stale `?sid=`. When the URL carries a
+   * sid the LiveSessionRegistry no longer knows (typical after a
+   * backend restart or a long-idle GC pass), refuse the request with a
+   * typed body the player can pattern-match. The Shaka response filter
+   * and the Tizen / Capacitor / webOS engine wrappers all react to
+   * `code === 'session_expired'` by triggering the shared
+   * refreshSidAndReload recovery flow.
+   *
+   * Without a sid we let the request through — legacy direct-URL
+   * fetches and pre-#302 callers fall back to the userId-based
+   * `findCurrent` lookup downstream.
+   */
+  private assertFreshSession(req: Request): void {
+    const sid = firstQueryString(req.query, 'sid');
+    if (!sid) return;
+    if (!this.liveSessions.get(sid)) {
+      throw new SessionExpiredException(sid);
+    }
+  }
+
   private buildSessionContext(
     req: Request,
     resolved: ResolvedFile,
@@ -383,11 +405,11 @@ export class StreamingController {
       isSourceHdr: !!si?.video?.[0]?.hdrFormat,
       // Variant chosen by stream-builder's codec selector at
       // playback-info time, threaded through every session spawn so
-      // ffmpeg-args resolves the matching encoder descriptor. A
-      // segment request that arrives before playback-info has created
-      // the LiveSession hits `buildFfmpegArgs`'s explicit throw, which
-      // surfaces as a 5xx the player retries after the next
-      // playback-info call.
+      // ffmpeg-args resolves the matching encoder descriptor. HLS
+      // routes 410-gate stale `?sid=` upstream via assertFreshSession,
+      // so videoVariant is undefined here only for legacy callers that
+      // never sent a sid — those route through the
+      // userId-based `findCurrent` fallback.
       videoVariant: live?.videoVariant ?? undefined,
     };
   }
@@ -969,6 +991,7 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    this.assertFreshSession(req);
     const resolved = await this.streamingService.resolveFile(
       mediaFileId,
       req.user as User,
@@ -1123,6 +1146,7 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    this.assertFreshSession(req);
     const resolved = await this.streamingService.resolveFile(
       mediaFileId,
       req.user as User,
@@ -1180,6 +1204,7 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    this.assertFreshSession(req);
     const AUDIO_SEG_RE = /^(init(_\d+)?\.mp4|seg-\d{3,4}\.(m4s|ts))$/;
     if (!AUDIO_SEG_RE.test(segment)) {
       throw new BadRequestException(`Invalid audio segment name: ${segment}`);
@@ -1290,6 +1315,7 @@ export class StreamingController {
     if (!VALID_QUALITIES.has(quality)) {
       throw new BadRequestException(`Invalid quality: ${quality}`);
     }
+    this.assertFreshSession(req);
     const resolved = await this.streamingService.resolveFile(
       mediaFileId,
       req.user as User,
@@ -1388,6 +1414,7 @@ export class StreamingController {
     if (!VALID_QUALITIES.has(quality)) {
       throw new BadRequestException(`Invalid quality: ${quality}`);
     }
+    this.assertFreshSession(req);
     const VIDEO_SEG_RE = /^(seg-\d{3,4}\.(m4s|ts)|init(_\d+)?\.mp4)$/;
     if (!VIDEO_SEG_RE.test(segment)) {
       throw new BadRequestException(`Invalid segment name: ${segment}`);

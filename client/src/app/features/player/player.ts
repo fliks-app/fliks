@@ -1175,6 +1175,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engine.on('firstFrame', () => {
       this.state.videoStarted.set(true);
     });
+    this.wireSessionExpiredRecovery(engine);
     // Volume sync for template
     video.addEventListener('volumechange', () => {
       this.state.volume.set(video.muted ? 0 : video.volume);
@@ -1239,6 +1240,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engine.on('firstFrame', () => {
       this.state.videoStarted.set(true);
     });
+    this.wireSessionExpiredRecovery(engine);
 
     // Tizen audio-tracks listener is deliberately NOT wired. With MPEG-TS
     // HLS the variant has a single muxed audio, so AVPlay's
@@ -1274,6 +1276,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engine.on('firstFrame', () => {
       this.state.videoStarted.set(true);
     });
+    this.wireSessionExpiredRecovery(engine);
 
     // Listen for audio tracks from native engine.
     // ExoPlayer may emit this multiple times (e.g. rendition switch) —
@@ -1842,6 +1845,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    * surface `sessionLost: true` in the interval.
    */
   private recoveringFromLostSession = false;
+
+  /**
+   * Hook into the engine's `sessionExpired` event so a backend 410 on
+   * a segment / playlist request triggers recovery on the very next
+   * tick instead of waiting for the 10 s heartbeat. Idempotent across
+   * engines (Shaka / Tizen AVPlay / Capacitor native) — they all share
+   * the same event contract on the PlaybackEngine interface.
+   */
+  private wireSessionExpiredRecovery(engine: PlaybackEngine): void {
+    engine.on('sessionExpired', () => {
+      void this.recoverFromLostSession();
+    });
+  }
 
   /**
    * The carried `sid` is no longer known to the backend (restart or
