@@ -10,17 +10,18 @@
     @if (compact()) {
       <svg lucideChevronLeft class="h-4 w-4"></svg>
     } @else {
-      {{ 'common.prev' | translate }}
+      <svg lucideChevronLeft class="h-4 w-4 sm:hidden"></svg>
+      <span class="hidden sm:inline">{{ 'common.prev' | translate }}</span>
     }
   </button>
 
   @for (slot of slots(); track $index) {
     @if (slot === 'ellipsis') {
-      <span class="px-1.5 text-base-content/50 select-none" aria-hidden="true">…</span>
+      <span class="px-1 text-base-content/50 select-none" aria-hidden="true">…</span>
     } @else {
       <button
         type="button"
-        class="btn btn-sm min-w-10"
+        class="btn btn-sm min-w-8 px-2 sm:min-w-10 sm:px-3"
         [class.btn-primary]="slot === current()"
         [class.btn-ghost]="slot !== current()"
         [attr.aria-current]="slot === current() ? 'page' : null"
@@ -42,7 +43,8 @@
     @if (compact()) {
       <svg lucideChevronRight class="h-4 w-4"></svg>
     } @else {
-      {{ 'common.next' | translate }}
+      <svg lucideChevronRight class="h-4 w-4 sm:hidden"></svg>
+      <span class="hidden sm:inline">{{ 'common.next' | translate }}</span>
     }
   </button>
 </nav>
