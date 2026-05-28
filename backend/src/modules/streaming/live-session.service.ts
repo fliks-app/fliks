@@ -6,9 +6,20 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { StreamLifetime } from './lifetime-constants';
+import type { TranscodeReason } from './dto/playback-info.dto';
+import type { BurnInSubtitle } from './transcoding';
+import type { CodecVariant } from './transcoding/codec/types';
 
 export type PlaybackState = 'playing' | 'paused' | 'buffering';
 export type SessionKind = 'transcode' | 'remux' | 'directplay';
+
+export type AudioPlan =
+  | { mode: 'copy'; codec: string }
+  | {
+      mode: 'transcode';
+      codec: 'aac' | 'ac3' | 'eac3';
+      bitrateBps: number;
+    };
 
 /**
  * Single live-session entry. The {@link sessionId} is the server-issued
@@ -16,6 +27,13 @@ export type SessionKind = 'transcode' | 'remux' | 'directplay';
  * transcoding service's internal session key (`mediaFileId-uX`) so two
  * devices on the same media-file can each carry their own
  * {@link LiveSession} without colliding on the cache layer.
+ *
+ * All per-playback session state (mux flavour, audio plan, device
+ * type, picked tracks, etc.) lives on this entry. The HLS routes
+ * resolve their session via the `?sid=...` URL param the client
+ * carries from `playback-info` onward, then read settings here —
+ * this guarantees same-user multi-device, multi-user same-file, and
+ * tab-vs-TV scenarios never clobber each other.
  */
 export interface LiveSession {
   sessionId: string;
@@ -35,6 +53,21 @@ export interface LiveSession {
   state: PlaybackState;
   audioTrackIndex: number | null;
   subtitleTrackIndex: number | null;
+  // ── Per-session settings owned by this entry ──
+  useTs: boolean;
+  audioPlan: AudioPlan | null;
+  audioStreamIndex: number | null;
+  audioStreamCount: number;
+  useExtXMedia: boolean;
+  deviceType: 'mobile' | 'desktop';
+  hdrLadder: boolean;
+  videoVariant: CodecVariant | null;
+  tonemapping: boolean;
+  transcodeReasons: TranscodeReason[];
+  burnIn: BurnInSubtitle | null;
+  encoderPreset: string;
+  canCopyVideo: boolean;
+  canCopyAudio: boolean;
 }
 
 /** Snapshot returned from {@link LiveSessionRegistry.list} — same shape
@@ -46,6 +79,60 @@ export interface LiveSessionSnapshot extends Omit<
   startedAt: Date;
   lastBeat: Date;
 }
+
+/** Optional initial values when creating a session. Anything not
+ *  supplied falls back to a safe default. */
+export interface CreateLiveSessionInput {
+  userId: number | null;
+  username: string | null;
+  mediaFileId: number;
+  mediaTitle?: string | null;
+  mediaType?: string | null;
+  posterUrl?: string | null;
+  profileHash?: string | null;
+  quality?: string | null;
+  kind: SessionKind;
+  deviceLabel?: string | null;
+  position?: number;
+  useTs?: boolean;
+  audioPlan?: AudioPlan | null;
+  audioStreamIndex?: number | null;
+  audioStreamCount?: number;
+  useExtXMedia?: boolean;
+  deviceType?: 'mobile' | 'desktop';
+  hdrLadder?: boolean;
+  videoVariant?: CodecVariant | null;
+  tonemapping?: boolean;
+  transcodeReasons?: TranscodeReason[];
+  burnIn?: BurnInSubtitle | null;
+  encoderPreset?: string;
+  canCopyVideo?: boolean;
+  canCopyAudio?: boolean;
+}
+
+/** Partial update applied via {@link LiveSessionRegistry.update}. Only
+ *  the fields supplied are touched. */
+export type LiveSessionPatch = Partial<
+  Pick<
+    LiveSession,
+    | 'useTs'
+    | 'audioPlan'
+    | 'audioStreamIndex'
+    | 'audioStreamCount'
+    | 'useExtXMedia'
+    | 'deviceType'
+    | 'hdrLadder'
+    | 'videoVariant'
+    | 'tonemapping'
+    | 'transcodeReasons'
+    | 'burnIn'
+    | 'encoderPreset'
+    | 'canCopyVideo'
+    | 'canCopyAudio'
+    | 'profileHash'
+    | 'quality'
+  >
+>;
 
 /**
  * In-memory registry of "currently watching" sessions. One entry per
@@ -80,23 +167,10 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Create a new live session and return its server-issued id. Called
-   * from the `playback-info` handler once the play method has been
-   * resolved.
+   * Create a new live session and return it. Called from the
+   * `playback-info` handler once the play method has been resolved.
    */
-  create(input: {
-    userId: number | null;
-    username: string | null;
-    mediaFileId: number;
-    mediaTitle?: string | null;
-    mediaType?: string | null;
-    posterUrl?: string | null;
-    profileHash?: string | null;
-    quality?: string | null;
-    kind: SessionKind;
-    deviceLabel?: string | null;
-    position?: number;
-  }): LiveSession {
+  create(input: CreateLiveSessionInput): LiveSession {
     const now = Date.now();
     const session: LiveSession = {
       sessionId: randomUUID(),
@@ -116,6 +190,20 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       state: 'playing',
       audioTrackIndex: null,
       subtitleTrackIndex: null,
+      useTs: input.useTs ?? false,
+      audioPlan: input.audioPlan ?? null,
+      audioStreamIndex: input.audioStreamIndex ?? null,
+      audioStreamCount: input.audioStreamCount ?? 0,
+      useExtXMedia: input.useExtXMedia ?? false,
+      deviceType: input.deviceType ?? 'desktop',
+      hdrLadder: input.hdrLadder ?? false,
+      videoVariant: input.videoVariant ?? null,
+      tonemapping: input.tonemapping ?? false,
+      transcodeReasons: input.transcodeReasons ?? [],
+      burnIn: input.burnIn ?? null,
+      encoderPreset: input.encoderPreset ?? 'faster',
+      canCopyVideo: input.canCopyVideo ?? false,
+      canCopyAudio: input.canCopyAudio ?? false,
     };
     this.sessions.set(session.sessionId, session);
     return session;
@@ -152,6 +240,18 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
     return session;
   }
 
+  /**
+   * Apply a partial patch to a session. No-op when the session is
+   * unknown (caller is expected to have just created it or to silently
+   * fall through to defaults).
+   */
+  update(sessionId: string, patch: LiveSessionPatch): LiveSession | null {
+    const session = this.sessions.get(sessionId);
+    if (!session) return null;
+    Object.assign(session, patch);
+    return session;
+  }
+
   /** Drop a session explicitly. Returns whether the id was known. */
   stop(sessionId: string): boolean {
     return this.sessions.delete(sessionId);
@@ -160,6 +260,24 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
   /** Lookup by id without mutating lastBeat. */
   get(sessionId: string): LiveSession | null {
     return this.sessions.get(sessionId) ?? null;
+  }
+
+  /**
+   * Most-recently-active session for a (user, file). Fallback used by
+   * HLS routes when the URL omits `?sid=` (legacy clients, prewarm,
+   * etc.) — picks the freshest entry so the active session wins over a
+   * stale one. Returns null when nothing matches.
+   */
+  findCurrent(
+    userId: number | null,
+    mediaFileId: number,
+  ): LiveSession | null {
+    let best: LiveSession | null = null;
+    for (const s of this.sessions.values()) {
+      if (s.userId !== userId || s.mediaFileId !== mediaFileId) continue;
+      if (!best || s.lastBeat > best.lastBeat) best = s;
+    }
+    return best;
   }
 
   /** Active sessions for the admin dashboard — `Date`-typed snapshots. */

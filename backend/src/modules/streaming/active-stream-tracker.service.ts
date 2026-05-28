@@ -1,6 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import type { BurnInSubtitle, TonemapAlgo } from './transcoding';
-import type { CodecVariant } from './transcoding/codec/types';
+import type { TonemapAlgo } from './transcoding';
 
 export interface DirectPlaySession {
   userId: number;
@@ -15,14 +14,22 @@ export interface DirectPlaySession {
 
 const STALE_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
 
+/**
+ * Dashboard / global-settings bookkeeping for streaming. Per-playback
+ * session state (mux flavour, audio plan, device type, picked tracks,
+ * etc.) used to live here but has moved onto {@link LiveSession} —
+ * this service now holds only:
+ *
+ *  - DirectPlay session presence for the admin "now watching" view
+ *    (`register` / `getActive` / `unregister`)
+ *  - Human-readable device name per (user, file)
+ *  - Intrinsic file dimensions (identical across users, kept here for
+ *    cheap reads in HLS routes)
+ *  - Global admin settings (segment duration, QSV options, tonemap algo)
+ */
 @Injectable()
 export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
   private readonly sessions = new Map<string, DirectPlaySession>();
-  /** Cache transcode reasons per mediaFileId (set during playback-info, read by dashboard) */
-  private readonly transcodeReasonsCache = new Map<
-    number,
-    { flag: string; message: string }[]
-  >();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
   onModuleInit() {
@@ -60,8 +67,9 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
   }
 
   unregister(userId: number, mediaFileId: number) {
-    this.sessions.delete(`${userId}-${mediaFileId}`);
-    this.deviceNameCache.delete(`${userId}-${mediaFileId}`);
+    const key = `${userId}-${mediaFileId}`;
+    this.sessions.delete(key);
+    this.deviceNameCache.delete(key);
   }
 
   /** Human-readable client device captured at playback-info ("Chrome — macOS",
@@ -78,153 +86,8 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.deviceNameCache.get(`${userId}-${mediaFileId}`) ?? null;
   }
 
-  private readonly tonemappingCache = new Map<number, boolean>();
-
-  setTranscodeReasons(
-    mediaFileId: number,
-    reasons: { flag: string; message: string }[],
-  ) {
-    this.transcodeReasonsCache.set(mediaFileId, reasons);
-  }
-
-  getTranscodeReasons(
-    mediaFileId: number,
-  ): { flag: string; message: string }[] {
-    return this.transcodeReasonsCache.get(mediaFileId) ?? [];
-  }
-
-  private readonly burnInCache = new Map<number, BurnInSubtitle>();
-
-  setTonemapping(mediaFileId: number, value: boolean) {
-    this.tonemappingCache.set(mediaFileId, value);
-  }
-
-  getTonemapping(mediaFileId: number): boolean {
-    return this.tonemappingCache.get(mediaFileId) ?? false;
-  }
-
-  /** HDR ladder eligibility — set at playback-info by stream-builder
-   *  (`isSourceHdr && clientSupportsHdr && sourceVideoCodec==='hevc'
-   *  && !FLIKS_DISABLE_HEVC_HDR`). Read at master.m3u8 time so the
-   *  playlist can emit the HEVC HDR ladder instead of the H.264 SDR
-   *  ladder. Default false keeps the existing behaviour for callers
-   *  that never reach playback-info (e.g. legacy direct URLs). */
-  private readonly hdrLadderCache = new Map<number, boolean>();
-  setHdrLadder(mediaFileId: number, value: boolean) {
-    this.hdrLadderCache.set(mediaFileId, value);
-  }
-  getHdrLadder(mediaFileId: number): boolean {
-    return this.hdrLadderCache.get(mediaFileId) ?? false;
-  }
-
-  /** Output codec variant chosen by stream-builder's selector. Read by
-   *  the controller when building the SessionContext so ffmpeg-args
-   *  resolves the right encoder descriptor. Single-codec-per-master
-   *  rule: only one variant per file at a time. */
-  private readonly videoVariantCache = new Map<number, CodecVariant>();
-  setVideoVariant(mediaFileId: number, variant: CodecVariant | null) {
-    if (variant) this.videoVariantCache.set(mediaFileId, variant);
-    else this.videoVariantCache.delete(mediaFileId);
-  }
-  getVideoVariant(mediaFileId: number): CodecVariant | undefined {
-    return this.videoVariantCache.get(mediaFileId);
-  }
-
-  setBurnIn(mediaFileId: number, info: BurnInSubtitle | undefined) {
-    if (info) {
-      this.burnInCache.set(mediaFileId, info);
-    } else {
-      this.burnInCache.delete(mediaFileId);
-    }
-  }
-
-  getBurnIn(mediaFileId: number): BurnInSubtitle | undefined {
-    return this.burnInCache.get(mediaFileId) ?? undefined;
-  }
-
-  private readonly audioStreamIndexCache = new Map<
-    number,
-    number | undefined
-  >();
-
-  /** Number of audio streams per media file — used to decide multi-audio HLS mode */
-  private readonly audioStreamCountCache = new Map<number, number>();
-
-  setAudioStreamCount(mediaFileId: number, count: number) {
-    this.audioStreamCountCache.set(mediaFileId, count);
-  }
-
-  getAudioStreamCount(mediaFileId: number): number {
-    return this.audioStreamCountCache.get(mediaFileId) ?? 0;
-  }
-
-  /** Client device category ('mobile' | 'desktop') captured at playback-info.
-   *  Used by hlsMaster and HLS segment endpoints to pick the right bitrate ladder. */
-  private readonly deviceTypeCache = new Map<number, 'mobile' | 'desktop'>();
-
-  setDeviceType(mediaFileId: number, value: 'mobile' | 'desktop') {
-    this.deviceTypeCache.set(mediaFileId, value);
-  }
-
-  getDeviceType(mediaFileId: number): 'mobile' | 'desktop' {
-    return this.deviceTypeCache.get(mediaFileId) ?? 'desktop';
-  }
-
-  /** Whether master.m3u8 decided to use separate audio renditions (EXT-X-MEDIA). */
-  private readonly useExtXMediaCache = new Map<number, boolean>();
-
-  setUseExtXMedia(mediaFileId: number, value: boolean) {
-    this.useExtXMediaCache.set(mediaFileId, value);
-  }
-
-  getUseExtXMedia(mediaFileId: number): boolean {
-    return this.useExtXMediaCache.get(mediaFileId) ?? false;
-  }
-
-  /** Set when the playback target is a Tizen TV that needs the MPEG-TS
-   *  fallback (issue #148 — AVPlay rejects HLS-fMP4 from the HLS muxer).
-   *  Drives the HLS segment container choice (mpegts vs fmp4) in
-   *  `buildFfmpegArgs`. Cast / browser / native mobile never set this. */
-  private readonly useTsCache = new Map<number, boolean>();
-
-  setUseTs(mediaFileId: number, value: boolean) {
-    this.useTsCache.set(mediaFileId, value);
-  }
-
-  getUseTs(mediaFileId: number): boolean {
-    return this.useTsCache.get(mediaFileId) ?? false;
-  }
-
-  private segmentDurationCache = 3;
-
-  setStreamingDuration(segDuration: number) {
-    this.segmentDurationCache = segDuration;
-  }
-
-  getSegmentDuration(): number {
-    return this.segmentDurationCache;
-  }
-
-  setAudioStreamIndex(mediaFileId: number, index: number | undefined) {
-    if (index != null) this.audioStreamIndexCache.set(mediaFileId, index);
-    else this.audioStreamIndexCache.delete(mediaFileId);
-  }
-
-  getAudioStreamIndex(mediaFileId: number): number | undefined {
-    return this.audioStreamIndexCache.get(mediaFileId);
-  }
-
-  // ── Admin streaming settings forwarded to transcode sessions ──
-  private readonly encoderPresetCache = new Map<number, string>();
+  // ── Global admin streaming settings forwarded to transcode sessions ──
   private qsvLowPowerCache = false;
-
-  setEncoderPreset(mediaFileId: number, preset: string) {
-    this.encoderPresetCache.set(mediaFileId, preset);
-  }
-
-  getEncoderPreset(mediaFileId: number): string {
-    return this.encoderPresetCache.get(mediaFileId) ?? 'faster';
-  }
 
   /** QSV advanced options are global (driven by admin streaming settings). */
   setQsvOptions(opts: { lowPower: boolean }) {
@@ -243,55 +106,20 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.tonemapAlgoCache;
   }
 
-  // ── Source-vs-client compat captured at playback-info time, read at
-  //    master.m3u8 time to decide whether to emit a smart-remux variant ──
-  private readonly canCopyVideoCache = new Map<number, boolean>();
-  private readonly canCopyAudioCache = new Map<number, boolean>();
+  private segmentDurationCache = 3;
+
+  setStreamingDuration(segDuration: number) {
+    this.segmentDurationCache = segDuration;
+  }
+
+  getSegmentDuration(): number {
+    return this.segmentDurationCache;
+  }
+
+  // Source dimensions describe the underlying file — identical across
+  // users, kept here for cheap lookups in HLS routes.
   private readonly sourceWidthCache = new Map<number, number>();
   private readonly sourceHeightCache = new Map<number, number>();
-
-  setCanCopyVideo(mediaFileId: number, value: boolean) {
-    this.canCopyVideoCache.set(mediaFileId, value);
-  }
-  getCanCopyVideo(mediaFileId: number): boolean {
-    return this.canCopyVideoCache.get(mediaFileId) ?? false;
-  }
-
-  setCanCopyAudio(mediaFileId: number, value: boolean) {
-    this.canCopyAudioCache.set(mediaFileId, value);
-  }
-  getCanCopyAudio(mediaFileId: number): boolean {
-    return this.canCopyAudioCache.get(mediaFileId) ?? false;
-  }
-
-  /** Canonical audio output decision computed by `stream-builder` at
-   *  `playback-info` time. Every consumer (ffmpeg-args, master-playlist,
-   *  admin dashboard) reads from here — no re-derivation downstream. */
-  private readonly audioPlanCache = new Map<
-    number,
-    | { mode: 'copy'; codec: string }
-    | {
-        mode: 'transcode';
-        codec: 'aac' | 'ac3' | 'eac3';
-        bitrateBps: number;
-      }
-  >();
-
-  setAudioPlan(
-    mediaFileId: number,
-    plan:
-      | { mode: 'copy'; codec: string }
-      | {
-          mode: 'transcode';
-          codec: 'aac' | 'ac3' | 'eac3';
-          bitrateBps: number;
-        },
-  ) {
-    this.audioPlanCache.set(mediaFileId, plan);
-  }
-  getAudioPlan(mediaFileId: number) {
-    return this.audioPlanCache.get(mediaFileId) ?? null;
-  }
 
   setSourceDimensions(mediaFileId: number, width: number, height: number) {
     this.sourceWidthCache.set(mediaFileId, width);
