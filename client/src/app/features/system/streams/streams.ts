@@ -15,6 +15,7 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { ToastService } from '../../../core/services/toast.service';
 import { LucideMessageSquare, LucidePause, LucidePlay, LucideSquare } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
+import { parseDeviceLabel } from '../../../core/utils/format-device-label';
 
 @Component({
   selector: 'app-system-streams',
@@ -132,6 +133,12 @@ export class SystemStreamsComponent implements OnInit, OnDestroy {
 
   episodeLink(s: ActiveStream): string {
     return `/series/${s.mediaId}/episode/${s.episodeId}`;
+  }
+
+  formatDevice(ua: string | null | undefined): string {
+    const label = parseDeviceLabel(ua ?? null);
+    if (!label) return '';
+    return this.translate.instant(label.key, label.params);
   }
 
   formatBitrate(bps: number): string {
