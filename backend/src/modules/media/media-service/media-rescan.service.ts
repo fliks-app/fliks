@@ -26,6 +26,7 @@ import {
   buildSpriteLabel,
 } from '../../streaming/thumbnail.service';
 import { MediaServersService } from '../../media-servers/media-servers.service';
+import { MediaMetadataService } from './media-metadata.service';
 import { clearMediaCache } from '../../../common/utils/media-cache.util';
 import { relativePathUnderMediaRoot } from '../../../common/utils/media-path.util';
 import { bucketResolutionHeight } from '../../../common/utils/resolution.util';
@@ -63,6 +64,7 @@ export class MediaRescanService {
     private readonly subtitleStream: SubtitleStreamService,
     private readonly thumbnailService: ThumbnailService,
     private readonly mediaServers: MediaServersService,
+    private readonly metadata: MediaMetadataService,
   ) {}
 
   /**
@@ -307,6 +309,10 @@ export class MediaRescanService {
         `Media #${mediaId} has no root path configured`,
       );
     }
+    // Set whenever a file forces us to invent a fresh season/episode slot.
+    // After the rescan we backfill metadata (titles, stills) for those slots
+    // by running the shared series refresh so they don't show up empty.
+    let metadataSlotsCreated = false;
 
     // Wipe the whole per-media `.cache/` tree (subtitles + any other cached
     // artefact) — streamInfo is about to be re-read so anything derived
@@ -438,11 +444,12 @@ export class MediaRescanService {
         const epNums = this.naming.parseEpisodeNumbers(filename);
         if (epNums && dbFile.episodeId == null) {
           try {
-            const ep = await this.ensureSeasonAndEpisode(
+            const { ep, created } = await this.ensureSeasonAndEpisode(
               media,
               epNums,
               mediaId,
             );
+            if (created) metadataSlotsCreated = true;
             if (ep) {
               dbFile.episode = ep;
               try {
@@ -556,11 +563,12 @@ export class MediaRescanService {
         const epNums = this.naming.parseEpisodeNumbers(filename);
         if (epNums) {
           try {
-            const ep = await this.ensureSeasonAndEpisode(
+            const { ep, created } = await this.ensureSeasonAndEpisode(
               media,
               epNums,
               mediaId,
             );
+            if (created) metadataSlotsCreated = true;
             episodeId = ep?.id;
           } catch (err) {
             this.log.error(
@@ -678,6 +686,20 @@ export class MediaRescanService {
       });
     }
 
+    // Slots invented to host newly-discovered files start out as bare rows
+    // (episodeNumber + monitored). Run the shared series refresh so they
+    // gain titles, overviews, stills and the season poster — the same
+    // routine the manual "Refresh metadata" button uses.
+    if (metadataSlotsCreated) {
+      try {
+        await this.metadata.refreshSeriesEpisodes(media);
+      } catch (err) {
+        this.log.warn(
+          `Rescan[media #${mediaId}]: refreshSeriesEpisodes failed — ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
     return {
       added,
       removed,
@@ -705,7 +727,8 @@ export class MediaRescanService {
       episodeEnd?: number | null;
     },
     mediaId: number,
-  ): Promise<Episode | null> {
+  ): Promise<{ ep: Episode | null; created: boolean }> {
+    let created = false;
     let season = await this.seasonRepo.findOne({
       where: { media: { id: media.id }, seasonNumber: epNums.season },
     });
@@ -717,6 +740,7 @@ export class MediaRescanService {
           monitored: true,
         }),
       );
+      created = true;
       this.log.log(
         `Rescan: created season ${epNums.season} for media #${mediaId}`,
       );
@@ -736,6 +760,7 @@ export class MediaRescanService {
           monitored: true,
         }),
       );
+      created = true;
       this.log.log(
         `Rescan: created episode S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')} for media #${mediaId}`,
       );
@@ -746,7 +771,7 @@ export class MediaRescanService {
       ep.endEpisodeNumber = epNums.episodeEnd;
       await this.episodeRepo.save(ep);
     }
-    return ep;
+    return { ep, created };
   }
 
   /**

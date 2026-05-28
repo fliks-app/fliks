@@ -23,6 +23,7 @@ import {
 } from '../../metadata-providers/interfaces/metadata-provider.interface';
 import { MediaType } from '../../../common/enums';
 import { ImageService } from '../../images/image.service';
+import { SchedulerService } from '../../scheduler/scheduler.service';
 import { mapWithConcurrency } from '../../../common/utils/concurrency';
 import { buildMediaFieldsFromTmdb } from './tmdb-mapping.util';
 
@@ -47,6 +48,7 @@ export class MediaMetadataService {
     private readonly tmdb: TmdbProvider,
     private readonly providerRegistry: MetadataProviderRegistry,
     private readonly imageService: ImageService,
+    private readonly scheduler: SchedulerService,
   ) {}
 
   async refreshMetadata(id: number): Promise<Media> {
@@ -81,7 +83,16 @@ export class MediaMetadataService {
       });
       await this.downloadMediaImages(media.id, details);
       await this.persistMediaMetadata(media, details);
-      await this.refreshSeriesEpisodes(media, { provider, externalId });
+      const { insertedCount } = await this.refreshSeriesEpisodes(media, {
+        provider,
+        externalId,
+      });
+      // New episodes appeared on the provider (typically a fresh season
+      // drop): kick the auto-grab pipeline now instead of waiting up to 6 h
+      // for the next scheduler tick. Mirrors the post-approval kick.
+      if (insertedCount > 0) {
+        void this.scheduler.searchMissingForMedia([media.id]);
+      }
     }
 
     await this.updateSearchVector(media.id);
@@ -144,7 +155,7 @@ export class MediaMetadataService {
   async refreshSeriesEpisodes(
     media: Media,
     preResolved?: { provider: IMetadataProvider; externalId: string },
-  ): Promise<void> {
+  ): Promise<{ insertedCount: number }> {
     // 1. Media-level provider enumerates all seasons and provides defaults.
     //    `refreshMetadata` has already resolved the provider — accept it
     //    so we don't re-emit the `resolveProvider:` log and skip the DB
@@ -160,6 +171,8 @@ export class MediaMetadataService {
       relations: ['episodes'],
     });
     const dbSeasonMap = new Map(dbSeasons.map((s) => [s.seasonNumber, s]));
+
+    let insertedCount = 0;
 
     // 2. Upsert seasons + apply media-level episode data, skipping seasons
     //    whose override points elsewhere (handled in the second pass).
@@ -182,7 +195,7 @@ export class MediaMetadataService {
       ) {
         continue;
       }
-      await this.applySeasonDetails(dbSeason, sd);
+      insertedCount += (await this.applySeasonDetails(dbSeason, sd)).insertedCount;
     }
 
     // 3. Second pass: re-fetch overridden seasons from their own provider.
@@ -193,7 +206,7 @@ export class MediaMetadataService {
         s.preferredProvider &&
         s.preferredProvider !== mediaResolve.provider.name,
     );
-    if (!overridden.length) return;
+    if (!overridden.length) return { insertedCount };
     const cache = new Map<string, SeasonDetails[]>();
     for (const dbSeason of overridden) {
       let overrideResolve: {
@@ -213,7 +226,9 @@ export class MediaMetadataService {
         const fallback = mediaSeasons.find(
           (s) => s.seasonNumber === dbSeason.seasonNumber,
         );
-        if (fallback) await this.applySeasonDetails(dbSeason, fallback);
+        if (fallback) {
+          insertedCount += (await this.applySeasonDetails(dbSeason, fallback)).insertedCount;
+        }
         continue;
       }
       const seasonData = await this.fetchSingleSeason(
@@ -231,18 +246,26 @@ export class MediaMetadataService {
         const fallback = mediaSeasons.find(
           (s) => s.seasonNumber === dbSeason.seasonNumber,
         );
-        if (fallback) await this.applySeasonDetails(dbSeason, fallback);
+        if (fallback) {
+          insertedCount += (await this.applySeasonDetails(dbSeason, fallback)).insertedCount;
+        }
         continue;
       }
-      await this.applySeasonDetails(dbSeason, seasonData);
+      insertedCount += (await this.applySeasonDetails(dbSeason, seasonData)).insertedCount;
     }
+    return { insertedCount };
   }
 
-  /** Upsert episodes of one DB season from provider season details. */
-  private async applySeasonDetails(
+  /** Upsert episodes of one DB season from provider season details, download
+   *  per-episode stills and the season poster. Shared by the metadata refresh
+   *  flow and the initial library import so both end up with the same set of
+   *  artwork — diverging here meant stills were missing right after import.
+   *  Returns the number of fresh episode rows it created so the caller can
+   *  decide whether to kick the auto-grab pipeline. */
+  async applySeasonDetails(
     dbSeason: Season,
     sd: SeasonDetails,
-  ): Promise<void> {
+  ): Promise<{ insertedCount: number }> {
     const dbEpMap = new Map(
       (dbSeason.episodes ?? []).map((e) => [e.episodeNumber, e]),
     );
@@ -319,6 +342,7 @@ export class MediaMetadataService {
     if (sd.posterUrl) {
       await this.downloadSeasonPoster(dbSeason.id, sd.posterUrl);
     }
+    return { insertedCount: insertedRows.length };
   }
 
   /**

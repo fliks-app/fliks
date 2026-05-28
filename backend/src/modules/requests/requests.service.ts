@@ -25,6 +25,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { MediaService } from '../media/media.service';
 import { Media } from '../media/entities/media.entity';
 import { ProfilesService } from '../profiles/profiles.service';
+import { SchedulerService } from '../scheduler/scheduler.service';
 import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
 import { Action } from '../auth/casl/actions.enum';
 import {
@@ -50,6 +51,7 @@ export class RequestsService {
     private readonly notifications: NotificationsService,
     private readonly mediaService: MediaService,
     private readonly profilesService: ProfilesService,
+    private readonly scheduler: SchedulerService,
     private readonly caslAbilityFactory: CaslAbilityFactory,
   ) {}
 
@@ -451,6 +453,13 @@ export class RequestsService {
     void this.notifications.dispatch('request.approved', {
       title: saved.title,
     });
+    // Kick an immediate SearchMissing on the approved media so the user
+    // doesn't wait for the next scheduler tick (up to 6 h). The lifecycle
+    // path already does this on auto-approval; the manual approve was the
+    // outlier — fire-and-forget so the HTTP response stays snappy.
+    if (saved.media) {
+      void this.scheduler.searchMissingForMedia([saved.media.id]);
+    }
     return saved;
   }
 

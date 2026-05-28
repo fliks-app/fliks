@@ -80,6 +80,11 @@ import { StreamingModule } from '../streaming/streaming.module';
     TorrentAutoMatcher,
     NamingService,
   ],
-  exports: [MediaService, AutoGrabPipelineService, TorrentAutoMatcher],
+  exports: [
+    MediaService,
+    MediaMetadataService,
+    AutoGrabPipelineService,
+    TorrentAutoMatcher,
+  ],
 })
 export class MediaModule {}

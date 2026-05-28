@@ -20,6 +20,7 @@ import { MediaType } from '../../common/enums';
 import { parseReleaseQuality } from '../../common/release-parsing';
 import { ImportFileEntry } from './dto/confirm-disk-import.dto';
 import { MediaService } from '../media/media.service';
+import { MediaMetadataService } from '../media/media-service/media-metadata.service';
 import { NamingService } from '../scheduler/naming.service';
 import { SubtitleSchedulerService } from '../scheduler/subtitle-scheduler.service';
 import { LibrariesService } from '../libraries/libraries.service';
@@ -76,6 +77,8 @@ export class DiskImportService {
     private readonly naming: NamingService,
     private readonly libraries: LibrariesService,
     private readonly fileTransfer: FileTransferService,
+    @Inject(forwardRef(() => MediaMetadataService))
+    private readonly metadata: MediaMetadataService,
   ) {}
 
   async scanFolder(folderPath: string): Promise<ScanCandidate[]> {
@@ -100,7 +103,27 @@ export class DiskImportService {
       select: ['id', 'title', 'originalTitle', 'year', 'type'],
     });
 
-    return Promise.all(videoFiles.map((f) => this.buildCandidate(f, allMedia)));
+    // `buildCandidate` may invent a fresh season / episode slot for any file
+    // that references one we haven't pulled metadata for yet. Collect the
+    // owning media so we can backfill those rows (titles, overviews, stills)
+    // via the shared series refresh, instead of leaving them bare in the UI.
+    const dirty = new Set<number>();
+    const candidates = await Promise.all(
+      videoFiles.map((f) => this.buildCandidate(f, allMedia, dirty)),
+    );
+    for (const mediaId of dirty) {
+      try {
+        const media = await this.mediaRepo.findOne({ where: { id: mediaId } });
+        if (media && media.type === MediaType.SERIES) {
+          await this.metadata.refreshSeriesEpisodes(media);
+        }
+      } catch (err) {
+        this.logger.warn(
+          `Disk scan: refreshSeriesEpisodes #${mediaId} failed — ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    return candidates;
   }
 
   /**
@@ -347,6 +370,7 @@ export class DiskImportService {
   private async buildCandidate(
     filePath: string,
     allMedia: Pick<Media, 'id' | 'title' | 'originalTitle' | 'year' | 'type'>[],
+    dirtyMediaIds?: Set<number>,
   ): Promise<ScanCandidate> {
     const filename = path.basename(filePath);
     let size = 0;
@@ -376,6 +400,7 @@ export class DiskImportService {
             monitored: true,
           }),
         );
+        dirtyMediaIds?.add(matched.id);
       }
       let ep = await this.episodeRepo.findOne({
         where: { season: { id: season.id }, episodeNumber: epNums.episode },
@@ -389,6 +414,7 @@ export class DiskImportService {
             monitored: true,
           }),
         );
+        dirtyMediaIds?.add(matched.id);
       } else if (
         epNums.episodeEnd != null &&
         ep.endEpisodeNumber !== epNums.episodeEnd
