@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   Post,
   Req,
@@ -29,8 +30,14 @@ import {
   getHdrLadderForDevice,
   getLadderForDevice,
   profileFitsSource,
+  computeProfileHash,
+  buildPlaybackProfileFromContext,
 } from './transcoding';
-import { secondsToSegmentIndex } from './transcoding/constants';
+import {
+  getSegmentDuration,
+  secondsToSegmentIndex,
+} from './transcoding/constants';
+import { LiveSessionRegistry } from './live-session.service';
 import { readAndRewriteCmaf } from './transcoding/cmaf-rewrite';
 import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { ThumbnailService } from './thumbnail.service';
@@ -200,6 +207,7 @@ export class StreamingController {
     private readonly playbackService: PlaybackService,
     private readonly markersService: MarkersService,
     private readonly streamingSettingsCache: StreamingSettingsCache,
+    private readonly liveSessions: LiveSessionRegistry,
   ) {}
 
   private getStreamingSettings() {
@@ -686,10 +694,10 @@ export class StreamingController {
     // next (~100–300ms later) and then seg-0. Starting ffmpeg here overlaps
     // that gap with encoder init so segment 0 is usually already on disk
     // (or streaming) when requested. No-op for DirectPlay or auto quality.
+    const startQuality = firstQueryString(req.query, 'startQuality');
+    const startAtRaw = firstQueryString(req.query, 'startAt');
+    const startAt = startAtRaw != null ? parseFloat(startAtRaw) : undefined;
     if (result.playMethod !== 'DirectPlay') {
-      const startQuality = firstQueryString(req.query, 'startQuality');
-      const startAtRaw = firstQueryString(req.query, 'startAt');
-      const startAt = startAtRaw != null ? parseFloat(startAtRaw) : undefined;
       // Await prewarm before responding so the session is registered in the
       // map when the frontend's subsequent master.m3u8/seg-0 requests
       // arrive — prevents a race where hlsSegment would spawn a duplicate
@@ -767,13 +775,63 @@ export class StreamingController {
       ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop })
       : null;
 
+    // Issue a live-session handle the client embeds in every subsequent
+    // heartbeat (PUT /playback/media/:id/state). The profile hash is
+    // computed from the same SessionContext the transcoding service
+    // will use to spawn ffmpeg, so multi-device dashboards can match
+    // a LiveSession back to its on-disk cache directory.
+    const sessionCtx = this.buildSessionContext(req, resolved, mediaFileId);
+    const profileHash =
+      result.playMethod === 'DirectPlay'
+        ? null
+        : computeProfileHash(
+            buildPlaybackProfileFromContext(
+              sessionCtx,
+              getSegmentDuration() * 1000,
+            ),
+          );
+    const kind =
+      result.playMethod === 'DirectPlay'
+        ? 'directplay'
+        : result.playMethod === 'DirectStream'
+          ? 'remux'
+          : 'transcode';
+    const deviceLabel: string | null = req.get('user-agent') ?? null;
+    const liveSession = this.liveSessions.create({
+      userId: user?.id ?? null,
+      username: user?.username ?? null,
+      mediaFileId,
+      mediaTitle: resolved.media?.title ?? null,
+      mediaType: resolved.media?.type ?? null,
+      posterUrl: resolved.media?.posterUrl ?? null,
+      profileHash,
+      quality: typeof startQuality === 'string' ? startQuality : null,
+      kind,
+      deviceLabel,
+      position: startAt ?? 0,
+    });
+
     return {
       ...result,
       tonemapAlgo,
       durationSeconds: duration,
       markers,
       chapters,
+      sessionId: liveSession.sessionId,
+      profileHash,
     };
+  }
+
+  /**
+   * Explicit stop signal from the client (player destroy / page unload,
+   * fetched with `keepalive: true`). Drops the live-session entry.
+   * Idempotent — silently 204 even for unknown ids so a duplicate
+   * unload doesn't surface as an error.
+   */
+  @Delete('sessions/:sessionId')
+  @HttpCode(204)
+  stopLiveSession(@Param('sessionId') sessionId: string) {
+    this.liveSessions.stop(sessionId);
   }
 
   // ---------------------------------------------------------------------------
@@ -1494,6 +1552,16 @@ export class StreamingController {
     await this.transcodingService.killSession(mediaFileId, user?.id);
     if (user) {
       this.activeStreamTracker.unregister(user.id, mediaFileId);
+    }
+    // Drop any live-session entries for this (user, file) so the
+    // dashboard stops surfacing the row immediately instead of waiting
+    // for the heartbeat ttl. Multi-device clean-up: we only touch
+    // sessions that match `user.id`, leaving other devices alive.
+    const userId = user?.id ?? null;
+    for (const s of this.liveSessions.list()) {
+      if (s.mediaFileId === mediaFileId && s.userId === userId) {
+        this.liveSessions.stop(s.sessionId);
+      }
     }
     return { ok: true };
   }

@@ -2314,11 +2314,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.streamingApi.stopSessions(this.mediaFileId).catch(() => {});
   }
 
-  /** Last second-rounded position we PUT to /state. Used to dedup the
-   *  3 saves that fire on exit (onBack, ngOnDestroy, savePosition
-   *  interval): all three see the same `currentTime`, so only the first
-   *  hits the network. */
-  private lastSavedPosition: number | null = null;
+  /** Wall-clock timestamp (ms) of the last PUT to /state. Used to dedup
+   *  the cluster of saves that fire on exit (onBack, ngOnDestroy, the
+   *  savePosition interval and the 'seeked' event all hit savePosition
+   *  within the same tick). Time-based instead of position-based so a
+   *  paused player still emits a heartbeat every 10 s — the backend's
+   *  {@link LiveSessionRegistry} relies on it to keep the session warm. */
+  private lastSaveAt = 0;
 
   private async savePosition() {
     if (!this.mediaId) return;
@@ -2338,25 +2340,50 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     if (!pos) return;
 
-    const rounded = Math.floor(pos);
-    if (this.lastSavedPosition === rounded) return;
-    this.lastSavedPosition = rounded;
+    const now = Date.now();
+    if (now - this.lastSaveAt < 2_000) return;
+    this.lastSaveAt = now;
 
-    const payload = {
+    const payload: {
+      positionSeconds: number;
+      durationSeconds: number;
+      mediaFileId: number;
+      episodeId?: number;
+      sessionId?: string;
+      state?: 'playing' | 'paused' | 'buffering';
+      quality?: string | null;
+    } = {
       positionSeconds: pos,
       durationSeconds: dur || 0,
       mediaFileId: this.mediaFileId,
       episodeId: this.episodeId,
     };
 
+    const sessionId = this.playbackInfo?.sessionId;
+    if (sessionId) {
+      payload.sessionId = sessionId;
+      payload.state = this.paused() ? 'paused' : 'playing';
+      payload.quality = this.activeQualityId() ?? null;
+    }
+
+    // Offline queue persists position only — the heartbeat-related
+    // fields (sessionId / state / quality) are pointless once the
+    // backend session has already expired by the time we reconnect.
+    const offlinePayload = {
+      mediaId: this.mediaId,
+      mediaFileId: this.mediaFileId,
+      episodeId: this.episodeId,
+      positionSeconds: payload.positionSeconds,
+      durationSeconds: payload.durationSeconds,
+    };
     if (this.network.isOnline()) {
       try {
         await this.streamingApi.updatePlaybackState(this.mediaId, payload);
       } catch {
-        this.offlineSync.queue({ mediaId: this.mediaId, ...payload });
+        this.offlineSync.queue(offlinePayload);
       }
     } else {
-      this.offlineSync.queue({ mediaId: this.mediaId, ...payload });
+      this.offlineSync.queue(offlinePayload);
     }
   }
 

@@ -19,14 +19,31 @@ import { PlaybackService } from './playback.service';
 import { RecommendationService } from './recommendation.service';
 import { User } from '../users/entities/user.entity';
 import { LibrariesService } from '../libraries/libraries.service';
+import {
+  LiveSessionRegistry,
+  type PlaybackState as LivePlaybackState,
+} from './live-session.service';
+
+/** Debounce window for DB writes — heartbeat fires every 10 s but we
+ *  flush playback state on a coarser cadence to avoid hammering
+ *  `playback_states` on a busy household. State transitions and the
+ *  "completed" threshold short-circuit the debounce. */
+const STATE_DB_WRITE_INTERVAL_MS = 30_000;
 
 @Controller('playback')
 @UseGuards(JwtOrApiKeyGuard)
 export class PlaybackController {
+  /** When the last DB write happened per `(userId, mediaId, episodeId)`
+   *  tuple. Drives the debounce above. In-memory map, fine for a single
+   *  backend instance — Phase 5 may move this onto Redis if multi-instance
+   *  becomes a thing. */
+  private readonly lastDbWriteAt = new Map<string, number>();
+
   constructor(
     private readonly playbackService: PlaybackService,
     private readonly recommendationService: RecommendationService,
     private readonly libraries: LibrariesService,
+    private readonly liveSessions: LiveSessionRegistry,
   ) {}
 
   @Get('recommendations')
@@ -157,9 +174,14 @@ export class PlaybackController {
     return this.playbackService.getState(user.id, mediaId, episodeId);
   }
 
-  /** Update playback state (position, duration, file). */
+  /** Update playback state (position, duration, file). Doubles as the
+   *  live-session heartbeat when the client includes `sessionId` —
+   *  refreshes the in-memory {@link LiveSessionRegistry} on every call
+   *  and debounces the actual DB write to one every
+   *  {@link STATE_DB_WRITE_INTERVAL_MS}. State transitions
+   *  (`playing` ↔ `paused`) and completion always force a flush. */
   @Put('media/:mediaId/state')
-  updateState(
+  async updateState(
     @Req() req: Request,
     @Param('mediaId', ParseIntPipe) mediaId: number,
     @Body()
@@ -168,10 +190,52 @@ export class PlaybackController {
       durationSeconds: number;
       mediaFileId: number;
       episodeId?: number;
+      // Optional heartbeat fields — present once the client embeds the
+      // sessionId emitted by `playback-info`.
+      sessionId?: string;
+      state?: LivePlaybackState;
+      quality?: string | null;
+      audioTrackIndex?: number | null;
+      subtitleTrackIndex?: number | null;
     },
   ) {
     const user = req.user as User;
-    return this.playbackService.updateState(user.id, mediaId, body);
+
+    let stateChanged = false;
+    if (body.sessionId) {
+      const before = this.liveSessions.get(body.sessionId);
+      const previousState = before?.state;
+      const updated = this.liveSessions.heartbeat(body.sessionId, {
+        position: body.positionSeconds,
+        state: body.state,
+        quality: body.quality,
+        audioTrackIndex: body.audioTrackIndex,
+        subtitleTrackIndex: body.subtitleTrackIndex,
+      });
+      stateChanged = !!updated && !!body.state && previousState !== body.state;
+    }
+
+    const dbKey = `${user.id}:${mediaId}:${body.episodeId ?? 0}`;
+    const now = Date.now();
+    const lastWrite = this.lastDbWriteAt.get(dbKey) ?? 0;
+    const dur = body.durationSeconds ?? 0;
+    const pos = body.positionSeconds ?? 0;
+    const wouldCompleteRow = dur > 0 && (pos >= dur - 30 || pos >= dur * 0.9);
+    const shouldFlushDb =
+      stateChanged ||
+      wouldCompleteRow ||
+      now - lastWrite >= STATE_DB_WRITE_INTERVAL_MS;
+
+    if (!shouldFlushDb) {
+      return null;
+    }
+    this.lastDbWriteAt.set(dbKey, now);
+    return this.playbackService.updateState(user.id, mediaId, {
+      positionSeconds: body.positionSeconds,
+      durationSeconds: body.durationSeconds,
+      mediaFileId: body.mediaFileId,
+      episodeId: body.episodeId,
+    });
   }
 
   /** Toggle watched/unwatched for a media or episode. */

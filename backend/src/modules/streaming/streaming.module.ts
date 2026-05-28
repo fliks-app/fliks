@@ -13,6 +13,7 @@ import { StreamingService } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
 import { TranscodingService } from './transcoding';
 import { TranscodeCacheService } from './transcoding/transcode-cache.service';
+import { LiveSessionRegistry } from './live-session.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { PlaybackService } from './playback.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
@@ -49,6 +50,7 @@ import { MarkersModule } from '../markers/markers.module';
     SubtitleStreamService,
     TranscodingService,
     TranscodeCacheService,
+    LiveSessionRegistry,
     StreamBuilderService,
     PlaybackService,
     ActiveStreamTracker,
@@ -62,6 +64,7 @@ import { MarkersModule } from '../markers/markers.module';
     TranscodingService,
     StreamingService,
     ActiveStreamTracker,
+    LiveSessionRegistry,
     ThumbnailService,
     SubtitleStreamService,
   ],

@@ -82,7 +82,18 @@ export interface PlaybackInfoResponse {
   };
   /** Embedded chapters from the container (MKV/MP4). */
   chapters?: { startSeconds: number; endSeconds: number; title?: string }[];
+  /** Server-issued live-session identifier. The client embeds it in every
+   *  subsequent `PUT /api/playback/media/:id/state` (heartbeat) and on
+   *  the `DELETE /api/stream/:mediaFileId/sessions` unload signal so the
+   *  backend can match the client back to its in-memory session record. */
+  sessionId?: string;
+  /** Profile hash this session's transcode cache is keyed under, or
+   *  `null` for DirectPlay. Surfaced for the admin dashboard and for
+   *  future multi-device match logic; not required by the player. */
+  profileHash?: string | null;
 }
+
+export type LivePlaybackState = 'playing' | 'paused' | 'buffering';
 
 export interface MediaResumeInfo {
   mediaFileId: number;
@@ -371,10 +382,21 @@ export class StreamingApiService {
       durationSeconds: number;
       mediaFileId: number;
       episodeId?: number;
+      // Live-session heartbeat fields. Only present once the player has
+      // received a `sessionId` from `getPlaybackInfo`; the backend
+      // tolerates their absence (legacy / unauthenticated paths).
+      sessionId?: string;
+      state?: LivePlaybackState;
+      quality?: string | null;
+      audioTrackIndex?: number | null;
+      subtitleTrackIndex?: number | null;
     },
   ) {
     return firstValueFrom(
-      this.http.put<PlaybackState>(`/api/playback/media/${mediaId}/state`, body),
+      this.http.put<PlaybackState | null>(
+        `/api/playback/media/${mediaId}/state`,
+        body,
+      ),
     );
   }
 
