@@ -245,4 +245,8 @@ export interface TranscodeSession {
    *  drift detection: flipping the flag mid-stream must kill+respawn
    *  the session because the on-disk layout differs. */
   audioLayout?: 'inline' | 'var-stream-map';
+  /** Profile hash this session was spawned under. Drives the on-disk
+   *  cache directory layout (`/tmp/transcode/cache/u<userId>/<file>/<hash>/...`)
+   *  and is the lookup key used by the {@link TranscodeCacheService}. */
+  profileHash?: string;
 }

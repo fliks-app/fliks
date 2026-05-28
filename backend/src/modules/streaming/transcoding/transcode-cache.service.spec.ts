@@ -111,6 +111,37 @@ describe('TranscodeCacheService', () => {
     await svc.runGc();
     expect(svc.size()).toBe(1);
   });
+
+  it('cachePathFor composes the expected directory shape', async () => {
+    await svc.onModuleInit();
+    expect(svc.cachePathFor(42, 7, 'a1b2c3d4e5', '1080p')).toBe(
+      path.join(CACHE_ROOT, 'u42', '7', 'a1b2c3d4e5', '1080p'),
+    );
+    expect(svc.cachePathFor(null, 7, 'a1b2c3d4e5')).toBe(
+      path.join(CACHE_ROOT, 'anon', '7', 'a1b2c3d4e5'),
+    );
+  });
+
+  it('ensureEntry creates a new entry on miss and reuses on hit', async () => {
+    await svc.onModuleInit();
+    const a = svc.ensureEntry(3, 11, 'ffffffffff');
+    const b = svc.ensureEntry(3, 11, 'ffffffffff');
+    expect(a).toBe(b);
+    expect(svc.size()).toBe(1);
+    expect(svc.lookup(3, 11, 'ffffffffff')).toBe(a);
+  });
+
+  it('drops entries whose dir was wiped externally on gc', async () => {
+    const dir = path.join(CACHE_ROOT, 'u1', '1', 'gggggggggg', '720p');
+    await writeFile(path.join(dir, 'seg-0.m4s'), 1000);
+    await svc.onModuleInit();
+    expect(svc.size()).toBe(1);
+    const entry = svc.lookup(1, 1, 'gggggggggg')!;
+    // Simulate TranscodingService wiping the dir without notifying us.
+    await fsp.rm(entry.cacheDir, { recursive: true, force: true });
+    await svc.runGc();
+    expect(svc.size()).toBe(0);
+  });
 });
 
 describe('TranscodeCacheService env overrides', () => {

@@ -159,11 +159,27 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Garbage collection pass. Evicts by TTL first; if total size remains
-   * above {@link maxBytes}, evicts least-recently-used entries until
-   * back under the threshold.
+   * Garbage collection pass. Three passes in order:
+   * 1. Drop entries whose on-disk dir has been wiped externally (the
+   *    transcoding service still owns lifecycle in phase 2).
+   * 2. Evict by TTL.
+   * 3. Evict least-recently-used until total bytes back under cap.
    */
   async runGc(): Promise<void> {
+    const orphans: CacheEntry[] = [];
+    for (const entry of this.entries.values()) {
+      try {
+        await fsp.access(entry.cacheDir);
+      } catch {
+        orphans.push(entry);
+      }
+    }
+    for (const entry of orphans) {
+      this.entries.delete(
+        entryKey(entry.userId, entry.mediaFileId, entry.profileHash),
+      );
+    }
+
     const now = Date.now();
     const expired: CacheEntry[] = [];
     for (const entry of this.entries.values()) {
@@ -201,6 +217,54 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
   /** Visible for tests. */
   cacheRoot(): string {
     return CACHE_LAYOUT_ROOT;
+  }
+
+  /**
+   * Absolute directory where the segments for this (user, file, profile,
+   * quality) tuple should be written. The transcoding service uses this
+   * to spawn ffmpeg's HLS muxer at the right path.
+   */
+  cachePathFor(
+    userId: number | null,
+    mediaFileId: number,
+    profileHash: string,
+    quality?: string,
+  ): string {
+    const userSeg = userId == null ? 'anon' : `u${userId}`;
+    const base = path.join(
+      CACHE_LAYOUT_ROOT,
+      userSeg,
+      String(mediaFileId),
+      profileHash,
+    );
+    return quality ? path.join(base, quality) : base;
+  }
+
+  /**
+   * Return the in-memory entry for this triple, creating an empty one
+   * on miss. Used by the transcoding service when a fresh ffmpeg job
+   * starts writing into a new cache directory — subsequent
+   * {@link recordSegmentWritten} calls land on the same entry.
+   */
+  ensureEntry(
+    userId: number | null,
+    mediaFileId: number,
+    profileHash: string,
+  ): CacheEntry {
+    const key = entryKey(userId, mediaFileId, profileHash);
+    const existing = this.entries.get(key);
+    if (existing) return existing;
+    const entry: CacheEntry = {
+      userId,
+      mediaFileId,
+      profileHash,
+      cacheDir: this.cachePathFor(userId, mediaFileId, profileHash),
+      perQuality: new Map(),
+      totalBytes: 0,
+      lastAccess: Date.now(),
+    };
+    this.entries.set(key, entry);
+    return entry;
   }
 
   private async rebuildIndex(): Promise<void> {
