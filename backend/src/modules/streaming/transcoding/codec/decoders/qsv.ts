@@ -16,9 +16,9 @@ function qsvDecoder(codec: VideoCodec, maxBitDepth: 8 | 10): DecoderDescriptor {
     sourceCodec: codec,
     maxBitDepth,
     // 'vaapi' rather than 'qsv': the decoder produces VAAPI surfaces
-    // that the qsv encoder filter chain hwmap's into qsv format. A
-    // future encoder chain that consumes qsv surfaces directly (Phase
-    // 5: vpp_qsv crop) opts into the qsv-native decoder below.
+    // that the qsv encoder filter chain hwmap's into qsv format. The
+    // qsv-native variant below emits QSV surfaces directly for chains
+    // (e.g. vpp_qsv crop) that consume them without hwmap.
     outputSurface: 'vaapi',
     supports: () => true,
     buildInputArgs: () => [
@@ -40,9 +40,9 @@ function qsvDecoder(codec: VideoCodec, maxBitDepth: 8 | 10): DecoderDescriptor {
 }
 
 /** QSV-native decoder variant — same iGPU but emits QSV surfaces
- *  directly. Used by `vpp_qsv` crop / scale paths in Phase 5; the
- *  default qsv decoder above stays VAAPI-output for compatibility
- *  with the existing scale_vaapi-based encoder chains. */
+ *  directly. Selected by `vpp_qsv` crop / scale paths that consume
+ *  QSV surfaces; the default qsv decoder above stays VAAPI-output for
+ *  compatibility with the scale_vaapi-based encoder chains. */
 function qsvNativeDecoder(
   codec: VideoCodec,
   maxBitDepth: 8 | 10,

@@ -30,7 +30,7 @@ const DESCRIPTORS: readonly DecoderDescriptor[] = [
   // Intel modern path. Default qsv decoder emits VAAPI surfaces (drop-
   // in compatible with the scale_vaapi-based encoder chains). A
   // qsv-native variant emits QSV surfaces directly — selected only by
-  // paths that opt in (vpp_qsv crop in Phase 5+).
+  // paths that opt in (e.g. vpp_qsv crop).
   h264QsvDecoder,
   hevcQsvDecoder,
   av1QsvDecoder,
@@ -101,7 +101,7 @@ export const ALL_DECODERS: readonly DecoderDescriptor[] = [
 ];
 
 /** Lookup a qsv-native decoder by source codec — exposed for the
- *  Phase 5 vpp_qsv crop path that bypasses the registry resolver. */
+ *  vpp_qsv crop path that bypasses the registry resolver. */
 export function findQsvNativeDecoder(
   codec: 'h264' | 'hevc' | 'av1',
 ): DecoderDescriptor | null {
