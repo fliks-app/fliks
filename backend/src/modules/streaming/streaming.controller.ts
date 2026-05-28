@@ -99,6 +99,16 @@ function streamQuery(
   return `${base}${sep}${parts.join('&')}`;
 }
 
+/** Lift `?token=` and `?sid=` off the incoming request and serialise
+ *  them back into a `?token=…&sid=…` suffix. Used to propagate the
+ *  caller's auth + live-session handle into the segment / playlist
+ *  URLs returned in HLS manifests. */
+function buildTokenParam(req: Request): string {
+  const token = firstQueryString(req.query, 'token');
+  const sid = firstQueryString(req.query, 'sid');
+  return streamQuery({ token, sid });
+}
+
 /** Pick the right HLS segment Content-Type. fMP4 (.m4s / .mp4) → video/mp4,
  *  MPEG-TS (.ts, used as the explicit `useTs` fallback for Tizen TVs on
  *  older firmwares — issue #148) → video/MP2T. */
@@ -630,9 +640,7 @@ export class StreamingController {
       mediaFileId,
       req.user as User,
     );
-    const token = firstQueryString(req.query, 'token');
-    const sid = firstQueryString(req.query, 'sid');
-    const tokenParam = streamQuery({ token, sid });
+    const tokenParam = buildTokenParam(req);
     const burnInSubtitleRaw = firstQueryString(req.query, 'burnInSubtitleId');
     const burnInSubtitleId = burnInSubtitleRaw
       ? parseInt(burnInSubtitleRaw, 10)
@@ -972,9 +980,7 @@ export class StreamingController {
     const w = crop?.width ?? v?.width ?? 1920;
     const h = crop?.height ?? v?.height ?? 1080;
 
-    const token = firstQueryString(req.query, 'token');
-    const sid = firstQueryString(req.query, 'sid');
-    const tokenParam = streamQuery({ token, sid });
+    const tokenParam = buildTokenParam(req);
 
     const includeRemux = firstQueryString(req.query, 'remux') === '1';
     const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
@@ -1149,9 +1155,7 @@ export class StreamingController {
       );
     }
 
-    const token = firstQueryString(req.query, 'token');
-    const sid = firstQueryString(req.query, 'sid');
-    const tokenParam = streamQuery({ token, sid });
+    const tokenParam = buildTokenParam(req);
     const basePath = `/api/stream/${mediaFileId}/audio/${audioIndex}`;
     const useTs = live?.useTs ?? false;
     const segExt = useTs ? 'ts' : 'm4s';
@@ -1338,9 +1342,7 @@ export class StreamingController {
       }
     }
 
-    const token = firstQueryString(req.query, 'token');
-    const sid = firstQueryString(req.query, 'sid');
-    const tokenParam = streamQuery({ token, sid });
+    const tokenParam = buildTokenParam(req);
     const basePath = `/api/stream/${mediaFileId}/${quality}`;
     // Use the master.m3u8 decision — must match to avoid init filename mismatch.
     const live = this.findRequestSession(req, mediaFileId);
