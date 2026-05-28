@@ -3,6 +3,8 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -48,6 +50,7 @@ export class MediaMetadataService {
     private readonly tmdb: TmdbProvider,
     private readonly providerRegistry: MetadataProviderRegistry,
     private readonly imageService: ImageService,
+    @Inject(forwardRef(() => SchedulerService))
     private readonly scheduler: SchedulerService,
   ) {}
 
