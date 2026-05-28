@@ -175,6 +175,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
   readonly qualityProfiles = signal<QualityProfile[]>([]);
 
   private allLibraries: LibrarySummary[] = [];
+  /** Bumped on every `load()` so a stale background revalidation kicked off
+   *  for the previous library can't overwrite the current view. */
+  private loadGen = 0;
 
   /** Re-load when route param changes (e.g. clicking another library in sidebar). */
   private readonly paramEffect = effect(() => {
@@ -590,24 +593,26 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (!libraryId) return;
     if (!silent) this.loading.set(true);
     const monitored = this.filterMonitored();
+    const fs = this.filterStatus();
+    const fw = this.filterWatched();
+    const params = {
+      libraryId,
+      q: this.searchQuery() || undefined,
+      sortBy: this.sortBy(),
+      sortOrder: this.sortOrder(),
+      genre: this.selectedGenre() || undefined,
+      collectionId: this.selectedCollectionId() ?? undefined,
+      monitored: monitored ? monitored === 'true' : undefined,
+      missing: fs === 'missing' ? true : fs === 'downloaded' ? false : undefined,
+      cutoffUnmet: fs === 'cutoffUnmet' ? true : undefined,
+      onlyWatched: fw === 'watched' ? true : undefined,
+      excludeWatched: fw === 'unwatched' ? true : undefined,
+      limit: 0,
+    } as const;
+    const gen = ++this.loadGen;
     try {
-      const fs = this.filterStatus();
-      const fw = this.filterWatched();
       const [res, watchedIds] = await Promise.all([
-        this.mediaService.getAll({
-          libraryId,
-          q: this.searchQuery() || undefined,
-          sortBy: this.sortBy(),
-          sortOrder: this.sortOrder(),
-          genre: this.selectedGenre() || undefined,
-          collectionId: this.selectedCollectionId() ?? undefined,
-          monitored: monitored ? monitored === 'true' : undefined,
-          missing: fs === 'missing' ? true : fs === 'downloaded' ? false : undefined,
-          cutoffUnmet: fs === 'cutoffUnmet' ? true : undefined,
-          onlyWatched: fw === 'watched' ? true : undefined,
-          excludeWatched: fw === 'unwatched' ? true : undefined,
-          limit: 0,
-        }),
+        this.mediaService.getAll(params),
         this.streamingApi.getWatchedMediaIds().catch(() => [] as number[]),
       ]);
       this.list.setItems(res.data, (m) => m.title);
@@ -615,6 +620,21 @@ export class LibraryComponent implements OnInit, OnDestroy {
     } finally {
       if (!silent) this.loading.set(false);
     }
+    queueMicrotask(() => {
+      // Cached lists paint instantly; revalidate so a media imported / files
+      // landed / watched-toggled since the last visit shows up without
+      // waiting on the 5 min TTL. Generation check drops a stale background
+      // result when the user has already moved to another library.
+      if (gen !== this.loadGen) return;
+      void Promise.all([
+        this.mediaService.getAll(params, { force: true }).catch(() => null),
+        this.streamingApi.getWatchedMediaIds({ force: true }).catch(() => null),
+      ]).then(([res, watchedIds]) => {
+        if (gen !== this.loadGen) return;
+        if (res) this.list.setItems(res.data, (m) => m.title);
+        if (watchedIds) this.watchedIds.set(new Set(watchedIds));
+      });
+    });
   }
 
   /** Series always toggleable (bulk endpoint, no file needed). Movies need
