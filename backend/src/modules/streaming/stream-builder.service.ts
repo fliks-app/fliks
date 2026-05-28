@@ -48,6 +48,7 @@ export class StreamBuilderService {
    * Evaluate a media file against a device profile and return the playback decision.
    */
   evaluate(
+    userId: number,
     resolved: ResolvedFile,
     profile: DeviceProfileDto,
     tokenParam: string,
@@ -130,7 +131,7 @@ export class StreamBuilderService {
     // HDR ladder. Anything that re-encodes via H.264 needs the tonemap
     // filter or AVPlayer rejects with -12927 (mismatched VUI vs codec).
     const needsTonemapping = isSourceHdr && !useHdrLadder;
-    this.activeStreamTracker.setHdrLadder(resolved.mediaFile.id, useHdrLadder);
+    this.activeStreamTracker.setHdrLadder(userId, resolved.mediaFile.id, useHdrLadder);
 
     // Codec selector: picks the variant the encoder pipeline will produce
     // when the playback path lands on transcode. The result is stored in
@@ -155,6 +156,7 @@ export class StreamBuilderService {
       userAgent,
     );
     this.activeStreamTracker.setVideoVariant(
+      userId,
       resolved.mediaFile.id,
       selectedVariant,
     );

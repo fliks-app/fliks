@@ -15,14 +15,13 @@ export interface DirectPlaySession {
 
 const STALE_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
 
+function userFileKey(userId: number, mediaFileId: number): string {
+  return `${userId}-${mediaFileId}`;
+}
+
 @Injectable()
 export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
   private readonly sessions = new Map<string, DirectPlaySession>();
-  /** Cache transcode reasons per mediaFileId (set during playback-info, read by dashboard) */
-  private readonly transcodeReasonsCache = new Map<
-    number,
-    { flag: string; message: string }[]
-  >();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
   onModuleInit() {
@@ -41,7 +40,7 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     mediaType: string,
     posterUrl: string | null,
   ) {
-    const key = `${userId}-${mediaFileId}`;
+    const key = userFileKey(userId, mediaFileId);
     const existing = this.sessions.get(key);
     if (existing) {
       existing.lastActivity = new Date();
@@ -60,8 +59,23 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
   }
 
   unregister(userId: number, mediaFileId: number) {
-    this.sessions.delete(`${userId}-${mediaFileId}`);
-    this.deviceNameCache.delete(`${userId}-${mediaFileId}`);
+    const key = userFileKey(userId, mediaFileId);
+    this.sessions.delete(key);
+    this.deviceNameCache.delete(key);
+    this.transcodeReasonsCache.delete(key);
+    this.tonemappingCache.delete(key);
+    this.burnInCache.delete(key);
+    this.audioStreamIndexCache.delete(key);
+    this.audioStreamCountCache.delete(key);
+    this.deviceTypeCache.delete(key);
+    this.useExtXMediaCache.delete(key);
+    this.useTsCache.delete(key);
+    this.encoderPresetCache.delete(key);
+    this.hdrLadderCache.delete(key);
+    this.videoVariantCache.delete(key);
+    this.canCopyVideoCache.delete(key);
+    this.canCopyAudioCache.delete(key);
+    this.audioPlanCache.delete(key);
   }
 
   /** Human-readable client device captured at playback-info ("Chrome — macOS",
@@ -71,36 +85,61 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
   private readonly deviceNameCache = new Map<string, string>();
 
   setDeviceName(userId: number, mediaFileId: number, name: string) {
-    if (name) this.deviceNameCache.set(`${userId}-${mediaFileId}`, name);
+    if (name) this.deviceNameCache.set(userFileKey(userId, mediaFileId), name);
   }
 
   getDeviceName(userId: number, mediaFileId: number): string | null {
-    return this.deviceNameCache.get(`${userId}-${mediaFileId}`) ?? null;
+    return this.deviceNameCache.get(userFileKey(userId, mediaFileId)) ?? null;
   }
 
-  private readonly tonemappingCache = new Map<number, boolean>();
+  /** Cache transcode reasons per (user, file) (set during playback-info, read by dashboard) */
+  private readonly transcodeReasonsCache = new Map<
+    string,
+    { flag: string; message: string }[]
+  >();
 
   setTranscodeReasons(
+    userId: number,
     mediaFileId: number,
     reasons: { flag: string; message: string }[],
   ) {
-    this.transcodeReasonsCache.set(mediaFileId, reasons);
+    this.transcodeReasonsCache.set(userFileKey(userId, mediaFileId), reasons);
   }
 
   getTranscodeReasons(
+    userId: number,
     mediaFileId: number,
   ): { flag: string; message: string }[] {
-    return this.transcodeReasonsCache.get(mediaFileId) ?? [];
+    return this.transcodeReasonsCache.get(userFileKey(userId, mediaFileId)) ?? [];
   }
 
-  private readonly burnInCache = new Map<number, BurnInSubtitle>();
+  private readonly tonemappingCache = new Map<string, boolean>();
 
-  setTonemapping(mediaFileId: number, value: boolean) {
-    this.tonemappingCache.set(mediaFileId, value);
+  setTonemapping(userId: number, mediaFileId: number, value: boolean) {
+    this.tonemappingCache.set(userFileKey(userId, mediaFileId), value);
   }
 
-  getTonemapping(mediaFileId: number): boolean {
-    return this.tonemappingCache.get(mediaFileId) ?? false;
+  getTonemapping(userId: number, mediaFileId: number): boolean {
+    return this.tonemappingCache.get(userFileKey(userId, mediaFileId)) ?? false;
+  }
+
+  private readonly burnInCache = new Map<string, BurnInSubtitle>();
+
+  setBurnIn(
+    userId: number,
+    mediaFileId: number,
+    info: BurnInSubtitle | undefined,
+  ) {
+    const key = userFileKey(userId, mediaFileId);
+    if (info) {
+      this.burnInCache.set(key, info);
+    } else {
+      this.burnInCache.delete(key);
+    }
+  }
+
+  getBurnIn(userId: number, mediaFileId: number): BurnInSubtitle | undefined {
+    return this.burnInCache.get(userFileKey(userId, mediaFileId)) ?? undefined;
   }
 
   /** HDR ladder eligibility — set at playback-info by stream-builder
@@ -109,90 +148,98 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
    *  playlist can emit the HEVC HDR ladder instead of the H.264 SDR
    *  ladder. Default false keeps the existing behaviour for callers
    *  that never reach playback-info (e.g. legacy direct URLs). */
-  private readonly hdrLadderCache = new Map<number, boolean>();
-  setHdrLadder(mediaFileId: number, value: boolean) {
-    this.hdrLadderCache.set(mediaFileId, value);
+  private readonly hdrLadderCache = new Map<string, boolean>();
+  setHdrLadder(userId: number, mediaFileId: number, value: boolean) {
+    this.hdrLadderCache.set(userFileKey(userId, mediaFileId), value);
   }
-  getHdrLadder(mediaFileId: number): boolean {
-    return this.hdrLadderCache.get(mediaFileId) ?? false;
+  getHdrLadder(userId: number, mediaFileId: number): boolean {
+    return this.hdrLadderCache.get(userFileKey(userId, mediaFileId)) ?? false;
   }
 
   /** Output codec variant chosen by stream-builder's selector. Read by
    *  the controller when building the SessionContext so ffmpeg-args
    *  resolves the right encoder descriptor. Single-codec-per-master
-   *  rule: only one variant per file at a time. */
-  private readonly videoVariantCache = new Map<number, CodecVariant>();
-  setVideoVariant(mediaFileId: number, variant: CodecVariant | null) {
-    if (variant) this.videoVariantCache.set(mediaFileId, variant);
-    else this.videoVariantCache.delete(mediaFileId);
+   *  rule: only one variant per (user, file) at a time. */
+  private readonly videoVariantCache = new Map<string, CodecVariant>();
+  setVideoVariant(
+    userId: number,
+    mediaFileId: number,
+    variant: CodecVariant | null,
+  ) {
+    const key = userFileKey(userId, mediaFileId);
+    if (variant) this.videoVariantCache.set(key, variant);
+    else this.videoVariantCache.delete(key);
   }
-  getVideoVariant(mediaFileId: number): CodecVariant | undefined {
-    return this.videoVariantCache.get(mediaFileId);
-  }
-
-  setBurnIn(mediaFileId: number, info: BurnInSubtitle | undefined) {
-    if (info) {
-      this.burnInCache.set(mediaFileId, info);
-    } else {
-      this.burnInCache.delete(mediaFileId);
-    }
-  }
-
-  getBurnIn(mediaFileId: number): BurnInSubtitle | undefined {
-    return this.burnInCache.get(mediaFileId) ?? undefined;
+  getVideoVariant(
+    userId: number,
+    mediaFileId: number,
+  ): CodecVariant | undefined {
+    return this.videoVariantCache.get(userFileKey(userId, mediaFileId));
   }
 
   private readonly audioStreamIndexCache = new Map<
-    number,
+    string,
     number | undefined
   >();
 
-  /** Number of audio streams per media file — used to decide multi-audio HLS mode */
-  private readonly audioStreamCountCache = new Map<number, number>();
+  /** Number of audio streams the user's device is exposed to — used to
+   *  decide multi-audio HLS mode. Per-(user, file) because a profile
+   *  that caps maxAudioStreams may see fewer streams than another. */
+  private readonly audioStreamCountCache = new Map<string, number>();
 
-  setAudioStreamCount(mediaFileId: number, count: number) {
-    this.audioStreamCountCache.set(mediaFileId, count);
+  setAudioStreamCount(userId: number, mediaFileId: number, count: number) {
+    this.audioStreamCountCache.set(userFileKey(userId, mediaFileId), count);
   }
 
-  getAudioStreamCount(mediaFileId: number): number {
-    return this.audioStreamCountCache.get(mediaFileId) ?? 0;
+  getAudioStreamCount(userId: number, mediaFileId: number): number {
+    return this.audioStreamCountCache.get(userFileKey(userId, mediaFileId)) ?? 0;
   }
 
   /** Client device category ('mobile' | 'desktop') captured at playback-info.
    *  Used by hlsMaster and HLS segment endpoints to pick the right bitrate ladder. */
-  private readonly deviceTypeCache = new Map<number, 'mobile' | 'desktop'>();
+  private readonly deviceTypeCache = new Map<string, 'mobile' | 'desktop'>();
 
-  setDeviceType(mediaFileId: number, value: 'mobile' | 'desktop') {
-    this.deviceTypeCache.set(mediaFileId, value);
+  setDeviceType(
+    userId: number,
+    mediaFileId: number,
+    value: 'mobile' | 'desktop',
+  ) {
+    this.deviceTypeCache.set(userFileKey(userId, mediaFileId), value);
   }
 
-  getDeviceType(mediaFileId: number): 'mobile' | 'desktop' {
-    return this.deviceTypeCache.get(mediaFileId) ?? 'desktop';
+  getDeviceType(userId: number, mediaFileId: number): 'mobile' | 'desktop' {
+    return (
+      this.deviceTypeCache.get(userFileKey(userId, mediaFileId)) ?? 'desktop'
+    );
   }
 
   /** Whether master.m3u8 decided to use separate audio renditions (EXT-X-MEDIA). */
-  private readonly useExtXMediaCache = new Map<number, boolean>();
+  private readonly useExtXMediaCache = new Map<string, boolean>();
 
-  setUseExtXMedia(mediaFileId: number, value: boolean) {
-    this.useExtXMediaCache.set(mediaFileId, value);
+  setUseExtXMedia(userId: number, mediaFileId: number, value: boolean) {
+    this.useExtXMediaCache.set(userFileKey(userId, mediaFileId), value);
   }
 
-  getUseExtXMedia(mediaFileId: number): boolean {
-    return this.useExtXMediaCache.get(mediaFileId) ?? false;
+  getUseExtXMedia(userId: number, mediaFileId: number): boolean {
+    return (
+      this.useExtXMediaCache.get(userFileKey(userId, mediaFileId)) ?? false
+    );
   }
 
   /** Set when the playback target is a Tizen TV that needs the MPEG-TS
    *  fallback (issue #148 — AVPlay rejects HLS-fMP4 from the HLS muxer).
    *  Drives the HLS segment container choice (mpegts vs fmp4) in
-   *  `buildFfmpegArgs`. Cast / browser / native mobile never set this. */
-  private readonly useTsCache = new Map<number, boolean>();
+   *  `buildFfmpegArgs`. Cast / browser / native mobile never set this.
+   *  Per-(user, file) because two devices on the same file can disagree
+   *  on the container — e.g. a Tizen + a browser session. */
+  private readonly useTsCache = new Map<string, boolean>();
 
-  setUseTs(mediaFileId: number, value: boolean) {
-    this.useTsCache.set(mediaFileId, value);
+  setUseTs(userId: number, mediaFileId: number, value: boolean) {
+    this.useTsCache.set(userFileKey(userId, mediaFileId), value);
   }
 
-  getUseTs(mediaFileId: number): boolean {
-    return this.useTsCache.get(mediaFileId) ?? false;
+  getUseTs(userId: number, mediaFileId: number): boolean {
+    return this.useTsCache.get(userFileKey(userId, mediaFileId)) ?? false;
   }
 
   private segmentDurationCache = 3;
@@ -205,25 +252,35 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
     return this.segmentDurationCache;
   }
 
-  setAudioStreamIndex(mediaFileId: number, index: number | undefined) {
-    if (index != null) this.audioStreamIndexCache.set(mediaFileId, index);
-    else this.audioStreamIndexCache.delete(mediaFileId);
+  setAudioStreamIndex(
+    userId: number,
+    mediaFileId: number,
+    index: number | undefined,
+  ) {
+    const key = userFileKey(userId, mediaFileId);
+    if (index != null) this.audioStreamIndexCache.set(key, index);
+    else this.audioStreamIndexCache.delete(key);
   }
 
-  getAudioStreamIndex(mediaFileId: number): number | undefined {
-    return this.audioStreamIndexCache.get(mediaFileId);
+  getAudioStreamIndex(
+    userId: number,
+    mediaFileId: number,
+  ): number | undefined {
+    return this.audioStreamIndexCache.get(userFileKey(userId, mediaFileId));
   }
 
   // ── Admin streaming settings forwarded to transcode sessions ──
-  private readonly encoderPresetCache = new Map<number, string>();
+  private readonly encoderPresetCache = new Map<string, string>();
   private qsvLowPowerCache = false;
 
-  setEncoderPreset(mediaFileId: number, preset: string) {
-    this.encoderPresetCache.set(mediaFileId, preset);
+  setEncoderPreset(userId: number, mediaFileId: number, preset: string) {
+    this.encoderPresetCache.set(userFileKey(userId, mediaFileId), preset);
   }
 
-  getEncoderPreset(mediaFileId: number): string {
-    return this.encoderPresetCache.get(mediaFileId) ?? 'faster';
+  getEncoderPreset(userId: number, mediaFileId: number): string {
+    return (
+      this.encoderPresetCache.get(userFileKey(userId, mediaFileId)) ?? 'faster'
+    );
   }
 
   /** QSV advanced options are global (driven by admin streaming settings). */
@@ -245,30 +302,35 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
 
   // ── Source-vs-client compat captured at playback-info time, read at
   //    master.m3u8 time to decide whether to emit a smart-remux variant ──
-  private readonly canCopyVideoCache = new Map<number, boolean>();
-  private readonly canCopyAudioCache = new Map<number, boolean>();
+  private readonly canCopyVideoCache = new Map<string, boolean>();
+  private readonly canCopyAudioCache = new Map<string, boolean>();
+  // Source dimensions are a property of the file, identical across users.
   private readonly sourceWidthCache = new Map<number, number>();
   private readonly sourceHeightCache = new Map<number, number>();
 
-  setCanCopyVideo(mediaFileId: number, value: boolean) {
-    this.canCopyVideoCache.set(mediaFileId, value);
+  setCanCopyVideo(userId: number, mediaFileId: number, value: boolean) {
+    this.canCopyVideoCache.set(userFileKey(userId, mediaFileId), value);
   }
-  getCanCopyVideo(mediaFileId: number): boolean {
-    return this.canCopyVideoCache.get(mediaFileId) ?? false;
+  getCanCopyVideo(userId: number, mediaFileId: number): boolean {
+    return (
+      this.canCopyVideoCache.get(userFileKey(userId, mediaFileId)) ?? false
+    );
   }
 
-  setCanCopyAudio(mediaFileId: number, value: boolean) {
-    this.canCopyAudioCache.set(mediaFileId, value);
+  setCanCopyAudio(userId: number, mediaFileId: number, value: boolean) {
+    this.canCopyAudioCache.set(userFileKey(userId, mediaFileId), value);
   }
-  getCanCopyAudio(mediaFileId: number): boolean {
-    return this.canCopyAudioCache.get(mediaFileId) ?? false;
+  getCanCopyAudio(userId: number, mediaFileId: number): boolean {
+    return (
+      this.canCopyAudioCache.get(userFileKey(userId, mediaFileId)) ?? false
+    );
   }
 
   /** Canonical audio output decision computed by `stream-builder` at
    *  `playback-info` time. Every consumer (ffmpeg-args, master-playlist,
    *  admin dashboard) reads from here — no re-derivation downstream. */
   private readonly audioPlanCache = new Map<
-    number,
+    string,
     | { mode: 'copy'; codec: string }
     | {
         mode: 'transcode';
@@ -278,6 +340,7 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
   >();
 
   setAudioPlan(
+    userId: number,
     mediaFileId: number,
     plan:
       | { mode: 'copy'; codec: string }
@@ -287,10 +350,10 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
           bitrateBps: number;
         },
   ) {
-    this.audioPlanCache.set(mediaFileId, plan);
+    this.audioPlanCache.set(userFileKey(userId, mediaFileId), plan);
   }
-  getAudioPlan(mediaFileId: number) {
-    return this.audioPlanCache.get(mediaFileId) ?? null;
+  getAudioPlan(userId: number, mediaFileId: number) {
+    return this.audioPlanCache.get(userFileKey(userId, mediaFileId)) ?? null;
   }
 
   setSourceDimensions(mediaFileId: number, width: number, height: number) {
@@ -313,10 +376,9 @@ export class ActiveStreamTracker implements OnModuleInit, OnModuleDestroy {
 
   private cleanup() {
     const cutoff = Date.now() - STALE_TIMEOUT_MS;
-    for (const [key, session] of this.sessions) {
+    for (const session of this.sessions.values()) {
       if (session.lastActivity.getTime() <= cutoff) {
-        this.sessions.delete(key);
-        this.deviceNameCache.delete(key);
+        this.unregister(session.userId, session.mediaFileId);
       }
     }
   }

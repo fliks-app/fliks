@@ -405,7 +405,10 @@ export class SystemController {
       // Single source of truth: the audio plan stream-builder stored at
       // playback-info time. mode/codec/bitrate are read directly — no
       // re-derivation, no string comparison gymnastics.
-      const audioPlan = this.activeStreamTracker.getAudioPlan(s.mediaFileId);
+      const audioPlan =
+        s.userId != null
+          ? this.activeStreamTracker.getAudioPlan(s.userId, s.mediaFileId)
+          : null;
 
       if (s.mode === 'transcode') {
         videoPlaybackMode = `Transcodage (${HW_ACCEL_LABEL[hwAccel] ?? hwAccel.toUpperCase()})`;
