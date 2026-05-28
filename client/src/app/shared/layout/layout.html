@@ -95,7 +95,7 @@
     <div appTvRow
          [appTvRowSnap]="true"
          class="hidden items-center justify-end gap-1 absolute right-4 z-50 pointer-events-none [&>*]:pointer-events-auto"
-         [style.top]="tv.isTv() ? 'calc(4rem + env(safe-area-inset-top, 0px))' : 'calc(1.5rem + env(safe-area-inset-top, 0px))'"
+         [style.top]="tv.isTv() ? 'calc(4rem + env(safe-area-inset-top, 0px))' : isNative ? 'calc(0.3rem + env(safe-area-inset-top, 1.5rem))' : '1.5rem'"
          [class.lg:flex]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
          [class.md:flex]="device.isTablet() && navbar.effectiveSidebarPinned()">
       @if (castPlayer.hasMedia()) {
@@ -123,9 +123,8 @@
     <main
       class="min-w-0 flex-1 p-4 lg:p-8"
       [class.overflow-x-clip]="!navbar.isHeroPage()"
-      [class.lg:pt-20]="!navbar.isHeroPage() && !isNative && !navbar.mobileNavbarVisible()"
+      [class.lg:pt-20]="!navbar.isHeroPage() && !navbar.mobileNavbarVisible()"
       [class.pt-8]="!navbar.isHeroPage() && !isNative && navbar.mobileNavbarVisible()"
-      [style.padding-top]="!navbar.isHeroPage() && isNative && !navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 1rem)' : null"
     >
       @if (!networkService.isOnline()) {
         <div class="alert alert-warning mb-4 flex items-center justify-between py-2">
@@ -159,10 +158,10 @@
              4 nav items distribute evenly across 5 columns. The FAB sits
              outside the dock to keep .dock's position:fixed intact. -->
         <span aria-hidden="true" class="invisible"></span>
-        <a routerLink="/requests" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: false }"
+        <a routerLink="/history" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: false }"
            (click)="resetNavHistory()">
-          <svg lucideClipboardList class="h-5 w-5"></svg>
-          <span class="dock-label truncate max-w-full">{{ 'nav.requests' | translate }}</span>
+          <svg lucideHistory class="h-5 w-5"></svg>
+          <span class="dock-label truncate max-w-full">{{ 'nav.history' | translate }}</span>
         </a>
         <button (click)="toggleBottomMenu()" [class.dock-active]="bottomMenuOpen()"
                 class="[&.dock-active]:before:hidden [&.dock-active]:after:hidden">
@@ -222,9 +221,14 @@
                 </a>
               </li>
               <li>
-                <a routerLink="/history" routerLinkActive="active" (click)="resetNavHistory()">
-                  <svg lucideHistory class="h-5 w-5"></svg>
-                  {{ 'nav.history' | translate }}
+                <a routerLink="/requests" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
+                  <span class="flex items-center gap-2">
+                    <svg lucideClipboardList class="h-5 w-5"></svg>
+                    {{ 'nav.requests' | translate }}
+                  </span>
+                  @if (pendingRequestCount() > 0) {
+                    <span class="badge badge-sm badge-warning">{{ pendingRequestCount() }}</span>
+                  }
                 </a>
               </li>
               <li>
