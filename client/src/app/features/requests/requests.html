@@ -34,14 +34,12 @@
           <!-- Mobile-only fanart backdrop with a dimming gradient so the
                foreground content stays legible (à la Overseerr). -->
           <div class="absolute inset-0 sm:hidden" aria-hidden="true">
-            @defer (on viewport) {
-              <app-request-poster
-                class="absolute inset-0"
-                [tmdbId]="row.tmdbId"
-                [mediaType]="row.mediaType"
-                mode="backdrop"
-              />
-            }
+            <app-request-poster
+              class="absolute inset-0"
+              [tmdbId]="row.tmdbId"
+              [mediaType]="row.mediaType"
+              mode="backdrop"
+            />
             <div class="absolute inset-0 bg-gradient-to-b from-base-100/45 via-base-100/80 to-base-100"></div>
           </div>
 
