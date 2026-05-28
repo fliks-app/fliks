@@ -34,9 +34,8 @@ const STATE_DB_WRITE_INTERVAL_MS = 30_000;
 @UseGuards(JwtOrApiKeyGuard)
 export class PlaybackController {
   /** When the last DB write happened per `(userId, mediaId, episodeId)`
-   *  tuple. Drives the debounce above. In-memory map, fine for a single
-   *  backend instance — Phase 5 may move this onto Redis if multi-instance
-   *  becomes a thing. */
+   *  tuple. Drives the debounce above. In-memory map — moves to a
+   *  shared store the day Fliks runs across multiple backend instances. */
   private readonly lastDbWriteAt = new Map<string, number>();
 
   constructor(

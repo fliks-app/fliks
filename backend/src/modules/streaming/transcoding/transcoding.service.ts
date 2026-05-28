@@ -147,22 +147,106 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 30_000);
   }
 
-  /** Get an existing session without creating or modifying it. */
+  /** Get an existing session for an exact `(file, user, profile)` triple.
+   *  Returns `undefined` if no matching session is registered — caller
+   *  should fall back to creating one. */
   getExistingSession(
     mediaFileId: number,
-    userId?: number,
+    userId: number | undefined,
+    profileHash: string,
   ): TranscodeSession | undefined {
-    const key = sessionKey(mediaFileId, userId);
-    return this.sessions.get(key);
+    return this.sessions.get(sessionKey(mediaFileId, userId, profileHash));
   }
 
   /** Get the short-lived early-segment companion session (if any). Lives in
-   *  parallel to the main session during a mid-file resume. */
+   *  parallel to the main session during a mid-file resume — same profile
+   *  hash as its main counterpart, scoped on its own map entry. */
   getExistingEarlySession(
     mediaFileId: number,
-    userId?: number,
+    userId: number | undefined,
+    profileHash: string,
   ): TranscodeSession | undefined {
-    return this.sessions.get(earlySessionKey(mediaFileId, userId));
+    return this.sessions.get(earlySessionKey(mediaFileId, userId, profileHash));
+  }
+
+  /** All transcode sessions registered for a given `(file, user)` pair —
+   *  one per profile variant. Used by full-file cleanup (`killSession`)
+   *  and by the admin dashboard. */
+  getSessionsForFileUser(
+    mediaFileId: number,
+    userId: number | undefined,
+  ): TranscodeSession[] {
+    const matches: TranscodeSession[] = [];
+    for (const s of this.sessions.values()) {
+      if (s.mediaFileId === mediaFileId && s.userId === userId) {
+        matches.push(s);
+      }
+    }
+    return matches;
+  }
+
+  /** Convenience lookup: derives the profile hash from the supplied
+   *  context and returns the matching session, if any. Use this from
+   *  segment-serving routes where the controller has just rebuilt the
+   *  session context from the request. */
+  findSessionByCtx(
+    mediaFileId: number,
+    ctx: SessionContext | undefined,
+  ): TranscodeSession | undefined {
+    return this.getExistingSession(
+      mediaFileId,
+      ctx?.userId,
+      this.computeProfileHashForCtx(ctx),
+    );
+  }
+
+  /** Same as {@link findSessionByCtx} for the early-segment companion. */
+  findEarlySessionByCtx(
+    mediaFileId: number,
+    ctx: SessionContext | undefined,
+  ): TranscodeSession | undefined {
+    return this.getExistingEarlySession(
+      mediaFileId,
+      ctx?.userId,
+      this.computeProfileHashForCtx(ctx),
+    );
+  }
+
+  /** Most-recently-accessed transcode session for this `(file, user)`
+   *  pair across every profile variant. Used by segment-serving routes
+   *  that can't cheaply reconstruct the session context — when only one
+   *  device is active this is exactly the session driving the playback,
+   *  and the multi-profile edge case (two devices, two profiles)
+   *  resolves to whichever side last fetched a segment. */
+  findCurrentSession(
+    mediaFileId: number,
+    userId: number | undefined,
+  ): TranscodeSession | undefined {
+    const sessions = this.getSessionsForFileUser(mediaFileId, userId);
+    if (sessions.length === 0) return undefined;
+    let best = sessions[0];
+    for (const s of sessions) {
+      if (s.lastAccess > best.lastAccess) best = s;
+    }
+    return best;
+  }
+
+  /** Companion of {@link findCurrentSession} for early sessions. */
+  findCurrentEarlySession(
+    mediaFileId: number,
+    userId: number | undefined,
+  ): TranscodeSession | undefined {
+    let best: TranscodeSession | undefined;
+    for (const s of this.sessions.values()) {
+      if (
+        s.mediaFileId === mediaFileId &&
+        s.userId === userId &&
+        s.id.endsWith('-early')
+      ) {
+        if (!best || s.lastAccess > best.lastAccess) best = s;
+      }
+    }
+    return best;
   }
 
   async onModuleDestroy() {
@@ -212,6 +296,16 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return Array.from(this.sessions.values());
   }
 
+  /** Profile hash for the given session context — derived from the same
+   *  fields {@link buildPlaybackProfileFromContext} consumes. Stashed on
+   *  the session and reused as the session-map key segment so multiple
+   *  profile variants of the same `(file, user)` coexist as siblings. */
+  computeProfileHashForCtx(ctx: SessionContext | undefined): string {
+    return computeProfileHash(
+      buildPlaybackProfileFromContext(ctx, getSegmentDuration() * 1000),
+    );
+  }
+
   /**
    * Resolve the on-disk cache directory for a session variant. Wraps
    * the {@link TranscodeCacheService} layout so every spawn site goes
@@ -225,11 +319,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     variant: 'main' | 'early' | 'remux' | { audio: number },
     quality?: string,
   ): { dir: string; profileHash: string } {
-    const baseProfile = buildPlaybackProfileFromContext(
-      ctx,
-      getSegmentDuration() * 1000,
-    );
-    const baseHash = computeProfileHash(baseProfile);
+    const baseHash = this.computeProfileHashForCtx(ctx);
     let hash: string;
     if (variant === 'main') hash = baseHash;
     else if (variant === 'early') hash = `${baseHash}-early`;
@@ -439,7 +529,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     ctx?: SessionContext,
     skipVerify = false,
   ): Promise<TranscodeSession> {
-    const key = sessionKey(mediaFileId, ctx?.userId);
+    const profileHash = this.computeProfileHashForCtx(ctx);
+    const key = sessionKey(mediaFileId, ctx?.userId, profileHash);
     const session = await this.withLock(key, () =>
       this.doGetOrCreateSession(
         key,
@@ -671,7 +762,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     absolutePath: string,
     ctx?: SessionContext,
   ): Promise<TranscodeSession> {
-    const id = earlySessionKey(mediaFileId, ctx?.userId);
+    const profileHash = this.computeProfileHashForCtx(ctx);
+    const id = earlySessionKey(mediaFileId, ctx?.userId, profileHash);
     return this.withLock(id, async () => {
       const existing = this.sessions.get(id);
       if (existing) {
@@ -1096,82 +1188,41 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return session;
   }
 
+  /** Stop every ffmpeg job for this `(file, user)` pair across all
+   *  profile variants. The on-disk cache **stays** — `TranscodeCacheService`
+   *  owns its lifecycle and will evict on TTL / LRU. A subsequent fresh
+   *  play (same profile) reattaches to the existing segments instead of
+   *  retranscoding from scratch. */
   async killSession(mediaFileId: number, userId?: number) {
-    const key = sessionKey(mediaFileId, userId);
-    const earlyKey = earlySessionKey(mediaFileId, userId);
-    const promises: Promise<void>[] = [];
-    const session = this.sessions.get(key);
-    if (session) {
-      this.log.log(`Kill session [${key}] (quality: ${session.quality})`);
-      this.sessions.delete(key);
-      promises.push(
-        this.killAndClean(session.process, session.cachePath, session.id),
-      );
+    const sessions = this.getSessionsForFileUser(mediaFileId, userId);
+    if (sessions.length === 0) return;
+    for (const s of sessions) {
+      this.log.log(`Kill session [${s.id}] (quality: ${s.quality})`);
+      this.sessions.delete(s.id);
+      s.intentionallyKilled = true;
     }
-    const earlySession = this.sessions.get(earlyKey);
-    if (earlySession) {
-      this.sessions.delete(earlyKey);
-      promises.push(
-        this.killAndClean(
-          earlySession.process,
-          earlySession.cachePath,
-          earlySession.id,
-        ),
-      );
-    }
-    const audioPrefix = `${key}-a`;
-    for (const [id, s] of this.sessions) {
-      if (id.startsWith(audioPrefix)) {
-        this.sessions.delete(id);
-        promises.push(this.killAndClean(s.process, s.cachePath, s.id));
-      }
-    }
-    await Promise.all(promises);
-    // Parent-dir rm is serialised under the main session's per-key lock
-    // (the same lock getOrCreate uses) so a fresh session entering
-    // mid-cleanup can't see its cache wiped from under it. The lock
-    // makes "either rm the user-file dir OR start a new session"
-    // atomic.
-    await this.removeUserFileDirIfIdle(mediaFileId, userId);
+    await Promise.all(sessions.map((s) => this.killProcess(s.process)));
   }
 
-  private async removeUserFileDirIfIdle(
-    mediaFileId: number,
-    userId: number | undefined,
-  ): Promise<void> {
-    const lockKey = sessionKey(mediaFileId, userId);
-    await this.withLock(lockKey, async () => {
-      const stillActive = [...this.sessions.values()].some(
-        (s) => s.mediaFileId === mediaFileId && s.userId === userId,
-      );
-      const parentDir = this.userFileParentDir(mediaFileId, userId);
-      if (stillActive) {
-        this.log.log(
-          `[disk] skip rm ${parentDir} — sessions still alive for ${lockKey}`,
-        );
-        return;
-      }
-      const existed = existsSync(parentDir);
-      this.log.log(`[disk] rm parent ${parentDir} (existed=${existed})`);
-      await fsp.rm(parentDir, { recursive: true, force: true }).catch(() => {});
-    });
-  }
-
-  /** Kill a session by its map key (used by admin dashboard). */
+  /** Kill a session by its map key (used by admin dashboard). The cache
+   *  directory stays — the admin can purge it separately via a future
+   *  cache-eviction action; killing a job mid-stream just frees CPU. */
   killSessionById(id: string) {
     const session = this.sessions.get(id);
     if (!session) return;
     this.sessions.delete(id);
-    this.gracefulKill(session);
+    session.intentionallyKilled = true;
+    void this.killProcess(session.process);
   }
 
-  /** Kill all sessions for a given media file (used on player close / page unload). */
+  /** Kill every session for a given media file across all users / profiles. */
   killAllSessionsForFile(mediaFileId: number) {
     for (const [id, session] of this.sessions) {
       if (session.mediaFileId === mediaFileId) {
         this.log.log(`Killing session ${id} for media file ${mediaFileId}`);
         this.sessions.delete(id);
-        this.gracefulKill(session);
+        session.intentionallyKilled = true;
+        void this.killProcess(session.process);
       }
     }
   }
@@ -1187,7 +1238,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     requestedSegment = 0,
     ctx?: SessionContext,
   ): Promise<TranscodeSession> {
-    const key = sessionKey(mediaFileId, ctx?.userId);
+    // Remux variant lives under its own profile bucket so the cache
+    // path matches `cacheDirFor(..., 'remux')`'s `${baseHash}-remux`.
+    const remuxHash = `${this.computeProfileHashForCtx(ctx)}-remux`;
+    const key = sessionKey(mediaFileId, ctx?.userId, remuxHash);
     return this.withLock(key, () =>
       this.doGetOrCreateRemuxSession(
         key,
@@ -1278,7 +1332,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     requestedSegment = 0,
     ctx?: SessionContext,
   ): Promise<TranscodeSession> {
-    const key = audioSessionKey(mediaFileId, audioIndex, ctx?.userId);
+    const audioHash = `${this.computeProfileHashForCtx(ctx)}-a${audioIndex}`;
+    const key = audioSessionKey(
+      mediaFileId,
+      audioIndex,
+      ctx?.userId,
+      audioHash,
+    );
     return this.withLock(key, () =>
       this.doGetOrCreateAudioSession(
         key,
@@ -1374,7 +1434,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       if (now - session.lastAccess > SESSION_TIMEOUT_MS && processDone) {
         this.log.log(`Cleanup stale session: ${id}`);
         this.sessions.delete(id);
-        this.gracefulKill(session);
+        // Cache is preserved across session evictions —
+        // TranscodeCacheService GC owns the disk lifecycle (TTL + LRU)
+        // so a fresh play after this point reattaches to the existing
+        // segments instead of retranscoding.
       }
     }
   }

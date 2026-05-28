@@ -46,9 +46,8 @@ export interface LiveSessionSnapshot extends Omit<
   lastBeat: Date;
 }
 
-/** Defaults match the transcoding service's 30-min idle timeout. Phase 5
- *  drops {@link LIVE_SESSION_TTL_MS} to 30 s once the heartbeat loop is
- *  wired client-side. */
+/** Session TTL matches the transcoding service's idle window — a live
+ *  session is considered dead after this long without a heartbeat. */
 const DEFAULT_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_GC_INTERVAL_MS = 30_000;
 
@@ -66,10 +65,9 @@ function readEnvInt(name: string, fallback: number): number {
  * via `DELETE /api/stream/sessions/:sessionId`. GC drops entries that
  * haven't been beaten in {@link DEFAULT_TTL_MS}.
  *
- * Phase 3: passive — the registry is populated, refreshed, and exposed
- * to the admin dashboard for enrichment, but no downstream lifecycle
- * decision reads from it yet. Phase 4 starts gating the ffmpeg job
- * grace window on `listForJob` cardinality.
+ * Drives the admin "now watching" dashboard and the ffmpeg job grace
+ * window — `listForJob` reports whether a given encoder still has any
+ * live consumer.
  */
 @Injectable()
 export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {

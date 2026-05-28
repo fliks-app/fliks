@@ -27,8 +27,6 @@ import {
   PROFILES,
   DESKTOP_HDR_PROFILES,
   SessionContext,
-  getHdrLadderForDevice,
-  getLadderForDevice,
   profileFitsSource,
   computeProfileHash,
   buildPlaybackProfileFromContext,
@@ -214,7 +212,6 @@ export class StreamingController {
     return this.streamingSettingsCache.get();
   }
 
-
   private buildSessionContext(
     req: Request,
     resolved: ResolvedFile,
@@ -333,12 +330,14 @@ export class StreamingController {
         }
         effectiveStartAt = effectiveStartAt ?? 0;
       }
+      const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+      const profileHash = this.transcodingService.computeProfileHashForCtx(ctx);
       const existing = this.transcodingService.getExistingSession(
         mediaFileId,
         req.user?.id,
+        profileHash,
       );
       if (existing && existing.process.exitCode === null) return;
-      const ctx = this.buildSessionContext(req, resolved, mediaFileId);
 
       // `remux` / `original` resolve to the player's actual rung only
       // after the manifest loads — Shaka filters variants whose
@@ -638,57 +637,12 @@ export class StreamingController {
       sv?.height ?? 0,
     );
 
-    // Device-profile drift detection. A single user can hop between a
-    // browser tab (which accepts EAC-3 copy on 2-ch) and the Chromecast
-    // (AAC transcode only) without unloading the file. The session map
-    // is keyed (mediaFileId, userId), so both hops share the same
-    // entry — and prewarm short-circuits on `existing.exitCode === null`
-    // without comparing plans. The result is a manifest advertising the
-    // new codec while ffmpeg keeps writing segments in the old one,
-    // tripping Shaka 4032 (CONTENT_UNSUPPORTED_BY_BROWSER) on Cast.
-    // Kill the running session whenever the new audio plan, the new
-    // video variant or the new mux flavour (Tizen hopping TS ↔ fmp4)
-    // disagrees with what it was spawned for; the prewarm immediately
-    // below then respawns with the up-to-date plan.
-    const newAudioCodec = result.audioPlan?.codec;
-    const newVideoCodec = this.activeStreamTracker
-      .getVideoVariant(mediaFileId)
-      ?.codec;
-    const newMuxFlavour: 'ts' | 'fmp4' = effectiveUseTs ? 'ts' : 'fmp4';
-    // Audio layout the *next* session would be spawned with. Mirrors
-    // the gate in `buildSessionContext` so flipping `useTs` (which
-    // toggles muxed-vs-separated audio under us) kills the running
-    // session instead of leaving an EXT-X-MEDIA master pointing at a
-    // `var_stream_map`-less segment tree.
-    const trackedAudioCount =
-      this.activeStreamTracker.getAudioStreamCount(mediaFileId);
-    const newAudioLayout: 'inline' | 'var-stream-map' = pickAudioLayout(
-      trackedAudioCount,
-      newMuxFlavour,
-    );
-    const existingForDrift = this.transcodingService.getExistingSession(
-      mediaFileId,
-      req.user?.id,
-    );
-    if (
-      existingForDrift &&
-      existingForDrift.process.exitCode === null &&
-      (existingForDrift.audioPlan?.codec !== newAudioCodec ||
-        existingForDrift.videoVariant?.codec !== newVideoCodec ||
-        (existingForDrift.muxFlavour &&
-          existingForDrift.muxFlavour !== newMuxFlavour) ||
-        (existingForDrift.audioLayout &&
-          existingForDrift.audioLayout !== newAudioLayout))
-    ) {
-      this.log.log(
-        `[playback-info] profile drift on file ${mediaFileId} — killing session ` +
-          `(audio: ${existingForDrift.audioPlan?.codec ?? '∅'} → ${newAudioCodec ?? '∅'}, ` +
-          `video: ${existingForDrift.videoVariant?.codec ?? '∅'} → ${newVideoCodec ?? '∅'}, ` +
-          `mux: ${existingForDrift.muxFlavour ?? '∅'} → ${newMuxFlavour}, ` +
-          `audioLayout: ${existingForDrift.audioLayout ?? '∅'} → ${newAudioLayout})`,
-      );
-      await this.transcodingService.killSession(mediaFileId, req.user?.id);
-    }
+    // Different device profiles (codec / mux / audio layout) hash to
+    // different session-map keys, so multi-device playback of the same
+    // file lands on coexisting sessions instead of mutually killing one
+    // another. No drift kill needed: a hop from browser → cast spawns a
+    // new session under the cast's profileHash and leaves the browser's
+    // session untouched.
 
     // Pre-spawn ffmpeg as early as possible — the client will GET master.m3u8
     // next (~100–300ms later) and then seg-0. Starting ffmpeg here overlaps
@@ -1118,7 +1072,7 @@ export class StreamingController {
     // on a multi-audio video session (master.m3u8 only emits EXT-X-MEDIA when
     // `audioStreams.length > 1`), so we don't need a separate audio-only path —
     // any segment Shaka asks for here is in `<videoSession.cachePath>/<varStreamPath>`.
-    let videoSession = this.transcodingService.getExistingSession(
+    let videoSession = this.transcodingService.findCurrentSession(
       mediaFileId,
       user?.id,
     );
@@ -1165,7 +1119,7 @@ export class StreamingController {
     // parallel with main, so it lands first. Use a short timeout — main
     // covers the same files behind it, so wasting 60s on early when it has
     // already exited adds latency for nothing.
-    const earlySession = this.transcodingService.getExistingEarlySession(
+    const earlySession = this.transcodingService.findCurrentEarlySession(
       mediaFileId,
       user?.id,
     );
@@ -1240,7 +1194,7 @@ export class StreamingController {
     // Exception: Cast passes startAt for resume position — pre-start for Cast/remux only.
     const startAtRaw = firstQueryString(req.query, 'startAt');
     if (startAtRaw) {
-      const existing = this.transcodingService.getExistingSession(
+      const existing = this.transcodingService.findCurrentSession(
         mediaFileId,
         req.user?.id,
       );
@@ -1333,7 +1287,7 @@ export class StreamingController {
     // Fast path: if a session already exists, skip the DB query — we only
     // need resolveFile for absolutePath + context when creating a NEW session.
     // Saves ~15-25ms per segment (a 2h file = ~2400 segments = ~40s saved).
-    const existing = this.transcodingService.getExistingSession(
+    const existing = this.transcodingService.findCurrentSession(
       mediaFileId,
       req.user?.id,
     );
@@ -1361,7 +1315,7 @@ export class StreamingController {
       // Same caveat as the segment path: remux video-only doesn't use
       // var_stream_map, so the `0/` prefix would 404 on the init lookup.
       const initFile = ma && quality !== 'remux' ? `0/${segment}` : segment;
-      const earlySession = this.transcodingService.getExistingEarlySession(
+      const earlySession = this.transcodingService.findCurrentEarlySession(
         mediaFileId,
         req.user?.id,
       );
@@ -1441,9 +1395,9 @@ export class StreamingController {
 
     // Early probe routing: when Shaka requests a segment before the main
     // session's startSegment (typical Shaka VOD behavior on resume), route
-    // to the early companion if it exists. 10s timeout safety net : si
-    // early hang (régression du fix Phase 2), fall through au slow path
-    // standard rather than blocking 60s.
+    // to the early companion if it exists. 10 s timeout safety net — if
+    // the early session hangs we fall through to the slow path rather
+    // than blocking on a 60 s waitForSegment.
     const isEarlyProbe =
       quality !== 'remux' &&
       existing != null &&
@@ -1452,7 +1406,7 @@ export class StreamingController {
       existing.startSegment > 0 &&
       segIndex < existing.startSegment;
     if (isEarlyProbe) {
-      const earlySession = this.transcodingService.getExistingEarlySession(
+      const earlySession = this.transcodingService.findCurrentEarlySession(
         mediaFileId,
         req.user?.id,
       );

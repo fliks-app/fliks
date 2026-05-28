@@ -48,10 +48,11 @@ function readEnvInt(name: string, fallback: number): number {
 }
 
 /**
- * Read-only index of the on-disk transcode cache. Phase 1: scans the
- * cache root at boot to build the in-memory index but does not yet
- * serve segments or respond to job writes. Lookup / GC plumbing is in
- * place so later phases can wire it without changing the public shape.
+ * In-memory index of the on-disk transcode cache. Scans the cache root
+ * at boot, tracks segment / init writes as `TranscodingService` fans
+ * them out, evicts entries by TTL + LRU. `lookup` returns the
+ * authoritative entry the streaming controller can serve from before
+ * spawning a fresh ffmpeg.
  */
 @Injectable()
 export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
@@ -160,8 +161,8 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Garbage collection pass. Three passes in order:
-   * 1. Drop entries whose on-disk dir has been wiped externally (the
-   *    transcoding service still owns lifecycle in phase 2).
+   * 1. Drop entries whose on-disk dir has been wiped externally
+   *    (kept in sync with the transcoding service's own cleanup paths).
    * 2. Evict by TTL.
    * 3. Evict least-recently-used until total bytes back under cap.
    */
