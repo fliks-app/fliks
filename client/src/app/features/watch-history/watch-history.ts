@@ -72,6 +72,15 @@ export class WatchHistoryComponent implements OnInit, OnDestroy {
       this.total.set(res.total);
     } catch { /* ignore */ }
     if (!silent) this.loading.set(false);
+    queueMicrotask(() => {
+      void this.streamingApi
+        .getHistory(this.currentPage(), this.pageSize, { force: true })
+        .then((fresh) => {
+          this.items.set(fresh.data);
+          this.total.set(fresh.total);
+        })
+        .catch(() => { /* keep cached body */ });
+    });
   }
 
   async goToPage(page: number) {

@@ -119,19 +119,24 @@ export class CalendarComponent implements OnInit {
     const d = this.currentDate();
     const start = new Date(d.getFullYear(), d.getMonth(), 1 - 7);
     const end = new Date(d.getFullYear(), d.getMonth() + 1, 7);
+    const startStr = this.toDateStr(start);
+    const endStr = this.toDateStr(end);
     this.loading.set(true);
     this.error.set('');
     try {
-      const data = await this.mediaService.getCalendar(
-        this.toDateStr(start),
-        this.toDateStr(end),
-      );
+      const data = await this.mediaService.getCalendar(startStr, endStr);
       this.entries.set(data);
     } catch {
       this.error.set('calendar.load_error');
     } finally {
       this.loading.set(false);
     }
+    queueMicrotask(() => {
+      void this.mediaService
+        .getCalendar(startStr, endStr, false, false, { force: true })
+        .then((fresh) => this.entries.set(fresh))
+        .catch(() => { /* keep cached entries */ });
+    });
   }
 
   private toDateStr(d: Date): string {

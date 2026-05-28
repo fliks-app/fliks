@@ -210,14 +210,28 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // Search local library first
     this.state.localLoading.set(true);
+    const localParams = { q, type, limit: 20, sortBy: 'title' } as const;
     try {
-      const res = await this.mediaService.getAll({ q, type, limit: 20, sortBy: 'title' });
+      const res = await this.mediaService.getAll(localParams);
       this.state.localResults.set(res.data);
     } catch {
       this.state.localResults.set([]);
     } finally {
       this.state.localLoading.set(false);
     }
+    queueMicrotask(() => {
+      // Revalidate: cached result paints instantly, then catch up to fresh
+      // matches (a media imported since the last identical query lands here).
+      if (this.state.query().trim() !== q || this.state.filter() !== filter) return;
+      void this.mediaService
+        .getAll(localParams, { force: true })
+        .then((fresh) => {
+          if (this.state.query().trim() === q && this.state.filter() === filter) {
+            this.state.localResults.set(fresh.data);
+          }
+        })
+        .catch(() => { /* keep cached results */ });
+    });
 
     // Then search external providers (if enabled)
     if (!this.state.externalEnabled()) return;

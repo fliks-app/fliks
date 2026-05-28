@@ -430,11 +430,14 @@ export class StreamingApiService {
     );
   }
 
-  getHistory(page = 1, limit = 25) {
+  getHistory(page = 1, limit = 25, opts: { force?: boolean } = {}) {
+    const reqOpts: {
+      params: Record<string, string>;
+      headers?: { [k: string]: string };
+    } = { params: { page: String(page), limit: String(limit) } };
+    if (opts.force) reqOpts.headers = { [CACHE_BYPASS_HEADER]: '1' };
     return firstValueFrom(
-      this.http.get<{ data: WatchHistoryItem[]; total: number }>('/api/playback/history', {
-        params: { page: String(page), limit: String(limit) },
-      }),
+      this.http.get<{ data: WatchHistoryItem[]; total: number }>('/api/playback/history', reqOpts),
     );
   }
 
@@ -445,8 +448,11 @@ export class StreamingApiService {
     );
   }
 
-  getWatchedMediaIds(): Promise<number[]> {
-    return firstValueFrom(this.http.get<number[]>('/api/playback/watched-ids'));
+  getWatchedMediaIds(opts: { force?: boolean } = {}): Promise<number[]> {
+    const headers = opts.force ? { [CACHE_BYPASS_HEADER]: '1' } : undefined;
+    return firstValueFrom(
+      this.http.get<number[]>('/api/playback/watched-ids', headers ? { headers } : {}),
+    );
   }
 
   toggleWatched(mediaId: number, mediaFileId: number, episodeId?: number) {

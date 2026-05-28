@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
+import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
 
 export interface QualityProfileBrief {
   id: number;
@@ -290,36 +291,42 @@ export class MediaService {
     );
   }
 
-  getGenres(libraryId?: number) {
-    const params = libraryId
-      ? { params: { libraryId: String(libraryId) } }
-      : {};
+  getGenres(libraryId?: number, opts: { force?: boolean } = {}) {
+    const reqOpts: { params?: { libraryId: string }; headers?: { [k: string]: string } } = {};
+    if (libraryId) reqOpts.params = { libraryId: String(libraryId) };
+    if (opts.force) reqOpts.headers = { [CACHE_BYPASS_HEADER]: '1' };
     return firstValueFrom(
-      this.http.get<GenreSummary[]>('/api/media/genres', params),
+      this.http.get<GenreSummary[]>('/api/media/genres', reqOpts),
     );
   }
 
-  getCollections(libraryId?: number) {
-    const params = libraryId
-      ? { params: { libraryId: String(libraryId) } }
-      : {};
+  getCollections(libraryId?: number, opts: { force?: boolean } = {}) {
+    const reqOpts: { params?: { libraryId: string }; headers?: { [k: string]: string } } = {};
+    if (libraryId) reqOpts.params = { libraryId: String(libraryId) };
+    if (opts.force) reqOpts.headers = { [CACHE_BYPASS_HEADER]: '1' };
     return firstValueFrom(
-      this.http.get<CollectionSummary[]>('/api/media/collections', params),
+      this.http.get<CollectionSummary[]>('/api/media/collections', reqOpts),
     );
   }
 
-  getAll(params: SearchParams = {}) {
+  getAll(params: SearchParams = {}, opts: { force?: boolean } = {}) {
     let httpParams = new HttpParams();
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null && value !== '') {
         httpParams = httpParams.set(key, String(value));
       }
     }
-    return firstValueFrom(this.http.get<MediaPage>('/api/media', { params: httpParams }));
+    const headers = opts.force ? { [CACHE_BYPASS_HEADER]: '1' } : undefined;
+    return firstValueFrom(
+      this.http.get<MediaPage>('/api/media', headers ? { params: httpParams, headers } : { params: httpParams }),
+    );
   }
 
-  getOne(id: number) {
-    return firstValueFrom(this.http.get<Media>(`/api/media/${id}`));
+  getOne(id: number, opts: { force?: boolean } = {}) {
+    const headers = opts.force ? { [CACHE_BYPASS_HEADER]: '1' } : undefined;
+    return firstValueFrom(
+      this.http.get<Media>(`/api/media/${id}`, headers ? { headers } : {}),
+    );
   }
 
   getTracking(id: number) {
@@ -391,12 +398,13 @@ export class MediaService {
     return firstValueFrom(this.http.put<Media>(`/api/media/${id}`, { monitored }));
   }
 
-  getCalendar(start: string, end: string, monitoredOnly = false, requestedByMe = false) {
+  getCalendar(start: string, end: string, monitoredOnly = false, requestedByMe = false, opts: { force?: boolean } = {}) {
     const params: Record<string, string> = { start, end };
     if (monitoredOnly) params['monitoredOnly'] = 'true';
     if (requestedByMe) params['requestedByMe'] = 'true';
+    const headers = opts.force ? { [CACHE_BYPASS_HEADER]: '1' } : undefined;
     return firstValueFrom(
-      this.http.get<CalendarEntry[]>('/api/media/calendar', { params }),
+      this.http.get<CalendarEntry[]>('/api/media/calendar', headers ? { params, headers } : { params }),
     );
   }
 
