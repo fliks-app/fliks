@@ -380,28 +380,18 @@ export class MediaImportService {
     await this.metadata.downloadMediaImages(saved.id, details);
 
     for (const sd of seasons) {
-      const season = this.seasonRepo.create({
-        media: saved,
-        seasonNumber: sd.seasonNumber,
-        monitored: true,
-      });
-      const sSaved = await this.seasonRepo.save(season);
-      if (sd.episodes.length > 0) {
-        await this.episodeRepo.insert(
-          sd.episodes.map((ep) => ({
-            season: sSaved,
-            episodeNumber: ep.episodeNumber,
-            title: ep.title || undefined,
-            overview: ep.overview || undefined,
-            airDate: ep.airDate || undefined,
-            runtime: ep.runtime ?? undefined,
-            monitored: true,
-          })),
-        );
-      }
-      if (sd.posterUrl) {
-        await this.metadata.downloadSeasonPoster(sSaved.id, sd.posterUrl);
-      }
+      const sSaved = await this.seasonRepo.save(
+        this.seasonRepo.create({
+          media: saved,
+          seasonNumber: sd.seasonNumber,
+          monitored: true,
+        }),
+      );
+      // Defer to the same per-season routine the metadata refresh uses, so
+      // import and refresh end up with identical episode rows, stills and
+      // season posters — diverging here is exactly what left every episode
+      // sharing the series fanart until a manual refresh.
+      await this.metadata.applySeasonDetails(sSaved, sd);
     }
 
     await this.metadata.updateSearchVector(saved.id);

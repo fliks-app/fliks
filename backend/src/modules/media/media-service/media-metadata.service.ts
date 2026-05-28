@@ -238,8 +238,11 @@ export class MediaMetadataService {
     }
   }
 
-  /** Upsert episodes of one DB season from provider season details. */
-  private async applySeasonDetails(
+  /** Upsert episodes of one DB season from provider season details, download
+   *  per-episode stills and the season poster. Shared by the metadata refresh
+   *  flow and the initial library import so both end up with the same set of
+   *  artwork — diverging here meant stills were missing right after import. */
+  async applySeasonDetails(
     dbSeason: Season,
     sd: SeasonDetails,
   ): Promise<void> {
