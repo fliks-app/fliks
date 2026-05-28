@@ -28,11 +28,98 @@
     <div class="flex flex-col gap-3">
       @for (row of rows(); track row.id) {
         <article
-          class="card bg-base-100 shadow-md border border-base-200 flex flex-row overflow-hidden rounded-box"
+          class="relative card bg-base-100 shadow-md border border-base-200 grid grid-cols-1 sm:grid-cols-[auto_1fr] items-stretch overflow-hidden rounded-box"
           [attr.title]="row.title"
         >
+          <!-- Mobile-only fanart backdrop with a dimming gradient so the
+               foreground content stays legible (à la Overseerr). -->
+          <div class="absolute inset-0 sm:hidden" aria-hidden="true">
+            <app-request-poster
+              class="absolute inset-0"
+              [tmdbId]="row.tmdbId"
+              [mediaType]="row.mediaType"
+              mode="backdrop"
+            />
+            <div class="absolute inset-0 bg-gradient-to-b from-base-100/45 via-base-100/80 to-base-100"></div>
+          </div>
+
+          @if (mobileActionsAvailable(row) || (row.status === 'declined' && row.declinedReason?.trim())) {
+            <!-- Corner action cluster: primary buttons (sm-only, surfaced on
+                 landscape phones / small tablets) + kebab for the secondary
+                 ones. Hidden on lg+ where the dedicated sidebar column owns
+                 every action inline. -->
+            <div class="absolute top-2 right-2 z-20 lg:hidden flex items-center gap-1">
+              @if (row.status === 'pending' && auth.hasPermission('requests.manage')) {
+                <button
+                  type="button"
+                  class="hidden sm:inline-flex btn btn-success btn-sm"
+                  [disabled]="actionBusyId() === row.id"
+                  (click)="approve(row.id)"
+                >
+                  {{ 'requests.approve' | translate }}
+                </button>
+                <button
+                  type="button"
+                  class="hidden sm:inline-flex btn btn-warning btn-sm"
+                  [disabled]="actionBusyId() === row.id"
+                  (click)="openDecline(row.id)"
+                >
+                  {{ 'requests.decline' | translate }}
+                </button>
+              }
+              @if (row.status === 'declined' && row.declinedReason?.trim()) {
+                <button
+                  type="button"
+                  class="hidden sm:inline-flex btn btn-outline btn-primary btn-sm"
+                  (click)="openViewDeclineReason(row)"
+                >
+                  {{ 'requests.view_decline' | translate }}
+                </button>
+              }
+              @if (mobileActionsAvailable(row)) {
+                <app-dropdown-menu placement="bottom-end">
+                  <button
+                    trigger
+                    type="button"
+                    class="btn btn-ghost btn-xs btn-circle"
+                    [attr.aria-label]="'common.actions' | translate"
+                  >
+                    <svg lucideEllipsisVertical class="h-4 w-4"></svg>
+                  </button>
+                  @if (canEdit(row)) {
+                    <button type="button" class="dropdown-item text-white" (click)="openEdit(row)">
+                      <svg lucidePencil class="h-4 w-4"></svg>
+                      {{ 'requests.edit' | translate }}
+                    </button>
+                  }
+                  @if (canDeleteRequest(row)) {
+                    <button
+                      type="button"
+                      class="dropdown-item text-error"
+                      [disabled]="actionBusyId() === row.id"
+                      (click)="removeRequest(row)"
+                    >
+                      <svg lucideTrash2 class="h-4 w-4"></svg>
+                      {{ 'requests.delete' | translate }}
+                    </button>
+                  } @else if (row.status === 'pending' && canCancel(row)) {
+                    <button
+                      type="button"
+                      class="dropdown-item text-error"
+                      [disabled]="actionBusyId() === row.id"
+                      (click)="removeRequest(row)"
+                    >
+                      <svg lucideTrash2 class="h-4 w-4"></svg>
+                      {{ 'requests.cancel' | translate }}
+                    </button>
+                  }
+                </app-dropdown-menu>
+              }
+            </div>
+          }
+
           <figure
-            class="relative w-20 sm:w-24 md:w-28 shrink-0 aspect-2/3 bg-base-300 overflow-hidden"
+            class="relative hidden sm:block self-start aspect-2/3 w-24 lg:w-32 m-3 me-1 overflow-hidden rounded-lg"
           >
             @defer (on viewport) {
               <app-request-poster
@@ -47,10 +134,10 @@
           </figure>
 
           <div
-            class="card-body p-3 sm:p-4 flex-1 min-w-0 flex flex-col sm:flex-row sm:items-stretch gap-3"
+            class="relative card-body p-3 sm:p-4 flex-1 min-w-0 flex flex-col lg:flex-row lg:items-stretch gap-3"
           >
             <div class="min-w-0 flex-1 flex flex-col gap-1.5 justify-center">
-              <h2 class="text-base font-semibold leading-snug line-clamp-2 m-0">
+              <h2 class="text-lg font-semibold leading-snug line-clamp-2 m-0">
                 <a
                   [routerLink]="mediaLink(row)"
                   class="link link-hover text-base-content hover:opacity-80 font-semibold text-left"
@@ -75,21 +162,30 @@
                 </span>
               </div>
 
-              @if (auth.hasPermission('requests.manage')) {
-                <p class="text-sm text-base-content/70">
-                  <span class="text-base-content/50">{{ 'requests.requested_by' | translate }}</span>
-                  @if (auth.canManageUsers()) {
-                    <a
-                      [routerLink]="['/admin/users', row.user.id]"
-                      class="link link-hover link-primary font-medium"
-                    >
-                      {{ row.user.username }}
-                    </a>
-                  } @else {
-                    <span class="font-medium text-base-content">{{ row.user.username }}</span>
-                  }
-                </p>
-              }
+              <div class="flex flex-col">
+                @if (row.mediaType === 'series' && row.seasons && row.seasons.length) {
+                  <p class="text-sm text-base-content/70">
+                    <span class="text-base-content/50">{{ 'requests.seasons_label' | translate }} · </span>
+                    {{ row.seasons.join(', ') }}
+                  </p>
+                }
+
+                @if (auth.hasPermission('requests.manage')) {
+                  <p class="text-sm text-base-content/70">
+                    <span class="text-base-content/50">{{ 'requests.requested_by' | translate }}</span>
+                    @if (auth.canManageUsers()) {
+                      <a
+                        [routerLink]="['/admin/users', row.user.id]"
+                        class="link link-hover link-primary font-medium"
+                      >
+                        {{ row.user.username }}
+                      </a>
+                    } @else {
+                      <span class="font-medium text-base-content">{{ row.user.username }}</span>
+                    }
+                  </p>
+                }
+              </div>
 
               <div class="flex flex-col gap-0.5 text-xs text-base-content/65">
                 <p>
@@ -104,18 +200,12 @@
                   <span class="text-base-content/50">{{ 'discover.language_profile' | translate }} · </span>
                   {{ languageProfileDisplay(row.languageProfileId) }}
                 </p>
-                @if (row.mediaType === 'series' && row.seasons && row.seasons.length) {
-                  <p>
-                    <span class="text-base-content/50">{{ 'requests.seasons_label' | translate }} · </span>
-                    {{ row.seasons.join(', ') }}
-                  </p>
-                }
               </div>
             </div>
 
             @if (row.status === 'declined' && row.declinedReason?.trim()) {
               <div
-                class="flex flex-wrap items-center justify-end gap-1 shrink-0 sm:border-s sm:border-base-200 sm:ps-4 sm:min-w-[min(100%,12rem)]"
+                class="flex sm:hidden lg:flex flex-wrap items-center justify-end gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
               >
                 <button
                   type="button"
@@ -127,7 +217,7 @@
                 @if (auth.hasPermission('requests.manage')) {
                   <button
                     type="button"
-                    class="btn btn-ghost btn-sm text-error"
+                    class="hidden sm:inline-flex btn btn-ghost btn-sm text-error"
                     [disabled]="actionBusyId() === row.id"
                     (click)="removeRequest(row)"
                   >
@@ -139,7 +229,7 @@
 
             @if (row.status === 'pending') {
               <div
-                class="flex flex-wrap items-center sm:items-end sm:justify-end content-start gap-1 shrink-0 sm:border-s sm:border-base-200 sm:ps-4 sm:min-w-[min(100%,12rem)]"
+                class="flex sm:hidden lg:flex flex-wrap items-center lg:items-end lg:justify-end content-start gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
               >
                 @if (auth.hasPermission('requests.manage')) {
                   <button
@@ -160,14 +250,14 @@
                   </button>
                 }
                 @if (canEdit(row)) {
-                  <button type="button" class="btn btn-ghost btn-sm" (click)="openEdit(row)">
+                  <button type="button" class="hidden sm:inline-flex btn btn-ghost btn-sm" (click)="openEdit(row)">
                     {{ 'requests.edit' | translate }}
                   </button>
                 }
                 @if (auth.hasPermission('requests.manage')) {
                   <button
                     type="button"
-                    class="btn btn-ghost btn-sm text-error"
+                    class="hidden sm:inline-flex btn btn-ghost btn-sm text-error"
                     [disabled]="actionBusyId() === row.id"
                     (click)="removeRequest(row)"
                   >
@@ -176,7 +266,7 @@
                 } @else if (canCancel(row)) {
                   <button
                     type="button"
-                    class="btn btn-ghost btn-sm text-error"
+                    class="hidden sm:inline-flex btn btn-ghost btn-sm text-error"
                     [disabled]="actionBusyId() === row.id"
                     (click)="removeRequest(row)"
                   >
@@ -188,7 +278,7 @@
 
             @if (showOrphanDeleteColumn(row)) {
               <div
-                class="flex flex-wrap items-center justify-end gap-1 shrink-0 sm:border-s sm:border-base-200 sm:ps-4 sm:min-w-[min(100%,12rem)]"
+                class="hidden lg:flex flex-wrap items-center justify-end gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
               >
                 <button
                   type="button"
