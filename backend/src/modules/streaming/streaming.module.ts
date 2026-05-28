@@ -12,6 +12,7 @@ import { PlaybackController } from './playback.controller';
 import { StreamingService } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
 import { TranscodingService } from './transcoding';
+import { TranscodeCacheService } from './transcoding/transcode-cache.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { PlaybackService } from './playback.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
@@ -47,6 +48,7 @@ import { MarkersModule } from '../markers/markers.module';
     StreamingService,
     SubtitleStreamService,
     TranscodingService,
+    TranscodeCacheService,
     StreamBuilderService,
     PlaybackService,
     ActiveStreamTracker,

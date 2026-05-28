@@ -22,3 +22,7 @@ export {
   getAvailableProfiles,
 } from './master-playlist';
 export { TranscodingService } from './transcoding.service';
+export { TranscodeCacheService } from './transcode-cache.service';
+export type { CacheEntry, QualityCache } from './transcode-cache.service';
+export { computeProfileHash } from './profile-hash';
+export type { PlaybackProfile, TvPlatform } from './profile-hash';

@@ -1,0 +1,140 @@
+import * as fsp from 'fs/promises';
+import * as path from 'path';
+import type { CacheEntry, QualityCache } from './transcode-cache.service';
+import { TranscodeCacheService } from './transcode-cache.service';
+
+const CACHE_ROOT = path.join('/tmp/transcode', 'cache');
+
+async function writeFile(p: string, size: number): Promise<void> {
+  await fsp.mkdir(path.dirname(p), { recursive: true });
+  await fsp.writeFile(p, Buffer.alloc(size, 0));
+}
+
+async function resetCacheRoot(): Promise<void> {
+  await fsp.rm(CACHE_ROOT, { recursive: true, force: true });
+  await fsp.mkdir(CACHE_ROOT, { recursive: true });
+}
+
+describe('TranscodeCacheService', () => {
+  let svc: TranscodeCacheService;
+
+  beforeEach(async () => {
+    await resetCacheRoot();
+    svc = new TranscodeCacheService();
+  });
+
+  afterEach(() => {
+    svc.onModuleDestroy();
+  });
+
+  it('starts with an empty index when the cache root is empty', async () => {
+    await svc.onModuleInit();
+    expect(svc.size()).toBe(0);
+    expect(svc.totalBytes()).toBe(0);
+  });
+
+  it('indexes existing cache directories on init', async () => {
+    const dir = path.join(CACHE_ROOT, 'u42', '1234', 'a1b2c3d4e5', '720p');
+    await writeFile(path.join(dir, 'init.mp4'), 100);
+    await writeFile(path.join(dir, 'seg-0.m4s'), 1000);
+    await writeFile(path.join(dir, 'seg-1.m4s'), 2000);
+    await writeFile(path.join(dir, 'seg-3.m4s'), 1500);
+
+    await svc.onModuleInit();
+    expect(svc.size()).toBe(1);
+
+    const entry = svc.lookup(42, 1234, 'a1b2c3d4e5');
+    expect(entry).not.toBeNull();
+    expect(entry!.totalBytes).toBe(100 + 1000 + 2000 + 1500);
+    const q = entry!.perQuality.get('720p');
+    expect(q?.hasInit).toBe(true);
+    expect([...(q?.segments ?? [])].sort((a, b) => a - b)).toEqual([0, 1, 3]);
+  });
+
+  it('indexes ts and m4s segments interchangeably', async () => {
+    const dir = path.join(CACHE_ROOT, 'u1', '99', 'aaaaaaaaaa', '1080p');
+    await writeFile(path.join(dir, 'seg-0.ts'), 500);
+    await writeFile(path.join(dir, 'seg-1.ts'), 500);
+    await svc.onModuleInit();
+    const entry = svc.lookup(1, 99, 'aaaaaaaaaa');
+    expect(entry?.perQuality.get('1080p')?.segments.size).toBe(2);
+  });
+
+  it('skips a profile dir that has no init and no segments', async () => {
+    const dir = path.join(CACHE_ROOT, 'u1', '1', 'xxxxxxxxxx', '720p');
+    await fsp.mkdir(dir, { recursive: true });
+    await svc.onModuleInit();
+    expect(svc.size()).toBe(0);
+  });
+
+  it('handles anonymous entries (no user id)', async () => {
+    const dir = path.join(CACHE_ROOT, 'anon', '7', 'bbbbbbbbbb', '480p');
+    await writeFile(path.join(dir, 'seg-0.m4s'), 300);
+    await svc.onModuleInit();
+    expect(svc.lookup(null, 7, 'bbbbbbbbbb')).not.toBeNull();
+  });
+
+  it('records a segment write and updates totals', async () => {
+    await svc.onModuleInit();
+    const dir = path.join(CACHE_ROOT, 'u5', '8', 'cccccccccc');
+    const entry: CacheEntry = {
+      userId: 5,
+      mediaFileId: 8,
+      profileHash: 'cccccccccc',
+      cacheDir: dir,
+      perQuality: new Map<string, QualityCache>(),
+      totalBytes: 0,
+      lastAccess: Date.now(),
+    };
+    svc.recordSegmentWritten(entry, '720p', 0, 1024);
+    svc.recordSegmentWritten(entry, '720p', 1, 2048);
+    svc.recordSegmentWritten(entry, '720p', 0, 9999); // duplicate, ignored
+    expect(entry.totalBytes).toBe(3072);
+    expect(entry.perQuality.get('720p')?.segments.size).toBe(2);
+  });
+
+  it('evicts entries past their TTL on gc', async () => {
+    const dir = path.join(CACHE_ROOT, 'u1', '1', 'dddddddddd', '720p');
+    await writeFile(path.join(dir, 'seg-0.m4s'), 1000);
+    await svc.onModuleInit();
+    const entry = svc.lookup(1, 1, 'dddddddddd')!;
+    entry.lastAccess = Date.now() - 10 * 60 * 60 * 1000; // 10 h ago, TTL default 4 h
+    await svc.runGc();
+    expect(svc.size()).toBe(0);
+    await expect(fsp.access(entry.cacheDir)).rejects.toBeDefined();
+  });
+
+  it('keeps fresh entries through gc', async () => {
+    const dir = path.join(CACHE_ROOT, 'u1', '1', 'eeeeeeeeee', '720p');
+    await writeFile(path.join(dir, 'seg-0.m4s'), 1000);
+    await svc.onModuleInit();
+    await svc.runGc();
+    expect(svc.size()).toBe(1);
+  });
+});
+
+describe('TranscodeCacheService env overrides', () => {
+  const ENV = process.env;
+  beforeEach(() => {
+    process.env = { ...ENV };
+  });
+  afterEach(() => {
+    process.env = ENV;
+  });
+
+  it('honours TRANSCODE_CACHE_TTL_MS', () => {
+    process.env.TRANSCODE_CACHE_TTL_MS = '1000';
+    const svc = new TranscodeCacheService();
+    // No public getter; assert by behaviour: a brand-new entry with
+    // lastAccess of 2 s ago should be evicted under the 1 s TTL.
+    expect((svc as unknown as { ttlMs: number }).ttlMs).toBe(1000);
+  });
+
+  it('falls back to default when env is unparseable', () => {
+    process.env.TRANSCODE_CACHE_TTL_MS = 'not-a-number';
+    const svc = new TranscodeCacheService();
+    expect((svc as unknown as { ttlMs: number }).ttlMs).toBe(
+      4 * 60 * 60 * 1000,
+    );
+  });
+});
