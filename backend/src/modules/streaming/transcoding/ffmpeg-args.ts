@@ -305,15 +305,16 @@ export function buildFfmpegArgs(
   // the formats supported by the filter`.
   //
   // `videoVariant` is required: callers must thread it from the
-  // ActiveStreamTracker so the segment bitstream matches the master
-  // playlist's CODECS string. Heuristic inference (profile name +
-  // hwAccel) silently produced HEVC when the manifest claimed H.264
-  // (or vice-versa) on cache misses — MSE then rejected the segments.
-  // Fail fast so the player retries after the next playback-info call
-  // repopulates the variant tracker.
+  // LiveSession the request resolves to, so the segment bitstream
+  // matches the master playlist's CODECS string. Heuristic inference
+  // (profile name + hwAccel) silently produced HEVC when the manifest
+  // claimed H.264 (or vice-versa) on cache misses — MSE then rejected
+  // the segments. HLS routes 410-gate stale sids upstream via
+  // assertFreshSession; reaching this throw means a non-HLS caller
+  // bypassed playback-info entirely.
   if (!videoVariant) {
     throw new Error(
-      `buildFfmpegArgs: missing videoVariant for profile "${profile.name}" — caller must pass it from ActiveStreamTracker`,
+      `buildFfmpegArgs: missing videoVariant for profile "${profile.name}" — caller must thread it from the LiveSession`,
     );
   }
   const variant: CodecVariant = videoVariant;

@@ -28,6 +28,13 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
    *  once per session, gated on requestVideoFrameCallback. */
   private firstFrameEmitted = false;
 
+  /** Set briefly after the 410 response filter has emitted
+   *  `sessionExpired`. Shaka also surfaces the thrown filter error
+   *  through its `error` event — we suppress the bridged `error`
+   *  emission for one tick so the UI doesn't flash a fatal-error overlay
+   *  on top of the in-flight recovery. */
+  private sessionExpiredInFlight = false;
+
   // ─── Lifecycle ──────────────────────────────────────────────────────
 
   async init(container: HTMLElement): Promise<void> {
@@ -68,8 +75,59 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       },
     } as any);
 
+    this.installSessionExpiredFilter();
     this.bridgeVideoEvents();
     this.bridgeShakaEvents();
+  }
+
+  /**
+   * NetworkingEngine response filter that turns the backend's 410
+   * "session_expired" body into a synchronous `sessionExpired` engine
+   * event. Without it Shaka would retry the segment per its
+   * `streaming.retryParameters` schedule (~5 attempts, exponential
+   * backoff → ~2 min before the heartbeat-driven recovery #302 kicks
+   * in). Reacting on the very first 410 collapses that window down to
+   * the time it takes to call /playback-info + reload (~1 s).
+   *
+   * Throwing a 1001 BAD_HTTP_STATUS error from the filter aborts
+   * Shaka's retry loop and surfaces as a regular `error` event, so the
+   * engine never silently swallows the failure if no listener consumes
+   * the `sessionExpired` signal.
+   */
+  private installSessionExpiredFilter(): void {
+    if (!this.player) return;
+    const ne = this.player.getNetworkingEngine?.();
+    if (!ne) return;
+    ne.registerResponseFilter((type, response: any) => {
+      if (response?.status !== 410) return;
+      const RequestType = shaka.net.NetworkingEngine.RequestType;
+      // SEGMENT covers init + media segments (the basic enum doesn't
+      // split them — that's only on AdvancedRequestType).
+      if (type !== RequestType.SEGMENT && type !== RequestType.MANIFEST) {
+        return;
+      }
+      let body: { code?: string } | null = null;
+      try {
+        const decoder = new TextDecoder('utf-8');
+        body = JSON.parse(decoder.decode(response.data));
+      } catch { /* malformed body — fall through and trust the status */ }
+      if (body?.code && body.code !== 'session_expired') return;
+      this.sessionExpiredInFlight = true;
+      // Window covers Shaka's own retry burst (the filter throws on
+      // every retried 410); cleared after a tick so a later, unrelated
+      // error from the bridge isn't accidentally suppressed.
+      setTimeout(() => { this.sessionExpiredInFlight = false; }, 2000);
+      this.emit('sessionExpired', undefined as any);
+      throw new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.NETWORK,
+        shaka.util.Error.Code.BAD_HTTP_STATUS,
+        response.uri,
+        410,
+        response.data,
+        type,
+      );
+    });
   }
 
   async destroy(): Promise<void> {
@@ -102,6 +160,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
   async load(url: string, startTime?: number, mimeType?: string, _headers?: Record<string, string>): Promise<void> {
     if (!this.player) throw new Error('ShakaEngine not initialised');
     this.firstFrameEmitted = false;
+    this.sessionExpiredInFlight = false;
     await this.player.load(url, startTime, mimeType);
   }
 
@@ -375,6 +434,12 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     // Shaka error events (separate from HTMLVideoElement errors)
     this.addShakaListener('error', (e: any) => {
       const detail = e.detail;
+      if (this.sessionExpiredInFlight) {
+        // 410 recovery is taking over — swallow the fatal-error event
+        // so the UI doesn't render the error overlay before the engine
+        // reloads with a fresh sid.
+        return;
+      }
       console.error('[Shaka] Player error:', detail?.code, detail?.category, detail?.message, detail?.data);
       this.emit('error', {
         code: detail?.code ?? 0,

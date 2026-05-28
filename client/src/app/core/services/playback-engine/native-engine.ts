@@ -45,6 +45,15 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
    *  the position-advance fallback below would otherwise fire on every
    *  later timeUpdate). Reset on each load(). */
   private firstFrameEmitted = false;
+
+  /** One-shot guard for the optimistic-recovery branch in the
+   *  `nativePlayerError` bridge. ExoPlayer / AVPlayer can't tell us the
+   *  HTTP status that triggered the error, so the first error during
+   *  stable playback is routed to `sessionExpired` (which makes the
+   *  player call /playback-info + reload). If a second error follows
+   *  before the next load() clears the flag, fall through to a real
+   *  fatal `error` so the UI isn't stuck retrying a broken stream. */
+  private recoveryAttempted = false;
   /** Last `timeUpdate.position` seen, used to detect that playback is
    *  actually advancing (Android's onRenderedFirstFrame is unreliable on
    *  some devices: it fires late or never on transcode → ABR switches,
@@ -97,6 +106,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     headers?: Record<string, string>,
   ): Promise<void> {
     this.firstFrameEmitted = false;
+    this.recoveryAttempted = false;
     this.lastTimeUpdatePos = -1;
     const subtitles = this._preloadedSubtitles.length > 0
       ? this._preloadedSubtitles
@@ -106,6 +116,15 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     // Apply subtitle style settings
     if (this._subtitleStyle) {
       await NativePlayer.setSubtitleStyle(this._subtitleStyle);
+    }
+
+    // Restore the previously-active subtitle selection. ExoPlayer disables
+    // text tracks by default on every new MediaItem, so a silent reload
+    // (session-expired recovery, cast handoff) would otherwise drop the
+    // user's pick and leave the SubtitleView blank. The plugin's
+    // pendingSubtitleTrackId queues this until onTracksChanged fires.
+    if (this._activeTrackId) {
+      NativePlayer.selectSubtitleTrack({ id: this._activeTrackId }).catch(() => {});
     }
   }
 
@@ -249,8 +268,8 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
 
   selectTextTrack(track: any): void {
     const id = typeof track === 'string' ? track : null;
+    this._activeTrackId = id;
     if (this._isIos) {
-      this._activeTrackId = id;
       this._subtitleVisible = !!id;
       this.updateSubtitleOverlay();
     } else {
@@ -266,6 +285,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
         this.updateSubtitleOverlay();
       }
     } else if (!visible) {
+      this._activeTrackId = null;
       NativePlayer.selectSubtitleTrack({ id: null });
     }
   }
@@ -342,6 +362,17 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
 
     bind('nativePlayerError', (e: Event) => {
       const d = (e as CustomEvent).detail;
+      // ExoPlayer / AVPlayer hide the HTTP status of the failing
+      // segment fetch — we can't tell a 410 (session expired) from a
+      // 5xx (ffmpeg crash). Heuristic: if a frame has played and we
+      // haven't tried recovery yet, treat the first error as a
+      // possible session-expired and let the player attempt a single
+      // /playback-info + reload before surfacing a fatal error.
+      if (this.firstFrameEmitted && !this.recoveryAttempted) {
+        this.recoveryAttempted = true;
+        this.emit('sessionExpired', undefined);
+        return;
+      }
       this._state = 'error';
       this.emit('error', d);
     });
