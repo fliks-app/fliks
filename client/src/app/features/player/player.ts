@@ -1760,6 +1760,59 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     await this.castPlayerService.reloadCastStream(position);
   }
 
+  /**
+   * Guard so a slow recovery (~1-2 s of playback-info + reload) can't
+   * race against the next 10-second heartbeat: we only fire one
+   * recoverFromLostSession at a time, no matter how many heartbeats
+   * surface `sessionLost: true` in the interval.
+   */
+  private recoveringFromLostSession = false;
+
+  /**
+   * The carried `sid` is no longer known to the backend (restart or
+   * GC after a long idle). Mint a fresh LiveSession via playback-info
+   * and reload the engine's stream URL with the new sid at the
+   * current position. Cast playbacks are skipped — the cast receiver
+   * owns its own session lifecycle.
+   */
+  private async recoverFromLostSession(): Promise<void> {
+    if (this.recoveringFromLostSession) return;
+    if (this.castService.isConnected()) return;
+    if (!this.engine || !this.mediaFileId) return;
+    this.recoveringFromLostSession = true;
+    try {
+      const currentPos = this.engine.currentTime || 0;
+      const deviceProfile = this.deviceProfileService.getProfile();
+      this.playbackInfo = await this.streamingApi.getPlaybackInfo(
+        this.mediaFileId,
+        deviceProfile,
+        this.activeBurnInId ?? undefined,
+        this.activeAudioStreamIndex ?? undefined,
+        undefined,
+        currentPos > 0 ? Math.floor(currentPos) : undefined,
+      );
+      const sid = this.playbackInfo.sessionId;
+      const mode = this.playbackMode();
+      const savedQualityId = this.activeQualityId();
+      const startQuality = mode !== 'direct' && savedQualityId !== 'auto'
+        ? savedQualityId
+        : undefined;
+      const url = mode === 'direct'
+        ? this.streamingApi.getStreamUrl(this.mediaFileId, sid)
+        : this.streamingApi.getHlsUrl(this.mediaFileId, startQuality, undefined, sid);
+      const mimeType = mode === 'direct' ? 'video/mp4' : undefined;
+      const wasPaused = this.paused();
+      await this.engine.load(url, currentPos > 0 ? currentPos : undefined, mimeType);
+      this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
+      if (!wasPaused) {
+        this.engine.play().catch(() => {});
+      }
+    } catch { /* heartbeat is fire-and-forget; next one retries */ }
+    finally {
+      this.recoveringFromLostSession = false;
+    }
+  }
+
   /** Reload local engine and resume after Cast disconnect. */
   private async resumeLocalAfterCast(castPos: number) {
     try {
@@ -2449,7 +2502,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     };
     if (this.network.isOnline()) {
       try {
-        await this.streamingApi.updatePlaybackState(this.mediaId, payload);
+        const response = await this.streamingApi.updatePlaybackState(
+          this.mediaId,
+          payload,
+        );
+        // The backend has GC'd / lost our LiveSession (restart, long
+        // idle, …). Re-issue playback-info and reload the engine
+        // with the fresh sid at the current position before the
+        // player's buffer drains.
+        if (response?.sessionLost) {
+          void this.recoverFromLostSession();
+        }
       } catch {
         this.offlineSync.queue(offlinePayload);
       }
