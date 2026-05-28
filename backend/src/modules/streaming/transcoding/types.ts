@@ -249,4 +249,14 @@ export interface TranscodeSession {
    *  cache directory layout (`/tmp/transcode/cache/u<userId>/<file>/<hash>/...`)
    *  and is the lookup key used by the {@link TranscodeCacheService}. */
   profileHash?: string;
+  /** Set to true the first time the GC loop observed a matching live
+   *  session for this (user, file, profileHash). Gates the
+   *  heartbeat-driven grace timer: a session that has never had a
+   *  live session falls back to the longer SESSION_TIMEOUT_MS idle
+   *  window. */
+  seenAnyLiveSession?: boolean;
+  /** When the GC loop first observed zero matching live sessions for
+   *  this transcode session. Reset to `null` whenever a live session
+   *  reappears. Used to enforce the JOB_GRACE_MS window. */
+  zeroLiveSince?: number | null;
 }

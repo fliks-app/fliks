@@ -9,12 +9,14 @@ import { existsSync, watch, FSWatcher } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import {
+  JOB_GRACE_MS,
   SEEK_WAIT_THRESHOLD,
   SESSION_TIMEOUT_MS,
   getSegmentDuration,
   segmentIndexToSeconds,
   setSegmentDuration as applySegmentDuration,
 } from './constants';
+import { LiveSessionRegistry } from '../live-session.service';
 import {
   getHdrLadderForDevice,
   getLadderForDevice,
@@ -71,10 +73,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   private readonly locks = new Map<string, Promise<void>>();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private detectedHwAccel: HwAccelType = 'none';
-  constructor(private readonly cacheService: TranscodeCacheService) {}
+  constructor(
+    private readonly cacheService: TranscodeCacheService,
+    private readonly liveSessions: LiveSessionRegistry,
+  ) {}
 
   async onModuleInit() {
-
     this.detectedHwAccel = await detectHwAccel(this.log);
     this.log.log(`Hardware acceleration: ${this.detectedHwAccel}`);
 
@@ -111,7 +115,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       void runTonemapOpenclProbe(this.log);
     }
 
-    this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 30_000);
+    // Tight cleanup cadence — paired with the live-session 30 s TTL +
+    // 60 s job grace, this puts ffmpeg death within ~100 s of the last
+    // viewer disappearing.
+    this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 10_000);
   }
 
   /** Get an existing session for an exact `(file, user, profile)` triple.
@@ -1394,18 +1401,72 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return session;
   }
 
+  /**
+   * Reap transcode sessions whose viewers have all gone. Two regimes:
+   *
+   * 1. Sessions paired with a live session ride the heartbeat-driven
+   *    grace timer: as long as `LiveSessionRegistry.listForJob` returns
+   *    at least one entry, the ffmpeg job is kept warm. When the count
+   *    drops to zero, JOB_GRACE_MS later the ffmpeg process is killed.
+   *
+   * 2. Sessions that were never seen with a live session (legacy URL
+   *    fetches, admin scrubbing) fall back to the SESSION_TIMEOUT_MS
+   *    idle window — safe default that mirrors the pre-heartbeat
+   *    behaviour.
+   *
+   * The on-disk cache directory is preserved in both cases.
+   * `TranscodeCacheService` owns the disk lifecycle (TTL + LRU); a
+   * fresh play that lands on the same (user, file, profileHash)
+   * reattaches to the existing segments without retranscoding.
+   */
   private cleanupStaleSessions() {
     const now = Date.now();
     for (const [id, session] of this.sessions) {
-      const processDone = session.process.exitCode !== null;
-      if (now - session.lastAccess > SESSION_TIMEOUT_MS && processDone) {
-        this.log.log(`Cleanup stale session: ${id}`);
-        this.sessions.delete(id);
-        // Cache is preserved across session evictions —
-        // TranscodeCacheService GC owns the disk lifecycle (TTL + LRU)
-        // so a fresh play after this point reattaches to the existing
-        // segments instead of retranscoding.
+      if (session.userId == null || !session.profileHash) {
+        this.fallbackIdleCleanup(now, id, session);
+        continue;
       }
+      const matching = this.liveSessions.listForJob(
+        session.userId,
+        session.mediaFileId,
+        session.profileHash,
+      );
+      if (matching.length > 0) {
+        session.seenAnyLiveSession = true;
+        session.zeroLiveSince = null;
+        continue;
+      }
+      if (!session.seenAnyLiveSession) {
+        this.fallbackIdleCleanup(now, id, session);
+        continue;
+      }
+      if (session.zeroLiveSince == null) {
+        session.zeroLiveSince = now;
+        continue;
+      }
+      if (now - session.zeroLiveSince < JOB_GRACE_MS) continue;
+      this.log.log(
+        `Cleanup session ${id}: no live viewer for ${Math.round(
+          (now - session.zeroLiveSince) / 1000,
+        )}s, killing ffmpeg (cache preserved)`,
+      );
+      this.sessions.delete(id);
+      session.intentionallyKilled = true;
+      void this.killProcess(session.process);
+    }
+  }
+
+  /** Idle-timeout fallback for transcode sessions without a tracked
+   *  live session — kept on the legacy SESSION_TIMEOUT_MS window. */
+  private fallbackIdleCleanup(
+    now: number,
+    id: string,
+    session: TranscodeSession,
+  ): void {
+    const processDone = session.process.exitCode !== null;
+    if (now - session.lastAccess > SESSION_TIMEOUT_MS && processDone) {
+      this.log.log(`Cleanup stale (fallback) session: ${id}`);
+      this.sessions.delete(id);
     }
   }
 

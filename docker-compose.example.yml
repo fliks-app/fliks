@@ -50,6 +50,38 @@ services:
       DB_PASSWORD: changeme
       DB_NAME: fliks
       NODE_ENV: production
+      # ---- Streaming session tuning (optional) -----------------------
+      # All values below have safe defaults baked in. Override only if
+      # you know what you're doing.
+      #
+      # How long a "live viewer" entry survives without any heartbeat
+      # from the client. The client beats every 10 s, so 30 s tolerates
+      # three missed beats (background tab, network blip). Default 30000.
+      # STREAM_LIVE_SESSION_TTL_MS: 30000
+      #
+      # Grace window after the last live viewer for a given
+      # (user, file, profileHash) disappears, before the matching
+      # ffmpeg encoder is killed. Cache stays so a reconnect within the
+      # next few hours reattaches without retranscoding. Default 60000.
+      # STREAM_JOB_GRACE_MS: 60000
+      #
+      # Idle timeout for transcode sessions that were never paired with
+      # a live session (legacy URL fetches, admin scrubbing). Mirrors
+      # the pre-heartbeat behaviour. Default 1800000 (30 min).
+      # STREAM_JOB_FALLBACK_TIMEOUT_MS: 1800000
+      #
+      # How long transcoded segments stay on disk after their last
+      # access. Default 14400000 (4 h). Set lower to free disk faster,
+      # higher to cover users who pause for a long time and come back.
+      # TRANSCODE_CACHE_TTL_MS: 14400000
+      #
+      # Hard cap on the total size of the transcode cache. Above this,
+      # LRU eviction kicks in even if entries are still within TTL.
+      # Default 21474836480 (20 GB).
+      # TRANSCODE_CACHE_MAX_BYTES: 21474836480
+      #
+      # How often the cache garbage collector runs. Default 300000 (5 min).
+      # TRANSCODE_CACHE_GC_INTERVAL_MS: 300000
     volumes:
       # ---- Media library ------------------------------------------------
       # Map your existing media tree here. Match the path Fliks tells the

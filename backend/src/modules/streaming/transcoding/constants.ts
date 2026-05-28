@@ -1,4 +1,26 @@
-export const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30min HLS session timeout
+/** Maximum idle window for transcode sessions that were never paired
+ *  with a {@link LiveSessionRegistry} entry (legacy URL fetches, admin
+ *  scrubbing, etc.). Sessions tied to a live session ride on the
+ *  {@link JOB_GRACE_MS} grace window after their last heartbeat
+ *  instead — see `TranscodingService.cleanupStaleSessions`. */
+export const SESSION_TIMEOUT_MS = (() => {
+  const raw = process.env.STREAM_JOB_FALLBACK_TIMEOUT_MS;
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30 * 60 * 1000;
+})();
+
+/** Grace window between the last matching live session disappearing and
+ *  the ffmpeg job being killed. Keeps a brief reconnect window so a
+ *  client that misses a few heartbeats (background tab, lockscreen)
+ *  can reattach without restarting the encoder. The cache directory
+ *  is preserved across the kill — a fresh play picks up from the
+ *  existing segments. */
+export const JOB_GRACE_MS = (() => {
+  const raw = process.env.STREAM_JOB_GRACE_MS;
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 60_000;
+})();
+
 /** Max gap (in segments) between FFmpeg frontier and requested segment before restarting. */
 export const SEEK_WAIT_THRESHOLD = 15;
 

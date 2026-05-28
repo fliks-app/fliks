@@ -46,10 +46,12 @@ export interface LiveSessionSnapshot extends Omit<
   lastBeat: Date;
 }
 
-/** Session TTL matches the transcoding service's idle window — a live
- *  session is considered dead after this long without a heartbeat. */
-const DEFAULT_TTL_MS = 30 * 60 * 1000;
-const DEFAULT_GC_INTERVAL_MS = 30_000;
+/** A live session is considered dead this long after the last
+ *  heartbeat. 30 s = three missed beats at the client's 10 s cadence,
+ *  enough to absorb transient network hiccups without dragging the
+ *  ffmpeg keep-alive window. */
+const DEFAULT_TTL_MS = 30_000;
+const DEFAULT_GC_INTERVAL_MS = 5_000;
 
 function readEnvInt(name: string, fallback: number): number {
   const raw = process.env[name];
