@@ -50,7 +50,7 @@
 </div>
 
 <div class="card bg-base-100 border border-base-200">
-  <div class="card-body">
+  <div class="card-body gap-5">
     <app-select-field
       [value]="mode()"
       (valueChange)="onModeChange($event)"
@@ -61,5 +61,14 @@
       <option [value]="'file'">{{ 'home_settings.mode_file' | translate }}</option>
       <option [value]="'both'">{{ 'home_settings.mode_both' | translate }}</option>
     </app-select-field>
+
+    <div class="divider my-0"></div>
+
+    <app-toggle-field
+      [value]="onlyMyRequests()"
+      (valueChange)="onOnlyMyRequestsChange($event)"
+      [label]="'home_settings.only_my_requests' | translate"
+      [hint]="'home_settings.only_my_requests_hint' | translate"
+    />
   </div>
 </div>

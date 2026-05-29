@@ -118,9 +118,7 @@
   "display_settings": {
     "title": "Affichage",
     "home_background": "Image de fond sur l'accueil",
-    "home_background_hint": "Affiche une affiche en plein écran derrière les sections de l'accueil.",
-    "only_my_requests": "Afficher uniquement les médias que j'ai demandé",
-    "only_my_requests_hint": "Filtre les sections « Récemment ajoutés » et « Bientôt disponible » de l'accueil pour ne garder que les médias que vous avez demandés."
+    "home_background_hint": "Affiche une affiche en plein écran derrière les sections de l'accueil."
   },
   "storage_settings": {
     "clear_cache": "Vider le cache",
@@ -1877,6 +1875,8 @@
     "recently_added_mode_hint": "Détermine ce qui alimente toutes les zones « Récemment ajouté » : les médias récemment ajoutés à la bibliothèque, ceux dont un fichier vient d'être ajouté, ou les deux.",
     "mode_media": "Médias récemment ajoutés",
     "mode_file": "Fichiers récemment ajoutés",
-    "mode_both": "Les deux"
+    "mode_both": "Les deux",
+    "only_my_requests": "Afficher uniquement les médias que j'ai demandé",
+    "only_my_requests_hint": "Filtre les sections « Récemment ajoutés » et « Bientôt disponible » de l'accueil pour ne garder que les médias que vous avez demandés."
   }
 }

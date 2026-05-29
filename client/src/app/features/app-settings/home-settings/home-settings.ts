@@ -26,7 +26,9 @@ import {
 } from '../../../core/services/home-settings.service';
 import { LibrariesApiService } from '../../../core/services/api/libraries-api.service';
 import { TvService } from '../../../core/services/tv.service';
+import { DisplaySettingsService } from '../../../core/services/display-settings.service';
 import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
+import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 
 @Component({
   selector: 'app-home-settings',
@@ -40,6 +42,7 @@ import { SelectFieldComponent } from '../../../shared/components/forms/select-fi
     LucideArrowUp,
     LucideArrowDown,
     SelectFieldComponent,
+    ToggleFieldComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home-settings.html',
@@ -47,11 +50,13 @@ import { SelectFieldComponent } from '../../../shared/components/forms/select-fi
 export class HomeSettingsPageComponent implements OnInit {
   private readonly home = inject(HomeSettingsService);
   private readonly librariesApi = inject(LibrariesApiService);
+  private readonly displaySettings = inject(DisplaySettingsService);
   readonly tv = inject(TvService);
 
   /** The rendered, reorderable rows — the working copy persisted on change. */
   readonly rows = signal<ResolvedHomeSection[]>([]);
   readonly mode = signal<RecentlyAddedMode>('media');
+  readonly onlyMyRequests = signal(false);
 
   private readonly BUILTIN_LABELS: Record<string, string> = {
     libraries: 'home_settings.section.libraries',
@@ -63,6 +68,7 @@ export class HomeSettingsPageComponent implements OnInit {
 
   async ngOnInit() {
     this.mode.set(this.home.settings().recentlyAddedMode);
+    this.onlyMyRequests.set(this.displaySettings.get().onlyMyRequests);
     let libs: { id: number; name: string }[] = [];
     try {
       libs = (await this.librariesApi.listMine()).map((l) => ({
@@ -113,5 +119,10 @@ export class HomeSettingsPageComponent implements OnInit {
   onModeChange(mode: RecentlyAddedMode) {
     this.mode.set(mode);
     this.home.setMode(mode);
+  }
+
+  onOnlyMyRequestsChange(value: boolean) {
+    this.onlyMyRequests.set(value);
+    this.displaySettings.save({ onlyMyRequests: value });
   }
 }
