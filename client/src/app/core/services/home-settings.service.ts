@@ -145,12 +145,12 @@ export class HomeSettingsService {
       }
     }
     // Permission-gated built-in: only offered when the user can use requests.
-    // With no saved preference it defaults visible, slotted between
-    // "recently-added" and "coming-soon"; a saved order (handled above) wins.
+    // With no saved preference it defaults visible, slotted just above
+    // "recently-added"; a saved order (handled above) wins.
     if (opts.requests && !seen.has('requests-recent')) {
       const pref: HomeSectionPref = { key: 'requests-recent', visible: true };
-      const after = merged.findIndex((p) => p.key === 'recently-added');
-      if (after >= 0) merged.splice(after + 1, 0, pref);
+      const at = merged.findIndex((p) => p.key === 'recently-added');
+      if (at >= 0) merged.splice(at, 0, pref);
       else merged.push(pref);
       seen.add('requests-recent');
     }
