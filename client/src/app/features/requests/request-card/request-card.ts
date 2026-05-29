@@ -26,7 +26,8 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
   // The host is the scroller flex item: fixed width, and a column flex so the
   // inner card fills the row's stretched height (all cards same height).
-  host: { class: 'flex shrink-0 w-72 sm:w-80' },
+  // Compact on mobile, growing to full size on desktop/TV.
+  host: { class: 'flex shrink-0 w-64 sm:w-72 lg:w-80' },
   templateUrl: './request-card.html',
 })
 export class RequestCardComponent {
