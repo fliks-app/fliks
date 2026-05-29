@@ -679,11 +679,8 @@ export class SystemController {
   /** Current on-disk transcode cache footprint, for the admin UI. */
   @Get('transcode-cache')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
-  transcodeCacheStats(): { entries: number; bytes: number } {
-    return {
-      entries: this.transcodeCache.size(),
-      bytes: this.transcodeCache.totalBytes(),
-    };
+  transcodeCacheStats(): Promise<{ entries: number; bytes: number }> {
+    return this.transcodeCache.diskUsage();
   }
 
   /**

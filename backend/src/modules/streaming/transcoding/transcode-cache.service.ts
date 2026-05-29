@@ -139,33 +139,90 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Manually drop cached entries and wipe their on-disk directories.
-   * Scope is the (mediaFileId, optional userId) pair: passing only
-   * `mediaFileId` purges every profile/quality across all users for that
-   * file; passing `userId` too restricts to that user's entries. With no
-   * `mediaFileId`, purges the whole cache. Returns what was freed so the
-   * caller can report it back to the operator.
+   * Live on-disk footprint of the cache, scanned fresh from the
+   * filesystem. The in-memory index is only authoritative at boot — it
+   * is not updated as ffmpeg writes segments mid-stream — so anything
+   * that must reflect current usage (admin stats, manual purge) walks
+   * the disk directly rather than trusting {@link totalBytes}. `entries`
+   * counts (user, file, profile) directories; `bytes` is the file total.
+   */
+  async diskUsage(
+    mediaFileId?: number,
+    userId?: number,
+  ): Promise<{ entries: number; bytes: number }> {
+    let entries = 0;
+    let bytes = 0;
+    for (const profileDir of await this.matchingProfileDirs(
+      mediaFileId,
+      userId,
+    )) {
+      entries += 1;
+      bytes += await dirBytes(profileDir);
+    }
+    return { entries, bytes };
+  }
+
+  /**
+   * Manually wipe cache directories on disk and drop any matching
+   * in-memory entries. Scope is the (mediaFileId, optional userId) pair:
+   * passing only `mediaFileId` purges every profile across all users for
+   * that file; adding `userId` restricts to that user; passing neither
+   * purges the whole cache. Operates on the live filesystem, so it also
+   * removes directories created since boot that the index never saw.
    */
   async purge(
     mediaFileId?: number,
     userId?: number,
   ): Promise<{ entries: number; bytes: number }> {
-    const targets = [...this.entries.values()].filter((entry) => {
-      if (mediaFileId != null && entry.mediaFileId !== mediaFileId) return false;
-      if (userId != null && entry.userId !== userId) return false;
-      return true;
-    });
+    let entries = 0;
     let bytes = 0;
-    for (const entry of targets) {
-      bytes += entry.totalBytes;
-      await this.evict(entry);
+    for (const profileDir of await this.matchingProfileDirs(
+      mediaFileId,
+      userId,
+    )) {
+      entries += 1;
+      bytes += await dirBytes(profileDir);
+      await fsp.rm(profileDir, { recursive: true, force: true });
     }
-    if (targets.length > 0) {
+    for (const [key, entry] of this.entries) {
+      if (mediaFileId != null && entry.mediaFileId !== mediaFileId) continue;
+      if (userId != null && entry.userId !== userId) continue;
+      this.entries.delete(key);
+    }
+    if (entries > 0) {
       this.log.log(
-        `[purge] dropped ${targets.length} cache entr${targets.length === 1 ? 'y' : 'ies'} (${formatBytes(bytes)})`,
+        `[purge] dropped ${entries} cache entr${entries === 1 ? 'y' : 'ies'} (${formatBytes(bytes)})`,
       );
     }
-    return { entries: targets.length, bytes };
+    return { entries, bytes };
+  }
+
+  /**
+   * Enumerate the (user, file, profile) directories on disk matching the
+   * given scope. Mirrors the {@link CACHE_LAYOUT_ROOT} layout
+   * (`root/userSeg/mediaFileId/profileHash`).
+   */
+  private async matchingProfileDirs(
+    mediaFileId?: number,
+    userId?: number,
+  ): Promise<string[]> {
+    const dirs: string[] = [];
+    for (const userDir of await readdirSafe(CACHE_LAYOUT_ROOT)) {
+      const uid = parseUserDir(userDir);
+      if (uid === undefined) continue;
+      if (userId != null && uid !== userId) continue;
+      const userPath = path.join(CACHE_LAYOUT_ROOT, userDir);
+      for (const fileDir of await readdirSafe(userPath)) {
+        const fid = Number.parseInt(fileDir, 10);
+        if (!Number.isFinite(fid)) continue;
+        if (mediaFileId != null && fid !== mediaFileId) continue;
+        const filePath = path.join(userPath, fileDir);
+        for (const profileDir of await readdirSafe(filePath)) {
+          dirs.push(path.join(filePath, profileDir));
+        }
+      }
+    }
+    return dirs;
   }
 
   /**
@@ -413,6 +470,39 @@ function parseUserDir(dir: string): number | null | undefined {
   const m = /^u(\d+)$/.exec(dir);
   if (!m) return undefined;
   return Number.parseInt(m[1], 10);
+}
+
+/** `readdir` that yields `[]` for a missing/unreadable directory. */
+async function readdirSafe(dir: string): Promise<string[]> {
+  try {
+    return await fsp.readdir(dir);
+  } catch {
+    return [];
+  }
+}
+
+/** Recursively sum the byte size of every file under a directory. */
+async function dirBytes(dir: string): Promise<number> {
+  let total = 0;
+  let items: import('fs').Dirent[];
+  try {
+    items = await fsp.readdir(dir, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  for (const item of items) {
+    const full = path.join(dir, item.name);
+    if (item.isDirectory()) {
+      total += await dirBytes(full);
+    } else {
+      try {
+        total += (await fsp.stat(full)).size;
+      } catch {
+        // File vanished mid-scan (GC / ffmpeg rename) — skip.
+      }
+    }
+  }
+  return total;
 }
 
 function parseSegmentIndex(filename: string): number | null {

@@ -131,6 +131,20 @@ describe('TranscodeCacheService', () => {
     expect(svc.lookup(3, 11, 'ffffffffff')).toBe(a);
   });
 
+  it('diskUsage reflects dirs created after boot that the index never saw', async () => {
+    await svc.onModuleInit();
+    expect(svc.size()).toBe(0);
+    // Simulate ffmpeg writing a fresh cache dir mid-stream — the index
+    // is not updated live, so size()/totalBytes() stay 0 while the disk
+    // grows. diskUsage() must see the real bytes.
+    const dir = path.join(CACHE_ROOT, 'u9', '70', 'aaaaaaaaaa', '720p');
+    await writeFile(path.join(dir, 'init.mp4'), 100);
+    await writeFile(path.join(dir, 'seg-0.m4s'), 4000);
+    expect(svc.size()).toBe(0);
+    expect(svc.totalBytes()).toBe(0);
+    expect(await svc.diskUsage()).toEqual({ entries: 1, bytes: 4100 });
+  });
+
   it('purges every profile/user for a media file, wiping disk', async () => {
     const a = path.join(CACHE_ROOT, 'u1', '50', 'aaaaaaaaaa', '720p');
     const b = path.join(CACHE_ROOT, 'u2', '50', 'bbbbbbbbbb', '1080p');
