@@ -1818,12 +1818,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (opts.unmute) this.engine.muted = false;
     const wasPaused = opts.preservePause ? this.paused() : false;
     const deviceProfile = this.deviceProfileService.getProfile();
+    // Pass the active rung as startQuality so the backend prewarms ffmpeg at
+    // the resume position — main session at -ss pos plus the bounded early
+    // session that absorbs Shaka's seg-0 VOD probe. Mirrors the initial load.
+    const activeQuality = this.activeQualityId();
+    const prewarmQuality = activeQuality !== 'auto' ? activeQuality : undefined;
     this.playbackInfo = await this.streamingApi.getPlaybackInfo(
       this.mediaFileId,
       deviceProfile,
       this.activeBurnInId ?? undefined,
       this.activeAudioStreamIndex ?? undefined,
-      undefined,
+      prewarmQuality,
       pos > 0 ? Math.floor(pos) : undefined,
     );
     const { url, mimeType } = this.buildPlayUrl({
