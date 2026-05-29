@@ -59,7 +59,7 @@
           <app-horizontal-scroller [title]="'home.recommendations' | translate">
             @for (rec of recommendations(); track rec.media.id) {
               <app-media-card
-                class="shrink-0 w-28 lg:w-40"
+                class="shrink-0 w-28 sm:w-32 lg:w-40"
                 [attr.data-home-focus]="'rec:' + rec.media.id"
                 [imageUrl]="rec.media.posterUrl"
                 [title]="rec.media.title"
@@ -82,7 +82,7 @@
           <app-horizontal-scroller [title]="'home.recent_media' | translate">
             @for (m of recentMedia(); track m.id) {
               <app-media-card
-                class="shrink-0 w-28 lg:w-40"
+                class="shrink-0 w-28 sm:w-32 lg:w-40"
                 [attr.data-home-focus]="'recent:' + m.id"
                 [media]="m"
                 [subtitle]="'' + m.year"
@@ -101,7 +101,7 @@
           <app-horizontal-scroller [title]="'home.coming_soon' | translate">
             @for (entry of comingSoon(); track entry.id) {
               <app-media-card
-                class="shrink-0 w-28 lg:w-40"
+                class="shrink-0 w-28 sm:w-32 lg:w-40"
                 [attr.data-home-focus]="'soon:' + entry.id"
                 [imageUrl]="entry.posterUrl"
                 [title]="entry.title"
@@ -139,7 +139,7 @@
           <app-horizontal-scroller [title]="'home.recent_media_in' | translate: { library: section.libraryName }">
             @for (m of libraryRecent().get(section.libraryId!) ?? []; track m.id) {
               <app-media-card
-                class="shrink-0 w-28 lg:w-40"
+                class="shrink-0 w-28 sm:w-32 lg:w-40"
                 [attr.data-home-focus]="'libRecent:' + section.libraryId + ':' + m.id"
                 [media]="m"
                 [subtitle]="'' + m.year"
