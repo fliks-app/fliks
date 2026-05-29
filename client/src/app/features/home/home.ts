@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal, computed, effect, OnInit, OnDestroy, Injector, afterNextRender } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal, computed, effect, OnInit, OnDestroy, Injector, afterNextRender, viewChild } from '@angular/core';
 import { ActivatedRoute, NavigationStart, Router, RouterLink } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
@@ -6,6 +6,8 @@ import { TranslateModule } from '@ngx-translate/core';
 import { MediaService, Media, CalendarEntry } from '../../core/services/api/media.service';
 import { StreamingApiService, ContinueWatchingItem, RecommendationItem } from '../../core/services/api/streaming-api.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
+import { RequestsService, FliksRequestRow } from '../../core/services/api/requests.service';
+import { ProfilesService } from '../../core/services/api/profiles.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { PlayableMediaService } from '../../core/services/playable-media.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
@@ -21,6 +23,8 @@ import { LucideIconComponent } from '../../shared/components/lucide-icon';
 import { SetupChecklistComponent } from '../../shared/components/setup-checklist/setup-checklist';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { AuthService } from '../../core/services/auth.service';
+import { RequestCardComponent } from '../requests/request-card/request-card';
+import { RequestDeclineModalComponent } from '../requests/request-decline-modal/request-decline-modal.component';
 
 /**
  * # Home page
@@ -64,6 +68,8 @@ import { AuthService } from '../../core/services/auth.service';
     LucideIconComponent,
     SetupChecklistComponent,
     TvSectionDirective,
+    RequestCardComponent,
+    RequestDeclineModalComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home.html',
@@ -75,6 +81,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly playableMedia = inject(PlayableMediaService);
   private readonly librariesApi = inject(LibrariesApiService);
+  private readonly requestsService = inject(RequestsService);
+  private readonly profilesApi = inject(ProfilesService);
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly focusMemory = inject(FocusMemoryService);
   private readonly navbar = inject(NavbarService);
@@ -94,6 +102,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private navStartSub?: Subscription;
   private attachedSub?: Subscription;
   private detachedSub?: Subscription;
+  private readonly declineModal = viewChild(RequestDeclineModalComponent);
 
   readonly libraries = signal<LibrarySummary[]>([]);
   readonly continueWatching = signal<ContinueWatchingItem[]>([]);
@@ -102,15 +111,48 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly recommendations = signal<RecommendationItem[]>([]);
   /** Recently-added items per library, keyed by library id (opt-in zones). */
   readonly libraryRecent = signal<Map<number, Media[]>>(new Map());
+  /** Latest requests (scoped to rights by the backend) for the optional
+   *  "Demandes récentes" zone. */
+  readonly recentRequests = signal<FliksRequestRow[]>([]);
+  readonly requestActionBusyId = signal<number | null>(null);
+  readonly declineForId = signal<number | null>(null);
+  readonly declineReasonText = signal('');
+  private qualityProfileNames = signal<Map<number, string>>(new Map());
+  private languageProfileNames = signal<Map<number, string>>(new Map());
+
+  /** Whether the user may have requests at all (own via create, or all via
+   *  manage) — gates the "Demandes récentes" zone in home + settings. */
+  get requestsAllowed(): boolean {
+    return (
+      this.auth.hasPermission('requests.create') ||
+      this.auth.hasPermission('requests.manage')
+    );
+  }
+  /** Managers can approve/decline and see the requester. */
+  get canManageRequests(): boolean {
+    return this.auth.hasPermission('requests.manage');
+  }
 
   /** The user's resolved home layout (order + visibility), reconciled with
    *  the libraries they can currently access. Drives template rendering. */
   readonly sections = computed(() =>
-    this.home.resolve(this.libraries().map((l) => ({ id: l.id, name: l.name }))),
+    this.home.resolve(
+      this.libraries().map((l) => ({ id: l.id, name: l.name })),
+      { requests: this.requestsAllowed },
+    ),
   );
   readonly visibleSections = computed(() =>
     this.sections().filter((s) => s.visible),
   );
+
+  qualityProfileDisplay(id: number | null): string {
+    if (id == null) return '—';
+    return this.qualityProfileNames().get(id) ?? `#${id}`;
+  }
+  languageProfileDisplay(id: number | null): string {
+    if (id == null) return '—';
+    return this.languageProfileNames().get(id) ?? `#${id}`;
+  }
 
   /** Once the recommendations land, randomise the page background
    *  using their fanarts (primary + extras). One pick per visit;
@@ -171,6 +213,9 @@ export class HomeComponent implements OnInit, OnDestroy {
   async ngOnInit() {
     this.arrivedViaBack = this.navbar.lastWasBack();
     this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
+    // Profile names for the request cards are resolved client-side (same as
+    // the requests page); load them once for users who can have requests.
+    if (this.requestsAllowed) void this.loadRequestProfiles();
     // Each section guards itself with `@if (().length)` so sections paint
     // independently as their data arrives. No global loading gate.
     await this.loadAllSections();
@@ -304,9 +349,12 @@ export class HomeComponent implements OnInit, OnDestroy {
     const libSections = this.visibleSections().filter(
       (s) => s.type === 'library-recent' && s.libraryId != null,
     );
+    const wantRequests = this.visibleSections().some(
+      (s) => s.type === 'requests-recent',
+    );
 
     try {
-      const [recent, calendar, libEntries] = await Promise.all([
+      const [recent, calendar, libEntries, requests] = await Promise.all([
         this.mediaService.getRecentlyAdded(
           {
             mode,
@@ -334,9 +382,16 @@ export class HomeComponent implements OnInit, OnDestroy {
               .catch(() => [s.libraryId as number, [] as Media[]] as const),
           ),
         ),
+        wantRequests
+          ? this.requestsService
+              .list({ limit: 12 }, { force })
+              .then((r) => r.data)
+              .catch(() => null)
+          : Promise.resolve(null),
       ]);
       this.recentMedia.set(recent);
       this.libraryRecent.set(new Map(libEntries));
+      if (requests) this.recentRequests.set(requests);
       const upcoming = calendar
         .filter((e) => !e.hasFile && (e.event === 'digital' || e.event === 'airing' || e.event === 'release'))
         .sort((a, b) => a.date.localeCompare(b.date));
@@ -349,6 +404,63 @@ export class HomeComponent implements OnInit, OnDestroy {
         }),
       );
     } catch { /* ignore */ }
+  }
+
+  private async loadRequestProfiles() {
+    try {
+      const [qp, lp] = await Promise.all([
+        this.profilesApi.getQualityProfiles(),
+        this.profilesApi.getLanguageProfiles(),
+      ]);
+      this.qualityProfileNames.set(new Map(qp.map((p) => [p.id, p.name])));
+      this.languageProfileNames.set(new Map(lp.map((p) => [p.id, p.name])));
+    } catch {
+      /* profiles optional — cards fall back to "#id" */
+    }
+  }
+
+  async approveRequest(id: number) {
+    this.requestActionBusyId.set(id);
+    try {
+      this.patchRequest(await this.requestsService.approve(id));
+    } catch {
+      /* global error toast */
+    } finally {
+      this.requestActionBusyId.set(null);
+    }
+  }
+
+  openDecline(id: number) {
+    this.declineForId.set(id);
+    this.declineReasonText.set('');
+    this.declineModal()?.showModal();
+  }
+
+  closeDecline() {
+    this.declineModal()?.close();
+    this.declineForId.set(null);
+  }
+
+  async submitDecline() {
+    const id = this.declineForId();
+    if (id == null) return;
+    this.requestActionBusyId.set(id);
+    try {
+      this.patchRequest(
+        await this.requestsService.decline(id, this.declineReasonText()),
+      );
+      this.closeDecline();
+    } catch {
+      /* global error toast */
+    } finally {
+      this.requestActionBusyId.set(null);
+    }
+  }
+
+  private patchRequest(updated: FliksRequestRow) {
+    this.recentRequests.update((list) =>
+      list.map((r) => (r.id === updated.id ? updated : r)),
+    );
   }
 
   /**

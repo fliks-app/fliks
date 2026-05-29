@@ -5,7 +5,7 @@ import {
   signal,
   OnInit,
 } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
 import {
   CdkDropList,
@@ -26,6 +26,8 @@ import {
 } from '../../../core/services/home-settings.service';
 import { LibrariesApiService } from '../../../core/services/api/libraries-api.service';
 import { TvService } from '../../../core/services/tv.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { DisplaySettingsService } from '../../../core/services/display-settings.service';
 import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
@@ -51,6 +53,9 @@ export class HomeSettingsPageComponent implements OnInit {
   private readonly home = inject(HomeSettingsService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly displaySettings = inject(DisplaySettingsService);
+  private readonly auth = inject(AuthService);
+  private readonly confirmation = inject(ConfirmationService);
+  private readonly translate = inject(TranslateService);
   readonly tv = inject(TvService);
 
   /** The rendered, reorderable rows — the working copy persisted on change. */
@@ -58,27 +63,57 @@ export class HomeSettingsPageComponent implements OnInit {
   readonly mode = signal<RecentlyAddedMode>('media');
   readonly onlyMyRequests = signal(false);
 
+  /** Cached so reset/rebuild can re-resolve without refetching libraries. */
+  private libs: { id: number; name: string }[] = [];
+
   private readonly BUILTIN_LABELS: Record<string, string> = {
     libraries: 'home_settings.section.libraries',
     'continue-watching': 'home_settings.section.continue_watching',
     recommendations: 'home_settings.section.recommendations',
     'recently-added': 'home_settings.section.recently_added',
     'coming-soon': 'home_settings.section.coming_soon',
+    'requests-recent': 'home_settings.section.requests_recent',
   };
 
   async ngOnInit() {
     this.mode.set(this.home.settings().recentlyAddedMode);
     this.onlyMyRequests.set(this.displaySettings.get().onlyMyRequests);
-    let libs: { id: number; name: string }[] = [];
     try {
-      libs = (await this.librariesApi.listMine()).map((l) => ({
+      this.libs = (await this.librariesApi.listMine()).map((l) => ({
         id: l.id,
         name: l.name,
       }));
     } catch {
       /* error handled by global interceptor */
     }
-    this.rows.set(this.home.resolve(libs));
+    this.rebuild();
+  }
+
+  private get requestsAllowed(): boolean {
+    return (
+      this.auth.hasPermission('requests.create') ||
+      this.auth.hasPermission('requests.manage')
+    );
+  }
+
+  /** Re-derive the rendered rows from the persisted settings + current libs. */
+  private rebuild() {
+    this.rows.set(
+      this.home.resolve(this.libs, { requests: this.requestsAllowed }),
+    );
+  }
+
+  /** Reset zone order + visibility to defaults, after confirmation. */
+  async reset() {
+    const confirmed = await this.confirmation.confirm({
+      title: this.translate.instant('home_settings.reset_confirm_title'),
+      message: this.translate.instant('home_settings.reset_confirm'),
+      confirmLabel: this.translate.instant('home_settings.reset'),
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    this.home.resetLayout();
+    this.rebuild();
   }
 
   /** Translation key for a built-in zone's label. */

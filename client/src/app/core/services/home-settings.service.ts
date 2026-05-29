@@ -8,6 +8,7 @@ export type HomeSectionKey =
   | 'recommendations'
   | 'recently-added'
   | 'coming-soon'
+  | 'requests-recent'
   | `library-recent:${number}`;
 
 export type HomeSectionType =
@@ -16,6 +17,7 @@ export type HomeSectionType =
   | 'recommendations'
   | 'recently-added'
   | 'coming-soon'
+  | 'requests-recent'
   | 'library-recent';
 
 /** What the "Recently added" zones rank by — must match the backend
@@ -100,15 +102,30 @@ export class HomeSettingsService {
     this.persist({ ...this.settings(), recentlyAddedMode });
   }
 
+  /** Reset zone order + visibility to defaults (built-ins visible in their
+   *  canonical order; permission-gated and per-library zones fall back to
+   *  their default placement via {@link resolve}). Leaves the recently-added
+   *  mode untouched. */
+  resetLayout(): void {
+    this.persist({
+      ...this.settings(),
+      order: DEFAULTS.order.map((p) => ({ ...p })),
+    });
+  }
+
   /**
    * Reconcile the saved order with what's actually available now: keep the
    * saved order for still-present zones, append any missing built-ins (default
    * visible) in their canonical position, append one zone per library (default
    * hidden — opt-in), and drop entries for libraries that no longer exist.
    */
-  resolve(libraries: { id: number; name: string }[]): ResolvedHomeSection[] {
+  resolve(
+    libraries: { id: number; name: string }[],
+    opts: { requests?: boolean } = {},
+  ): ResolvedHomeSection[] {
     const libName = new Map(libraries.map((l) => [l.id, l.name]));
     const available = new Set<HomeSectionKey>(BUILTIN_ORDER);
+    if (opts.requests) available.add('requests-recent');
     for (const lib of libraries) {
       available.add(`${LIBRARY_RECENT_PREFIX}${lib.id}` as HomeSectionKey);
     }
@@ -126,6 +143,16 @@ export class HomeSettingsService {
         merged.push({ key, visible: true });
         seen.add(key);
       }
+    }
+    // Permission-gated built-in: only offered when the user can use requests.
+    // With no saved preference it defaults visible, slotted just above
+    // "recently-added"; a saved order (handled above) wins.
+    if (opts.requests && !seen.has('requests-recent')) {
+      const pref: HomeSectionPref = { key: 'requests-recent', visible: true };
+      const at = merged.findIndex((p) => p.key === 'recently-added');
+      if (at >= 0) merged.splice(at, 0, pref);
+      else merged.push(pref);
+      seen.add('requests-recent');
     }
     for (const lib of libraries) {
       const key = `${LIBRARY_RECENT_PREFIX}${lib.id}` as HomeSectionKey;

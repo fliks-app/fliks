@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
+import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
 
 export interface RequestUser {
   id: number;
@@ -85,14 +86,20 @@ export class RequestsService {
     return firstValueFrom(this.http.patch<FliksRequestRow>(`/api/requests/${id}`, body));
   }
 
-  list(params: ListRequestsParams = {}) {
+  list(params: ListRequestsParams = {}, opts: { force?: boolean } = {}) {
     let httpParams = new HttpParams();
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null && value !== '') {
         httpParams = httpParams.set(key, String(value));
       }
     }
-    return firstValueFrom(this.http.get<RequestsPage>('/api/requests', { params: httpParams }));
+    const headers = opts.force ? { [CACHE_BYPASS_HEADER]: '1' } : undefined;
+    return firstValueFrom(
+      this.http.get<RequestsPage>(
+        '/api/requests',
+        headers ? { params: httpParams, headers } : { params: httpParams },
+      ),
+    );
   }
 
   remove(id: number) {

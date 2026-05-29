@@ -113,6 +113,26 @@
         }
       }
 
+      <!-- Recent requests (permission-gated) -->
+      @case ('requests-recent') {
+        @if (recentRequests().length) {
+          <app-horizontal-scroller [title]="'home.requests_recent' | translate">
+            @for (req of recentRequests(); track req.id) {
+              <app-request-card
+                [attr.data-home-focus]="'request:' + req.id"
+                [request]="req"
+                [canManage]="canManageRequests"
+                [qualityProfileName]="qualityProfileDisplay(req.qualityProfileId)"
+                [languageProfileName]="languageProfileDisplay(req.languageProfileId)"
+                [busy]="requestActionBusyId() === req.id"
+                (approve)="approveRequest($event)"
+                (decline)="openDecline($event)"
+              />
+            }
+          </app-horizontal-scroller>
+        }
+      }
+
       <!-- Recently Added — per library (opt-in) -->
       @case ('library-recent') {
         @if (libraryRecent().get(section.libraryId!)?.length) {
@@ -136,3 +156,12 @@
   }
 
 </div>
+
+<app-request-decline-modal
+  [requestId]="declineForId()"
+  [reasonText]="declineReasonText()"
+  [submitBusy]="requestActionBusyId() === declineForId()"
+  (reasonTextChange)="declineReasonText.set($event)"
+  (dismissed)="closeDecline()"
+  (submitted)="submitDecline()"
+/>
