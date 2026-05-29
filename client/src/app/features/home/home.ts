@@ -206,7 +206,13 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.attachedSub = this.reuseStrategy.attached$.subscribe((key) => {
       if (key !== ownKey) return;
       this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
+      // The cached signals stay visible; refresh cache-first for an instant
+      // repaint, then force a network round-trip so a return to home reflects
+      // additions / watched flips made elsewhere — same SWR contract as the
+      // initial ngOnInit load (a plain reuse-attach would otherwise sit on
+      // stale data until the cache TTL expired).
       void this.loadAllSections();
+      queueMicrotask(() => void this.loadAllSections({ force: true }));
       this.scrollMemory.restoreSticky(HomeComponent.SCROLL_KEY);
       if (this.tv.isTv()) {
         this.arrivedViaBack = true;
@@ -258,7 +264,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       if (cw) this.continueWatching.set(cw);
       if (recs) this.recommendations.set(recs);
     } catch { /* ignore */ }
-    await this.loadFilteredSections();
+    await this.loadFilteredSections({ force });
   }
 
   private applyDefaultFocus() {
@@ -282,7 +288,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     root.querySelector<HTMLElement>(FOCUSABLE)?.focus({ preventScroll: false });
   }
 
-  private async loadFilteredSections() {
+  private async loadFilteredSections(opts: { force?: boolean } = {}) {
+    const force = !!opts.force;
     const mine = this.displaySettings.settings().onlyMyRequests;
     const mode = this.home.settings().recentlyAddedMode;
     const today = new Date();
@@ -300,23 +307,29 @@ export class HomeComponent implements OnInit, OnDestroy {
 
     try {
       const [recent, calendar, libEntries] = await Promise.all([
-        this.mediaService.getRecentlyAdded({
-          mode,
-          limit: 20,
-          excludeWatched: true,
-          requestedByMe: mine || undefined,
-        }),
-        this.mediaService.getCalendar(startStr, in30dStr, true, mine).catch(() => []),
+        this.mediaService.getRecentlyAdded(
+          {
+            mode,
+            limit: 20,
+            excludeWatched: true,
+            requestedByMe: mine || undefined,
+          },
+          { force },
+        ),
+        this.mediaService.getCalendar(startStr, in30dStr, true, mine, { force }).catch(() => []),
         Promise.all(
           libSections.map((s) =>
             this.mediaService
-              .getRecentlyAdded({
-                libraryId: s.libraryId,
-                mode,
-                limit: 20,
-                excludeWatched: true,
-                requestedByMe: mine || undefined,
-              })
+              .getRecentlyAdded(
+                {
+                  libraryId: s.libraryId,
+                  mode,
+                  limit: 20,
+                  excludeWatched: true,
+                  requestedByMe: mine || undefined,
+                },
+                { force },
+              )
               .then((items) => [s.libraryId as number, items] as const)
               .catch(() => [s.libraryId as number, [] as Media[]] as const),
           ),
