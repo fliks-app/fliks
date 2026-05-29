@@ -951,7 +951,15 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     try {
       const updated = await this.mediaService.toggleMonitored(m.id, !m.monitored);
       this.media.set(updated);
-      if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
+      if (updated.type === 'series') {
+        this.syncActiveSeasonForSeriesFilter();
+        const open = this.episodeDrawerContext();
+        if (open) {
+          const s = updated.seasons?.find((x) => x.id === open.season.id);
+          const e = s?.episodes.find((x) => x.id === open.episode.id);
+          if (s && e) this.episodeDrawerContext.set({ season: s, episode: e });
+        }
+      }
     } finally {
       this.monitoredLoading.set(false);
     }
@@ -1252,13 +1260,26 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       const updated = await this.mediaService.updateSeasonMonitored(season.id, !season.monitored);
       const m = this.media();
       if (!m?.seasons) return;
-      this.media.set({
-        ...m,
-        seasons: m.seasons.map((s) =>
-          s.id === updated.id ? { ...s, monitored: updated.monitored } : s,
-        ),
-      });
+      const nextSeasons = m.seasons.map((s) =>
+        s.id === updated.id
+          ? {
+              ...s,
+              monitored: updated.monitored,
+              episodes: s.episodes.map((e) => ({
+                ...e,
+                monitored: updated.monitored,
+              })),
+            }
+          : s,
+      );
+      this.media.set({ ...m, seasons: nextSeasons });
       this.syncActiveSeasonForSeriesFilter();
+      const open = this.episodeDrawerContext();
+      if (open?.season.id === updated.id) {
+        const s = nextSeasons.find((x) => x.id === updated.id);
+        const e = s?.episodes.find((x) => x.id === open.episode.id);
+        if (s && e) this.episodeDrawerContext.set({ season: s, episode: e });
+      }
     } finally {
       this.seasonBusy.set(null);
     }

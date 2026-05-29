@@ -55,9 +55,42 @@ export class MediaMutationService {
     Object.assign(media, rest);
 
     const saved = await this.mediaRepo.save(media);
+    if (dto.monitored !== undefined) {
+      await this.cascadeMonitoredToChildren([saved.id], dto.monitored);
+    }
     await this.metadata.updateSearchVector(saved.id);
     await this.requestLifecycle.onMediaMonitorChange(saved, wasMonitored);
     return this.query.findOne(saved.id);
+  }
+
+  /**
+   * Propagate a series' monitored flag down to every season and episode it
+   * owns. Toggling monitoring on a series (or season) is an all-or-nothing
+   * intent: the children inherit the new state so the library doesn't keep
+   * grabbing episodes under an unmonitored series. A no-op for movies, which
+   * own no seasons. Plain bulk UPDATEs keep it to two statements regardless of
+   * how many episodes the series has.
+   */
+  private async cascadeMonitoredToChildren(
+    mediaIds: number[],
+    monitored: boolean,
+  ): Promise<void> {
+    if (mediaIds.length === 0) return;
+    await this.seasonRepo
+      .createQueryBuilder()
+      .update(Season)
+      .set({ monitored })
+      .where('"mediaId" IN (:...mediaIds)', { mediaIds })
+      .execute();
+    await this.episodeRepo
+      .createQueryBuilder()
+      .update(Episode)
+      .set({ monitored })
+      .where(
+        '"seasonId" IN (SELECT id FROM seasons WHERE "mediaId" IN (:...mediaIds))',
+        { mediaIds },
+      )
+      .execute();
   }
 
   /**
@@ -153,6 +186,10 @@ export class MediaMutationService {
       .whereInIds(dto.ids)
       .execute();
 
+    if (dto.monitored !== undefined) {
+      await this.cascadeMonitoredToChildren(dto.ids, dto.monitored);
+    }
+
     return { updated: result.affected ?? 0 };
   }
 
@@ -182,6 +219,14 @@ export class MediaMutationService {
     if (patch.preferredProvider !== undefined)
       season.preferredProvider = patch.preferredProvider;
     const saved = await this.seasonRepo.save(season);
+    if (patch.monitored !== undefined) {
+      await this.episodeRepo
+        .createQueryBuilder()
+        .update(Episode)
+        .set({ monitored: patch.monitored })
+        .where('"seasonId" = :seasonId', { seasonId })
+        .execute();
+    }
     if (season.media) {
       await this.requestLifecycle.onSeasonMonitorChange(
         season.media,
