@@ -59,6 +59,15 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
    *  a mediaOption rejection is recovered via the fallback, not surfaced. */
   private loadingPhase = false;
 
+  /** One-shot guard for the optimistic-recovery branch in the `error`
+   *  bridge. webOS's native HLS pipeline hides the HTTP status of the
+   *  failing segment fetch — we can't tell a backend 410 from a real
+   *  decode failure. First network-shaped MediaError after a frame has
+   *  played is routed to `sessionExpired`; the player tries one cheap
+   *  /playback-info reload before surfacing a fatal error. Reset on
+   *  every {@link load} so a fresh playback starts with a fresh budget. */
+  private recoveryAttempted = false;
+
   /** Optimistic position reported while a seek settles, so the seekbar stays
    *  pinned and relative (±10s) steps accumulate even though the real clock
    *  hasn't moved yet (reload-based seeks take a few seconds). */
@@ -147,6 +156,19 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     add('error', () => {
       if (this.loadingPhase) return; // recovered via the load() fallback
       const err = v.error;
+      // Network / unsupported-source errors mid-playback are the signature
+      // of a backend 410 on a segment (LiveSession gone) or any other
+      // transient stream loss the recovery flow handles. Optimistically
+      // route the first one to `sessionExpired`; the player swaps to a
+      // fresh sid via /playback-info. Repeat errors fall through to fatal.
+      const networkShaped =
+        err?.code === MediaError.MEDIA_ERR_NETWORK ||
+        err?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED;
+      if (this.firstFrameEmitted && !this.recoveryAttempted && networkShaped) {
+        this.recoveryAttempted = true;
+        this.emit('sessionExpired', undefined);
+        return;
+      }
       this.emit('error', { code: err?.code ?? -1, message: mediaErrorMessage(err) });
       this.emit('stateChanged', { state: 'error' });
     });
@@ -173,6 +195,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     if (!this.video) throw new Error('WebOsEngine not initialised');
     this.loadedUrl = url;
     this.firstFrameEmitted = false;
+    this.recoveryAttempted = false;
     this.clearSeekDebounce();
     this.pendingReloadTarget = null;
     const start = startTime && startTime > 0 ? startTime : 0;
