@@ -1553,14 +1553,21 @@ export class StreamingController {
     // anchoring a fresh main at segment 0. A segment at or past the floor is a
     // genuine seek/forward read the main owns. 10 s timeout safety net falls
     // through to the slow path rather than blocking on a 60 s waitForSegment.
+    const isInit = segment.startsWith('init');
     const resumeFloor = Math.max(
       existing?.startSegment ?? 0,
       live ? secondsToSegmentIndex(live.position) : 0,
     );
+    // An init segment is position-independent, so it never anchors the main —
+    // otherwise an init request landing right after a restart (before recovery
+    // re-seeds the live playhead) would spawn a fresh main at segment 0. A
+    // seg-0/seg-1 probe routes to early only while the playhead sits past the
+    // early window (a resume); at the start it is the real first read the main
+    // owns.
     const isEarlyProbe =
       quality !== 'remux' &&
-      resumeFloor > EARLY_PROBE_SEGMENTS &&
-      segIndex < EARLY_PROBE_SEGMENTS;
+      (isInit ||
+        (resumeFloor > EARLY_PROBE_SEGMENTS && segIndex < EARLY_PROBE_SEGMENTS));
     if (isEarlyProbe) {
       let earlySession = this.resolveEarlySession(
         mediaFileId,
