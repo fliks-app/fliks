@@ -8,6 +8,7 @@ export type HomeSectionKey =
   | 'recommendations'
   | 'recently-added'
   | 'coming-soon'
+  | 'requests-recent'
   | `library-recent:${number}`;
 
 export type HomeSectionType =
@@ -16,6 +17,7 @@ export type HomeSectionType =
   | 'recommendations'
   | 'recently-added'
   | 'coming-soon'
+  | 'requests-recent'
   | 'library-recent';
 
 /** What the "Recently added" zones rank by — must match the backend
@@ -106,9 +108,13 @@ export class HomeSettingsService {
    * visible) in their canonical position, append one zone per library (default
    * hidden — opt-in), and drop entries for libraries that no longer exist.
    */
-  resolve(libraries: { id: number; name: string }[]): ResolvedHomeSection[] {
+  resolve(
+    libraries: { id: number; name: string }[],
+    opts: { requests?: boolean } = {},
+  ): ResolvedHomeSection[] {
     const libName = new Map(libraries.map((l) => [l.id, l.name]));
     const available = new Set<HomeSectionKey>(BUILTIN_ORDER);
+    if (opts.requests) available.add('requests-recent');
     for (const lib of libraries) {
       available.add(`${LIBRARY_RECENT_PREFIX}${lib.id}` as HomeSectionKey);
     }
@@ -126,6 +132,12 @@ export class HomeSettingsService {
         merged.push({ key, visible: true });
         seen.add(key);
       }
+    }
+    // Permission-gated built-in: only offered when the user can use requests,
+    // visible by default, appended after the other built-ins.
+    if (opts.requests && !seen.has('requests-recent')) {
+      merged.push({ key: 'requests-recent', visible: true });
+      seen.add('requests-recent');
     }
     for (const lib of libraries) {
       const key = `${LIBRARY_RECENT_PREFIX}${lib.id}` as HomeSectionKey;

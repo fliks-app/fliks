@@ -1,0 +1,83 @@
+<div class="relative w-72 sm:w-80 shrink-0 overflow-hidden rounded-box border border-base-200 bg-base-100 shadow-md">
+  <!-- Fanart backdrop + dimming gradient so the overlaid text stays legible. -->
+  <div class="absolute inset-0" aria-hidden="true">
+    <app-request-poster
+      class="absolute inset-0"
+      [tmdbId]="request().tmdbId"
+      [mediaType]="request().mediaType"
+      mode="backdrop"
+    />
+    <div class="absolute inset-0 bg-gradient-to-br from-base-100/55 via-base-100/80 to-base-100"></div>
+  </div>
+
+  <div class="relative flex flex-col gap-1.5 p-4">
+    <h3 class="text-lg font-semibold leading-snug line-clamp-1 m-0">
+      <a [routerLink]="mediaLink()" class="link link-hover text-base-content hover:opacity-80">
+        {{ request().media?.title || request().title }}
+      </a>
+    </h3>
+
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/70">
+      <span class="badge badge-sm whitespace-nowrap" [class]="statusBadgeClass(request().status)">
+        {{ ('requests.status.' + request().status) | translate }}
+      </span>
+      <span>
+        @if (request().mediaType === 'movie') {
+          {{ 'requests.type_movie' | translate }}
+        } @else {
+          {{ 'requests.type_series' | translate }}
+        }
+      </span>
+    </div>
+
+    @if (request().mediaType === 'series' && request().seasons?.length) {
+      <p class="text-sm text-base-content/70 m-0">
+        <span class="text-base-content/50">{{ 'requests.seasons_label' | translate }} · </span>
+        {{ request().seasons?.join(', ') }}
+      </p>
+    }
+
+    @if (canManage()) {
+      <p class="text-sm text-base-content/70 m-0">
+        <span class="text-base-content/50">{{ 'requests.requested_by' | translate }}</span>
+        <span class="font-medium text-base-content">{{ request().user.username }}</span>
+      </p>
+    }
+
+    <div class="flex flex-col gap-0.5 text-xs text-base-content/65">
+      <p class="m-0">
+        <span class="text-base-content/50">{{ 'requests.date_label' | translate }}</span>
+        {{ request().createdAt | date: 'short' }}
+      </p>
+      <p class="m-0">
+        <span class="text-base-content/50">{{ 'discover.quality_profile' | translate }} · </span>
+        {{ qualityProfileName() }}
+      </p>
+      <p class="m-0">
+        <span class="text-base-content/50">{{ 'discover.language_profile' | translate }} · </span>
+        {{ languageProfileName() }}
+      </p>
+    </div>
+
+    @if (canManage() && request().status === 'pending') {
+      <div class="mt-2 flex gap-2">
+        <button
+          type="button"
+          class="btn btn-success btn-sm flex-1"
+          [disabled]="busy()"
+          (click)="approve.emit(request().id)"
+        >
+          {{ 'requests.approve' | translate }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-warning btn-sm flex-1"
+          [disabled]="busy()"
+          (click)="decline.emit(request().id)"
+        >
+          {{ 'requests.decline' | translate }}
+        </button>
+      </div>
+    }
+  </div>
+</div>

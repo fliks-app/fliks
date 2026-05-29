@@ -189,7 +189,8 @@
     "coming_soon": "Bientôt disponible",
     "recent_media": "Récemment ajoutés",
     "recommendations": "Recommandations",
-    "recent_media_in": "Récemment ajouté – {{library}}"
+    "recent_media_in": "Récemment ajouté – {{library}}",
+    "requests_recent": "Demandes récentes"
   },
   "playback_settings": {
     "title": "Paramètres de lecture",
@@ -1864,7 +1865,8 @@
       "continue_watching": "Reprendre la lecture",
       "recommendations": "Recommandations",
       "recently_added": "Récemment ajouté",
-      "coming_soon": "Bientôt disponible"
+      "coming_soon": "Bientôt disponible",
+      "requests_recent": "Demandes récentes"
     },
     "section_library_recent": "Récemment ajouté – {{library}}",
     "drag": "Déplacer",

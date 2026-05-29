@@ -26,6 +26,7 @@ import {
 } from '../../../core/services/home-settings.service';
 import { LibrariesApiService } from '../../../core/services/api/libraries-api.service';
 import { TvService } from '../../../core/services/tv.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { DisplaySettingsService } from '../../../core/services/display-settings.service';
 import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
@@ -51,6 +52,7 @@ export class HomeSettingsPageComponent implements OnInit {
   private readonly home = inject(HomeSettingsService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly displaySettings = inject(DisplaySettingsService);
+  private readonly auth = inject(AuthService);
   readonly tv = inject(TvService);
 
   /** The rendered, reorderable rows — the working copy persisted on change. */
@@ -64,6 +66,7 @@ export class HomeSettingsPageComponent implements OnInit {
     recommendations: 'home_settings.section.recommendations',
     'recently-added': 'home_settings.section.recently_added',
     'coming-soon': 'home_settings.section.coming_soon',
+    'requests-recent': 'home_settings.section.requests_recent',
   };
 
   async ngOnInit() {
@@ -78,7 +81,10 @@ export class HomeSettingsPageComponent implements OnInit {
     } catch {
       /* error handled by global interceptor */
     }
-    this.rows.set(this.home.resolve(libs));
+    const requests =
+      this.auth.hasPermission('requests.create') ||
+      this.auth.hasPermission('requests.manage');
+    this.rows.set(this.home.resolve(libs, { requests }));
   }
 
   /** Translation key for a built-in zone's label. */
