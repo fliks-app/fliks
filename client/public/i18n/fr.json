@@ -111,15 +111,14 @@
       "subtitles": "Sous-titres",
       "cast": "Chromecast",
       "display": "Affichage",
-      "storage": "Stockage"
+      "storage": "Stockage",
+      "home": "Accueil"
     }
   },
   "display_settings": {
     "title": "Affichage",
     "home_background": "Image de fond sur l'accueil",
-    "home_background_hint": "Affiche une affiche en plein écran derrière les sections de l'accueil.",
-    "only_my_requests": "Afficher uniquement les médias que j'ai demandé",
-    "only_my_requests_hint": "Filtre les sections « Récemment ajoutés » et « Bientôt disponible » de l'accueil pour ne garder que les médias que vous avez demandés."
+    "home_background_hint": "Affiche une affiche en plein écran derrière les sections de l'accueil."
   },
   "storage_settings": {
     "clear_cache": "Vider le cache",
@@ -189,7 +188,8 @@
     "continue_watching": "Reprendre la lecture",
     "coming_soon": "Bientôt disponible",
     "recent_media": "Récemment ajoutés",
-    "recommendations": "Recommandations"
+    "recommendations": "Recommandations",
+    "recent_media_in": "Récemment ajouté – {{library}}"
   },
   "playback_settings": {
     "title": "Paramètres de lecture",
@@ -1854,5 +1854,29 @@
     "total": "Total :",
     "monitored": "Surveillés :",
     "unmonitored": "Non surveillés :"
+  },
+  "home_settings": {
+    "title": "Accueil",
+    "sections_title": "Zones de l'accueil",
+    "sections_hint": "Choisissez les zones à afficher et leur ordre. Glissez pour réordonner, ou utilisez les flèches.",
+    "section": {
+      "libraries": "Bibliothèques",
+      "continue_watching": "Reprendre la lecture",
+      "recommendations": "Recommandations",
+      "recently_added": "Récemment ajouté",
+      "coming_soon": "Bientôt disponible"
+    },
+    "section_library_recent": "Récemment ajouté – {{library}}",
+    "drag": "Déplacer",
+    "move_up": "Monter",
+    "move_down": "Descendre",
+    "toggle_visible": "Afficher la zone",
+    "recently_added_mode": "Contenu de « Récemment ajouté »",
+    "recently_added_mode_hint": "Détermine ce qui alimente toutes les zones « Récemment ajouté » : les médias récemment ajoutés à la bibliothèque, ceux dont un fichier vient d'être ajouté, ou les deux.",
+    "mode_media": "Médias récemment ajoutés",
+    "mode_file": "Fichiers récemment ajoutés",
+    "mode_both": "Les deux",
+    "only_my_requests": "Afficher uniquement les médias que j'ai demandé",
+    "only_my_requests_hint": "Filtre les sections « Récemment ajoutés » et « Bientôt disponible » de l'accueil pour ne garder que les médias que vous avez demandés."
   }
 }

@@ -244,7 +244,14 @@ export const routes: Routes = [
       import('./features/app-settings/app-settings-shell').then((m) => m.AppSettingsShellComponent),
     canActivate: [serverConfigGuard, authGuard, passwordChangeGuard],
     children: [
-      { path: '', pathMatch: 'full', redirectTo: 'display' },
+      { path: '', pathMatch: 'full', redirectTo: 'home' },
+      {
+        path: 'home',
+        loadComponent: () =>
+          import('./features/app-settings/home-settings/home-settings').then(
+            (m) => m.HomeSettingsPageComponent,
+          ),
+      },
       {
         path: 'player',
         loadComponent: () =>

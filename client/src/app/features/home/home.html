@@ -5,99 +5,134 @@
 
 <div appTvSection class="flex flex-col gap-8">
 
-    <!-- Libraries -->
-    @if (libraries().length) {
-      <app-horizontal-scroller [title]="'home.libraries' | translate">
-        @for (lib of libraries(); track lib.id) {
-          <a [routerLink]="libraryUrl(lib)"
-             [attr.data-home-focus]="'library:' + lib.id"
-             class="shrink-0 w-36 h-20 sm:w-48 sm:h-28 rounded-xl border flex items-center gap-3 px-4 sm:px-5 hover:shadow-lg transition-shadow"
-             [style.background]="'linear-gradient(135deg, color-mix(in oklch, ' + libraryColor(lib) + ' 20%, transparent), color-mix(in oklch, ' + libraryColor(lib) + ' 5%, transparent))'"
-             [style.border-color]="'color-mix(in oklch, ' + libraryColor(lib) + ' 15%, transparent)'"
-          >
-            <app-lucide-icon [name]="lib.icon || 'library'" class="h-6 w-6 sm:h-8 sm:w-8 shrink-0" [style.color]="libraryColor(lib)" />
-            <span class="text-sm sm:text-base font-semibold">{{ lib.name }}</span>
-          </a>
-        }
-      </app-horizontal-scroller>
-    }
+  @for (section of visibleSections(); track section.key) {
+    @switch (section.type) {
 
-    <!-- Continue Watching -->
-    @if (continueWatching().length) {
-      <app-horizontal-scroller [title]="'home.continue_watching' | translate">
-        @for (item of continueWatching(); track item.id) {
-          <app-media-card [aspect]="'landscape'"
-            [attr.data-home-focus]="'cw:' + item.id"
-            [imageUrl]="item.stillUrl ?? item.fanartUrl ?? item.posterUrl"
-            [title]="item.mediaTitle"
-            [subtitle]="item.episodeLabel ?? undefined"
-            [progressPercent]="item.progressPercent"
-            [playable]="true"
-            [link]="['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId]"
-            [subtitleLink]="item.episodeId ? ['/series', '' + item.mediaId, 'episode', '' + item.episodeId] : null"
-            [dismissable]="true"
-            [interactiveWatched]="true"
-            [clickIntent]="'play'"
-            (clicked)="playContinueWatching(item)"
-            (dismissed)="removeContinueWatching(item)"
-            (watchedToggled)="toggleContinueWatchingWatched(item, $event)"
-          />
+      <!-- Libraries -->
+      @case ('libraries') {
+        @if (libraries().length) {
+          <app-horizontal-scroller [title]="'home.libraries' | translate">
+            @for (lib of libraries(); track lib.id) {
+              <a [routerLink]="libraryUrl(lib)"
+                 [attr.data-home-focus]="'library:' + lib.id"
+                 class="shrink-0 w-36 h-20 sm:w-48 sm:h-28 rounded-xl border flex items-center gap-3 px-4 sm:px-5 hover:shadow-lg transition-shadow"
+                 [style.background]="'linear-gradient(135deg, color-mix(in oklch, ' + libraryColor(lib) + ' 20%, transparent), color-mix(in oklch, ' + libraryColor(lib) + ' 5%, transparent))'"
+                 [style.border-color]="'color-mix(in oklch, ' + libraryColor(lib) + ' 15%, transparent)'"
+              >
+                <app-lucide-icon [name]="lib.icon || 'library'" class="h-6 w-6 sm:h-8 sm:w-8 shrink-0" [style.color]="libraryColor(lib)" />
+                <span class="text-sm sm:text-base font-semibold">{{ lib.name }}</span>
+              </a>
+            }
+          </app-horizontal-scroller>
         }
-      </app-horizontal-scroller>
-    }
+      }
 
-    <!-- Recommendations -->
-    @if (recommendations().length) {
-      <app-horizontal-scroller [title]="'home.recommendations' | translate">
-        @for (rec of recommendations(); track rec.media.id) {
-          <app-media-card
-            class="shrink-0 w-28 sm:w-40"
-            [attr.data-home-focus]="'rec:' + rec.media.id"
-            [imageUrl]="rec.media.posterUrl"
-            [title]="rec.media.title"
-            [subtitle]="'' + rec.media.year"
-            [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
-            [status]="rec.media.available ? null : 'missing'"
-            [playable]="rec.media.available"
-            [dismissable]="true"
-            (played)="playRecommendation(rec)"
-            (dismissed)="dismissRecommendation(rec)"
-          />
+      <!-- Continue Watching -->
+      @case ('continue-watching') {
+        @if (continueWatching().length) {
+          <app-horizontal-scroller [title]="'home.continue_watching' | translate">
+            @for (item of continueWatching(); track item.id) {
+              <app-media-card [aspect]="'landscape'"
+                [attr.data-home-focus]="'cw:' + item.id"
+                [imageUrl]="item.stillUrl ?? item.fanartUrl ?? item.posterUrl"
+                [title]="item.mediaTitle"
+                [subtitle]="item.episodeLabel ?? undefined"
+                [progressPercent]="item.progressPercent"
+                [playable]="true"
+                [link]="['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId]"
+                [subtitleLink]="item.episodeId ? ['/series', '' + item.mediaId, 'episode', '' + item.episodeId] : null"
+                [dismissable]="true"
+                [interactiveWatched]="true"
+                [clickIntent]="'play'"
+                (clicked)="playContinueWatching(item)"
+                (dismissed)="removeContinueWatching(item)"
+                (watchedToggled)="toggleContinueWatchingWatched(item, $event)"
+              />
+            }
+          </app-horizontal-scroller>
         }
-      </app-horizontal-scroller>
-    }
+      }
 
-    <!-- Recently Added -->
-    @if (recentMedia().length) {
-      <app-horizontal-scroller [title]="'home.recent_media' | translate">
-        @for (m of recentMedia(); track m.id) {
-          <app-media-card
-            class="shrink-0 w-28 sm:w-40"
-            [attr.data-home-focus]="'recent:' + m.id"
-            [media]="m"
-            [subtitle]="'' + m.year"
-            [hideStatusBar]="true"
-            [interactiveWatched]="canMarkMediaWatched(m)"
-            (watchedToggled)="toggleRecentMediaWatched(m, $event)"
-          />
+      <!-- Recommendations -->
+      @case ('recommendations') {
+        @if (recommendations().length) {
+          <app-horizontal-scroller [title]="'home.recommendations' | translate">
+            @for (rec of recommendations(); track rec.media.id) {
+              <app-media-card
+                class="shrink-0 w-28 sm:w-40"
+                [attr.data-home-focus]="'rec:' + rec.media.id"
+                [imageUrl]="rec.media.posterUrl"
+                [title]="rec.media.title"
+                [subtitle]="'' + rec.media.year"
+                [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
+                [status]="rec.media.available ? null : 'missing'"
+                [playable]="rec.media.available"
+                [dismissable]="true"
+                (played)="playRecommendation(rec)"
+                (dismissed)="dismissRecommendation(rec)"
+              />
+            }
+          </app-horizontal-scroller>
         }
-      </app-horizontal-scroller>
-    }
+      }
 
-    <!-- Coming Soon -->
-    @if (comingSoon().length) {
-      <app-horizontal-scroller [title]="'home.coming_soon' | translate">
-        @for (entry of comingSoon(); track entry.id) {
-          <app-media-card
-            class="shrink-0 w-28 sm:w-40"
-            [attr.data-home-focus]="'soon:' + entry.id"
-            [imageUrl]="entry.posterUrl"
-            [title]="entry.title"
-            [subtitle]="entry.date"
-            [link]="['/' + (entry.type === 'series' ? 'series' : 'movies'), '' + entry.mediaId]"
-          />
+      <!-- Recently Added -->
+      @case ('recently-added') {
+        @if (recentMedia().length) {
+          <app-horizontal-scroller [title]="'home.recent_media' | translate">
+            @for (m of recentMedia(); track m.id) {
+              <app-media-card
+                class="shrink-0 w-28 sm:w-40"
+                [attr.data-home-focus]="'recent:' + m.id"
+                [media]="m"
+                [subtitle]="'' + m.year"
+                [hideStatusBar]="true"
+                [interactiveWatched]="canMarkMediaWatched(m)"
+                (watchedToggled)="toggleRecentMediaWatched(m, $event)"
+              />
+            }
+          </app-horizontal-scroller>
         }
-      </app-horizontal-scroller>
-    }
+      }
 
-  </div>
+      <!-- Coming Soon -->
+      @case ('coming-soon') {
+        @if (comingSoon().length) {
+          <app-horizontal-scroller [title]="'home.coming_soon' | translate">
+            @for (entry of comingSoon(); track entry.id) {
+              <app-media-card
+                class="shrink-0 w-28 sm:w-40"
+                [attr.data-home-focus]="'soon:' + entry.id"
+                [imageUrl]="entry.posterUrl"
+                [title]="entry.title"
+                [subtitle]="entry.date"
+                [link]="['/' + (entry.type === 'series' ? 'series' : 'movies'), '' + entry.mediaId]"
+              />
+            }
+          </app-horizontal-scroller>
+        }
+      }
+
+      <!-- Recently Added — per library (opt-in) -->
+      @case ('library-recent') {
+        @if (libraryRecent().get(section.libraryId!)?.length) {
+          <app-horizontal-scroller [title]="'home.recent_media_in' | translate: { library: section.libraryName }">
+            @for (m of libraryRecent().get(section.libraryId!) ?? []; track m.id) {
+              <app-media-card
+                class="shrink-0 w-28 sm:w-40"
+                [attr.data-home-focus]="'libRecent:' + section.libraryId + ':' + m.id"
+                [media]="m"
+                [subtitle]="'' + m.year"
+                [hideStatusBar]="true"
+                [interactiveWatched]="canMarkMediaWatched(m)"
+                (watchedToggled)="toggleLibraryRecentWatched(section.libraryId!, m, $event)"
+              />
+            }
+          </app-horizontal-scroller>
+        }
+      }
+
+    }
+  }
+
+</div>

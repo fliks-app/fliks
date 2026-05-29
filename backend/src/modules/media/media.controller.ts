@@ -27,6 +27,7 @@ import { GrabMovieDto } from './dto/grab-movie.dto';
 import { UpdateMediaProfilesDto } from './dto/update-media-profiles.dto';
 import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
+import { RecentlyAddedDto } from './dto/recently-added.dto';
 import { PatchMonitoredDto } from './dto/patch-monitored.dto';
 import { PatchSeasonDto } from './dto/patch-season.dto';
 import { APP_QUALITIES } from '../../common/constants/app-qualities';
@@ -98,6 +99,26 @@ export class MediaController {
         : undefined,
       accessibleLibraryIds,
     );
+  }
+
+  @Get('recently-added')
+  @CheckPolicies((ability) => ability.can(Action.Read, Media))
+  async recentlyAdded(
+    @Query() query: RecentlyAddedDto,
+    @CurrentUser() user: User,
+  ) {
+    const accessibleLibraryIds =
+      await this.libraries.getAccessibleLibraryIds(user);
+    return this.mediaService.findRecentlyAdded({
+      libraryId: query.libraryId,
+      limit: query.limit ?? 20,
+      mode: query.mode ?? 'file',
+      excludeWatched: query.excludeWatched,
+      requestedByMe: query.requestedByMe,
+      userId:
+        query.excludeWatched || query.requestedByMe ? user?.id : undefined,
+      accessibleLibraryIds,
+    });
   }
 
   @Get('counts')

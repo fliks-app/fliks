@@ -329,6 +329,33 @@ export class MediaService {
     );
   }
 
+  /** Home "Recently added" feed. `mode` picks the ranking basis (media
+   *  add time / newest file / both); `libraryId` scopes to one library. */
+  getRecentlyAdded(
+    params: {
+      libraryId?: number;
+      limit?: number;
+      mode?: 'media' | 'file' | 'both';
+      excludeWatched?: boolean;
+      requestedByMe?: boolean;
+    } = {},
+    opts: { force?: boolean } = {},
+  ) {
+    let httpParams = new HttpParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null) {
+        httpParams = httpParams.set(key, String(value));
+      }
+    }
+    const headers = opts.force ? { [CACHE_BYPASS_HEADER]: '1' } : undefined;
+    return firstValueFrom(
+      this.http.get<Media[]>(
+        '/api/media/recently-added',
+        headers ? { params: httpParams, headers } : { params: httpParams },
+      ),
+    );
+  }
+
   getTracking(id: number) {
     return firstValueFrom(
       this.http.get<TrackingStatus>(`/api/media/${id}/tracking`),

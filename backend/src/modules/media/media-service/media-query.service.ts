@@ -8,6 +8,7 @@ import { MediaCast } from '../entities/media-cast.entity';
 import { MediaCrew } from '../entities/media-crew.entity';
 import { SearchMediaDto } from '../dto/search-media.dto';
 import { CalendarQueryDto } from '../dto/calendar-query.dto';
+import { RecentlyAddedMode } from '../dto/recently-added.dto';
 import { MediaType } from '../../../common/enums';
 import {
   getAppQualityById,
@@ -257,47 +258,7 @@ export class MediaQueryService {
 
     const [data, total] = await qb.getManyAndCount();
 
-    // For series: attach episode stats
-    const seriesIds = data
-      .filter((m) => m.type === MediaType.SERIES)
-      .map((m) => m.id);
-    let episodeStatsMap = new Map<
-      number,
-      { totalEpisodes: number; downloadedEpisodes: number }
-    >();
-    if (seriesIds.length) {
-      const stats: { mediaId: number; total: string; downloaded: string }[] =
-        await this.dataSource.query(
-          // "downloaded" = episodes whose content is on disk (coverage),
-          // including the shadowed episodes of a multi-episode file. Counting
-          // MediaFile rows or hasFile alone would undercount those.
-          `SELECT s."mediaId",
-                  COUNT(e.id) AS total,
-                  COUNT(e.id) FILTER (WHERE ${onDiskSql('e')}) AS downloaded
-           FROM seasons s
-           JOIN episodes e ON e."seasonId" = s.id
-           WHERE s."mediaId" = ANY($1) AND s."seasonNumber" > 0
-           GROUP BY s."mediaId"`,
-          [seriesIds],
-        );
-      episodeStatsMap = new Map(
-        stats.map((s) => [
-          s.mediaId,
-          {
-            totalEpisodes: parseInt(s.total, 10),
-            downloadedEpisodes: parseInt(s.downloaded, 10),
-          },
-        ]),
-      );
-    }
-
-    let enriched = data.map((m) => {
-      const stats = episodeStatsMap.get(m.id);
-      return Object.assign(m, {
-        sizeOnDisk: (m.files ?? []).reduce((sum, f) => sum + Number(f.size), 0),
-        episodeStats: stats ?? undefined,
-      });
-    });
+    let enriched = await this.attachEpisodeStats(data);
 
     if (query.cutoffUnmet === true) {
       // Cutoff comparison must reach below the cutoff *on the unit that gets
@@ -396,6 +357,146 @@ export class MediaQueryService {
     }
 
     return { data: enriched, total };
+  }
+
+  /**
+   * Attach the per-media derived fields media cards rely on: `sizeOnDisk`
+   * (sum of file sizes) and, for series, `episodeStats` (total +
+   * downloaded episode coverage). Mutates and returns the same rows.
+   */
+  private async attachEpisodeStats(data: Media[]): Promise<Media[]> {
+    const seriesIds = data
+      .filter((m) => m.type === MediaType.SERIES)
+      .map((m) => m.id);
+    let episodeStatsMap = new Map<
+      number,
+      { totalEpisodes: number; downloadedEpisodes: number }
+    >();
+    if (seriesIds.length) {
+      const stats: { mediaId: number; total: string; downloaded: string }[] =
+        await this.dataSource.query(
+          // "downloaded" = episodes whose content is on disk (coverage),
+          // including the shadowed episodes of a multi-episode file. Counting
+          // MediaFile rows or hasFile alone would undercount those.
+          `SELECT s."mediaId",
+                  COUNT(e.id) AS total,
+                  COUNT(e.id) FILTER (WHERE ${onDiskSql('e')}) AS downloaded
+           FROM seasons s
+           JOIN episodes e ON e."seasonId" = s.id
+           WHERE s."mediaId" = ANY($1) AND s."seasonNumber" > 0
+           GROUP BY s."mediaId"`,
+          [seriesIds],
+        );
+      episodeStatsMap = new Map(
+        stats.map((s) => [
+          s.mediaId,
+          {
+            totalEpisodes: parseInt(s.total, 10),
+            downloadedEpisodes: parseInt(s.downloaded, 10),
+          },
+        ]),
+      );
+    }
+
+    return data.map((m) => {
+      const stats = episodeStatsMap.get(m.id);
+      return Object.assign(m, {
+        sizeOnDisk: (m.files ?? []).reduce((sum, f) => sum + Number(f.size), 0),
+        episodeStats: stats ?? undefined,
+      });
+    });
+  }
+
+  /**
+   * "Recently added" feed for the home page, optionally scoped to one
+   * library. The ranking basis is the caller-supplied {@link RecentlyAddedMode}:
+   *   • `media` — `Media.createdAt` (when the title entered the library)
+   *   • `file`  — newest `MediaFile.createdAt` (only titles that have a file);
+   *     surfaces a series again when a fresh episode file lands
+   *   • `both`  — the more recent of the two
+   *
+   * Two passes keep the ranking exact: pass 1 ranks + limits media ids in a
+   * flat query (no collection join to skew the limit or the order
+   * expression), pass 2 hydrates the full entities and restores the order.
+   */
+  async findRecentlyAdded(opts: {
+    libraryId?: number;
+    limit?: number;
+    mode?: RecentlyAddedMode;
+    excludeWatched?: boolean;
+    requestedByMe?: boolean;
+    userId?: number;
+    accessibleLibraryIds?: number[];
+  }): Promise<Media[]> {
+    const {
+      libraryId,
+      limit = 20,
+      mode = 'file',
+      excludeWatched,
+      requestedByMe,
+      userId,
+      accessibleLibraryIds = [],
+    } = opts;
+
+    const idQb = this.mediaRepo
+      .createQueryBuilder('media')
+      .select('media.id', 'id');
+    this.applyLibraryAcl(idQb, accessibleLibraryIds);
+
+    if (libraryId) {
+      idQb.andWhere('media."libraryId" = :libraryId', { libraryId });
+    }
+    if (excludeWatched && userId) {
+      idQb.andWhere(`media.id NOT IN (${WATCHED_MEDIA_IDS_SUBQUERY})`, {
+        userId,
+      });
+    }
+    if (requestedByMe && userId) {
+      idQb.andWhere('media."addedById" = :reqUserId', { reqUserId: userId });
+    }
+
+    if (mode === 'media') {
+      idQb.orderBy('media."createdAt"', 'DESC');
+    } else {
+      // Newest imported file per media.
+      idQb.leftJoin(
+        (sub) =>
+          sub
+            .select('mf."mediaId"', 'mediaId')
+            .addSelect('MAX(mf."createdAt")', 'added')
+            .from('media_files', 'mf')
+            .groupBy('mf."mediaId"'),
+        'lf',
+        'lf."mediaId" = media.id',
+      );
+      if (mode === 'file') {
+        idQb.andWhere('lf.added IS NOT NULL').orderBy('lf.added', 'DESC');
+      } else {
+        idQb.orderBy(
+          'GREATEST(media."createdAt", COALESCE(lf.added, media."createdAt"))',
+          'DESC',
+        );
+      }
+    }
+
+    const idRows = await idQb.limit(limit).getRawMany<{ id: number }>();
+    const ids = idRows.map((r) => r.id);
+    if (ids.length === 0) return [];
+
+    const rows = await this.mediaRepo
+      .createQueryBuilder('media')
+      .leftJoinAndSelect('media.library', 'library')
+      .leftJoinAndSelect('media.qualityProfile', 'qualityProfile')
+      .leftJoinAndSelect('media.languageProfile', 'languageProfile')
+      .leftJoinAndSelect('media.files', 'files')
+      .where('media.id IN (:...ids)', { ids })
+      .getMany();
+    const byId = new Map(rows.map((m) => [m.id, m]));
+    const ordered = ids
+      .map((id) => byId.get(id))
+      .filter((m): m is Media => m != null);
+
+    return this.attachEpisodeStats(ordered);
   }
 
   /** When `accessibleLibraryIds` is omitted the lookup is unscoped — used
