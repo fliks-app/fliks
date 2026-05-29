@@ -139,6 +139,36 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Manually drop cached entries and wipe their on-disk directories.
+   * Scope is the (mediaFileId, optional userId) pair: passing only
+   * `mediaFileId` purges every profile/quality across all users for that
+   * file; passing `userId` too restricts to that user's entries. With no
+   * `mediaFileId`, purges the whole cache. Returns what was freed so the
+   * caller can report it back to the operator.
+   */
+  async purge(
+    mediaFileId?: number,
+    userId?: number,
+  ): Promise<{ entries: number; bytes: number }> {
+    const targets = [...this.entries.values()].filter((entry) => {
+      if (mediaFileId != null && entry.mediaFileId !== mediaFileId) return false;
+      if (userId != null && entry.userId !== userId) return false;
+      return true;
+    });
+    let bytes = 0;
+    for (const entry of targets) {
+      bytes += entry.totalBytes;
+      await this.evict(entry);
+    }
+    if (targets.length > 0) {
+      this.log.log(
+        `[purge] dropped ${targets.length} cache entr${targets.length === 1 ? 'y' : 'ies'} (${formatBytes(bytes)})`,
+      );
+    }
+    return { entries: targets.length, bytes };
+  }
+
+  /**
    * Garbage collection pass. Three passes in order:
    * 1. Drop entries whose on-disk dir has been wiped externally
    *    (kept in sync with the transcoding service's own cleanup paths).

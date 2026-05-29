@@ -131,6 +131,37 @@ describe('TranscodeCacheService', () => {
     expect(svc.lookup(3, 11, 'ffffffffff')).toBe(a);
   });
 
+  it('purges every profile/user for a media file, wiping disk', async () => {
+    const a = path.join(CACHE_ROOT, 'u1', '50', 'aaaaaaaaaa', '720p');
+    const b = path.join(CACHE_ROOT, 'u2', '50', 'bbbbbbbbbb', '1080p');
+    const other = path.join(CACHE_ROOT, 'u1', '51', 'cccccccccc', '720p');
+    await writeFile(path.join(a, 'seg-0.m4s'), 1000);
+    await writeFile(path.join(b, 'seg-0.m4s'), 2000);
+    await writeFile(path.join(other, 'seg-0.m4s'), 500);
+    await svc.onModuleInit();
+    expect(svc.size()).toBe(3);
+
+    const freed = await svc.purge(50);
+    expect(freed).toEqual({ entries: 2, bytes: 3000 });
+    expect(svc.size()).toBe(1);
+    expect(svc.lookup(1, 51, 'cccccccccc')).not.toBeNull();
+    await expect(fsp.access(a)).rejects.toBeDefined();
+    await expect(fsp.access(b)).rejects.toBeDefined();
+  });
+
+  it('scopes a purge to a single user when userId is given', async () => {
+    const a = path.join(CACHE_ROOT, 'u1', '60', 'aaaaaaaaaa', '720p');
+    const b = path.join(CACHE_ROOT, 'u2', '60', 'bbbbbbbbbb', '720p');
+    await writeFile(path.join(a, 'seg-0.m4s'), 1000);
+    await writeFile(path.join(b, 'seg-0.m4s'), 2000);
+    await svc.onModuleInit();
+
+    const freed = await svc.purge(60, 1);
+    expect(freed).toEqual({ entries: 1, bytes: 1000 });
+    expect(svc.lookup(1, 60, 'aaaaaaaaaa')).toBeNull();
+    expect(svc.lookup(2, 60, 'bbbbbbbbbb')).not.toBeNull();
+  });
+
   it('drops entries whose dir was wiped externally on gc', async () => {
     const dir = path.join(CACHE_ROOT, 'u1', '1', 'gggggggggg', '720p');
     await writeFile(path.join(dir, 'seg-0.m4s'), 1000);

@@ -5,6 +5,7 @@ import {
   Post,
   Body,
   Param,
+  ParseIntPipe,
   Query,
   Res,
   Sse,
@@ -35,6 +36,7 @@ import {
   type HwAccelType,
   type TranscodeSession,
   TranscodingService,
+  TranscodeCacheService,
 } from '../streaming/transcoding';
 import { ActiveStreamTracker } from '../streaming/active-stream-tracker.service';
 import {
@@ -150,6 +152,7 @@ export class SystemController {
     private readonly logBuffer: LogBufferService,
     private readonly eventsService: EventsService,
     private readonly transcodingService: TranscodingService,
+    private readonly transcodeCache: TranscodeCacheService,
     private readonly activeStreamTracker: ActiveStreamTracker,
     private readonly liveSessions: LiveSessionRegistry,
     private readonly playbackService: PlaybackService,
@@ -671,6 +674,26 @@ export class SystemController {
       };
     }
     return null;
+  }
+
+  /**
+   * Purge the on-disk transcode cache for one media file, optionally
+   * scoped to a single user via `?userId=`. Lets operators free disk or
+   * force a clean retranscode without restarting the backend. TTL + LRU
+   * still handle this automatically; this is the manual escape hatch.
+   */
+  @Delete('transcode-cache/:mediaFileId')
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
+  async purgeTranscodeCache(
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Query('userId') userId?: string,
+  ): Promise<{ ok: true; entries: number; bytes: number }> {
+    const scopedUser = userId ? Number.parseInt(userId, 10) : undefined;
+    const freed = await this.transcodeCache.purge(
+      mediaFileId,
+      Number.isFinite(scopedUser) ? scopedUser : undefined,
+    );
+    return { ok: true, ...freed };
   }
 
   @Delete('streams/:sessionId')
