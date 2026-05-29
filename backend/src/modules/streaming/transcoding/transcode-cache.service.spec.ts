@@ -131,6 +131,66 @@ describe('TranscodeCacheService', () => {
     expect(svc.lookup(3, 11, 'ffffffffff')).toBe(a);
   });
 
+  it('diskUsage reflects dirs created after boot that the index never saw', async () => {
+    await svc.onModuleInit();
+    expect(svc.size()).toBe(0);
+    // Simulate ffmpeg writing a fresh cache dir mid-stream — the index
+    // is not updated live, so size()/totalBytes() stay 0 while the disk
+    // grows. diskUsage() must see the real bytes.
+    const dir = path.join(CACHE_ROOT, 'u9', '70', 'aaaaaaaaaa', '720p');
+    await writeFile(path.join(dir, 'init.mp4'), 100);
+    await writeFile(path.join(dir, 'seg-0.m4s'), 4000);
+    expect(svc.size()).toBe(0);
+    expect(svc.totalBytes()).toBe(0);
+    expect(await svc.diskUsage()).toEqual({ entries: 1, bytes: 4100 });
+  });
+
+  it('counts a title once even with multiple profile variants', async () => {
+    await svc.onModuleInit();
+    // One playback spawns a main variant + an early-start companion under
+    // the same (user, file) dir — operators count that as one title.
+    const main = path.join(CACHE_ROOT, 'u9', '70', 'aaaaaaaaaa', '720p');
+    const early = path.join(CACHE_ROOT, 'u9', '70', 'aaaaaaaaaa-early', '720p');
+    await writeFile(path.join(main, 'seg-0.m4s'), 4000);
+    await writeFile(path.join(early, 'init.mp4'), 100);
+    expect(await svc.diskUsage()).toEqual({ entries: 1, bytes: 4100 });
+
+    const freed = await svc.purge(70);
+    expect(freed).toEqual({ entries: 1, bytes: 4100 });
+    await expect(fsp.access(path.join(CACHE_ROOT, 'u9', '70'))).rejects.toBeDefined();
+  });
+
+  it('purges every profile/user for a media file, wiping disk', async () => {
+    const a = path.join(CACHE_ROOT, 'u1', '50', 'aaaaaaaaaa', '720p');
+    const b = path.join(CACHE_ROOT, 'u2', '50', 'bbbbbbbbbb', '1080p');
+    const other = path.join(CACHE_ROOT, 'u1', '51', 'cccccccccc', '720p');
+    await writeFile(path.join(a, 'seg-0.m4s'), 1000);
+    await writeFile(path.join(b, 'seg-0.m4s'), 2000);
+    await writeFile(path.join(other, 'seg-0.m4s'), 500);
+    await svc.onModuleInit();
+    expect(svc.size()).toBe(3);
+
+    const freed = await svc.purge(50);
+    expect(freed).toEqual({ entries: 2, bytes: 3000 });
+    expect(svc.size()).toBe(1);
+    expect(svc.lookup(1, 51, 'cccccccccc')).not.toBeNull();
+    await expect(fsp.access(a)).rejects.toBeDefined();
+    await expect(fsp.access(b)).rejects.toBeDefined();
+  });
+
+  it('scopes a purge to a single user when userId is given', async () => {
+    const a = path.join(CACHE_ROOT, 'u1', '60', 'aaaaaaaaaa', '720p');
+    const b = path.join(CACHE_ROOT, 'u2', '60', 'bbbbbbbbbb', '720p');
+    await writeFile(path.join(a, 'seg-0.m4s'), 1000);
+    await writeFile(path.join(b, 'seg-0.m4s'), 2000);
+    await svc.onModuleInit();
+
+    const freed = await svc.purge(60, 1);
+    expect(freed).toEqual({ entries: 1, bytes: 1000 });
+    expect(svc.lookup(1, 60, 'aaaaaaaaaa')).toBeNull();
+    expect(svc.lookup(2, 60, 'bbbbbbbbbb')).not.toBeNull();
+  });
+
   it('drops entries whose dir was wiped externally on gc', async () => {
     const dir = path.join(CACHE_ROOT, 'u1', '1', 'gggggggggg', '720p');
     await writeFile(path.join(dir, 'seg-0.m4s'), 1000);

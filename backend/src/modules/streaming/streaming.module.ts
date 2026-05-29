@@ -62,6 +62,7 @@ import { MarkersModule } from '../markers/markers.module';
   exports: [
     PlaybackService,
     TranscodingService,
+    TranscodeCacheService,
     StreamingService,
     ActiveStreamTracker,
     LiveSessionRegistry,

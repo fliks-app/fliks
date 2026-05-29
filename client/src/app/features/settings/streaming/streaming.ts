@@ -3,6 +3,8 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
+import { StreamsApiService } from '../../../core/services/api/streams-api.service';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
@@ -14,11 +16,17 @@ import { ToastService } from '../../../core/services/toast.service';
 export class StreamingSettingsComponent implements OnInit {
   private readonly api = inject(SettingsApiService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly streamsApi = inject(StreamsApiService);
+  private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
   readonly loading = signal(true);
   readonly saving = signal(false);
+
+  readonly cacheBytes = signal(0);
+  readonly cacheEntries = signal(0);
+  readonly purging = signal(false);
 
   readonly segmentDuration = signal('3');
   readonly qsvPreset = signal('faster');
@@ -37,6 +45,7 @@ export class StreamingSettingsComponent implements OnInit {
         this.api.getAll(),
         this.streamingApi.getTonemapAlgos().catch(() => ({ available: ['auto'] })),
       ]);
+      this.refreshCacheStats();
       this.segmentDuration.set(all['streaming_segment_duration'] ?? '3');
       this.qsvPreset.set(all['streaming_qsv_preset'] ?? 'faster');
       this.qsvLowPower.set(all['streaming_qsv_low_power'] === 'true');
@@ -65,5 +74,42 @@ export class StreamingSettingsComponent implements OnInit {
       this.toast.success(this.translate.instant('settings.streaming.saved'));
     } catch { /* interceptor */ }
     this.saving.set(false);
+  }
+
+  private async refreshCacheStats() {
+    try {
+      const stats = await this.streamsApi.transcodeCacheStats();
+      this.cacheEntries.set(stats.entries);
+      this.cacheBytes.set(stats.bytes);
+    } catch { /* interceptor */ }
+  }
+
+  async purgeCache() {
+    const confirmed = await this.confirmation.confirm({
+      title: this.translate.instant('settings.streaming.cache_purge_title'),
+      message: this.translate.instant('settings.streaming.cache_purge_confirm'),
+      confirmLabel: this.translate.instant('settings.streaming.cache_purge_action'),
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    this.purging.set(true);
+    try {
+      const freed = await this.streamsApi.purgeTranscodeCache();
+      this.toast.success(
+        this.translate.instant('settings.streaming.cache_purged', {
+          entries: freed.entries,
+          size: this.formatBytes(freed.bytes),
+        }),
+      );
+      await this.refreshCacheStats();
+    } catch { /* interceptor */ }
+    this.purging.set(false);
+  }
+
+  formatBytes(bytes: number): string {
+    if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
+    if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(0)} MB`;
+    if (bytes >= 1_000) return `${(bytes / 1_000).toFixed(0)} KB`;
+    return `${bytes} B`;
   }
 }

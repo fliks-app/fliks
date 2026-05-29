@@ -139,6 +139,86 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Live on-disk footprint of the cache, scanned fresh from the
+   * filesystem. The in-memory index is only authoritative at boot — it
+   * is not updated as ffmpeg writes segments mid-stream — so anything
+   * that must reflect current usage (admin stats, manual purge) walks
+   * the disk directly rather than trusting {@link totalBytes}. `entries`
+   * counts (user, file, profile) directories; `bytes` is the file total.
+   */
+  async diskUsage(
+    mediaFileId?: number,
+    userId?: number,
+  ): Promise<{ entries: number; bytes: number }> {
+    let entries = 0;
+    let bytes = 0;
+    for (const fileDir of await this.matchingFileDirs(mediaFileId, userId)) {
+      entries += 1;
+      bytes += await dirBytes(fileDir);
+    }
+    return { entries, bytes };
+  }
+
+  /**
+   * Manually wipe cache directories on disk and drop any matching
+   * in-memory entries. Scope is the (mediaFileId, optional userId) pair:
+   * passing only `mediaFileId` purges every profile across all users for
+   * that file; adding `userId` restricts to that user; passing neither
+   * purges the whole cache. Operates on the live filesystem, so it also
+   * removes directories created since boot that the index never saw.
+   */
+  async purge(
+    mediaFileId?: number,
+    userId?: number,
+  ): Promise<{ entries: number; bytes: number }> {
+    let entries = 0;
+    let bytes = 0;
+    for (const fileDir of await this.matchingFileDirs(mediaFileId, userId)) {
+      entries += 1;
+      bytes += await dirBytes(fileDir);
+      await fsp.rm(fileDir, { recursive: true, force: true });
+    }
+    for (const [key, entry] of this.entries) {
+      if (mediaFileId != null && entry.mediaFileId !== mediaFileId) continue;
+      if (userId != null && entry.userId !== userId) continue;
+      this.entries.delete(key);
+    }
+    if (entries > 0) {
+      this.log.log(
+        `[purge] dropped ${entries} cached title${entries === 1 ? '' : 's'} (${formatBytes(bytes)})`,
+      );
+    }
+    return { entries, bytes };
+  }
+
+  /**
+   * Enumerate the (user, file) directories on disk matching the given
+   * scope. One such directory holds every profile variant (`main`,
+   * `-early`, `-remux`, `-a<N>`) for a single playback, so callers count
+   * it as one cached title rather than one per internal variant. Mirrors
+   * the {@link CACHE_LAYOUT_ROOT} layout (`root/userSeg/mediaFileId`).
+   */
+  private async matchingFileDirs(
+    mediaFileId?: number,
+    userId?: number,
+  ): Promise<string[]> {
+    const dirs: string[] = [];
+    for (const userDir of await readdirSafe(CACHE_LAYOUT_ROOT)) {
+      const uid = parseUserDir(userDir);
+      if (uid === undefined) continue;
+      if (userId != null && uid !== userId) continue;
+      const userPath = path.join(CACHE_LAYOUT_ROOT, userDir);
+      for (const fileDir of await readdirSafe(userPath)) {
+        const fid = Number.parseInt(fileDir, 10);
+        if (!Number.isFinite(fid)) continue;
+        if (mediaFileId != null && fid !== mediaFileId) continue;
+        dirs.push(path.join(userPath, fileDir));
+      }
+    }
+    return dirs;
+  }
+
+  /**
    * Garbage collection pass. Three passes in order:
    * 1. Drop entries whose on-disk dir has been wiped externally
    *    (kept in sync with the transcoding service's own cleanup paths).
@@ -383,6 +463,39 @@ function parseUserDir(dir: string): number | null | undefined {
   const m = /^u(\d+)$/.exec(dir);
   if (!m) return undefined;
   return Number.parseInt(m[1], 10);
+}
+
+/** `readdir` that yields `[]` for a missing/unreadable directory. */
+async function readdirSafe(dir: string): Promise<string[]> {
+  try {
+    return await fsp.readdir(dir);
+  } catch {
+    return [];
+  }
+}
+
+/** Recursively sum the byte size of every file under a directory. */
+async function dirBytes(dir: string): Promise<number> {
+  let total = 0;
+  let items: import('fs').Dirent[];
+  try {
+    items = await fsp.readdir(dir, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  for (const item of items) {
+    const full = path.join(dir, item.name);
+    if (item.isDirectory()) {
+      total += await dirBytes(full);
+    } else {
+      try {
+        total += (await fsp.stat(full)).size;
+      } catch {
+        // File vanished mid-scan (GC / ffmpeg rename) — skip.
+      }
+    }
+  }
+  return total;
 }
 
 function parseSegmentIndex(filename: string): number | null {

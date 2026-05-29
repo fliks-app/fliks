@@ -1639,13 +1639,22 @@ export class StreamingController {
   // Session cleanup
   // ---------------------------------------------------------------------------
 
-  /** Stop the transcoding session for this user + media file (called on player close / page unload). */
+  /**
+   * Deprecated bulk stop: tears down every session this user has on a
+   * media file. Superseded by the sid-scoped `DELETE /sessions/:sid`,
+   * which stops exactly the device that asked. Kept only for clients
+   * that predate sid routing; the warning log lets us confirm zero hits
+   * before removal.
+   */
   @Delete(':mediaFileId/sessions')
   async stopSessions(
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
     @Req() req: Request,
   ) {
     const user = req.user;
+    this.log.warn(
+      `[deprecated] DELETE /:mediaFileId/sessions called (mediaFileId=${mediaFileId}, userId=${user?.id ?? 'anon'}); use sid-scoped DELETE /sessions/:sid`,
+    );
     await this.transcodingService.killSession(mediaFileId, user?.id);
     if (user) {
       this.activeStreamTracker.unregister(user.id, mediaFileId);
