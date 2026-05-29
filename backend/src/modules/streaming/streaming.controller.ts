@@ -170,6 +170,13 @@ async function awaitFileNonEmpty(
   return false;
 }
 
+/** Segments the early companion covers. Its ffmpeg is bound to `-t 4`
+ *  (see getOrCreateEarlySession), which at a 3 s segment grid yields seg-0
+ *  and seg-1 — the window a player's seg-0 VOD probe falls in. Requests
+ *  below this are absorbed by the early session; anything higher is a real
+ *  seek the main session handles. */
+const EARLY_PROBE_SEGMENTS = 2;
+
 /** Send a transient unavailability response. Players with sane HTTP
  *  retry policies (Shaka, Media3's loader when given a backoff)
  *  treat 503 as retryable, unlike 404 which Media3 marks as a
@@ -1549,11 +1556,31 @@ export class StreamingController {
       existing.startSegment > 0 &&
       segIndex < existing.startSegment;
     if (isEarlyProbe) {
-      const earlySession = this.resolveEarlySession(
+      let earlySession = this.resolveEarlySession(
         mediaFileId,
         req.user?.id,
         req,
       );
+      // Absorb a seg-0/seg-1 probe at the requested quality even when the
+      // prewarmed early companion is absent or on a different rung (prewarm
+      // picks a rung from the saved preference; the player may commit to
+      // another). Falling through for a segment below the main's startSegment
+      // routes it to getOrCreateSession, which relocates the forward-producing
+      // main back to that low segment. Higher segments are a genuine backward
+      // seek the main owns.
+      if (
+        segIndex < EARLY_PROBE_SEGMENTS &&
+        (!earlySession || earlySession.quality !== quality)
+      ) {
+        earlySession = await this.transcodingService
+          .getOrCreateEarlySession(
+            mediaFileId,
+            quality,
+            resolved.absolutePath,
+            ctx,
+          )
+          .catch(() => undefined);
+      }
       if (earlySession && earlySession.quality === quality) {
         const varStreamMap = live?.useExtXMedia ?? false;
         const segName = varStreamMap ? `0/${segment}` : segment;
