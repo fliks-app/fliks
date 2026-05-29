@@ -25,6 +25,7 @@ import {
   RecentlyAddedMode,
 } from '../../../core/services/home-settings.service';
 import { LibrariesApiService } from '../../../core/services/api/libraries-api.service';
+import { TvService } from '../../../core/services/tv.service';
 import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
 
 @Component({
@@ -46,6 +47,7 @@ import { SelectFieldComponent } from '../../../shared/components/forms/select-fi
 export class HomeSettingsPageComponent implements OnInit {
   private readonly home = inject(HomeSettingsService);
   private readonly librariesApi = inject(LibrariesApiService);
+  readonly tv = inject(TvService);
 
   /** The rendered, reorderable rows — the working copy persisted on change. */
   readonly rows = signal<ResolvedHomeSection[]>([]);
