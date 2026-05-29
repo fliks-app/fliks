@@ -1203,6 +1203,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engine.on('firstFrame', () => {
       this.state.videoStarted.set(true);
     });
+    this.wireSessionExpiredRecovery(engine);
     video.addEventListener('volumechange', () => {
       this.state.volume.set(video.muted ? 0 : video.volume);
     });
