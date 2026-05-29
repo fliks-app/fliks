@@ -1543,35 +1543,35 @@ export class StreamingController {
 
     const ctx = this.buildSessionContext(req, resolved, mediaFileId);
 
-    // Early probe routing: when Shaka requests a segment before the main
-    // session's startSegment (typical Shaka VOD behavior on resume), route
-    // to the early companion if it exists. 10 s timeout safety net — if
-    // the early session hangs we fall through to the slow path rather
-    // than blocking on a 60 s waitForSegment.
+    // Early probe routing: the seg-0/seg-1 init probe a player fires on
+    // resume must be served by the bounded early companion, never spawn or
+    // relocate the forward-producing main. The floor is the higher of the
+    // main's startSegment and the live playhead (secondsToSegmentIndex of the
+    // session position) — the playhead survives an in-memory session loss
+    // because the recovery playback-info re-seeds it, so a probe arriving
+    // after a server restart (no main yet) still routes to early instead of
+    // anchoring a fresh main at segment 0. A segment at or past the floor is a
+    // genuine seek/forward read the main owns. 10 s timeout safety net falls
+    // through to the slow path rather than blocking on a 60 s waitForSegment.
+    const resumeFloor = Math.max(
+      existing?.startSegment ?? 0,
+      live ? secondsToSegmentIndex(live.position) : 0,
+    );
     const isEarlyProbe =
       quality !== 'remux' &&
-      existing != null &&
-      existing.quality === quality &&
-      existing.startSegment != null &&
-      existing.startSegment > 0 &&
-      segIndex < existing.startSegment;
+      resumeFloor > EARLY_PROBE_SEGMENTS &&
+      segIndex < EARLY_PROBE_SEGMENTS;
     if (isEarlyProbe) {
       let earlySession = this.resolveEarlySession(
         mediaFileId,
         req.user?.id,
         req,
       );
-      // Absorb a seg-0/seg-1 probe at the requested quality even when the
-      // prewarmed early companion is absent or on a different rung (prewarm
-      // picks a rung from the saved preference; the player may commit to
-      // another). Falling through for a segment below the main's startSegment
-      // routes it to getOrCreateSession, which relocates the forward-producing
-      // main back to that low segment. Higher segments are a genuine backward
-      // seek the main owns.
-      if (
-        segIndex < EARLY_PROBE_SEGMENTS &&
-        (!earlySession || earlySession.quality !== quality)
-      ) {
+      // (Re)spawn the early companion at the requested quality when it is
+      // absent or on a different rung — prewarm picks a rung from the saved
+      // preference and the player may commit to another, leaving a stale
+      // early that the quality gate below would skip.
+      if (!earlySession || earlySession.quality !== quality) {
         earlySession = await this.transcodingService
           .getOrCreateEarlySession(
             mediaFileId,
