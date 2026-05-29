@@ -893,7 +893,6 @@
     "stream_message_placeholder": "Votre message…",
     "stream_message_send": "Envoyer",
     "stream_message_sent": "Message envoyé",
-    "stream_message_failed": "Échec de l'envoi du message",
     "streams_empty": "Aucune activité vidéo en cours",
     "streams_label_stream": "Flux",
     "streams_label_video": "Vidéo",

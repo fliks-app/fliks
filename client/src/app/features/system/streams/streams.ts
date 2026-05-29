@@ -92,7 +92,8 @@ export class SystemStreamsComponent implements OnInit, OnDestroy {
       this.toast.success(this.translate.instant('system.stream_message_sent'));
       this.closeMessage();
     } catch {
-      this.toast.error(this.translate.instant('system.stream_message_failed'));
+      // Failure toast is owned by the global error interceptor — surfacing
+      // a generic "send failed" here on top would just stack two toasts.
     } finally {
       this.messageBusy.set(false);
     }
