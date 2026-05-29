@@ -150,11 +150,12 @@
     class="flex gap-6 lg:gap-10 relative z-20 tv:pt-24!"
     [style.padding-top]="!navbar.isHeroPage() || navbar.effectiveSidebarPinned() ? null : navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 3rem)' : null"
   >
-    <!-- Poster / Still (desktop only). Smaller poster on the lg-to-xl range
-         (sidebar pinned + tablet/desktop window) so the content next to it
-         keeps room to breathe; full 280 px from xl up. -->
+    <!-- Poster / Still (desktop only). Compact on the md-to-lg range (landscape
+         phones / small windows) so the title keeps room in a short viewport;
+         200 px from lg, 220 from xl, full 280 px from 2xl up. -->
     <div class="shrink-0"
-         [class.w-[200px]]="posterMode() === 'poster'"
+         [class.w-[140px]]="posterMode() === 'poster'"
+         [class.lg:w-[200px]]="posterMode() === 'poster'"
          [class.xl:w-[220px]]="posterMode() === 'poster'"
          [class.2xl:w-[280px]]="posterMode() === 'poster'"
          [class.w-[20%]]="posterMode() === 'still'">
@@ -181,7 +182,7 @@
 
     <div class="flex-1 min-w-0 pt-2">
       <!-- Title -->
-      <h1 class="text-4xl font-bold tracking-tight">
+      <h1 class="text-2xl lg:text-4xl font-bold tracking-tight">
         @if (episodeLabel()) {
           <a [routerLink]="backRoute()" class="hover:underline rounded">{{ title() }}</a>
         } @else {
@@ -308,7 +309,14 @@
 
       <!-- Overview -->
       @if (overview()) {
-        <p class="mt-4 text-base-content/90 leading-relaxed whitespace-pre-line">{{ overview() }}</p>
+        <p #overviewText
+           class="mt-4 text-base-content/90 leading-relaxed whitespace-pre-line"
+           [class.line-clamp-4]="!overviewExpanded()">{{ overview() }}</p>
+        @if (overviewClamped() || overviewExpanded()) {
+          <button type="button" class="link link-primary no-underline hover:underline text-sm mt-1" (click)="toggleOverview()">
+            {{ (overviewExpanded() ? 'common.show_less' : 'common.show_more') | translate }}
+          </button>
+        }
       }
 
     </div>

@@ -8,7 +8,7 @@ import {
   input,
   output,
   signal,
-  viewChild,
+  viewChildren,
 } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -201,8 +201,10 @@ export class MediaInfoHeaderComponent {
   readonly selectedAudioIndex = signal<number | null>(null);
   readonly selectedSubtitleId = signal<string | null>(null);
 
-  // Mobile overview clamp / expand
-  private readonly overviewTextRef = viewChild<ElementRef<HTMLParagraphElement>>('overviewText');
+  // Overview clamp / expand. The mobile and desktop layouts each render an
+  // `#overviewText` paragraph (both live in the DOM; CSS hides one), so we
+  // measure whichever is actually on screen.
+  private readonly overviewTextRefs = viewChildren<ElementRef<HTMLParagraphElement>>('overviewText');
   readonly overviewClamped = signal(false);
   readonly overviewExpanded = signal(false);
 
@@ -211,7 +213,10 @@ export class MediaInfoHeaderComponent {
     this.overview();
     this.overviewExpanded.set(false);
     requestAnimationFrame(() => {
-      const el = this.overviewTextRef()?.nativeElement;
+      const refs = this.overviewTextRefs();
+      const el =
+        refs.map((r) => r.nativeElement).find((n) => n.offsetParent !== null) ??
+        refs[0]?.nativeElement;
       if (el) this.overviewClamped.set(el.scrollHeight > el.clientHeight + 1);
       else this.overviewClamped.set(false);
     });
