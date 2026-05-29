@@ -145,6 +145,21 @@ describe('TranscodeCacheService', () => {
     expect(await svc.diskUsage()).toEqual({ entries: 1, bytes: 4100 });
   });
 
+  it('counts a title once even with multiple profile variants', async () => {
+    await svc.onModuleInit();
+    // One playback spawns a main variant + an early-start companion under
+    // the same (user, file) dir — operators count that as one title.
+    const main = path.join(CACHE_ROOT, 'u9', '70', 'aaaaaaaaaa', '720p');
+    const early = path.join(CACHE_ROOT, 'u9', '70', 'aaaaaaaaaa-early', '720p');
+    await writeFile(path.join(main, 'seg-0.m4s'), 4000);
+    await writeFile(path.join(early, 'init.mp4'), 100);
+    expect(await svc.diskUsage()).toEqual({ entries: 1, bytes: 4100 });
+
+    const freed = await svc.purge(70);
+    expect(freed).toEqual({ entries: 1, bytes: 4100 });
+    await expect(fsp.access(path.join(CACHE_ROOT, 'u9', '70'))).rejects.toBeDefined();
+  });
+
   it('purges every profile/user for a media file, wiping disk', async () => {
     const a = path.join(CACHE_ROOT, 'u1', '50', 'aaaaaaaaaa', '720p');
     const b = path.join(CACHE_ROOT, 'u2', '50', 'bbbbbbbbbb', '1080p');

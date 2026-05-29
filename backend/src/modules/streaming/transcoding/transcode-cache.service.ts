@@ -152,12 +152,9 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
   ): Promise<{ entries: number; bytes: number }> {
     let entries = 0;
     let bytes = 0;
-    for (const profileDir of await this.matchingProfileDirs(
-      mediaFileId,
-      userId,
-    )) {
+    for (const fileDir of await this.matchingFileDirs(mediaFileId, userId)) {
       entries += 1;
-      bytes += await dirBytes(profileDir);
+      bytes += await dirBytes(fileDir);
     }
     return { entries, bytes };
   }
@@ -176,13 +173,10 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
   ): Promise<{ entries: number; bytes: number }> {
     let entries = 0;
     let bytes = 0;
-    for (const profileDir of await this.matchingProfileDirs(
-      mediaFileId,
-      userId,
-    )) {
+    for (const fileDir of await this.matchingFileDirs(mediaFileId, userId)) {
       entries += 1;
-      bytes += await dirBytes(profileDir);
-      await fsp.rm(profileDir, { recursive: true, force: true });
+      bytes += await dirBytes(fileDir);
+      await fsp.rm(fileDir, { recursive: true, force: true });
     }
     for (const [key, entry] of this.entries) {
       if (mediaFileId != null && entry.mediaFileId !== mediaFileId) continue;
@@ -191,18 +185,20 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
     }
     if (entries > 0) {
       this.log.log(
-        `[purge] dropped ${entries} cache entr${entries === 1 ? 'y' : 'ies'} (${formatBytes(bytes)})`,
+        `[purge] dropped ${entries} cached title${entries === 1 ? '' : 's'} (${formatBytes(bytes)})`,
       );
     }
     return { entries, bytes };
   }
 
   /**
-   * Enumerate the (user, file, profile) directories on disk matching the
-   * given scope. Mirrors the {@link CACHE_LAYOUT_ROOT} layout
-   * (`root/userSeg/mediaFileId/profileHash`).
+   * Enumerate the (user, file) directories on disk matching the given
+   * scope. One such directory holds every profile variant (`main`,
+   * `-early`, `-remux`, `-a<N>`) for a single playback, so callers count
+   * it as one cached title rather than one per internal variant. Mirrors
+   * the {@link CACHE_LAYOUT_ROOT} layout (`root/userSeg/mediaFileId`).
    */
-  private async matchingProfileDirs(
+  private async matchingFileDirs(
     mediaFileId?: number,
     userId?: number,
   ): Promise<string[]> {
@@ -216,10 +212,7 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
         const fid = Number.parseInt(fileDir, 10);
         if (!Number.isFinite(fid)) continue;
         if (mediaFileId != null && fid !== mediaFileId) continue;
-        const filePath = path.join(userPath, fileDir);
-        for (const profileDir of await readdirSafe(filePath)) {
-          dirs.push(path.join(filePath, profileDir));
-        }
+        dirs.push(path.join(userPath, fileDir));
       }
     }
     return dirs;

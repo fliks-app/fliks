@@ -1119,13 +1119,13 @@
       "saved": "Paramètres de streaming enregistrés",
       "cache_title": "Cache de transcodage",
       "cache_usage": "Espace utilisé",
-      "cache_usage_value": "{{entries}} entrée(s) · {{size}}",
+      "cache_usage_value": "{{entries}} titre(s) en cache · {{size}}",
       "cache_purge_help": "Vide tous les segments transcodés en cache pour libérer de l'espace disque. Les lectures en cours devront retranscoder (rebuffering bref) ; le redémarrage est automatique.",
       "cache_purge": "Vider le cache",
       "cache_purge_title": "Vider le cache de transcodage",
       "cache_purge_confirm": "Cela supprime tous les segments transcodés en cache. Les lectures en cours vont retranscoder à la volée (rebuffering bref). Continuer ?",
       "cache_purge_action": "Vider",
-      "cache_purged": "Cache vidé · {{entries}} entrée(s), {{size}} libéré(s)"
+      "cache_purged": "Cache vidé · {{entries}} titre(s), {{size}} libéré(s)"
     },
     "general": {
       "title": "Paramètres généraux",
