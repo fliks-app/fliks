@@ -24,6 +24,9 @@ import {
   selector: 'app-request-card',
   imports: [DatePipe, RouterLink, TranslateModule, RequestPosterComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // The host is the scroller flex item: fixed width, and a column flex so the
+  // inner card fills the row's stretched height (all cards same height).
+  host: { class: 'flex shrink-0 w-72 sm:w-80' },
   templateUrl: './request-card.html',
 })
 export class RequestCardComponent {
