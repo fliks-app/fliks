@@ -60,6 +60,9 @@ export class HomeSettingsPageComponent implements OnInit {
   readonly mode = signal<RecentlyAddedMode>('media');
   readonly onlyMyRequests = signal(false);
 
+  /** Cached so reset/rebuild can re-resolve without refetching libraries. */
+  private libs: { id: number; name: string }[] = [];
+
   private readonly BUILTIN_LABELS: Record<string, string> = {
     libraries: 'home_settings.section.libraries',
     'continue-watching': 'home_settings.section.continue_watching',
@@ -72,19 +75,35 @@ export class HomeSettingsPageComponent implements OnInit {
   async ngOnInit() {
     this.mode.set(this.home.settings().recentlyAddedMode);
     this.onlyMyRequests.set(this.displaySettings.get().onlyMyRequests);
-    let libs: { id: number; name: string }[] = [];
     try {
-      libs = (await this.librariesApi.listMine()).map((l) => ({
+      this.libs = (await this.librariesApi.listMine()).map((l) => ({
         id: l.id,
         name: l.name,
       }));
     } catch {
       /* error handled by global interceptor */
     }
-    const requests =
+    this.rebuild();
+  }
+
+  private get requestsAllowed(): boolean {
+    return (
       this.auth.hasPermission('requests.create') ||
-      this.auth.hasPermission('requests.manage');
-    this.rows.set(this.home.resolve(libs, { requests }));
+      this.auth.hasPermission('requests.manage')
+    );
+  }
+
+  /** Re-derive the rendered rows from the persisted settings + current libs. */
+  private rebuild() {
+    this.rows.set(
+      this.home.resolve(this.libs, { requests: this.requestsAllowed }),
+    );
+  }
+
+  /** Reset zone order + visibility to defaults. */
+  reset() {
+    this.home.resetLayout();
+    this.rebuild();
   }
 
   /** Translation key for a built-in zone's label. */

@@ -102,6 +102,17 @@ export class HomeSettingsService {
     this.persist({ ...this.settings(), recentlyAddedMode });
   }
 
+  /** Reset zone order + visibility to defaults (built-ins visible in their
+   *  canonical order; permission-gated and per-library zones fall back to
+   *  their default placement via {@link resolve}). Leaves the recently-added
+   *  mode untouched. */
+  resetLayout(): void {
+    this.persist({
+      ...this.settings(),
+      order: DEFAULTS.order.map((p) => ({ ...p })),
+    });
+  }
+
   /**
    * Reconcile the saved order with what's actually available now: keep the
    * saved order for still-present zones, append any missing built-ins (default
@@ -133,10 +144,14 @@ export class HomeSettingsService {
         seen.add(key);
       }
     }
-    // Permission-gated built-in: only offered when the user can use requests,
-    // visible by default, appended after the other built-ins.
+    // Permission-gated built-in: only offered when the user can use requests.
+    // With no saved preference it defaults visible, slotted between
+    // "recently-added" and "coming-soon"; a saved order (handled above) wins.
     if (opts.requests && !seen.has('requests-recent')) {
-      merged.push({ key: 'requests-recent', visible: true });
+      const pref: HomeSectionPref = { key: 'requests-recent', visible: true };
+      const after = merged.findIndex((p) => p.key === 'recently-added');
+      if (after >= 0) merged.splice(after + 1, 0, pref);
+      else merged.push(pref);
       seen.add('requests-recent');
     }
     for (const lib of libraries) {

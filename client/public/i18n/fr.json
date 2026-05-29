@@ -1879,6 +1879,7 @@
     "mode_file": "Fichiers récemment ajoutés",
     "mode_both": "Les deux",
     "only_my_requests": "Afficher uniquement les médias que j'ai demandé",
-    "only_my_requests_hint": "Filtre les sections « Récemment ajoutés » et « Bientôt disponible » de l'accueil pour ne garder que les médias que vous avez demandés."
+    "only_my_requests_hint": "Filtre les sections « Récemment ajoutés » et « Bientôt disponible » de l'accueil pour ne garder que les médias que vous avez demandés.",
+    "reset": "Réinitialiser"
   }
 }
