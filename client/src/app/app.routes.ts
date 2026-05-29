@@ -246,6 +246,13 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'display' },
       {
+        path: 'home',
+        loadComponent: () =>
+          import('./features/app-settings/home-settings/home-settings').then(
+            (m) => m.HomeSettingsPageComponent,
+          ),
+      },
+      {
         path: 'player',
         loadComponent: () =>
           import('./features/playback-settings/player-settings/player-settings').then(

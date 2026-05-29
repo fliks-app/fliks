@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal, effect, OnInit, OnDestroy, Injector, afterNextRender } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal, computed, effect, OnInit, OnDestroy, Injector, afterNextRender } from '@angular/core';
 import { ActivatedRoute, NavigationStart, Router, RouterLink } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
@@ -13,6 +13,7 @@ import { FocusMemoryService } from '../../core/services/focus-memory.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { DisplaySettingsService } from '../../core/services/display-settings.service';
+import { HomeSettingsService } from '../../core/services/home-settings.service';
 import { TvService } from '../../core/services/tv.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
@@ -78,6 +79,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly navbar = inject(NavbarService);
   private readonly backgroundService = inject(BackgroundService);
   private readonly displaySettings = inject(DisplaySettingsService);
+  private readonly home = inject(HomeSettingsService);
   readonly auth = inject(AuthService);
   private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
@@ -97,6 +99,17 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly recentMedia = signal<Media[]>([]);
   readonly comingSoon = signal<CalendarEntry[]>([]);
   readonly recommendations = signal<RecommendationItem[]>([]);
+  /** Recently-added items per library, keyed by library id (opt-in zones). */
+  readonly libraryRecent = signal<Map<number, Media[]>>(new Map());
+
+  /** The user's resolved home layout (order + visibility), reconciled with
+   *  the libraries they can currently access. Drives template rendering. */
+  readonly sections = computed(() =>
+    this.home.resolve(this.libraries().map((l) => ({ id: l.id, name: l.name }))),
+  );
+  readonly visibleSections = computed(() =>
+    this.sections().filter((s) => s.visible),
+  );
 
   /** Once the recommendations land, randomise the page background
    *  using their fanarts (primary + extras). One pick per visit;
@@ -125,6 +138,18 @@ export class HomeComponent implements OnInit, OnDestroy {
     void this.displaySettings.settings().onlyMyRequests;
     if (this.firstOnlyMyRequestsRun) {
       this.firstOnlyMyRequestsRun = false;
+      return;
+    }
+    void this.loadFilteredSections();
+  });
+  /** Re-fetch the recently-added rows when the user changes the ranking mode
+   *  or enables/reorders zones from the home settings page. Skips the initial
+   *  run — ngOnInit already loads the sections. */
+  private firstHomeSettingsRun = true;
+  private readonly homeSettingsEffect = effect(() => {
+    void this.home.settings();
+    if (this.firstHomeSettingsRun) {
+      this.firstHomeSettingsRun = false;
       return;
     }
     void this.loadFilteredSections();
@@ -258,6 +283,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   private async loadFilteredSections() {
     const mine = this.displaySettings.settings().onlyMyRequests;
+    const mode = this.home.settings().recentlyAddedMode;
     const today = new Date();
     const threeDaysAgo = new Date(today);
     threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
@@ -266,18 +292,37 @@ export class HomeComponent implements OnInit, OnDestroy {
     const startStr = threeDaysAgo.toISOString().slice(0, 10);
     const in30dStr = in30d.toISOString().slice(0, 10);
 
+    // Only fetch per-library rows the user has actually enabled (opt-in).
+    const libSections = this.visibleSections().filter(
+      (s) => s.type === 'library-recent' && s.libraryId != null,
+    );
+
     try {
-      const [recent, calendar] = await Promise.all([
-        this.mediaService.getAll({
-          sortBy: 'createdAt',
-          sortOrder: 'DESC',
+      const [recent, calendar, libEntries] = await Promise.all([
+        this.mediaService.getRecentlyAdded({
+          mode,
           limit: 20,
           excludeWatched: true,
           requestedByMe: mine || undefined,
         }),
         this.mediaService.getCalendar(startStr, in30dStr, true, mine).catch(() => []),
+        Promise.all(
+          libSections.map((s) =>
+            this.mediaService
+              .getRecentlyAdded({
+                libraryId: s.libraryId,
+                mode,
+                limit: 20,
+                excludeWatched: true,
+                requestedByMe: mine || undefined,
+              })
+              .then((items) => [s.libraryId as number, items] as const)
+              .catch(() => [s.libraryId as number, [] as Media[]] as const),
+          ),
+        ),
       ]);
-      this.recentMedia.set(recent.data);
+      this.recentMedia.set(recent);
+      this.libraryRecent.set(new Map(libEntries));
       const upcoming = calendar
         .filter((e) => !e.hasFile && (e.event === 'digital' || e.event === 'airing' || e.event === 'release'))
         .sort((a, b) => a.date.localeCompare(b.date));
@@ -387,6 +432,29 @@ export class HomeComponent implements OnInit, OnDestroy {
         // row would vanish on the next refresh anyway — remove it now to
         // match the visible expectation.
         this.recentMedia.update(list => list.filter(x => x.id !== m.id));
+      }
+    } catch { /* global error toast */ }
+  }
+
+  /** Same as {@link toggleRecentMediaWatched} for a per-library recently-added
+   *  row — drops the watched item from that library's bucket. */
+  async toggleLibraryRecentWatched(libraryId: number, m: Media, watched: boolean) {
+    try {
+      if (m.type === 'series') {
+        await this.streamingApi.toggleSeriesWatched(m.id, watched);
+      } else {
+        const fileId = m.files?.[0]?.id;
+        if (!fileId) return;
+        await this.streamingApi.toggleWatched(m.id, fileId);
+      }
+      if (watched) {
+        this.libraryRecent.update((map) => {
+          const items = map.get(libraryId);
+          if (!items) return map;
+          const next = new Map(map);
+          next.set(libraryId, items.filter((x) => x.id !== m.id));
+          return next;
+        });
       }
     } catch { /* global error toast */ }
   }

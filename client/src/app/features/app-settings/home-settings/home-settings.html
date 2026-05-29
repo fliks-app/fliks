@@ -1,0 +1,61 @@
+<h1 class="text-2xl font-bold mb-4">{{ 'home_settings.title' | translate }}</h1>
+
+<div class="card bg-base-100 border border-base-200 mb-6">
+  <div class="card-body gap-4">
+    <div>
+      <h2 class="font-semibold">{{ 'home_settings.sections_title' | translate }}</h2>
+      <p class="text-sm text-base-content/60">{{ 'home_settings.sections_hint' | translate }}</p>
+    </div>
+
+    <div cdkDropList (cdkDropListDropped)="drop($event)" class="flex flex-col gap-2">
+      @for (section of rows(); track section.key; let i = $index) {
+        <div cdkDrag class="flex items-center gap-2 rounded-lg border border-base-200 bg-base-200/40 px-3 py-2">
+          <button type="button" cdkDragHandle
+                  class="cursor-grab text-base-content/40 hover:text-base-content/70"
+                  [attr.aria-label]="'home_settings.drag' | translate">
+            <svg lucideGripVertical class="h-4 w-4"></svg>
+          </button>
+
+          <span class="flex-1 font-medium">
+            @if (section.type === 'library-recent') {
+              {{ 'home_settings.section_library_recent' | translate: { library: section.libraryName } }}
+            } @else {
+              {{ builtinLabel(section) | translate }}
+            }
+          </span>
+
+          <button type="button" class="btn btn-ghost btn-xs btn-square"
+                  [disabled]="i === 0" (click)="move(i, -1)"
+                  [attr.aria-label]="'home_settings.move_up' | translate">
+            <svg lucideArrowUp class="h-4 w-4"></svg>
+          </button>
+          <button type="button" class="btn btn-ghost btn-xs btn-square"
+                  [disabled]="i === rows().length - 1" (click)="move(i, 1)"
+                  [attr.aria-label]="'home_settings.move_down' | translate">
+            <svg lucideArrowDown class="h-4 w-4"></svg>
+          </button>
+
+          <input type="checkbox" class="toggle toggle-primary toggle-sm ml-1"
+                 [checked]="section.visible"
+                 (change)="setVisible(i, $any($event.target).checked)"
+                 [attr.aria-label]="'home_settings.toggle_visible' | translate" />
+        </div>
+      }
+    </div>
+  </div>
+</div>
+
+<div class="card bg-base-100 border border-base-200">
+  <div class="card-body">
+    <app-select-field
+      [value]="mode()"
+      (valueChange)="onModeChange($event)"
+      [label]="'home_settings.recently_added_mode' | translate"
+      [hint]="'home_settings.recently_added_mode_hint' | translate"
+    >
+      <option [ngValue]="'media'">{{ 'home_settings.mode_media' | translate }}</option>
+      <option [ngValue]="'file'">{{ 'home_settings.mode_file' | translate }}</option>
+      <option [ngValue]="'both'">{{ 'home_settings.mode_both' | translate }}</option>
+    </app-select-field>
+  </div>
+</div>
