@@ -53,7 +53,7 @@ const BUILTIN_ORDER: HomeSectionKey[] = [
 
 const DEFAULTS: HomeSettings = {
   order: BUILTIN_ORDER.map((key) => ({ key, visible: true })),
-  recentlyAddedMode: 'media',
+  recentlyAddedMode: 'file',
 };
 
 /**

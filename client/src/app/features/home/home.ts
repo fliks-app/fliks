@@ -45,9 +45,10 @@ import { AuthService } from '../../core/services/auth.service';
  * Deduplicated by mediaId (earliest date kept).
  *
  * ## Récemment ajoutés
- * Last 20 media added to the library (movies + series mixed),
- * excluding already-watched entries. Includes items still awaiting download.
- * Data: `GET /api/media?sortBy=createdAt&sortOrder=DESC&limit=20&excludeWatched=true`.
+ * Last 20 media (movies + series mixed), excluding already-watched entries,
+ * ranked by the user's `recentlyAddedMode` (media add time / newest file /
+ * both). Opt-in per-library variants render the same feed scoped to one
+ * library. Data: `GET /api/media/recently-added`.
  *
  * ## Recommandations
  * Genre-based suggestions derived from the user's watch history.

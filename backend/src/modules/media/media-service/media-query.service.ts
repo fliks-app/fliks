@@ -431,7 +431,7 @@ export class MediaQueryService {
     const {
       libraryId,
       limit = 20,
-      mode = 'media',
+      mode = 'file',
       excludeWatched,
       requestedByMe,
       userId,

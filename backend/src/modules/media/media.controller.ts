@@ -112,7 +112,7 @@ export class MediaController {
     return this.mediaService.findRecentlyAdded({
       libraryId: query.libraryId,
       limit: query.limit ?? 20,
-      mode: query.mode ?? 'media',
+      mode: query.mode ?? 'file',
       excludeWatched: query.excludeWatched,
       requestedByMe: query.requestedByMe,
       userId:
