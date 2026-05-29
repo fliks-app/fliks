@@ -1880,6 +1880,8 @@
     "mode_both": "Les deux",
     "only_my_requests": "Afficher uniquement les médias que j'ai demandé",
     "only_my_requests_hint": "Filtre les sections « Récemment ajoutés » et « Bientôt disponible » de l'accueil pour ne garder que les médias que vous avez demandés.",
-    "reset": "Réinitialiser"
+    "reset": "Réinitialiser",
+    "reset_confirm_title": "Réinitialiser les zones",
+    "reset_confirm": "Remettre l'ordre et la visibilité des zones de l'accueil par défaut ?"
   }
 }

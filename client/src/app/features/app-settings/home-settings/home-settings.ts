@@ -5,7 +5,7 @@ import {
   signal,
   OnInit,
 } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
 import {
   CdkDropList,
@@ -27,6 +27,7 @@ import {
 import { LibrariesApiService } from '../../../core/services/api/libraries-api.service';
 import { TvService } from '../../../core/services/tv.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { DisplaySettingsService } from '../../../core/services/display-settings.service';
 import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
@@ -53,6 +54,8 @@ export class HomeSettingsPageComponent implements OnInit {
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly displaySettings = inject(DisplaySettingsService);
   private readonly auth = inject(AuthService);
+  private readonly confirmation = inject(ConfirmationService);
+  private readonly translate = inject(TranslateService);
   readonly tv = inject(TvService);
 
   /** The rendered, reorderable rows — the working copy persisted on change. */
@@ -100,8 +103,15 @@ export class HomeSettingsPageComponent implements OnInit {
     );
   }
 
-  /** Reset zone order + visibility to defaults. */
-  reset() {
+  /** Reset zone order + visibility to defaults, after confirmation. */
+  async reset() {
+    const confirmed = await this.confirmation.confirm({
+      title: this.translate.instant('home_settings.reset_confirm_title'),
+      message: this.translate.instant('home_settings.reset_confirm'),
+      confirmLabel: this.translate.instant('home_settings.reset'),
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     this.home.resetLayout();
     this.rebuild();
   }
