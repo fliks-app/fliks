@@ -676,11 +676,38 @@ export class SystemController {
     return null;
   }
 
+  /** Current on-disk transcode cache footprint, for the admin UI. */
+  @Get('transcode-cache')
+  @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
+  transcodeCacheStats(): { entries: number; bytes: number } {
+    return {
+      entries: this.transcodeCache.size(),
+      bytes: this.transcodeCache.totalBytes(),
+    };
+  }
+
+  /**
+   * Purge the entire on-disk transcode cache. Lets operators free disk
+   * in one click; in-progress playbacks simply retranscode on the next
+   * segment. TTL + LRU still handle this automatically — this is the
+   * manual escape hatch.
+   */
+  @Delete('transcode-cache')
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
+  async purgeAllTranscodeCache(): Promise<{
+    ok: true;
+    entries: number;
+    bytes: number;
+  }> {
+    const freed = await this.transcodeCache.purge();
+    return { ok: true, ...freed };
+  }
+
   /**
    * Purge the on-disk transcode cache for one media file, optionally
-   * scoped to a single user via `?userId=`. Lets operators free disk or
-   * force a clean retranscode without restarting the backend. TTL + LRU
-   * still handle this automatically; this is the manual escape hatch.
+   * scoped to a single user via `?userId=`. Same escape hatch as the
+   * cache-wide purge above, narrowed to force a clean retranscode of a
+   * single title.
    */
   @Delete('transcode-cache/:mediaFileId')
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))

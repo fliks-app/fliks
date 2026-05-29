@@ -72,4 +72,20 @@ export class StreamsApiService {
       }),
     );
   }
+
+  transcodeCacheStats() {
+    return firstValueFrom(
+      this.http.get<{ entries: number; bytes: number }>(
+        '/api/system/transcode-cache',
+      ),
+    );
+  }
+
+  purgeTranscodeCache() {
+    return firstValueFrom(
+      this.http.delete<{ ok: true; entries: number; bytes: number }>(
+        '/api/system/transcode-cache',
+      ),
+    );
+  }
 }

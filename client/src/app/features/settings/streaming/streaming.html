@@ -61,5 +61,21 @@
       @if (saving()) { <span class="loading loading-spinner loading-xs"></span> }
       {{ 'common.save' | translate }}
     </button>
+
+    <!-- Transcode cache footprint + manual purge -->
+    <div class="divider">{{ 'settings.streaming.cache_title' | translate }}</div>
+
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.cache_usage' | translate }}</span></label>
+      <p class="text-base-content/70">
+        {{ 'settings.streaming.cache_usage_value' | translate: { entries: cacheEntries(), size: formatBytes(cacheBytes()) } }}
+      </p>
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.cache_purge_help' | translate }}</span></label>
+    </div>
+
+    <button class="btn btn-error btn-outline" [disabled]="purging() || cacheEntries() === 0" (click)="purgeCache()">
+      @if (purging()) { <span class="loading loading-spinner loading-xs"></span> }
+      {{ 'settings.streaming.cache_purge' | translate }}
+    </button>
   </div>
 }
