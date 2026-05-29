@@ -50,7 +50,7 @@ import { NativePlayer } from '../../core/plugins/native-player.plugin';
 import { NativeEngine } from '../../core/services/playback-engine/native-engine';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { TrackManagerService, SubtitleOption } from '../../core/services/track-manager.service';
-import { QualityManagerService, findVariantByProfileName, findBestVariantForHeight } from '../../core/services/quality-manager.service';
+import { QualityManagerService } from '../../core/services/quality-manager.service';
 import { DeviceService } from '../../core/services/device.service';
 
 interface ImmersivePlugin {
@@ -1818,12 +1818,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (opts.unmute) this.engine.muted = false;
     const wasPaused = opts.preservePause ? this.paused() : false;
     const deviceProfile = this.deviceProfileService.getProfile();
+    // Pass the active rung as startQuality so the backend prewarms ffmpeg at
+    // the resume position — main session at -ss pos plus the bounded early
+    // session that absorbs Shaka's seg-0 VOD probe. Mirrors the initial load.
+    const activeQuality = this.activeQualityId();
+    const prewarmQuality = activeQuality !== 'auto' ? activeQuality : undefined;
     this.playbackInfo = await this.streamingApi.getPlaybackInfo(
       this.mediaFileId,
       deviceProfile,
       this.activeBurnInId ?? undefined,
       this.activeAudioStreamIndex ?? undefined,
-      undefined,
+      prewarmQuality,
       pos > 0 ? Math.floor(pos) : undefined,
     );
     const { url, mimeType } = this.buildPlayUrl({
@@ -1872,6 +1877,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.castService.isConnected()) return;
     if (!this.engine || !this.mediaFileId) return;
     this.recoveringFromLostSession = true;
+    // Suppress the fatal-error overlay the engine tears off as the stream
+    // reloads — recovery is about to resume playback, so the reload window
+    // reads as buffering, not "Playback error".
+    this.state.setRecovering(true);
     try {
       await this.refreshSidAndReload(this.engine.currentTime || 0, {
         preservePause: true,
@@ -1880,6 +1889,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } catch { /* heartbeat is fire-and-forget; next one retries */ }
     finally {
       this.recoveringFromLostSession = false;
+      this.state.setRecovering(false);
     }
   }
 
@@ -2206,7 +2216,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // EXCLUSION: the Tizen Return key (keyCode 10009 / `XF86Back`) must
     // bubble up to the window-level handler in `app.ts` — otherwise the
     // user can't exit the player. Same for `Escape` on dev keyboards.
-    const isBackKey = e.keyCode === 10009 || e.key === 'XF86Back' || e.key === 'GoBack' || e.key === 'Escape';
+    // Tizen reports 10009 with no reliable `e.key` on older firmware, so the
+    // legacy code stays load-bearing; read it through a plain typed view to
+    // keep clear of the lib.dom `keyCode` deprecation.
+    const legacyKeyCode = (e as { keyCode: number }).keyCode;
+    const isBackKey = legacyKeyCode === 10009 || e.key === 'XF86Back' || e.key === 'GoBack' || e.key === 'Escape';
     if (!isBackKey && !this.controlsVisible() && this.device.isTv()) {
       this.showControls();
       e.preventDefault();
@@ -2447,15 +2461,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.activeSessionId(),
     );
     fetch(url, { method: 'DELETE', keepalive: true }).catch(() => {});
-  }
-
-  /** Find a variant track matching a quality id (e.g. '480p', 'original') by URL or height fallback. */
-  private findVariantByQualityId(qualityId: string, targetHeight: number): any | null {
-    if (!this.engine) return null;
-    const tracks = this.engine.getVariantTracks();
-    if (!tracks.length) return null;
-    return findVariantByProfileName(tracks, qualityId)
-      ?? findBestVariantForHeight(tracks, targetHeight);
   }
 
   /** Get the currently active variant track. */
