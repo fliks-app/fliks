@@ -80,6 +80,10 @@ export class MediaService {
     return this.query.findAll(query, userId, accessibleLibraryIds);
   }
 
+  findRecentlyAdded(opts: Parameters<MediaQueryService['findRecentlyAdded']>[0]) {
+    return this.query.findRecentlyAdded(opts);
+  }
+
   findByTmdbId(
     tmdbId: number,
     type: MediaType,
