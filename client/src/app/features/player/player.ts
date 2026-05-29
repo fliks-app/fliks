@@ -1877,6 +1877,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.castService.isConnected()) return;
     if (!this.engine || !this.mediaFileId) return;
     this.recoveringFromLostSession = true;
+    // Suppress the fatal-error overlay the engine tears off as the stream
+    // reloads — recovery is about to resume playback, so the reload window
+    // reads as buffering, not "Playback error".
+    this.state.setRecovering(true);
     try {
       await this.refreshSidAndReload(this.engine.currentTime || 0, {
         preservePause: true,
@@ -1885,6 +1889,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } catch { /* heartbeat is fire-and-forget; next one retries */ }
     finally {
       this.recoveringFromLostSession = false;
+      this.state.setRecovering(false);
     }
   }
 

@@ -34,14 +34,27 @@ export class PlayerStateService {
 
   private engine: PlaybackEngine | null = null;
 
+  /** True while a lost-session recovery is re-minting the sid and reloading
+   *  the engine. The reload tears the current stream down, so the engine
+   *  briefly emits a fatal error (Shaka's `<video>` element error, ExoPlayer's
+   *  one-shot error bridge) that recovery is about to resolve. While set, that
+   *  error surfaces as buffering — the spinner — instead of the terminal
+   *  "Playback error" overlay. Owned by PlayerComponent's recovery flow. */
+  private recovering = false;
+
+  setRecovering(value: boolean): void {
+    this.recovering = value;
+    if (value) this.error.set(null);
+  }
+
   /** Bind a playback engine's events to our signals. Call this when the engine changes. */
   bindEngine(engine: PlaybackEngine): void {
     this.engine = engine;
 
     engine.on('stateChanged', (e) => {
       this.paused.set(e.state === 'paused' || e.state === 'idle');
-      this.buffering.set(e.state === 'buffering');
-      if (e.state === 'error') this.error.set('Playback error');
+      this.buffering.set(e.state === 'buffering' || (this.recovering && e.state === 'error'));
+      if (e.state === 'error' && !this.recovering) this.error.set('Playback error');
       // videoStarted is intentionally NOT flipped here — Shaka emits 'playing'
       // on DOM 'play' (= play() called), well before the first frame is
       // actually painted. PlayerComponent owns the flip per engine: rvfc on
@@ -56,6 +69,10 @@ export class PlayerStateService {
     });
 
     engine.on('error', (e) => {
+      if (this.recovering) {
+        this.buffering.set(true);
+        return;
+      }
       this.error.set(e.message);
     });
   }
