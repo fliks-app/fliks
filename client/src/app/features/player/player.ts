@@ -2211,7 +2211,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // EXCLUSION: the Tizen Return key (keyCode 10009 / `XF86Back`) must
     // bubble up to the window-level handler in `app.ts` — otherwise the
     // user can't exit the player. Same for `Escape` on dev keyboards.
-    const isBackKey = e.keyCode === 10009 || e.key === 'XF86Back' || e.key === 'GoBack' || e.key === 'Escape';
+    // Tizen reports 10009 with no reliable `e.key` on older firmware, so the
+    // legacy code stays load-bearing; read it through a plain typed view to
+    // keep clear of the lib.dom `keyCode` deprecation.
+    const legacyKeyCode = (e as { keyCode: number }).keyCode;
+    const isBackKey = legacyKeyCode === 10009 || e.key === 'XF86Back' || e.key === 'GoBack' || e.key === 'Escape';
     if (!isBackKey && !this.controlsVisible() && this.device.isTv()) {
       this.showControls();
       e.preventDefault();
