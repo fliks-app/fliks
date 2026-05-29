@@ -50,7 +50,7 @@ import { NativePlayer } from '../../core/plugins/native-player.plugin';
 import { NativeEngine } from '../../core/services/playback-engine/native-engine';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { TrackManagerService, SubtitleOption } from '../../core/services/track-manager.service';
-import { QualityManagerService, findVariantByProfileName, findBestVariantForHeight } from '../../core/services/quality-manager.service';
+import { QualityManagerService } from '../../core/services/quality-manager.service';
 import { DeviceService } from '../../core/services/device.service';
 
 interface ImmersivePlugin {
@@ -2456,15 +2456,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.activeSessionId(),
     );
     fetch(url, { method: 'DELETE', keepalive: true }).catch(() => {});
-  }
-
-  /** Find a variant track matching a quality id (e.g. '480p', 'original') by URL or height fallback. */
-  private findVariantByQualityId(qualityId: string, targetHeight: number): any | null {
-    if (!this.engine) return null;
-    const tracks = this.engine.getVariantTracks();
-    if (!tracks.length) return null;
-    return findVariantByProfileName(tracks, qualityId)
-      ?? findBestVariantForHeight(tracks, targetHeight);
   }
 
   /** Get the currently active variant track. */
