@@ -619,21 +619,71 @@ export class SystemController {
     return streams;
   }
 
-  @Delete('streams/:sessionId')
-  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
-  killStream(@Param('sessionId') sessionId: string) {
+  /**
+   * Resolve a dashboard `sessionId` to the (user, mediaFile) pair the
+   * command targets. The dashboard hands us three flavours of id:
+   *   - `dp-<userId>-<mediaFileId>` — legacy direct-play tracker entry.
+   *   - A `LiveSession.sessionId` UUID — the canonical id since #300.
+   *   - A `TranscodeSession.id` hash — left in for completeness; the
+   *     dashboard hasn't emitted these in a while but a stale client
+   *     tab could still send one.
+   * Returns null when none of the three lookups produces a (user, file)
+   * pair the command can act on.
+   */
+  private resolveStreamCommandTarget(sessionId: string): {
+    userId: number;
+    mediaFileId: number;
+    killTranscodeId: string | null;
+    isDirectPlay: boolean;
+  } | null {
     if (sessionId.startsWith('dp-')) {
-      // Direct play session — can't really kill it, just untrack
       const parts = sessionId.replace('dp-', '').split('-');
       const userId = parseInt(parts[0], 10);
       const mediaFileId = parseInt(parts[1], 10);
-      if (userId && mediaFileId) {
-        this.activeStreamTracker.unregister(userId, mediaFileId);
-      }
-    } else {
-      // Transcode session — kill by session map key directly
-      this.transcodingService.killSessionById(sessionId);
+      if (!userId || !mediaFileId) return null;
+      return { userId, mediaFileId, killTranscodeId: null, isDirectPlay: true };
     }
+    const live = this.liveSessions.get(sessionId);
+    if (live && live.userId != null) {
+      const transcode = live.profileHash
+        ? this.transcodingService.getExistingSession(
+            live.mediaFileId,
+            live.userId,
+            live.profileHash,
+          )
+        : null;
+      return {
+        userId: live.userId,
+        mediaFileId: live.mediaFileId,
+        killTranscodeId: transcode?.id ?? null,
+        isDirectPlay: live.kind === 'directplay',
+      };
+    }
+    const transcode = this.transcodingService
+      .getActiveSessions()
+      .find((s) => s.id === sessionId);
+    if (transcode && transcode.userId != null) {
+      return {
+        userId: transcode.userId,
+        mediaFileId: transcode.mediaFileId,
+        killTranscodeId: transcode.id,
+        isDirectPlay: false,
+      };
+    }
+    return null;
+  }
+
+  @Delete('streams/:sessionId')
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
+  killStream(@Param('sessionId') sessionId: string) {
+    const target = this.resolveStreamCommandTarget(sessionId);
+    if (!target) return { ok: true }; // already gone
+    if (target.isDirectPlay) {
+      this.activeStreamTracker.unregister(target.userId, target.mediaFileId);
+    } else if (target.killTranscodeId) {
+      this.transcodingService.killSessionById(target.killTranscodeId);
+    }
+    this.liveSessions.stop(sessionId);
     return { ok: true };
   }
 
@@ -643,44 +693,26 @@ export class SystemController {
     @Param('sessionId') sessionId: string,
     @Body() body: { action: 'pause' | 'play' | 'stop' | 'message'; message?: string },
   ) {
-    // Parse userId and mediaFileId from sessionId
-    let userId = 0;
-    let mediaFileId = 0;
-
-    if (sessionId.startsWith('dp-')) {
-      const parts = sessionId.replace('dp-', '').split('-');
-      userId = parseInt(parts[0], 10);
-      mediaFileId = parseInt(parts[1], 10);
-    } else {
-      // Transcode session — look up from active sessions
-      const session = this.transcodingService
-        .getActiveSessions()
-        .find((s) => s.id === sessionId);
-      if (session) {
-        userId = session.userId ?? 0;
-        mediaFileId = session.mediaFileId;
-      }
-    }
-
-    if (!userId || !mediaFileId) {
+    const target = this.resolveStreamCommandTarget(sessionId);
+    if (!target) {
       throw new BadRequestException('Session not found');
     }
 
-    this.eventsService.emitToUser(userId, {
+    this.eventsService.emitToUser(target.userId, {
       type: 'player.command',
-      mediaFileId,
-      userId,
+      mediaFileId: target.mediaFileId,
+      userId: target.userId,
       action: body.action,
       message: body.message,
     });
 
-    // If stop, also kill the transcode session
     if (body.action === 'stop') {
-      if (sessionId.startsWith('dp-')) {
-        this.activeStreamTracker.unregister(userId, mediaFileId);
-      } else {
-        this.transcodingService.killSessionById(sessionId);
+      if (target.isDirectPlay) {
+        this.activeStreamTracker.unregister(target.userId, target.mediaFileId);
+      } else if (target.killTranscodeId) {
+        this.transcodingService.killSessionById(target.killTranscodeId);
       }
+      this.liveSessions.stop(sessionId);
     }
 
     return { ok: true };
