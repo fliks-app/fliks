@@ -27,17 +27,24 @@ export class SubtitleOverlay {
   private cursor = 0;
   private visible = false;
   private lastText = '';
+  private disposed = false;
 
   /** Parse a remote WebVTT file and arm it as the active track. */
   async show(url: string): Promise<void> {
     this.visible = true;
+    this.disposed = false;
+    let cues: VttCue[] = [];
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error('VTT fetch ' + res.status);
-      this.cues = parseVtt(await res.text());
+      cues = parseVtt(await res.text());
     } catch {
-      this.cues = [];
+      cues = [];
     }
+    // destroy() may have run while the fetch was in flight — don't repopulate
+    // cues after teardown.
+    if (this.disposed) return;
+    this.cues = cues;
     this.cursor = 0;
   }
 
@@ -102,6 +109,7 @@ export class SubtitleOverlay {
   }
 
   destroy(): void {
+    this.disposed = true;
     if (this.el?.parentElement) this.el.parentElement.removeChild(this.el);
     this.el = null;
     this.cues = [];
