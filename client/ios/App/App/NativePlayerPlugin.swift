@@ -386,12 +386,14 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
             if let item = self?.player?.currentItem,
                let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .audible) {
+                let selected = item.currentMediaSelection.selectedMediaOption(in: group)
                 for (index, option) in group.options.enumerated() {
                     let locale = option.locale ?? Locale(identifier: "und")
                     tracks.append([
                         "id": "audio-\(index)",
                         "language": locale.languageCode ?? "und",
                         "label": option.displayName,
+                        "selected": option == selected,
                     ])
                 }
             }
@@ -420,6 +422,10 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             }
 
             item.select(group.options[index], in: group)
+            // Surface the new selected-state so the audio menu updates — the
+            // AVPlayer media-selection change emits no event of its own
+            // (Android's onTracksChanged does this automatically).
+            self?.emitTracksChanged()
             call.resolve()
         }
     }
@@ -869,12 +875,14 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
         var audioTracks: [[String: Any]] = []
         if let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .audible) {
+            let selected = item.currentMediaSelection.selectedMediaOption(in: group)
             for (index, option) in group.options.enumerated() {
                 let locale = option.locale ?? Locale(identifier: "und")
                 audioTracks.append([
                     "id": "audio-\(index)",
                     "language": locale.languageCode ?? "und",
                     "label": option.displayName,
+                    "selected": option == selected,
                 ])
             }
         }

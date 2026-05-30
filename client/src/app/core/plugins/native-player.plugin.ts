@@ -8,6 +8,8 @@ export interface NativeAudioTrack {
   id: string;
   language: string;
   label: string;
+  /** True for the currently active audio track, so the menu highlights it. */
+  selected?: boolean;
 }
 
 export interface NativeSubtitleTrack {
