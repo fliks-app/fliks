@@ -47,6 +47,7 @@ import {
 import {
   fileExists,
   firstMissingSegment,
+  purgeSegmentsFrom,
   segmentNearby,
 } from './segment-utils';
 import { sessionKey } from './session-key';
@@ -577,6 +578,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
             await fsp.mkdir(path.join(dir, String(i)), { recursive: true });
           }
         }
+        // Drop any segments from the previous run at/after the new start: they
+        // carry that run's 0-based-at-its-own-ss timeline, which collides with
+        // this run's at the boundary and stalls the player. Keeps the cache to
+        // a single timeline forward of the restart point.
+        await purgeSegmentsFrom(dir, restartAt);
         const restarted = this.startSeekSession(
           key,
           mediaFileId,
@@ -613,6 +619,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         await fsp.mkdir(path.join(sessionDir, String(i)), { recursive: true });
       }
     }
+    // Single-timeline cache: clear any prior run's segments at/after this
+    // start so the forward path never crosses a backward tfdt jump (see
+    // purgeSegmentsFrom). A cold first play finds nothing to drop.
+    await purgeSegmentsFrom(sessionDir, requestedSegment);
     const session = this.startFfmpeg(
       key,
       mediaFileId,
