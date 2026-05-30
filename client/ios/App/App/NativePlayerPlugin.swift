@@ -488,29 +488,31 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// Map the app's subtitle-style settings to AVTextStyleRule attributes so
-    /// AVPlayer's native legible caption rendering honours them — most
-    /// importantly a transparent background (no caption box) when the user
-    /// hasn't chosen one. Returns an empty list if the markup attributes can't
-    /// be formed, leaving AVPlayer's defaults in place.
+    /// Map the app's subtitle-style settings to AVTextStyleRule rules for
+    /// AVPlayer's native legible caption rendering. Returns two rules: a
+    /// global one (foreground / size / edge / background) and a second
+    /// background rule scoped via `textSelector` to target the caption box
+    /// specifically — the global rule's background appears to apply to the
+    /// text run rather than the box, leaving a semi-opaque box behind.
     private func buildSubtitleStyleRules(
         fontScale: Float,
         foregroundColor: String,
         backgroundColor: String,
         edgeType: String
     ) -> [AVTextStyleRule] {
-        var attrs: [String: Any] = [:]
-        if let fg = parseColor(foregroundColor) {
-            attrs[kCMTextMarkupAttribute_ForegroundColorARGB as String] = fg
-        }
-        // "transparent" → fully transparent ARGB so no caption box is drawn.
-        // Set BOTH backgrounds: AVPlayer draws the visible box behind WebVTT
-        // cues from the *character* background, so clearing only the region
-        // `BackgroundColorARGB` leaves a semi-opaque box behind.
+        var rules: [AVTextStyleRule] = []
+
+        // "transparent" → fully transparent ARGB ([alpha, red, green, blue]).
         let bg: [CGFloat] =
             backgroundColor == "transparent"
             ? [0, 0, 0, 0]
             : (parseColor(backgroundColor) ?? [0, 0, 0, 0])
+
+        // Global rule: foreground, size, edge, and background.
+        var attrs: [String: Any] = [:]
+        if let fg = parseColor(foregroundColor) {
+            attrs[kCMTextMarkupAttribute_ForegroundColorARGB as String] = fg
+        }
         attrs[kCMTextMarkupAttribute_BackgroundColorARGB as String] = bg
         attrs[kCMTextMarkupAttribute_CharacterBackgroundColorARGB as String] = bg
         // Font size as a percentage of video height (~5% ≈ AVPlayer's default
@@ -525,10 +527,24 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         default: edge = kCMTextMarkupCharacterEdgeStyle_None
         }
         attrs[kCMTextMarkupAttribute_CharacterEdgeStyle as String] = edge
-        guard let rule = AVTextStyleRule(textMarkupAttributes: attrs) else {
-            return []
+        if let rule = AVTextStyleRule(textMarkupAttributes: attrs) {
+            rules.append(rule)
         }
-        return [rule]
+
+        // Background-scoped rule: target the caption box background directly
+        // via a textSelector so a transparent value clears the box (the
+        // global rule's background may land on the text run instead).
+        if let bgRule = AVTextStyleRule(
+            textMarkupAttributes: [
+                kCMTextMarkupAttribute_BackgroundColorARGB as String: bg,
+                kCMTextMarkupAttribute_CharacterBackgroundColorARGB as String: bg,
+            ],
+            textSelector: "background"
+        ) {
+            rules.append(bgRule)
+        }
+
+        return rules
     }
 
     // MARK: - Brightness
