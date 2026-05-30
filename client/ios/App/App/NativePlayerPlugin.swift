@@ -50,7 +50,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var subtitleBottomConstraint: NSLayoutConstraint?
     private var timeObserver: Any?
     private var statusObserver: NSKeyValueObservation?
-    private var rateObserver: NSKeyValueObservation?
+    private var timeControlObserver: NSKeyValueObservation?
     private var firstFrameObserver: NSKeyValueObservation?
     private var firstFrameEmitted = false
     private var savedBrightness: CGFloat?
@@ -679,19 +679,17 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             self?.emitTimeUpdate()
         }
 
-        // Playback status. `.initial` catches the case where the asset
-        // was already loaded synchronously (warm cache, in-memory
-        // playlist) and the status flipped to `.readyToPlay` between
-        // AVPlayerItem creation and observer attach — without `.initial`
-        // we'd miss the only emit and the UI would never leave the
-        // loading state. emit handlers are idempotent so a duplicate
-        // initial fire is harmless.
+        // Item status. `.initial` catches a warm asset that flipped to
+        // `.readyToPlay` between item creation and observer attach, so the
+        // track list still surfaces. Play / pause / buffer state is owned by
+        // the `timeControlStatus` observer below, not this one — here
+        // `.readyToPlay` only publishes tracks and `.failed` raises the
+        // terminal error.
         statusObserver = player.currentItem?.observe(
             \.status, options: [.initial, .new]
         ) { [weak self] item, _ in
             switch item.status {
             case .readyToPlay:
-                self?.emitStateChanged("playing")
                 self?.emitTracksChanged()
             case .failed:
                 let nsError = item.error as NSError?
@@ -728,12 +726,26 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             object: player.currentItem
         )
 
-        // Rate changes (play/pause detection)
-        rateObserver = player.observe(\.rate) { [weak self] player, _ in
-            if player.rate == 0 {
+        // Single source of truth for play / pause / buffer. With
+        // `automaticallyWaitsToMinimizeStalling = true` AVPlayer signals a
+        // stall and its recovery through `timeControlStatus`, not `rate`
+        // (which holds at the requested value across a re-buffer) — so a
+        // `\.rate` observer never fires when playback resumes and the JS
+        // spinner would latch. `.waitingToPlayAtSpecifiedRate` is buffering,
+        // `.playing` is started/resumed, `.paused` is user pause or stop.
+        // `.initial` publishes the status at attach so a warm reload that is
+        // already `.playing` emits too; a cold load reports `.paused` here,
+        // harmlessly, just before play() starts it.
+        timeControlObserver = player.observe(\.timeControlStatus, options: [.initial, .new]) { [weak self] player, _ in
+            switch player.timeControlStatus {
+            case .paused:
                 self?.emitStateChanged("paused")
-            } else {
+            case .waitingToPlayAtSpecifiedRate:
+                self?.emitStateChanged("buffering")
+            case .playing:
                 self?.emitStateChanged("playing")
+            @unknown default:
+                break
             }
         }
 
@@ -741,24 +753,17 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         // `AVPlayerLayer.isReadyForDisplay` is the canonical signal that
         // the layer has decoded + composited a frame to the surface;
         // mirrors ExoPlayer's `onRenderedFirstFrame` on Android.
-        // `initial: .new` fires once synchronously, so we gate on
-        // `firstFrameEmitted` to skip the pre-load `false` value and emit
-        // only on the actual flip to `true`.
+        // `.initial` catches a layer already ready at observer attach (warm
+        // reload); KVO otherwise fires on each `isReadyForDisplay` transition.
+        // The `firstFrameEmitted` flag makes the emit one-shot, dropping the
+        // `false` values and any later re-ready toggles across re-buffers.
         if let layer = playerLayer {
-            firstFrameObserver = layer.observe(\.isReadyForDisplay, options: [.new]) { [weak self] layer, _ in
+            firstFrameObserver = layer.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak self] layer, _ in
                 guard let self = self, layer.isReadyForDisplay, !self.firstFrameEmitted else { return }
                 self.firstFrameEmitted = true
                 self.emitFirstFrame()
             }
         }
-
-        // Buffering detection
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(playerStalled),
-            name: .AVPlayerItemPlaybackStalled,
-            object: player.currentItem
-        )
 
         // Ended detection
         NotificationCenter.default.addObserver(
@@ -769,17 +774,15 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         )
     }
 
-    @objc private func playerStalled() {
-        emitStateChanged("buffering")
-    }
-
     @objc private func handleNewErrorLogEntry(_ notification: Notification) {
         guard let item = notification.object as? AVPlayerItem,
               let log = item.errorLog(),
               let entry = log.events.last else { return }
         let msg = "[\(entry.errorDomain) \(entry.errorStatusCode)] \(entry.errorComment ?? "—") uri=\(entry.uri ?? "—")"
-        // Dump to JS console so it shows up in Safari Web Inspector / app
-        // log, AND emit as a soft error event for the UI to surface.
+        // Dump to the JS console (Safari Web Inspector / app log) only.
+        // These entries fire on recoverable per-segment network / codec
+        // hiccups, so they are deliberately not raised as a UI error
+        // event — only the terminal `.status == .failed` path does that.
         let escaped = msg.replacingOccurrences(of: "'", with: "\\'")
         let js = "console.warn('[NativePlayer] errorLog:', '\(escaped)');"
         DispatchQueue.main.async { [weak self] in
@@ -800,8 +803,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         statusObserver = nil
         firstFrameObserver?.invalidate()
         firstFrameObserver = nil
-        rateObserver?.invalidate()
-        rateObserver = nil
+        timeControlObserver?.invalidate()
+        timeControlObserver = nil
         NotificationCenter.default.removeObserver(self)
     }
 
