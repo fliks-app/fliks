@@ -504,11 +504,15 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             attrs[kCMTextMarkupAttribute_ForegroundColorARGB as String] = fg
         }
         // "transparent" → fully transparent ARGB so no caption box is drawn.
+        // Set BOTH backgrounds: AVPlayer draws the visible box behind WebVTT
+        // cues from the *character* background, so clearing only the region
+        // `BackgroundColorARGB` leaves a semi-opaque box behind.
         let bg: [CGFloat] =
             backgroundColor == "transparent"
             ? [0, 0, 0, 0]
             : (parseColor(backgroundColor) ?? [0, 0, 0, 0])
         attrs[kCMTextMarkupAttribute_BackgroundColorARGB as String] = bg
+        attrs[kCMTextMarkupAttribute_CharacterBackgroundColorARGB as String] = bg
         // Font size as a percentage of video height (~5% ≈ AVPlayer's default
         // caption size), scaled by the user's size factor.
         attrs[kCMTextMarkupAttribute_BaseFontSizePercentageRelativeToVideoHeight as String] =
