@@ -178,6 +178,10 @@ export function generateMasterPlaylist(
   const subsAttr = hasSubs ? ',SUBTITLES="subs"' : '';
   const pushSubtitleMedia = (out: string[]): void => {
     if (!hasSubs) return;
+    // `name` is a human label (track title / language). Two tracks can resolve
+    // to the same string, so uniquify with an increment (#2 on collision) — a
+    // native player (AirPlay, lock-screen) dedupes identical NAMEs into one
+    // selectable option otherwise.
     const names = buildUniqueAudioNames(
       subtitleRenditions.map((s) => ({ title: s.name, language: s.language })),
     );

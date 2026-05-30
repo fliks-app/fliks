@@ -67,12 +67,16 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
    *  its text tracks. The default/saved selection is applied right after
    *  load() — before ExoPlayer has parsed the manifest's text tracks — so we
    *  hold the intent and (re)apply it on `nativePlayerTracksChanged`. */
-  private _desiredSubtitle: { language: string; forced: boolean } | null = null;
+  private _desiredSubtitle: {
+    language: string;
+    forced: boolean;
+  } | null = null;
   /** Text tracks the player currently reports, refreshed on track changes. */
   private _nativeSubtitleTracks: {
     id: string;
     language: string;
     label: string;
+    forced?: boolean;
   }[] = [];
 
   // ── Lifecycle ──
@@ -258,15 +262,19 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   ): Promise<{ language: string; forced: boolean }> {
     // Subtitles are HLS SUBTITLES renditions; the player surfaces them as
     // native text tracks. Return the desired track descriptor — actual
-    // selection is resolved by language against the player's reported tracks,
-    // which only appear after the manifest is parsed (see resolveSubtitle).
+    // selection is resolved against the player's reported tracks (by
+    // language), which only appear after the manifest is parsed (see
+    // resolveSubtitle).
     return { language, forced };
   }
 
   selectTextTrack(track: any): void {
     this._desiredSubtitle =
       track && typeof track === 'object' && track.language
-        ? { language: track.language, forced: !!track.forced }
+        ? {
+            language: track.language,
+            forced: !!track.forced,
+          }
         : null;
     this.resolveSubtitle();
   }
@@ -286,14 +294,21 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
    *  (fixes "subtitle selected by default but hidden" on ExoPlayer). */
   private resolveSubtitle(): void {
     if (!this._desiredSubtitle) return;
-    const want = normalizeLangCode(this._desiredSubtitle.language);
+    const { language, forced } = this._desiredSubtitle;
+    const want = normalizeLangCode(language);
+    const tracks = this._nativeSubtitleTracks;
+    // Match by (language + forced) → language → a lone track, so selection
+    // still works on a tag mismatch.
     const id =
-      this._nativeSubtitleTracks.find(
-        (t) => normalizeLangCode(t.language) === want,
-      )?.id ?? null;
-    if (id && id !== this._activeTrackId) {
-      this._activeTrackId = id;
-      NativePlayer.selectSubtitleTrack({ id });
+      tracks.find(
+        (t) => normalizeLangCode(t.language) === want && !!t.forced === !!forced,
+      ) ??
+      tracks.find((t) => normalizeLangCode(t.language) === want) ??
+      (tracks.length === 1 ? tracks[0] : undefined);
+    const selectedId = id?.id ?? null;
+    if (selectedId && selectedId !== this._activeTrackId) {
+      this._activeTrackId = selectedId;
+      NativePlayer.selectSubtitleTrack({ id: selectedId });
     }
   }
 

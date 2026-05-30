@@ -55,6 +55,21 @@ export const ISO_639_2_TO_1: Record<string, string> = Object.fromEntries(
   ),
 );
 
+/**
+ * Normalize a stream/subtitle language tag to its canonical ISO 639-1 code.
+ * Embedded streams carry the raw container tag — usually ISO 639-2 (`fre`,
+ * `fra`) or a regional form (`fr-FR`) — which native players (AVPlayer /
+ * ExoPlayer) fail to match against a 2-letter selection. Folds those to `fr`
+ * (etc.) so an advertised rendition's LANGUAGE is the canonical code; returns
+ * `und` for an empty tag and the lowercased input when it isn't recognised.
+ */
+export function normalizeLanguageCode(lang: string | null | undefined): string {
+  if (!lang) return 'und';
+  const base = lang.toLowerCase().split(/[-_]/)[0];
+  if (base.length === 2) return base;
+  return ISO_639_2_TO_1[base] ?? base;
+}
+
 const byId = new Map(APP_LANGUAGES.map((l) => [l.id, l]));
 
 export function getAppLanguageById(

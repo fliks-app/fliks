@@ -17,6 +17,7 @@ import { StreamingService } from './streaming.service';
 import { EventsService } from '../scheduler/events.service';
 import { Command } from '../scheduler/entities/command.entity';
 import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
+import { normalizeLanguageCode } from '../../common/constants/app-languages';
 import type { SubtitleRenditionMeta } from './transcoding/types';
 
 const execFileAsync = promisify(execFile);
@@ -126,13 +127,14 @@ export class SubtitleStreamService {
   }
 
   /**
-   * Text subtitle tracks for the HLS master's `SUBTITLES` rendition group:
-   * embedded non-bitmap streams (from cached `streamInfo`) plus external
-   * subtitle files on disk. Bitmap subtitles (PGS/DVD/DVB) are excluded —
-   * they have no WebVTT form and stay on the burn-in path. Each entry's
-   * `key` feeds the existing VTT endpoints (`subtitles/embedded/:idx` for
-   * embedded, `subtitles/:id` for external), which the subtitle media
-   * playlist references as its single segment.
+   * Text subtitle tracks for the HLS master's `SUBTITLES` group: embedded
+   * non-bitmap streams (from cached `streamInfo`) then external files. Bitmap
+   * subtitles (PGS/DVD/DVB) are excluded — they have no WebVTT form and stay on
+   * the burn-in path. `key` feeds the VTT endpoints (`subtitles/embedded/:idx`,
+   * `subtitles/:id`); `name` is a human label (track title / language /
+   * "Subtitle") shown by native players (AirPlay, lock-screen). It is NOT a
+   * stable id — the master playlist uniquifies colliding names with an
+   * increment, and the client no longer matches a track on it.
    */
   async listTextSubtitleRenditions(
     mediaFileId: number,
@@ -144,8 +146,8 @@ export class SubtitleStreamService {
       out.push({
         kind: 'embedded',
         key: s.streamIndex,
-        language: s.language,
-        name: s.title || s.language || 'Subtitle',
+        language: normalizeLanguageCode(s.language),
+        name: s.title || normalizeLanguageCode(s.language) || 'Subtitle',
         forced: s.forced,
       });
     }
@@ -161,7 +163,7 @@ export class SubtitleStreamService {
         out.push({
           kind: 'external',
           key: sf.id,
-          language: sf.language,
+          language: normalizeLanguageCode(sf.language),
           name: sf.language || 'Subtitle',
           forced: sf.forced,
         });

@@ -14,6 +14,8 @@ export interface NativeSubtitleTrack {
   id: string;
   language: string;
   label: string;
+  /** True if the track carries only forced (foreign-dialogue) cues. */
+  forced?: boolean;
 }
 
 export interface NativePlayerPosition {
