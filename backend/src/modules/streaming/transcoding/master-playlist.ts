@@ -188,7 +188,7 @@ export function generateMasterPlaylist(
           ? `subtitles/embedded/${s.key}`
           : `subtitles/${s.key}`;
       out.push(
-        `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=NO,AUTOSELECT=YES,FORCED=${s.forced ? 'YES' : 'NO'},URI="/api/stream/${mediaFileId}/${path}/index.m3u8${tokenParam}"`,
+        `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=NO,AUTOSELECT=NO,FORCED=${s.forced ? 'YES' : 'NO'},URI="/api/stream/${mediaFileId}/${path}/index.m3u8${tokenParam}"`,
       );
     });
   };

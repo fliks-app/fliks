@@ -149,16 +149,27 @@ export class SubtitleStreamService {
         forced: s.forced,
       });
     }
-    const external = await this.subtitleFileRepo.find({ where: { mediaFileId } });
-    for (const sf of external) {
-      if (!sf.relativePath) continue;
-      out.push({
-        kind: 'external',
-        key: sf.id,
-        language: sf.language,
-        name: sf.language || 'Subtitle',
-        forced: sf.forced,
+    // External subtitle files. Query through the relation — `mediaFileId` on
+    // SubtitleFile is a @RelationId (virtual), which TypeORM rejects in a
+    // `where`. Isolated so a query failure can never drop the embedded subs.
+    try {
+      const external = await this.subtitleFileRepo.find({
+        where: { mediaFile: { id: mediaFileId } },
       });
+      for (const sf of external) {
+        if (!sf.relativePath) continue;
+        out.push({
+          kind: 'external',
+          key: sf.id,
+          language: sf.language,
+          name: sf.language || 'Subtitle',
+          forced: sf.forced,
+        });
+      }
+    } catch (e) {
+      this.log.warn(
+        `listTextSubtitleRenditions: external query failed for #${mediaFileId}: ${e instanceof Error ? e.message : e}`,
+      );
     }
     return out;
   }
