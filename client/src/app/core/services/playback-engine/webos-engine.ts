@@ -340,7 +340,12 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.pendingReloadTarget = null;
     this.reloadInFlight = true;
     this.loadInternal(setStartAt(this.loadedUrl, target), target)
-      .catch(() => { /* surfaced via the engine error event */ })
+      .catch(() => {
+        // loadInternal does not emit during its loading phase, so a failed
+        // reload-seek would leave seekIntent pinning the seekbar at the
+        // unreachable target forever — clear it so the bar tracks the real clock.
+        this.seekIntent = null;
+      })
       .finally(() => {
         this.reloadInFlight = false;
         // A newer target arrived mid-reload — honour the latest, once.
