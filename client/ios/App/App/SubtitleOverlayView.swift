@@ -1,4 +1,5 @@
 import UIKit
+import AVFoundation
 import CoreMedia
 
 // MARK: - Style
@@ -99,6 +100,21 @@ final class SubtitleOverlayView: UIView {
     private var style = SubtitleStyle()
     private var cues: [[SubtitleRun]] = []
 
+    /// The player layer the subtitles belong to. Captions size and anchor to
+    /// the video rectangle, not the full surface, so a 16:9 video letterboxed
+    /// into a portrait screen gets video-sized (not screen-sized) text.
+    weak var videoLayer: AVPlayerLayer?
+
+    /// The rectangle the video occupies (letterboxed under `.resizeAspect`),
+    /// in this view's coordinate space — the player layer is sized to the same
+    /// bounds. Falls back to full bounds before the video dimensions are known.
+    private var videoRect: CGRect {
+        if let rect = videoLayer?.videoRect, rect.width > 1, rect.height > 1 {
+            return rect
+        }
+        return bounds
+    }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         isUserInteractionEnabled = false
@@ -142,7 +158,7 @@ final class SubtitleOverlayView: UIView {
     }
 
     private func buildAttributed(_ lines: [[SubtitleRun]]) -> NSAttributedString {
-        let pointSize = max(8, bounds.height * 0.05 * style.fontScale)
+        let pointSize = max(8, videoRect.height * 0.05 * style.fontScale)
         let base = UIFont.systemFont(ofSize: pointSize, weight: .semibold)
         let out = NSMutableAttributedString()
         for (lineIdx, runs) in lines.enumerated() {
@@ -188,13 +204,14 @@ final class SubtitleOverlayView: UIView {
     }
 
     private func positionLabel() {
-        let maxWidth = bounds.width * 0.9
-        let fit = label.sizeThatFits(CGSize(width: maxWidth, height: bounds.height))
+        let area = videoRect
+        let maxWidth = area.width * 0.9
+        let fit = label.sizeThatFits(CGSize(width: maxWidth, height: area.height))
         let w = min(fit.width, maxWidth)
-        let bottomInset = bounds.height * style.bottomMarginFraction
+        let bottomInset = area.height * style.bottomMarginFraction
         label.frame = CGRect(
-            x: (bounds.width - w) / 2,
-            y: max(0, bounds.height - bottomInset - fit.height),
+            x: area.minX + (area.width - w) / 2,
+            y: max(area.minY, area.maxY - bottomInset - fit.height),
             width: w,
             height: fit.height
         )
