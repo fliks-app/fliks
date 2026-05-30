@@ -78,14 +78,17 @@ public class PipPlugin: CAPPlugin, CAPBridgedPlugin, AVPictureInPictureControlle
 
     // MARK: - Private
 
+    private var nativePlayer: NativePlayerPlugin? {
+        bridge?.plugin(withName: "NativePlayer") as? NativePlayerPlugin
+    }
+
     private func getOrCreateController() -> AVPictureInPictureController? {
         if let existing = pipController { return existing }
 
         guard AVPictureInPictureController.isPictureInPictureSupported() else { return nil }
 
         // Get the player layer from NativePlayerPlugin
-        guard let nativePlayer = bridge?.plugin(withName: "NativePlayer") as? NativePlayerPlugin,
-              let playerLayer = nativePlayer.activePlayerLayer else {
+        guard let playerLayer = nativePlayer?.activePlayerLayer else {
             return nil
         }
 
@@ -99,8 +102,19 @@ public class PipPlugin: CAPPlugin, CAPBridgedPlugin, AVPictureInPictureControlle
 
     // MARK: - AVPictureInPictureControllerDelegate
 
+    public func pictureInPictureControllerWillStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+        // The custom subtitle overlay isn't captured by PiP — hand rendering to
+        // the native (boxed) caption track for the duration of the PiP window.
+        nativePlayer?.setSubtitleRenderingForPiP(true)
+    }
+
     public func pictureInPictureControllerDidStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
         emitPipModeChanged(true)
+    }
+
+    public func pictureInPictureControllerWillStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+        // Back to fullscreen: restore the no-box overlay.
+        nativePlayer?.setSubtitleRenderingForPiP(false)
     }
 
     public func pictureInPictureControllerDidStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
