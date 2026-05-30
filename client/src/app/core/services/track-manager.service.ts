@@ -125,20 +125,6 @@ export class TrackManagerService {
       const bitmapCodecs = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle']);
       const seen = new Set<string>();
 
-      // Embedded stream titles (e.g. "European" / "Canadian") aren't on the
-      // SubtitleFile rows — pull them from streamInfo so several same-language
-      // tracks are distinguishable in the menu.
-      const file = media?.files?.find((f) => f.id === mediaFileId);
-      const si = file?.streamInfo as any;
-      const titleByIndex = new Map<number, string>();
-      for (const emb of si?.subtitles ?? []) {
-        if (emb.title) titleByIndex.set(emb.streamIndex, emb.title);
-      }
-      const withTitle = (label: string, idx?: number | null): string => {
-        const t = idx != null ? titleByIndex.get(idx) : undefined;
-        return t ? `${label} — ${t}` : label;
-      };
-
       for (const sub of subs) {
         if (sub.mediaFileId !== mediaFileId) continue;
         const isBitmap = bitmapCodecs.has(sub.codec ?? '');
@@ -162,7 +148,7 @@ export class TrackManagerService {
           seen.add(key);
           options.push({
             id: key,
-            label: withTitle(formatSubtitleLabel(sub, this.translate), sub.streamIndex),
+            label: formatSubtitleLabel(sub, this.translate),
             url: isBitmap ? '' : streamingApi.getEmbeddedSubtitleUrl(mediaFileId, sub.streamIndex!),
             language: sub.language,
             burnIn: isBitmap,
@@ -173,6 +159,8 @@ export class TrackManagerService {
       }
 
       // Also check streamInfo for embedded subs not yet in DB
+      const file = media?.files?.find((f) => f.id === mediaFileId);
+      const si = file?.streamInfo as any;
       if (si?.subtitles?.length) {
         for (const emb of si.subtitles) {
           const key = `emb-${emb.streamIndex}`;
@@ -182,7 +170,7 @@ export class TrackManagerService {
           if (isBitmap) continue; // Bitmap from streamInfo only (no DB ID for burn-in)
           options.push({
             id: key,
-            label: withTitle(formatSubtitleLabel(emb, this.translate), emb.streamIndex),
+            label: formatSubtitleLabel(emb, this.translate),
             url: streamingApi.getEmbeddedSubtitleUrl(mediaFileId, emb.streamIndex),
             language: emb.language,
             burnIn: false,
