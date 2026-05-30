@@ -394,7 +394,7 @@ export class StreamingApiService {
     );
   }
 
-  /** Build the URL for stopping sessions (used with sendBeacon on unload).
+  /** Build the URL for stopping sessions (used with fetch(keepalive) on unload).
    *  Prefer the sid-scoped variant when a sessionId is available — the
    *  bulk path kills every profile for the (user, file) pair, which
    *  would tear down other devices watching the same title. */

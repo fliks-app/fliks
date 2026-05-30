@@ -230,7 +230,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const id = this.activeQualityId();
     if (id === 'auto') {
       const res = this.activeResolution();
-      return res ? `Auto (${res})` : 'Auto';
+      return res
+        ? this.translate.instant('player.auto_resolution', { res })
+        : this.translate.instant('player.auto');
     }
     return this.availableQualities().find((q) => q.id === id)?.label ?? id;
   });
@@ -558,10 +560,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Playback mode for video
     let videoPlaybackMode: string;
     if (effectiveVideoCopy) {
-      videoPlaybackMode = 'Direct playback';
+      videoPlaybackMode = this.translate.instant('player.stats_direct_playback');
     } else {
       const hwLabel: Record<string, string> = { qsv: 'QSV', vaapi: 'VAAPI', nvenc: 'NVENC', videotoolbox: 'Apple VT', none: 'CPU' };
-      videoPlaybackMode = `Transcoding (${hwLabel[hw] ?? hw.toUpperCase()})`;
+      videoPlaybackMode = this.translate.instant('player.stats_transcoding', { hw: hwLabel[hw] ?? hw.toUpperCase() });
     }
     if (playingHeight && src?.height && playingHeight < src.height) {
       videoPlaybackMode += ` \u2192 ${playingWidth}x${playingHeight}`;
@@ -622,10 +624,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     let audioPlaybackMode: string;
     if (effectiveAudioCopy) {
-      audioPlaybackMode = 'Direct playback';
+      audioPlaybackMode = this.translate.instant('player.stats_direct_playback');
     } else {
       const outCodec = isTranscodeQuality ? 'AAC' : (pi?.outputAudioCodec ?? 'aac').toUpperCase();
-      audioPlaybackMode = `Transcode (${outCodec} 192 kbps)`;
+      audioPlaybackMode = this.translate.instant('player.stats_transcode_audio', { codec: outCodec });
     }
 
     return {
@@ -2206,9 +2208,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       try { this.engine.setTextVisibility(false); } catch {}
       this.activeSubtitleId.set(null);
       this.subtitlePickerOpen.set(false);
-      localStorage.setItem('player.subtitleLang', '');
       this.trackManager.saveSubtitleSelection(this.mediaId, null);
-      localStorage.removeItem('player.subtitleForced');
       if (!this.isOfflinePlayback && this.activeBurnInId) {
         this.activeBurnInId = null;
         await this.reloadStream();
@@ -2220,8 +2220,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.activeBurnInId = sub.subtitleDbId;
       this.activeSubtitleId.set(sub.id);
       this.subtitlePickerOpen.set(false);
-      localStorage.setItem('player.subtitleLang', sub.language);
-      localStorage.setItem('player.subtitleForced', sub.forced ? '1' : '0');
       // Persist like the soft/off branches do, so a burn-in pick is restored
       // on reload / next episode instead of silently reverting.
       this.trackManager.saveSubtitleSelection(
@@ -2248,7 +2246,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     this.activeSubtitleId.set(sub.id);
     this.subtitlePickerOpen.set(false);
-    localStorage.setItem('player.subtitleLang', sub.language);
 
     this.trackManager.saveSubtitleSelection(this.mediaId, sub.language, sub.forced, sub.id.startsWith('emb-'));
   }
@@ -2429,8 +2426,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const option = this.availableQualities().find(q => q.id === id);
     if (!option) return;
     const mode = this.playbackMode();
-    // User picked this explicitly → persist at app level.
-    this.qualityManager.selectQuality(option, this.engine, mode, false, true);
+    // User picked this explicitly → persist at app level. In non-direct mode
+    // the imminent reloadStream() re-applies the quality after load
+    // (applyQualityPreferenceAfterLoad), so pass engine=null here to only
+    // persist and avoid selecting a variant the full reload throws away.
+    this.qualityManager.selectQuality(option, mode !== 'direct' ? null : this.engine, mode, false, true);
 
     // Transcode mode: the backend emits a single-variant master playlist
     // (the one matching savedQualityId), so switching quality requires a
