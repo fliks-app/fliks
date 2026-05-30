@@ -5,6 +5,7 @@ import { RequestComment } from './entities/request-comment.entity';
 import { AutoApprovalRule } from './entities/auto-approval-rule.entity';
 import { AuthModule } from '../auth/auth.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { SettingsModule } from '../settings/settings.module';
 import { MediaModule } from '../media/media.module';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { FliksSchedulerModule } from '../scheduler/scheduler.module';
@@ -18,6 +19,7 @@ import { AutoApprovalRulesController } from './auto-approval-rules.controller';
     TypeOrmModule.forFeature([FliksRequest, RequestComment, AutoApprovalRule]),
     AuthModule,
     NotificationsModule,
+    SettingsModule,
     // forwardRef: MediaModule injects RequestLifecycleService for the
     // import / remove / unmonitor hooks, and we inject MediaService here
     // for the monitoring + 409 fallback lookups.

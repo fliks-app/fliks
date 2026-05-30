@@ -18,6 +18,7 @@ import { ProfilesService } from '../profiles/profiles.service';
 import { EventsService } from '../scheduler/events.service';
 import { SchedulerService } from '../scheduler/scheduler.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SettingsService } from '../settings/settings.service';
 import { User } from '../users/entities/user.entity';
 import {
   IN_FLIGHT_REQUEST_STATUSES,
@@ -66,6 +67,7 @@ export class RequestLifecycleService
     @Inject(forwardRef(() => SchedulerService))
     private readonly scheduler: SchedulerService,
     private readonly notifications: NotificationsService,
+    private readonly settings: SettingsService,
   ) {}
 
   /**
@@ -74,11 +76,11 @@ export class RequestLifecycleService
    * SearchMissing tick. Default is "yes" — users expect the download
    * to start right after the green check.
    *
-   * TODO(#212): replace with an awaited `SettingsService.get(...)` read
-   * so the admin can opt out from the UI. Default stays `true`.
+   * Admin-toggleable from the General settings page; defaults to `true`
+   * (an unset key reads as enabled) to preserve behaviour on existing installs.
    */
-  private autoGrabOnApproval(): boolean {
-    return true;
+  private async autoGrabOnApproval(): Promise<boolean> {
+    return (await this.settings.get('requests_auto_grab_on_approval')) !== 'false';
   }
 
   onModuleInit(): void {
@@ -165,7 +167,7 @@ export class RequestLifecycleService
     // an immediate SearchMissing for that media so the user doesn't
     // wait up to 6 h for the next scheduled tick. Fire-and-forget;
     // failures (missing indexer, etc.) are logged inside the scheduler.
-    if (touched.length && this.autoGrabOnApproval()) {
+    if (touched.length && (await this.autoGrabOnApproval())) {
       void this.scheduler.searchMissingForMedia([media.id]);
     }
   }

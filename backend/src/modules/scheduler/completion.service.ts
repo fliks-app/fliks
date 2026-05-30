@@ -101,11 +101,11 @@ export class CompletionService {
    * detection. Default on — most users want skip-intro working right
    * after a series finishes downloading.
    *
-   * TODO(#212): replace with an awaited `SettingsService.get(...)` read
-   * so the admin can opt out from the UI. Default stays `true`.
+   * Admin-toggleable from the General settings page; defaults to `true`
+   * (an unset key reads as enabled) to preserve behaviour on existing installs.
    */
-  private autoDetectMarkersOnImport(): boolean {
-    return true;
+  private async autoDetectMarkersOnImport(): Promise<boolean> {
+    return (await this.settings.get('markers_auto_detect_on_import')) !== 'false';
   }
 
   /**
@@ -818,8 +818,9 @@ export class CompletionService {
     // we dedupe per season. Fire-and-forget; the detection itself is
     // queued via a Command row, and the in-flight guard skips seasons
     // already being scanned.
-    if (media.type === 'series' && this.autoDetectMarkersOnImport()) {
+    if (media.type === 'series') {
       void (async () => {
+        if (!(await this.autoDetectMarkersOnImport())) return;
         const seasonIds = new Set<number>();
         for (const { episodeId: epId } of importedFiles) {
           if (epId == null) continue;

@@ -1168,6 +1168,8 @@
       "rss_interval": "Intervalle de synchro RSS (minutes)",
       "rss_interval_hint": "Fréquence de vérification des flux RSS des indexers.",
       "search_missing_auto": "Rechercher automatiquement les médias manquants",
+      "auto_grab_on_approval": "Télécharger automatiquement après l'approbation d'une demande",
+      "auto_detect_markers_on_import": "Détecter les intros / génériques à l'import des séries",
       "saved": "Paramètres enregistrés.",
       "save_error": "Impossible d'enregistrer.",
       "load_error": "Impossible de charger les paramètres.",
