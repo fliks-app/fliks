@@ -845,6 +845,7 @@ export class StreamingController {
       useExtXMedia,
       deviceType,
       hdrLadder: useHdrLadder,
+      supportsHlsSubtitles: !!deviceProfile.supportsHlsSubtitles,
       videoVariant,
       tonemapping: response.tonemapping,
       transcodeReasons: response.transcodeReasons,
@@ -1056,6 +1057,19 @@ export class StreamingController {
       });
     }
 
+    // Native HLS subtitle renditions — gated by the client's
+    // `supportsHlsSubtitles` capability (sent in the device profile at
+    // playback-info, stored on the session), so cues render inside the
+    // player pipeline (PiP / AirPlay / lock-screen). Decoupled from the
+    // video transcode: each rendition wraps the WebVTT the subtitle service
+    // already extracts. Web (Shaka) leaves the flag off and keeps fetching
+    // sidecar VTT.
+    const subtitleRenditions = (live?.supportsHlsSubtitles ?? false)
+      ? await this.subtitleStreamService
+          .listTextSubtitleRenditions(mediaFileId)
+          .catch(() => undefined)
+      : undefined;
+
     const sdrVariant = live?.videoVariant ?? null;
     const sourceFrameRate = parseFloat(v?.frameRate ?? '') || undefined;
     const playlist = this.transcodingService.generateMasterPlaylist(
@@ -1080,6 +1094,7 @@ export class StreamingController {
       // already drives its codec strings from `hdrPassThrough`.
       sdrVariant && sdrVariant.hdr == null ? sdrVariant : undefined,
       sourceFrameRate,
+      subtitleRenditions,
     );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -1138,6 +1153,75 @@ export class StreamingController {
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(withTimestampMap(vtt));
+  }
+
+  // HLS subtitle media playlists (single WebVTT segment) — referenced by the
+  // master's SUBTITLES group. The extra `/index.m3u8` segment keeps these
+  // from colliding with the plain VTT routes above. Embedded route is
+  // declared first so "embedded" is never read as a numeric subtitleId.
+
+  /** Subtitle media playlist for an embedded stream. */
+  @Get(':mediaFileId/subtitles/embedded/:streamIndex/index.m3u8')
+  async embeddedSubtitlePlaylist(
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Param('streamIndex', ParseIntPipe) streamIndex: number,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    await this.sendSubtitlePlaylist(
+      res,
+      req,
+      mediaFileId,
+      `subtitles/embedded/${streamIndex}`,
+    );
+  }
+
+  /** Subtitle media playlist for an external subtitle file. */
+  @Get(':mediaFileId/subtitles/:subtitleId/index.m3u8')
+  async externalSubtitlePlaylist(
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Param('subtitleId', ParseIntPipe) subtitleId: number,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    await this.sendSubtitlePlaylist(
+      res,
+      req,
+      mediaFileId,
+      `subtitles/${subtitleId}`,
+    );
+  }
+
+  /** Build + send a single-segment VOD WebVTT media playlist whose one
+   *  segment is the matching VTT endpoint. Native HLS players consume this
+   *  as a SUBTITLES rendition so cues render inside the player pipeline
+   *  (PiP / AirPlay / lock-screen) rather than an app overlay. The VTT
+   *  itself carries the `X-TIMESTAMP-MAP` (via `withTimestampMap`) needed to
+   *  align cue times with the media timeline. */
+  private async sendSubtitlePlaylist(
+    res: Response,
+    req: Request,
+    mediaFileId: number,
+    vttPath: string,
+  ): Promise<void> {
+    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const duration = resolved.mediaFile.streamInfo?.durationSeconds ?? 0;
+    const tokenParam = buildTokenParam(req);
+    const target = Math.max(1, Math.ceil(duration || 1));
+    const playlist = [
+      '#EXTM3U',
+      '#EXT-X-VERSION:7',
+      '#EXT-X-PLAYLIST-TYPE:VOD',
+      `#EXT-X-TARGETDURATION:${target}`,
+      '#EXT-X-MEDIA-SEQUENCE:0',
+      `#EXTINF:${(duration || target).toFixed(3)},`,
+      `/api/stream/${mediaFileId}/${vttPath}${tokenParam}`,
+      '#EXT-X-ENDLIST',
+    ].join('\n');
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(playlist);
   }
 
   // ---------------------------------------------------------------------------

@@ -455,6 +455,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     },
     sdrVariant?: import('./codec/types').CodecVariant,
     sourceFrameRate?: number,
+    subtitleRenditions?: import('./types').SubtitleRenditionMeta[],
   ): string {
     // Ask the encoder registry whether any HEVC Main10 HDR10 encoder is
     // probed-OK on the detected hwAccel (or CPU fallback). When false,
@@ -484,6 +485,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       canEncodeHevcHdr,
       sdrVariant,
       sourceFrameRate,
+      subtitleRenditions,
     );
   }
 

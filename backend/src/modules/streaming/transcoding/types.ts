@@ -25,6 +25,23 @@ export interface AudioStreamMeta {
   streamIndex?: number;
 }
 
+/**
+ * A text subtitle track surfaced as an HLS `SUBTITLES` rendition in the
+ * master playlist. `kind` selects the segment source: an embedded stream
+ * (extracted to WebVTT by `SubtitleStreamService`) or an external subtitle
+ * file row. `key` is the ffprobe stream index (embedded) or the
+ * `SubtitleFile` id (external) — the master builder turns it into the
+ * rendition's media-playlist URI. Bitmap subtitles (PGS/DVD/DVB) are never
+ * renditions: they stay on the burn-in path.
+ */
+export interface SubtitleRenditionMeta {
+  kind: 'embedded' | 'external';
+  key: number;
+  language?: string;
+  name: string;
+  forced?: boolean;
+}
+
 export type HwAccelType = 'vaapi' | 'nvenc' | 'qsv' | 'videotoolbox' | 'none';
 
 /** Short human-readable label for each HW accel type (used in admin
