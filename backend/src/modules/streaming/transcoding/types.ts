@@ -42,6 +42,30 @@ export interface SubtitleRenditionMeta {
   forced?: boolean;
 }
 
+/**
+ * Single ordered source of truth for a file's subtitle tracks, shared by the
+ * picker and the HLS `SUBTITLES` group. `name` is unique per track and is the
+ * identity the native players round-trip (manifest NAME → AVPlayer displayName
+ * / ExoPlayer Format.label), so a picked track maps to the exact rendition
+ * even among same-(language, forced) entries. Image-based tracks are included
+ * (the picker offers them for burn-in) but filtered out of the rendition list.
+ */
+export interface UnifiedSubtitleTrack {
+  /** `emb-<streamIndex>` | `ext-<dbId>` — matches the client SubtitleOption id. */
+  stableId: string;
+  /** streamIndex (embedded) or SubtitleFile id (external) — the VTT endpoint key. */
+  key: number;
+  /** Unique display/match name; equals the manifest NAME. */
+  name: string;
+  language: string;
+  forced: boolean;
+  hearingImpaired: boolean;
+  codec: string | null;
+  isImageBased: boolean;
+  subtitleDbId: number | null;
+  kind: 'embedded' | 'external';
+}
+
 export type HwAccelType = 'vaapi' | 'nvenc' | 'qsv' | 'videotoolbox' | 'none';
 
 /** Short human-readable label for each HW accel type (used in admin
