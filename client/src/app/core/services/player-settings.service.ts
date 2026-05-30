@@ -124,7 +124,9 @@ export class PlayerSettingsService {
     // Priority 1: remembered selection always wins (even with "use default" enabled)
     // Uses mediaId (series/movie) so the choice carries across episodes.
     if (s.rememberAudioSelections && mediaId) {
-      const savedLang = this.getRememberedAudioTrack(mediaId);
+      // The stored value may carry a ":n" ordinal (same-language disambiguator);
+      // the backend index resolves by language, so strip it here.
+      const savedLang = this.getRememberedAudioTrack(mediaId)?.split(':')[0];
       if (savedLang) {
         const idx = audioStreams.findIndex(
           (a) => normalizeLang(a.language) === savedLang,
