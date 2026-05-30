@@ -1839,6 +1839,29 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.engine,
       this.playbackMode(),
     );
+    // Shaka/webOS drop sidecar text tracks on a fresh load(), so a recovery
+    // reload silently loses the user's subtitle. Re-add + re-select the active
+    // soft subtitle. Native restores its own pick inside load(); burn-in is
+    // re-baked server-side via the activeBurnInId passed to playback-info above.
+    if (!this.isNativeEngine()) {
+      const activeId = this.activeSubtitleId();
+      const sub = activeId
+        ? this.availableSubtitles().find((s) => s.id === activeId)
+        : null;
+      if (sub && !sub.burnIn && sub.url) {
+        try {
+          const track = await this.engine.addTextTrack(
+            sub.url,
+            sub.language,
+            sub.label,
+          );
+          this.engine.selectTextTrack(track);
+          this.engine.setTextVisibility(true);
+        } catch (e) {
+          console.error('[Player] re-apply subtitle after reload failed:', e);
+        }
+      }
+    }
     if (!wasPaused) {
       this.engine.play().catch(() => {});
     }
