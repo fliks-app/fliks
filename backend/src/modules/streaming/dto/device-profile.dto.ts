@@ -73,6 +73,17 @@ export class DeviceProfileDto {
   @IsOptional()
   supportsHdr?: boolean;
 
+  /**
+   * Client renders HLS `SUBTITLES` renditions natively (AVPlayer, ExoPlayer,
+   * Tizen AVPlay, webOS), so the master advertises a subtitle group and cues
+   * show in PiP / AirPlay / lock-screen. Web (Shaka) leaves this unset and
+   * keeps fetching sidecar VTT, which renders better multi-line cues via its
+   * own text displayer.
+   */
+  @IsBoolean()
+  @IsOptional()
+  supportsHlsSubtitles?: boolean;
+
   @IsIn(['mobile', 'desktop'])
   @IsOptional()
   deviceType?: 'mobile' | 'desktop';

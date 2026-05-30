@@ -5,7 +5,12 @@ import {
   profileFitsSource,
   profileResolution,
 } from './profiles';
-import type { AudioStreamMeta, DeviceType, TranscodeProfile } from './types';
+import type {
+  AudioStreamMeta,
+  DeviceType,
+  SubtitleRenditionMeta,
+  TranscodeProfile,
+} from './types';
 import type { CodecVariant } from './codec/types';
 import {
   av1CodecString,
@@ -134,6 +139,17 @@ export function generateMasterPlaylist(
    *  so legacy callers without source info still produce a valid
    *  manifest. */
   sourceFrameRate = 24,
+  /** Text subtitle tracks to advertise as an HLS `SUBTITLES` rendition
+   *  group. When non-empty, a `#EXT-X-MEDIA:TYPE=SUBTITLES` line is emitted
+   *  per track and every `#EXT-X-STREAM-INF` gains `SUBTITLES="subs"`, so a
+   *  native HLS player (AVPlayer, ExoPlayer, AVPlay, webOS) renders cues
+   *  inside its own pipeline — visible in PiP / AirPlay / lock-screen.
+   *  Empty / undefined keeps the manifest subtitle-free (web + older
+   *  clients keep fetching sidecar VTT). The renditions are decoupled from
+   *  the video transcode: each URI points at a tiny media playlist wrapping
+   *  the WebVTT the subtitle service already extracts, so the HEVC
+   *  `var_stream_map` is untouched (no decoder-buffer regression). */
+  subtitleRenditions?: SubtitleRenditionMeta[],
 ): string {
   // The "multi-audio" flag is really an "EXT-X-MEDIA layout" toggle —
   // the caller decided whether to split audio into renditions. Single-
@@ -154,6 +170,28 @@ export function generateMasterPlaylist(
   const codecsTail = noAudio ? '' : `,${audioCodec}`;
 
   const frameRateAttr = `,FRAME-RATE=${formatFrameRate(sourceFrameRate)}`;
+
+  // Subtitle renditions: one shared `subs` group, referenced by every
+  // variant via `SUBTITLES="subs"`. Emitted in both the SDR and HDR
+  // branches so the group is present whichever ladder the master uses.
+  const hasSubs = subtitleRenditions != null && subtitleRenditions.length > 0;
+  const subsAttr = hasSubs ? ',SUBTITLES="subs"' : '';
+  const pushSubtitleMedia = (out: string[]): void => {
+    if (!hasSubs) return;
+    const names = buildUniqueAudioNames(
+      subtitleRenditions.map((s) => ({ title: s.name, language: s.language })),
+    );
+    subtitleRenditions.forEach((s, i) => {
+      const lang = s.language || 'und';
+      const path =
+        s.kind === 'embedded'
+          ? `subtitles/embedded/${s.key}`
+          : `subtitles/${s.key}`;
+      out.push(
+        `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=NO,AUTOSELECT=NO,FORCED=${s.forced ? 'YES' : 'NO'},URI="/api/stream/${mediaFileId}/${path}/index.m3u8${tokenParam}"`,
+      );
+    });
+  };
 
   // HDR pass-through path — emitted when the source is HEVC HDR and
   // the client claims HDR support. Outputs a full HEVC HDR ladder
@@ -193,6 +231,7 @@ export function generateMasterPlaylist(
       }
     }
     const hdrAudioAttr = multiAudio ? ',AUDIO="audio"' : '';
+    pushSubtitleMedia(lines);
 
     // HEVC HDR rungs are pure transcodes (hevc_qsv Main10 with forced
     // 3-second keyframes), gated on `canEncodeHevcHdr`. The former
@@ -241,7 +280,7 @@ export function generateMasterPlaylist(
           frameRate: sourceFrameRate,
         });
         lines.push(
-          `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},VIDEO-RANGE=${range}${frameRateAttr},NAME="${p.name}",CODECS="${videoCodec}${codecsTail}"${hdrAudioAttr}`,
+          `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},VIDEO-RANGE=${range}${frameRateAttr},NAME="${p.name}",CODECS="${videoCodec}${codecsTail}"${hdrAudioAttr}${subsAttr}`,
           `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
         );
       }
@@ -280,6 +319,7 @@ export function generateMasterPlaylist(
   // (L4.0) for every rung makes iOS AVPlayer reject 4K segments whose
   // bitstream signals L5.x — visible as decoder reinit / frame freeze.
   const audioAttr = multiAudio ? ',AUDIO="audio"' : '';
+  pushSubtitleMedia(lines);
 
   // The HLS master never advertises the `/remux/` variant — it proved
   // unreliable on ExoPlayer (Android), which would ABR-downgrade from the
@@ -338,7 +378,7 @@ export function generateMasterPlaylist(
           : h264CodecString(target);
     const codecsAttr = `,CODECS="${videoCodec}${codecsTail}"`;
     lines.push(
-      `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h}${frameRateAttr},NAME="${p.name}"${codecsAttr}${audioAttr}`,
+      `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h}${frameRateAttr},NAME="${p.name}"${codecsAttr}${audioAttr}${subsAttr}`,
       `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
     );
   }

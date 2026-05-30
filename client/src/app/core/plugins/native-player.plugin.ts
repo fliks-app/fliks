@@ -84,13 +84,6 @@ export interface NativePlayerPlugin {
   getSubtitleTracks(): Promise<{ tracks: NativeSubtitleTrack[] }>;
   selectSubtitleTrack(options: { id: string | null }): Promise<void>;
 
-  /** Load an external subtitle (WebVTT) by URL. */
-  addExternalSubtitle(options: {
-    url: string;
-    language: string;
-    label: string;
-  }): Promise<{ id: string }>;
-
   // ── Subtitle style ──
 
   /** Apply subtitle appearance settings to the native SubtitleView. */
@@ -116,9 +109,6 @@ export interface NativePlayerPlugin {
 
   getPosition(): Promise<NativePlayerPosition>;
   setPlaybackRate(options: { rate: number }): Promise<void>;
-
-  /** Update the native subtitle label text (iOS: rendered between player and WebView). */
-  setSubtitleText(options: { text: string }): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------

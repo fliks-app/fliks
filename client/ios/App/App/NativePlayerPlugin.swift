@@ -2,6 +2,7 @@ import Foundation
 import Capacitor
 import AVFoundation
 import AVKit
+import CoreMedia
 
 /// UIView subclass that keeps its first CALayer sublayer (the AVPlayerLayer) sized to bounds.
 private class PlayerContainerView: UIView {
@@ -33,27 +34,34 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "selectAudioTrack", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getSubtitleTracks", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "selectSubtitleTrack", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "addExternalSubtitle", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setSubtitleStyle", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setBrightness", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMaxResolution", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPosition", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPlaybackRate", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "setSubtitleText", returnType: CAPPluginReturnPromise),
     ]
 
     private var player: AVPlayer?
     private var playerLayer: AVPlayerLayer?
     private var playerView: UIView?
-    private var subtitleLabel: UILabel?
-    private var subtitleView: UIView?
-    private var subtitleBottomConstraint: NSLayoutConstraint?
     private var timeObserver: Any?
     private var statusObserver: NSKeyValueObservation?
     private var timeControlObserver: NSKeyValueObservation?
     private var firstFrameObserver: NSKeyValueObservation?
     private var firstFrameEmitted = false
     private var savedBrightness: CGFloat?
+    /// Cues are pulled off the selected legible track via this output with
+    /// player rendering suppressed, then drawn by `subtitleOverlay` so the app
+    /// fully controls styling and no system caption box appears. Inside PiP
+    /// (where the overlay isn't captured) suppression is lifted so the native
+    /// track draws into the mirrored layer instead.
+    private var subtitleOutput: AVPlayerItemLegibleOutput?
+    private var subtitleOverlay: SubtitleOverlayView?
+    private var currentSubtitleStyle = SubtitleStyle()
+    private let legibleQueue = DispatchQueue(label: "fliks.subtitle.legible")
+    /// Legible option deselected to clear the native caption while leaving PiP,
+    /// restored once PiP has fully exited.
+    private var pipDeselectedSubtitle: AVMediaSelectionOption?
 
     /// Exposed for PipPlugin to access the player layer.
     public var activePlayerLayer: AVPlayerLayer? { playerLayer }
@@ -97,47 +105,13 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
             self.playerView = view
 
-            // Create subtitle view between player and WebView
-            let subContainer = UIView(frame: parentBounds)
-            subContainer.backgroundColor = .clear
-            subContainer.isUserInteractionEnabled = false
-            if isFullScreen {
-                subContainer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            }
-            webView.superview?.insertSubview(subContainer, belowSubview: webView)
-
-            let label = UILabel()
-            label.translatesAutoresizingMaskIntoConstraints = false
-            label.textColor = .white
-            label.font = .systemFont(ofSize: 20, weight: .semibold)
-            label.textAlignment = .center
-            label.numberOfLines = 0
-            label.layer.shadowColor = UIColor.black.cgColor
-            label.layer.shadowOffset = CGSize(width: 0, height: 1)
-            label.layer.shadowRadius = 4
-            label.layer.shadowOpacity = 0.9
-            subContainer.addSubview(label)
-
-            // Anchor to the container's raw `bottomAnchor`, not its
-            // `safeAreaLayoutGuide.bottomAnchor`. iPhones with a home
-            // indicator have ~34 pt of safe-area padding at the bottom,
-            // so anchoring to the safe area left a permanent ~34 pt gap
-            // even when the user set the subtitle margin to 0 %. With
-            // the raw anchor, `bottomMarginPercent` is the only thing
-            // that decides where the subtitle sits — 0 % means flush
-            // with the screen bottom. The home indicator auto-hides
-            // during video playback anyway, so subtitles never collide
-            // with a visible system gesture handle.
-            let bottomConstraint = label.bottomAnchor.constraint(equalTo: subContainer.bottomAnchor, constant: -40)
-            NSLayoutConstraint.activate([
-                label.leadingAnchor.constraint(equalTo: subContainer.leadingAnchor, constant: 24),
-                label.trailingAnchor.constraint(equalTo: subContainer.trailingAnchor, constant: -24),
-                bottomConstraint,
-            ])
-            self.subtitleBottomConstraint = bottomConstraint
-
-            self.subtitleLabel = label
-            self.subtitleView = subContainer
+            // Custom subtitle overlay above the AVPlayerLayer (and below the
+            // transparent WebView, so Angular controls stay on top).
+            let overlay = SubtitleOverlayView(frame: view.bounds)
+            overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            overlay.apply(self.currentSubtitleStyle)
+            view.addSubview(overlay)
+            self.subtitleOverlay = overlay
 
             // Keep screen awake during playback
             UIApplication.shared.isIdleTimerDisabled = true
@@ -191,6 +165,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             self.removeObservers()
             self.firstFrameEmitted = false
             self.player?.pause()
+            self.subtitleOverlay?.render([])
 
             // Audio session can be flipped out of `.playback` by a phone
             // call, route change, or Siri. AppDelegate sets it once at
@@ -305,6 +280,9 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// user explicitly picks a quality.
     @discardableResult
     private func attachPlayerItem(_ item: AVPlayerItem) -> AVPlayer {
+        // Pull cues off the legible track ourselves (player rendering
+        // suppressed) so the custom overlay can draw them box-free.
+        attachLegibleOutput(to: item)
         if let existing = player {
             existing.replaceCurrentItem(with: item)
             existing.automaticallyWaitsToMinimizeStalling = true
@@ -317,7 +295,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             let layer = AVPlayerLayer(player: player)
             layer.frame = view.bounds
             layer.videoGravity = .resizeAspect
-            view.layer.addSublayer(layer)
+            // Index 0 keeps the video beneath the subtitle overlay subview.
+            view.layer.insertSublayer(layer, at: 0)
             playerLayer = layer
         } else {
             playerLayer?.player = player
@@ -491,76 +470,88 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    @objc func addExternalSubtitle(_ call: CAPPluginCall) {
-        // External subtitle support via AVPlayer requires AVMutableComposition.
-        // Return stub ID — frontend handles subtitle display via HTML overlay.
-        let id = "ext-sub-\(Int(Date().timeIntervalSince1970 * 1000))"
-        call.resolve(["id": id])
-    }
-
     // MARK: - Subtitle Style
 
     @objc func setSubtitleStyle(_ call: CAPPluginCall) {
-        let fontScale = call.getFloat("fontScale") ?? 1.0
-        let foregroundColor = call.getString("foregroundColor") ?? "#FFFFFF"
-        let backgroundColor = call.getString("backgroundColor") ?? "transparent"
-        let edgeType = call.getString("edgeType") ?? "none"
-        let bottomMargin = CGFloat(call.getFloat("bottomMarginPercent") ?? 8.0)
-
+        let style = SubtitleStyle(
+            fontScale: CGFloat(call.getFloat("fontScale") ?? 1.0),
+            foregroundHex: call.getString("foregroundColor") ?? "#FFFFFF",
+            backgroundHex: call.getString("backgroundColor") ?? "transparent",
+            edgeType: call.getString("edgeType") ?? "none",
+            bottomMarginPercent: CGFloat(call.getFloat("bottomMarginPercent") ?? 8.0)
+        )
         DispatchQueue.main.async { [weak self] in
-            guard let label = self?.subtitleLabel,
-                  let container = self?.subtitleView else {
+            guard let self = self else {
                 call.resolve()
                 return
             }
-
-            // Font size: base 20pt scaled
-            let baseSize: CGFloat = 20.0
-            label.font = .systemFont(ofSize: baseSize * CGFloat(fontScale), weight: .semibold)
-
-            // Foreground color
-            if let argb = self?.parseColor(foregroundColor) {
-                label.textColor = UIColor(
-                    red: argb[1], green: argb[2], blue: argb[3], alpha: argb[0]
-                )
-            }
-
-            // Background
-            if backgroundColor == "transparent" {
-                label.backgroundColor = .clear
-            } else if let argb = self?.parseColor(backgroundColor) {
-                label.backgroundColor = UIColor(
-                    red: argb[1], green: argb[2], blue: argb[3], alpha: argb[0]
-                )
-            }
-
-            // Shadow / edge type
-            switch edgeType {
-            case "drop_shadow":
-                label.layer.shadowColor = UIColor.black.cgColor
-                label.layer.shadowOffset = CGSize(width: 0, height: 2)
-                label.layer.shadowRadius = 4
-                label.layer.shadowOpacity = 0.9
-            case "outline":
-                label.layer.shadowColor = UIColor.black.cgColor
-                label.layer.shadowOffset = .zero
-                label.layer.shadowRadius = 2
-                label.layer.shadowOpacity = 1.0
-            case "raised":
-                label.layer.shadowColor = UIColor.black.cgColor
-                label.layer.shadowOffset = CGSize(width: 1, height: 1)
-                label.layer.shadowRadius = 6
-                label.layer.shadowOpacity = 0.8
-            default:
-                label.layer.shadowOpacity = 0
-            }
-
-            // Bottom margin
-            let screenHeight = UIScreen.main.bounds.height
-            self?.subtitleBottomConstraint?.constant = -(screenHeight * bottomMargin / 100)
-
+            self.currentSubtitleStyle = style
+            self.subtitleOverlay?.apply(style)
             call.resolve()
         }
+    }
+
+    /// Attach a legible output to the item with player rendering suppressed:
+    /// cues are delivered to the delegate (and drawn by `subtitleOverlay`)
+    /// while AVPlayer draws no caption box. `.sourceAndRulesOnly` keeps the
+    /// system's user-preference styling (the box) out of the delivered cues.
+    private func attachLegibleOutput(to item: AVPlayerItem) {
+        let output = AVPlayerItemLegibleOutput()
+        output.suppressesPlayerRendering = true
+        output.textStylingResolution = .sourceAndRulesOnly
+        output.setDelegate(self, queue: legibleQueue)
+        item.add(output)
+        subtitleOutput = output
+    }
+
+    /// PiP can only mirror the AVPlayerLayer, not the overlay subview. While
+    /// PiP is active, lift suppression so AVPlayer renders the (boxed) native
+    /// caption into the mirrored layer; restore the overlay on exit.
+    /// PiP enter / will-stop. Entering: let AVPlayer draw the (boxed) native
+    /// caption into the mirrored layer and hide the overlay. Will-stop:
+    /// re-suppress and clear the native caption, but keep the overlay hidden —
+    /// it is revealed only once PiP has fully exited (`finishSubtitlePiPExit`),
+    /// otherwise it overlaps the boxed caption during the restore animation.
+    public func setSubtitleRenderingForPiP(_ inPiP: Bool) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if inPiP {
+                self.subtitleOutput?.suppressesPlayerRendering = false
+                self.subtitleOverlay?.isHidden = true
+            } else {
+                self.subtitleOutput?.suppressesPlayerRendering = true
+                self.subtitleOverlay?.isHidden = true
+                self.clearNativeCaption()
+            }
+        }
+    }
+
+    /// Called once PiP has fully stopped (after the restore animation). Restores
+    /// the legible cue flow to the output and reveals the no-box overlay.
+    public func finishSubtitlePiPExit() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.restoreLegibleSelection()
+            self.subtitleOverlay?.isHidden = false
+        }
+    }
+
+    /// Deselect the legible option to drop the caption the player rendered
+    /// during PiP (re-suppressing alone leaves the last cue frozen on screen).
+    /// The option is remembered so cue delivery can be restored on exit.
+    private func clearNativeCaption() {
+        guard let item = player?.currentItem,
+              let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible) else { return }
+        pipDeselectedSubtitle = item.currentMediaSelection.selectedMediaOption(in: group)
+        item.select(nil, in: group)
+    }
+
+    private func restoreLegibleSelection() {
+        guard let option = pipDeselectedSubtitle,
+              let item = player?.currentItem,
+              let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible) else { return }
+        item.select(option, in: group)
+        pipDeselectedSubtitle = nil
     }
 
     // MARK: - Brightness
@@ -629,16 +620,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         case 360..<480: return 1_500_000     // profile 1M, next 2M
         case 240..<360: return 750_000       // profile 500k, next 1M
         default: return 350_000              // 144p profile 200k, next 500k
-        }
-    }
-
-    // MARK: - Subtitles (HTML-free overlay)
-
-    @objc func setSubtitleText(_ call: CAPPluginCall) {
-        let text = call.getString("text") ?? ""
-        DispatchQueue.main.async { [weak self] in
-            self?.subtitleLabel?.text = text.isEmpty ? nil : text
-            call.resolve()
         }
     }
 
@@ -816,11 +797,9 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         playerLayer = nil
         playerView?.removeFromSuperview()
         playerView = nil
-        subtitleView?.removeFromSuperview()
-        subtitleView = nil
-        subtitleLabel = nil
-        subtitleBottomConstraint = nil
-
+        subtitleOutput = nil
+        subtitleOverlay?.removeFromSuperview()
+        subtitleOverlay = nil
 
         // Restore brightness
         if let saved = savedBrightness {
@@ -839,35 +818,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             return end.isFinite ? end : 0
         }
         return 0
-    }
-
-    /// Parse hex color string (#RGB, #RRGGBB, #AARRGGBB) into ARGB array for CMTextMarkup.
-    private func parseColor(_ hex: String) -> [CGFloat]? {
-        var h = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        if h.hasPrefix("#") { h.removeFirst() }
-
-        var a: CGFloat = 1.0
-        var r: CGFloat = 1.0
-        var g: CGFloat = 1.0
-        var b: CGFloat = 1.0
-
-        guard let val = UInt64(h, radix: 16) else { return nil }
-
-        switch h.count {
-        case 6: // RRGGBB
-            r = CGFloat((val >> 16) & 0xFF) / 255.0
-            g = CGFloat((val >> 8) & 0xFF) / 255.0
-            b = CGFloat(val & 0xFF) / 255.0
-        case 8: // AARRGGBB
-            a = CGFloat((val >> 24) & 0xFF) / 255.0
-            r = CGFloat((val >> 16) & 0xFF) / 255.0
-            g = CGFloat((val >> 8) & 0xFF) / 255.0
-            b = CGFloat(val & 0xFF) / 255.0
-        default:
-            return nil
-        }
-
-        return [a, r, g, b]
     }
 
     // MARK: - Event Emitters
@@ -946,6 +896,22 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let js = "window.dispatchEvent(new CustomEvent('nativePlayerTracksChanged', { detail: { audioTracks: \(audioJson), subtitleTracks: \(subJson) } }));"
         DispatchQueue.main.async { [weak self] in
             self?.bridge?.webView?.evaluateJavaScript(js)
+        }
+    }
+}
+
+// MARK: - Legible output delegate
+
+extension NativePlayerPlugin: AVPlayerItemLegibleOutputPushDelegate {
+    public func legibleOutput(
+        _ output: AVPlayerItemLegibleOutput,
+        didOutputAttributedStrings strings: [NSAttributedString],
+        nativeSampleBuffers nativeSamples: [Any],
+        forItemTime itemTime: CMTime
+    ) {
+        let cues = strings.map { SubtitleRun.runs(from: $0) }
+        DispatchQueue.main.async { [weak self] in
+            self?.subtitleOverlay?.render(cues)
         }
     }
 }

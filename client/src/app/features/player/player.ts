@@ -1869,6 +1869,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             sub.url,
             sub.language,
             sub.label,
+            sub.forced,
           );
           this.engine.selectTextTrack(track);
           this.engine.setTextVisibility(true);
@@ -2233,7 +2234,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.activeBurnInId = null;
         if (!this.isOfflinePlayback) await this.reloadStream();
       }
-      const track = await this.engine.addTextTrack(sub.url, sub.language, sub.label);
+      const track = await this.engine.addTextTrack(sub.url, sub.language, sub.label, sub.forced);
       this.engine.selectTextTrack(track);
       try { this.engine.setTextVisibility(true); } catch {}
     } catch (e) {
@@ -2493,7 +2494,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Restore active subtitle (non burn-in) after Shaka reload
     if (activeSub && !activeSub.burnIn && activeSub.url) {
       try {
-        const track = await this.engine.addTextTrack(activeSub.url, activeSub.language, activeSub.label);
+        const track = await this.engine.addTextTrack(activeSub.url, activeSub.language, activeSub.label, activeSub.forced);
         this.engine.selectTextTrack(track);
         this.engine.setTextVisibility(true);
       } catch {}

@@ -61,6 +61,11 @@ export interface LiveSession {
   useExtXMedia: boolean;
   deviceType: 'mobile' | 'desktop';
   hdrLadder: boolean;
+  /** Client renders HLS `SUBTITLES` renditions natively (AVPlayer,
+   *  ExoPlayer, AVPlay, webOS) — the master advertises a subtitle group so
+   *  cues show in PiP / AirPlay / lock-screen. Web (Shaka) leaves this false
+   *  and keeps fetching sidecar VTT. Sourced from the device profile. */
+  supportsHlsSubtitles: boolean;
   videoVariant: CodecVariant | null;
   tonemapping: boolean;
   transcodeReasons: TranscodeReason[];
@@ -101,6 +106,7 @@ export interface CreateLiveSessionInput {
   useExtXMedia?: boolean;
   deviceType?: 'mobile' | 'desktop';
   hdrLadder?: boolean;
+  supportsHlsSubtitles?: boolean;
   videoVariant?: CodecVariant | null;
   tonemapping?: boolean;
   transcodeReasons?: TranscodeReason[];
@@ -197,6 +203,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       useExtXMedia: input.useExtXMedia ?? false,
       deviceType: input.deviceType ?? 'desktop',
       hdrLadder: input.hdrLadder ?? false,
+      supportsHlsSubtitles: input.supportsHlsSubtitles ?? false,
       videoVariant: input.videoVariant ?? null,
       tonemapping: input.tonemapping ?? false,
       transcodeReasons: input.transcodeReasons ?? [],

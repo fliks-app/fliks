@@ -17,6 +17,7 @@ import { StreamingService } from './streaming.service';
 import { EventsService } from '../scheduler/events.service';
 import { Command } from '../scheduler/entities/command.entity';
 import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
+import type { SubtitleRenditionMeta } from './transcoding/types';
 
 const execFileAsync = promisify(execFile);
 
@@ -122,6 +123,55 @@ export class SubtitleStreamService {
 
     // Fallback: try SRT conversion
     return this.srtToVtt(content);
+  }
+
+  /**
+   * Text subtitle tracks for the HLS master's `SUBTITLES` rendition group:
+   * embedded non-bitmap streams (from cached `streamInfo`) plus external
+   * subtitle files on disk. Bitmap subtitles (PGS/DVD/DVB) are excluded —
+   * they have no WebVTT form and stay on the burn-in path. Each entry's
+   * `key` feeds the existing VTT endpoints (`subtitles/embedded/:idx` for
+   * embedded, `subtitles/:id` for external), which the subtitle media
+   * playlist references as its single segment.
+   */
+  async listTextSubtitleRenditions(
+    mediaFileId: number,
+  ): Promise<SubtitleRenditionMeta[]> {
+    const out: SubtitleRenditionMeta[] = [];
+    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    for (const s of resolved.mediaFile.streamInfo?.subtitles ?? []) {
+      if (s.isImageBased) continue;
+      out.push({
+        kind: 'embedded',
+        key: s.streamIndex,
+        language: s.language,
+        name: s.title || s.language || 'Subtitle',
+        forced: s.forced,
+      });
+    }
+    // External subtitle files. Query through the relation — `mediaFileId` on
+    // SubtitleFile is a @RelationId (virtual), which TypeORM rejects in a
+    // `where`. Isolated so a query failure can never drop the embedded subs.
+    try {
+      const external = await this.subtitleFileRepo.find({
+        where: { mediaFile: { id: mediaFileId } },
+      });
+      for (const sf of external) {
+        if (!sf.relativePath) continue;
+        out.push({
+          kind: 'external',
+          key: sf.id,
+          language: sf.language,
+          name: sf.language || 'Subtitle',
+          forced: sf.forced,
+        });
+      }
+    } catch (e) {
+      this.log.warn(
+        `listTextSubtitleRenditions: external query failed for #${mediaFileId}: ${e instanceof Error ? e.message : e}`,
+      );
+    }
+    return out;
   }
 
   /**

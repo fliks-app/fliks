@@ -6,6 +6,7 @@ import {
   PlaybackEngine,
   PlaybackState,
 } from './playback-engine';
+import { normalizeLangCode } from '../../utils/language.utils';
 
 /**
  * Shaka Player implementation of the PlaybackEngine interface.
@@ -272,13 +273,38 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   // ─── Subtitles ─────────────────────────────────────────────────────
 
-  async addTextTrack(url: string, language: string, label: string): Promise<any> {
+  async addTextTrack(
+    _url: string,
+    language: string,
+    _label: string,
+    forced?: boolean,
+  ): Promise<any> {
     if (!this.player) throw new Error('ShakaEngine not initialised');
-    return this.player.addTextTrackAsync(url, language, 'subtitles', 'text/vtt', undefined, label);
+    // Subtitles ship as HLS SUBTITLES renditions in the manifest. Shaka
+    // parses them into text tracks and still renders them through the
+    // configured UITextDisplayer (so multi-line cue styling is preserved),
+    // so we match the chosen track by (language, forced) instead of loading
+    // a sidecar VTT. Match on normalised language codes — the manifest
+    // LANGUAGE may be 2-letter (`en`) while the option carries 3-letter
+    // (`eng`). Falls back to a language-only match, then the first track.
+    const want = normalizeLangCode(language);
+    const tracks: any[] = this.player.getTextTracks();
+    return (
+      tracks.find((t) => normalizeLangCode(t.language) === want && !!t.forced === !!forced) ??
+      tracks.find((t) => normalizeLangCode(t.language) === want) ??
+      tracks[0] ??
+      null
+    );
   }
 
   selectTextTrack(track: any): void {
+    if (!track) return;
     this.player?.selectTextTrack(track);
+    try {
+      (this.player as any)?.setTextVisibility(true);
+    } catch {
+      // Shaka may throw if no text tracks exist
+    }
   }
 
   setTextVisibility(visible: boolean): void {

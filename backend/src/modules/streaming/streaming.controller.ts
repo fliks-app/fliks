@@ -39,6 +39,8 @@ import {
 } from './transcoding/constants';
 import { LiveSession, LiveSessionRegistry } from './live-session.service';
 import { readAndRewriteCmaf } from './transcoding/cmaf-rewrite';
+import { parseInitTracks, rewriteSegmentTfdt } from './transcoding/timeline';
+import * as path from 'path';
 import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
@@ -71,6 +73,11 @@ function withTimestampMap(vtt: string | Buffer): string {
 
 /** Default segment duration — overridden by admin streaming settings. */
 let SEG_DURATION = 3;
+
+/** Per-cache-dir track info (timescale + video flag), parsed once from each
+ *  rendition's init segment and reused to anchor that rendition's segments
+ *  onto the absolute presentation timeline (see {@link rewriteSegmentTfdt}). */
+const initTrackCache = new Map<string, ReturnType<typeof parseInitTracks>>();
 
 /**
  * Compose / append the `token=...` + `sid=...` query pair that every
@@ -570,8 +577,9 @@ export class StreamingController {
       if (!res.headersSent) res.status(404).end();
       return;
     }
+    const out = await this.anchorSegmentTimeline(filePath, buf);
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Length', String(buf.length));
+    res.setHeader('Content-Length', String(out.length));
     res.setHeader('Access-Control-Allow-Origin', '*');
     // Cloudflare (and any intermediate CDN) will gladly cache a 0-byte
     // 200 response under the URL and serve it back for 4h by default —
@@ -579,7 +587,53 @@ export class StreamingController {
     // permanent failure. Mark each fMP4 chunk un-cacheable so a CDN
     // refusing the upstream length check never pins a broken response.
     res.setHeader('Cache-Control', 'no-store');
-    res.end(buf);
+    res.end(out);
+  }
+
+  /** Anchor a media segment onto the single absolute presentation timeline:
+   *  rewrite its `tfdt` so `seg-N` decodes at its true content time
+   *  `N · SEG_DURATION` (per-track timescale), instead of FFmpeg's per-run
+   *  0-based reset. This is the packaging layer owning the timeline so all
+   *  renditions (video, audio, subtitle) stay coherent across resume / seek
+   *  runs (HLS requires one shared timeline). Init segments and MPEG-TS
+   *  segments carry no `tfdt` and pass through unchanged. */
+  private async anchorSegmentTimeline(
+    filePath: string,
+    buf: Buffer,
+  ): Promise<Buffer> {
+    const m = /(?:^|\/)seg-(\d+)\.m4s$/.exec(filePath);
+    if (!m) return buf;
+    const tracks = await this.tracksForDir(path.dirname(filePath));
+    if (tracks.size === 0) return buf;
+    return rewriteSegmentTfdt(buf, tracks, Number(m[1]), SEG_DURATION);
+  }
+
+  /** Track info for a rendition's cache dir, parsed once from its init
+   *  segment. Cached only once populated so a cold-start race (init not yet
+   *  flushed) retries on the next segment instead of caching empty. */
+  private async tracksForDir(
+    dir: string,
+  ): Promise<ReturnType<typeof parseInitTracks>> {
+    const cached = initTrackCache.get(dir);
+    if (cached) return cached;
+    let initBuf: Buffer | null = null;
+    try {
+      initBuf = await fs.promises.readFile(path.join(dir, 'init.mp4'));
+    } catch {
+      // var_stream_map renditions may name the init `init_<n>.mp4`.
+      try {
+        const entry = (await fs.promises.readdir(dir)).find((f) =>
+          /^init.*\.mp4$/.test(f),
+        );
+        if (entry) initBuf = await fs.promises.readFile(path.join(dir, entry));
+      } catch {
+        return new Map();
+      }
+    }
+    if (!initBuf) return new Map();
+    const tracks = parseInitTracks(initBuf);
+    if (tracks.size > 0) initTrackCache.set(dir, tracks);
+    return tracks;
   }
 
   /** Available download qualities for a media file (used by download-quality modal). */
@@ -845,6 +899,7 @@ export class StreamingController {
       useExtXMedia,
       deviceType,
       hdrLadder: useHdrLadder,
+      supportsHlsSubtitles: !!deviceProfile.supportsHlsSubtitles,
       videoVariant,
       tonemapping: response.tonemapping,
       transcodeReasons: response.transcodeReasons,
@@ -1056,6 +1111,24 @@ export class StreamingController {
       });
     }
 
+    // Native HLS subtitle renditions — gated by the client's
+    // `supportsHlsSubtitles` capability (sent in the device profile at
+    // playback-info, stored on the session), so cues render inside the
+    // player pipeline (PiP / AirPlay / lock-screen). Decoupled from the
+    // video transcode: each rendition wraps the WebVTT the subtitle service
+    // already extracts. Web (Shaka) leaves the flag off and keeps fetching
+    // sidecar VTT.
+    const subtitleRenditions = (live?.supportsHlsSubtitles ?? false)
+      ? await this.subtitleStreamService
+          .listTextSubtitleRenditions(mediaFileId)
+          .catch((e) => {
+            this.log.warn(
+              `subtitle renditions failed for #${mediaFileId}: ${e instanceof Error ? e.message : e}`,
+            );
+            return undefined;
+          })
+      : undefined;
+
     const sdrVariant = live?.videoVariant ?? null;
     const sourceFrameRate = parseFloat(v?.frameRate ?? '') || undefined;
     const playlist = this.transcodingService.generateMasterPlaylist(
@@ -1080,6 +1153,7 @@ export class StreamingController {
       // already drives its codec strings from `hdrPassThrough`.
       sdrVariant && sdrVariant.hdr == null ? sdrVariant : undefined,
       sourceFrameRate,
+      subtitleRenditions,
     );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -1138,6 +1212,75 @@ export class StreamingController {
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(withTimestampMap(vtt));
+  }
+
+  // HLS subtitle media playlists (single WebVTT segment) — referenced by the
+  // master's SUBTITLES group. The extra `/index.m3u8` segment keeps these
+  // from colliding with the plain VTT routes above. Embedded route is
+  // declared first so "embedded" is never read as a numeric subtitleId.
+
+  /** Subtitle media playlist for an embedded stream. */
+  @Get(':mediaFileId/subtitles/embedded/:streamIndex/index.m3u8')
+  async embeddedSubtitlePlaylist(
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Param('streamIndex', ParseIntPipe) streamIndex: number,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    await this.sendSubtitlePlaylist(
+      res,
+      req,
+      mediaFileId,
+      `subtitles/embedded/${streamIndex}`,
+    );
+  }
+
+  /** Subtitle media playlist for an external subtitle file. */
+  @Get(':mediaFileId/subtitles/:subtitleId/index.m3u8')
+  async externalSubtitlePlaylist(
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Param('subtitleId', ParseIntPipe) subtitleId: number,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    await this.sendSubtitlePlaylist(
+      res,
+      req,
+      mediaFileId,
+      `subtitles/${subtitleId}`,
+    );
+  }
+
+  /** Build + send a single-segment VOD WebVTT media playlist whose one
+   *  segment is the matching VTT endpoint. Native HLS players consume this
+   *  as a SUBTITLES rendition so cues render inside the player pipeline
+   *  (PiP / AirPlay / lock-screen) rather than an app overlay. The VTT
+   *  itself carries the `X-TIMESTAMP-MAP` (via `withTimestampMap`) needed to
+   *  align cue times with the media timeline. */
+  private async sendSubtitlePlaylist(
+    res: Response,
+    req: Request,
+    mediaFileId: number,
+    vttPath: string,
+  ): Promise<void> {
+    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const duration = resolved.mediaFile.streamInfo?.durationSeconds ?? 0;
+    const tokenParam = buildTokenParam(req);
+    const target = Math.max(1, Math.ceil(duration || 1));
+    const playlist = [
+      '#EXTM3U',
+      '#EXT-X-VERSION:7',
+      '#EXT-X-PLAYLIST-TYPE:VOD',
+      `#EXT-X-TARGETDURATION:${target}`,
+      '#EXT-X-MEDIA-SEQUENCE:0',
+      `#EXTINF:${(duration || target).toFixed(3)},`,
+      `/api/stream/${mediaFileId}/${vttPath}${tokenParam}`,
+      '#EXT-X-ENDLIST',
+    ].join('\n');
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(playlist);
   }
 
   // ---------------------------------------------------------------------------

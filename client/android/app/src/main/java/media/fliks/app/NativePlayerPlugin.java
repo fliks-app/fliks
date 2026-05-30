@@ -578,14 +578,6 @@ public class NativePlayerPlugin extends Plugin {
         });
     }
 
-    @PluginMethod()
-    public void addExternalSubtitle(PluginCall call) {
-        // Subtitles are preloaded at load() time. This just returns an ID
-        // for the frontend to track. The actual selection is done via selectSubtitleTrack.
-        String id = call.getString("url", "ext-sub-" + System.currentTimeMillis());
-        call.resolve(new JSObject().put("id", id));
-    }
-
     // ── Subtitle Style ──
 
     @PluginMethod()
@@ -787,14 +779,19 @@ public class NativePlayerPlugin extends Plugin {
         try { targetIndex = Integer.parseInt(id.replace("text-", "")); }
         catch (NumberFormatException e) { return false; }
 
-        // ExoPlayer may auto-detect extra text tracks (CEA-608 from HLS) before our sidecar subs.
-        // Offset by the number of non-sidecar text tracks so text-0 maps to our first SubtitleConfiguration.
+        // When sidecar SubtitleConfigurations are present, ExoPlayer may
+        // auto-detect extra text tracks (CEA-608 from HLS) before them, so
+        // text-0 must skip those. With subtitles delivered as HLS SUBTITLES
+        // renditions (no sidecar), the text groups ARE the renditions and
+        // "text-N" maps straight to the Nth text group — getSubtitleTracks
+        // enumerates them in the same order, so the offset must be 0.
         int totalTextGroups = 0;
         for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
             if (group.getType() == C.TRACK_TYPE_TEXT) totalTextGroups++;
         }
-        int sidecarOffset = totalTextGroups - subtitleConfigs.size();
-        if (sidecarOffset < 0) sidecarOffset = 0;
+        int sidecarOffset = subtitleConfigs.isEmpty()
+                ? 0
+                : Math.max(0, totalTextGroups - subtitleConfigs.size());
         int exoIndex = targetIndex + sidecarOffset;
 
         int idx = 0;
