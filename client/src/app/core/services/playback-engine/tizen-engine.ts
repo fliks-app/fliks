@@ -204,7 +204,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
         try { webapis.avplay.stop(); } catch { /* ok */ }
         document.documentElement.classList.remove('native-player-active');
         const msg = 'AVPlay prepareAsync timeout (30s)';
-        this.emit('error', { code: -1, message: msg });
+        this.emit('error', { code: -1, message: msg, errorKey: 'player.playback_error' });
         reject(new Error(msg));
       }, 30000);
       const done = (fn: () => void) => {
@@ -224,7 +224,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
             try { this.applyDisplayRect(); } catch { /* ok */ }
             if (!this._paused) {
               try { webapis.avplay.play(); } catch (e) {
-                this.emit('error', { code: -1, message: 'AVPlay play (post-prepare) failed: ' + String(e) });
+                this.emit('error', { code: -1, message: 'AVPlay play (post-prepare) failed: ' + String(e), errorKey: 'player.playback_error' });
               }
               this.emit('stateChanged', { state: 'playing' });
             } else {
@@ -236,7 +236,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
           (err) => done(() => {
             try { webapis.avplay.stop(); } catch { /* ok */ }
             document.documentElement.classList.remove('native-player-active');
-            this.emit('error', { code: -1, message: 'AVPlay prepare failed: ' + String(err) });
+            this.emit('error', { code: -1, message: 'AVPlay prepare failed: ' + String(err), errorKey: 'player.playback_error' });
             reject(new Error('AVPlay prepare failed: ' + String(err)));
           }),
         );
@@ -245,7 +245,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
           try { webapis.avplay.stop(); } catch { /* ok */ }
           document.documentElement.classList.remove('native-player-active');
           const msg = 'AVPlay prepareAsync threw: ' + (e instanceof Error ? e.message : String(e));
-          this.emit('error', { code: -1, message: msg });
+          this.emit('error', { code: -1, message: msg, errorKey: 'player.playback_error' });
           reject(new Error(msg));
         });
       }
@@ -318,7 +318,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       this.emit('sessionExpired', undefined);
       return;
     }
-    this.emit('error', { code: -1, message: msg });
+    this.emit('error', { code: -1, message: msg, errorKey: 'player.playback_error' });
     this.emit('stateChanged', { state: 'error' });
   }
   private handleStreamCompleted(): void {
@@ -340,7 +340,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       // NONE / IDLE: post-prepare success checks `_paused` and starts
       // playback once AVPlay reaches READY. PLAYING: nothing to do.
     } catch (e) {
-      this.emit('error', { code: -1, message: 'AVPlay play failed: ' + String(e) });
+      this.emit('error', { code: -1, message: 'AVPlay play failed: ' + String(e), errorKey: 'player.playback_error' });
     }
     this.emit('stateChanged', { state: 'playing' });
   }
@@ -350,7 +350,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     try {
       if (webapis.avplay.getState() === 'PLAYING') webapis.avplay.pause();
     } catch (e) {
-      this.emit('error', { code: -1, message: 'AVPlay pause failed: ' + String(e) });
+      this.emit('error', { code: -1, message: 'AVPlay pause failed: ' + String(e), errorKey: 'player.playback_error' });
     }
     this.emit('stateChanged', { state: 'paused' });
   }
@@ -488,7 +488,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       this._currentAudioIndex = index;
       this.emitAudioTracks();
     } catch (e) {
-      this.emit('error', { code: -1, message: 'AVPlay setSelectTrack audio failed: ' + String(e) });
+      this.emit('error', { code: -1, message: 'AVPlay setSelectTrack audio failed: ' + String(e), errorKey: 'player.playback_error' });
     }
   }
 

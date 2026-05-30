@@ -44,7 +44,11 @@ export interface EngineStats {
 export type EngineEventMap = {
   stateChanged: { state: PlaybackState };
   timeUpdate: { position: number; duration: number; buffered: number };
-  error: { code: number; message: string };
+  // `errorKey` is an i18n key the engine resolves the user-facing message
+  // from (raw `message` stays for the console). Engines that surface
+  // platform-specific strings (Tizen AVPlay, webOS MediaError) set it so the
+  // overlay shows translated text instead of an untranslated native string.
+  error: { code: number; message: string; errorKey?: string };
   audioTracksChanged: { tracks: AudioTrack[] };
   ended: void;
   /** Fires when the first video frame is presented to the screen.
