@@ -470,27 +470,18 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: - Subtitle Style
 
     @objc func setSubtitleStyle(_ call: CAPPluginCall) {
-        let fontScale = CGFloat(call.getFloat("fontScale") ?? 1.0)
-        let foregroundColor = call.getString("foregroundColor") ?? "#FFFFFF"
-        let backgroundColor = call.getString("backgroundColor") ?? "transparent"
-        let edgeType = call.getString("edgeType") ?? "none"
-        let bottomMarginPercent = CGFloat(call.getFloat("bottomMarginPercent") ?? 8.0)
-
+        let style = SubtitleStyle(
+            fontScale: CGFloat(call.getFloat("fontScale") ?? 1.0),
+            foregroundHex: call.getString("foregroundColor") ?? "#FFFFFF",
+            backgroundHex: call.getString("backgroundColor") ?? "transparent",
+            edgeType: call.getString("edgeType") ?? "none",
+            bottomMarginPercent: CGFloat(call.getFloat("bottomMarginPercent") ?? 8.0)
+        )
         DispatchQueue.main.async { [weak self] in
             guard let self = self else {
                 call.resolve()
                 return
             }
-            var style = SubtitleStyle()
-            style.fontScale = fontScale
-            style.foregroundColor = Self.uiColor(from: foregroundColor) ?? .white
-            // "transparent" (or an unparseable value) → no box; a real colour
-            // is honoured directly because we own the rendering now.
-            style.backgroundColor = backgroundColor == "transparent"
-                ? nil
-                : Self.uiColor(from: backgroundColor)
-            style.edgeType = edgeType
-            style.bottomMarginFraction = max(0, min(0.45, bottomMarginPercent / 100.0))
             self.currentSubtitleStyle = style
             self.subtitleOverlay?.apply(style)
             call.resolve()
@@ -516,47 +507,40 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     public func setSubtitleRenderingForPiP(_ inPiP: Bool) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.subtitleOutput?.suppressesPlayerRendering = !inPiP
-            self.subtitleOverlay?.isHidden = inPiP
-            if !inPiP {
-                // Re-enabling suppression stops future native draws but leaves
-                // the last caption the player rendered during PiP stuck on the
-                // layer (frozen, no longer updating) while the overlay also
-                // draws live cues — a double render. Re-selecting the legible
-                // option forces the player to clear it; the overlay then owns
-                // rendering again.
-                self.flushNativeCaption()
+            if inPiP {
+                self.subtitleOutput?.suppressesPlayerRendering = false
+                self.subtitleOverlay?.isHidden = true
+                return
+            }
+            // Re-enabling suppression stops future native draws but leaves the
+            // last caption the player rendered during PiP stuck on the layer
+            // (frozen). Keep the overlay hidden until that boxed caption is
+            // cleared, then reveal it — otherwise the two briefly overlap.
+            self.subtitleOutput?.suppressesPlayerRendering = true
+            self.subtitleOverlay?.isHidden = true
+            self.flushNativeCaption { [weak self] in
+                self?.subtitleOverlay?.isHidden = false
             }
         }
     }
 
     /// Force the native legible renderer to drop whatever caption it has on
     /// screen by momentarily deselecting and re-selecting the active option.
-    /// The re-select runs on the next runloop hop so the clear is processed
-    /// before the option comes back (a same-tick toggle gets coalesced).
-    private func flushNativeCaption() {
+    /// The re-select (and the completion) run on the next runloop hop so the
+    /// clear is processed before the option comes back — a same-tick toggle
+    /// gets coalesced and the box never clears.
+    private func flushNativeCaption(completion: @escaping () -> Void) {
         guard let item = player?.currentItem,
               let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible),
-              let option = item.currentMediaSelection.selectedMediaOption(in: group) else { return }
+              let option = item.currentMediaSelection.selectedMediaOption(in: group) else {
+            completion()
+            return
+        }
         item.select(nil, in: group)
         DispatchQueue.main.async {
             item.select(option, in: group)
+            completion()
         }
-    }
-
-    /// Flatten a delivered cue into runs that carry only bold / italic; colour,
-    /// size, edge and background all come from the app style in the overlay.
-    private static func runs(from attributed: NSAttributedString) -> [SubtitleRun] {
-        var runs: [SubtitleRun] = []
-        let full = NSRange(location: 0, length: attributed.length)
-        attributed.enumerateAttributes(in: full, options: []) { attrs, range, _ in
-            let text = attributed.attributedSubstring(from: range).string
-            guard !text.isEmpty else { return }
-            let bold = (attrs[NSAttributedString.Key(kCMTextMarkupAttribute_BoldStyle as String)] as? Bool) ?? false
-            let italic = (attrs[NSAttributedString.Key(kCMTextMarkupAttribute_ItalicStyle as String)] as? Bool) ?? false
-            runs.append(SubtitleRun(text: text, bold: bold, italic: italic))
-        }
-        return runs
     }
 
     // MARK: - Brightness
@@ -825,29 +809,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         return 0
     }
 
-    /// Parse a hex colour string (#RRGGBB or #AARRGGBB) into a UIColor.
-    private static func uiColor(from hex: String) -> UIColor? {
-        var h = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        if h.hasPrefix("#") { h.removeFirst() }
-        guard let val = UInt64(h, radix: 16) else { return nil }
-
-        var a: CGFloat = 1.0, r: CGFloat = 1.0, g: CGFloat = 1.0, b: CGFloat = 1.0
-        switch h.count {
-        case 6: // RRGGBB
-            r = CGFloat((val >> 16) & 0xFF) / 255.0
-            g = CGFloat((val >> 8) & 0xFF) / 255.0
-            b = CGFloat(val & 0xFF) / 255.0
-        case 8: // AARRGGBB
-            a = CGFloat((val >> 24) & 0xFF) / 255.0
-            r = CGFloat((val >> 16) & 0xFF) / 255.0
-            g = CGFloat((val >> 8) & 0xFF) / 255.0
-            b = CGFloat(val & 0xFF) / 255.0
-        default:
-            return nil
-        }
-        return UIColor(red: r, green: g, blue: b, alpha: a)
-    }
-
     // MARK: - Event Emitters
 
     private func emitStateChanged(_ state: String) {
@@ -937,142 +898,9 @@ extension NativePlayerPlugin: AVPlayerItemLegibleOutputPushDelegate {
         nativeSampleBuffers nativeSamples: [Any],
         forItemTime itemTime: CMTime
     ) {
-        let cues = strings.map { NativePlayerPlugin.runs(from: $0) }
+        let cues = strings.map { SubtitleRun.runs(from: $0) }
         DispatchQueue.main.async { [weak self] in
             self?.subtitleOverlay?.render(cues)
         }
-    }
-}
-
-// MARK: - Subtitle overlay
-
-/// App-controlled subtitle appearance, mapped from the JS `setSubtitleStyle`.
-private struct SubtitleStyle {
-    var fontScale: CGFloat = 1.0
-    var foregroundColor: UIColor = .white
-    /// nil = transparent (no box). A real colour paints a tight per-line
-    /// highlight behind the text — fully under app control, unlike the
-    /// user-preference-gated system caption box.
-    var backgroundColor: UIColor?
-    var edgeType: String = "none"
-    /// Distance from the bottom edge as a fraction of view height.
-    var bottomMarginFraction: CGFloat = 0.08
-}
-
-/// One styled span of a cue. Only bold / italic are carried from the source;
-/// every other visual is applied from `SubtitleStyle`.
-private struct SubtitleRun {
-    let text: String
-    let bold: Bool
-    let italic: Bool
-}
-
-/// Draws subtitle cues as a no-box, app-styled overlay. Sits above the
-/// AVPlayerLayer and below the transparent WebView. Font size tracks view
-/// height so it scales with rotation and surface size.
-private final class SubtitleOverlayView: UIView {
-    private let label = UILabel()
-    private var style = SubtitleStyle()
-    private var cues: [[SubtitleRun]] = []
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isUserInteractionEnabled = false
-        backgroundColor = .clear
-        label.numberOfLines = 0
-        label.textAlignment = .center
-        label.lineBreakMode = .byWordWrapping
-        addSubview(label)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    func apply(_ style: SubtitleStyle) {
-        self.style = style
-        rebuild()
-    }
-
-    /// Replace the displayed cues. Empty array clears the overlay.
-    func render(_ cues: [[SubtitleRun]]) {
-        self.cues = cues
-        rebuild()
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        rebuild()
-    }
-
-    private func rebuild() {
-        guard bounds.height > 0 else { return }
-        let visible = cues.filter { !$0.isEmpty }
-        if visible.isEmpty {
-            label.attributedText = nil
-            label.isHidden = true
-            return
-        }
-        label.isHidden = false
-        label.attributedText = buildAttributed(visible)
-        positionLabel()
-    }
-
-    private func buildAttributed(_ lines: [[SubtitleRun]]) -> NSAttributedString {
-        let pointSize = max(8, bounds.height * 0.05 * style.fontScale)
-        let base = UIFont.systemFont(ofSize: pointSize, weight: .semibold)
-        let out = NSMutableAttributedString()
-        for (lineIdx, runs) in lines.enumerated() {
-            if lineIdx > 0 { out.append(NSAttributedString(string: "\n")) }
-            for run in runs {
-                var traits: UIFontDescriptor.SymbolicTraits = []
-                if run.bold { traits.insert(.traitBold) }
-                if run.italic { traits.insert(.traitItalic) }
-                let font: UIFont
-                if !traits.isEmpty, let desc = base.fontDescriptor.withSymbolicTraits(traits) {
-                    font = UIFont(descriptor: desc, size: pointSize)
-                } else {
-                    font = base
-                }
-                var attrs: [NSAttributedString.Key: Any] = [
-                    .font: font,
-                    .foregroundColor: style.foregroundColor,
-                ]
-                if let bg = style.backgroundColor {
-                    attrs[.backgroundColor] = bg
-                }
-                applyEdge(&attrs, pointSize: pointSize)
-                out.append(NSAttributedString(string: run.text, attributes: attrs))
-            }
-        }
-        return out
-    }
-
-    private func applyEdge(_ attrs: inout [NSAttributedString.Key: Any], pointSize: CGFloat) {
-        switch style.edgeType {
-        case "drop_shadow", "raised":
-            let shadow = NSShadow()
-            shadow.shadowColor = UIColor.black.withAlphaComponent(0.9)
-            shadow.shadowOffset = CGSize(width: 0, height: 1)
-            shadow.shadowBlurRadius = pointSize * 0.12
-            attrs[.shadow] = shadow
-        case "outline":
-            attrs[.strokeColor] = UIColor.black
-            attrs[.strokeWidth] = -3.0
-        default:
-            break
-        }
-    }
-
-    private func positionLabel() {
-        let maxWidth = bounds.width * 0.9
-        let fit = label.sizeThatFits(CGSize(width: maxWidth, height: bounds.height))
-        let w = min(fit.width, maxWidth)
-        let bottomInset = bounds.height * style.bottomMarginFraction
-        label.frame = CGRect(
-            x: (bounds.width - w) / 2,
-            y: max(0, bounds.height - bottomInset - fit.height),
-            width: w,
-            height: fit.height
-        )
     }
 }
