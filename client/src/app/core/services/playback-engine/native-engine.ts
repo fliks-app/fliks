@@ -68,19 +68,14 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
    *  load() — before ExoPlayer has parsed the manifest's text tracks — so we
    *  hold the intent and (re)apply it on `nativePlayerTracksChanged`. */
   private _desiredSubtitle: {
-    /** Stable rendition id (== manifest NAME == picker SubtitleOption.id). */
-    renditionId?: string;
     language: string;
     forced: boolean;
   } | null = null;
-  /** Text tracks the player currently reports, refreshed on track changes.
-   *  `name` is the manifest NAME the player echoes back (AVPlayer displayName /
-   *  ExoPlayer Format.label), which equals the rendition's stable id. */
+  /** Text tracks the player currently reports, refreshed on track changes. */
   private _nativeSubtitleTracks: {
     id: string;
     language: string;
     label: string;
-    name?: string;
     forced?: boolean;
   }[] = [];
 
@@ -264,21 +259,19 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     language: string,
     _label: string,
     forced = false,
-    renditionId?: string,
-  ): Promise<{ renditionId?: string; language: string; forced: boolean }> {
+  ): Promise<{ language: string; forced: boolean }> {
     // Subtitles are HLS SUBTITLES renditions; the player surfaces them as
     // native text tracks. Return the desired track descriptor — actual
-    // selection is resolved against the player's reported tracks (by stable
-    // rendition id, falling back to language), which only appear after the
-    // manifest is parsed (see resolveSubtitle).
-    return { renditionId, language, forced };
+    // selection is resolved against the player's reported tracks (by
+    // language), which only appear after the manifest is parsed (see
+    // resolveSubtitle).
+    return { language, forced };
   }
 
   selectTextTrack(track: any): void {
     this._desiredSubtitle =
       track && typeof track === 'object' && track.language
         ? {
-            renditionId: track.renditionId,
             language: track.language,
             forced: !!track.forced,
           }
@@ -301,18 +294,12 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
    *  (fixes "subtitle selected by default but hidden" on ExoPlayer). */
   private resolveSubtitle(): void {
     if (!this._desiredSubtitle) return;
-    const { renditionId, language, forced } = this._desiredSubtitle;
+    const { language, forced } = this._desiredSubtitle;
     const want = normalizeLangCode(language);
     const tracks = this._nativeSubtitleTracks;
-    // Prefer the exact rendition the user picked, matched by its stable id
-    // (the manifest NAME the player echoes back as `name`). This is the only
-    // tier that disambiguates several same-(language, forced) tracks. Fall
-    // back to (language + forced) → language → a lone track, so selection
-    // still works before the plugin reports names or on a tag mismatch.
+    // Match by (language + forced) → language → a lone track, so selection
+    // still works on a tag mismatch.
     const id =
-      (renditionId
-        ? tracks.find((t) => t.name === renditionId)
-        : undefined) ??
       tracks.find(
         (t) => normalizeLangCode(t.language) === want && !!t.forced === !!forced,
       ) ??

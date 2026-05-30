@@ -545,9 +545,6 @@ public class NativePlayerPlugin extends Plugin {
                             t.put("id", "text-" + idx);
                             t.put("language", fmt.language != null ? fmt.language : "und");
                             t.put("label", fmt.label != null ? fmt.label : (fmt.language != null ? fmt.language : "Track " + idx));
-                            // fmt.label is the manifest NAME (the rendition's stable id);
-                            // the engine matches the picked track by it.
-                            t.put("name", fmt.label);
                             t.put("forced", (fmt.selectionFlags & C.SELECTION_FLAG_FORCED) != 0);
                             tracks.put(t);
                             idx++;

@@ -440,7 +440,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                         "label": option.displayName,
                         // displayName == the manifest NAME (the rendition's
                         // stable id); the engine matches the picked track by it.
-                        "name": option.displayName,
                         "forced": option.hasMediaCharacteristic(.containsOnlyForcedSubtitles),
                     ])
                 }
@@ -888,7 +887,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                     "id": "text-\(index)",
                     "language": locale.languageCode ?? "und",
                     "label": option.displayName,
-                    "name": option.displayName,
                     "forced": option.hasMediaCharacteristic(.containsOnlyForcedSubtitles),
                 ])
             }

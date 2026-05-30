@@ -178,18 +178,21 @@ export function generateMasterPlaylist(
   const subsAttr = hasSubs ? ',SUBTITLES="subs"' : '';
   const pushSubtitleMedia = (out: string[]): void => {
     if (!hasSubs) return;
-    // `name` is the rendition's stable id (emb-<idx>/ext-<dbId>, inherently
-    // unique) and is the key the native players report back via displayName /
-    // Format.label, so emit it verbatim — the client matches a picked track by
-    // this NAME (== its SubtitleOption.id).
-    subtitleRenditions.forEach((s) => {
+    // `name` is a human label (track title / language). Two tracks can resolve
+    // to the same string, so uniquify with an increment (#2 on collision) — a
+    // native player (AirPlay, lock-screen) dedupes identical NAMEs into one
+    // selectable option otherwise.
+    const names = buildUniqueAudioNames(
+      subtitleRenditions.map((s) => ({ title: s.name, language: s.language })),
+    );
+    subtitleRenditions.forEach((s, i) => {
       const lang = s.language || 'und';
       const path =
         s.kind === 'embedded'
           ? `subtitles/embedded/${s.key}`
           : `subtitles/${s.key}`;
       out.push(
-        `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="${s.name}",LANGUAGE="${lang}",DEFAULT=NO,AUTOSELECT=NO,FORCED=${s.forced ? 'YES' : 'NO'},URI="/api/stream/${mediaFileId}/${path}/index.m3u8${tokenParam}"`,
+        `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=NO,AUTOSELECT=NO,FORCED=${s.forced ? 'YES' : 'NO'},URI="/api/stream/${mediaFileId}/${path}/index.m3u8${tokenParam}"`,
       );
     });
   };

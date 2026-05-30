@@ -131,10 +131,10 @@ export class SubtitleStreamService {
    * non-bitmap streams (from cached `streamInfo`) then external files. Bitmap
    * subtitles (PGS/DVD/DVB) are excluded — they have no WebVTT form and stay on
    * the burn-in path. `key` feeds the VTT endpoints (`subtitles/embedded/:idx`,
-   * `subtitles/:id`); `name` carries the stable id (`emb-<streamIndex>` /
-   * `ext-<dbId>`), which equals the client's SubtitleOption.id. The native
-   * player round-trips that NAME via displayName / Format.label, so the engine
-   * selects the exact rendition — even among several same-(language, forced).
+   * `subtitles/:id`); `name` is a human label (track title / language /
+   * "Subtitle") shown by native players (AirPlay, lock-screen). It is NOT a
+   * stable id — the master playlist uniquifies colliding names with an
+   * increment, and the client no longer matches a track on it.
    */
   async listTextSubtitleRenditions(
     mediaFileId: number,
@@ -147,7 +147,7 @@ export class SubtitleStreamService {
         kind: 'embedded',
         key: s.streamIndex,
         language: normalizeLanguageCode(s.language),
-        name: `emb-${s.streamIndex}`,
+        name: s.title || normalizeLanguageCode(s.language) || 'Subtitle',
         forced: s.forced,
       });
     }
@@ -164,7 +164,7 @@ export class SubtitleStreamService {
           kind: 'external',
           key: sf.id,
           language: normalizeLanguageCode(sf.language),
-          name: `ext-${sf.id}`,
+          name: sf.language || 'Subtitle',
           forced: sf.forced,
         });
       }

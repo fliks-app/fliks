@@ -16,9 +16,6 @@ export interface NativeSubtitleTrack {
   label: string;
   /** True if the track carries only forced (foreign-dialogue) cues. */
   forced?: boolean;
-  /** Unique rendition name (== manifest NAME), used to select the exact
-   *  track the user picked even among same-(language, forced) renditions. */
-  name?: string;
 }
 
 export interface NativePlayerPosition {

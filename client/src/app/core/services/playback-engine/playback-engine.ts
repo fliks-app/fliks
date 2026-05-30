@@ -138,11 +138,7 @@ export interface PlaybackEngine {
   // engine maps a chosen track to its player's own track by (language,
   // forced) and returns a handle for `selectTextTrack`. `forced`
   // disambiguates a full vs forced track of the same language.
-  // `renditionId` is the track's stable id (== manifest NAME); engines that
-  // consume HLS SUBTITLES renditions (Shaka/native) select the exact rendition
-  // by it, disambiguating several same-(language, forced) tracks. Tizen/webOS
-  // (sidecar overlay) ignore it.
-  addTextTrack(url: string, language: string, label: string, forced?: boolean, renditionId?: string): Promise<any>;
+  addTextTrack(url: string, language: string, label: string, forced?: boolean): Promise<any>;
   selectTextTrack(track: any): void;
   setTextVisibility(visible: boolean): void;
 
