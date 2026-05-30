@@ -1890,7 +1890,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    */
   private wireSessionExpiredRecovery(engine: PlaybackEngine): void {
     engine.on('sessionExpired', () => {
-      void this.recoverFromLostSession();
+      void this.recoverFromLostSession(true);
     });
   }
 
@@ -1901,7 +1901,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    * current position. Cast playbacks are skipped — the cast receiver
    * owns its own session lifecycle.
    */
-  private async recoverFromLostSession(): Promise<void> {
+  private async recoverFromLostSession(surfaceErrorOnFailure = false): Promise<void> {
     if (this.recoveringFromLostSession) return;
     if (this.castService.isConnected()) return;
     if (!this.engine || !this.mediaFileId) return;
@@ -1910,13 +1910,24 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // reloads — recovery is about to resume playback, so the reload window
     // reads as buffering, not "Playback error".
     this.state.setRecovering(true);
+    // engine.currentTime can read 0 right after an error (e.g. Tizen AVPlay),
+    // which would reload from the start — fall back to the last mirrored
+    // position in that case.
+    const enginePos = this.engine.currentTime;
+    const pos = enginePos > 1 ? enginePos : this.state.currentTime();
     try {
-      await this.refreshSidAndReload(this.engine.currentTime || 0, {
+      await this.refreshSidAndReload(pos, {
         preservePause: true,
         unmute: false,
       });
-    } catch { /* heartbeat is fire-and-forget; next one retries */ }
-    finally {
+    } catch {
+      // The heartbeat path retries on its next tick; the event (sessionExpired)
+      // path has no retry, so surface a terminal error there instead of
+      // latching the recovery spinner forever.
+      if (surfaceErrorOnFailure) {
+        this.state.error.set(this.translate.instant('player.playback_error'));
+      }
+    } finally {
       this.recoveringFromLostSession = false;
       this.state.setRecovering(false);
     }
@@ -1933,7 +1944,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         preservePause: false,
         unmute: true,
       });
-    } catch { /* ignore */ }
+    } catch {
+      // No retry path after a Cast disconnect — surface a terminal error
+      // instead of leaving the local player silently dead.
+      this.state.error.set(this.translate.instant('player.playback_error'));
+    }
   }
 
   onSpeedChange(rate: number) {
