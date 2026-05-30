@@ -295,7 +295,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             // Index 0 keeps the video beneath the subtitle overlay subview.
             view.layer.insertSublayer(layer, at: 0)
             playerLayer = layer
-            subtitleOverlay?.videoLayer = layer
         } else {
             playerLayer?.player = player
         }
