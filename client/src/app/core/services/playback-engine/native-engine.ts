@@ -89,6 +89,10 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     this._initialized = false;
     this.unbindWindowEvents();
     this.destroySubtitleOverlay();
+    // Drop engine event subscribers (every other engine does this in destroy).
+    // Without it, each player navigation leaks the previous component's
+    // listeners onto the long-lived NativePlayer bridge.
+    this.clearHandlers();
     await NativePlayer.destroy();
   }
 
@@ -334,6 +338,10 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       this._state = detail.state;
       this._paused = detail.state === 'paused' || detail.state === 'idle';
       this.emit('stateChanged', { state: detail.state });
+      // Surface end-of-stream so the player can advance to the next episode /
+      // exit; the bridge reports it via stateChanged but the dedicated 'ended'
+      // event (in EngineEventMap) was never emitted.
+      if (detail.state === 'ended') this.emit('ended', undefined);
     });
 
     bind('nativePlayerTimeUpdate', (e: Event) => {

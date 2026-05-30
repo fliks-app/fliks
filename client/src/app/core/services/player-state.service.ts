@@ -1,4 +1,5 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
+import { TranslateService } from '@ngx-translate/core';
 import type { PlaybackEngine } from './playback-engine/playback-engine';
 
 /**
@@ -32,7 +33,13 @@ export class PlayerStateService {
    *  engine reports mid-seek. */
   readonly seekLocked = signal(false);
 
+  private readonly translate = inject(TranslateService);
   private engine: PlaybackEngine | null = null;
+
+  /** Last playhead position seen on `timeUpdate`. A moving playhead while not
+   *  paused is the reliable cross-engine "frames are flowing" signal used to
+   *  clear a latched buffering spinner. */
+  private lastBufferingPos = -1;
 
   /** True while a lost-session recovery is re-minting the sid and reloading
    *  the engine. The reload tears the current stream down, so the engine
@@ -54,7 +61,9 @@ export class PlayerStateService {
     engine.on('stateChanged', (e) => {
       this.paused.set(e.state === 'paused' || e.state === 'idle');
       this.buffering.set(e.state === 'buffering' || (this.recovering && e.state === 'error'));
-      if (e.state === 'error' && !this.recovering) this.error.set('Playback error');
+      if (e.state === 'error' && !this.recovering) {
+        this.error.set(this.translate.instant('player.playback_error'));
+      }
       // videoStarted is intentionally NOT flipped here — Shaka emits 'playing'
       // on DOM 'play' (= play() called), well before the first frame is
       // actually painted. PlayerComponent owns the flip per engine: rvfc on
@@ -66,6 +75,19 @@ export class PlayerStateService {
       if (!this.seekLocked()) this.currentTime.set(e.position);
       if (e.duration > 0) this.duration.set(e.duration);
       this.bufferedEnd.set(e.buffered);
+      // A moving playhead while not paused means frames are flowing — clear a
+      // latched buffering spinner. Some engines (notably iOS AVPlayer recovering
+      // from a stall) never emit a 'playing' stateChanged after a re-buffer, so
+      // the spinner would otherwise stay up over correctly-playing video.
+      if (
+        !this.seekLocked() &&
+        !this.paused() &&
+        this.buffering() &&
+        e.position !== this.lastBufferingPos
+      ) {
+        this.buffering.set(false);
+      }
+      this.lastBufferingPos = e.position;
     });
 
     engine.on('error', (e) => {
@@ -88,6 +110,7 @@ export class PlayerStateService {
     this.buffering.set(false);
     this.bufferedEnd.set(0);
     this.seekLocked.set(false);
+    this.lastBufferingPos = -1;
   }
 
   getEngine(): PlaybackEngine | null {
