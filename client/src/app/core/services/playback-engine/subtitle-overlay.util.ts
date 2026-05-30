@@ -22,6 +22,9 @@ interface VttCue {
 export class SubtitleOverlay {
   private el: HTMLDivElement | null = null;
   private cues: VttCue[] = [];
+  /** Index into `cues` near the last queried time, advanced incrementally so
+   *  `updateAt` stays O(1) per tick instead of scanning every cue. */
+  private cursor = 0;
   private visible = false;
   private lastText = '';
 
@@ -35,6 +38,7 @@ export class SubtitleOverlay {
     } catch {
       this.cues = [];
     }
+    this.cursor = 0;
   }
 
   setVisible(visible: boolean): void {
@@ -45,6 +49,7 @@ export class SubtitleOverlay {
   clear(): void {
     this.visible = false;
     this.cues = [];
+    this.cursor = 0;
     this.render('');
   }
 
@@ -55,8 +60,18 @@ export class SubtitleOverlay {
       return;
     }
     if (!this.cues.length) return;
-    const active = this.cues.find((c) => timeSec >= c.start && timeSec <= c.end);
-    this.render(active?.text ?? '');
+    // Advance the cursor past cues that have ended, and rewind it on a
+    // backward jump (seek/loop), so each tick costs O(1) amortised instead of
+    // a full linear scan. Cues are start-sorted by the VTT parser.
+    while (this.cursor < this.cues.length - 1 && timeSec > this.cues[this.cursor].end) {
+      this.cursor++;
+    }
+    while (this.cursor > 0 && timeSec < this.cues[this.cursor].start) {
+      this.cursor--;
+    }
+    const cue = this.cues[this.cursor];
+    const active = cue && timeSec >= cue.start && timeSec <= cue.end ? cue.text : '';
+    this.render(active);
   }
 
   /** Same preset enums Shaka consumes from `player-settings.service`. */
@@ -90,6 +105,7 @@ export class SubtitleOverlay {
     if (this.el?.parentElement) this.el.parentElement.removeChild(this.el);
     this.el = null;
     this.cues = [];
+    this.cursor = 0;
     this.visible = false;
     this.lastText = '';
   }
