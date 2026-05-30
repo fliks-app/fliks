@@ -31,6 +31,54 @@ export async function segmentNearby(
 }
 
 /**
+ * Delete cached segments numbered `>= fromSegment` across the flat layout and
+ * any var_stream_map numeric subdirs (`0/`, `1/`, …). Called when a run
+ * (re)starts at a new seek point: each run's segments carry a tfdt that is
+ * 0-based at its own `-ss`, so leaving a previous run's segments ahead of the
+ * new start makes the decode timeline jump backward at the boundary and stalls
+ * the player. Purging everything from the new start forward guarantees the
+ * play-forward path only ever sees the current run's timeline. `init_*.mp4` is
+ * left intact — codec config is identical across runs.
+ */
+export async function purgeSegmentsFrom(
+  cacheDir: string,
+  fromSegment: number,
+): Promise<void> {
+  const segRe = /^seg-(\d+)\.(m4s|ts)$/;
+  const dirs = [cacheDir];
+  let top: import('fs').Dirent[];
+  try {
+    top = await fsp.readdir(cacheDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const e of top) {
+    if (e.isDirectory() && /^\d+$/.test(e.name)) {
+      dirs.push(path.join(cacheDir, e.name));
+    }
+  }
+  await Promise.all(
+    dirs.map(async (dir) => {
+      let files: string[];
+      try {
+        files = await fsp.readdir(dir);
+      } catch {
+        return;
+      }
+      await Promise.all(
+        files.map((f) => {
+          const m = segRe.exec(f);
+          if (m && parseInt(m[1], 10) >= fromSegment) {
+            return fsp.unlink(path.join(dir, f)).catch(() => undefined);
+          }
+          return undefined;
+        }),
+      );
+    }),
+  );
+}
+
+/**
  * Starting from `fromSegment`, find the first segment number NOT on disk.
  * Returns `null` when every segment up to a reasonable lookahead exists.
  */
