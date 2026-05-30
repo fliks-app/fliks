@@ -39,6 +39,8 @@ import {
 } from './transcoding/constants';
 import { LiveSession, LiveSessionRegistry } from './live-session.service';
 import { readAndRewriteCmaf } from './transcoding/cmaf-rewrite';
+import { parseInitTracks, rewriteSegmentTfdt } from './transcoding/timeline';
+import * as path from 'path';
 import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
@@ -71,6 +73,11 @@ function withTimestampMap(vtt: string | Buffer): string {
 
 /** Default segment duration — overridden by admin streaming settings. */
 let SEG_DURATION = 3;
+
+/** Per-cache-dir track info (timescale + video flag), parsed once from each
+ *  rendition's init segment and reused to anchor that rendition's segments
+ *  onto the absolute presentation timeline (see {@link rewriteSegmentTfdt}). */
+const initTrackCache = new Map<string, ReturnType<typeof parseInitTracks>>();
 
 /**
  * Compose / append the `token=...` + `sid=...` query pair that every
@@ -570,8 +577,9 @@ export class StreamingController {
       if (!res.headersSent) res.status(404).end();
       return;
     }
+    const out = await this.anchorSegmentTimeline(filePath, buf);
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Length', String(buf.length));
+    res.setHeader('Content-Length', String(out.length));
     res.setHeader('Access-Control-Allow-Origin', '*');
     // Cloudflare (and any intermediate CDN) will gladly cache a 0-byte
     // 200 response under the URL and serve it back for 4h by default —
@@ -579,7 +587,53 @@ export class StreamingController {
     // permanent failure. Mark each fMP4 chunk un-cacheable so a CDN
     // refusing the upstream length check never pins a broken response.
     res.setHeader('Cache-Control', 'no-store');
-    res.end(buf);
+    res.end(out);
+  }
+
+  /** Anchor a media segment onto the single absolute presentation timeline:
+   *  rewrite its `tfdt` so `seg-N` decodes at its true content time
+   *  `N · SEG_DURATION` (per-track timescale), instead of FFmpeg's per-run
+   *  0-based reset. This is the packaging layer owning the timeline so all
+   *  renditions (video, audio, subtitle) stay coherent across resume / seek
+   *  runs (HLS requires one shared timeline). Init segments and MPEG-TS
+   *  segments carry no `tfdt` and pass through unchanged. */
+  private async anchorSegmentTimeline(
+    filePath: string,
+    buf: Buffer,
+  ): Promise<Buffer> {
+    const m = /(?:^|\/)seg-(\d+)\.m4s$/.exec(filePath);
+    if (!m) return buf;
+    const tracks = await this.tracksForDir(path.dirname(filePath));
+    if (tracks.size === 0) return buf;
+    return rewriteSegmentTfdt(buf, tracks, Number(m[1]), SEG_DURATION);
+  }
+
+  /** Track info for a rendition's cache dir, parsed once from its init
+   *  segment. Cached only once populated so a cold-start race (init not yet
+   *  flushed) retries on the next segment instead of caching empty. */
+  private async tracksForDir(
+    dir: string,
+  ): Promise<ReturnType<typeof parseInitTracks>> {
+    const cached = initTrackCache.get(dir);
+    if (cached) return cached;
+    let initBuf: Buffer | null = null;
+    try {
+      initBuf = await fs.promises.readFile(path.join(dir, 'init.mp4'));
+    } catch {
+      // var_stream_map renditions may name the init `init_<n>.mp4`.
+      try {
+        const entry = (await fs.promises.readdir(dir)).find((f) =>
+          /^init.*\.mp4$/.test(f),
+        );
+        if (entry) initBuf = await fs.promises.readFile(path.join(dir, entry));
+      } catch {
+        return new Map();
+      }
+    }
+    if (!initBuf) return new Map();
+    const tracks = parseInitTracks(initBuf);
+    if (tracks.size > 0) initTrackCache.set(dir, tracks);
+    return tracks;
   }
 
   /** Available download qualities for a media file (used by download-quality modal). */
@@ -1067,7 +1121,12 @@ export class StreamingController {
     const subtitleRenditions = (live?.supportsHlsSubtitles ?? false)
       ? await this.subtitleStreamService
           .listTextSubtitleRenditions(mediaFileId)
-          .catch(() => undefined)
+          .catch((e) => {
+            this.log.warn(
+              `subtitle renditions failed for #${mediaFileId}: ${e instanceof Error ? e.message : e}`,
+            );
+            return undefined;
+          })
       : undefined;
 
     const sdrVariant = live?.videoVariant ?? null;
