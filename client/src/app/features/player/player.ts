@@ -1144,6 +1144,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.destroyed = true;
     this.savePosition();
     if (!this.castService.isConnected()) {
       // keepalive fetch (not HttpClient) so the stop survives if this destroy
@@ -1155,6 +1156,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         document.documentElement.classList.remove('native-player-active');
       }
       this.engine.destroy().catch(() => {});
+      // Drop the reference so any late async (recovery / cast resume) can't
+      // reload a torn-down engine and relaunch playback in the background.
+      this.engine = null;
     }
     this.removeSubtitleStyle();
     const video = this.videoEl()?.nativeElement;
@@ -1882,6 +1886,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    * surface `sessionLost: true` in the interval.
    */
   private recoveringFromLostSession = false;
+  /** Set in ngOnDestroy. Blocks any late async (heartbeat sessionLost,
+   *  sessionExpired event, Cast resume) from reloading the engine after the
+   *  player has been torn down — otherwise a fresh native player relaunches
+   *  in the background once the user has navigated away. */
+  private destroyed = false;
 
   /**
    * Hook into the engine's `sessionExpired` event so a backend 410 on
@@ -1904,6 +1913,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    * owns its own session lifecycle.
    */
   private async recoverFromLostSession(surfaceErrorOnFailure = false): Promise<void> {
+    if (this.destroyed) return;
     if (this.recoveringFromLostSession) return;
     if (this.castService.isConnected()) return;
     if (!this.engine || !this.mediaFileId) return;
@@ -1941,6 +1951,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  reloading — reusing `this.playbackInfo?.sessionId` would race
    *  against the heartbeat fallback path and flash a reload. */
   private async resumeLocalAfterCast(castPos: number) {
+    if (this.destroyed) return;
     try {
       await this.refreshSidAndReload(castPos, {
         preservePause: false,
