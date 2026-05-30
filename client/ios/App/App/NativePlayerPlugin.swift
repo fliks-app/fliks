@@ -515,8 +515,32 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// caption into the mirrored layer; restore the overlay on exit.
     public func setSubtitleRenderingForPiP(_ inPiP: Bool) {
         DispatchQueue.main.async { [weak self] in
-            self?.subtitleOutput?.suppressesPlayerRendering = !inPiP
-            self?.subtitleOverlay?.isHidden = inPiP
+            guard let self = self else { return }
+            self.subtitleOutput?.suppressesPlayerRendering = !inPiP
+            self.subtitleOverlay?.isHidden = inPiP
+            if !inPiP {
+                // Re-enabling suppression stops future native draws but leaves
+                // the last caption the player rendered during PiP stuck on the
+                // layer (frozen, no longer updating) while the overlay also
+                // draws live cues — a double render. Re-selecting the legible
+                // option forces the player to clear it; the overlay then owns
+                // rendering again.
+                self.flushNativeCaption()
+            }
+        }
+    }
+
+    /// Force the native legible renderer to drop whatever caption it has on
+    /// screen by momentarily deselecting and re-selecting the active option.
+    /// The re-select runs on the next runloop hop so the clear is processed
+    /// before the option comes back (a same-tick toggle gets coalesced).
+    private func flushNativeCaption() {
+        guard let item = player?.currentItem,
+              let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible),
+              let option = item.currentMediaSelection.selectedMediaOption(in: group) else { return }
+        item.select(nil, in: group)
+        DispatchQueue.main.async {
+            item.select(option, in: group)
         }
     }
 
