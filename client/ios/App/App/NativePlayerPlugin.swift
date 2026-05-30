@@ -59,6 +59,9 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var subtitleOverlay: SubtitleOverlayView?
     private var currentSubtitleStyle = SubtitleStyle()
     private let legibleQueue = DispatchQueue(label: "fliks.subtitle.legible")
+    /// Legible option deselected to clear the native caption while leaving PiP,
+    /// restored once PiP has fully exited.
+    private var pipDeselectedSubtitle: AVMediaSelectionOption?
 
     /// Exposed for PipPlugin to access the player layer.
     public var activePlayerLayer: AVPlayerLayer? { playerLayer }
@@ -504,43 +507,51 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// PiP can only mirror the AVPlayerLayer, not the overlay subview. While
     /// PiP is active, lift suppression so AVPlayer renders the (boxed) native
     /// caption into the mirrored layer; restore the overlay on exit.
+    /// PiP enter / will-stop. Entering: let AVPlayer draw the (boxed) native
+    /// caption into the mirrored layer and hide the overlay. Will-stop:
+    /// re-suppress and clear the native caption, but keep the overlay hidden —
+    /// it is revealed only once PiP has fully exited (`finishSubtitlePiPExit`),
+    /// otherwise it overlaps the boxed caption during the restore animation.
     public func setSubtitleRenderingForPiP(_ inPiP: Bool) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             if inPiP {
                 self.subtitleOutput?.suppressesPlayerRendering = false
                 self.subtitleOverlay?.isHidden = true
-                return
-            }
-            // Re-enabling suppression stops future native draws but leaves the
-            // last caption the player rendered during PiP stuck on the layer
-            // (frozen). Keep the overlay hidden until that boxed caption is
-            // cleared, then reveal it — otherwise the two briefly overlap.
-            self.subtitleOutput?.suppressesPlayerRendering = true
-            self.subtitleOverlay?.isHidden = true
-            self.flushNativeCaption { [weak self] in
-                self?.subtitleOverlay?.isHidden = false
+            } else {
+                self.subtitleOutput?.suppressesPlayerRendering = true
+                self.subtitleOverlay?.isHidden = true
+                self.clearNativeCaption()
             }
         }
     }
 
-    /// Force the native legible renderer to drop whatever caption it has on
-    /// screen by momentarily deselecting and re-selecting the active option.
-    /// The re-select (and the completion) run on the next runloop hop so the
-    /// clear is processed before the option comes back — a same-tick toggle
-    /// gets coalesced and the box never clears.
-    private func flushNativeCaption(completion: @escaping () -> Void) {
+    /// Called once PiP has fully stopped (after the restore animation). Restores
+    /// the legible cue flow to the output and reveals the no-box overlay.
+    public func finishSubtitlePiPExit() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.restoreLegibleSelection()
+            self.subtitleOverlay?.isHidden = false
+        }
+    }
+
+    /// Deselect the legible option to drop the caption the player rendered
+    /// during PiP (re-suppressing alone leaves the last cue frozen on screen).
+    /// The option is remembered so cue delivery can be restored on exit.
+    private func clearNativeCaption() {
         guard let item = player?.currentItem,
-              let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible),
-              let option = item.currentMediaSelection.selectedMediaOption(in: group) else {
-            completion()
-            return
-        }
+              let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible) else { return }
+        pipDeselectedSubtitle = item.currentMediaSelection.selectedMediaOption(in: group)
         item.select(nil, in: group)
-        DispatchQueue.main.async {
-            item.select(option, in: group)
-            completion()
-        }
+    }
+
+    private func restoreLegibleSelection() {
+        guard let option = pipDeselectedSubtitle,
+              let item = player?.currentItem,
+              let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible) else { return }
+        item.select(option, in: group)
+        pipDeselectedSubtitle = nil
     }
 
     // MARK: - Brightness

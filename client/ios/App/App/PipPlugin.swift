@@ -113,11 +113,14 @@ public class PipPlugin: CAPPlugin, CAPBridgedPlugin, AVPictureInPictureControlle
     }
 
     public func pictureInPictureControllerWillStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
-        // Back to fullscreen: restore the no-box overlay.
+        // Re-suppress and clear the native caption now; the overlay is revealed
+        // only once PiP has fully exited (didStop) so it doesn't overlap the
+        // boxed caption during the restore animation.
         nativePlayer?.setSubtitleRenderingForPiP(false)
     }
 
     public func pictureInPictureControllerDidStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+        nativePlayer?.finishSubtitlePiPExit()
         emitPipModeChanged(false)
         pipController = nil
     }
