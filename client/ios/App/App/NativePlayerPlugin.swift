@@ -2,6 +2,7 @@ import Foundation
 import Capacitor
 import AVFoundation
 import AVKit
+import CoreMedia
 
 /// UIView subclass that keeps its first CALayer sublayer (the AVPlayerLayer) sized to bounds.
 private class PlayerContainerView: UIView {
@@ -33,27 +34,26 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "selectAudioTrack", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getSubtitleTracks", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "selectSubtitleTrack", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "addExternalSubtitle", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setSubtitleStyle", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setBrightness", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMaxResolution", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPosition", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPlaybackRate", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "setSubtitleText", returnType: CAPPluginReturnPromise),
     ]
 
     private var player: AVPlayer?
     private var playerLayer: AVPlayerLayer?
     private var playerView: UIView?
-    private var subtitleLabel: UILabel?
-    private var subtitleView: UIView?
-    private var subtitleBottomConstraint: NSLayoutConstraint?
     private var timeObserver: Any?
     private var statusObserver: NSKeyValueObservation?
     private var timeControlObserver: NSKeyValueObservation?
     private var firstFrameObserver: NSKeyValueObservation?
     private var firstFrameEmitted = false
     private var savedBrightness: CGFloat?
+    /// AVTextStyleRule built from the app's subtitle-style settings, applied
+    /// to each AVPlayerItem so native (legible) caption rendering honours the
+    /// chosen colours / background instead of AVPlayer's default grey box.
+    private var subtitleStyleRules: [AVTextStyleRule] = []
 
     /// Exposed for PipPlugin to access the player layer.
     public var activePlayerLayer: AVPlayerLayer? { playerLayer }
@@ -96,48 +96,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             webView.scrollView.backgroundColor = .clear
 
             self.playerView = view
-
-            // Create subtitle view between player and WebView
-            let subContainer = UIView(frame: parentBounds)
-            subContainer.backgroundColor = .clear
-            subContainer.isUserInteractionEnabled = false
-            if isFullScreen {
-                subContainer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            }
-            webView.superview?.insertSubview(subContainer, belowSubview: webView)
-
-            let label = UILabel()
-            label.translatesAutoresizingMaskIntoConstraints = false
-            label.textColor = .white
-            label.font = .systemFont(ofSize: 20, weight: .semibold)
-            label.textAlignment = .center
-            label.numberOfLines = 0
-            label.layer.shadowColor = UIColor.black.cgColor
-            label.layer.shadowOffset = CGSize(width: 0, height: 1)
-            label.layer.shadowRadius = 4
-            label.layer.shadowOpacity = 0.9
-            subContainer.addSubview(label)
-
-            // Anchor to the container's raw `bottomAnchor`, not its
-            // `safeAreaLayoutGuide.bottomAnchor`. iPhones with a home
-            // indicator have ~34 pt of safe-area padding at the bottom,
-            // so anchoring to the safe area left a permanent ~34 pt gap
-            // even when the user set the subtitle margin to 0 %. With
-            // the raw anchor, `bottomMarginPercent` is the only thing
-            // that decides where the subtitle sits — 0 % means flush
-            // with the screen bottom. The home indicator auto-hides
-            // during video playback anyway, so subtitles never collide
-            // with a visible system gesture handle.
-            let bottomConstraint = label.bottomAnchor.constraint(equalTo: subContainer.bottomAnchor, constant: -40)
-            NSLayoutConstraint.activate([
-                label.leadingAnchor.constraint(equalTo: subContainer.leadingAnchor, constant: 24),
-                label.trailingAnchor.constraint(equalTo: subContainer.trailingAnchor, constant: -24),
-                bottomConstraint,
-            ])
-            self.subtitleBottomConstraint = bottomConstraint
-
-            self.subtitleLabel = label
-            self.subtitleView = subContainer
 
             // Keep screen awake during playback
             UIApplication.shared.isIdleTimerDisabled = true
@@ -305,6 +263,11 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// user explicitly picks a quality.
     @discardableResult
     private func attachPlayerItem(_ item: AVPlayerItem) -> AVPlayer {
+        // Carry the chosen subtitle styling onto every new item (set before
+        // the first load, kept across loads).
+        if !subtitleStyleRules.isEmpty {
+            item.textStyleRules = subtitleStyleRules
+        }
         if let existing = player {
             existing.replaceCurrentItem(with: item)
             existing.automaticallyWaitsToMinimizeStalling = true
@@ -491,13 +454,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    @objc func addExternalSubtitle(_ call: CAPPluginCall) {
-        // External subtitle support via AVPlayer requires AVMutableComposition.
-        // Return stub ID — frontend handles subtitle display via HTML overlay.
-        let id = "ext-sub-\(Int(Date().timeIntervalSince1970 * 1000))"
-        call.resolve(["id": id])
-    }
-
     // MARK: - Subtitle Style
 
     @objc func setSubtitleStyle(_ call: CAPPluginCall) {
@@ -505,62 +461,70 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let foregroundColor = call.getString("foregroundColor") ?? "#FFFFFF"
         let backgroundColor = call.getString("backgroundColor") ?? "transparent"
         let edgeType = call.getString("edgeType") ?? "none"
-        let bottomMargin = CGFloat(call.getFloat("bottomMarginPercent") ?? 8.0)
+        // `bottomMarginPercent` has no AVTextStyleRule equivalent — native
+        // legible captions position themselves; the setting is honoured on
+        // the web/TV (overlay) engines only.
 
         DispatchQueue.main.async { [weak self] in
-            guard let label = self?.subtitleLabel,
-                  let container = self?.subtitleView else {
+            guard let self = self else {
                 call.resolve()
                 return
             }
 
-            // Font size: base 20pt scaled
-            let baseSize: CGFloat = 20.0
-            label.font = .systemFont(ofSize: baseSize * CGFloat(fontScale), weight: .semibold)
-
-            // Foreground color
-            if let argb = self?.parseColor(foregroundColor) {
-                label.textColor = UIColor(
-                    red: argb[1], green: argb[2], blue: argb[3], alpha: argb[0]
-                )
-            }
-
-            // Background
-            if backgroundColor == "transparent" {
-                label.backgroundColor = .clear
-            } else if let argb = self?.parseColor(backgroundColor) {
-                label.backgroundColor = UIColor(
-                    red: argb[1], green: argb[2], blue: argb[3], alpha: argb[0]
-                )
-            }
-
-            // Shadow / edge type
-            switch edgeType {
-            case "drop_shadow":
-                label.layer.shadowColor = UIColor.black.cgColor
-                label.layer.shadowOffset = CGSize(width: 0, height: 2)
-                label.layer.shadowRadius = 4
-                label.layer.shadowOpacity = 0.9
-            case "outline":
-                label.layer.shadowColor = UIColor.black.cgColor
-                label.layer.shadowOffset = .zero
-                label.layer.shadowRadius = 2
-                label.layer.shadowOpacity = 1.0
-            case "raised":
-                label.layer.shadowColor = UIColor.black.cgColor
-                label.layer.shadowOffset = CGSize(width: 1, height: 1)
-                label.layer.shadowRadius = 6
-                label.layer.shadowOpacity = 0.8
-            default:
-                label.layer.shadowOpacity = 0
-            }
-
-            // Bottom margin
-            let screenHeight = UIScreen.main.bounds.height
-            self?.subtitleBottomConstraint?.constant = -(screenHeight * bottomMargin / 100)
-
+            // Native legible rendering: drive AVPlayer's caption styling via
+            // AVTextStyleRule so the app's subtitle settings actually apply.
+            // Without it AVPlayer draws its built-in caption box (grey, semi-
+            // opaque) regardless of the chosen background. Stored so each
+            // newly attached item picks the same rules up (see attachPlayerItem).
+            let rules = self.buildSubtitleStyleRules(
+                fontScale: fontScale,
+                foregroundColor: foregroundColor,
+                backgroundColor: backgroundColor,
+                edgeType: edgeType
+            )
+            self.subtitleStyleRules = rules
+            self.player?.currentItem?.textStyleRules = rules
             call.resolve()
         }
+    }
+
+    /// Map the app's subtitle-style settings to AVTextStyleRule attributes so
+    /// AVPlayer's native legible caption rendering honours them — most
+    /// importantly a transparent background (no caption box) when the user
+    /// hasn't chosen one. Returns an empty list if the markup attributes can't
+    /// be formed, leaving AVPlayer's defaults in place.
+    private func buildSubtitleStyleRules(
+        fontScale: Float,
+        foregroundColor: String,
+        backgroundColor: String,
+        edgeType: String
+    ) -> [AVTextStyleRule] {
+        var attrs: [String: Any] = [:]
+        if let fg = parseColor(foregroundColor) {
+            attrs[kCMTextMarkupAttribute_ForegroundColorARGB as String] = fg
+        }
+        // "transparent" → fully transparent ARGB so no caption box is drawn.
+        let bg: [CGFloat] =
+            backgroundColor == "transparent"
+            ? [0, 0, 0, 0]
+            : (parseColor(backgroundColor) ?? [0, 0, 0, 0])
+        attrs[kCMTextMarkupAttribute_BackgroundColorARGB as String] = bg
+        // Font size as a percentage of video height (~5% ≈ AVPlayer's default
+        // caption size), scaled by the user's size factor.
+        attrs[kCMTextMarkupAttribute_BaseFontSizePercentageRelativeToVideoHeight as String] =
+            Double(5.0 * fontScale)
+        let edge: CFString
+        switch edgeType {
+        case "drop_shadow": edge = kCMTextMarkupCharacterEdgeStyle_DropShadow
+        case "outline": edge = kCMTextMarkupCharacterEdgeStyle_Uniform
+        case "raised": edge = kCMTextMarkupCharacterEdgeStyle_Raised
+        default: edge = kCMTextMarkupCharacterEdgeStyle_None
+        }
+        attrs[kCMTextMarkupAttribute_CharacterEdgeStyle as String] = edge
+        guard let rule = AVTextStyleRule(textMarkupAttributes: attrs) else {
+            return []
+        }
+        return [rule]
     }
 
     // MARK: - Brightness
@@ -629,16 +593,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         case 360..<480: return 1_500_000     // profile 1M, next 2M
         case 240..<360: return 750_000       // profile 500k, next 1M
         default: return 350_000              // 144p profile 200k, next 500k
-        }
-    }
-
-    // MARK: - Subtitles (HTML-free overlay)
-
-    @objc func setSubtitleText(_ call: CAPPluginCall) {
-        let text = call.getString("text") ?? ""
-        DispatchQueue.main.async { [weak self] in
-            self?.subtitleLabel?.text = text.isEmpty ? nil : text
-            call.resolve()
         }
     }
 
@@ -816,11 +770,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         playerLayer = nil
         playerView?.removeFromSuperview()
         playerView = nil
-        subtitleView?.removeFromSuperview()
-        subtitleView = nil
-        subtitleLabel = nil
-        subtitleBottomConstraint = nil
-
+        subtitleStyleRules = []
 
         // Restore brightness
         if let saved = savedBrightness {

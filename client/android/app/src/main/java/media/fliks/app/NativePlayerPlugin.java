@@ -578,14 +578,6 @@ public class NativePlayerPlugin extends Plugin {
         });
     }
 
-    @PluginMethod()
-    public void addExternalSubtitle(PluginCall call) {
-        // Subtitles are preloaded at load() time. This just returns an ID
-        // for the frontend to track. The actual selection is done via selectSubtitleTrack.
-        String id = call.getString("url", "ext-sub-" + System.currentTimeMillis());
-        call.resolve(new JSObject().put("id", id));
-    }
-
     // ── Subtitle Style ──
 
     @PluginMethod()
