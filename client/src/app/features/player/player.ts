@@ -442,8 +442,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly playerStats = computed<PlayerStats | null>(() => {
     if (!this.statsVisible()) return null;
 
-    // Read signals so Angular tracks them as dependencies
-    const _time = this.currentTime();
+    // Read signals so Angular tracks them as dependencies. NB: currentTime()
+    // is deliberately NOT read here — it ticks ~4Hz and nothing below uses it,
+    // so the stats panel refreshes off statsRefreshTick (1Hz) instead.
     const _quality = this.activeQualityId();
     void this.statsRefreshTick();
 
@@ -685,7 +686,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (qp['offline'] === '1') {
         offlineCheck = await this.offlineStorage.getLocalUrl(`download-${this.mediaFileId}`).catch(() => null);
         if (!offlineCheck) {
-          this.state.error.set('Contenu offline introuvable. Re-téléchargez le média.');
+          this.state.error.set(this.translate.instant('player.offline_not_found'));
           return;
         }
         this.isOfflinePlayback = true;
@@ -714,6 +715,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             prewarmQuality,
             prewarmStartAt,
           );
+      // Mint the long-lived stream JWT in parallel with media/state/playback-info
+      // load instead of serially before engine init — it's on the time-to-first-
+      // frame critical path. Awaited just before the manifest/Bearer headers are
+      // built (below).
+      const streamTokenPromise = this.isOfflinePlayback
+        ? null
+        : this.authService.ensureStreamToken();
 
       // Load media info + playback state in parallel
       // No stopSessions here — getOrCreateSession handles stale sessions naturally
@@ -835,7 +843,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // passed to ExoPlayer / AVPlay / Shaka. Those engines bake auth
         // at \`load()\` and never re-ask Angular for a fresh credential —
         // the regular 1h access token would expire mid-film.
-        await this.authService.ensureStreamToken();
+        if (streamTokenPromise) await streamTokenPromise;
 
         // ── Engine selection ──
         // Native (Capacitor) always goes through the platform player —
@@ -1112,8 +1120,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Keyboard shortcuts
     document.addEventListener('keydown', this.onKeyDown);
 
-    // Best-effort cleanup on page unload
+    // Best-effort cleanup on page unload. `pagehide` is added alongside
+    // `beforeunload` because iOS Safari/WebView frequently skips `beforeunload`
+    // (bfcache, app backgrounding) — `pagehide` fires reliably there, so the
+    // ffmpeg session is released instead of lingering until its idle GC.
     window.addEventListener('beforeunload', this.onBeforeUnload);
+    window.addEventListener('pagehide', this.onBeforeUnload);
 
     // PiP mode change listener (native Android)
     if (this.isNative) {
@@ -1131,7 +1143,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   ngOnDestroy() {
     this.savePosition();
     if (!this.castService.isConnected()) {
-      this.stopStreamingSessions();
+      // keepalive fetch (not HttpClient) so the stop survives if this destroy
+      // coincides with a page unload / app background.
+      this.fireAndForgetStopSessions();
     }
     if (this.engine) {
       if (this.isNativeEngine()) {
@@ -1146,6 +1160,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.adminMessageTimer) clearTimeout(this.adminMessageTimer);
     document.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('beforeunload', this.onBeforeUnload);
+    window.removeEventListener('pagehide', this.onBeforeUnload);
     window.removeEventListener('app:playerBack', this.onPlayerBackEvent);
     if (this.isNative) {
       screen.orientation?.removeEventListener('change', this.onOrientationChange);
@@ -2201,6 +2216,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.subtitlePickerOpen.set(false);
       localStorage.setItem('player.subtitleLang', sub.language);
       localStorage.setItem('player.subtitleForced', sub.forced ? '1' : '0');
+      // Persist like the soft/off branches do, so a burn-in pick is restored
+      // on reload / next episode instead of silently reverting.
+      this.trackManager.saveSubtitleSelection(
+        this.mediaId,
+        sub.language,
+        sub.forced,
+        sub.id.startsWith('emb-'),
+      );
       await this.reloadStream();
       return;
     }
@@ -2489,13 +2512,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Get the currently active variant track. */
   private getActiveVariant(): any | null {
     return this.engine?.getVariantTracks()?.find((t: any) => t.active) ?? null;
-  }
-
-  private stopStreamingSessions() {
-    if (!this.mediaFileId || this.playbackMode() === 'direct') return;
-    this.streamingApi
-      .stopSessions(this.mediaFileId, this.activeSessionId())
-      .catch(() => {});
   }
 
   /** Wall-clock timestamp (ms) of the last PUT to /state. Used to dedup
