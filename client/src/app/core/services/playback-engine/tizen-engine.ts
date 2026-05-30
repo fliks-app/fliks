@@ -124,15 +124,18 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   }
 
   async destroy(): Promise<void> {
-    try {
-      const s = webapis.avplay.getState();
-      if (s !== 'NONE' && s !== 'IDLE') webapis.avplay.stop();
-    } catch { /* ok */ }
     if (this.orientationHandler) {
       window.removeEventListener('resize', this.orientationHandler);
       this.orientationHandler = null;
     }
+    // Only stop the shared AVPlay surface if this engine still owns it — a
+    // stale engine tearing down after a newer one took over must not stop
+    // the newer engine's playback.
     if (TizenEngine.activeEngine === this) {
+      try {
+        const s = webapis.avplay.getState();
+        if (s !== 'NONE' && s !== 'IDLE') webapis.avplay.stop();
+      } catch { /* ok */ }
       if (this.avObject) this.avObject.style.display = 'none';
       TizenEngine.activeEngine = null;
     }

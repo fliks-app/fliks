@@ -275,6 +275,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Audio tracks from streamInfo for the Cast remote */
   readonly castAudioOptions = computed<CastAudioOption[]>(() => {
+    this.mediaLoadedTick(); // recompute once this.media is populated on load
     const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
     return buildCastAudioOptions(file?.streamInfo?.audio, this.translate);
   });

@@ -390,7 +390,9 @@ export class CastPlayerService {
     const mfId = this.mediaFileId();
     if (!mfId) return;
 
-    await this.streamingApi.stopSessions(mfId).catch(() => {});
+    // Scope the stop to the Cast session's own sid so a concurrent local
+    // session on the same file (another profile/device) is not torn down too.
+    await this.streamingApi.stopSessions(mfId, this.liveSessionId() ?? undefined).catch(() => {});
 
     const currentPos = positionOverride ?? this.cast.currentTime();
     const audioIdx = this.activeAudioStreamIndex
