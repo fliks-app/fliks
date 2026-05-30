@@ -970,8 +970,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             const audioSettings = this.playerSettings.get();
             let preferredLang: string | undefined;
             if (audioSettings.rememberAudioSelections && this.mediaId) {
+              // Strip any ":n" ordinal — Shaka pre-picks the variant by
+              // language; autoSelectAudioTrack corrects to the Nth post-load.
               preferredLang =
-                this.playerSettings.getRememberedAudioTrack(this.mediaId) ?? undefined;
+                this.playerSettings.getRememberedAudioTrack(this.mediaId)?.split(':')[0] ??
+                undefined;
             }
             if (!preferredLang && !audioSettings.useDefaultAudioStream) {
               preferredLang = audioSettings.preferredAudioLanguage || undefined;
@@ -2188,17 +2191,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    // si-* tracks are the streamInfo fallback. For HLS, the manifest always
-    // exposes every audio rendition via EXT-X-MEDIA so Shaka switches
-    // client-side — any transient si-* list upgrades to shaka-* as soon as
-    // Shaka fires trackschanged, and the user picks the real track then.
-    // For direct MP4 play, switching audio requires a backend reload with a
-    // new audioStreamIndex. Offline: no backend.
+    // si-* tracks are the streamInfo fallback list shown before the engine
+    // surfaces client-switchable tracks. For HLS the transient si-* list
+    // upgrades to shaka-* once Shaka fires trackschanged, and a shaka-* pick
+    // switches client-side. But a si-* pick means there is no engine-level
+    // track for that rendition yet, so the only way to honour it — in direct,
+    // remux or transcode alike — is a backend reload that marks the new
+    // audioStreamIndex DEFAULT (set above from the si-* index). Offline: no
+    // backend, nothing to reload.
     if (this.isOfflinePlayback) return;
     if (!trackId.startsWith('si-')) return;
-    if (this.playbackMode() === 'direct') {
-      await this.reloadStream();
-    }
+    await this.reloadStream();
   }
 
   async selectSubtitle(sub: SubtitleOption | null) {

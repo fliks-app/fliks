@@ -396,6 +396,12 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
                 reject(new Error(`seek failed: ${err}`));
                 return;
               }
+              // Recover by reloading at the target. Clear the in-flight flag
+              // and drop any seek queued during this failed one first, so the
+              // reload's own seek isn't blocked and a now-stale pending seek
+              // isn't replayed on top of the recovered position.
+              this._seekInFlight = false;
+              this._pendingSeek = null;
               try {
                 await this.load(this._lastLoadedUrl, position);
                 resolve();

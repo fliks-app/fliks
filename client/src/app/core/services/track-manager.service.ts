@@ -52,11 +52,16 @@ export class TrackManagerService {
       !!this.playerSettings.getRememberedAudioTrack(key);
     if (settings.useDefaultAudioStream && !hasSavedSelection) return;
 
-    // Priority 1: remembered selection for this media (saved as language code)
+    // Priority 1: remembered selection for this media (saved as "language" or
+    // "language:ordinal" — see saveAudioSelection). The ordinal picks the Nth
+    // same-language rendition; it falls back to the first if the layout drifted.
     if (settings.rememberAudioSelections) {
-      const savedLang = this.playerSettings.getRememberedAudioTrack(key);
-      if (savedLang) {
-        const match = tracks.find((t) => t.language === savedLang);
+      const saved = this.playerSettings.getRememberedAudioTrack(key);
+      if (saved) {
+        const [savedLang, ordStr] = saved.split(':');
+        const ordinal = ordStr ? parseInt(ordStr, 10) : 0;
+        const sameLang = tracks.filter((t) => t.language === savedLang);
+        const match = sameLang[ordinal] ?? sameLang[0];
         if (match && match.id !== activeAudioTrackId) {
           onSelect(match.id);
           return;
@@ -87,8 +92,18 @@ export class TrackManagerService {
     if (!this.playerSettings.get().rememberAudioSelections) return;
     const track = tracks.find((t) => t.id === trackId);
     const lang = track?.language ?? trackId;
+    // Disambiguate multiple same-language renditions (e.g. 5.1 vs stereo) by
+    // their ordinal among same-language tracks — language alone can never reach
+    // the 2nd one. Reproducible across episodes when the audio layout is
+    // consistent. The ":n" suffix is only added past the first, so single-track
+    // languages stay a plain code; the language-keyed pre-load paths strip it.
+    const sameLang = tracks.filter((t) => (t.language ?? '') === lang);
+    const ordinal = sameLang.findIndex((t) => t.id === trackId);
     const key = mediaId;
-    this.playerSettings.saveRememberedAudioTrack(key, lang);
+    this.playerSettings.saveRememberedAudioTrack(
+      key,
+      ordinal > 0 ? `${lang}:${ordinal}` : lang,
+    );
   }
 
   /** Save subtitle selection for this media. Pass null = user explicitly disabled.

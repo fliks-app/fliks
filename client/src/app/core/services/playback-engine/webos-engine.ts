@@ -215,9 +215,13 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
       try {
         // Preferred path: native resume + start-bitrate via mediaOption.
         await this.attachAndPlay(url, start, true);
-      } catch {
-        // Firmware rejected the mediaOption schema — plain src still plays;
-        // resume falls back to a post-load currentTime seek.
+      } catch (e) {
+        // Only a mediaOption *schema* rejection (firmware refusing the
+        // <source type> payload, surfaced as a media error) is worth a plain-src
+        // retry — plain src still plays, with resume via a post-load seek. A
+        // load timeout means the stream itself is slow; retrying would just burn
+        // another 30s (60s total), so surface it instead of falling back.
+        if (e instanceof Error && e.name === 'WebOsLoadTimeout') throw e;
         await this.attachAndPlay(url, start, false);
       }
     } finally {
@@ -235,7 +239,13 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     return new Promise<void>((resolve, reject) => {
       let settled = false;
       const timer = setTimeout(
-        () => finish(() => reject(new Error('webOS <video> load timeout (30s)'))),
+        () => finish(() => {
+          // Tagged so loadInternal can tell a slow-stream timeout (don't retry)
+          // from a mediaOption schema rejection (fall back to plain src).
+          const e = new Error('webOS <video> load timeout (30s)');
+          e.name = 'WebOsLoadTimeout';
+          reject(e);
+        }),
         30000,
       );
       const finish = (fn: () => void) => {
