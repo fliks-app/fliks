@@ -741,9 +741,9 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         // `AVPlayerLayer.isReadyForDisplay` is the canonical signal that
         // the layer has decoded + composited a frame to the surface;
         // mirrors ExoPlayer's `onRenderedFirstFrame` on Android.
-        // `initial: .new` fires once synchronously, so we gate on
-        // `firstFrameEmitted` to skip the pre-load `false` value and emit
-        // only on the actual flip to `true`.
+        // KVO fires on every `isReadyForDisplay` transition; the
+        // `firstFrameEmitted` flag makes the emit one-shot, dropping the
+        // `false` values and any later re-ready toggles across re-buffers.
         if let layer = playerLayer {
             firstFrameObserver = layer.observe(\.isReadyForDisplay, options: [.new]) { [weak self] layer, _ in
                 guard let self = self, layer.isReadyForDisplay, !self.firstFrameEmitted else { return }
@@ -778,8 +778,10 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
               let log = item.errorLog(),
               let entry = log.events.last else { return }
         let msg = "[\(entry.errorDomain) \(entry.errorStatusCode)] \(entry.errorComment ?? "—") uri=\(entry.uri ?? "—")"
-        // Dump to JS console so it shows up in Safari Web Inspector / app
-        // log, AND emit as a soft error event for the UI to surface.
+        // Dump to the JS console (Safari Web Inspector / app log) only.
+        // These entries fire on recoverable per-segment network / codec
+        // hiccups, so they are deliberately not raised as a UI error
+        // event — only the terminal `.status == .failed` path does that.
         let escaped = msg.replacingOccurrences(of: "'", with: "\\'")
         let js = "console.warn('[NativePlayer] errorLog:', '\(escaped)');"
         DispatchQueue.main.async { [weak self] in
