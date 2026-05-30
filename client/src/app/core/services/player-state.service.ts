@@ -95,7 +95,13 @@ export class PlayerStateService {
         this.buffering.set(true);
         return;
       }
-      this.error.set(e.message);
+      // Prefer the engine's i18n key (Tizen/webOS surface platform strings);
+      // fall back to the raw message, then a generic translated error.
+      this.error.set(
+        e.errorKey
+          ? this.translate.instant(e.errorKey)
+          : e.message || this.translate.instant('player.playback_error'),
+      );
     });
   }
 

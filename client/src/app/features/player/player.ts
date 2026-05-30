@@ -889,23 +889,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           });
           await this.engine!.load(tizenUrl, startTime, tizenMimeType, headers);
 
-          // Subtitles loaded — expose to the picker. The full auto-pick
-          // path (remembered selection, language match, forced subs) is
-          // shared with native/Shaka further down, via `autoSelectSubtitle`.
+          // Subtitles loaded — expose to the picker. The full auto-pick path
+          // (remembered selection, language match, forced subs) runs once for
+          // all engines further down via the shared `autoSelectSubtitle`, so we
+          // don't pre-select here (that earlier pass was a redundant, less
+          // complete duplicate — it skipped visibility / burn-in handling).
           const subs = await tvSubsPromise;
           this.availableSubtitles.set(subs);
-          await this.trackManager.autoSelectSubtitle(
-            subs,
-            this.availableAudioTracks(),
-            this.activeAudioTrackId(),
-            this.mediaFileId,
-            async (sub) => {
-              if (!sub) return;
-              this.engine!.selectTextTrack(sub);
-              this.activeSubtitleId.set(sub.id);
-            },
-            this.mediaId,
-          );
         } else if (this.isNative) {
           // Start subtitle fetch in parallel with native engine creation so
           // the network round-trip doesn't block ExoPlayer's init.

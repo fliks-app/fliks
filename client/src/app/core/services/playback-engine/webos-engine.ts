@@ -169,7 +169,11 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
         this.emit('sessionExpired', undefined);
         return;
       }
-      this.emit('error', { code: err?.code ?? -1, message: mediaErrorMessage(err) });
+      this.emit('error', {
+        code: err?.code ?? -1,
+        message: mediaErrorMessage(err),
+        errorKey: mediaErrorKey(err),
+      });
       this.emit('stateChanged', { state: 'error' });
     });
 
@@ -508,4 +512,15 @@ function mediaErrorMessage(err: MediaError | null): string {
     4: 'MEDIA_ERR_SRC_NOT_SUPPORTED',
   };
   return err.message || names[err.code] || 'webOS playback error (' + err.code + ')';
+}
+
+/** Map a numeric MediaError code to a translated i18n key for the overlay. */
+function mediaErrorKey(err: MediaError | null): string {
+  const keys: Record<number, string> = {
+    1: 'player.error_aborted',
+    2: 'player.error_network',
+    3: 'player.error_decode',
+    4: 'player.error_unsupported',
+  };
+  return (err && keys[err.code]) || 'player.playback_error';
 }
