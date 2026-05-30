@@ -206,6 +206,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private seekDragging = false;
   private statsInterval: ReturnType<typeof setInterval> | null = null;
   private subtitleStyleEl: HTMLStyleElement | null = null;
+  /** Stall watchdog: last position we saw the playhead at, and when. If the
+   *  playhead doesn't advance for {@link stallTimeoutMs} while the player is
+   *  meant to be playing (a silent transcode death or a wedged buffer), we
+   *  treat it like a lost session and reload at the current position. */
+  private lastProgressPos = 0;
+  private lastProgressAt = 0;
+  private readonly stallTimeoutMs = 15_000;
 
   // ── Template-facing signal aliases (delegate to services) ──
   readonly loading = this.state.loading;
@@ -1052,6 +1059,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       // Save position every 10s + immediately on seek
       this.saveInterval = setInterval(() => this.savePosition(), 10_000);
+      this.resetStallWatchdog();
       const video = this.videoEl()?.nativeElement;
       if (video) video.addEventListener('seeked', this.onSeeked);
 
@@ -1061,6 +1069,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       // Update stats every second
       this.statsInterval = setInterval(() => {
+        this.checkStall();
         const stats = this.engine?.getStats();
         const variant = stats?.activeVariant;
         if (variant?.height) {
@@ -1160,6 +1169,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.saveInterval) clearInterval(this.saveInterval);
     if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
     if (this.statsInterval) clearInterval(this.statsInterval);
+    if (this.recoverRetryTimer) clearTimeout(this.recoverRetryTimer);
     if (this.adminMessageTimer) clearTimeout(this.adminMessageTimer);
     document.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('beforeunload', this.onBeforeUnload);
@@ -1876,6 +1886,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    * surface `sessionLost: true` in the interval.
    */
   private recoveringFromLostSession = false;
+  /** Failed recovery attempts in the current loss episode. Reset to 0 on a
+   *  successful reload; once it reaches {@link maxRecoverAttempts} we stop
+   *  retrying and surface a terminal error instead of reloading forever. */
+  private recoverAttempts = 0;
+  private readonly maxRecoverAttempts = 3;
+  /** Pending backoff retry between failed recovery attempts (2s → 4s). */
+  private recoverRetryTimer: ReturnType<typeof setTimeout> | null = null;
   /** Set in ngOnDestroy. Blocks any late async (heartbeat sessionLost,
    *  sessionExpired event, Cast resume) from reloading the engine after the
    *  player has been torn down — otherwise a fresh native player relaunches
@@ -1891,20 +1908,63 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    */
   private wireSessionExpiredRecovery(engine: PlaybackEngine): void {
     engine.on('sessionExpired', () => {
-      void this.recoverFromLostSession(true);
+      void this.recoverFromLostSession();
     });
+  }
+
+  /** Re-baseline the stall watchdog so the next {@link stallTimeoutMs} window
+   *  starts from the current playhead. Called after load, after a seek, and
+   *  after a successful recovery — anywhere the playhead legitimately jumps. */
+  private resetStallWatchdog(): void {
+    this.lastProgressPos = this.engine?.currentTime ?? 0;
+    this.lastProgressAt = Date.now();
+  }
+
+  /** Ticked once a second from the stats interval. Detects a frozen playhead
+   *  during intended playback and routes it through the same recovery as a
+   *  lost session (re-mint sid + reload at position). */
+  private checkStall(): void {
+    if (this.destroyed || !this.engine) return;
+    if (this.castService.isConnected()) return;
+    // Not trying to play, or not playing yet → no stall to detect; keep the
+    // baseline fresh so resuming/finishing-load doesn't trip the timer.
+    if (this.paused() || this.state.loading() || this.recoveringFromLostSession) {
+      this.resetStallWatchdog();
+      return;
+    }
+    const pos = this.engine.currentTime;
+    const dur = this.engine.duration;
+    if (dur && pos >= dur - 1) {
+      this.resetStallWatchdog();
+      return;
+    }
+    // Any meaningful move (forward play or a seek in either direction) counts
+    // as progress and rearms the window.
+    if (Math.abs(pos - this.lastProgressPos) > 0.25) {
+      this.lastProgressPos = pos;
+      this.lastProgressAt = Date.now();
+      return;
+    }
+    if (Date.now() - this.lastProgressAt >= this.stallTimeoutMs) {
+      this.resetStallWatchdog();
+      void this.recoverFromLostSession();
+    }
   }
 
   /**
    * The carried `sid` is no longer known to the backend (restart or
-   * GC after a long idle). Mint a fresh LiveSession via playback-info
-   * and reload the engine's stream URL with the new sid at the
-   * current position. Cast playbacks are skipped — the cast receiver
-   * owns its own session lifecycle.
+   * GC after a long idle), or the playhead wedged (stall watchdog). Mint
+   * a fresh LiveSession via playback-info and reload the engine's stream
+   * URL with the new sid at the current position. Retries with backoff
+   * (2s → 4s) and surfaces a terminal error after {@link maxRecoverAttempts}
+   * failures rather than reloading forever. Cast playbacks are skipped —
+   * the cast receiver owns its own session lifecycle.
    */
-  private async recoverFromLostSession(surfaceErrorOnFailure = false): Promise<void> {
+  private async recoverFromLostSession(): Promise<void> {
     if (this.destroyed) return;
     if (this.recoveringFromLostSession) return;
+    if (this.recoverRetryTimer) return; // a backoff retry is already queued
+    if (this.recoverAttempts >= this.maxRecoverAttempts) return; // gave up
     if (this.castService.isConnected()) return;
     if (!this.engine || !this.mediaFileId) return;
     this.recoveringFromLostSession = true;
@@ -1922,16 +1982,25 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         preservePause: true,
         unmute: false,
       });
+      this.recoverAttempts = 0;
+      this.resetStallWatchdog();
+      this.state.setRecovering(false);
     } catch {
-      // The heartbeat path retries on its next tick; the event (sessionExpired)
-      // path has no retry, so surface a terminal error there instead of
-      // latching the recovery spinner forever.
-      if (surfaceErrorOnFailure) {
+      this.recoverAttempts += 1;
+      if (this.recoverAttempts >= this.maxRecoverAttempts) {
+        this.state.setRecovering(false);
         this.state.error.set(this.translate.instant('player.playback_error'));
+      } else {
+        // Hold the recovering veil up across the backoff so the user sees a
+        // reconnect, not a flash of the fatal overlay between attempts.
+        const backoff = 2_000 * 2 ** (this.recoverAttempts - 1); // 2s, 4s
+        this.recoverRetryTimer = setTimeout(() => {
+          this.recoverRetryTimer = null;
+          void this.recoverFromLostSession();
+        }, backoff);
       }
     } finally {
       this.recoveringFromLostSession = false;
-      this.state.setRecovering(false);
     }
   }
 
@@ -2253,7 +2322,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // Bound DOM handlers kept as stable references so ngOnDestroy can remove
   // them — inline closures would pin this route-scoped component per session.
-  private onSeeked = () => this.savePosition();
+  private onSeeked = () => {
+    this.resetStallWatchdog();
+    this.savePosition();
+  };
   private onVideoVolumeChange = () => {
     const v = this.videoEl()?.nativeElement;
     if (v) this.state.volume.set(v.muted ? 0 : v.volume);
