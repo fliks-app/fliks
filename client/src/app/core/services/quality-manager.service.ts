@@ -1,4 +1,5 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
+import { TranslateService } from '@ngx-translate/core';
 import type { PlaybackEngine } from './playback-engine/playback-engine';
 import { bucketResolutionLabel, widthForProfile } from '../utils/player.utils';
 
@@ -47,6 +48,7 @@ export function findBestVariantForHeight(tracks: any[], targetHeight: number): a
 
 @Injectable({ providedIn: 'root' })
 export class QualityManagerService {
+  private readonly translate = inject(TranslateService);
   readonly activeQualityId = signal('auto');
   readonly availableQualities = signal<QualityOption[]>([]);
   readonly activeResolution = signal('');
@@ -63,7 +65,7 @@ export class QualityManagerService {
     qualities?: { id: string; label: string; height: number; lowBandwidth?: boolean }[];
   }): void {
     const options: QualityOption[] = [
-      { id: 'auto', label: 'Auto', height: 0 },
+      { id: 'auto', label: this.translate.instant('player.auto'), height: 0 },
     ];
     for (const q of playbackInfo.qualities ?? []) {
       options.push({
