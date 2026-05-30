@@ -18,10 +18,7 @@ import { EventsService } from '../scheduler/events.service';
 import { Command } from '../scheduler/entities/command.entity';
 import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
-import type {
-  SubtitleRenditionMeta,
-  UnifiedSubtitleTrack,
-} from './transcoding/types';
+import type { SubtitleRenditionMeta } from './transcoding/types';
 
 const execFileAsync = promisify(execFile);
 
@@ -130,115 +127,53 @@ export class SubtitleStreamService {
   }
 
   /**
-   * Single ordered source of truth for a file's subtitle tracks, consumed by
-   * both the picker (via the API) and the HLS `SUBTITLES` group (via
-   * {@link listTextSubtitleRenditions}). Order is embedded-then-external,
-   * matching the manifest. Each track gets a unique `name` that doubles as the
-   * native selection key (manifest NAME → AVPlayer displayName / ExoPlayer
-   * Format.label), so a picked track resolves to the exact rendition even when
-   * several share a `(language, forced)`. Embedded entries are merged with
-   * their `providerType='embedded'` DB row (by streamIndex) so they carry the
-   * `subtitleDbId` the burn-in / management paths need.
-   */
-  async listSubtitleTracks(
-    mediaFileId: number,
-  ): Promise<UnifiedSubtitleTrack[]> {
-    const resolved = await this.streamingService.resolveFile(mediaFileId);
-
-    // All SubtitleFile rows for the file (embedded providerType rows carry the
-    // db id for a streamIndex; external rows carry relativePath). The
-    // `mediaFileId` column is a @RelationId (virtual), so query via the
-    // relation. Isolated so a query failure never drops the embedded subs.
-    let rows: SubtitleFile[] = [];
-    try {
-      rows = await this.subtitleFileRepo.find({
-        where: { mediaFile: { id: mediaFileId } },
-      });
-    } catch (e) {
-      this.log.warn(
-        `listSubtitleTracks: subtitle_files query failed for #${mediaFileId}: ${e instanceof Error ? e.message : e}`,
-      );
-    }
-    const embeddedDbByIndex = new Map<number, SubtitleFile>();
-    for (const sf of rows) {
-      if (!sf.relativePath && sf.streamIndex != null) {
-        embeddedDbByIndex.set(sf.streamIndex, sf);
-      }
-    }
-
-    const out: UnifiedSubtitleTrack[] = [];
-    // 1) Embedded streams from cached streamInfo — authoritative for stream
-    //    order, codec and image-based detection.
-    for (const s of resolved.mediaFile.streamInfo?.subtitles ?? []) {
-      const dbRow = embeddedDbByIndex.get(s.streamIndex);
-      out.push({
-        stableId: `emb-${s.streamIndex}`,
-        key: s.streamIndex,
-        name: s.title || normalizeLanguageCode(s.language) || 'Subtitle',
-        language: normalizeLanguageCode(s.language),
-        forced: !!s.forced,
-        hearingImpaired: !!s.hearingImpaired,
-        codec: s.codec ?? null,
-        isImageBased: !!s.isImageBased,
-        subtitleDbId: dbRow?.id ?? null,
-        kind: 'embedded',
-      });
-    }
-    // 2) External subtitle files on disk.
-    for (const sf of rows) {
-      if (!sf.relativePath) continue;
-      out.push({
-        stableId: `ext-${sf.id}`,
-        key: sf.id,
-        name: sf.language || 'Subtitle',
-        language: normalizeLanguageCode(sf.language),
-        forced: !!sf.forced,
-        hearingImpaired: !!sf.hearingImpaired,
-        codec: sf.codec ?? null,
-        isImageBased: false,
-        subtitleDbId: sf.id,
-        kind: 'external',
-      });
-    }
-
-    this.uniquifySubtitleNames(out);
-    return out;
-  }
-
-  /**
-   * Make each track's `name` unique in place (`Foo`, `Foo (2)`, `Foo (3)`),
-   * deterministically by list order, so the manifest NAME the native player
-   * reports back is an unambiguous selection key. The manifest emits these
-   * names verbatim.
-   */
-  private uniquifySubtitleNames(tracks: UnifiedSubtitleTrack[]): void {
-    const counts = new Map<string, number>();
-    for (const t of tracks) {
-      const seen = counts.get(t.name) ?? 0;
-      counts.set(t.name, seen + 1);
-      if (seen > 0) t.name = `${t.name} (${seen + 1})`;
-    }
-  }
-
-  /**
-   * Text subtitle tracks for the HLS master's `SUBTITLES` group — a thin
-   * projection of {@link listSubtitleTracks} that drops image-based (bitmap)
-   * subtitles, which have no WebVTT form and stay on the burn-in path. `key`
-   * feeds the existing VTT endpoints (`subtitles/embedded/:idx`, `subtitles/:id`).
+   * Text subtitle tracks for the HLS master's `SUBTITLES` group: embedded
+   * non-bitmap streams (from cached `streamInfo`) then external files. Bitmap
+   * subtitles (PGS/DVD/DVB) are excluded — they have no WebVTT form and stay on
+   * the burn-in path. `key` feeds the VTT endpoints (`subtitles/embedded/:idx`,
+   * `subtitles/:id`); `name` carries the stable id (`emb-<streamIndex>` /
+   * `ext-<dbId>`), which equals the client's SubtitleOption.id. The native
+   * player round-trips that NAME via displayName / Format.label, so the engine
+   * selects the exact rendition — even among several same-(language, forced).
    */
   async listTextSubtitleRenditions(
     mediaFileId: number,
   ): Promise<SubtitleRenditionMeta[]> {
-    const tracks = await this.listSubtitleTracks(mediaFileId);
-    return tracks
-      .filter((t) => !t.isImageBased)
-      .map((t) => ({
-        kind: t.kind,
-        key: t.key,
-        language: t.language,
-        name: t.name,
-        forced: t.forced,
-      }));
+    const out: SubtitleRenditionMeta[] = [];
+    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    for (const s of resolved.mediaFile.streamInfo?.subtitles ?? []) {
+      if (s.isImageBased) continue;
+      out.push({
+        kind: 'embedded',
+        key: s.streamIndex,
+        language: normalizeLanguageCode(s.language),
+        name: `emb-${s.streamIndex}`,
+        forced: s.forced,
+      });
+    }
+    // External subtitle files. Query through the relation — `mediaFileId` on
+    // SubtitleFile is a @RelationId (virtual), which TypeORM rejects in a
+    // `where`. Isolated so a query failure can never drop the embedded subs.
+    try {
+      const external = await this.subtitleFileRepo.find({
+        where: { mediaFile: { id: mediaFileId } },
+      });
+      for (const sf of external) {
+        if (!sf.relativePath) continue;
+        out.push({
+          kind: 'external',
+          key: sf.id,
+          language: normalizeLanguageCode(sf.language),
+          name: `ext-${sf.id}`,
+          forced: sf.forced,
+        });
+      }
+    } catch (e) {
+      this.log.warn(
+        `listTextSubtitleRenditions: external query failed for #${mediaFileId}: ${e instanceof Error ? e.message : e}`,
+      );
+    }
+    return out;
   }
 
   /**

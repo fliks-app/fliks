@@ -1047,30 +1047,6 @@ export class StreamingController {
   // ---------------------------------------------------------------------------
 
   /** HLS master playlist — lists available quality variants. */
-  /**
-   * The ordered subtitle-track list for the picker — the same source the HLS
-   * SUBTITLES group is projected from, so each entry's `name` is the exact key
-   * the native players report back, letting the client select the precise
-   * track even among same-(language, forced) ones. JWT-authed (class guard);
-   * static metadata, no session gate.
-   */
-  @Get(':mediaFileId/subtitle-tracks.json')
-  async subtitleTracks(
-    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
-    @Res() res: Response,
-  ) {
-    const tracks = await this.subtitleStreamService
-      .listSubtitleTracks(mediaFileId)
-      .catch((e) => {
-        this.log.warn(
-          `subtitle-tracks failed for #${mediaFileId}: ${e instanceof Error ? e.message : e}`,
-        );
-        return [];
-      });
-    res.setHeader('Cache-Control', 'no-store');
-    res.json({ tracks });
-  }
-
   @Get(':mediaFileId/master.m3u8')
   async hlsMaster(
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,

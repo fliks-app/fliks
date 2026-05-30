@@ -178,9 +178,10 @@ export function generateMasterPlaylist(
   const subsAttr = hasSubs ? ',SUBTITLES="subs"' : '';
   const pushSubtitleMedia = (out: string[]): void => {
     if (!hasSubs) return;
-    // `name` is already unique per track (uniquified in listSubtitleTracks) and
-    // is the key the native players report back via displayName/Format.label,
-    // so emit it verbatim — the client matches a picked track by this NAME.
+    // `name` is the rendition's stable id (emb-<idx>/ext-<dbId>, inherently
+    // unique) and is the key the native players report back via displayName /
+    // Format.label, so emit it verbatim — the client matches a picked track by
+    // this NAME (== its SubtitleOption.id).
     subtitleRenditions.forEach((s) => {
       const lang = s.language || 'und';
       const path =
