@@ -79,6 +79,14 @@ export interface DeviceProfile {
    *  side-stepping the probe — at the cost of Dolby pass-through.
    *  Multi-audio Tizen sources stay on fMP4 + var_stream_map. */
   useTsOnSingleAudio?: boolean;
+
+  /** Client consumes HLS `SUBTITLES` renditions from the master playlist
+   *  natively (cues render inside the player pipeline, so they show in
+   *  Picture-in-Picture / AirPlay). When false the backend omits the
+   *  subtitle group and the client renders subtitles itself from a sidecar
+   *  VTT. True for phone/desktop (iOS, Android, web/Shaka); false for TVs,
+   *  whose AVPlay/webOS cue APIs are limited so they keep a DOM overlay. */
+  supportsHlsSubtitles?: boolean;
 }
 
 /** True when `localStorage['fliks.useTs']` is set to a truthy value.
@@ -315,6 +323,12 @@ export class BrowserDeviceProfileService {
       // Cast and native mobile consume muxed fMP4 across the board (webOS's
       // native <video> has no such stall and fMP4 keeps Dolby pass-through).
       useTsOnSingleAudio: tvPlatform === 'tizen',
+      // Phone/desktop clients (iOS AVPlayer, Android ExoPlayer, web Shaka)
+      // consume the master SUBTITLES renditions natively, so cues render
+      // inside the player (PiP / AirPlay / browser PiP). TVs stay false:
+      // they have no PiP and their AVPlay/webOS cue APIs are limited, so the
+      // Tizen/webOS engines keep their DOM overlay (fed by sidecar VTT).
+      supportsHlsSubtitles: !isTv,
     };
   }
 

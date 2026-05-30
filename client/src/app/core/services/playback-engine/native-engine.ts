@@ -1,4 +1,3 @@
-import { Capacitor } from '@capacitor/core';
 import { NativePlayer } from '../../plugins/native-player.plugin';
 import {
   AbstractPlaybackEngine,
@@ -13,12 +12,7 @@ import {
   SUBTITLE_BG_ARGB,
   SUBTITLE_EDGE_KEY,
 } from '../../utils/subtitle-presets';
-
-interface VttCue {
-  start: number;
-  end: number;
-  text: string;
-}
+import { normalizeLangCode } from '../../utils/language.utils';
 
 /**
  * PlaybackEngine implementation backed by the NativePlayer Capacitor plugin
@@ -63,12 +57,23 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
    *  belt-and-suspenders signal. */
   private lastTimeUpdatePos = -1;
 
-  // ── Native subtitle overlay (iOS) ──
-  private readonly _isIos = Capacitor.getPlatform() === 'ios';
-  private _parsedTracks = new Map<string, VttCue[]>();
+  // ── Subtitles ──
+  // Subtitles ship as HLS SUBTITLES renditions in the master playlist; the
+  // native player (AVPlayer legible group / ExoPlayer text tracks) renders
+  // them in its own pipeline so they show in PiP / AirPlay — no app overlay.
+  /** Player's own id ("text-N") of the currently selected track. */
   private _activeTrackId: string | null = null;
-  private _subtitleVisible = false;
-  private _lastCueText = '';
+  /** Desired subtitle (by language/forced), kept until the player surfaces
+   *  its text tracks. The default/saved selection is applied right after
+   *  load() — before ExoPlayer has parsed the manifest's text tracks — so we
+   *  hold the intent and (re)apply it on `nativePlayerTracksChanged`. */
+  private _desiredSubtitle: { language: string; forced: boolean } | null = null;
+  /** Text tracks the player currently reports, refreshed on track changes. */
+  private _nativeSubtitleTracks: {
+    id: string;
+    language: string;
+    label: string;
+  }[] = [];
 
   // ── Lifecycle ──
 
@@ -88,7 +93,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   async destroy(): Promise<void> {
     this._initialized = false;
     this.unbindWindowEvents();
-    this.destroySubtitleOverlay();
+    this._activeTrackId = null;
     // Drop engine event subscribers (every other engine does this in destroy).
     // Without it, each player navigation leaks the previous component's
     // listeners onto the long-lived NativePlayer bridge.
@@ -112,24 +117,22 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     this.firstFrameEmitted = false;
     this.recoveryAttempted = false;
     this.lastTimeUpdatePos = -1;
-    const subtitles = this._preloadedSubtitles.length > 0
-      ? this._preloadedSubtitles
-      : undefined;
-    await NativePlayer.load({ url, startTime, headers, subtitles, offline: this._offline });
+    // Subtitles are delivered as HLS SUBTITLES renditions in the master
+    // playlist, not sidecar SubtitleConfigurations, so the player surfaces
+    // them as native text tracks — nothing to preload here.
+    await NativePlayer.load({ url, startTime, headers, offline: this._offline });
 
     // Apply subtitle style settings
     if (this._subtitleStyle) {
       await NativePlayer.setSubtitleStyle(this._subtitleStyle);
     }
 
-    // Restore the previously-active subtitle selection. ExoPlayer disables
-    // text tracks by default on every new MediaItem, so a silent reload
-    // (session-expired recovery, cast handoff) would otherwise drop the
-    // user's pick and leave the SubtitleView blank. The plugin's
-    // pendingSubtitleTrackId queues this until onTracksChanged fires.
-    if (this._activeTrackId) {
-      NativePlayer.selectSubtitleTrack({ id: this._activeTrackId }).catch(() => {});
-    }
+    // A new MediaItem resurfaces fresh text tracks: drop the stale resolved
+    // id and let the desired selection (kept across a silent reload —
+    // session-expired recovery, cast handoff) re-apply against the new track
+    // list once `nativePlayerTracksChanged` fires.
+    this._activeTrackId = null;
+    this._nativeSubtitleTracks = [];
   }
 
   private _subtitleStyle: {
@@ -248,50 +251,62 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   }
 
   async addTextTrack(
-    url: string,
-    _language: string,
+    _url: string,
+    language: string,
     _label: string,
-  ): Promise<string> {
-    // Find the index of this URL in the preloaded subtitles
-    const idx = this._subtitleUrls.indexOf(url);
-    const trackId = idx >= 0 ? `text-${idx}` : `text-0`;
-
-    // On iOS: fetch and parse WebVTT for HTML overlay rendering
-    if (this._isIos && !this._parsedTracks.has(trackId)) {
-      try {
-        const resp = await fetch(url);
-        const vtt = await resp.text();
-        this._parsedTracks.set(trackId, this.parseVtt(vtt));
-      } catch {
-        this._parsedTracks.set(trackId, []);
-      }
-    }
-
-    return trackId;
+    forced = false,
+  ): Promise<{ language: string; forced: boolean }> {
+    // Subtitles are HLS SUBTITLES renditions; the player surfaces them as
+    // native text tracks. Return the desired track descriptor — actual
+    // selection is resolved by language against the player's reported tracks,
+    // which only appear after the manifest is parsed (see resolveSubtitle).
+    return { language, forced };
   }
 
   selectTextTrack(track: any): void {
-    const id = typeof track === 'string' ? track : null;
-    this._activeTrackId = id;
-    if (this._isIos) {
-      this._subtitleVisible = !!id;
-      this.updateSubtitleOverlay();
-    } else {
+    this._desiredSubtitle =
+      track && typeof track === 'object' && track.language
+        ? { language: track.language, forced: !!track.forced }
+        : null;
+    this.resolveSubtitle();
+  }
+
+  setTextVisibility(visible: boolean): void {
+    if (!visible) {
+      this._desiredSubtitle = null;
+      this._activeTrackId = null;
+      NativePlayer.selectSubtitleTrack({ id: null });
+    }
+  }
+
+  /** Map the desired subtitle (by language) to the player's own track id and
+   *  select it. No-op until the player has surfaced its text tracks — the
+   *  `nativePlayerTracksChanged` handler re-runs this, so a default selection
+   *  applied right after load() takes effect as soon as the tracks are ready
+   *  (fixes "subtitle selected by default but hidden" on ExoPlayer). */
+  private resolveSubtitle(): void {
+    if (!this._desiredSubtitle) return;
+    const want = normalizeLangCode(this._desiredSubtitle.language);
+    const id =
+      this._nativeSubtitleTracks.find(
+        (t) => normalizeLangCode(t.language) === want,
+      )?.id ?? null;
+    if (id && id !== this._activeTrackId) {
+      this._activeTrackId = id;
       NativePlayer.selectSubtitleTrack({ id });
     }
   }
 
-  setTextVisibility(visible: boolean): void {
-    if (this._isIos) {
-      this._subtitleVisible = visible;
-      if (!visible) {
-        this._activeTrackId = null;
-        this.updateSubtitleOverlay();
-      }
-    } else if (!visible) {
-      this._activeTrackId = null;
-      NativePlayer.selectSubtitleTrack({ id: null });
-    }
+  /** Refresh the reported text-track list, then (re)apply the desired
+   *  selection. Queried from the plugin because the Android bridge reports an
+   *  empty subtitle list on the track-change event. */
+  private refreshSubtitleTracks(): void {
+    NativePlayer.getSubtitleTracks()
+      .then(({ tracks }) => {
+        this._nativeSubtitleTracks = tracks ?? [];
+        this.resolveSubtitle();
+      })
+      .catch(() => {});
   }
 
   // ── Stats ──
@@ -350,7 +365,6 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       this._duration = d.duration;
       this._buffered = d.buffered;
       this.emit('timeUpdate', d);
-      this.updateSubtitleOverlay();
       // Fallback for the missing onRenderedFirstFrame case: native only
       // fires nativePlayerTimeUpdate when `player.isPlaying()`, so a
       // position that grows between two updates is a strong signal that
@@ -389,6 +403,9 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       const d = (e as CustomEvent).detail;
       this._audioTracks = d.audioTracks ?? [];
       this.emit('audioTracksChanged', { tracks: this._audioTracks });
+      // Text tracks are now available — refresh them and apply any pending
+      // (default / saved) subtitle selection that raced ahead of load().
+      this.refreshSubtitleTracks();
     });
 
     bind('nativePlayerFirstFrame', () => {
@@ -403,72 +420,5 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       window.removeEventListener(event, fn);
     }
     this.listeners = [];
-  }
-
-  // ── Native Subtitle Overlay (iOS) ──
-
-  private updateSubtitleOverlay(): void {
-    if (!this._isIos) return;
-    if (!this._subtitleVisible || !this._activeTrackId) {
-      if (this._lastCueText) {
-        this._lastCueText = '';
-        NativePlayer.setSubtitleText({ text: '' }).catch(() => {});
-      }
-      return;
-    }
-    const cues = this._parsedTracks.get(this._activeTrackId);
-    if (!cues) return;
-    const t = this._currentTime;
-    const active = cues.find(c => t >= c.start && t <= c.end);
-    const text = active?.text?.replace(/<br>/g, '\n').replace(/<[^>]*>/g, '') ?? '';
-    if (text !== this._lastCueText) {
-      this._lastCueText = text;
-      NativePlayer.setSubtitleText({ text }).catch(() => {});
-    }
-  }
-
-  private destroySubtitleOverlay(): void {
-    if (this._isIos) {
-      NativePlayer.setSubtitleText({ text: '' }).catch(() => {});
-    }
-    this._parsedTracks.clear();
-    this._activeTrackId = null;
-    this._subtitleVisible = false;
-    this._lastCueText = '';
-  }
-
-  private parseVtt(raw: string): VttCue[] {
-    const cues: VttCue[] = [];
-    const blocks = raw.replace(/\r\n/g, '\n').split('\n\n');
-    for (const block of blocks) {
-      const lines = block.trim().split('\n');
-      const timeLine = lines.find(l => l.includes('-->'));
-      if (!timeLine) continue;
-      const [startStr, endStr] = timeLine.split('-->').map(s => s.trim());
-      const start = this.vttTimeToSec(startStr);
-      const end = this.vttTimeToSec(endStr);
-      if (isNaN(start) || isNaN(end)) continue;
-      const textLines = lines.slice(lines.indexOf(timeLine) + 1);
-      const text = textLines.join('<br>').replace(/<\/?[^>]*>/g, (tag) => {
-        // Allow <b>, <i>, <u>, <br> — strip everything else
-        if (/^<\/?(b|i|u|br)\s*\/?>$/i.test(tag)) return tag;
-        return '';
-      });
-      if (text) cues.push({ start, end, text });
-    }
-    return cues;
-  }
-
-  private vttTimeToSec(ts: string): number {
-    // Remove positioning metadata (e.g. "00:01:23.456 align:start")
-    const clean = ts.split(' ')[0];
-    const parts = clean.split(':');
-    if (parts.length === 3) {
-      return +parts[0] * 3600 + +parts[1] * 60 + parseFloat(parts[2]);
-    }
-    if (parts.length === 2) {
-      return +parts[0] * 60 + parseFloat(parts[1]);
-    }
-    return NaN;
   }
 }
