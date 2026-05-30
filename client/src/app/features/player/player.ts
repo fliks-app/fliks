@@ -1060,7 +1060,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Save position every 10s + immediately on seek
       this.saveInterval = setInterval(() => this.savePosition(), 10_000);
       const video = this.videoEl()?.nativeElement;
-      if (video) video.addEventListener('seeked', () => this.savePosition());
+      if (video) video.addEventListener('seeked', this.onSeeked);
 
       // Apply subtitle appearance + load thumbnail sprite metadata
       this.applySubtitleStyle();
@@ -1154,6 +1154,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.engine.destroy().catch(() => {});
     }
     this.removeSubtitleStyle();
+    const video = this.videoEl()?.nativeElement;
+    if (video) {
+      video.removeEventListener('seeked', this.onSeeked);
+      video.removeEventListener('volumechange', this.onVideoVolumeChange);
+    }
+    this.spriteAbort?.abort();
     if (this.saveInterval) clearInterval(this.saveInterval);
     if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
     if (this.statsInterval) clearInterval(this.statsInterval);
@@ -1192,16 +1198,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     });
     this.wireSessionExpiredRecovery(engine);
     // Volume sync for template
-    video.addEventListener('volumechange', () => {
-      this.state.volume.set(video.muted ? 0 : video.volume);
-    });
-    // durationchange fallback: only use if we don't already have a reliable duration
-    video.addEventListener('durationchange', () => {
-      const current = this.state.duration();
-      if (!current && isFinite(video.duration) && video.duration > 0) {
-        this.state.duration.set(video.duration);
-      }
-    });
+    video.addEventListener('volumechange', this.onVideoVolumeChange);
   }
 
   private async createWebOsEngine(): Promise<void> {
@@ -1219,15 +1216,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.videoStarted.set(true);
     });
     this.wireSessionExpiredRecovery(engine);
-    video.addEventListener('volumechange', () => {
-      this.state.volume.set(video.muted ? 0 : video.volume);
-    });
-    video.addEventListener('durationchange', () => {
-      const current = this.state.duration();
-      if (!current && isFinite(video.duration) && video.duration > 0) {
-        this.state.duration.set(video.duration);
-      }
-    });
+    video.addEventListener('volumechange', this.onVideoVolumeChange);
   }
 
   private async createTizenEngine(): Promise<void> {
@@ -2248,6 +2237,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.trackManager.saveSubtitleSelection(this.mediaId, sub.language, sub.forced, sub.id.startsWith('emb-'));
   }
 
+  // Bound DOM handlers kept as stable references so ngOnDestroy can remove
+  // them — inline closures would pin this route-scoped component per session.
+  private onSeeked = () => this.savePosition();
+  private onVideoVolumeChange = () => {
+    const v = this.videoEl()?.nativeElement;
+    if (v) this.state.volume.set(v.muted ? 0 : v.volume);
+  };
+  private spriteAbort?: AbortController;
+
   // ── Keyboard handler ──
 
   private onKeyDown = (e: KeyboardEvent) => {
@@ -2654,15 +2652,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private async loadSpriteMetadata(): Promise<void> {
+    this.spriteAbort = new AbortController();
     try {
       const url = this.streamingApi.getThumbnailMetadataUrl(this.mediaFileId);
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: this.spriteAbort.signal });
       if (!res.ok) return;
       const meta: SpriteMetadata = await res.json();
       this.spriteMetadata.set(meta);
       this.spriteUrl.set(this.streamingApi.getThumbnailSpriteUrl(this.mediaFileId));
     } catch {
-      // Sprite not available, tooltip will show time only
+      // Sprite not available or aborted on teardown — tooltip shows time only
     }
   }
 
