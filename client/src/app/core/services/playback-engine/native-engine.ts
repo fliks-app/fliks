@@ -287,10 +287,14 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   private resolveSubtitle(): void {
     if (!this._desiredSubtitle) return;
     const want = normalizeLangCode(this._desiredSubtitle.language);
+    const tracks = this._nativeSubtitleTracks;
     const id =
-      this._nativeSubtitleTracks.find(
-        (t) => normalizeLangCode(t.language) === want,
-      )?.id ?? null;
+      (tracks.find((t) => normalizeLangCode(t.language) === want) ??
+        // A single advertised text track is unambiguously the one the user
+        // picked — select it even if its language tag came through as und /
+        // non-canonical (some embedded subs carry no usable code). Mirrors
+        // Shaka's first-track fallback so native isn't stricter than web.
+        (tracks.length === 1 ? tracks[0] : undefined))?.id ?? null;
     if (id && id !== this._activeTrackId) {
       this._activeTrackId = id;
       NativePlayer.selectSubtitleTrack({ id });

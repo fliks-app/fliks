@@ -17,6 +17,7 @@ import { StreamingService } from './streaming.service';
 import { EventsService } from '../scheduler/events.service';
 import { Command } from '../scheduler/entities/command.entity';
 import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
+import { normalizeLanguageCode } from '../../common/constants/app-languages';
 import type { SubtitleRenditionMeta } from './transcoding/types';
 
 const execFileAsync = promisify(execFile);
@@ -143,8 +144,11 @@ export class SubtitleStreamService {
       if (s.isImageBased) continue;
       out.push({
         kind: 'embedded',
+        // Embedded streams carry the raw container tag (often ISO 639-2 like
+        // `fre`/`fra`); normalize so the advertised LANGUAGE is the canonical
+        // 2-letter code native players match against.
         key: s.streamIndex,
-        language: s.language,
+        language: normalizeLanguageCode(s.language),
         name: s.title || s.language || 'Subtitle',
         forced: s.forced,
       });
@@ -161,7 +165,7 @@ export class SubtitleStreamService {
         out.push({
           kind: 'external',
           key: sf.id,
-          language: sf.language,
+          language: normalizeLanguageCode(sf.language),
           name: sf.language || 'Subtitle',
           forced: sf.forced,
         });
