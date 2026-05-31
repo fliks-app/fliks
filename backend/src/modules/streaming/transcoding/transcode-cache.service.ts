@@ -47,6 +47,11 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger(TranscodeCacheService.name);
   private readonly entries = new Map<string, CacheEntry>();
   private gcTimer: ReturnType<typeof setInterval> | null = null;
+  /** Returns the cache directories currently backed by a live transcode
+   *  session. GC never evicts a directory an active ffmpeg job is still
+   *  writing to / serving from. Registered by TranscodingService (via
+   *  {@link registerLiveDirProvider}) to avoid a circular import. */
+  private liveDirProvider: (() => Set<string>) | null = null;
 
   private readonly ttlMs = StreamLifetime.cacheTtlMs();
   private readonly maxBytes = StreamLifetime.cacheMaxBytes();
@@ -67,6 +72,22 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
       clearInterval(this.gcTimer);
       this.gcTimer = null;
     }
+  }
+
+  /** Wire the live-session lookup {@link runGc} uses to skip directories an
+   *  active ffmpeg job is still writing to / serving from. */
+  registerLiveDirProvider(provider: () => Set<string>): void {
+    this.liveDirProvider = provider;
+  }
+
+  /** True when `cacheDir` (a profile-level entry dir) holds, or is, a live
+   *  session's directory. Session paths are quality subdirs of the entry dir,
+   *  so a prefix match covers both levels. */
+  private isLiveDir(cacheDir: string, live: Set<string>): boolean {
+    for (const p of live) {
+      if (p === cacheDir || p.startsWith(cacheDir + path.sep)) return true;
+    }
+    return false;
   }
 
   /** Resolve the entry for a (user, file, profile) triple, or null. */
@@ -219,32 +240,29 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Garbage collection pass. Three passes in order:
-   * 1. Drop entries whose on-disk dir has been wiped externally
-   *    (kept in sync with the transcoding service's own cleanup paths).
+   * Garbage collection pass:
+   * 1. Refresh the index from disk so it reflects reality — dirs created
+   *    since boot are seen, current sizes/mtimes are read, and externally
+   *    removed dirs drop out. The in-memory index is otherwise only built at
+   *    boot (the segment-write hooks are not on the ffmpeg path), so without
+   *    this refresh post-boot dirs escape TTL+LRU and the byte total drifts.
    * 2. Evict by TTL.
-   * 3. Evict least-recently-used until total bytes back under cap.
+   * 3. Evict least-recently-used until total bytes are back under the cap.
+   *
+   * Both eviction passes skip any directory a live transcode session is still
+   * writing to / serving from, so GC can never wipe an active playback's cache.
    */
   async runGc(): Promise<void> {
-    const orphans: CacheEntry[] = [];
-    for (const entry of this.entries.values()) {
-      try {
-        await fsp.access(entry.cacheDir);
-      } catch {
-        orphans.push(entry);
-      }
-    }
-    for (const entry of orphans) {
-      this.entries.delete(
-        entryKey(entry.userId, entry.mediaFileId, entry.profileHash),
-      );
-    }
+    await this.rebuildIndex(/* quiet */ true);
 
+    const live = this.liveDirProvider?.() ?? new Set<string>();
     const now = Date.now();
-    const expired: CacheEntry[] = [];
-    for (const entry of this.entries.values()) {
-      if (now - entry.lastAccess > this.ttlMs) expired.push(entry);
-    }
+
+    const expired = [...this.entries.values()].filter(
+      (entry) =>
+        !this.isLiveDir(entry.cacheDir, live) &&
+        now - entry.lastAccess > this.ttlMs,
+    );
     for (const entry of expired) {
       await this.evict(entry);
     }
@@ -252,9 +270,9 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
     let total = this.totalBytes();
     if (total <= this.maxBytes) return;
 
-    const lru = [...this.entries.values()].sort(
-      (a, b) => a.lastAccess - b.lastAccess,
-    );
+    const lru = [...this.entries.values()]
+      .filter((entry) => !this.isLiveDir(entry.cacheDir, live))
+      .sort((a, b) => a.lastAccess - b.lastAccess);
     for (const entry of lru) {
       if (total <= this.maxBytes) break;
       total -= entry.totalBytes;
@@ -327,13 +345,30 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
     return entry;
   }
 
-  private async rebuildIndex(): Promise<void> {
+  private async rebuildIndex(quiet = false): Promise<void> {
+    const scanned = await this.scanIndexFromDisk();
+    // Atomic swap: the clear + set loop is synchronous, so a concurrent
+    // lookup() sees either the old index or the fully-rebuilt one, never a
+    // half-populated map mid-scan.
     this.entries.clear();
+    for (const [key, entry] of scanned) this.entries.set(key, entry);
+
+    if (!quiet && this.entries.size > 0) {
+      this.log.log(
+        `[disk] indexed ${this.entries.size} cache entr${this.entries.size === 1 ? 'y' : 'ies'} (${formatBytes(this.totalBytes())})`,
+      );
+    }
+  }
+
+  /** Walk the cache root and build a fresh index map from disk. Pure — does
+   *  not mutate {@link entries}; the caller swaps it in. */
+  private async scanIndexFromDisk(): Promise<Map<string, CacheEntry>> {
+    const result = new Map<string, CacheEntry>();
     let userDirs: string[];
     try {
       userDirs = await fsp.readdir(CACHE_LAYOUT_ROOT);
     } catch {
-      return;
+      return result;
     }
 
     for (const userDir of userDirs) {
@@ -365,17 +400,12 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
             cacheDir,
           );
           if (entry) {
-            this.entries.set(entryKey(userId, mediaFileId, profileHash), entry);
+            result.set(entryKey(userId, mediaFileId, profileHash), entry);
           }
         }
       }
     }
-
-    if (this.entries.size > 0) {
-      this.log.log(
-        `[disk] indexed ${this.entries.size} cache entr${this.entries.size === 1 ? 'y' : 'ies'} (${formatBytes(this.totalBytes())})`,
-      );
-    }
+    return result;
   }
 
   private async indexEntry(

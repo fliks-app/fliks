@@ -197,19 +197,24 @@ describe('streaming lifecycle — LiveSessionRegistry × TranscodeCacheService',
     await writeSegment(cache, ALICE.userId, 2, PROFILE, '1080p', 0, 1000);
     await writeSegment(cache, ALICE.userId, 3, PROFILE, '1080p', 0, 1000);
 
-    const fresh = cache.lookup(ALICE.userId, 1, PROFILE)!;
     const stale1 = cache.lookup(ALICE.userId, 2, PROFILE)!;
     const stale2 = cache.lookup(ALICE.userId, 3, PROFILE)!;
 
-    // 1080p TTL window is 4 h; push two of the three past it.
-    const FIVE_HOURS_AGO = Date.now() - 5 * 60 * 60 * 1000;
-    stale1.lastAccess = FIVE_HOURS_AGO;
-    stale2.lastAccess = FIVE_HOURS_AGO;
+    // GC derives lastAccess from the newest file mtime; push two of the three
+    // segment files past the 4 h 1080p TTL. (The fresh one keeps its mtime.)
+    const fiveHoursAgo = new Date(Date.now() - 5 * 60 * 60 * 1000);
+    for (const fid of [2, 3]) {
+      const seg = path.join(
+        cache.cachePathFor(ALICE.userId, fid, PROFILE, '1080p'),
+        'seg-0000.m4s',
+      );
+      await fsp.utimes(seg, fiveHoursAgo, fiveHoursAgo);
+    }
 
     await cache.runGc();
 
     expect(cache.size()).toBe(1);
-    expect(cache.lookup(ALICE.userId, 1, PROFILE)).toBe(fresh);
+    expect(cache.lookup(ALICE.userId, 1, PROFILE)).not.toBeNull();
     expect(cache.lookup(ALICE.userId, 2, PROFILE)).toBeNull();
     expect(cache.lookup(ALICE.userId, 3, PROFILE)).toBeNull();
     await expect(fsp.access(stale1.cacheDir)).rejects.toBeDefined();
