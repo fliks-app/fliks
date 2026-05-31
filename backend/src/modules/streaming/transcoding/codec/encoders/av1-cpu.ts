@@ -1,6 +1,7 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { av1CodecString } from '../codec-strings';
 import { hdrColorArgs } from './helpers/hdr-variants';
+import { masterDisplayString, maxCllString } from './helpers/hdr-metadata';
 import { scaleMod16Height } from './helpers/scale-filter';
 
 /** Maps a named ffmpeg preset onto the SVT-AV1 integer preset namespace
@@ -113,7 +114,7 @@ export const av1CpuHdr10: EncoderDescriptor = {
       '-bufsize',
       bufsize,
       '-svtav1-params',
-      'enable-hdr=1:mastering-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1):content-light=1000,400',
+      `enable-hdr=1:mastering-display=${masterDisplayString(input.hdrMetadata)}:content-light=${maxCllString(input.hdrMetadata)}`,
       '-vf',
       `${filters.cpuCropPrefix}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p10le${filters.burnInFilter}`,
       '-g',

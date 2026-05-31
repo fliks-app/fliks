@@ -47,6 +47,11 @@ export interface VideoStreamInfo {
   colorTransfer?: string;
   colorPrimaries?: string;
   hdrFormat?: HdrFormat;
+  /** Source HDR10 static metadata (SMPTE ST 2086 mastering display + CTA-861.3
+   *  content light), probed via frame side-data for HDR10 sources. Drives the
+   *  encoder's master-display / max-cll so the display tonemaps to the source's
+   *  real peak luminance instead of a generic 1000-nit reference. */
+  hdrMetadata?: { masteringDisplay: string; maxCll: number; maxFall: number };
   crop?: CropInfo;
 }
 
@@ -158,6 +163,74 @@ function resolveStreamLanguage(s: {
   const explicit = tag(s.tags, 'language');
   if (explicit && explicit.toLowerCase() !== 'und') return explicit;
   return inferLanguageCodeFromTitle(tag(s.tags, 'title')) ?? 'und';
+}
+
+export interface HdrStaticMetadataDto {
+  masteringDisplay: string;
+  maxCll: number;
+  maxFall: number;
+}
+
+/** Scale an ffprobe metadata value to its integer SEI unit. ffprobe emits
+ *  rationals (`"13250/50000"`) on modern builds and bare decimals on older
+ *  ones; both resolve to the same scaled integer. Returns null when unparseable
+ *  so the caller can drop incomplete metadata rather than emit garbage. */
+function scaleMetaValue(
+  raw: string | number | undefined,
+  unit: number,
+): number | null {
+  if (raw == null) return null;
+  if (typeof raw === 'number') return Math.round(raw * unit);
+  const [n, d] = raw.split('/');
+  const num = Number(n);
+  const den = d != null ? Number(d) : 1;
+  if (!Number.isFinite(num) || !Number.isFinite(den) || den === 0) return null;
+  return Math.round((num / den) * unit);
+}
+
+/**
+ * Parse ffprobe frame `side_data_list` into HDR10 static metadata. Builds the
+ * `G()B()R()WP()L()` mastering-display string (coordinates in 0.00002 units,
+ * luminance in 0.0001 cd/m²) plus MaxCLL/MaxFALL. Returns null when no
+ * mastering-display side-data is present (HLG, SDR, or HDR10 without metadata)
+ * or when it is incomplete.
+ */
+export function parseHdrStaticMetadata(
+  sideDataList: unknown[] | undefined,
+): HdrStaticMetadataDto | null {
+  if (!Array.isArray(sideDataList)) return null;
+  const typeOf = (d: unknown): string =>
+    String((d as { side_data_type?: unknown })?.side_data_type ?? '');
+  const md = sideDataList.find((d) => /mastering display/i.test(typeOf(d))) as
+    | Record<string, string | number>
+    | undefined;
+  if (!md) return null;
+  const cl = sideDataList.find((d) => /content light/i.test(typeOf(d))) as
+    | Record<string, string | number>
+    | undefined;
+
+  const gx = scaleMetaValue(md.green_x, 50000);
+  const gy = scaleMetaValue(md.green_y, 50000);
+  const bx = scaleMetaValue(md.blue_x, 50000);
+  const by = scaleMetaValue(md.blue_y, 50000);
+  const rx = scaleMetaValue(md.red_x, 50000);
+  const ry = scaleMetaValue(md.red_y, 50000);
+  const wx = scaleMetaValue(md.white_point_x, 50000);
+  const wy = scaleMetaValue(md.white_point_y, 50000);
+  const maxL = scaleMetaValue(md.max_luminance, 10000);
+  const minL = scaleMetaValue(md.min_luminance, 10000);
+  if ([gx, gy, bx, by, rx, ry, wx, wy, maxL, minL].some((v) => v == null)) {
+    return null;
+  }
+
+  const masteringDisplay = `G(${gx},${gy})B(${bx},${by})R(${rx},${ry})WP(${wx},${wy})L(${maxL},${minL})`;
+  const maxCll = cl?.max_content != null ? Number(cl.max_content) : 0;
+  const maxFall = cl?.max_average != null ? Number(cl.max_average) : 0;
+  return {
+    masteringDisplay,
+    maxCll: Number.isFinite(maxCll) ? maxCll : 0,
+    maxFall: Number.isFinite(maxFall) ? maxFall : 0,
+  };
 }
 
 @Injectable()
@@ -291,6 +364,15 @@ export class FfprobeService {
           hdrFormat: this.deriveHdrFormat(s.color_transfer, s.color_primaries),
         }));
 
+      // HDR10 sources: probe the first frame's side-data for mastering-display
+      // + content-light so the encoder signals the source's real peak luminance
+      // instead of a generic 1000-nit reference. Gated to HDR10 (one extra
+      // frame-decoding ffprobe pass); SDR / HLG imports skip it.
+      if (video[0]?.hdrFormat === 'HDR10') {
+        const meta = await this.probeHdrStaticMetadata(videoPath);
+        if (meta) video[0].hdrMetadata = meta;
+      }
+
       const audio: AudioStreamInfo[] = streams
         .filter((s) => s.codec_type === 'audio')
         .map((s) => ({
@@ -370,6 +452,42 @@ export class FfprobeService {
     if (colorTransfer === 'smpte2084' && isBt2020) return 'HDR10';
     if (colorTransfer === 'arib-std-b67' && isBt2020) return 'HLG';
     return undefined;
+  }
+
+  /** Probe the first video frame's side-data for HDR10 static metadata
+   *  (mastering display + content light). Gated to HDR10 sources by the caller
+   *  so non-HDR imports skip the extra (frame-decoding) ffprobe pass. Returns
+   *  null when the source carries no such metadata. */
+  private async probeHdrStaticMetadata(
+    videoPath: string,
+  ): Promise<HdrStaticMetadataDto | null> {
+    try {
+      const { stdout } = await execFileAsync(
+        'ffprobe',
+        [
+          '-v',
+          'error',
+          '-print_format',
+          'json',
+          '-select_streams',
+          'v:0',
+          '-read_intervals',
+          '%+#1',
+          '-show_frames',
+          '-show_entries',
+          'frame=side_data_list',
+          videoPath,
+        ],
+        { timeout: 15_000 },
+      );
+      const frames = (JSON.parse(stdout) as { frames?: { side_data_list?: unknown[] }[] }).frames;
+      return parseHdrStaticMetadata(frames?.[0]?.side_data_list);
+    } catch (err) {
+      this.logger.warn(
+        `HDR static-metadata probe failed for "${videoPath}": ${(err as Error).message}`,
+      );
+      return null;
+    }
   }
 
   private parseFrameRate(rate?: string): string | undefined {

@@ -837,6 +837,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           sourceBitDepth: ctx?.isSourceHdr ? 10 : 8,
           sourceWidth: ctx?.sourceWidth,
           sourceHeight: ctx?.sourceHeight,
+          sourceHdrMetadata: ctx?.hdrMetadata,
         },
         this.log,
       );
@@ -1146,6 +1147,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         sourceBitDepth: ctx?.isSourceHdr ? 10 : 8,
         sourceWidth: ctx?.sourceWidth,
         sourceHeight: ctx?.sourceHeight,
+        sourceHdrMetadata: ctx?.hdrMetadata,
       },
       this.log,
     );

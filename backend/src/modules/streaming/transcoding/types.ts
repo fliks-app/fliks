@@ -198,6 +198,10 @@ export interface SessionContext {
    * contradict the master playlist's CODECS string.
    */
   videoVariant?: import('./codec/types').CodecVariant;
+  /** Source HDR10 static metadata, threaded from the probed streamInfo so the
+   *  encoder signals the source's real mastering display / content light
+   *  instead of a generic 1000-nit reference. */
+  hdrMetadata?: import('./codec/types').HdrStaticMetadata;
 }
 
 export interface TranscodeSession {

@@ -1,6 +1,7 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
 import { hdrColorArgs } from './helpers/hdr-variants';
+import { masterDisplayString, maxCllString } from './helpers/hdr-metadata';
 import { scaleMod16Height } from './helpers/scale-filter';
 
 /** Universal libx265 HEVC SDR fallback. Same thread cap as libx264 (4):
@@ -44,20 +45,6 @@ export const hevcCpu: EncoderDescriptor = {
   },
 };
 
-/** Reference HDR10 master-display string for `x265-params`. The values
- *  describe a BT.2020 display mastered at 1000-nit peak / 0.0001-nit
- *  black point — a sane default for a home-server that re-encodes from
- *  consumer HDR sources without per-title color analysis. Units follow
- *  x265's convention: chromaticities are `0.00002`-step integers and
- *  luminance is `0.0001 cd/m2`. */
-const X265_MASTER_DISPLAY =
-  'G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1)';
-
-/** Default MaxCLL / MaxFALL — 1000 / 400 nits. Reasonable HDR10 envelope
- *  for streaming-grade content; conservative enough that downstream
- *  displays don't see clipped highlights. */
-const X265_MAX_CLL = '1000,400';
-
 /** libx265 HEVC Main10 HDR10 — universal CPU fallback for HDR rungs
  *  whenever the platform's HW path either can't emit Main10 or can't
  *  write the `mdcv` / `clli` SEI reliably. `hdr-opt=1` enables PQ
@@ -80,8 +67,8 @@ export const hevcCpuHdr10: EncoderDescriptor = {
       'colorprim=bt2020',
       'transfer=smpte2084',
       'colormatrix=bt2020nc',
-      `master-display=${X265_MASTER_DISPLAY}`,
-      `max-cll=${X265_MAX_CLL}`,
+      `master-display=${masterDisplayString(input.hdrMetadata)}`,
+      `max-cll=${maxCllString(input.hdrMetadata)}`,
     ].join(':');
     return [
       '-c:v',
