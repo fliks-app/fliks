@@ -1390,6 +1390,9 @@ export class StreamingController {
     @Res() res: Response,
   ) {
     this.assertFreshSession(req);
+    // Enforce the library ACL on every segment serve (the cached fast path
+    // below otherwise serves a revoked-mid-stream session — see hlsSegment).
+    await this.streamingService.resolveFile(mediaFileId, req.user as User);
     const AUDIO_SEG_RE = /^(init(_\d+)?\.mp4|seg-\d{3,4}\.(m4s|ts))$/;
     if (!AUDIO_SEG_RE.test(segment)) {
       throw new BadRequestException(`Invalid audio segment name: ${segment}`);
@@ -1600,6 +1603,10 @@ export class StreamingController {
       throw new BadRequestException(`Invalid quality: ${quality}`);
     }
     this.assertFreshSession(req);
+    // Enforce the library ACL on every segment serve — the cached fast path
+    // below otherwise keeps serving a session whose owner lost access
+    // mid-stream (only the slow create path checked, not the fast path).
+    await this.streamingService.resolveFile(mediaFileId, req.user as User);
     const VIDEO_SEG_RE = /^(seg-\d{3,4}\.(m4s|ts)|init(_\d+)?\.mp4)$/;
     if (!VIDEO_SEG_RE.test(segment)) {
       throw new BadRequestException(`Invalid segment name: ${segment}`);
