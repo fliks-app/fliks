@@ -681,6 +681,14 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             switch item.status {
             case .readyToPlay:
                 self?.emitTracksChanged()
+                // AVPlayer often reports `.readyToPlay` before the
+                // alternate-audio rendition playlists have been fetched, so
+                // the `.audible` selection group is still empty. Without
+                // this re-emit the client's `audioTracksChanged` upgrade
+                // guard rejects the short list, leaves the `si-*` fallback
+                // in place, and every language switch falls back to a full
+                // backend reload (re-encode). See issue #378.
+                self?.ensureMediaSelectionPopulated()
             case .failed:
                 let nsError = item.error as NSError?
                 let msg = nsError?.localizedDescription ?? "Playback failed"
@@ -867,6 +875,28 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         """
         DispatchQueue.main.async { [weak self] in
             self?.bridge?.webView?.evaluateJavaScript(js)
+        }
+    }
+
+    private func ensureMediaSelectionPopulated(retries: Int = 8) {
+        guard let item = player?.currentItem else { return }
+        let asset = item.asset
+        let key = "availableMediaCharacteristicsWithMediaSelectionOptions"
+        asset.loadValuesAsynchronously(forKeys: [key]) { [weak self] in
+            DispatchQueue.main.async {
+                guard let self = self, self.player?.currentItem === item else { return }
+                let audible = asset.mediaSelectionGroup(forMediaCharacteristic: .audible)?.options.count ?? 0
+                let legible = asset.mediaSelectionGroup(forMediaCharacteristic: .legible)?.options.count ?? 0
+                if audible > 0 || legible > 0 {
+                    self.emitTracksChanged()
+                    return
+                }
+                if retries > 0 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                        self?.ensureMediaSelectionPopulated(retries: retries - 1)
+                    }
+                }
+            }
         }
     }
 
