@@ -14,6 +14,7 @@ import * as fsSync from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { StreamingService } from './streaming.service';
+import { User } from '../users/entities/user.entity';
 import { EventsService } from '../scheduler/events.service';
 import { Command } from '../scheduler/entities/command.entity';
 import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
@@ -85,11 +86,18 @@ export class SubtitleStreamService {
   /**
    * Get an external subtitle file converted to WebVTT.
    */
-  async getSubtitleAsVtt(subtitleId: number): Promise<string> {
+  async getSubtitleAsVtt(subtitleId: number, user?: User): Promise<string> {
     const sub = await this.subtitleFileRepo.findOne({
       where: { id: subtitleId },
       relations: ['media', 'media.library'],
     });
+    // Library ACL on the subtitle's OWN media, so a foreign subtitle id can't
+    // be read regardless of the mediaFileId in the request path (IDOR).
+    await this.streamingService.assertLibraryAccess(
+      sub?.media?.libraryId ?? null,
+      user,
+      `Subtitle #${subtitleId} not found`,
+    );
     if (!sub?.relativePath) {
       throw new NotFoundException(`Subtitle #${subtitleId} not found`);
     }
@@ -138,9 +146,10 @@ export class SubtitleStreamService {
    */
   async listTextSubtitleRenditions(
     mediaFileId: number,
+    user?: User,
   ): Promise<SubtitleRenditionMeta[]> {
     const out: SubtitleRenditionMeta[] = [];
-    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const resolved = await this.streamingService.resolveFile(mediaFileId, user);
     for (const s of resolved.mediaFile.streamInfo?.subtitles ?? []) {
       if (s.isImageBased) continue;
       out.push({
@@ -188,6 +197,7 @@ export class SubtitleStreamService {
   async extractEmbeddedSubtitle(
     mediaFileId: number,
     streamIndex: number,
+    user?: User,
   ): Promise<Readable> {
     if (
       !Number.isInteger(streamIndex) ||
@@ -197,7 +207,7 @@ export class SubtitleStreamService {
       throw new BadRequestException(`Invalid stream index: ${streamIndex}`);
     }
 
-    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const resolved = await this.streamingService.resolveFile(mediaFileId, user);
     const mediaRoot = resolved.media.path;
     if (!mediaRoot) {
       throw new NotFoundException(
