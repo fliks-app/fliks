@@ -82,22 +82,11 @@ const APPLE_TV_PRE_A17_NO_AV1: ClientQuirk = {
   reason: 'iOS / Apple TV without A17 HW AV1 decoder',
 };
 
-const DROP_DV_TRANSCODE: ClientQuirk = {
-  id: 'no-dv-transcode',
-  matches: () => true,
-  filter: (variants) =>
-    variants.filter(
-      (v) => v.hdr !== 'DV5' && v.hdr !== 'DV81' && v.hdr !== 'DV84',
-    ),
-  reason: 'Dolby Vision transcode is not implemented (DirectPlay only)',
-};
-
 const REGISTRY: readonly ClientQuirk[] = [
   CCWGTV_HD_NO_4K_HEVC_HDR,
   CCWGTV_HD_NO_4K,
   OLDER_CHROMECAST_NO_AV1,
   APPLE_TV_PRE_A17_NO_AV1,
-  DROP_DV_TRANSCODE,
 ];
 
 /** Run every applicable quirk against the candidate variants. Returns

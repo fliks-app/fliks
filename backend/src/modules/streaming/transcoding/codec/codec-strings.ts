@@ -1,4 +1,4 @@
-import type { EncoderTarget, HdrFormat } from './types';
+import type { EncoderTarget } from './types';
 
 /** RFC 6381 CODECS attribute generators. Each function returns the
  *  string that goes inside `CODECS="..."` on an `EXT-X-STREAM-INF`
@@ -81,39 +81,6 @@ export function av1CodecString(
   bitDepth: 8 | 10,
 ): string {
   return `av01.0.${av1Level(target)}M.${String(bitDepth).padStart(2, '0')}`;
-}
-
-/** Dolby Vision — `dvh1.PP.LL`. Apple HLS requires `dvh1` (parameter sets
- *  in moov), never `dvhe`. Profile and level pulled from the source's DV
- *  RPU sidedata when present. Listed for completeness — we don't transcode
- *  to DV, only pass through on DirectPlay. */
-export function dolbyVisionCodecString(profile: number, level: number): string {
-  return `dvh1.${pad2(profile)}.${pad2(level)}`;
-}
-
-/** Generates `SUPPLEMENTAL-CODECS` value for HDR10+/DV backward-compat
- *  variants. Apple HLS 2024+. */
-export function supplementalCodecsBrand(hdr: HdrFormat): string | null {
-  switch (hdr) {
-    case 'HDR10':
-      return null; // No supplemental codec for vanilla HDR10
-    case 'HLG':
-      return null;
-    case 'DV5':
-      return null; // Profile 5 has no HDR10/HLG fallback
-    case 'DV81':
-      return 'db1p'; // DV 8.1 → HDR10 BL
-    case 'DV84':
-      return 'db4h'; // DV 8.4 → HLG BL
-  }
-}
-
-/** VIDEO-RANGE master-playlist attribute. iOS AVPlayer reads this to
- *  filter variants by display transfer-function compatibility. */
-export function videoRange(hdr: HdrFormat | null): 'SDR' | 'PQ' | 'HLG' {
-  if (hdr == null) return 'SDR';
-  if (hdr === 'HLG') return 'HLG';
-  return 'PQ'; // HDR10, DV5, DV81, DV84 all carry PQ-tagged transfer
 }
 
 // ───────────────────────── helpers ─────────────────────────
