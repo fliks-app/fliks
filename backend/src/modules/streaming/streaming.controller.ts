@@ -425,6 +425,7 @@ export class StreamingController {
       sourceWidth: si?.video?.[0]?.width,
       sourceHeight: si?.video?.[0]?.height,
       isSourceHdr: !!si?.video?.[0]?.hdrFormat,
+      hdrMetadata: si?.video?.[0]?.hdrMetadata,
       // Variant chosen by stream-builder's codec selector at
       // playback-info time, threaded through every session spawn so
       // ffmpeg-args resolves the matching encoder descriptor. HLS

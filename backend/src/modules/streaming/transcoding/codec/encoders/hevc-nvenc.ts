@@ -1,6 +1,7 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
 import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
+import { masterDisplayString, maxCllString } from './helpers/hdr-metadata';
 import { scaleMod16Height } from './helpers/scale-filter';
 
 /** NVIDIA NVENC HEVC SDR encoder — Maxwell 2nd gen (GM20x) and later.
@@ -101,6 +102,18 @@ export const hevcNvencHdr10: EncoderDescriptor = {
       '-force_key_frames',
       input.forceKeyframesExpr,
       ...hdrColorArgs('HDR10'),
+      // When the source's HDR10 static metadata was probed, emit it explicitly
+      // so the mastering-display / content-light SEI is guaranteed rather than
+      // depending on the AVFrame side-data surviving scale_cuda. Absent → fall
+      // back to NVENC's own input-derived SEI (#354).
+      ...(input.hdrMetadata
+        ? [
+            '-master_display',
+            masterDisplayString(input.hdrMetadata),
+            '-max_cll',
+            maxCllString(input.hdrMetadata),
+          ]
+        : []),
       '-tag:v',
       'hvc1',
     ];

@@ -1,6 +1,7 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { av1CodecString } from '../codec-strings';
 import { hdrColorArgs } from './helpers/hdr-variants';
+import { masterDisplayString, maxCllString } from './helpers/hdr-metadata';
 import { scaleMod16Height } from './helpers/scale-filter';
 
 /** NVIDIA NVENC AV1 encoder — Ada Lovelace (RTX 4000 series) and later.
@@ -99,9 +100,9 @@ export const av1NvencHdr10: EncoderDescriptor = {
       input.forceKeyframesExpr,
       ...hdrColorArgs('HDR10'),
       '-master_display',
-      'G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1)',
+      masterDisplayString(input.hdrMetadata),
       '-max_cll',
-      '1000,400',
+      maxCllString(input.hdrMetadata),
     ];
   },
 };

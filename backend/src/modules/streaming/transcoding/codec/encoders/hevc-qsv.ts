@@ -1,6 +1,7 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
 import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
+import { masterDisplayString, maxCllString } from './helpers/hdr-metadata';
 import { qsvScaleFilter8bit, qsvScaleFilter10bit } from './helpers/qsv-filters';
 
 /** Intel QSV HEVC Main 8-bit encoder — Skylake gen6 and above. Native
@@ -94,6 +95,17 @@ export const hevcQsvHdr10: EncoderDescriptor = {
       '-force_key_frames',
       input.forceKeyframesExpr,
       ...hdrColorArgs('HDR10'),
+      // Emit the probed source mastering-display / content-light SEI explicitly
+      // when available, rather than relying solely on AVFrame metadata
+      // propagation through the QSV filter chain. Absent → input-derived (#354).
+      ...(input.hdrMetadata
+        ? [
+            '-master_display',
+            masterDisplayString(input.hdrMetadata),
+            '-max_cll',
+            maxCllString(input.hdrMetadata),
+          ]
+        : []),
       '-tag:v',
       'hvc1',
     ];

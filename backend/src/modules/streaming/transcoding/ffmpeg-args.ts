@@ -15,6 +15,7 @@ import type {
   BitDepth,
   CodecVariant,
   EncoderInput,
+  HdrStaticMetadata,
   VideoCodec,
 } from './codec/types';
 import { decoderRegistry, findQsvNativeDecoder } from './codec/decoders';
@@ -62,6 +63,11 @@ export interface BuildFfmpegArgsOptions {
    *  defaults to the profile's raw `maxWidth × maxHeight`. */
   sourceWidth?: number;
   sourceHeight?: number;
+  /** Source HDR10 static metadata (mastering display + content light), probed
+   *  from the source. Fed into the encoder's master-display / max-cll so the
+   *  display tonemaps to the real peak luminance; the encoders fall back to a
+   *  generic 1000-nit reference when absent. */
+  sourceHdrMetadata?: HdrStaticMetadata;
   /** Audio output decision — see {@link SessionContext.audioPlan}. When
    *  omitted, ffmpeg-args falls back to AAC stereo at the profile bitrate
    *  (safe default that plays everywhere). */
@@ -140,6 +146,7 @@ export function buildFfmpegArgs(
     sourceBitDepth = 8,
     sourceWidth = 0,
     sourceHeight = 0,
+    sourceHdrMetadata,
     tonemapAlgo = 'auto',
   } = opts;
 
@@ -539,6 +546,7 @@ export function buildFfmpegArgs(
     tonemapPath,
     hasBurnIn: !!burnIn?.filter,
     hasCrop: !!crop,
+    hdrMetadata: sourceHdrMetadata,
     // Override to 'videotoolbox' when the Metal fast path is active —
     // the descriptor's static `outputSurface` is `'cpu'` because every
     // OTHER VT consumer expects CPU buffers, but we just told the

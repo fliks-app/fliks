@@ -19,6 +19,18 @@ export type BitDepth = 8 | 10;
  *  passthrough is deferred to #368. */
 export type HdrFormat = 'HDR10' | 'HLG';
 
+/** Source HDR10 static metadata (SMPTE ST 2086 mastering display + CTA-861.3
+ *  content light level), probed from the source and propagated into the encoder
+ *  so the display tonemaps against the real peak luminance instead of a generic
+ *  1000-nit reference. `maxCll`/`maxFall` are 0 when unknown. `masteringDisplay`
+ *  is the `G(gx,gy)B(bx,by)R(rx,ry)WP(wx,wy)L(max,min)` string shared by x265
+ *  `master-display`, SVT-AV1 `mastering-display`, and ffmpeg `-master_display`. */
+export interface HdrStaticMetadata {
+  masteringDisplay: string;
+  maxCll: number;
+  maxFall: number;
+}
+
 /** The triple that uniquely identifies a video output format. Resolution
  *  and bitrate are not part of identity — those live on `LadderRung`. */
 export interface CodecVariant {
@@ -105,6 +117,9 @@ export interface EncoderInput {
    *  both crop and scale; when it receives VAAPI surfaces (default
    *  Linux path) it stays on the `scale_vaapi → hwmap=qsv` chain. */
   inputSurface: import('./decoders/types').SurfaceFormat;
+  /** Source HDR10 static metadata, when the probe recovered it. Encoders feed
+   *  it into `master-display` / `max-cll`; absent → generic 1000-nit fallback. */
+  hdrMetadata?: HdrStaticMetadata;
 }
 
 /** A single encoder binding — one ffmpeg encoder × one platform × one
