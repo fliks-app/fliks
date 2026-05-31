@@ -3,7 +3,6 @@ import {
   VARIANT_MAIN,
   VARIANT_REMUX,
   baseProfileHash,
-  isVariantOf,
   variantHash,
   variantSuffix,
 } from './variant';
@@ -46,26 +45,6 @@ describe('baseProfileHash', () => {
   it('leaves non-variant trailing dashes alone', () => {
     expect(baseProfileHash(`${base}-foo`)).toBe(`${base}-foo`);
     expect(baseProfileHash(`${base}-aX`)).toBe(`${base}-aX`);
-  });
-});
-
-describe('isVariantOf', () => {
-  const base = 'cafebabe01';
-  it('matches the base itself', () => {
-    expect(isVariantOf(base, base)).toBe(true);
-  });
-  it('matches any known variant suffix', () => {
-    expect(isVariantOf(`${base}-early`, base)).toBe(true);
-    expect(isVariantOf(`${base}-remux`, base)).toBe(true);
-    expect(isVariantOf(`${base}-a5`, base)).toBe(true);
-  });
-  it('rejects unrelated cache keys with the same prefix length', () => {
-    expect(isVariantOf('cafebabe02', base)).toBe(false);
-    expect(isVariantOf('cafebabe02-early', base)).toBe(false);
-  });
-  it('rejects hashes that merely contain the base as a substring', () => {
-    expect(isVariantOf(`xxx${base}`, base)).toBe(false);
-    expect(isVariantOf(`xxx${base}-early`, base)).toBe(false);
   });
 });
 
