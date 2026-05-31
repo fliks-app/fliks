@@ -459,7 +459,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     onlyQuality?: string,
     defaultAudioIndex = 0,
     deviceType: DeviceType = 'desktop',
-    outputAudioCodec: 'aac' | 'ac3' | 'eac3' = 'aac',
+    outputAudioCodec: string = 'aac',
     hdrPassThrough?: {
       hdrFormat: 'HDR10' | 'HLG';
       videoBitRateBps?: number;

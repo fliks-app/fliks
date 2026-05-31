@@ -1149,7 +1149,7 @@ export class StreamingController {
       onlyQuality,
       pickedIdx ?? 0,
       deviceType,
-      (live?.audioPlan?.codec ?? 'aac') as 'aac' | 'ac3' | 'eac3',
+      live?.audioPlan?.codec ?? 'aac',
       hdrPassThrough,
       // Only the SDR ladder branch consumes this — the HDR branch
       // already drives its codec strings from `hdrPassThrough`.
