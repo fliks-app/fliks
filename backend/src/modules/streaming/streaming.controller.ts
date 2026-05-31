@@ -196,6 +196,18 @@ function sendTransientUnavailable(res: Response, retryAfterSec: number = 2): voi
   res.status(503).end();
 }
 
+/** `statSync().size`, or null when the file vanished — e.g. a seek-restart /
+ *  teardown `rm` racing the read between getSegmentPath's existsSync and here.
+ *  Callers treat null like a not-yet-ready segment (retryable 503) instead of
+ *  letting the throw bubble to an uncaught 500. */
+function statSizeOrNull(filePath: string): number | null {
+  try {
+    return fs.statSync(filePath).size;
+  } catch {
+    return null;
+  }
+}
+
 /** Generate a VOD HLS playlist for a given duration and segment URL pattern.
  *  Uniform segment grid: each segment is SEG_DURATION seconds, seg-N covers
  *  `[N*SEG, (N+1)*SEG)`. The EXTINF values mirror what FFmpeg actually emits
@@ -1709,8 +1721,8 @@ export class StreamingController {
         // Stat-check and refuse so the CDN never caches the broken
         // version, then mark every segment served from a live transcode
         // session un-cacheable for the same reason.
-        const segStat = fs.statSync(segPath);
-        if (segStat.size === 0) {
+        const segSize = statSizeOrNull(segPath);
+        if (segSize === null || segSize === 0) {
           sendTransientUnavailable(res);
           return;
         }
@@ -1783,8 +1795,8 @@ export class StreamingController {
           10_000,
         );
         if (segPath) {
-          const earlyStat = fs.statSync(segPath);
-          if (earlyStat.size === 0) {
+          const earlySize = statSizeOrNull(segPath);
+          if (earlySize === null || earlySize === 0) {
             sendTransientUnavailable(res);
             return;
           }
@@ -1847,8 +1859,8 @@ export class StreamingController {
       return;
     }
 
-    const finalStat = fs.statSync(segPath);
-    if (finalStat.size === 0) {
+    const finalSize = statSizeOrNull(segPath);
+    if (finalSize === null || finalSize === 0) {
       sendTransientUnavailable(res);
       return;
     }
