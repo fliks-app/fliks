@@ -2,7 +2,7 @@ import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { av1CodecString } from '../codec-strings';
 import { hdrColorArgs } from './helpers/hdr-variants';
 import { masterDisplayString, maxCllString } from './helpers/hdr-metadata';
-import { scaleMod16Height } from './helpers/scale-filter';
+import { scaleEvenHeight } from './helpers/scale-filter';
 
 /** Maps a named ffmpeg preset onto the SVT-AV1 integer preset namespace
  *  (`0` slowest / highest-quality, `13` fastest). Values picked to match
@@ -74,7 +74,7 @@ export const av1Cpu: EncoderDescriptor = {
       '-bufsize',
       bufsize,
       '-vf',
-      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
+      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
       '-g',
       String(target.gopSize),
       '-keyint_min',
@@ -116,7 +116,7 @@ export const av1CpuHdr10: EncoderDescriptor = {
       '-svtav1-params',
       `enable-hdr=1:mastering-display=${masterDisplayString(input.hdrMetadata)}:content-light=${maxCllString(input.hdrMetadata)}`,
       '-vf',
-      `${filters.cpuCropPrefix}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p10le${filters.burnInFilter}`,
+      `${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p10le${filters.burnInFilter}`,
       '-g',
       String(target.gopSize),
       '-keyint_min',
@@ -160,7 +160,7 @@ export const av1CpuHlg: EncoderDescriptor = {
       '-svtav1-params',
       'color-primaries=9:transfer-characteristics=18:matrix-coefficients=9',
       '-vf',
-      `${filters.cpuCropPrefix}scale=${w}:${scaleMod16Height(w)}:flags=lanczos,format=yuv420p10le${filters.burnInFilter}`,
+      `${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p10le${filters.burnInFilter}`,
       '-g',
       String(target.gopSize),
       '-keyint_min',

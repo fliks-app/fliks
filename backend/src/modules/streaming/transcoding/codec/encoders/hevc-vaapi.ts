@@ -41,7 +41,7 @@ export const hevcVaapi: EncoderDescriptor = {
       return [
         ...common,
         '-vf',
-        `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapVaapi}`,
+        `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi}`,
         ...trailing,
       ];
     }
@@ -49,14 +49,14 @@ export const hevcVaapi: EncoderDescriptor = {
       return [
         ...common,
         '-vf',
-        `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-16:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
+        `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
         ...trailing,
       ];
     }
     return [
       ...common,
       '-vf',
-      `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-16:format=nv12`,
+      `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:format=nv12`,
       ...trailing,
     ];
   },
@@ -89,7 +89,7 @@ export const hevcVaapiHdr10: EncoderDescriptor = {
       '-maxrate',
       bitrate,
       '-vf',
-      `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-16:format=p010le`,
+      `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:format=p010le`,
       '-g',
       String(target.gopSize),
       '-keyint_min',

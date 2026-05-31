@@ -1,6 +1,6 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { h264CodecString } from '../codec-strings';
-import { scaleMod16Height } from './helpers/scale-filter';
+import { scaleEvenHeight } from './helpers/scale-filter';
 
 /** NVIDIA NVENC H.264 encoder — Kepler and later. Tonemap path round-trips
  *  via CPU (hwdownload + scale + tonemap chain) because the CUDA filter
@@ -40,7 +40,7 @@ export const h264Nvenc: EncoderDescriptor = {
       return [
         ...common,
         '-vf',
-        `hwdownload,format=p010le,${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleMod16Height(w)}`,
+        `hwdownload,format=p010le,${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleEvenHeight(w)}`,
         ...trailing,
       ];
     }

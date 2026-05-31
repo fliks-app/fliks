@@ -228,18 +228,15 @@ export function profileFitsSource(
   );
 }
 
-/** Compute output dimensions for a profile against a source. Width is
- *  capped at the source (no upscale); height follows the source aspect
- *  ratio, snapped UP to a multiple of 2 (HEVC/H.264 minimum encode
- *  granularity). We deliberately do NOT round to a multiple of 16:
- *  scale_vaapi treats `h=-16` as a divisibility hint, not a hard
- *  constraint, and Intel VPP/QSV happily emits source-height bitstreams
- *  (e.g. 1080 from a 1920×1080 source) regardless of what we declare.
- *  Rounding the master to 1088 while the bitstream stays at 1080 leaves
- *  Chrome MSE with a SourceBuffer dimensioned for 1088 receiving a 1080
- *  init.mp4 — appendBuffer is rejected as MEDIA_SOURCE_OPERATION_FAILED
- *  (Shaka 3014). Multiple-of-2 matches what every HEVC encoder we ship
- *  actually emits and keeps the master in sync. */
+/** Compute output dimensions for a profile against a source. Width is capped
+ *  at the source (no upscale); height follows the source aspect ratio, snapped
+ *  UP to a multiple of 2 — the 4:2:0 codec minimum and the standard streaming
+ *  rung (1920x1080, not 1088). Every encoder's scale filter rounds to mod-2 too
+ *  (`scaleEvenHeight`, `scale_*=h=-2`), so the master `RESOLUTION` matches the
+ *  bitstream's display size exactly. mod-16 is only the encoder's internal
+ *  macroblock/CTU grid (cropped back via the conformance window) — it is never
+ *  an output dimension; rounding the master to it would advertise 1088 with a
+ *  136:135 SAR that no encoder actually produces. */
 export function profileResolution(
   p: { maxWidth: number },
   sourceWidth: number,

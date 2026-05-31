@@ -1,17 +1,15 @@
-/** Build the height argument for ffmpeg's software `scale` filter so the
- *  CPU pipeline produces mod-16 output — matching what HW encoders emit
- *  (`scale_vaapi=h=-16`) and what the master playlist advertises
- *  (`profileResolution` snaps to mod-16). `scale=W:-2` alone produces
- *  mod-2, which drifts on theatrical 4K masters (3840×2024 → 2024 mod-2
- *  vs 2016 mod-16); a `-2`/`-16` mismatch between the bitstream and the
- *  master `RESOLUTION` attribute can trip MSE on append and leaves the
- *  player guessing about the pixel grid.
+/** Build the height argument for ffmpeg's software `scale` filter, preserving
+ *  source aspect and rounding to the nearest even (mod-2) value. mod-2 is the
+ *  codec minimum for 4:2:0 and what `profileResolution` advertises in the
+ *  master `RESOLUTION`, so manifest and bitstream agree on a clean square-pixel
+ *  size — e.g. 1920x1080 (SAR 1:1), the standard streaming rung. Forcing mod-16
+ *  instead yields 1920x1088 with a 136:135 SAR (a non-standard aspect hack):
+ *  mod-16 is the encoder's internal macroblock/CTU grid, handled transparently
+ *  via the conformance window, never an output dimension. Matches the HW paths
+ *  (`scale_cuda=h=-2`, `scale_vt=h=-2`, `scale_vaapi=h=-2`).
  *
- *  Inline expression preserves source aspect via `ih*W/iw` and rounds
- *  the height down to the nearest multiple of 16. No `max(…)` guard:
- *  any `,` inside a filter option ends the current filter, and even an
- *  escaped one is fragile across ffmpeg builds — real video sources
- *  are always large enough that mod-16 is non-zero. */
-export function scaleMod16Height(targetWidth: number): string {
-  return `ceil(ih*${targetWidth}/iw/16)*16`;
+ *  Inline expression (no `max(…)` guard): a `,` inside a filter option ends the
+ *  filter, and real sources are always large enough that mod-2 is non-zero. */
+export function scaleEvenHeight(targetWidth: number): string {
+  return `ceil(ih*${targetWidth}/iw/2)*2`;
 }
