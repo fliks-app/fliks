@@ -1387,12 +1387,13 @@ export class StreamingController {
     @Param('audioIndex', ParseIntPipe) audioIndex: number,
     @Param('segment') segment: string,
     @Req() req: Request,
+    @CurrentUser() user: User | undefined,
     @Res() res: Response,
   ) {
     this.assertFreshSession(req);
     // Enforce the library ACL on every segment serve (the cached fast path
     // below otherwise serves a revoked-mid-stream session — see hlsSegment).
-    await this.streamingService.resolveFile(mediaFileId, req.user as User);
+    await this.streamingService.resolveFile(mediaFileId, user);
     const AUDIO_SEG_RE = /^(init(_\d+)?\.mp4|seg-\d{3,4}\.(m4s|ts))$/;
     if (!AUDIO_SEG_RE.test(segment)) {
       throw new BadRequestException(`Invalid audio segment name: ${segment}`);
@@ -1401,7 +1402,6 @@ export class StreamingController {
     const segMatch = segment.match(/seg-(\d+)\.(m4s|ts)/);
     const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
     const isInit = segment.startsWith('init');
-    const user = req.user;
     // var_stream_map writes audio under `<variantIdx>/`; variant 0 is video,
     // each audio rendition lives under `<audioIndex+1>/` and its init is
     // named `init_<audioIndex+1>.mp4` to match `-hls_fmp4_init_filename`.
@@ -1597,6 +1597,7 @@ export class StreamingController {
     @Param('quality') quality: string,
     @Param('segment') segment: string,
     @Req() req: Request,
+    @CurrentUser() user: User | undefined,
     @Res() res: Response,
   ) {
     if (!VALID_QUALITIES.has(quality)) {
@@ -1606,7 +1607,7 @@ export class StreamingController {
     // Enforce the library ACL on every segment serve — the cached fast path
     // below otherwise keeps serving a session whose owner lost access
     // mid-stream (only the slow create path checked, not the fast path).
-    await this.streamingService.resolveFile(mediaFileId, req.user as User);
+    await this.streamingService.resolveFile(mediaFileId, user);
     const VIDEO_SEG_RE = /^(seg-\d{3,4}\.(m4s|ts)|init(_\d+)?\.mp4)$/;
     if (!VIDEO_SEG_RE.test(segment)) {
       throw new BadRequestException(`Invalid segment name: ${segment}`);
