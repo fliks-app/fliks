@@ -11,9 +11,13 @@ export type BitDepth = 8 | 10;
 /** HDR transfer / signaling. `null` means SDR.
  *  - HDR10: BT.2020 primaries + SMPTE-ST-2084 (PQ) transfer + static metadata
  *  - HLG:   BT.2020 primaries + ARIB STD-B67 transfer
- *  - DV*:   Dolby Vision profiles; transcode support is intentionally out of
- *           scope (DirectPlay only). Listed for typing completeness. */
-export type HdrFormat = 'HDR10' | 'HLG' | 'DV5' | 'DV81' | 'DV84';
+ *
+ *  Dolby Vision is NOT detected or signaled: ffprobe classifies HDR purely by
+ *  colour tags, so a DV source resolves to HDR10 (profile 8.1 — its PQ base
+ *  layer plays as HDR10, a graceful downgrade) or SDR (profile 5 — tonemapped
+ *  imperfectly, since ffmpeg can't process the DV RPU). Full DV detection +
+ *  passthrough is deferred to #368. */
+export type HdrFormat = 'HDR10' | 'HLG';
 
 /** The triple that uniquely identifies a video output format. Resolution
  *  and bitrate are not part of identity — those live on `LadderRung`. */
