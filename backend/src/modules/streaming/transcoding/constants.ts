@@ -20,6 +20,13 @@ export const JOB_GRACE_MS = StreamLifetime.jobGraceMs();
 /** Max gap (in segments) between FFmpeg frontier and requested segment before restarting. */
 export const SEEK_WAIT_THRESHOLD = 15;
 
+/** Number of leading segments (seg-0 .. seg-(N-1)) the early-start companion
+ *  pre-encodes at position 0 while the main session spins up at the resume
+ *  point. Drives BOTH how long the early ffmpeg reads (its `-t`) and how many
+ *  segment requests route to it — the two must agree, or a resume probe hits a
+ *  session that never wrote that segment. Independent of segment duration. */
+export const EARLY_PROBE_SEGMENTS = 2;
+
 /** Mutable runtime state for HLS segment duration. Updated from admin
  *  streaming settings via `setSegmentDuration()`. Read by FFmpeg arg
  *  builders and the session manager. */
