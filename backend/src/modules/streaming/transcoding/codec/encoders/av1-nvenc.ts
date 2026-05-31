@@ -2,7 +2,7 @@ import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { av1CodecString } from '../codec-strings';
 import { hdrColorArgs } from './helpers/hdr-variants';
 import { masterDisplayString, maxCllString } from './helpers/hdr-metadata';
-import { scaleMod16Height } from './helpers/scale-filter';
+import { scaleEvenHeight } from './helpers/scale-filter';
 
 /** NVIDIA NVENC AV1 encoder — Ada Lovelace (RTX 4000 series) and later.
  *  Pascal, Turing and Ampere don't ship the AV1 encode unit, so
@@ -44,7 +44,7 @@ export const av1Nvenc: EncoderDescriptor = {
       return [
         ...common,
         '-vf',
-        `hwdownload,format=p010le,${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleMod16Height(w)}`,
+        `hwdownload,format=p010le,${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleEvenHeight(w)}`,
         ...trailing,
       ];
     }
