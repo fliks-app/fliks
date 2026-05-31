@@ -574,6 +574,30 @@ export class StreamingController {
     filePath: string,
     contentType: string,
   ): Promise<void> {
+    // TS segments aren't fMP4/CMAF — the CMAF rewrite and tfdt anchoring below
+    // are no-ops on them, and running an ISO-BMFF box parser over MPEG-TS bytes
+    // is meaningless. Read + serve verbatim. Buffered (not streamed) to keep
+    // the same read-after-unlink safety the fMP4 path relies on.
+    if (filePath.endsWith('.ts')) {
+      let tsBuf: Buffer;
+      try {
+        tsBuf = await fs.promises.readFile(filePath);
+      } catch {
+        if (!res.headersSent) res.status(404).end();
+        return;
+      }
+      if (tsBuf.length === 0) {
+        if (!res.headersSent) res.status(404).end();
+        return;
+      }
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Length', String(tsBuf.length));
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'no-store');
+      res.end(tsBuf);
+      return;
+    }
+
     const buf = await readAndRewriteCmaf(filePath);
     if (!buf || buf.length === 0) {
       if (!res.headersSent) res.status(404).end();

@@ -422,7 +422,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
         for (const f of files) {
-          const m = f.match(/^seg-(\d+)\.m4s$/);
+          const m = f.match(/^seg-(\d+)\.(?:m4s|ts)$/);
           if (m) {
             const n = parseInt(m[1], 10);
             if (n > maxSeg) maxSeg = n;
@@ -870,7 +870,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     for (let i = 0; i < 120; i++) {
       if (await fileExists(playlistPath)) {
         const content = await fsp.readFile(playlistPath, 'utf-8');
-        if (content.includes('.m4s')) return content;
+        // Ready once ffmpeg has written segment lines — fMP4 (.m4s) or TS (.ts).
+        if (content.includes('.m4s') || content.includes('.ts')) return content;
       }
       await new Promise((r) => setTimeout(r, 500));
     }
