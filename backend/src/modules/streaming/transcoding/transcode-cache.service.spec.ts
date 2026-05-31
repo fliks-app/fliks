@@ -95,13 +95,15 @@ describe('TranscodeCacheService', () => {
 
   it('evicts entries past their TTL on gc', async () => {
     const dir = path.join(CACHE_ROOT, 'u1', '1', 'dddddddddd', '720p');
-    await writeFile(path.join(dir, 'seg-0.m4s'), 1000);
+    const seg = path.join(dir, 'seg-0.m4s');
+    await writeFile(seg, 1000);
+    // GC derives lastAccess from the newest file mtime; age it past the 4 h TTL.
+    const old = new Date(Date.now() - 10 * 60 * 60 * 1000);
+    await fsp.utimes(seg, old, old);
     await svc.onModuleInit();
-    const entry = svc.lookup(1, 1, 'dddddddddd')!;
-    entry.lastAccess = Date.now() - 10 * 60 * 60 * 1000; // 10 h ago, TTL default 4 h
     await svc.runGc();
     expect(svc.size()).toBe(0);
-    await expect(fsp.access(entry.cacheDir)).rejects.toBeDefined();
+    await expect(fsp.access(dir)).rejects.toBeDefined();
   });
 
   it('keeps fresh entries through gc', async () => {
@@ -110,6 +112,41 @@ describe('TranscodeCacheService', () => {
     await svc.onModuleInit();
     await svc.runGc();
     expect(svc.size()).toBe(1);
+  });
+
+  it('gc indexes dirs created after boot, then TTL-manages them', async () => {
+    await svc.onModuleInit();
+    expect(svc.size()).toBe(0);
+    const dir = path.join(CACHE_ROOT, 'u9', '70', 'aaaaaaaaaa', '720p');
+    const seg = path.join(dir, 'seg-0.m4s');
+    await writeFile(seg, 4000);
+    // Fresh post-boot dir: gc now sees it (boot index never did) and keeps it.
+    await svc.runGc();
+    expect(svc.size()).toBe(1);
+    expect(svc.totalBytes()).toBe(4000);
+    // Age it past TTL: the next gc reclaims it — post-boot dirs no longer escape.
+    const old = new Date(Date.now() - 10 * 60 * 60 * 1000);
+    await fsp.utimes(seg, old, old);
+    await svc.runGc();
+    expect(svc.size()).toBe(0);
+  });
+
+  it('never evicts a directory backed by a live session, even past TTL', async () => {
+    const dir = path.join(CACHE_ROOT, 'u1', '1', 'liveliveee', '720p');
+    const seg = path.join(dir, 'seg-0.m4s');
+    await writeFile(seg, 1000);
+    const old = new Date(Date.now() - 10 * 60 * 60 * 1000); // past TTL
+    await fsp.utimes(seg, old, old);
+    await svc.onModuleInit();
+    // Session path is the quality subdir of the entry dir — matched by prefix.
+    svc.registerLiveDirProvider(() => new Set([dir]));
+    await svc.runGc();
+    expect(svc.size()).toBe(1);
+    await expect(fsp.access(dir)).resolves.toBeUndefined();
+    // Session ends → next gc reclaims it.
+    svc.registerLiveDirProvider(() => new Set());
+    await svc.runGc();
+    expect(svc.size()).toBe(0);
   });
 
   it('cachePathFor composes the expected directory shape', async () => {

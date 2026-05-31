@@ -87,6 +87,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit() {
+    // Let the cache GC see which directories are backed by a live session so
+    // it never evicts one mid-playback. Session cache paths are quality
+    // subdirs of the cache entry dirs; the cache matches by prefix.
+    this.cacheService.registerLiveDirProvider(
+      () =>
+        new Set(
+          [...this.sessions.values()]
+            .map((s) => s.cachePath)
+            .filter((p): p is string => typeof p === 'string' && p.length > 0),
+        ),
+    );
+
     this.detectedHwAccel = await detectHwAccel(this.log);
     this.log.log(`Hardware acceleration: ${this.detectedHwAccel}`);
 
