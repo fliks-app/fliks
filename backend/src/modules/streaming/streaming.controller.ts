@@ -20,6 +20,7 @@ import * as fs from 'fs';
 const execFileAsync = promisify(execFile);
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { parseByteRange } from './byte-range.util';
 import { User } from '../users/entities/user.entity';
 import { StreamingService, ResolvedFile } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
@@ -1915,9 +1916,15 @@ export class StreamingController {
       return;
     }
 
-    const parts = range.replace(/bytes=/, '').split('-');
-    const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+    const parsed = parseByteRange(range, fileSize);
+    if (!parsed) {
+      // RFC 7233 §4.4 — unsatisfiable / malformed range.
+      res.status(416);
+      res.setHeader('Content-Range', `bytes */${fileSize}`);
+      res.end();
+      return;
+    }
+    const { start, end } = parsed;
     const chunkSize = end - start + 1;
 
     res.status(206);
