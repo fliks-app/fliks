@@ -861,6 +861,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         startSegment: 0,
         segExt: ctx?.useTs ? '.ts' : '.m4s',
         segSubDir: usesVarStreamMap ? '0' : undefined,
+        reason: ctx?.spawnReason,
         extra: { actualHwAccel: this.detectedHwAccel },
       });
       session.baseProfileHash = baseHash;
@@ -969,6 +970,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     segExt?: string;
     /** Subdirectory for first segment check (e.g. '0' for var_stream_map) */
     segSubDir?: string;
+    /** Diagnostic origin label, surfaced in the "FFmpeg start" log. */
+    reason?: string;
     extra?: Partial<TranscodeSession>;
   }): TranscodeSession {
     const {
@@ -980,6 +983,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       startSegment,
       segExt = '.m4s',
       segSubDir,
+      reason,
       extra,
     } = opts;
     const { resolve: readyResolve, promise: readyPromise } =
@@ -1015,7 +1019,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           ? 'qsv'
           : hwaccel;
     this.log.log(
-      `FFmpeg start [${id}] ${quality} dec=${decoder} enc=${encoder} ss=${ss} start_number=${startNumber}`,
+      `FFmpeg start [${id}] ${quality} dec=${decoder} enc=${encoder} ss=${ss} start_number=${startNumber}${reason ? ` reason=${reason}` : ''}`,
     );
     this.log.debug(`FFmpeg argv [${id}]: ffmpeg ${args.join(' ')}`);
 
@@ -1163,6 +1167,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       startSegment,
       segExt: ctx?.useTs ? '.ts' : '.m4s',
       segSubDir: usesVarStreamMap ? '0' : undefined,
+      reason: ctx?.spawnReason,
       extra: {
         actualHwAccel: hwAccel,
       },
@@ -1329,6 +1334,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       args,
       sessionDir,
       startSegment: requestedSegment,
+      reason: ctx?.spawnReason,
       extra: { remux: true },
     });
     session.baseProfileHash = remuxBaseHash;
@@ -1436,6 +1442,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       sessionDir,
       startSegment: requestedSegment,
       segExt: ctx?.useTs ? '.ts' : undefined,
+      reason: ctx?.spawnReason,
       extra: { isAudioOnly: true },
     });
     session.baseProfileHash = audioBaseHash;

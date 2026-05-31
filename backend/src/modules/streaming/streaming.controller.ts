@@ -464,6 +464,39 @@ export class StreamingController {
   }
 
   /**
+   * Highest segment the main session legitimately owns: the larger of its
+   * current start and the live playhead. The playhead survives an in-memory
+   * session loss (recovery re-seeds it), so a probe arriving after a restart
+   * still floors at the resume point instead of segment 0.
+   */
+  private resumeFloor(
+    live: { position: number } | null | undefined,
+    existing: { startSegment?: number | null } | null | undefined,
+  ): number {
+    return Math.max(
+      existing?.startSegment ?? 0,
+      live ? secondsToSegmentIndex(live.position) : 0,
+    );
+  }
+
+  /**
+   * Segment a freshly-spawned main should start at for a request. An init
+   * segment is position-independent, so it anchors at the resume floor (the
+   * session playhead) rather than its nominal segment 0; a real segment read
+   * anchors at the requested segment. Single source of truth for resume
+   * anchoring across the spawn paths that fire when the prewarm didn't pre-warm
+   * the main — keeps them from diverging (the "fix one, miss the others" trap).
+   */
+  private anchorSegment(
+    live: { position: number } | null | undefined,
+    existing: { startSegment?: number | null } | null | undefined,
+    isInit: boolean,
+    segIndex: number,
+  ): number {
+    return isInit ? this.resumeFloor(live, existing) : segIndex;
+  }
+
+  /**
    * Pre-spawn ffmpeg for the first segment the player will request. Handles
    * both fresh play (startAt=0) and resume (startAt>0 from URL or from the
    * user's saved playbackState). Fire-and-forget — the session is reused
@@ -488,6 +521,7 @@ export class StreamingController {
         resolved.mediaFile.episodeId ?? undefined,
       );
       const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+      ctx.spawnReason = 'prewarm';
       const profileHash = this.transcodingService.computeProfileHashForCtx(ctx);
       const existing = this.transcodingService.getExistingSession(
         mediaFileId,
@@ -1464,6 +1498,7 @@ export class StreamingController {
         req.user as User,
       );
       const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+      ctx.spawnReason = 'seg-race';
       const live = this.findRequestSession(req, mediaFileId);
       const deviceType = live?.deviceType ?? 'desktop';
       const sourceW =
@@ -1487,13 +1522,10 @@ export class StreamingController {
         !baseQuality.endsWith('-hdr')
           ? `${baseQuality}-hdr`
           : baseQuality;
-      // Anchor a freshly-spawned main at the session's known playhead
-      // (`live.position`, seeded by playback-info from the resume offset), not
-      // segment 0 — so a resume starts ffmpeg at the resume segment directly
-      // rather than at 0 followed by an immediate seek-restart forward.
-      const startSeg = live
-        ? Math.max(0, secondsToSegmentIndex(live.position))
-        : 0;
+      // No existing main and we're spawning to serve a request: anchor at the
+      // resume floor (the session playhead), not segment 0, so a resume starts
+      // ffmpeg at the resume segment directly. See {@link anchorSegment}.
+      const startSeg = this.anchorSegment(live, null, true, 0);
       videoSession = await this.transcodingService.getOrCreateSession(
         mediaFileId,
         quality,
@@ -1589,6 +1621,7 @@ export class StreamingController {
         const startAtSec = parseInt(startAtRaw, 10);
         const startSegment = secondsToSegmentIndex(startAtSec);
         const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+        ctx.spawnReason = 'variant-prespawn';
         if (quality === 'remux') {
           const copyAudio =
             firstQueryString(req.query, 'copyAudio') !== 'false';
@@ -1783,6 +1816,7 @@ export class StreamingController {
     );
 
     const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+    ctx.spawnReason = 'seg-request';
 
     // Early probe routing: the seg-0/seg-1 init probe a player fires on
     // resume must be served by the bounded early companion, never spawn or
@@ -1795,10 +1829,7 @@ export class StreamingController {
     // genuine seek/forward read the main owns. 10 s timeout safety net falls
     // through to the slow path rather than blocking on a 60 s waitForSegment.
     const isInit = segment.startsWith('init');
-    const resumeFloor = Math.max(
-      existing?.startSegment ?? 0,
-      live ? secondsToSegmentIndex(live.position) : 0,
-    );
+    const resumeFloor = this.resumeFloor(live, existing);
     // An init segment is position-independent, so it never anchors the main —
     // otherwise an init request landing right after a restart (before recovery
     // re-seeds the live playhead) would spawn a fresh main at segment 0. A
@@ -1861,11 +1892,7 @@ export class StreamingController {
     // For remux sessions, copy audio only when the source codec is compatible
     // (captured at playback-info); otherwise transcode audio to AAC.
     const copyAudio = live?.canCopyAudio ?? false;
-    // An init segment is position-independent, so anchor a freshly-spawned main
-    // at the resume floor (the session playhead) rather than init's nominal
-    // segment 0 — otherwise a resume's first request (the init) spins main up at
-    // 0 and immediately seek-restarts forward to the resume segment.
-    const anchorSeg = isInit ? resumeFloor : segIndex;
+    const anchorSeg = this.anchorSegment(live, existing, isInit, segIndex);
     const session =
       quality === 'remux'
         ? await this.transcodingService.getOrCreateRemuxSession(
