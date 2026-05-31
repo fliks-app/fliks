@@ -24,9 +24,9 @@ const EXPECTED_DISPLAY =
 
 describe('parseHdrStaticMetadata', () => {
   it('parses full HDR10 side-data (rational form)', () => {
-    expect(
-      parseHdrStaticMetadata([MASTERING_RATIONAL, CONTENT_LIGHT]),
-    ).toEqual({ masteringDisplay: EXPECTED_DISPLAY, maxCll: 1000, maxFall: 400 });
+    expect(parseHdrStaticMetadata([MASTERING_RATIONAL, CONTENT_LIGHT])).toEqual(
+      { masteringDisplay: EXPECTED_DISPLAY, maxCll: 1000, maxFall: 400 },
+    );
   });
 
   it('parses the same values in decimal form (older ffprobe)', () => {
