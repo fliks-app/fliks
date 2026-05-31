@@ -37,14 +37,14 @@ function formatFrameRate(fps: number): string {
  *  init.mp4 fetch triggers a ffmpeg kill+respawn on the backend
  *  when the requested quality doesn't match the active session.
  *
- *  - `remux` / `original` collapse to the top SDR profile that fits
- *    the source resolution (no upscale). HDR ladder ignores these
- *    pseudo-labels because the source-resolution HDR rung is emitted
- *    via the separate `hdrPassThrough` block. Fitting is delegated
- *    to {@link profileFitsSource} (bucket on both axes) so anamorphic
- *    or scope crops (e.g. 1918×872) keep their 1080p top rung — a
- *    strict `maxWidth <= sourceWidth` check sat one or two pixels
- *    short and dropped the user back to 720p.
+ *  - `remux` / `original` collapse to the single top profile that fits
+ *    the source resolution (no upscale), in both the SDR and HDR
+ *    ladders — one variant so AVPlayer / ExoPlayer have no other rung
+ *    to ABR-switch to and stay locked at the source quality. Fitting is
+ *    delegated to {@link profileFitsSource} (bucket on both axes) so
+ *    anamorphic or scope crops (e.g. 1918×872) keep their 1080p top
+ *    rung — a strict `maxWidth <= sourceWidth` check sat one or two
+ *    pixels short and dropped the user back to 720p.
  *  - When `hdrSuffix` is true, an input `1080p` is matched against
  *    `1080p-hdr` (HDR ladder rungs carry the suffix); already
  *    `*-hdr` inputs pass through unchanged.
@@ -59,7 +59,6 @@ function applyQualityPin(
 ): TranscodeProfile[] {
   if (!onlyQuality) return ladder;
   if (onlyQuality === 'remux' || onlyQuality === 'original') {
-    if (hdrSuffix) return ladder;
     const top =
       ladder.find((p) => profileFitsSource(p, sourceWidth, sourceHeight)) ??
       ladder[0];
