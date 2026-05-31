@@ -66,6 +66,11 @@ export interface LiveSession {
    *  cues show in PiP / AirPlay / lock-screen. Web (Shaka) leaves this false
    *  and keeps fetching sidecar VTT. Sourced from the device profile. */
   supportsHlsSubtitles: boolean;
+  /** Engine fetches seg-0 on a load-then-seek (Shaka / Cast), so the seg-0
+   *  early-start companion is worth spawning. Native engines seek straight to
+   *  the resume segment and never request seg-0 — false skips the companion.
+   *  Sourced from the device profile. */
+  probesSegZero: boolean;
   videoVariant: CodecVariant | null;
   tonemapping: boolean;
   transcodeReasons: TranscodeReason[];
@@ -107,6 +112,7 @@ export interface CreateLiveSessionInput {
   deviceType?: 'mobile' | 'desktop';
   hdrLadder?: boolean;
   supportsHlsSubtitles?: boolean;
+  probesSegZero?: boolean;
   videoVariant?: CodecVariant | null;
   tonemapping?: boolean;
   transcodeReasons?: TranscodeReason[];
@@ -204,6 +210,11 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       deviceType: input.deviceType ?? 'desktop',
       hdrLadder: input.hdrLadder ?? false,
       supportsHlsSubtitles: input.supportsHlsSubtitles ?? false,
+      // Default true: only a client that explicitly declares it seeks straight
+      // to the resume segment opts out of the seg-0 companion. Pre-flag clients
+      // keep the companion (a wasted seg-0 probe is harmless; a missing one
+      // makes a seg-0-probing engine restart from scratch).
+      probesSegZero: input.probesSegZero ?? true,
       videoVariant: input.videoVariant ?? null,
       tonemapping: input.tonemapping ?? false,
       transcodeReasons: input.transcodeReasons ?? [],

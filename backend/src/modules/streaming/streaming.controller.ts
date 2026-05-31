@@ -497,17 +497,21 @@ export class StreamingController {
       // (`1080p`), so translate to the HDR equivalent so prewarm
       // doesn't spawn a doomed SDR session that the player will
       // immediately kill and replace with the matching HDR rung.
+      const session = this.findRequestSession(req, mediaFileId);
       const targetQuality =
-        (this.findRequestSession(req, mediaFileId)?.hdrLadder ?? false) &&
-        !startQuality.endsWith('-hdr')
+        (session?.hdrLadder ?? false) && !startQuality.endsWith('-hdr')
           ? `${startQuality}-hdr`
           : startQuality;
       const startSegment = Math.max(0, secondsToSegmentIndex(effectiveStartAt));
 
-      // Spawn early en PARALLÈLE de main (fire-and-forget). hlsSegment
-      // routera vers cette session pour seg-0 via isEarlyProbe pendant
-      // que main encode forward depuis seg-K.
-      if (startSegment > 0) {
+      // The seg-0 early-start companion runs in parallel with main and serves
+      // seg-0 instantly while main encodes forward from seg-K. It only earns
+      // its keep for engines that fetch seg-0 on a load-then-seek (Shaka /
+      // Cast). Native engines (AVPlayer, ExoPlayer, AVPlay, webOS) seek
+      // straight to seg-K and never request seg-0, so the parallel seg-0
+      // transcode would be pure wasted GPU — skip it. Capability rides the
+      // device profile and is stored on the session.
+      if (startSegment > 0 && (session?.probesSegZero ?? true)) {
         void this.transcodingService
           .getOrCreateEarlySession(
             mediaFileId,
@@ -942,6 +946,7 @@ export class StreamingController {
       deviceType,
       hdrLadder: useHdrLadder,
       supportsHlsSubtitles: !!deviceProfile.supportsHlsSubtitles,
+      probesSegZero: deviceProfile.probesSegZero,
       videoVariant,
       tonemapping: response.tonemapping,
       transcodeReasons: response.transcodeReasons,
