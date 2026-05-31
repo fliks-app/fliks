@@ -13,6 +13,7 @@ import type {
 } from './types';
 import type { CodecVariant } from './codec/types';
 import {
+  audioCodecString,
   av1CodecString,
   h264CodecString,
   hevcMain10CodecString,
@@ -102,7 +103,7 @@ export function generateMasterPlaylist(
    *  must match or the receiver rejects the segment at MSE chunk-demuxer
    *  append. Recognised values: `'aac'` (AAC-LC), `'ac3'` (Dolby Digital),
    *  `'eac3'` (Dolby Digital Plus). Defaults to AAC for legacy callers. */
-  outputAudioCodec: 'aac' | 'ac3' | 'eac3' = 'aac',
+  outputAudioCodec: string = 'aac',
   /** When set, the master advertises a single HEVC HDR variant pointing at
    *  the `remux/index.m3u8` path instead of the H.264 transcode ladder.
    *  The remux session does `-c:v copy` so the HDR metadata (BT.2020/PQ
@@ -165,9 +166,8 @@ export function generateMasterPlaylist(
   const noAudio = audioStreams != null && audioStreams.length === 0;
   const lines = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-INDEPENDENT-SEGMENTS'];
 
-  const audioCodecMap = { aac: 'mp4a.40.2', ac3: 'ac-3', eac3: 'ec-3' };
-  const audioCodec = audioCodecMap[outputAudioCodec] ?? 'mp4a.40.2';
-  const codecsTail = noAudio ? '' : `,${audioCodec}`;
+  const audioCodec = audioCodecString(outputAudioCodec);
+  const codecsTail = noAudio || !audioCodec ? '' : `,${audioCodec}`;
 
   const frameRateAttr = `,FRAME-RATE=${formatFrameRate(sourceFrameRate)}`;
 

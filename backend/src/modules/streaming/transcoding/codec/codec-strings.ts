@@ -151,6 +151,31 @@ function av1Level(target: EncoderTarget): string {
   return '04'; //                                 L3.0 — 720p30
 }
 
+/** Audio codecs we can emit an RFC 6381 CODECS string for: transcode targets
+ *  AAC / AC-3 / E-AC-3, copy-mode additionally passes through Opus / FLAC. The
+ *  `Record` below is keyed by this type, so adding a codec is a compile error
+ *  until its CODECS string is supplied. */
+export type AudioOutputCodec = 'aac' | 'ac3' | 'eac3' | 'opus' | 'flac';
+
+const AUDIO_CODEC_STRINGS: Record<AudioOutputCodec, string> = {
+  aac: 'mp4a.40.2',
+  ac3: 'ac-3',
+  eac3: 'ec-3',
+  opus: 'Opus',
+  flac: 'fLaC',
+};
+
+/**
+ * RFC 6381 CODECS string for an output audio codec, or null when the codec is
+ * outside {@link AudioOutputCodec}. Input is `string` — copy-mode passes the
+ * raw source codec (see AudioPlan), which can be anything (e.g. truehd, dts).
+ * An unrecognised codec must be omitted from CODECS rather than mislabeled as
+ * AAC: a wrong codec hard-rejects on MSE append, a missing one is probed.
+ */
+export function audioCodecString(codec: string): string | null {
+  return AUDIO_CODEC_STRINGS[codec.toLowerCase() as AudioOutputCodec] ?? null;
+}
+
 function pad2(n: number): string {
   return n.toString().padStart(2, '0');
 }
