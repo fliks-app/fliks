@@ -438,6 +438,32 @@ export class StreamingController {
   }
 
   /**
+   * Effective resume offset in seconds. The explicit `startAt` query wins when
+   * supplied (including `0` = restart from the top, which must override a saved
+   * position); otherwise fall back to the saved playback position when it's a
+   * meaningful resume (>10 s in, not finished), else 0. Shared by the prewarm
+   * and the LiveSession `position` seed so the session's playhead matches where
+   * ffmpeg actually starts — otherwise a resume that relies on the saved
+   * position leaves `position` at 0, and a fresh main spawned off it anchors at
+   * segment 0 instead of the resume segment.
+   */
+  private async resolveEffectiveStartAt(
+    startAt: number | undefined,
+    userId: number | undefined,
+    mediaId: number | undefined,
+    episodeId: number | undefined,
+  ): Promise<number> {
+    if (startAt !== undefined) return startAt;
+    if (userId != null && mediaId != null) {
+      const state = await this.playbackService.getState(userId, mediaId, episodeId);
+      if (state && !state.completed && state.positionSeconds > 10) {
+        return state.positionSeconds;
+      }
+    }
+    return 0;
+  }
+
+  /**
    * Pre-spawn ffmpeg for the first segment the player will request. Handles
    * both fresh play (startAt=0) and resume (startAt>0 from URL or from the
    * user's saved playbackState). Fire-and-forget — the session is reused
@@ -455,25 +481,12 @@ export class StreamingController {
   ): Promise<void> {
     if (!startQuality || startQuality === 'auto') return;
     try {
-      // Auto-resume only when the caller did NOT supply a startAt query
-      // param (fresh open). An explicit `startAt=0` means the user clicked
-      // "restart from beginning" and must override the saved position.
-      let effectiveStartAt = startAt;
-      if (effectiveStartAt === undefined) {
-        const userId = req.user?.id;
-        const mediaId = resolved.mediaFile.mediaId;
-        if (userId && mediaId) {
-          const state = await this.playbackService.getState(
-            userId,
-            mediaId,
-            resolved.mediaFile.episodeId ?? undefined,
-          );
-          if (state && !state.completed && state.positionSeconds > 10) {
-            effectiveStartAt = state.positionSeconds;
-          }
-        }
-        effectiveStartAt = effectiveStartAt ?? 0;
-      }
+      const effectiveStartAt = await this.resolveEffectiveStartAt(
+        startAt,
+        req.user?.id,
+        resolved.mediaFile.mediaId,
+        resolved.mediaFile.episodeId ?? undefined,
+      );
       const ctx = this.buildSessionContext(req, resolved, mediaFileId);
       const profileHash = this.transcodingService.computeProfileHashForCtx(ctx);
       const existing = this.transcodingService.getExistingSession(
@@ -923,6 +936,17 @@ export class StreamingController {
           : 'transcode';
     const deviceLabel: string | null = req.get('user-agent') ?? null;
 
+    // Seed the session playhead with the effective resume offset, not the raw
+    // `startAt`: a client that resumes by relying on the saved position (no
+    // `startAt` query) would otherwise leave `position` at 0, and a fresh main
+    // spawned off `position` (segment-handler race) would anchor at segment 0.
+    const resumePosition = await this.resolveEffectiveStartAt(
+      startAt,
+      userId,
+      resolved.mediaFile.mediaId,
+      episodeId ?? undefined,
+    );
+
     // The LiveSession owns every per-playback setting: future HLS
     // requests resolve it via `?sid=...` and read settings straight off
     // this entry — no shared per-file mutable state to clobber.
@@ -937,7 +961,7 @@ export class StreamingController {
       quality: typeof startQuality === 'string' ? startQuality : null,
       kind,
       deviceLabel,
-      position: startAt ?? 0,
+      position: resumePosition,
       useTs: effectiveUseTs,
       audioPlan: response.audioPlan,
       audioStreamIndex: audioStreamIndex ?? null,
@@ -1463,11 +1487,18 @@ export class StreamingController {
         !baseQuality.endsWith('-hdr')
           ? `${baseQuality}-hdr`
           : baseQuality;
+      // Anchor a freshly-spawned main at the session's known playhead
+      // (`live.position`, seeded by playback-info from the resume offset), not
+      // segment 0 — so a resume starts ffmpeg at the resume segment directly
+      // rather than at 0 followed by an immediate seek-restart forward.
+      const startSeg = live
+        ? Math.max(0, secondsToSegmentIndex(live.position))
+        : 0;
       videoSession = await this.transcodingService.getOrCreateSession(
         mediaFileId,
         quality,
         resolved.absolutePath,
-        0,
+        startSeg,
         ctx,
         /* skipVerify */ true,
       );
@@ -1776,6 +1807,11 @@ export class StreamingController {
     // owns.
     const isEarlyProbe =
       quality !== 'remux' &&
+      // Only engines that fetch seg-0 on a load-then-seek (Shaka / Cast) use
+      // the early companion. Native players seek straight to the main's
+      // segment and only fetch the position-independent init, so routing that
+      // init here would spawn a companion they never read — keep them on main.
+      (live?.probesSegZero ?? true) &&
       (isInit ||
         (resumeFloor > EARLY_PROBE_SEGMENTS && segIndex < EARLY_PROBE_SEGMENTS));
     if (isEarlyProbe) {
@@ -1825,20 +1861,25 @@ export class StreamingController {
     // For remux sessions, copy audio only when the source codec is compatible
     // (captured at playback-info); otherwise transcode audio to AAC.
     const copyAudio = live?.canCopyAudio ?? false;
+    // An init segment is position-independent, so anchor a freshly-spawned main
+    // at the resume floor (the session playhead) rather than init's nominal
+    // segment 0 — otherwise a resume's first request (the init) spins main up at
+    // 0 and immediately seek-restarts forward to the resume segment.
+    const anchorSeg = isInit ? resumeFloor : segIndex;
     const session =
       quality === 'remux'
         ? await this.transcodingService.getOrCreateRemuxSession(
             mediaFileId,
             resolved.absolutePath,
             copyAudio,
-            segIndex,
+            anchorSeg,
             ctx,
           )
         : await this.transcodingService.getOrCreateSession(
             mediaFileId,
             quality,
             resolved.absolutePath,
-            segIndex,
+            anchorSeg,
             ctx,
           );
 
