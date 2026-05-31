@@ -45,6 +45,28 @@ export class StreamingService {
   ) {}
 
   /**
+   * Throw NotFoundException — the same "missing" shape as a non-existent file,
+   * so callers can't probe library existence — when `user` lacks access to
+   * `libraryId`. No-op for internal callers that pass no `user`. Shared by
+   * {@link resolveFile} and the subtitle routes so every streaming entry point
+   * enforces one identical library ACL.
+   */
+  async assertLibraryAccess(
+    libraryId: number | null,
+    user: User | undefined,
+    notFoundMessage: string,
+  ): Promise<void> {
+    if (!user) return;
+    const accessible = await this.libraries.getAccessibleLibraryIds(user);
+    if (
+      accessible !== null &&
+      (libraryId == null || !accessible.includes(libraryId))
+    ) {
+      throw new NotFoundException(notFoundMessage);
+    }
+  }
+
+  /**
    * Resolve a media file for streaming/download. When `user` is passed,
    * enforces library ACL — non-admin users get NotFoundException for media
    * outside their accessible libraries (same shape as "missing" so we don't
@@ -61,16 +83,11 @@ export class StreamingService {
 
     const media = file.media;
 
-    if (user) {
-      const accessible = await this.libraries.getAccessibleLibraryIds(user);
-      if (accessible !== null) {
-        if (media.libraryId == null || !accessible.includes(media.libraryId)) {
-          // Mirror the "not found" shape so users can't probe for media in
-          // libraries they don't have access to.
-          throw new NotFoundException(`MediaFile #${mediaFileId} not found`);
-        }
-      }
-    }
+    await this.assertLibraryAccess(
+      media?.libraryId ?? null,
+      user,
+      `MediaFile #${mediaFileId} not found`,
+    );
 
     if (!media?.path) {
       throw new NotFoundException(

@@ -19,6 +19,7 @@ import { promisify } from 'util';
 import * as fs from 'fs';
 const execFileAsync = promisify(execFile);
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
 import { StreamingService, ResolvedFile } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
@@ -1120,7 +1121,7 @@ export class StreamingController {
     // sidecar VTT.
     const subtitleRenditions = (live?.supportsHlsSubtitles ?? false)
       ? await this.subtitleStreamService
-          .listTextSubtitleRenditions(mediaFileId)
+          .listTextSubtitleRenditions(mediaFileId, req.user as User)
           .catch((e) => {
             this.log.warn(
               `subtitle renditions failed for #${mediaFileId}: ${e instanceof Error ? e.message : e}`,
@@ -1184,11 +1185,13 @@ export class StreamingController {
   async embeddedSubtitle(
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
     @Param('streamIndex', ParseIntPipe) streamIndex: number,
+    @CurrentUser() user: User | undefined,
     @Res() res: Response,
   ) {
     const stream = await this.subtitleStreamService.extractEmbeddedSubtitle(
       mediaFileId,
       streamIndex,
+      user,
     );
     // Buffer the FFmpeg output so we can send Content-Length
     // (ExoPlayer needs it for subtitle loading)
@@ -1206,9 +1209,13 @@ export class StreamingController {
   @Get(':mediaFileId/subtitles/:subtitleId')
   async subtitle(
     @Param('subtitleId', ParseIntPipe) subtitleId: number,
+    @CurrentUser() user: User | undefined,
     @Res() res: Response,
   ) {
-    const vtt = await this.subtitleStreamService.getSubtitleAsVtt(subtitleId);
+    const vtt = await this.subtitleStreamService.getSubtitleAsVtt(
+      subtitleId,
+      user,
+    );
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(withTimestampMap(vtt));
@@ -1263,7 +1270,10 @@ export class StreamingController {
     mediaFileId: number,
     vttPath: string,
   ): Promise<void> {
-    const resolved = await this.streamingService.resolveFile(mediaFileId);
+    const resolved = await this.streamingService.resolveFile(
+      mediaFileId,
+      req.user as User,
+    );
     const duration = resolved.mediaFile.streamInfo?.durationSeconds ?? 0;
     const tokenParam = buildTokenParam(req);
     const target = Math.max(1, Math.ceil(duration || 1));
