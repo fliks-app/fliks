@@ -96,6 +96,11 @@ export interface SessionContext {
   audioStreams?: AudioStreamMeta[];
   /** Client device category — selects the per-device bitrate ladder. */
   deviceType?: DeviceType;
+  /** Diagnostic label for the request path that triggered the spawn
+   *  (`prewarm`, `seg-request`, `seg-race`, `variant-prespawn`). Echoed in the
+   *  "FFmpeg start" log so a mis-anchored session can be traced to its origin
+   *  without ad-hoc debug logging. Purely observational — never affects output. */
+  spawnReason?: string;
   /**
    * FFmpeg encoder preset ('veryfast' | 'faster' | 'fast' | 'medium' | 'slow').
    * Applied to h264_qsv and libx264; VAAPI/NVENC ignore it (different naming).
