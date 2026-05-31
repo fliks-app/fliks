@@ -23,6 +23,10 @@ export interface AudioStreamMeta {
   language?: string;
   title?: string;
   streamIndex?: number;
+  /** Source channel count (from ffprobe streamInfo). Drives the EXT-X-MEDIA
+   *  CHANNELS attribute for copy / AC-3 / E-AC-3 renditions, which keep the
+   *  source layout; AAC renditions are downmixed to 2 regardless. */
+  channels?: number;
 }
 
 /**
