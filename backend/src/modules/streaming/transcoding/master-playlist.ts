@@ -14,6 +14,7 @@ import type {
 import type { CodecVariant } from './codec/types';
 import {
   audioCodecString,
+  audioRenditionChannels,
   av1CodecString,
   h264CodecString,
   hevcMain10CodecString,
@@ -230,7 +231,7 @@ export function generateMasterPlaylist(
         // probes the renditions, single-audio doesn't trigger the
         // probe when the hint is missing).
         lines.push(
-          `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},CHANNELS="2",URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
+          `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},CHANNELS="${audioRenditionChannels(outputAudioCodec, a.channels)}",URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
         );
       }
     }
@@ -303,13 +304,13 @@ export function generateMasterPlaylist(
       const a = audioStreams[i];
       const lang = a.language || 'und';
       const isDefault = i === pickedIdx ? 'YES' : 'NO';
-      // `CHANNELS="2"` matches what ffmpeg emits (`-ac 2`) and what
-      // Apple's reference fMP4 master ships — Tizen AVPlay uses this
-      // hint to pre-allocate the right audio decoder before fetching
-      // the rendition. Without it the single-audio variant doesn't
+      // CHANNELS reports the rendition's real output layout (AAC downmixes
+      // to 2 via `-ac 2`; copy / AC-3 / E-AC-3 keep the source layout) — Tizen
+      // AVPlay uses this hint to pre-allocate the right audio decoder before
+      // fetching the rendition. Without it the single-audio variant doesn't
       // trigger a rendition probe (issue #148 bisection).
       lines.push(
-        `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},CHANNELS="2",URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
+        `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},CHANNELS="${audioRenditionChannels(outputAudioCodec, a.channels)}",URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
       );
     }
   }
