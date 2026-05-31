@@ -9,6 +9,7 @@ import { existsSync, watch, FSWatcher } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import {
+  EARLY_PROBE_SEGMENTS,
   JOB_GRACE_MS,
   SEEK_WAIT_THRESHOLD,
   SESSION_TIMEOUT_MS,
@@ -742,9 +743,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    * the main session would force a kill+restart from K back to 0 — wiping
    * out the prewarm work and adding a second 4K cold-start.
    *
-   * Bounded by `-t 4` (input-side limit) so ffmpeg exits ~5s after spawn
-   * once it has flushed seg-0 (1s, INIT_TIME) + seg-1 (3s) plus the trailer.
-   * Same encoder profile + audio layout as the main session so segments and
+   * Bounded by an input-side `-t` of EARLY_PROBE_SEGMENTS segments (+1s) so
+   * ffmpeg exits shortly after flushing seg-0 .. seg-(EARLY_PROBE_SEGMENTS-1),
+   * each a full `getSegmentDuration()` long (there is no `hls_init_time`, so
+   * seg-0 is not shortened). Same encoder profile + audio layout as the main
+   * session so segments and
    * init.mp4 are decode-compatible (Shaka can mix-and-match across the two
    * sessions seamlessly).
    *
@@ -837,10 +840,14 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         },
         this.log,
       );
-      // Bound input read to 4s — enough for seg-0 + seg-1, then ffmpeg
-      // exits cleanly. Insert as INPUT option (before -i).
+      // Bound the input read so the early session writes EARLY_PROBE_SEGMENTS
+      // full segments (+1s so the last one closes past its boundary), then
+      // ffmpeg exits cleanly. Derived from the configured segment duration —
+      // a hardcoded 4s only covered two segments at the 3s default and left
+      // seg-1 unwritten at 4s/6s grids. Insert as an INPUT option (before -i).
+      const earlyReadSec = EARLY_PROBE_SEGMENTS * getSegmentDuration() + 1;
       const inputIdx = args.indexOf('-i');
-      if (inputIdx >= 0) args.splice(inputIdx, 0, '-t', '4');
+      if (inputIdx >= 0) args.splice(inputIdx, 0, '-t', String(earlyReadSec));
 
       const usesVarStreamMap =
         isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;

@@ -36,6 +36,7 @@ import {
 } from './transcoding';
 import type { TranscodeSession } from './transcoding/types';
 import {
+  EARLY_PROBE_SEGMENTS,
   getSegmentDuration,
   secondsToSegmentIndex,
 } from './transcoding/constants';
@@ -178,13 +179,6 @@ async function awaitFileNonEmpty(
   }
   return false;
 }
-
-/** Segments the early companion covers. Its ffmpeg is bound to `-t 4`
- *  (see getOrCreateEarlySession), which at a 3 s segment grid yields seg-0
- *  and seg-1 — the window a player's seg-0 VOD probe falls in. Requests
- *  below this are absorbed by the early session; anything higher is a real
- *  seek the main session handles. */
-const EARLY_PROBE_SEGMENTS = 2;
 
 /** Send a transient unavailability response. Players with sane HTTP
  *  retry policies (Shaka, Media3's loader when given a backoff)
@@ -1474,7 +1468,10 @@ export class StreamingController {
       videoSession.startSegment != null &&
       videoSession.startSegment > 0 &&
       earlySession.quality === videoSession.quality &&
-      (isInit || segIndex < videoSession.startSegment);
+      // Only seg-0 .. seg-(EARLY_PROBE_SEGMENTS-1) live in the early session —
+      // bound to the same window the video path uses. (Was `< startSegment`,
+      // which on a deep resume routed segments the early session never wrote.)
+      (isInit || segIndex < EARLY_PROBE_SEGMENTS);
 
     let segPath: string | null = null;
     if (useEarly && earlySession) {
