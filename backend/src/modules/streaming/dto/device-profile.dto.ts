@@ -84,6 +84,19 @@ export class DeviceProfileDto {
   @IsOptional()
   supportsHlsSubtitles?: boolean;
 
+  /**
+   * Engine fetches the first VOD segment (seg-0) when it loads the playlist
+   * and then seeks to the resume point — Shaka (web) and the Cast receiver do
+   * this. The backend pre-spawns a short seg-0 "early-start" companion next to
+   * the main session so that probe lands instantly. Native engines (AVPlayer,
+   * ExoPlayer, AVPlay, webOS) seek straight to the target segment and never
+   * request seg-0, so they leave this false and the backend skips the
+   * companion — for them it is a wasted parallel transcode.
+   */
+  @IsBoolean()
+  @IsOptional()
+  probesSegZero?: boolean;
+
   @IsIn(['mobile', 'desktop'])
   @IsOptional()
   deviceType?: 'mobile' | 'desktop';

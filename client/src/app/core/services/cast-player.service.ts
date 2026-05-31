@@ -164,6 +164,9 @@ export class CastPlayerService {
       // and its backend plumbing are kept as dead code so we can flip
       // back later without re-doing the plumbing.
       useTs: false,
+      // The Cast receiver runs Shaka, which fetches seg-0 on a load-then-seek,
+      // so keep the backend's seg-0 early-start companion for resumes.
+      probesSegZero: true,
     };
   }
 

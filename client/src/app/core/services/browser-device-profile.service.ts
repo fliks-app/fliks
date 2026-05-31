@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { PlayerSettingsService } from './player-settings.service';
 import { DeviceService } from './device.service';
+import { ServerConfigService } from './server-config.service';
 import { getDeviceName } from '../utils/device-info';
 
 interface HdrPlugin {
@@ -87,6 +88,14 @@ export interface DeviceProfile {
    *  VTT. True for phone/desktop (iOS, Android, web/Shaka); false for TVs,
    *  whose AVPlay/webOS cue APIs are limited so they keep a DOM overlay. */
   supportsHlsSubtitles?: boolean;
+
+  /** Engine fetches seg-0 when it loads the playlist and then seeks to the
+   *  resume point — true for the web/Shaka path (and the Cast receiver). The
+   *  backend uses it to decide whether to pre-spawn the seg-0 early-start
+   *  companion. Native engines (AVPlayer/ExoPlayer/AVPlay/webOS) seek straight
+   *  to the target segment and never request seg-0, so they send false and the
+   *  backend skips the companion (a wasted parallel transcode for them). */
+  probesSegZero?: boolean;
 }
 
 /** True when `localStorage['fliks.useTs']` is set to a truthy value.
@@ -101,6 +110,7 @@ function readUseTsOverride(): boolean {
 export class BrowserDeviceProfileService {
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly device = inject(DeviceService);
+  private readonly serverConfig = inject(ServerConfigService);
   private cachedProfile: DeviceProfile | null = null;
   private nativeHdr: boolean | null = null;
   private nativeAudio: { codecs: string[]; maxChannels: number } | null = null;
@@ -329,6 +339,11 @@ export class BrowserDeviceProfileService {
       // they have no PiP and their AVPlay/webOS cue APIs are limited, so the
       // Tizen/webOS engines keep their DOM overlay (fed by sidecar VTT).
       supportsHlsSubtitles: !isTv,
+      // Only the web/Shaka path probes seg-0 on a load-then-seek; that is
+      // exactly the `!isNative` engine branch (Capacitor mobile + every TV go
+      // through native players that seek straight to the resume segment). The
+      // Cast receiver sets this true in its own profile.
+      probesSegZero: !this.serverConfig.isNative,
     };
   }
 
