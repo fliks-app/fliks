@@ -64,10 +64,3 @@ const VARIANT_SUFFIX_RE = /-(?:early|remux|a\d+)$/;
 export function baseProfileHash(cacheKey: string): string {
   return cacheKey.replace(VARIANT_SUFFIX_RE, '');
 }
-
-/** True when `cacheKey` is the main or any variant of `baseHash`.
- *  Used to find every ffmpeg job tied to a single client when, e.g.,
- *  that client explicitly stops. */
-export function isVariantOf(cacheKey: string, baseHash: string): boolean {
-  return cacheKey === baseHash || cacheKey.startsWith(`${baseHash}-`);
-}

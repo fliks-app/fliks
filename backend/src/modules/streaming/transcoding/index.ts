@@ -22,7 +22,6 @@ export {
   VARIANT_MAIN,
   VARIANT_REMUX,
   baseProfileHash,
-  isVariantOf,
   variantHash,
   variantSuffix,
 } from './variant';
