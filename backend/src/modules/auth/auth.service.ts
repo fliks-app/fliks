@@ -231,6 +231,23 @@ export class AuthService {
    * re-ask Angular for a fresh one, so a 2h film with a 1h token would
    * break halfway. This token gives the engines a window large enough
    * to cover essentially any single playback session.
+   *
+   * Security envelope (deliberately accepted — see issue #356). The token is
+   * long-lived, stateless and carries no per-file or per-session claim, so a
+   * leaked manifest URL is replayable until expiry. The blast radius is bounded
+   * on four sides and the residual risk is judged acceptable rather than
+   * traded against the playback breakage a shorter TTL or session-binding would
+   * introduce (engines can't re-bake mid-stream):
+   *   1. user-scoped via `sub` — replays only the holder's OWN content;
+   *   2. every stream route still runs `resolveFile(mediaFileId, user)` under
+   *      `JwtOrApiKeyGuard`, enforcing the live library ACL on each request;
+   *   3. the manifest / segment routes are sid-gated (`assertFreshSession`
+   *      410s a stopped/GC'd session), so URLs die with their LiveSession;
+   *   4. disabling/deleting the user invalidates the token on its next use
+   *      (the strategy re-checks `enabled`).
+   * Tightening further (jti=sid binding, shorter TTL) is tracked but not done:
+   * it reworks the client's token-reuse flow and risks mid-playback reloads for
+   * a marginal gain over the above.
    */
   generateStreamToken(user: User): string {
     const ttl = this.config.get<string>('STREAM_TOKEN_TTL', '12h');
