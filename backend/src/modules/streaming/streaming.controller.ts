@@ -579,6 +579,7 @@ export class StreamingController {
     res: Response,
     filePath: string,
     contentType: string,
+    skipTimelineRewrite = false,
   ): Promise<void> {
     // TS segments aren't fMP4/CMAF — the CMAF rewrite and tfdt anchoring below
     // are no-ops on them, and running an ISO-BMFF box parser over MPEG-TS bytes
@@ -609,7 +610,15 @@ export class StreamingController {
       if (!res.headersSent) res.status(404).end();
       return;
     }
-    const out = await this.anchorSegmentTimeline(filePath, buf);
+    // Remux (`-c:v copy`) segments carry an absolute, GOP-aligned -copyts
+    // timeline; the grid tfdt anchor assumes forced-keyframe transcode output
+    // (seg-N decodes at N*SEG) and would shift each remux segment by its own
+    // IDR-vs-grid offset, breaking the single monotonic timeline (#349).
+    // Transcode output is grid-aligned so the anchor is a no-op — only remux
+    // must skip it.
+    const out = skipTimelineRewrite
+      ? buf
+      : await this.anchorSegmentTimeline(filePath, buf);
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', String(out.length));
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1861,7 +1870,16 @@ export class StreamingController {
       sendTransientUnavailable(res);
       return;
     }
-    await this.serveCmafFile(res, segPath, segmentContentType(segment));
+    // Remux segments skip the tfdt anchor — they already carry an absolute
+    // -copyts timeline (see serveCmafFile / #349). The early-probe paths above
+    // never run for remux (gated on quality !== 'remux'), so this main serve
+    // is the only remux-reachable tfdt path.
+    await this.serveCmafFile(
+      res,
+      segPath,
+      segmentContentType(segment),
+      quality === 'remux',
+    );
   }
 
   // ---------------------------------------------------------------------------
