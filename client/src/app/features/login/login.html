@@ -1,7 +1,11 @@
 <div class="min-h-screen flex items-center justify-center bg-base-200">
   <div class="card w-96 bg-base-100 shadow-xl">
     <div class="card-body">
-      <h2 class="card-title text-2xl justify-center mb-4">{{ 'app.name' | translate }}</h2>
+      <img
+        src="/fliks-logo-ondark.svg"
+        alt="{{ 'app.name' | translate }}"
+        class="h-14 w-auto mx-auto mb-6"
+      />
 
       @if (error()) {
         <div role="alert" class="alert alert-error mb-4">
