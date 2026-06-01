@@ -18,7 +18,7 @@ jobs:
   build-dmg:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # ── Resolve version + patch Info.plist BEFORE build ──
       # The DMG name comes from Info.plist's CFBundleShortVersionString
@@ -45,7 +45,7 @@ jobs:
           echo "Patched Info.plist: CFBundleShortVersionString=$SHORT (from $RAW)"
 
       # ── Node.js for building client + backend ──
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -108,6 +108,6 @@ jobs:
       # ── Attach DMG to GitHub Release (tag pushes only) ──
       - name: Attach to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: macos/build/Fliks-*.dmg

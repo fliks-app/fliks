@@ -61,7 +61,7 @@ jobs:
         target: ${{ fromJSON(needs.setup.outputs.platforms) }}
     runs-on: ${{ matrix.target.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Sanitize platform for cache key
         id: sanitize
