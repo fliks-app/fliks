@@ -1,5 +1,95 @@
 # Changelog
 
+## [1.8.0](https://github.com/fliks-app/fliks/compare/v1.7.1...v1.8.0) (2026-06-01)
+
+
+### Features
+
+* **activity:** add block-torrent action with rule-based re-grab ([#275](https://github.com/fliks-app/fliks/issues/275)) ([d31312c](https://github.com/fliks-app/fliks/commit/d31312cb52119ee1fc196969039569b750f86970))
+* **activity:** add queue search and group downloads by add date ([#274](https://github.com/fliks-app/fliks/issues/274)) ([add54d6](https://github.com/fliks-app/fliks/commit/add54d620647efb8a9fc482b485e22f1d827b749))
+* **activity:** filter the download queue by status with pagination ([#273](https://github.com/fliks-app/fliks/issues/273)) ([e162f43](https://github.com/fliks-app/fliks/commit/e162f43f2ed2ae19e7893d46bd071d13e4f39d67))
+* **ci:** publish iOS to App Store Connect on every release tag ([#265](https://github.com/fliks-app/fliks/issues/265)) ([8d5bac2](https://github.com/fliks-app/fliks/commit/8d5bac2012bcd44a796aeb501c816e3d5974db2c))
+* **home:** add "Demandes récentes" zone with request cards ([#311](https://github.com/fliks-app/fliks/issues/311)) ([b848046](https://github.com/fliks-app/fliks/commit/b848046eacf622875c8e84ad55e9814ed401701d)), closes [#291](https://github.com/fliks-app/fliks/issues/291)
+* **home:** personalizable zones + per-library recently added ([#310](https://github.com/fliks-app/fliks/issues/310)) ([6de7f44](https://github.com/fliks-app/fliks/commit/6de7f44e5df6a950b1f07f32d087ab88e4968e3c)), closes [#291](https://github.com/fliks-app/fliks/issues/291)
+* **media-detail:** add tracking-status modal per item ([#276](https://github.com/fliks-app/fliks/issues/276)) ([bc6d2ed](https://github.com/fliks-app/fliks/commit/bc6d2edaa14c147ca0e6d1112437173b4471672f))
+* **media:** cascade monitored toggle to seasons and episodes ([#314](https://github.com/fliks-app/fliks/issues/314)) ([174cf50](https://github.com/fliks-app/fliks/commit/174cf50eb0bf7763be632b6d487ec9e090d9e676))
+* **player:** native HLS subtitle renditions with client iOS rendering ([729c6cc](https://github.com/fliks-app/fliks/commit/729c6cc369ec79e02e8095f7f0a56fe8284697f0))
+* **settings:** toggles for auto-grab on approval and marker auto-detect ([#342](https://github.com/fliks-app/fliks/issues/342)) ([996540d](https://github.com/fliks-app/fliks/commit/996540d4ebb09b6020362394a8c388415057868d)), closes [#212](https://github.com/fliks-app/fliks/issues/212)
+* **sse:** scope events to recipients and add admin viewer messages ([#270](https://github.com/fliks-app/fliks/issues/270)) ([17015c9](https://github.com/fliks-app/fliks/commit/17015c9b53b3d515aaa7f443973792f0c16944ed))
+* **streaming:** auto-recover player when backend loses the LiveSession ([#302](https://github.com/fliks-app/fliks/issues/302)) ([77478aa](https://github.com/fliks-app/fliks/commit/77478aa3cf028b2a46764006112775bb1d309b35)), closes [#291](https://github.com/fliks-app/fliks/issues/291)
+* **streaming:** profile-keyed cache, heartbeat-driven lifecycle, multi-profile coexistence ([#290](https://github.com/fliks-app/fliks/issues/290)) ([a547fa4](https://github.com/fliks-app/fliks/commit/a547fa4ec9bc87e20d16829faef1a7e062d78704))
+* **streaming:** transcode-cache size + purge in admin, deprecate bulk-stop ([#309](https://github.com/fliks-app/fliks/issues/309)) ([b77eed8](https://github.com/fliks-app/fliks/commit/b77eed834d94ce0fe3f2d9707513ac9ceeead09f)), closes [#291](https://github.com/fliks-app/fliks/issues/291)
+* **streams:** show client device on the active-streams dashboard ([#271](https://github.com/fliks-app/fliks/issues/271)) ([0a6df8b](https://github.com/fliks-app/fliks/commit/0a6df8bf8b5c8a64d39afeb3bd13ef5b6f80d225))
+* **system-streams:** translate device label from the User-Agent header ([#305](https://github.com/fliks-app/fliks/issues/305)) ([13519a7](https://github.com/fliks-app/fliks/commit/13519a7c8e20680556b16791772ad517c80583d7))
+* **webos:** native LG TV player and platform fixes ([#280](https://github.com/fliks-app/fliks/issues/280)) ([3b4ac99](https://github.com/fliks-app/fliks/commit/3b4ac99c6e3225c55b22d3040fc48bcd24a029b6))
+
+
+### Bug Fixes
+
+* **auto-grab:** grab only the targeted episode and heal history links ([#272](https://github.com/fliks-app/fliks/issues/272)) ([3512cae](https://github.com/fliks-app/fliks/commit/3512caeb1df6366822bcdcb1d0bd66e32964681b))
+* **cache:** revalidate browsing pages after the cache preload ([#284](https://github.com/fliks-app/fliks/issues/284)) ([a67255b](https://github.com/fliks-app/fliks/commit/a67255b68fd22b2fb1dc9cd02a5bd2713f56f670))
+* **ci:** bump iOS publish workflow to Xcode 26 / iOS 26 SDK ([#268](https://github.com/fliks-app/fliks/issues/268)) ([3a3e523](https://github.com/fliks-app/fliks/commit/3a3e523f18103a9d8841a73fc0cfc79a5662cad3))
+* **ci:** select Xcode via maxim-lobanov/setup-xcode action ([#269](https://github.com/fliks-app/fliks/issues/269)) ([4b35661](https://github.com/fliks-app/fliks/commit/4b3566176cfa59b54f420dcfab040558dff6415e))
+* **episodes:** treat multi-episode files as on-disk via derived coverage ([#277](https://github.com/fliks-app/fliks/issues/277)) ([9b8300a](https://github.com/fliks-app/fliks/commit/9b8300abc38ed4b4cf78d23265ec7a5a7440721f))
+* **ios-player:** re-emit tracks after media selection group populates ([#380](https://github.com/fliks-app/fliks/issues/380)) ([6901695](https://github.com/fliks-app/fliks/commit/690169533a7c762a3db12882ff348d90e9e35051)), closes [#378](https://github.com/fliks-app/fliks/issues/378)
+* **layout:** tablet native top toolbar offset and dock nav swap ([#293](https://github.com/fliks-app/fliks/issues/293)) ([96d146d](https://github.com/fliks-app/fliks/commit/96d146dc63ef147fca1d2bbfc30dbd5ab3c107ec))
+* **media-card:** right-size home cards across breakpoints ([#312](https://github.com/fliks-app/fliks/issues/312)) ([624554d](https://github.com/fliks-app/fliks/commit/624554d80127506c81d077015c8e4faf1f1e4547)), closes [#291](https://github.com/fliks-app/fliks/issues/291)
+* **media-detail:** compact header on mobile landscape + clamp synopsis ([#313](https://github.com/fliks-app/fliks/issues/313)) ([7ebe7f2](https://github.com/fliks-app/fliks/commit/7ebe7f20a15ce05e919c1733b0a394d402c7d38b))
+* **media-detail:** hide profiles + monitored badge below lg ([#375](https://github.com/fliks-app/fliks/issues/375)) ([a0f711c](https://github.com/fliks-app/fliks/commit/a0f711c892bea7323892bb8f685eaae997d070d2))
+* **media:** forwardRef the SchedulerService dep on MediaMetadataService ([#283](https://github.com/fliks-app/fliks/issues/283)) ([efc9b3c](https://github.com/fliks-app/fliks/commit/efc9b3c807188f3971f63ea2b2503c32886fb582))
+* **media:** make the cutoff-unmet series filter multi-episode aware ([#278](https://github.com/fliks-app/fliks/issues/278)) ([c6e2c8b](https://github.com/fliks-app/fliks/commit/c6e2c8b80a0a10c449ed3a640ddb19e0b2a9cb4f))
+* **player:** audited quick wins — stuck spinner, leaks, startup latency, i18n, a11y ([#318](https://github.com/fliks-app/fliks/issues/318)) ([2c3e9f5](https://github.com/fliks-app/fliks/commit/2c3e9f58cf5ea43b37fca79bf529257d90e1326a))
+* **player:** clean session-recovery reload (spinner, prewarmed resume) ([#316](https://github.com/fliks-app/fliks/issues/316)) ([dadaa7f](https://github.com/fliks-app/fliks/commit/dadaa7f4b155ac1e1c5a48c3c2d1eb2e7fac01a2))
+* **player:** correct Tizen/webOS/Cast teardown and reload edge cases ([#333](https://github.com/fliks-app/fliks/issues/333)) ([3732d82](https://github.com/fliks-app/fliks/commit/3732d829cb96344f9c2570ed003a236ec2ebed97)), closes [#325](https://github.com/fliks-app/fliks/issues/325)
+* **player:** cross-platform audio + seek correctness fixes ([#341](https://github.com/fliks-app/fliks/issues/341)) ([617237f](https://github.com/fliks-app/fliks/commit/617237f7efc8c25ebe109921ebb8d86674aac5ef)), closes [#325](https://github.com/fliks-app/fliks/issues/325)
+* **player:** i18n Tizen/webOS engine errors, drop redundant auto-pick ([#338](https://github.com/fliks-app/fliks/issues/338)) ([dd691b1](https://github.com/fliks-app/fliks/commit/dd691b10f0c75bab3b8dceebdf4d58be565a9c55)), closes [#328](https://github.com/fliks-app/fliks/issues/328)
+* **player:** iOS stall-recovery spinner via timeControlStatus ([#329](https://github.com/fliks-app/fliks/issues/329)) ([c8cc148](https://github.com/fliks-app/fliks/commit/c8cc148ebffb4e96c1a6e9d9c94c9b385a527d64))
+* **player:** recover from stalled playback with capped backoff ([#340](https://github.com/fliks-app/fliks/issues/340)) ([9554995](https://github.com/fliks-app/fliks/commit/9554995f63d0b294a5e45b2c27e39e2496cc3757)), closes [#322](https://github.com/fliks-app/fliks/issues/322)
+* **player:** refresh sid via playback-info on cast disconnect ([#295](https://github.com/fliks-app/fliks/issues/295)) ([10514ef](https://github.com/fliks-app/fliks/commit/10514ef75361236944987a53eb9401db81b52dcb)), closes [#291](https://github.com/fliks-app/fliks/issues/291)
+* **player:** remove leaked DOM listeners, abort sprite fetch on teardown ([#332](https://github.com/fliks-app/fliks/issues/332)) ([da54545](https://github.com/fliks-app/fliks/commit/da545456058cc52a7d0a868a76ec60efae4d90d5)), closes [#326](https://github.com/fliks-app/fliks/issues/326)
+* **player:** report the selected audio track on iOS ([#339](https://github.com/fliks-app/fliks/issues/339)) ([8415145](https://github.com/fliks-app/fliks/commit/841514517e7d463639b01af1977bb5aa58b8f803))
+* **player:** stop background relaunch after closing the player ([#337](https://github.com/fliks-app/fliks/issues/337)) ([300cae7](https://github.com/fliks-app/fliks/commit/300cae7874b75c476a568164dafa10a311fcac6b))
+* **player:** surface recovery failures and keep resume position ([#334](https://github.com/fliks-app/fliks/issues/334)) ([08b864b](https://github.com/fliks-app/fliks/commit/08b864b21819fd8a12a76a4942ee78f556aec4f2)), closes [#322](https://github.com/fliks-app/fliks/issues/322)
+* **requests, media:** unify metadata workflow and kick auto-grab on every approval/refresh ([#281](https://github.com/fliks-app/fliks/issues/281)) ([ea2ed22](https://github.com/fliks-app/fliks/commit/ea2ed22eaabbb40757bbd38372e5f6a77abc5661))
+* **streaming:** 410 gone for stale sids + cross-engine recovery ([#306](https://github.com/fliks-app/fliks/issues/306)) ([748db00](https://github.com/fliks-app/fliks/commit/748db00643de3ce504dd7015715d1086caaefb11))
+* **streaming:** derive early-companion read window from segment duration ([#367](https://github.com/fliks-app/fliks/issues/367)) ([204ac29](https://github.com/fliks-app/fliks/commit/204ac298f2b700546b88232cc2e4caf4d06bbff1)), closes [#346](https://github.com/fliks-app/fliks/issues/346)
+* **streaming:** don't grid-snap remux segment tfdt ([#370](https://github.com/fliks-app/fliks/issues/370)) ([b693386](https://github.com/fliks-app/fliks/commit/b69338655d55d77fbf4e136d6db72ccd2c3c30a3)), closes [#349](https://github.com/fliks-app/fliks/issues/349)
+* **streaming:** drop -master_display/-max_cll from hevc_qsv (NVENC-only opt) ([#374](https://github.com/fliks-app/fliks/issues/374)) ([dab581b](https://github.com/fliks-app/fliks/commit/dab581bdeb810381a889d887f65f7e34c6f018f0))
+* **streaming:** enforce library ACL on subtitle routes (IDOR) ([#358](https://github.com/fliks-app/fliks/issues/358)) ([f72ca96](https://github.com/fliks-app/fliks/commit/f72ca969a3784611383d076e44fd2e4a19efe28d)), closes [#345](https://github.com/fliks-app/fliks/issues/345)
+* **streaming:** enforce library ACL on the segment-serve fast path ([#364](https://github.com/fliks-app/fliks/issues/364)) ([37a1f39](https://github.com/fliks-app/fliks/commit/37a1f39c0ecdea04776ab1a22fc520ff457321ce))
+* **streaming:** keep transcode cache to one timeline across restarts and seeks ([#317](https://github.com/fliks-app/fliks/issues/317)) ([39dcd1b](https://github.com/fliks-app/fliks/commit/39dcd1b381558f44e5097e304491588022038e53))
+* **streaming:** label copy-mode Opus/FLAC audio correctly in CODECS ([#361](https://github.com/fliks-app/fliks/issues/361)) ([555c6e0](https://github.com/fliks-app/fliks/commit/555c6e07576d0fbef195ff5aed9c476adb4980b0)), closes [#347](https://github.com/fliks-app/fliks/issues/347)
+* **streaming:** make the TS (Tizen) path .m4s/.ts agnostic ([#362](https://github.com/fliks-app/fliks/issues/362)) ([a8546a1](https://github.com/fliks-app/fliks/commit/a8546a1e28086cff3566b1e66a8bf3a9443daa5b)), closes [#357](https://github.com/fliks-app/fliks/issues/357)
+* **streaming:** pin HDR original/remux to a single master variant ([#377](https://github.com/fliks-app/fliks/issues/377)) ([5cdab40](https://github.com/fliks-app/fliks/commit/5cdab409d5326703868ba36a9ba32aa26ec89289))
+* **streaming:** propagate source HDR10 static metadata to encoders ([#371](https://github.com/fliks-app/fliks/issues/371)) ([cdc5849](https://github.com/fliks-app/fliks/commit/cdc58494e67c54464ace99f3e496d96f9ea91edd))
+* **streaming:** report real audio channel count in EXT-X-MEDIA CHANNELS ([#366](https://github.com/fliks-app/fliks/issues/366)) ([82514fa](https://github.com/fliks-app/fliks/commit/82514fa7e0e7bf294cc027fcd95b333c9a75d336)), closes [#348](https://github.com/fliks-app/fliks/issues/348)
+* **streaming:** return a retryable 503 when a segment vanishes mid-serve ([#365](https://github.com/fliks-app/fliks/issues/365)) ([a984edd](https://github.com/fliks-app/fliks/commit/a984edd3886b251b088200f891a6c52a068ee846)), closes [#351](https://github.com/fliks-app/fliks/issues/351)
+* **streaming:** scale to mod-2 so encode height matches the manifest ([#373](https://github.com/fliks-app/fliks/issues/373)) ([de08917](https://github.com/fliks-app/fliks/commit/de08917cd63cb4d63d5bfa61b677c37806b32331)), closes [#344](https://github.com/fliks-app/fliks/issues/344)
+* **streaming:** skip the seg-0 early-start companion for native players ([#379](https://github.com/fliks-app/fliks/issues/379)) ([ddc34ca](https://github.com/fliks-app/fliks/commit/ddc34cae7d0dac81aa9298a9dd97349502cdb4c6))
+* **streaming:** start native resumes at the resume segment, not 0 ([#381](https://github.com/fliks-app/fliks/issues/381)) ([8bd1e43](https://github.com/fliks-app/fliks/commit/8bd1e435b5dbe531a41a295d7f6460d9fbcb14b5))
+* **streaming:** stop cache GC evicting live dirs; track post-boot growth ([#359](https://github.com/fliks-app/fliks/issues/359)) ([8137c01](https://github.com/fliks-app/fliks/commit/8137c01c4fb54292a38f9a860983f0f27eaf5876)), closes [#343](https://github.com/fliks-app/fliks/issues/343)
+* **streaming:** unblock AV1 seeks and surface ffmpeg errors in logs ([#384](https://github.com/fliks-app/fliks/issues/384)) ([88f019f](https://github.com/fliks-app/fliks/commit/88f019fe747c9d27ba33a561fc46b216208e1717))
+* **streaming:** validate direct-play Range header (RFC 7233) ([#360](https://github.com/fliks-app/fliks/issues/360)) ([5e4e2a3](https://github.com/fliks-app/fliks/commit/5e4e2a3ab0325c474ac6d1c874eb2b2a3fa8c129)), closes [#350](https://github.com/fliks-app/fliks/issues/350)
+* **subtitles:** pick the right native subtitle track (language + forced) ([#336](https://github.com/fliks-app/fliks/issues/336)) ([1fbd93d](https://github.com/fliks-app/fliks/commit/1fbd93d8f0af1d2ba833a3ddd6e2141c0ef6e6ce))
+* **system-streams:** target commands via LiveSession instead of transcode key ([#307](https://github.com/fliks-app/fliks/issues/307)) ([aa1d371](https://github.com/fliks-app/fliks/commit/aa1d371e1e4d51a94fe2ddb3a67562f5b9e0ea32))
+* **webos-player:** emit sessionExpired on network errors for 410 recovery ([#308](https://github.com/fliks-app/fliks/issues/308)) ([6af6cb8](https://github.com/fliks-app/fliks/commit/6af6cb8ccebf09a357760ff116fb6bc992b823ea))
+
+
+### Performance Improvements
+
+* **player:** cache a cue cursor for the TV subtitle overlay ([#331](https://github.com/fliks-app/fliks/issues/331)) ([469afcd](https://github.com/fliks-app/fliks/commit/469afcd2b850c57c5c303a329283db16b6d7aa0e)), closes [#324](https://github.com/fliks-app/fliks/issues/324)
+
+
+### Reverts
+
+* **layout:** put requests back in the phone dock and history in the more menu ([#297](https://github.com/fliks-app/fliks/issues/297)) ([56506a8](https://github.com/fliks-app/fliks/commit/56506a898beb9c8d711bcc3ef55ebfec9eb14e22))
+
+
+### Miscellaneous Chores
+
+* prepare 1.7.2 release ([#267](https://github.com/fliks-app/fliks/issues/267)) ([198151d](https://github.com/fliks-app/fliks/commit/198151d5c65e44abfb9fe33920955e27c5f9dd68))
+* set next release to 1.8.0 ([#376](https://github.com/fliks-app/fliks/issues/376)) ([8773f07](https://github.com/fliks-app/fliks/commit/8773f076f8362662adbec951a83fecedd415b7cb))
+
 ## [1.7.1](https://github.com/fliks-app/fliks/compare/v1.7.0...v1.7.1) (2026-05-26)
 
 
