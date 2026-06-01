@@ -168,6 +168,10 @@ await write(await icon(iconSvg, 1024, { pad: 0.14 }), `${AND_RES}/drawable/fliks
 await write(await icon(iconSvg, 1024, { pad: 0.04 }), 'client/tizen/icon.png');
 await write(await icon(iconSvg, 1024, { pad: 0.04 }), 'client/webos/icon.png');
 
+// Chromecast receiver splash mark — transparent, composited over the
+// #1d232a splash; shown at 192 CSS px so 384 covers 2× displays.
+await write(await sharp(await icon(iconSvg, 384, { pad: 0.04 })).webp({ quality: 92 }).toBuffer(), 'cast-receiver/fliks-mark.webp');
+
 // Splash — icon only, on the brand base
 for (const [d, [w, h]] of Object.entries(AND_SPLASH)) await write(await splash(iconSvg, w, h, 0.40), `${AND_RES}/${d}/splash.png`);
 for (const f of ['splash-2732x2732.png', 'splash-2732x2732-1.png', 'splash-2732x2732-2.png']) {

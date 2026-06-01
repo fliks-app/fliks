@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg id="Calque_2" data-name="Calque 2" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 378.03 148.46">
   <defs>
+    <filter id="vibrant" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feColorMatrix type="saturate" values="1.75"/>
+    </filter>
     <style>
       .cls-1 {
         fill: url(#Dégradé_sans_nom_135);
@@ -125,7 +128,7 @@
       <stop offset="1" stop-color="#b54b96"/>
     </linearGradient>
   </defs>
-  <g id="Calque_1-2" data-name="Calque 1">
+  <g id="Calque_1-2" data-name="Calque 1" filter="url(#vibrant)">
     <polygon class="cls-8" points="156.95 109.4 172.38 109.4 172.38 84.64 204.47 84.64 204.47 72.31 172.38 72.31 172.38 54.66 208.02 54.66 208.02 42.33 156.95 42.33 156.95 109.4"/>
     <rect class="cls-3" x="190.01" y="66.51" width="70.34" height="15.43" transform="translate(299.41 -150.95) rotate(90)"/>
     <rect class="cls-3" x="227.84" y="75.93" width="51.54" height="15.43" transform="translate(337.25 -169.96) rotate(90)"/>
