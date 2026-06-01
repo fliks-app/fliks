@@ -28,6 +28,22 @@ import {
 import { resolveTonemapPath } from './tonemap-path';
 import { normaliseSourceCodec } from './codec/normalise';
 
+/**
+ * Probe ceiling (bytes) for the trusted-streamInfo fast path. Paired with
+ * `-analyzeduration 0` so it stays a read *ceiling*, not a target — FFmpeg
+ * stops as soon as it has stream parameters, keeping cold-start open time at
+ * the same ~70 ms regardless of the value.
+ *
+ * 5 MB rather than a few hundred KB because AV1-in-Matroska needs the demuxer
+ * to ingest enough of the bitstream up front to set the decoder up for a
+ * mid-file input seek. Under ~3 MB the demuxer delivers no decodable sequence
+ * after `-ss`, the decoder emits zero frames, and the HLS muxer writes no
+ * segments — every resume/scrub on such a source stalls. The larger ceiling
+ * is read only when the demuxer actually needs it, so it carries no measurable
+ * startup cost on the common (small-header) case.
+ */
+const TRUSTED_PROBE_SIZE = '5000000';
+
 export interface BuildFfmpegArgsOptions {
   inputPath: string;
   profile: TranscodeProfile;
@@ -218,8 +234,8 @@ export function buildFfmpegArgs(
   // headers and stops. Otherwise fall back to a balanced 1s/1MB budget.
   // Default FFmpeg is 5s/5MB which burns 3-5s on cold start of large 4K MKVs.
   if (trustedStreamInfo) {
-    log.debug?.('Probe: using cached streamInfo (0s / 200KB scan)');
-    args.push('-analyzeduration', '0', '-probesize', '200000');
+    log.debug?.('Probe: using cached streamInfo (0s / 5MB ceiling)');
+    args.push('-analyzeduration', '0', '-probesize', TRUSTED_PROBE_SIZE);
   } else {
     // Keep the no-cache fallback at LOG — cold-start scans are expected
     // only on rescan / import races, so each one is worth surfacing.
@@ -725,9 +741,9 @@ export function buildAudioOnlyFfmpegArgs(
   const args = ['-hide_banner', '-loglevel', 'warning'];
   if (trustedStreamInfo) {
     log.debug?.(
-      'Probe [audio-only]: using cached streamInfo (0s / 200KB scan)',
+      'Probe [audio-only]: using cached streamInfo (0s / 5MB ceiling)',
     );
-    args.push('-analyzeduration', '0', '-probesize', '200000');
+    args.push('-analyzeduration', '0', '-probesize', TRUSTED_PROBE_SIZE);
   } else {
     log.log(
       'Probe [audio-only]: no cached streamInfo — running full FFmpeg scan (1s / 1MB)',
@@ -808,8 +824,8 @@ export function buildRemuxArgs(
 
   const args = ['-hide_banner', '-loglevel', 'warning'];
   if (trustedStreamInfo) {
-    log?.log('Probe [remux]: using cached streamInfo (0s / 200KB scan)');
-    args.push('-analyzeduration', '0', '-probesize', '200000');
+    log?.log('Probe [remux]: using cached streamInfo (0s / 5MB ceiling)');
+    args.push('-analyzeduration', '0', '-probesize', TRUSTED_PROBE_SIZE);
   } else {
     log?.log(
       'Probe [remux]: no cached streamInfo — running full FFmpeg scan (1s / 1MB)',
