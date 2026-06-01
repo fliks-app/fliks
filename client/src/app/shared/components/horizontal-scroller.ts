@@ -1,6 +1,7 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  DestroyRef,
   HostListener,
   inject,
   input,
@@ -10,79 +11,33 @@ import {
   AfterViewInit,
   OnDestroy,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { LucideChevronLeft, LucideChevronRight } from '@lucide/angular';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { TvService } from '../../core/services/tv.service';
+import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 
 @Component({
   selector: 'app-horizontal-scroller',
   imports: [LucideChevronLeft, LucideChevronRight, TvRowDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <!-- Header: title + arrows (arrows are mouse-only — hidden on touch/TV,
-         and when content fits without scrolling so we don't show two grey
-         disabled chevrons doing nothing). -->
-    <div class="flex items-center justify-between mb-3">
-      <h2 class="text-lg font-bold">{{ title() }}</h2>
-      @if (!atStart() || !atEnd()) {
-        <div class="flex gap-1 scroll-arrows">
-          <button
-            type="button"
-            tabindex="-1"
-            class="btn btn-ghost btn-sm btn-circle"
-            [disabled]="atStart()"
-            (click)="scrollLeft()"
-          >
-            <svg lucideChevronLeft class="h-5 w-5"></svg>
-          </button>
-          <button
-            type="button"
-            tabindex="-1"
-            class="btn btn-ghost btn-sm btn-circle"
-            [disabled]="atEnd()"
-            (click)="scrollRight()"
-          >
-            <svg lucideChevronRight class="h-5 w-5"></svg>
-          </button>
-        </div>
-      }
-    </div>
-    <!-- Scrollable content (no visible scrollbar). Vertical / horizontal
-         padding (with matching negative margin so neighbours don't shift)
-         makes room for the focus ring + media-card scale-up — both extend
-         past the row and would otherwise be clipped by overflow-x:auto's
-         implicit overflow-y. -->
-    <div
-      #scroller
-      appTvRow
-      class="flex gap-2 lg:gap-4 overflow-x-auto scrollbar-none [scroll-behavior:smooth] py-5 -my-5 px-4 -mx-4 lg:px-5 lg:-mx-5 scroll-px-4 lg:scroll-px-5"
-      (scroll)="updateArrows()"
-    >
-      <ng-content />
-    </div>
-  `,
-  styles: [`
-    .scrollbar-none {
-      scrollbar-width: none;
-      -ms-overflow-style: none;
-    }
-    .scrollbar-none::-webkit-scrollbar {
-      display: none;
-    }
-    /* Hide the < > scroll arrows on touch / TV — they're mouse-only ergonomy.
-       Use both a body.tv selector (reliable) and a hover-media query (web touch). */
-    :host-context(body.tv) .scroll-arrows { display: none; }
-    @media (hover: none) {
-      .scroll-arrows { display: none; }
-    }
-  `],
+  templateUrl: './horizontal-scroller.html',
+  styleUrl: './horizontal-scroller.css',
 })
 export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly tv = inject(TvService);
+  private readonly reuse = inject(CachingReuseStrategy);
+  private readonly destroyRef = inject(DestroyRef);
   readonly title = input('');
   readonly atStart = signal(true);
   readonly atEnd = signal(false);
+  /** Edge arrows reveal only while the cursor sits within {@link EDGE_ZONE_PX}
+   *  of that edge, not on a whole-row hover — so they don't cover the middle
+   *  cards and only show where they act. */
+  readonly showLeft = signal(false);
+  readonly showRight = signal(false);
+  private static readonly EDGE_ZONE_PX = 80;
 
   private readonly scrollerEl = viewChild<ElementRef<HTMLElement>>('scroller');
   private resizeObserver?: ResizeObserver;
@@ -132,6 +87,20 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
       this.resizeObserver = new ResizeObserver(() => this.updateArrows());
       this.resizeObserver.observe(el);
     }
+    // Routes flagged `reuse: true` detach this row's DOM on navigate-away and
+    // reattach it on return without re-running ngAfterViewInit. The reattach
+    // can reset the rail's scrollLeft and leaves atStart/atEnd stale, so the
+    // arrows show the wrong state coming back from a detail page. Recompute
+    // once the page is reattached (next frame, after layout settles).
+    this.reuse.attached$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        // The cursor isn't necessarily over the row on return — drop any
+        // stale proximity state, then recompute the scroll extents.
+        this.showLeft.set(false);
+        this.showRight.set(false);
+        requestAnimationFrame(() => this.updateArrows());
+      });
   }
 
   ngOnDestroy() {
@@ -153,5 +122,23 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
   scrollRight() {
     const el = this.scrollerEl()?.nativeElement;
     if (el) el.scrollBy({ left: el.clientWidth * 0.8, behavior: 'smooth' });
+  }
+
+  /** Reveal an edge arrow only when the cursor is within the edge zone on
+   *  that side. Signals are written only on change so the high-frequency
+   *  mousemove doesn't thrash change detection. */
+  onPointerMove(event: MouseEvent) {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const zone = HorizontalScrollerComponent.EDGE_ZONE_PX;
+    const left = x <= zone;
+    const right = x >= rect.width - zone;
+    if (this.showLeft() !== left) this.showLeft.set(left);
+    if (this.showRight() !== right) this.showRight.set(right);
+  }
+
+  onPointerLeave() {
+    if (this.showLeft()) this.showLeft.set(false);
+    if (this.showRight()) this.showRight.set(false);
   }
 }

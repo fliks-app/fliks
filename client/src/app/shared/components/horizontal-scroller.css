@@ -1,0 +1,57 @@
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Large edge scroll affordances. Centred on the row, they fade in while the
+   row is hovered and scroll one viewport-width on click. Mouse-only — on
+   touch they get in the way of swiping, and on TV the row is driven by
+   spatial navigation. */
+.scroll-edge {
+  position: absolute;
+  top: 50%;
+  z-index: 10;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1d232a;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, background-color 120ms ease, transform 120ms ease;
+}
+.scroll-edge--left {
+  left: 0.5rem;
+}
+.scroll-edge--right {
+  right: 0.5rem;
+}
+
+.scroll-edge.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.scroll-edge:hover {
+  background: #ffffff;
+  transform: translateY(-50%) scale(1.06);
+}
+.scroll-edge:active {
+  transform: translateY(-50%) scale(0.97);
+}
+
+:host-context(body.tv) .scroll-edge {
+  display: none;
+}
+@media (hover: none) {
+  .scroll-edge {
+    display: none;
+  }
+}
