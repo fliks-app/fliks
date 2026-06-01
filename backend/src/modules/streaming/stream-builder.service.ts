@@ -601,6 +601,22 @@ export class StreamBuilderService {
       });
     }
 
+    // Forced transcode (no remux → no `original`, e.g. HEVC/AV1 on desktop):
+    // there's no split, so the eco rung above wasn't emitted. Still surface
+    // one low-consumption choice at source resolution, right after the top
+    // rung. Desktop-only — mobile's top rung is already the low one and is
+    // present in the list above.
+    if (deviceType === 'desktop' && lowProfile && !videoCopyStream) {
+      qualities.splice(1, 0, {
+        id: lowProfile.name,
+        label: resolutionLabel,
+        height: originalHeight,
+        totalBitrateBps: lowTotal,
+        isRemux: false,
+        lowBandwidth: true,
+      });
+    }
+
     return qualities;
   }
 
