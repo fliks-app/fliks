@@ -3,6 +3,10 @@
 # release-please) plus on manual `workflow_dispatch` for ad-hoc
 # re-uploads to other tracks.
 #
+# On tag builds it also assembles a signed APK and attaches it to the
+# GitHub release (release-please created it for the tag) as
+# `Fliks-<version>.apk`, for direct sideloading outside the Play Store.
+#
 # Promotion from `internal` → `alpha`/`beta`/`production` stays a
 # manual click in Play Console; this workflow never touches anything
 # beyond what the dispatch input asks for.
@@ -28,7 +32,9 @@ on:
         default: internal
 
 permissions:
-  contents: read
+  # `write` so the signed APK can be attached to the GitHub release that
+  # release-please created for the `v*` tag.
+  contents: write
 
 jobs:
   build-and-publish:
@@ -84,6 +90,36 @@ jobs:
         run: |
           cd android
           ./gradlew bundleRelease
+
+      # Signed APK for direct sideloading, attached to the GitHub release.
+      # Only on tag builds (a release exists to attach to); the same release
+      # signingConfig that signs the AAB signs this APK. Reuses the gradle
+      # build from bundleRelease above, so it is a cheap incremental task.
+      - name: Assemble signed release APK
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          ORG_GRADLE_PROJECT_FLIKS_VERSION_CODE: ${{ steps.vcode.outputs.value }}
+          ORG_GRADLE_PROJECT_FLIKS_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_FLIKS_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_FLIKS_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: |
+          cd android
+          ./gradlew assembleRelease
+
+      - name: Stage signed APK with a versioned name
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: apk
+        run: |
+          dest="Fliks-${GITHUB_REF_NAME#v}.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/$dest"
+          echo "path=$dest" >> "$GITHUB_OUTPUT"
+
+      - name: Attach signed APK to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.apk.outputs.path }}
+          fail_on_unmatched_files: true
 
       - name: Extract latest release notes from CHANGELOG.md
         # release-please writes one section per release in the format
