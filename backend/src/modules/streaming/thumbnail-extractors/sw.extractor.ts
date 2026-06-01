@@ -38,12 +38,14 @@ export class SwExtractor implements ExtractorBackend {
       '-noaccurate_seek',
       '-ss',
       String(seekSeconds),
-      // Minimise per-process startup cost: we're spawning one ffmpeg per
-      // thumbnail and don't need a full stream probe.
+      // `-analyzeduration 0` keeps per-thumbnail startup minimal; the 5 MB
+      // probe is a ceiling read only when the demuxer needs it. AV1-in-Matroska
+      // requires it so the decoder is set up for the `-ss` seek — under ~3 MB
+      // the post-seek decode yields no frame and the thumbnail comes out blank.
       '-analyzeduration',
       '0',
       '-probesize',
-      '200000',
+      '5000000',
       '-i',
       inputPath,
       '-frames:v',
