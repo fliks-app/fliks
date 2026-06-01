@@ -952,7 +952,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         }
       }, 500);
 
-      timeout = setTimeout(() => finish(null), timeoutMs);
+      timeout = setTimeout(() => {
+        // ffmpeg launched but the segment never landed in time. Don't fail the
+        // request silently — surface the stall (slow/unsupported decode, e.g.
+        // CPU AV1, or a stuck input) with ffmpeg's state + last stderr so a
+        // seek that "does nothing" is traceable in prod.
+        const running = session.process.exitCode === null;
+        this.log.warn(
+          `[${session.id}] segment ${name} not produced within ${timeoutMs}ms — ffmpeg ${running ? 'still running' : `exited ${session.process.exitCode}`}${session.stderr ? `\nlast stderr:\n${session.stderr.slice(-1500)}` : ''}`,
+        );
+        finish(null);
+      }, timeoutMs);
     });
   }
 
@@ -1076,13 +1086,14 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         resolved = true;
         readyResolve();
       }
-      if (code && code !== 0 && code !== 255) {
+      if (!session.intentionallyKilled && code !== 0) {
+        // Any exit we didn't ask for is a real failure — decode error, corrupt
+        // or unsupported input, OOM kill, etc. Surface it loudly with the
+        // ffmpeg tail so it's diagnosable in prod (where there's no terminal).
+        // `code !== 0` also catches a null code (process killed by a signal we
+        // didn't issue); our own kills set `intentionallyKilled` and skip this.
         this.log.error(
-          `FFmpeg [${id}] exited ${code}:\n${stderr.slice(-2000)}`,
-        );
-      } else if (!firstSegProduced && !session.intentionallyKilled) {
-        this.log.warn(
-          `FFmpeg [${id}] exited code=${code} WITHOUT producing first segment ${firstSegName}\nstderr:\n${stderr.slice(-2000)}`,
+          `FFmpeg [${id}] exited code=${code}${firstSegProduced ? '' : ` before producing ${firstSegName}`}:\n${stderr.slice(-2000)}`,
         );
       }
     });
