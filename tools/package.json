@@ -1,0 +1,13 @@
+{
+  "name": "fliks-brand-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Regenerate Fliks brand assets (icons, favicons, launcher icons, splash, menu bar) from the source SVGs.",
+  "scripts": {
+    "generate": "node generate-brand-assets.mjs"
+  },
+  "devDependencies": {
+    "sharp": "^0.33.5"
+  }
+}
