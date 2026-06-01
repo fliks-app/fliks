@@ -7,6 +7,11 @@
 # GitHub release (release-please created it for the tag) as
 # `Fliks-<version>.apk`, for direct sideloading outside the Play Store.
 #
+# To backfill the APK on an already-published release, run the workflow
+# via `workflow_dispatch` with the `apk_tag` input (e.g. `v1.8.0`): it
+# checks out that tag, builds + attaches the signed APK, and skips the
+# Play Store upload entirely.
+#
 # Promotion from `internal` → `alpha`/`beta`/`production` stays a
 # manual click in Play Console; this workflow never touches anything
 # beyond what the dispatch input asks for.
@@ -30,6 +35,10 @@ on:
         type: choice
         options: [internal, alpha, beta, production]
         default: internal
+      apk_tag:
+        description: 'Existing release tag to (re)build a signed APK for and attach to its GitHub release, e.g. v1.8.0. APK-only — skips the Play Store upload. Leave empty for a normal Play Store run.'
+        type: string
+        default: ''
 
 permissions:
   # `write` so the signed APK can be attached to the GitHub release that
@@ -45,6 +54,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # `apk_tag` rebuilds an already-released tag (its tree carries the
+          # old workflow, so we run main's workflow against the tag's source).
+          # Otherwise build the triggering ref.
+          ref: ${{ github.event.inputs.apk_tag || github.ref }}
           # Full history needed so `git rev-list --count HEAD` produces
           # a meaningful commit count for the versionCode.
           fetch-depth: 0
@@ -82,6 +95,9 @@ jobs:
             | base64 -d > android/app/fliks-upload.jks
 
       - name: Assemble signed release AAB
+        # Skipped in APK-only mode (`apk_tag` dispatch) — that path attaches a
+        # sideload build to an existing release and never touches Play Store.
+        if: github.event.inputs.apk_tag == ''
         env:
           ORG_GRADLE_PROJECT_FLIKS_VERSION_CODE: ${{ steps.vcode.outputs.value }}
           ORG_GRADLE_PROJECT_FLIKS_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
@@ -92,11 +108,10 @@ jobs:
           ./gradlew bundleRelease
 
       # Signed APK for direct sideloading, attached to the GitHub release.
-      # Only on tag builds (a release exists to attach to); the same release
-      # signingConfig that signs the AAB signs this APK. Reuses the gradle
-      # build from bundleRelease above, so it is a cheap incremental task.
+      # Runs on every `v*` tag push, and on an `apk_tag` dispatch that targets
+      # an already-released tag. Same release signingConfig that signs the AAB.
       - name: Assemble signed release APK
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.apk_tag != ''
         env:
           ORG_GRADLE_PROJECT_FLIKS_VERSION_CODE: ${{ steps.vcode.outputs.value }}
           ORG_GRADLE_PROJECT_FLIKS_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
@@ -107,21 +122,26 @@ jobs:
           ./gradlew assembleRelease
 
       - name: Stage signed APK with a versioned name
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.apk_tag != ''
         id: apk
         run: |
-          dest="Fliks-${GITHUB_REF_NAME#v}.apk"
+          tag="${{ github.event.inputs.apk_tag }}"
+          [ -z "$tag" ] && tag="$GITHUB_REF_NAME"
+          dest="Fliks-${tag#v}.apk"
           cp android/app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/$dest"
           echo "path=$dest" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Attach signed APK to the GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.apk_tag != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.apk.outputs.tag }}
           files: ${{ steps.apk.outputs.path }}
           fail_on_unmatched_files: true
 
       - name: Extract latest release notes from CHANGELOG.md
+        if: github.event.inputs.apk_tag == ''
         # release-please writes one section per release in the format
         # `## [X.Y.Z]` (followed by the date). Awk grabs everything
         # between the first such header and the next one — that is
@@ -143,6 +163,7 @@ jobs:
           fi
 
       - name: Upload to Play Store
+        if: github.event.inputs.apk_tag == ''
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
