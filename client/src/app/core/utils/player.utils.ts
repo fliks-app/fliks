@@ -20,12 +20,13 @@ export const PROFILE_WIDTHS: Record<string, number> = {
   '144p': 256,
 };
 
-/** Resolve a quality id (`'1080p'`, `'1080p-hdr'`, `'original'`, …) to
- *  the rung width. Strips an `-hdr` suffix because HDR rungs share the
- *  resolution of their SDR sibling. Returns `undefined` for unknown ids
- *  so the caller can apply its own fallback. */
+/** Resolve a quality id (`'1080p'`, `'1080p-hdr'`, `'eco-1080p'`,
+ *  `'original'`, …) to the rung width. Strips the `eco-` prefix (the
+ *  low-consumption rung shares its sibling's resolution) and any `-hdr`
+ *  suffix. Returns `undefined` for unknown ids so the caller can apply its
+ *  own fallback. */
 export function widthForProfile(id: string): number | undefined {
-  const base = id.replace(/-hdr$/, '');
+  const base = id.replace(/^eco-/, '').replace(/-hdr$/, '');
   return PROFILE_WIDTHS[base];
 }
 

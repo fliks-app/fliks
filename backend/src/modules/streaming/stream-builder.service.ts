@@ -14,6 +14,7 @@ import {
   encoderRegistry,
   getHdrLadderForDevice,
   getLadderForDevice,
+  isEcoProfile,
   parseBitrateToBps,
   profileFitsSource,
   requestedHwAccelFor,
@@ -250,7 +251,7 @@ export class StreamBuilderService {
         outputContainer: sourceContainer,
         hwAccel: 'none',
         tonemapping: false,
-        qualities: this.buildQualityList(source, 'DirectPlay', true, qualityLadder),
+        qualities: this.buildQualityList(source, 'DirectPlay', true, qualityLadder, deviceType),
         source,
       });
     }
@@ -344,7 +345,7 @@ export class StreamBuilderService {
         tonemapping: false,
         remuxMasterBandwidthBps: remuxBw > 0 ? remuxBw : undefined,
         transcodeBitrateByQuality,
-        qualities: this.buildQualityList(source, 'DirectStream', true, qualityLadder),
+        qualities: this.buildQualityList(source, 'DirectStream', true, qualityLadder, deviceType),
         source,
       });
     }
@@ -475,7 +476,7 @@ export class StreamBuilderService {
       hwAccel: effectiveHwAccel,
       tonemapping: needsTonemapping,
       transcodeBitrateByQuality,
-      qualities: this.buildQualityList(source, 'Transcode', false, qualityLadder),
+      qualities: this.buildQualityList(source, 'Transcode', false, qualityLadder, deviceType),
       source,
     });
   }
@@ -500,6 +501,7 @@ export class StreamBuilderService {
     playMethod: 'DirectPlay' | 'DirectStream' | 'Transcode',
     videoCopyStream: boolean,
     ladder: TranscodeProfile[],
+    deviceType: DeviceType,
   ): QualityOption[] {
     const sourceW = source.width ?? 0;
     const sourceH = source.height ?? 0;
@@ -511,10 +513,12 @@ export class StreamBuilderService {
       profileFitsSource(p, sourceW, sourceH),
     );
     if (!available.length) available.push(ladder[ladder.length - 1]);
-    // Ladder is ordered top→bottom, so available[0] is the source-resolution rung.
-    const topProfile = available[0];
+    // Ladder is ordered top→bottom with the eco rungs appended last, so the
+    // first non-eco entry is the source-resolution rung.
+    const topProfile =
+      available.find((p) => !isEcoProfile(p.name)) ?? available[0];
     const displayLabel = (name: string) => {
-      const stripped = name.replace(/-hdr$/, '');
+      const stripped = name.replace(/^eco-/, '').replace(/-hdr$/, '');
       return stripped === '2160p' ? '4K' : stripped;
     };
     const resolutionLabel = displayLabel(topProfile.name);
@@ -532,14 +536,27 @@ export class StreamBuilderService {
       ];
     }
 
-    const topTotal =
-      parseBitrateToBps(topProfile.videoBitrate) +
-      parseBitrateToBps(topProfile.audioBitrate);
+    // The "faible consommation" rung shown alongside `original`. On desktop
+    // it's a dedicated low (mobile-tier) `eco-*` rung at source resolution;
+    // on mobile the top ladder rung is already the low one.
+    const lowProfile =
+      deviceType === 'desktop'
+        ? available.find((p) => isEcoProfile(p.name))
+        : topProfile;
+    const lowTotal = lowProfile
+      ? parseBitrateToBps(lowProfile.videoBitrate) +
+        parseBitrateToBps(lowProfile.audioBitrate)
+      : Infinity;
     const splitOriginal =
-      videoCopyStream && sourceTotal > topTotal * ORIGINAL_SEPARATE_RATIO;
+      videoCopyStream &&
+      !!lowProfile &&
+      sourceTotal > lowTotal * ORIGINAL_SEPARATE_RATIO;
 
     const qualities: QualityOption[] = [];
     for (const p of available) {
+      // Eco rungs never list as standalone qualities — the single faible-
+      // consommation entry is emitted next to `original` below.
+      if (isEcoProfile(p.name)) continue;
       const isTop = p.name === topProfile.name;
       const v = parseBitrateToBps(p.videoBitrate);
       const a = parseBitrateToBps(p.audioBitrate);
@@ -556,7 +573,7 @@ export class StreamBuilderService {
         continue;
       }
 
-      if (isTop && splitOriginal) {
+      if (isTop && splitOriginal && lowProfile) {
         qualities.push({
           id: 'original',
           label: resolutionLabel,
@@ -565,10 +582,10 @@ export class StreamBuilderService {
           isRemux: true,
         });
         qualities.push({
-          id: p.name,
-          label: displayLabel(p.name),
-          height: p.maxHeight,
-          totalBitrateBps: total,
+          id: lowProfile.name,
+          label: resolutionLabel,
+          height: originalHeight,
+          totalBitrateBps: lowTotal,
           isRemux: false,
           lowBandwidth: true,
         });

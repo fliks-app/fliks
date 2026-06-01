@@ -187,11 +187,63 @@ export const MOBILE_HDR_PROFILES: TranscodeProfile[] = [
   },
 ];
 
+/** Low-consumption ("faible consommation") rungs appended to the desktop
+ *  ladder. Desktop keeps its high ladder for forced-transcode quality on big
+ *  screens, so a genuinely-low option needs its own distinctly-named rung at
+ *  mobile-tier bitrate — selectable alongside `original`. The `eco-` prefix
+ *  keeps URL routing / session keys distinct from the regular `1080p` rung.
+ *  Mobile doesn't need these: its whole ladder is already low. */
+export const ECO_PROFILES: TranscodeProfile[] = [
+  {
+    name: 'eco-2160p',
+    maxWidth: 3840,
+    maxHeight: 2160,
+    videoBitrate: '8M',
+    audioBitrate: '192k',
+  },
+  {
+    name: 'eco-1080p',
+    maxWidth: 1920,
+    maxHeight: 1080,
+    videoBitrate: '3M',
+    audioBitrate: '192k',
+  },
+  {
+    name: 'eco-720p',
+    maxWidth: 1280,
+    maxHeight: 720,
+    videoBitrate: '1500k',
+    audioBitrate: '128k',
+  },
+];
+
+export const ECO_HDR_PROFILES: TranscodeProfile[] = [
+  {
+    name: 'eco-2160p-hdr',
+    maxWidth: 3840,
+    maxHeight: 2160,
+    videoBitrate: '12M',
+    audioBitrate: '192k',
+  },
+  {
+    name: 'eco-1080p-hdr',
+    maxWidth: 1920,
+    maxHeight: 1080,
+    videoBitrate: '2200k',
+    audioBitrate: '192k',
+  },
+];
+
+/** True for a low-consumption rung (the desktop-only `eco-*` tier). */
+export function isEcoProfile(name: string): boolean {
+  return name.startsWith('eco-');
+}
+
 export function getLadderForDevice(
   deviceType: DeviceType | undefined,
 ): TranscodeProfile[] {
   if (deviceType === 'mobile') return MOBILE_PROFILES;
-  return DESKTOP_PROFILES;
+  return [...DESKTOP_PROFILES, ...ECO_PROFILES];
 }
 
 /** HDR-preserving ladder. Stops at 480p — below that, HDR's visual
@@ -200,7 +252,7 @@ export function getHdrLadderForDevice(
   deviceType: DeviceType | undefined,
 ): TranscodeProfile[] {
   if (deviceType === 'mobile') return MOBILE_HDR_PROFILES;
-  return DESKTOP_HDR_PROFILES;
+  return [...DESKTOP_HDR_PROFILES, ...ECO_HDR_PROFILES];
 }
 
 /** True when a profile name belongs to the HEVC HDR ladder. Drives the

@@ -28,6 +28,8 @@ import {
   TranscodingService,
   PROFILES,
   DESKTOP_HDR_PROFILES,
+  ECO_PROFILES,
+  ECO_HDR_PROFILES,
   SessionContext,
   VARIANT_EARLY,
   profileFitsSource,
@@ -58,6 +60,8 @@ import { StreamingSettingsCache } from './streaming-settings-cache.service';
 const VALID_QUALITIES = new Set([
   ...PROFILES.map((p) => p.name),
   ...DESKTOP_HDR_PROFILES.map((p) => p.name),
+  ...ECO_PROFILES.map((p) => p.name),
+  ...ECO_HDR_PROFILES.map((p) => p.name),
   'remux',
 ]);
 
