@@ -103,11 +103,13 @@ public class ImmersivePlugin extends Plugin {
                 ((MainActivity) getActivity()).setImmersiveMode(false);
             }
 
-            // Reset cutout mode to default
+            // Keep drawing into the short-edge cutout (the app-wide baseline),
+            // not DEFAULT — DEFAULT re-letterboxes the landscape punch-hole
+            // with a black bar once the player closes.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 WindowManager.LayoutParams lp = window.getAttributes();
                 lp.layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
                 window.setAttributes(lp);
             }
 
@@ -128,6 +130,14 @@ public class ImmersivePlugin extends Plugin {
                     | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                     | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                 );
+            }
+            // Re-assert edge-to-edge now the bars are shown again: keep the
+            // WebView drawing under them (full width) and re-dispatch the
+            // insets + transparent bar colours. Without this the returning
+            // bars take layout space — the status bar goes opaque (black) and
+            // the narrower viewport flips the form factor back to phone.
+            if (getActivity() instanceof MainActivity) {
+                ((MainActivity) getActivity()).reapplyEdgeToEdge();
             }
             call.resolve();
         });

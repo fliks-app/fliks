@@ -12,6 +12,7 @@ import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.Window;
+import android.view.WindowManager;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.view.WindowCompat;
@@ -147,6 +148,17 @@ public class MainActivity extends BridgeActivity {
         WindowCompat.setDecorFitsSystemWindows(window, false);
         window.setStatusBarColor(Color.TRANSPARENT);
         window.setNavigationBarColor(Color.TRANSPARENT);
+        // Draw into the display cutout on the short edges. In landscape the
+        // punch-hole sits on a short (left/right) edge; the default mode
+        // letterboxes it with a black bar. SHORT_EDGES lets the app background
+        // reach the edge while body.native's env(safe-area-inset-left/right)
+        // padding keeps content clear of the camera.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            WindowManager.LayoutParams lp = window.getAttributes();
+            lp.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            window.setAttributes(lp);
+        }
         // Force a fresh window-insets dispatch down to the WebView. On a cold
         // start the bars are reset to opaque while the splash is up and the
         // insets that drive CSS env(safe-area-inset-*) arrive as zero, so the
@@ -218,10 +230,13 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        // Android resets the WindowInsetsController appearance bits on orientation
-        // changes; reapply the last requested state so nav/status icons keep their
-        // theme-matching color (white on dark, dark on light).
-        getWindow().getDecorView().post(this::applyLightStatusBar);
+        // An orientation change drops the edge-to-edge layout and the
+        // WindowInsetsController appearance bits, so reassert both to keep the
+        // status bar transparent with content drawn under it. Repeat on the
+        // next frame because the insets that drive env(safe-area-inset-*) land
+        // once the rotated layout has settled.
+        reapplyEdgeToEdge();
+        getWindow().getDecorView().post(this::reapplyEdgeToEdge);
     }
 
     /** True when the device is in television (leanback) UI mode. */
