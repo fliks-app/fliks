@@ -70,6 +70,14 @@ public class ImmersivePlugin extends Plugin {
     }
 
     @PluginMethod()
+    public void applyEdgeToEdge(PluginCall call) {
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).reapplyEdgeToEdge();
+        }
+        call.resolve();
+    }
+
+    @PluginMethod()
     public void setLightStatusBar(PluginCall call) {
         boolean light = call.getBoolean("light", false);
         getActivity().runOnUiThread(() -> {
