@@ -307,7 +307,11 @@ export class StreamBuilderService {
       const transcodeBitrateByQuality: NonNullable<
         PlaybackInfoResponse['transcodeBitrateByQuality']
       > = {};
-      for (const p of ladder) {
+      // Key by the ladder actually offered (HDR rungs carry the `-hdr`
+      // suffix) so the stats overlay can resolve the selected rung's bitrate.
+      // Using the SDR `ladder` here left HDR / eco-hdr rungs unmatched, and
+      // the overlay fell back to the full remux bandwidth.
+      for (const p of qualityLadder) {
         const v = parseBitrateToBps(p.videoBitrate);
         const a = parseBitrateToBps(p.audioBitrate);
         transcodeBitrateByQuality[p.name] = {
@@ -445,7 +449,10 @@ export class StreamBuilderService {
     const transcodeBitrateByQuality: NonNullable<
       PlaybackInfoResponse['transcodeBitrateByQuality']
     > = {};
-    for (const p of ladder) {
+    // Key by the offered ladder (HDR/eco-hdr rungs carry `-hdr`) so the stats
+    // overlay resolves the selected rung instead of falling back to the full
+    // remux bandwidth.
+    for (const p of qualityLadder) {
       const v = parseBitrateToBps(p.videoBitrate);
       const a = outputAudioBitrateBps ?? parseBitrateToBps(p.audioBitrate);
       transcodeBitrateByQuality[p.name] = {

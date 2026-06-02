@@ -9,6 +9,9 @@ export interface QualityOption {
   label: string;   // "Auto", "1080p", "4K", ...
   height: number;  // 0 for auto, source height for original, profile height
   width?: number;  // target width (from the backend; avoids re-deriving from id)
+  /** Total (video+audio) target bitrate in bps for this rung, from the
+   *  backend — the authoritative per-rung bitrate for the stats overlay. */
+  totalBitrateBps?: number;
   /** Low-consumption ("faible consommation") rung. */
   lowBandwidth?: boolean;
 }
@@ -70,6 +73,7 @@ export class QualityManagerService {
       label: string;
       height: number;
       width?: number;
+      totalBitrateBps?: number;
       lowBandwidth?: boolean;
     }[];
   }): void {
@@ -83,6 +87,7 @@ export class QualityManagerService {
         label: q.label,
         height: q.height,
         width: q.width,
+        totalBitrateBps: q.totalBitrateBps,
         lowBandwidth: q.lowBandwidth,
       });
     }
