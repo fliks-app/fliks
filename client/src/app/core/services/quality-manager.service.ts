@@ -2,12 +2,17 @@ import { Injectable, inject, signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import type { PlaybackEngine } from './playback-engine/playback-engine';
 import { bucketResolutionLabel, widthForProfile } from '../utils/player.utils';
+import { PlayerSettingsService } from './player-settings.service';
 
 export interface QualityOption {
-  id: string;      // 'auto' | 'original' | '2160p' | '1080p' | '720p' | '480p' | ...
+  id: string;      // 'auto' | 'original' | '2160p' | '1080p' | 'eco-1080p' | ...
   label: string;   // "Auto", "1080p", "4K", ...
   height: number;  // 0 for auto, source height for original, profile height
-  /** Reduced transcode rung shown alongside `original` at source resolution. */
+  width?: number;  // target width (from the backend; avoids re-deriving from id)
+  /** Total (video+audio) target bitrate in bps for this rung, from the
+   *  backend — the authoritative per-rung bitrate for the stats overlay. */
+  totalBitrateBps?: number;
+  /** Low-consumption ("faible consommation") rung. */
   lowBandwidth?: boolean;
 }
 
@@ -49,6 +54,7 @@ export function findBestVariantForHeight(tracks: any[], targetHeight: number): a
 @Injectable({ providedIn: 'root' })
 export class QualityManagerService {
   private readonly translate = inject(TranslateService);
+  private readonly playerSettings = inject(PlayerSettingsService);
   readonly activeQualityId = signal('auto');
   readonly availableQualities = signal<QualityOption[]>([]);
   readonly activeResolution = signal('');
@@ -62,20 +68,60 @@ export class QualityManagerService {
     playMethod: string;
     videoCopyStream: boolean;
     source: { width?: number; height?: number };
-    qualities?: { id: string; label: string; height: number; lowBandwidth?: boolean }[];
+    qualities?: {
+      id: string;
+      label: string;
+      height: number;
+      width?: number;
+      totalBitrateBps?: number;
+      lowBandwidth?: boolean;
+    }[];
   }): void {
-    const options: QualityOption[] = [
+    const prefs = this.playerSettings.get();
+    const all: QualityOption[] = [
       { id: 'auto', label: this.translate.instant('player.auto'), height: 0 },
     ];
     for (const q of playbackInfo.qualities ?? []) {
-      options.push({
+      all.push({
         id: q.id,
         label: q.label,
         height: q.height,
+        width: q.width,
+        totalBitrateBps: q.totalBitrateBps,
         lowBandwidth: q.lowBandwidth,
       });
     }
-    this.availableQualities.set(options);
+    // Visibility from the player settings:
+    //  - eco-by-default → only the eco rungs (when any exist);
+    //  - hide eco → drop the eco rungs;
+    //  - otherwise show everything.
+    const eco = all.filter((q) => q.lowBandwidth);
+    let visible = all;
+    if (prefs.ecoByDefault && eco.length) {
+      // Eco rungs, plus the inherently-low rungs below 720p (480p and down
+      // are already low-bitrate and have no eco variant) so the menu doesn't
+      // dead-end at 720p eco.
+      visible = all.filter(
+        (q) => q.lowBandwidth || (q.height > 0 && q.height < 720),
+      );
+    } else if (!prefs.showEcoQualities) {
+      visible = all.filter((q) => !q.lowBandwidth);
+    }
+    this.availableQualities.set(visible);
+  }
+
+  /** Default quality id for the current visible list: `auto` when present,
+   *  else the first (top) visible rung — so the eco-only list defaults to the
+   *  top eco rung. */
+  private defaultQualityId(): string {
+    const opts = this.availableQualities();
+    return opts.some((q) => q.id === 'auto') ? 'auto' : (opts[0]?.id ?? 'auto');
+  }
+
+  /** When eco is the forced default every visible rung is already eco, so the
+   *  "faible consommation" badge is redundant. */
+  get ecoBadgeHidden(): boolean {
+    return this.playerSettings.get().ecoByDefault;
   }
 
   /**
@@ -88,7 +134,7 @@ export class QualityManagerService {
   applySavedPreference(): void {
     const saved = this.readFromStorage();
     if (!saved) {
-      this.activeQualityId.set('auto');
+      this.activeQualityId.set(this.defaultQualityId());
       return;
     }
     const opts = this.availableQualities();
@@ -113,7 +159,7 @@ export class QualityManagerService {
         return;
       }
     }
-    this.activeQualityId.set('auto');
+    this.activeQualityId.set(this.defaultQualityId());
   }
 
   /**
@@ -190,7 +236,9 @@ export class QualityManagerService {
       const isOriginal = option.id === 'original';
       const w = isOriginal
         ? 99999
-        : (widthForProfile(option.id) ?? Math.round(option.height * 16 / 9));
+        : (option.width ??
+          widthForProfile(option.id) ??
+          Math.round((option.height * 16) / 9));
       const h = isOriginal ? 99999 : option.height;
       engine.selectVariantTrack({ height: h, width: w }, true);
       return;
@@ -234,7 +282,8 @@ export class QualityManagerService {
     playbackMode: 'direct' | 'remux' | 'transcode',
   ): void {
     const option = this.availableQualities().find(q => q.id === this.activeQualityId())
-      ?? this.availableQualities().find(q => q.id === 'auto');
+      ?? this.availableQualities().find(q => q.id === 'auto')
+      ?? this.availableQualities()[0];
     if (!option) return;
     this.selectQuality(option, engine, playbackMode, true);
   }

@@ -42,6 +42,20 @@
     <div class="divider my-0"></div>
 
     <app-toggle-field
+      [(value)]="showEcoQualities"
+      [label]="'playback_settings.player_show_eco' | translate"
+      [hint]="'playback_settings.player_show_eco_hint' | translate"
+    />
+
+    <app-toggle-field
+      [(value)]="ecoByDefault"
+      [label]="'playback_settings.player_eco_default' | translate"
+      [hint]="'playback_settings.player_eco_default_hint' | translate"
+    />
+
+    <div class="divider my-0"></div>
+
+    <app-toggle-field
       [(value)]="autoSkipIntro"
       [label]="'playback_settings.player_auto_skip_intro' | translate"
       [hint]="'playback_settings.player_auto_skip_intro_hint' | translate"

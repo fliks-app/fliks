@@ -33,6 +33,8 @@ export class PlayerSettingsPageComponent implements OnInit {
   readonly rememberAudioSelections = signal(false);
   readonly forceDisableHdr = signal(false);
   readonly showHdrToggle = signal(false);
+  readonly showEcoQualities = signal(true);
+  readonly ecoByDefault = signal(false);
   readonly autoSkipIntro = signal(false);
 
   ngOnInit() {
@@ -42,6 +44,8 @@ export class PlayerSettingsPageComponent implements OnInit {
     this.rememberAudioSelections.set(p.rememberAudioSelections);
     this.forceDisableHdr.set(p.forceDisableHdr);
     this.showHdrToggle.set(this.deviceProfile.hardwareSupportsHdr);
+    this.showEcoQualities.set(p.showEcoQualities);
+    this.ecoByDefault.set(p.ecoByDefault);
     this.autoSkipIntro.set(p.autoSkipIntro);
   }
 
@@ -58,6 +62,8 @@ export class PlayerSettingsPageComponent implements OnInit {
       useDefaultAudioStream: this.useDefaultAudioStream(),
       rememberAudioSelections: this.rememberAudioSelections(),
       forceDisableHdr: this.forceDisableHdr(),
+      showEcoQualities: this.showEcoQualities(),
+      ecoByDefault: this.ecoByDefault(),
       autoSkipIntro: this.autoSkipIntro(),
     });
     this.toast.success(this.translate.instant('common.settings_saved'));

@@ -15,6 +15,7 @@ import {
 } from '@angular/core';
 import { DeviceService } from '../../../core/services/device.service';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
+import { PlayerSettingsService } from '../../../core/services/player-settings.service';
 import { NgTemplateOutlet } from '@angular/common';
 import { BottomSheetComponent } from '../../../shared/components/bottom-sheet';
 import { TranslateModule } from '@ngx-translate/core';
@@ -69,8 +70,14 @@ import {
 export class PlayerControlsComponent {
   private readonly device = inject(DeviceService);
   private readonly dismissStack = inject(DismissableStackService);
+  private readonly playerSettings = inject(PlayerSettingsService);
   /** True on Android TV — drives 10-foot UI choices in the template. */
   readonly isTv = this.device.isTv;
+  /** Hide the "faible consommation" badge when eco is the forced default —
+   *  every visible rung is eco then, so the tag is just noise. */
+  readonly showEcoBadge = computed(
+    () => !this.playerSettings.settings().ecoByDefault,
+  );
 
   constructor() {
     // Mirror the open dropdown into the global dismissable stack so the

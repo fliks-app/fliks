@@ -338,7 +338,7 @@
         <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="selectQuality.emit(q.id); closeSheet()">
           <span class="flex-1 text-left">
             {{ q.label }}
-            @if (q.lowBandwidth) {
+            @if (q.lowBandwidth && showEcoBadge()) {
               <span class="text-white/50 ml-1 text-xs">({{ 'player.low_bandwidth' | translate }})</span>
             }
           </span>
@@ -396,7 +396,7 @@
           >
             <span class="flex-1 text-left">
               {{ q.label }}
-              @if (q.lowBandwidth) {
+              @if (q.lowBandwidth && showEcoBadge()) {
                 <span class="text-white/50 ml-1 text-xs">({{ 'player.low_bandwidth' | translate }})</span>
               }
             </span>

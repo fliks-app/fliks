@@ -27,9 +27,8 @@ import { SubtitleStreamService } from './subtitle-stream.service';
 import {
   TranscodingService,
   PROFILES,
-  DESKTOP_HDR_PROFILES,
-  ECO_PROFILES,
-  ECO_HDR_PROFILES,
+  getLadderForDevice,
+  getHdrLadderForDevice,
   SessionContext,
   VARIANT_EARLY,
   profileFitsSource,
@@ -57,11 +56,12 @@ import { MarkersService } from '../markers/markers.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 import { StreamingSettingsCache } from './streaming-settings-cache.service';
 
+// Derived from the ladders themselves (SDR + HDR, full + eco) so a new rung
+// can never be forgotten here — the missing eco entry is exactly what 400'd
+// `eco-1080p` and surfaced as Shaka error 1001.
 const VALID_QUALITIES = new Set([
-  ...PROFILES.map((p) => p.name),
-  ...DESKTOP_HDR_PROFILES.map((p) => p.name),
-  ...ECO_PROFILES.map((p) => p.name),
-  ...ECO_HDR_PROFILES.map((p) => p.name),
+  ...getLadderForDevice(undefined).map((p) => p.name),
+  ...getHdrLadderForDevice(undefined).map((p) => p.name),
   'remux',
 ]);
 
@@ -1576,6 +1576,21 @@ export class StreamingController {
     }
 
     if (!segPath) {
+      // Mirror the video segment route: a missing file while the producing
+      // session is still alive is transient (the rendition init/segment is
+      // about to be (re)written — e.g. during a seek respawn), so surface a
+      // retryable 503 instead of a hard 404 that players treat as fatal.
+      // Only a session whose ffmpeg actually exited is a real 404.
+      if (videoSession.process.exitCode === null) {
+        this.log.warn(
+          `Audio segment 503 (transient): ${segment} (audioIndex=${audioIndex}, mfid=${mediaFileId})`,
+        );
+        sendTransientUnavailable(res);
+        return;
+      }
+      this.log.warn(
+        `Audio segment 404: ${segment} (audioIndex=${audioIndex}, mfid=${mediaFileId}, exitCode=${videoSession.process.exitCode})`,
+      );
       res.status(404).send('Segment not found');
       return;
     }

@@ -57,60 +57,6 @@ export const DESKTOP_PROFILES: TranscodeProfile[] = [
   },
 ];
 
-/** Conservative mobile ladder — same resolutions, lower target bitrates
- *  so phones on cellular don't burn through data. Audio unchanged. */
-export const MOBILE_PROFILES: TranscodeProfile[] = [
-  {
-    name: '2160p',
-    maxWidth: 3840,
-    maxHeight: 2160,
-    videoBitrate: '8M',
-    audioBitrate: '192k',
-  },
-  {
-    name: '1080p',
-    maxWidth: 1920,
-    maxHeight: 1080,
-    videoBitrate: '3M',
-    audioBitrate: '192k',
-  },
-  {
-    name: '720p',
-    maxWidth: 1280,
-    maxHeight: 720,
-    videoBitrate: '1500k',
-    audioBitrate: '128k',
-  },
-  {
-    name: '480p',
-    maxWidth: 854,
-    maxHeight: 480,
-    videoBitrate: '800k',
-    audioBitrate: '96k',
-  },
-  {
-    name: '360p',
-    maxWidth: 640,
-    maxHeight: 360,
-    videoBitrate: '500k',
-    audioBitrate: '64k',
-  },
-  {
-    name: '240p',
-    maxWidth: 426,
-    maxHeight: 240,
-    videoBitrate: '300k',
-    audioBitrate: '64k',
-  },
-  {
-    name: '144p',
-    maxWidth: 256,
-    maxHeight: 144,
-    videoBitrate: '150k',
-    audioBitrate: '48k',
-  },
-];
-
 /** HEVC HDR ladder — used when the source is HEVC HDR and the client
  *  declares HDR support. Names are suffixed `-hdr` so the URL routing,
  *  session cache keys, and admin dashboard can tell SDR and HDR rungs
@@ -156,43 +102,10 @@ export const DESKTOP_HDR_PROFILES: TranscodeProfile[] = [
   },
 ];
 
-export const MOBILE_HDR_PROFILES: TranscodeProfile[] = [
-  {
-    name: '2160p-hdr',
-    maxWidth: 3840,
-    maxHeight: 2160,
-    videoBitrate: '12M',
-    audioBitrate: '192k',
-  },
-  {
-    name: '1080p-hdr',
-    maxWidth: 1920,
-    maxHeight: 1080,
-    videoBitrate: '2200k',
-    audioBitrate: '192k',
-  },
-  {
-    name: '720p-hdr',
-    maxWidth: 1280,
-    maxHeight: 720,
-    videoBitrate: '1100k',
-    audioBitrate: '128k',
-  },
-  {
-    name: '480p-hdr',
-    maxWidth: 854,
-    maxHeight: 480,
-    videoBitrate: '600k',
-    audioBitrate: '96k',
-  },
-];
-
-/** Low-consumption ("faible consommation") rungs appended to the desktop
- *  ladder. Desktop keeps its high ladder for forced-transcode quality on big
- *  screens, so a genuinely-low option needs its own distinctly-named rung at
- *  mobile-tier bitrate — selectable alongside `original`. The `eco-` prefix
- *  keeps URL routing / session keys distinct from the regular `1080p` rung.
- *  Mobile doesn't need these: its whole ladder is already low. */
+/** Low-consumption ("faible consommation") rungs. Shared by every device:
+ *  the full ladder plus these eco rungs make one menu, and clients pick an
+ *  eco rung (or default to it) to save bandwidth. The `eco-` prefix
+ *  keeps URL routing / session keys distinct from the regular `1080p` rung. */
 export const ECO_PROFILES: TranscodeProfile[] = [
   {
     name: 'eco-2160p',
@@ -239,19 +152,24 @@ export function isEcoProfile(name: string): boolean {
   return name.startsWith('eco-');
 }
 
+/** Unified ladder for every device: the full-quality rungs plus the
+ *  low-consumption `eco-*` rungs. Desktop and mobile expose the same menu;
+ *  data-conscious clients pick an eco rung (or default to it via the player
+ *  setting) instead of getting a silently-capped ladder. `deviceType` is kept
+ *  for signature stability but no longer branches the ladder. */
 export function getLadderForDevice(
   deviceType: DeviceType | undefined,
 ): TranscodeProfile[] {
-  if (deviceType === 'mobile') return MOBILE_PROFILES;
+  void deviceType;
   return [...DESKTOP_PROFILES, ...ECO_PROFILES];
 }
 
-/** HDR-preserving ladder. Stops at 480p — below that, HDR's visual
- *  benefit is moot and the encode cost isn't justified. */
+/** HDR-preserving ladder (full + eco). Stops at 480p — below that, HDR's
+ *  visual benefit is moot and the encode cost isn't justified. */
 export function getHdrLadderForDevice(
   deviceType: DeviceType | undefined,
 ): TranscodeProfile[] {
-  if (deviceType === 'mobile') return MOBILE_HDR_PROFILES;
+  void deviceType;
   return [...DESKTOP_HDR_PROFILES, ...ECO_HDR_PROFILES];
 }
 

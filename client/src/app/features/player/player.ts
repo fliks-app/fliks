@@ -506,8 +506,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Use profile name from active variant URL (e.g. "360p") instead of raw resolution
     const active = this.getActiveVariant();
     const urlMatch = active?.originalVideoId?.match(/\/(\d+p)\//);
-    const resLabel = urlMatch?.[1]
-      ?? this.qualityManager.resolutionLabel(playingWidth, playingHeight);
+    // For a pinned quality (anything but `auto`), trust the selected rung's
+    // label — the native engine's reported variant doesn't always refresh
+    // after a switch on mobile, leaving the resolution line stale. `auto`
+    // still reads the ABR-chosen variant.
+    const selectedQualityOpt = this.qualityManager
+      .availableQualities()
+      .find((q) => q.id === _quality);
+    const resLabel =
+      _quality !== 'auto' && selectedQualityOpt?.label
+        ? selectedQualityOpt.label
+        : (urlMatch?.[1] ??
+          this.qualityManager.resolutionLabel(playingWidth, playingHeight));
     const hdrTag = src?.hdrFormat ? ` ${src.hdrFormat}` : '';
     const codecName = (src?.videoCodec ?? '?').toUpperCase();
     const videoLabel = `${resLabel}${hdrTag} ${codecName}`;
@@ -534,7 +544,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Video stream bitrate
     let videoStreamBitrate = '';
     let serverStreamTotalBps: number | undefined;
-    if (selectedRateEntry) {
+    // A pinned rung carries its own authoritative target bitrate from the
+    // backend — use it first so eco / -hdr rungs report their real bitrate
+    // instead of falling back to the variant/remux bandwidth (which left an
+    // eco selection showing the full ~9.7 Mbps).
+    if (
+      _quality !== 'auto' &&
+      _quality !== 'original' &&
+      validBps(selectedQualityOpt?.totalBitrateBps)
+    ) {
+      serverStreamTotalBps = selectedQualityOpt!.totalBitrateBps;
+    } else if (selectedRateEntry) {
       serverStreamTotalBps = selectedRateEntry.totalBitrateBps;
     } else if (
       pi?.playMethod === 'DirectStream' &&
@@ -610,9 +630,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       : allFlags.filter((f) => f.startsWith('Audio'));
 
     // --- Audio ---
+    // Derive from the SELECTED track, not the source's primary stream, so the
+    // line follows a language switch. `activeAudioTrackId()` is read so this
+    // computed re-runs when the user changes audio track.
+    const _audioTrackId = this.activeAudioTrackId();
+    const selectedAudio = this.availableAudioTracks().find(
+      (t) => t.id === _audioTrackId,
+    );
     const channelLabel = src?.audioChannelLayout ?? (src?.audioChannels ? `${src.audioChannels}ch` : '');
-    const langLabel = src?.audioLanguage ? src.audioLanguage.charAt(0).toUpperCase() + src.audioLanguage.slice(1) : '?';
-    const audioCodecUpper = (src?.audioCodec ?? '?').toUpperCase();
+    const rawLang = selectedAudio?.language || src?.audioLanguage;
+    const langLabel = rawLang ? rawLang.charAt(0).toUpperCase() + rawLang.slice(1) : '?';
+    const audioCodecUpper = (activeVariant?.audioCodec ?? src?.audioCodec ?? '?').toUpperCase();
     const audioLabel = `${langLabel} ${audioCodecUpper} ${channelLabel}`;
 
     let audioStreamBitrate = '';

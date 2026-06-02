@@ -8,7 +8,6 @@ import {
 import { ResolvedFile } from './streaming.service';
 import {
   DeviceType,
-  ORIGINAL_SEPARATE_RATIO,
   TranscodeProfile,
   TranscodingService,
   encoderRegistry,
@@ -251,7 +250,7 @@ export class StreamBuilderService {
         outputContainer: sourceContainer,
         hwAccel: 'none',
         tonemapping: false,
-        qualities: this.buildQualityList(source, 'DirectPlay', true, qualityLadder, deviceType),
+        qualities: this.buildQualityList(source, 'DirectPlay', true, qualityLadder),
         source,
       });
     }
@@ -308,7 +307,11 @@ export class StreamBuilderService {
       const transcodeBitrateByQuality: NonNullable<
         PlaybackInfoResponse['transcodeBitrateByQuality']
       > = {};
-      for (const p of ladder) {
+      // Key by the ladder actually offered (HDR rungs carry the `-hdr`
+      // suffix) so the stats overlay can resolve the selected rung's bitrate.
+      // Using the SDR `ladder` here left HDR / eco-hdr rungs unmatched, and
+      // the overlay fell back to the full remux bandwidth.
+      for (const p of qualityLadder) {
         const v = parseBitrateToBps(p.videoBitrate);
         const a = parseBitrateToBps(p.audioBitrate);
         transcodeBitrateByQuality[p.name] = {
@@ -345,7 +348,7 @@ export class StreamBuilderService {
         tonemapping: false,
         remuxMasterBandwidthBps: remuxBw > 0 ? remuxBw : undefined,
         transcodeBitrateByQuality,
-        qualities: this.buildQualityList(source, 'DirectStream', true, qualityLadder, deviceType),
+        qualities: this.buildQualityList(source, 'DirectStream', true, qualityLadder),
         source,
       });
     }
@@ -446,7 +449,10 @@ export class StreamBuilderService {
     const transcodeBitrateByQuality: NonNullable<
       PlaybackInfoResponse['transcodeBitrateByQuality']
     > = {};
-    for (const p of ladder) {
+    // Key by the offered ladder (HDR/eco-hdr rungs carry `-hdr`) so the stats
+    // overlay resolves the selected rung instead of falling back to the full
+    // remux bandwidth.
+    for (const p of qualityLadder) {
       const v = parseBitrateToBps(p.videoBitrate);
       const a = outputAudioBitrateBps ?? parseBitrateToBps(p.audioBitrate);
       transcodeBitrateByQuality[p.name] = {
@@ -476,7 +482,7 @@ export class StreamBuilderService {
       hwAccel: effectiveHwAccel,
       tonemapping: needsTonemapping,
       transcodeBitrateByQuality,
-      qualities: this.buildQualityList(source, 'Transcode', false, qualityLadder, deviceType),
+      qualities: this.buildQualityList(source, 'Transcode', false, qualityLadder),
       source,
     });
   }
@@ -501,7 +507,6 @@ export class StreamBuilderService {
     playMethod: 'DirectPlay' | 'DirectStream' | 'Transcode',
     videoCopyStream: boolean,
     ladder: TranscodeProfile[],
-    deviceType: DeviceType,
   ): QualityOption[] {
     const sourceW = source.width ?? 0;
     const sourceH = source.height ?? 0;
@@ -513,16 +518,19 @@ export class StreamBuilderService {
       profileFitsSource(p, sourceW, sourceH),
     );
     if (!available.length) available.push(ladder[ladder.length - 1]);
-    // Ladder is ordered top→bottom with the eco rungs appended last, so the
-    // first non-eco entry is the source-resolution rung.
-    const topProfile =
-      available.find((p) => !isEcoProfile(p.name)) ?? available[0];
     const displayLabel = (name: string) => {
       const stripped = name.replace(/^eco-/, '').replace(/-hdr$/, '');
       return stripped === '2160p' ? '4K' : stripped;
     };
+    const totalOf = (p: TranscodeProfile) =>
+      parseBitrateToBps(p.videoBitrate) + parseBitrateToBps(p.audioBitrate);
+
+    // First non-eco entry = the source-resolution (top) rung.
+    const topProfile =
+      available.find((p) => !isEcoProfile(p.name)) ?? available[0];
     const resolutionLabel = displayLabel(topProfile.name);
     const originalHeight = sourceH || topProfile.maxHeight;
+    const originalWidth = sourceW || topProfile.maxWidth;
 
     if (playMethod === 'DirectPlay') {
       return [
@@ -530,92 +538,63 @@ export class StreamBuilderService {
           id: 'original',
           label: resolutionLabel,
           height: originalHeight,
+          width: originalWidth,
           totalBitrateBps: sourceTotal,
           isRemux: false,
         },
       ];
     }
 
-    // The "faible consommation" rung shown alongside `original`. On desktop
-    // it's a dedicated low (mobile-tier) `eco-*` rung at source resolution;
-    // on mobile the top ladder rung is already the low one.
-    const lowProfile =
-      deviceType === 'desktop'
-        ? available.find((p) => isEcoProfile(p.name))
-        : topProfile;
-    const lowTotal = lowProfile
-      ? parseBitrateToBps(lowProfile.videoBitrate) +
-        parseBitrateToBps(lowProfile.audioBitrate)
-      : Infinity;
-    const splitOriginal =
-      videoCopyStream &&
-      !!lowProfile &&
-      sourceTotal > lowTotal * ORIGINAL_SEPARATE_RATIO;
-
+    // Full-quality rungs. The top rung collapses into `original` (remux) when
+    // the source video can be copied; a forced transcode lists it as a normal
+    // rung instead.
     const qualities: QualityOption[] = [];
     for (const p of available) {
-      // Eco rungs never list as standalone qualities — the single faible-
-      // consommation entry is emitted next to `original` below.
       if (isEcoProfile(p.name)) continue;
-      const isTop = p.name === topProfile.name;
-      const v = parseBitrateToBps(p.videoBitrate);
-      const a = parseBitrateToBps(p.audioBitrate);
-      const total = v + a;
-
-      if (isTop && videoCopyStream && !splitOriginal) {
+      const total = totalOf(p);
+      if (p.name === topProfile.name && videoCopyStream) {
         qualities.push({
           id: 'original',
           label: resolutionLabel,
           height: originalHeight,
+          width: originalWidth,
           totalBitrateBps: sourceTotal > 0 ? sourceTotal : total,
           isRemux: true,
         });
         continue;
       }
-
-      if (isTop && splitOriginal && lowProfile) {
-        qualities.push({
-          id: 'original',
-          label: resolutionLabel,
-          height: originalHeight,
-          totalBitrateBps: sourceTotal,
-          isRemux: true,
-        });
-        qualities.push({
-          id: lowProfile.name,
-          label: resolutionLabel,
-          height: originalHeight,
-          totalBitrateBps: lowTotal,
-          isRemux: false,
-          lowBandwidth: true,
-        });
-        continue;
-      }
-
       qualities.push({
         id: p.name,
         label: displayLabel(p.name),
         height: p.maxHeight,
+        width: p.maxWidth,
         totalBitrateBps: total,
         isRemux: false,
       });
     }
 
-    // Forced transcode (no remux → no `original`, e.g. HEVC/AV1 on desktop):
-    // there's no split, so the eco rung above wasn't emitted. Still surface
-    // one low-consumption choice at source resolution, right after the top
-    // rung. Desktop-only — mobile's top rung is already the low one and is
-    // present in the list above.
-    if (deviceType === 'desktop' && lowProfile && !videoCopyStream) {
-      qualities.splice(1, 0, {
-        id: lowProfile.name,
-        label: resolutionLabel,
-        height: originalHeight,
-        totalBitrateBps: lowTotal,
+    // Low-consumption rungs at every fitting resolution (4K eco, 1080p eco,
+    // 720p eco…). Same on every device. Only listed when genuinely lighter
+    // than the source — no point offering an eco rung heavier than the file.
+    const savingRef = sourceTotal > 0 ? sourceTotal : totalOf(topProfile);
+    for (const p of available) {
+      if (!isEcoProfile(p.name) || totalOf(p) >= savingRef) continue;
+      qualities.push({
+        id: p.name,
+        label: displayLabel(p.name),
+        height: p.maxHeight,
+        width: p.maxWidth,
+        totalBitrateBps: totalOf(p),
         isRemux: false,
         lowBandwidth: true,
       });
     }
+
+    // Order by resolution then bitrate (both descending) so full and eco
+    // interleave naturally: 4K, 4K eco, 1080p, 1080p eco, 720p, 720p eco, …
+    qualities.sort(
+      (a, b) => b.height - a.height || b.totalBitrateBps - a.totalBitrateBps,
+    );
 
     return qualities;
   }

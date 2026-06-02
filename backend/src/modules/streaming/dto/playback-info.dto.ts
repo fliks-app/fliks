@@ -21,6 +21,10 @@ export interface QualityOption {
   label: string;
   /** Target height in pixels (source height for `original`). */
   height: number;
+  /** Target width in pixels (source width for `original`). Lets the client
+   *  set native track-selection constraints without re-deriving widths from
+   *  the rung id. */
+  width?: number;
   /** Total bandwidth (video + audio) in bits/s for this rung. */
   totalBitrateBps: number;
   /** True when the 'original' rung maps to a DirectStream (remux) path. */
