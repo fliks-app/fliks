@@ -76,7 +76,7 @@ export class App implements OnInit, OnDestroy {
           // on hide() resolves too early and the re-assert doesn't take.)
           if (Capacitor.getPlatform() === 'android') {
             const Immersive = registerPlugin<{ applyEdgeToEdge(): Promise<void> }>('Immersive');
-            setTimeout(() => void Immersive.applyEdgeToEdge().catch(() => {}), 100);
+            setTimeout(() => void Immersive.applyEdgeToEdge().catch(() => {}), 200);
           }
         });
       });

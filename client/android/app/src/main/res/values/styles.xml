@@ -28,5 +28,9 @@
         <item name="windowNoTitle">true</item>
         <item name="android:windowBackground">@drawable/splash_themed</item>
         <item name="splashBackground">@color/splash_bg_dark</item>
+        <!-- Draw into short-edge cutouts so the landscape punch-hole isn't
+             letterboxed with a black bar; content is kept clear of the camera
+             by env(safe-area-inset-left/right) padding. -->
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
 </resources>
