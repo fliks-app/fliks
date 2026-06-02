@@ -113,6 +113,22 @@ public class MainActivity extends BridgeActivity {
         getWindow().getDecorView().post(this::applyLightStatusBar);
     }
 
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        // The launch splash (and Capacitor bridge setup) keep the window in
+        // the launch theme's opaque-bar state while they're up, so the
+        // edge-to-edge call in onCreate — and even the first onResume, which
+        // runs while the splash still covers the activity — don't stick: the
+        // status bar only turns transparent once the window truly gains
+        // focus after the splash is removed. That focus gain is exactly what
+        // a recents → return cycle reproduces, which is why it "fixes itself"
+        // there. Re-assert here so the first post-splash frame is edge-to-edge.
+        if (hasFocus) {
+            reapplyEdgeToEdge();
+        }
+    }
+
     /**
      * Asserts the window's edge-to-edge layout + transparent system
      * bars. Safe to call multiple times; idempotent.
@@ -131,6 +147,26 @@ public class MainActivity extends BridgeActivity {
         WindowCompat.setDecorFitsSystemWindows(window, false);
         window.setStatusBarColor(Color.TRANSPARENT);
         window.setNavigationBarColor(Color.TRANSPARENT);
+        // Force a fresh window-insets dispatch down to the WebView. On a cold
+        // start the bars are reset to opaque while the splash is up and the
+        // insets that drive CSS env(safe-area-inset-*) arrive as zero, so the
+        // top bar doesn't extend under the status bar (black strip) until the
+        // next relayout. Requesting it explicitly re-publishes the real insets.
+        window.getDecorView().requestApplyInsets();
+    }
+
+    /**
+     * Re-asserts edge-to-edge + status-bar icon color. Used both on window
+     * focus gain and from JS (ImmersivePlugin) right after the splash is
+     * hidden — the first cold-start moment the layout is settled enough for
+     * the transparent status bar + insets to actually stick. Marshals onto the
+     * UI thread so it's safe to call from the plugin's binder thread too.
+     */
+    public void reapplyEdgeToEdge() {
+        runOnUiThread(() -> {
+            applyEdgeToEdge();
+            getWindow().getDecorView().post(this::applyLightStatusBar);
+        });
     }
 
     /** Called by ImmersivePlugin. */

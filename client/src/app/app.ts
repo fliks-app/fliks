@@ -1,7 +1,7 @@
 import { Component, ChangeDetectionStrategy, inject, OnInit, OnDestroy } from '@angular/core';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, take } from 'rxjs';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { AuthService } from './core/services/auth.service';
@@ -68,6 +68,16 @@ export class App implements OnInit, OnDestroy {
         // the splash fades out — otherwise the user briefly sees a blank app.
         requestAnimationFrame(() => {
           void SplashScreen.hide({ fadeOutDuration: 200 });
+          // On a cold start the status bar is left opaque (a black strip under
+          // it) until a relayout, because the splash teardown drops the window
+          // insets that drive env(safe-area-inset-*). Re-assert edge-to-edge a
+          // short beat after hide() — once the window has settled the insets
+          // re-publish and the status bar goes transparent. (Chaining directly
+          // on hide() resolves too early and the re-assert doesn't take.)
+          if (Capacitor.getPlatform() === 'android') {
+            const Immersive = registerPlugin<{ applyEdgeToEdge(): Promise<void> }>('Immersive');
+            setTimeout(() => void Immersive.applyEdgeToEdge().catch(() => {}), 100);
+          }
         });
       });
 
