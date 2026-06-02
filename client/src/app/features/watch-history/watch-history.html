@@ -19,7 +19,9 @@
             (click)="goToMedia(item)"
           >
             <div class="absolute inset-0 overflow-hidden rounded-md">
-              @if (item.fanartUrl) {
+              @if (item.stillUrl) {
+                <img [src]="item.stillUrl | resolveUrl:'thumb'" [alt]="item.mediaTitle" class="h-full w-full object-contain" loading="lazy" />
+              } @else if (item.fanartUrl) {
                 <img [src]="item.fanartUrl | resolveUrl:'thumb'" [alt]="item.mediaTitle" class="h-full w-full object-contain" loading="lazy" />
               } @else if (item.posterUrl) {
                 <img [src]="item.posterUrl | resolveUrl:'thumb'" [alt]="item.mediaTitle" class="h-full w-full object-contain" loading="lazy" />

@@ -26,6 +26,8 @@ export interface WatchHistoryItem {
   mediaType: string;
   posterUrl: string | null;
   fanartUrl: string | null;
+  /** Episode still — null for movie rows or when TMDB had no still. */
+  stillUrl: string | null;
   episodeLabel: string | null;
 }
 
@@ -497,7 +499,7 @@ export class PlaybackService implements OnModuleInit {
          ps."positionSeconds", ps."durationSeconds", ps.completed,
          ps."lastPlayedAt",
          m.title AS "mediaTitle", m.type AS "mediaType",
-         m."posterUrl", m."fanartUrl",
+         m."posterUrl", m."fanartUrl", e."stillUrl",
          CASE WHEN ps."durationSeconds" > 0
               THEN ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)
               ELSE 0 END AS "progressPercent",

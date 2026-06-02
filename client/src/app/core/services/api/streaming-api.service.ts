@@ -142,6 +142,8 @@ export interface WatchHistoryItem {
   mediaType: string;
   posterUrl: string | null;
   fanartUrl: string | null;
+  /** Episode still — null for movies or when TMDB had no still. */
+  stillUrl: string | null;
   episodeLabel: string | null;
 }
 
