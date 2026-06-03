@@ -16,10 +16,8 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
-import { MediaService } from '../../core/services/api/media.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
-import { DownloadClientsApiService, QueueItem } from '../../core/services/api/download-clients-api.service';
-import { RequestsService } from '../../core/services/api/requests.service';
+import { CountsApiService } from '../../core/services/api/counts-api.service';
 import { ServerCacheService } from '../../core/services/server-cache.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SseService } from '../../core/services/sse.service';
@@ -74,10 +72,8 @@ import {
 export class LayoutComponent implements OnInit, OnDestroy {
   readonly auth = inject(AuthService);
   private readonly router = inject(Router);
-  private readonly mediaService = inject(MediaService);
   private readonly librariesApi = inject(LibrariesApiService);
-  private readonly downloadApi = inject(DownloadClientsApiService);
-  private readonly requestsService = inject(RequestsService);
+  private readonly countsApi = inject(CountsApiService);
   readonly serverConfig = inject(ServerConfigService);
   private readonly serverCache = inject(ServerCacheService);
   private readonly sse = inject(SseService);
@@ -156,15 +152,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
       // receives them), so library counts ride the broadcast queue.updated that
       // follows every import — otherwise non-requesters' sidebars go stale.
       case 'queue.updated':
-        this.refreshMediaCounts();
-        this.refreshQueueCount();
-        break;
       case 'stalled.removed':
-        this.refreshQueueCount();
-        break;
       case 'request.approved':
       case 'request.declined':
-        this.refreshRequestCount();
+        this.refreshSidebarCounts();
         break;
     }
   });
@@ -227,34 +218,27 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   async refreshCounts() {
     try {
-      const [libs, counts, queue, requests] = await Promise.all([
+      const [libs, counts] = await Promise.all([
         this.librariesApi.listMine(),
-        this.mediaService.getCountsByLibrary(),
-        this.downloadApi.getQueue({ pageSize: 100 }),
-        this.requestsService.list({ status: 'pending', limit: 1 }),
+        this.countsApi.get(),
       ]);
       this.libraries.set(libs);
-      this.libraryCounts.set(counts);
-      this.queueCount.set(queue.items.filter((q) => this.isActiveDownload(q)).length);
-      this.pendingRequestCount.set(requests.total);
+      this.libraryCounts.set(counts.mediaByLibrary);
+      this.queueCount.set(counts.queueActive);
+      this.pendingRequestCount.set(counts.pendingRequests);
     } catch {
       // silently ignore — counts are non-critical
     }
   }
 
-  /** Sidebar badge counts only torrents still doing work — excludes the
-   *  terminal Fliks states (imported, failed, quality-not-upgraded) and the
-   *  download-client error states (error, missing files). */
-  private isActiveDownload(q: QueueItem): boolean {
-    const doneStatuses = ['Imported', 'Import failed', 'Quality not upgraded'];
-    const errorTracker = ['Error', 'Missing files'];
-    return !doneStatuses.includes(q.status) && !errorTracker.includes(q.trackerStatus);
-  }
-
-  private async refreshMediaCounts() {
+  /** Refreshes the badge counts only (no library list re-fetch) — the SSE
+   *  handlers ride this for every count-bearing event. */
+  private async refreshSidebarCounts() {
     try {
-      const counts = await this.mediaService.getCountsByLibrary();
-      this.libraryCounts.set(counts);
+      const counts = await this.countsApi.get();
+      this.libraryCounts.set(counts.mediaByLibrary);
+      this.queueCount.set(counts.queueActive);
+      this.pendingRequestCount.set(counts.pendingRequests);
     } catch { /* ignore */ }
   }
 
@@ -265,20 +249,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
   /** Icon key for a library: explicit icon > default 'library'. */
   libraryIcon(lib: LibrarySummary): string {
     return lib.icon || 'library';
-  }
-
-  private async refreshQueueCount() {
-    try {
-      const queue = await this.downloadApi.getQueue({ pageSize: 100 });
-      this.queueCount.set(queue.items.filter((q) => this.isActiveDownload(q)).length);
-    } catch { /* ignore */ }
-  }
-
-  private async refreshRequestCount() {
-    try {
-      const requests = await this.requestsService.list({ status: 'pending', limit: 1 });
-      this.pendingRequestCount.set(requests.total);
-    } catch { /* ignore */ }
   }
 
 
