@@ -137,10 +137,14 @@ export class AuthService {
     username: string,
     password: string,
   ): Promise<{ accessToken: string; user: PublicUser }> {
-    const user = await this.userRepo.findOne({
-      where: { username },
-      relations: ['userRole'],
-    });
+    // passwordHash is select:false on the entity — the bcrypt compare below
+    // is the one read path that must opt back in.
+    const user = await this.userRepo
+      .createQueryBuilder('user')
+      .addSelect('user.passwordHash')
+      .leftJoinAndSelect('user.userRole', 'userRole')
+      .where('user.username = :username', { username })
+      .getOne();
     if (!user?.passwordHash) {
       throw new UnauthorizedException('Invalid credentials');
     }

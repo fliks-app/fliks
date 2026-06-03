@@ -341,8 +341,13 @@ export class RequestsService {
     const limit = query.limit ?? 25;
     const qb = this.requestRepo
       .createQueryBuilder('r')
-      .leftJoinAndSelect('r.user', 'user')
-      .leftJoinAndSelect('r.approvedBy', 'approvedBy')
+      // Embedded users are projected down to the public identity fields —
+      // the full User row carries credentials and account settings that
+      // don't belong in a request payload.
+      .leftJoin('r.user', 'user')
+      .addSelect(['user.id', 'user.username', 'user.avatar'])
+      .leftJoin('r.approvedBy', 'approvedBy')
+      .addSelect(['approvedBy.id', 'approvedBy.username', 'approvedBy.avatar'])
       // Resolve the linked library media by (tmdbId, type) rather than the
       // request's FK so partial-library titles (another user's request
       // already brought it in, or only some seasons are present) surface a
@@ -385,7 +390,26 @@ export class RequestsService {
     if (!this.canManageRequests(user) && row.userId !== user.id) {
       throw new ForbiddenException();
     }
+    row.user = this.toPublicIdentity(row.user) as User;
+    row.approvedBy = this.toPublicIdentity(row.approvedBy) as User | null;
+    row.comments?.forEach((c) => {
+      c.user = this.toPublicIdentity(c.user) as User;
+    });
     return row;
+  }
+
+  /**
+   * Projects an embedded User down to its public identity. Request payloads
+   * expose who acted, never the account itself — and a nested FindOptions
+   * `select` can't enforce this because eager relations hydrate all columns
+   * regardless.
+   */
+  private toPublicIdentity(
+    user: User | null,
+  ): Pick<User, 'id' | 'username' | 'avatar'> | null {
+    if (!user) return null;
+    const { id, username, avatar } = user;
+    return { id, username, avatar };
   }
 
   async update(
@@ -605,11 +629,15 @@ export class RequestsService {
     if (!this.canManageRequests(user) && request.userId !== user.id) {
       throw new ForbiddenException();
     }
-    return this.commentRepo.find({
+    const comments = await this.commentRepo.find({
       where: { request: { id: requestId } },
       relations: ['user'],
       order: { createdAt: 'ASC' },
     });
+    comments.forEach((c) => {
+      c.user = this.toPublicIdentity(c.user) as User;
+    });
+    return comments;
   }
 
   async removeComment(commentId: number, user: User): Promise<void> {
@@ -625,4 +653,3 @@ export class RequestsService {
     await this.commentRepo.remove(comment);
   }
 }
-

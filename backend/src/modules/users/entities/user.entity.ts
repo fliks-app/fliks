@@ -1,4 +1,5 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Exclude } from 'class-transformer';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { MediaServerType } from '../../../common/enums';
 import { Role } from '../../roles/entities/role.entity';
@@ -11,7 +12,14 @@ export class User extends BaseEntity {
   @Column({ nullable: true })
   email: string;
 
-  @Column({ nullable: true })
+  /**
+   * Bcrypt hash. Double-locked against leaking through API responses:
+   * `select: false` keeps it out of every default load (readers must
+   * `addSelect` it explicitly), and `@Exclude` strips it from any User
+   * instance that still reaches the global ClassSerializerInterceptor.
+   */
+  @Column({ nullable: true, select: false })
+  @Exclude()
   passwordHash: string;
 
   @Column({ nullable: true })
