@@ -82,6 +82,18 @@ export class FliksRequest extends BaseEntity {
   @Column({ type: 'jsonb', nullable: true })
   seasons: number[] | null;
 
+  /**
+   * Local card art (`/api/images/request/{tmdbId}/...`), stored at creation
+   * so cards render from the cached image pipeline without a metadata
+   * round-trip. Null when the download failed or the request predates local
+   * request art — the client falls back to the metadata lookup.
+   */
+  @Column({ type: 'text', nullable: true })
+  posterUrl: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  fanartUrl: string | null;
+
   @OneToMany(() => RequestComment, (comment) => comment.request, {
     cascade: true,
   })

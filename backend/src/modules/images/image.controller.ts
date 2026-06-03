@@ -49,7 +49,7 @@ export class ImageController {
     sizeRaw: string | undefined,
     res: Response,
   ) {
-    const validTypes = ['media', 'person', 'episode', 'season'];
+    const validTypes = ['media', 'person', 'episode', 'season', 'request'];
     if (!validTypes.includes(type)) throw new NotFoundException();
 
     const size: ImageSize = (VALID_SIZES as string[]).includes(sizeRaw ?? '')

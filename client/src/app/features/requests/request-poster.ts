@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { MetadataService } from '../../core/services/api/metadata.service';
 import { MediaType } from '../../core/enums/media-type.enum';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 /** Per-process cache for the metadata detail fetch — multiple instances of
  *  `app-request-poster` on the same row (poster chip + mobile backdrop)
@@ -21,12 +22,13 @@ const detailsCache = new Map<
 
 @Component({
   selector: 'app-request-poster',
+  imports: [ResolveUrlPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block w-full h-full min-h-0' },
   template: `
     @if (imageUrl()) {
       <img
-        [src]="imageUrl()!"
+        [src]="imageUrl()! | resolveUrl: (mode() === 'backdrop' ? 'medium' : 'thumb')"
         [alt]="titleText()"
         class="w-full h-full object-cover"
         loading="lazy"
@@ -67,16 +69,29 @@ export class RequestPosterComponent implements OnInit {
    *  with no fallback — meant to sit behind a gradient and stay silent when
    *  there's nothing to render. */
   readonly mode = input<'poster' | 'backdrop'>('poster');
+  /** Pre-resolved art (the request row's local `/api/images` paths). When the
+   *  current mode's URL is provided, the component renders it directly and
+   *  skips the metadata lookup entirely. */
+  readonly poster = input<string | null>(null);
+  readonly fanart = input<string | null>(null);
 
-  readonly posterUrl = signal<string | null>(null);
-  readonly fanartUrl = signal<string | null>(null);
+  private readonly fetchedPoster = signal<string | null>(null);
+  private readonly fetchedFanart = signal<string | null>(null);
   readonly loaded = signal(false);
 
   readonly imageUrl = computed(() =>
-    this.mode() === 'backdrop' ? this.fanartUrl() : this.posterUrl(),
+    this.mode() === 'backdrop'
+      ? (this.fanart() ?? this.fetchedFanart())
+      : (this.poster() ?? this.fetchedPoster()),
   );
 
   async ngOnInit() {
+    const provided =
+      this.mode() === 'backdrop' ? this.fanart() : this.poster();
+    if (provided) {
+      this.loaded.set(true);
+      return;
+    }
     const key = `${this.mediaType()}:${this.tmdbId()}`;
     let promise = detailsCache.get(key);
     if (!promise) {
@@ -90,8 +105,8 @@ export class RequestPosterComponent implements OnInit {
       detailsCache.set(key, promise);
     }
     const details = await promise;
-    this.posterUrl.set(details.posterUrl);
-    this.fanartUrl.set(details.fanartUrl);
+    this.fetchedPoster.set(details.posterUrl);
+    this.fetchedFanart.set(details.fanartUrl);
     this.loaded.set(true);
   }
 }

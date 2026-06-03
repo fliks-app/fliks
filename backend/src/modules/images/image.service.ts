@@ -3,7 +3,7 @@ import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 
-export type ImageType = 'media' | 'person' | 'episode' | 'season';
+export type ImageType = 'media' | 'person' | 'episode' | 'season' | 'request';
 /** Variant of a media image. `fanart-${N}` (N≥1) addresses the extra
  *  fanarts kept for randomised page backgrounds — they share `fanart`'s
  *  size pipeline (thumb / medium / full) so frontends can request any
@@ -25,6 +25,10 @@ export type ImageSize = 'thumb' | 'medium' | 'full';
 const TMDB_SIZE_MAP: Record<string, Partial<Record<ImageSize, string>>> = {
   'media/poster': { thumb: 'w185', medium: 'w500', full: 'original' },
   'media/fanart': { thumb: 'w300', medium: 'w780', full: 'original' },
+  // Request card art — keyed by tmdbId (not a media id), so every request
+  // for the same title shares one stored file.
+  'request/poster': { thumb: 'w185', medium: 'w500', full: 'original' },
+  'request/fanart': { thumb: 'w300', medium: 'w780', full: 'original' },
   person: { thumb: 'w45', full: 'original' },
   episode: { thumb: 'w300', full: 'original' },
   season: { thumb: 'w185', medium: 'w500', full: 'original' },
@@ -33,11 +37,11 @@ const TMDB_SIZE_MAP: Record<string, Partial<Record<ImageSize, string>>> = {
 const TMDB_HOST = /^https?:\/\/image\.tmdb\.org\//;
 
 function sizeMapKey(type: ImageType, variant?: MediaImageVariant): string {
-  if (type === 'media') {
+  if (type === 'media' || type === 'request') {
     const v = variant ?? 'poster';
     // Indexed fanarts share the parent `fanart` size pipeline.
     const base = /^fanart-\d+$/.test(v) ? 'fanart' : v;
-    return `media/${base}`;
+    return `${type}/${base}`;
   }
   return type;
 }
@@ -131,11 +135,11 @@ export class ImageService {
    * Delete all images (every size) for a given entity.
    */
   deleteImages(type: ImageType, id: number): void {
-    if (type === 'media') {
-      fs.rmSync(path.join(this.baseDir, 'media', String(id)), {
-        recursive: true,
-        force: true,
-      });
+    if (type === 'media' || type === 'request') {
+      fs.rmSync(
+        path.join(this.baseDir, type === 'media' ? 'media' : 'requests', String(id)),
+        { recursive: true, force: true },
+      );
       return;
     }
 
@@ -168,6 +172,13 @@ export class ImageService {
           String(id),
           `${variant ?? 'poster'}${suffix}.jpg`,
         );
+      case 'request':
+        return path.join(
+          this.baseDir,
+          'requests',
+          String(id),
+          `${variant ?? 'poster'}${suffix}.jpg`,
+        );
       case 'person':
         return path.join(this.baseDir, 'persons', `${id}${suffix}.jpg`);
       case 'episode':
@@ -175,6 +186,11 @@ export class ImageService {
       case 'season':
         return path.join(this.baseDir, 'seasons', `${id}${suffix}.jpg`);
     }
+  }
+
+  /** Whether the full-size file for (type, id, variant) is already stored. */
+  hasImage(type: ImageType, id: number, variant?: MediaImageVariant): boolean {
+    return fs.existsSync(this.getDiskPath(type, id, variant));
   }
 
   /**
@@ -185,6 +201,8 @@ export class ImageService {
     switch (type) {
       case 'media':
         return `/api/images/media/${id}/${variant ?? 'poster'}`;
+      case 'request':
+        return `/api/images/request/${id}/${variant ?? 'poster'}`;
       case 'person':
         return `/api/images/person/${id}`;
       case 'episode':
