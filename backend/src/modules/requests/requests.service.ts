@@ -219,6 +219,7 @@ export class RequestsService {
     };
     const row = this.requestRepo.create(partial);
     const saved = await this.requestRepo.save(row);
+    this.projectEmbeddedUsers(saved);
 
     const event = autoApprove ? 'request.approved' : 'request.created';
     void this.notifications.dispatch(event, {
@@ -467,12 +468,7 @@ export class RequestsService {
     if (!this.canManageRequests(user) && row.userId !== user.id) {
       throw new ForbiddenException();
     }
-    row.user = this.toPublicIdentity(row.user) as User;
-    row.approvedBy = this.toPublicIdentity(row.approvedBy) as User | null;
-    row.comments?.forEach((c) => {
-      c.user = this.toPublicIdentity(c.user) as User;
-    });
-    return row;
+    return this.projectEmbeddedUsers(row);
   }
 
   /**
@@ -487,6 +483,20 @@ export class RequestsService {
     if (!user) return null;
     const { id, username, avatar } = user;
     return { id, username, avatar };
+  }
+
+  /**
+   * In-place projection of every embedded user on a row about to be
+   * returned. Every request endpoint must route its response through this
+   * (or findOne) — the eager relations otherwise hydrate full accounts.
+   */
+  private projectEmbeddedUsers(row: FliksRequest): FliksRequest {
+    row.user = this.toPublicIdentity(row.user) as User;
+    row.approvedBy = this.toPublicIdentity(row.approvedBy) as User | null;
+    row.comments?.forEach((c) => {
+      c.user = this.toPublicIdentity(c.user) as User;
+    });
+    return row;
   }
 
   async update(
@@ -562,6 +572,7 @@ export class RequestsService {
     );
 
     const saved = await this.requestRepo.save(row);
+    this.projectEmbeddedUsers(saved);
     void this.notifications.dispatch('request.approved', {
       title: saved.title,
     });
@@ -665,6 +676,7 @@ export class RequestsService {
     row.approvedBy = admin;
     row.declinedReason = reason ?? null;
     const saved = await this.requestRepo.save(row);
+    this.projectEmbeddedUsers(saved);
     void this.notifications.dispatch('request.declined', {
       title: saved.title,
       reason: reason ?? '',
@@ -694,7 +706,10 @@ export class RequestsService {
       user,
       message: dto.message,
     });
-    return this.commentRepo.save(comment);
+    const saved = await this.commentRepo.save(comment);
+    saved.user = this.toPublicIdentity(saved.user) as User;
+    if (saved.request) this.projectEmbeddedUsers(saved.request);
+    return saved;
   }
 
   async getComments(requestId: number, user: User): Promise<RequestComment[]> {
