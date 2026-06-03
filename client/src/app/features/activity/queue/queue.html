@@ -69,7 +69,7 @@
               @if (item.mediaId) {
                 <a
                   [routerLink]="['/' + (item.mediaType === 'series' ? 'series' : 'movies'), item.mediaId]"
-                  class="font-medium text-sm leading-tight truncate text-primary hover:underline"
+                  class="block font-medium text-sm leading-tight truncate text-primary hover:underline"
                   [title]="item.name"
                 >{{ item.name }}</a>
                 @if (item.episodeNumber != null) {
