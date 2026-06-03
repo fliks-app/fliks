@@ -31,6 +31,10 @@ import { MediaType } from '../../common/enums';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 import { enqueueCommand } from '../../common/utils/command-queue.util';
 import { StalledCheck } from './entities/stalled-check.entity';
+import {
+  countStalledStrikes,
+  STALL_ELIGIBLE_STATES,
+} from './utils/stalled-progress.util';
 import { CleanupProfile } from '../cleanup-profiles/entities/cleanup-profile.entity';
 import { Library } from '../libraries/entities/library.entity';
 import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
@@ -922,8 +926,9 @@ export class CompletionService {
    *
    * For every active downloading torrent that can be traced back to a library
    * with a cleanup profile (fast/medium/slow), we snapshot the `downloaded` byte
-   * counter at the profile's interval. When the last N snapshots are all equal,
-   * the download is considered stalled and is removed + blocklisted.
+   * counter at the profile's interval. When the last N snapshots show no
+   * meaningful progress, the download is considered stalled and is removed
+   * + blocklisted.
    *
    * Whether a new search is triggered depends on:
    *   - the profile's `autoRestart` flag,
@@ -953,6 +958,21 @@ export class CompletionService {
     const allowManualRestart =
       (await this.settings.get('cleanup_restart_manual_grabs')) === 'true';
 
+    // Candidate histories for the torrent↔history match, loaded once for all
+    // clients. `completed` rows are excluded — a finished import is no longer
+    // an in-flight download. The matcher falls back to name matching and
+    // self-heals missing hashes, so grabs whose hash was never recovered at
+    // add time are still covered (the old hash-only lookup skipped them).
+    const histories = await this.historyRepo.find({
+      where: [
+        { status: 'grabbed' },
+        { status: 'failed' },
+        { status: 'warning' },
+        { status: 'importing' },
+      ],
+      relations: ['media'],
+    });
+
     const mediaToResearch = new Set<number>();
     const now = Date.now();
 
@@ -964,46 +984,19 @@ export class CompletionService {
         continue;
       }
 
-      // Only examine torrents that are still downloading AND not paused by the user.
-      // Paused/stopped torrents make no progress by design and should never be flagged.
       const downloading = torrents.filter(
         (t) =>
           t.progress < 1 &&
           t.hash &&
           t.hash.length > 0 &&
-          t.state !== 'pausedDL' &&
-          t.state !== 'stoppedDL',
+          STALL_ELIGIBLE_STATES.has(t.state),
       );
       if (!downloading.length) continue;
 
-      // Bulk-load all histories matching these hashes in one query.
-      const hashes = downloading.map((t) => t.hash.toLowerCase());
-      const histories = await this.historyRepo.find({
-        where: { torrentHash: In(hashes) },
-      });
-      const historyByHash = new Map(
-        histories.map((h) => [h.torrentHash.toLowerCase(), h]),
-      );
-
-      // Pre-load the media rows we need (to resolve libraryId).
-      const mediaIds = Array.from(
-        new Set(
-          histories
-            .map((h) => h.mediaId)
-            .filter((id): id is number => id != null),
-        ),
-      );
-      const medias = mediaIds.length
-        ? await this.mediaRepo.find({ where: { id: In(mediaIds) } })
-        : [];
-      const mediaById = new Map(medias.map((m) => [m.id, m]));
-
       for (const t of downloading) {
-        const history = historyByHash.get(t.hash.toLowerCase());
+        const history = await this.historyMatcher.matchAndHeal(t, histories);
         if (!history) continue; // Untracked torrent — not our business.
-        const media = history.mediaId
-          ? mediaById.get(history.mediaId)
-          : undefined;
+        const media = history.media; // library is eager-loaded with the media
         if (!media?.libraryId) continue;
         const library = libraryById.get(media.libraryId);
         if (!library?.stalledCleanupProfile) continue;
@@ -1081,7 +1074,8 @@ export class CompletionService {
 
   /**
    * Records a snapshot if the interval has elapsed, then checks whether the
-   * last `profile.samples` snapshots all have the same `downloadedBytes`.
+   * last `profile.samples` snapshots form an unbroken no-progress run (each
+   * step within the tolerance of `stalled-progress.util`).
    */
   private async evaluateStalled(
     torrent: QbittorrentTorrent,
@@ -1116,11 +1110,19 @@ export class CompletionService {
     });
 
     if (recent.length < profile.samples) return false;
-    const first = recent[0].downloadedBytes;
-    return recent.every((s) => s.downloadedBytes === first);
+    // `recent` is DESC by checkedAt — exactly the order the strike counter
+    // expects. Tolerant comparison: a stalled torrent keeps receiving a
+    // trickle of wasted bytes from churning peers, so strict byte equality
+    // would never fire.
+    return countStalledStrikes(recent) >= profile.samples;
   }
 
-  /** Deletes stalled-check rows older than 24 h to keep the table small. */
+  /**
+   * Deletes stalled-check rows older than 24 h to keep the table small.
+   * Assumes every profile's detection window (`(samples - 1) × interval`)
+   * stays under 24 h — a longer custom window would lose its oldest
+   * snapshots before the run could complete.
+   */
   private async pruneOldStalledChecks(): Promise<void> {
     const cutoff = new Date(Date.now() - 24 * 60 * 60_000);
     await this.stalledCheckRepo.delete({ checkedAt: LessThan(cutoff) });
