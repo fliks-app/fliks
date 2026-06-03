@@ -25,8 +25,9 @@ export type ImageSize = 'thumb' | 'medium' | 'full';
 const TMDB_SIZE_MAP: Record<string, Partial<Record<ImageSize, string>>> = {
   'media/poster': { thumb: 'w185', medium: 'w500', full: 'original' },
   'media/fanart': { thumb: 'w300', medium: 'w780', full: 'original' },
-  // Request card art — keyed by tmdbId (not a media id), so every request
-  // for the same title shares one stored file.
+  // Request card art — keyed by `{mediaType}-{tmdbId}` (TMDB ids are
+  // namespaced per media type, so a movie and a series can share the same
+  // number). Every request for the same title shares one stored file.
   'request/poster': { thumb: 'w185', medium: 'w500', full: 'original' },
   'request/fanart': { thumb: 'w300', medium: 'w780', full: 'original' },
   person: { thumb: 'w45', full: 'original' },
@@ -71,7 +72,7 @@ export class ImageService {
   async downloadAndStore(
     remoteUrl: string,
     type: ImageType,
-    id: number,
+    id: number | string,
     variant?: MediaImageVariant,
   ): Promise<string | null> {
     const sizes = TMDB_SIZE_MAP[sizeMapKey(type, variant)] ?? {
@@ -134,7 +135,7 @@ export class ImageService {
   /**
    * Delete all images (every size) for a given entity.
    */
-  deleteImages(type: ImageType, id: number): void {
+  deleteImages(type: ImageType, id: number | string): void {
     if (type === 'media' || type === 'request') {
       fs.rmSync(
         path.join(this.baseDir, type === 'media' ? 'media' : 'requests', String(id)),
@@ -159,7 +160,7 @@ export class ImageService {
    */
   getDiskPath(
     type: ImageType,
-    id: number,
+    id: number | string,
     variant?: MediaImageVariant,
     size: ImageSize = 'full',
   ): string {
@@ -189,7 +190,11 @@ export class ImageService {
   }
 
   /** Whether the full-size file for (type, id, variant) is already stored. */
-  hasImage(type: ImageType, id: number, variant?: MediaImageVariant): boolean {
+  hasImage(
+    type: ImageType,
+    id: number | string,
+    variant?: MediaImageVariant,
+  ): boolean {
     return fs.existsSync(this.getDiskPath(type, id, variant));
   }
 
@@ -197,7 +202,11 @@ export class ImageService {
    * Public API path stored in DB. Always size-agnostic — clients append
    * `?size=thumb|medium|full` at request time.
    */
-  getApiPath(type: ImageType, id: number, variant?: MediaImageVariant): string {
+  getApiPath(
+    type: ImageType,
+    id: number | string,
+    variant?: MediaImageVariant,
+  ): string {
     switch (type) {
       case 'media':
         return `/api/images/media/${id}/${variant ?? 'poster'}`;

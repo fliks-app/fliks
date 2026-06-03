@@ -227,7 +227,15 @@ export class RequestsService {
       mediaType: dto.mediaType,
     });
 
-    await this.populateRequestArt(saved);
+    // Bounded wait: the art typically lands within a couple seconds and the
+    // first render gets it. On a degraded TMDB the response returns with
+    // null art after the deadline and the client's metadata fallback covers
+    // the row while the download finishes in the background (the columns
+    // are persisted by a separate UPDATE).
+    await Promise.race([
+      this.populateRequestArt(saved),
+      new Promise((resolve) => setTimeout(resolve, 5_000)),
+    ]);
 
     return saved;
   }
@@ -236,55 +244,46 @@ export class RequestsService {
    * Stores the title's poster/fanart through the local image pipeline and
    * stamps their API paths on the request, so cards render from the cached
    * `/api/images` endpoint instead of fetching metadata + the TMDB CDN per
-   * card. Art is keyed by tmdbId: requests for the same title share files,
-   * and a repeat request skips the network entirely. Best-effort — any
-   * failure leaves the columns null and the client falls back to the
-   * metadata lookup.
+   * card. Art is keyed by `{mediaType}-{tmdbId}` — TMDB ids are namespaced
+   * per media type — so requests for the same title share files and a
+   * repeat request only downloads whichever variant is still missing.
+   * Best-effort: any failure leaves the columns null and the client falls
+   * back to the metadata lookup.
    */
   private async populateRequestArt(row: FliksRequest): Promise<void> {
     try {
-      let posterUrl: string | null = null;
-      let fanartUrl: string | null = null;
+      const key = `${row.mediaType}-${row.tmdbId}`;
+      let posterUrl = this.imageService.hasImage('request', key, 'poster')
+        ? this.imageService.getApiPath('request', key, 'poster')
+        : null;
+      let fanartUrl = this.imageService.hasImage('request', key, 'fanart')
+        ? this.imageService.getApiPath('request', key, 'fanart')
+        : null;
 
-      const hasPoster = this.imageService.hasImage(
-        'request',
-        row.tmdbId,
-        'poster',
-      );
-      const hasFanart = this.imageService.hasImage(
-        'request',
-        row.tmdbId,
-        'fanart',
-      );
-      if (hasPoster || hasFanart) {
-        posterUrl = hasPoster
-          ? this.imageService.getApiPath('request', row.tmdbId, 'poster')
-          : null;
-        fanartUrl = hasFanart
-          ? this.imageService.getApiPath('request', row.tmdbId, 'fanart')
-          : null;
-      } else {
+      if (!posterUrl || !fanartUrl) {
         const details =
           row.mediaType === MediaType.MOVIE
             ? await this.tmdb.getMovieDetails(String(row.tmdbId))
             : await this.tmdb.getTvShowDetails(String(row.tmdbId));
         [posterUrl, fanartUrl] = await Promise.all([
-          details.posterUrl
-            ? this.imageService.downloadAndStore(
-                details.posterUrl,
-                'request',
-                row.tmdbId,
-                'poster',
-              )
-            : Promise.resolve(null),
-          details.fanartUrl
-            ? this.imageService.downloadAndStore(
-                details.fanartUrl,
-                'request',
-                row.tmdbId,
-                'fanart',
-              )
-            : Promise.resolve(null),
+          posterUrl ??
+            (details.posterUrl
+              ? this.imageService.downloadAndStore(
+                  details.posterUrl,
+                  'request',
+                  key,
+                  'poster',
+                )
+              : Promise.resolve(null)),
+          fanartUrl ??
+            (details.fanartUrl
+              ? this.imageService.downloadAndStore(
+                  details.fanartUrl,
+                  'request',
+                  key,
+                  'fanart',
+                )
+              : Promise.resolve(null)),
         ]);
       }
 
