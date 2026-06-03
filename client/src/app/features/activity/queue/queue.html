@@ -69,7 +69,7 @@
               @if (item.mediaId) {
                 <a
                   [routerLink]="['/' + (item.mediaType === 'series' ? 'series' : 'movies'), item.mediaId]"
-                  class="font-medium text-sm leading-tight truncate text-primary hover:underline"
+                  class="block font-medium text-sm leading-tight truncate text-primary hover:underline"
                   [title]="item.name"
                 >{{ item.name }}</a>
                 @if (item.episodeNumber != null) {
@@ -106,10 +106,26 @@
                   {{ fliksStatusLabel(item.status) }}
                 </span>
               }
+              @if (showStallStrikes(item)) {
+                <span
+                  class="badge badge-sm gap-1"
+                  [ngClass]="stallStrikeClass(item)"
+                  [title]="'activity.stall_strikes_tooltip' | translate:{ current: item.stalledStrikes, required: item.stalledStrikesRequired }"
+                >
+                  <svg lucideTriangleAlert class="h-3 w-3"></svg>
+                  {{ item.stalledStrikes }}/{{ item.stalledStrikesRequired }}
+                </span>
+              }
               <app-dropdown-menu placement="bottom-end">
                 <button trigger type="button" class="btn btn-ghost btn-xs btn-circle">
                   <svg lucideEllipsisVertical class="h-4 w-4"></svg>
                 </button>
+                @if (item.mediaId) {
+                  <button type="button" class="dropdown-item text-white" (click)="searchReplacement(item)">
+                    <svg lucideSearch class="h-4 w-4"></svg>
+                    {{ 'activity.search_another' | translate }}
+                  </button>
+                }
                 @if (item.status === 'Imported' || item.status === 'Quality not upgraded' || item.status === 'Import failed' || (!item.status && item.progress >= 1)) {
                   <button type="button" class="dropdown-item text-white" (click)="reimportAndTrigger(item)">
                     <svg lucideRotateCcw class="h-4 w-4"></svg>
@@ -274,3 +290,16 @@
   </div>
   <form method="dialog" class="modal-backdrop"><button>close</button></form>
 </dialog>
+
+<!-- Search a replacement release for a queue item -->
+<app-releases-modal #replacementModal
+  [title]="replacementTitle()"
+  [releases]="replacementReleases()"
+  [loading]="replacementLoading()"
+  [searched]="replacementSearched()"
+  [error]="replacementError()"
+  [grabBusy]="replacementGrabBusy()"
+  [grabState]="replacementGrabState()"
+  grabPrefix="rep"
+  (grab)="grabReplacement($event.release, $event.index)"
+/>

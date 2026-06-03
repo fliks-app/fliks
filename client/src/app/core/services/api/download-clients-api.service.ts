@@ -61,8 +61,13 @@ export interface QueueItem {
   seasonNumber?: number;
   episodeNumber?: number;
   episodeTitle?: string | null;
+  episodeId?: number;
+  seasonId?: number;
   indexerName?: string;
   statusMessage?: string;
+  /** Consecutive no-progress cleanup checks; removal fires at `stalledStrikesRequired`. */
+  stalledStrikes?: number;
+  stalledStrikesRequired?: number;
 }
 
 export interface QueueResult {

@@ -1,9 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { DownloadClient } from './entities/download-client.entity';
 import { DownloadHistory } from '../media/entities/download-history.entity';
 import { Media } from '../media/entities/media.entity';
+import { StalledCheck } from '../scheduler/entities/stalled-check.entity';
+import { CleanupProfile } from '../cleanup-profiles/entities/cleanup-profile.entity';
+import { StalledCleanupProfileKey } from '../../common/constants/stalled-cleanup-profiles';
+import {
+  countStalledStrikes,
+  STALL_ELIGIBLE_STATES,
+} from '../scheduler/utils/stalled-progress.util';
 import { QbittorrentService, QbittorrentTorrent } from './qbittorrent.service';
 import { CreateDownloadClientDto } from './dto/create-download-client.dto';
 import { UpdateDownloadClientDto } from './dto/update-download-client.dto';
@@ -26,8 +33,20 @@ export interface QueueEntry extends QbittorrentTorrent {
   episodeNumber?: number;
   /** Episode title where known. */
   episodeTitle?: string | null;
+  /** Linked episode id (single-episode grabs) — lets the client open the
+   *  episode releases modal for this exact target. */
+  episodeId?: number;
+  /** Linked season id (episode grabs carry the parent season, packs the pack's). */
+  seasonId?: number;
   /** Indexer the torrent was grabbed from (resolved through DownloadHistory). */
   indexerName?: string;
+  /** Consecutive no-progress stall snapshots for this torrent, computed with
+   *  the same tolerance as the stalled cleanup. Present only when the item's
+   *  media→library carries a cleanup profile. */
+  stalledStrikes?: number;
+  /** The profile's sample count — the cleanup removes the torrent when
+   *  `stalledStrikes` reaches this. */
+  stalledStrikesRequired?: number;
   /** Download client status (Downloading, Seeding, Paused, Stalled…) */
   trackerStatus: string;
   /** App-level status (Awaiting import, Importing, Imported, Import failed…) */
@@ -88,6 +107,10 @@ export class DownloadClientsService {
     private readonly repo: Repository<DownloadClient>,
     @InjectRepository(DownloadHistory)
     private readonly historyRepo: Repository<DownloadHistory>,
+    @InjectRepository(StalledCheck)
+    private readonly stalledCheckRepo: Repository<StalledCheck>,
+    @InjectRepository(CleanupProfile)
+    private readonly cleanupProfileRepo: Repository<CleanupProfile>,
     private readonly qbittorrent: QbittorrentService,
     private readonly historyMatcher: TorrentHistoryMatcher,
     private readonly blocklist: BlocklistService,
@@ -367,6 +390,11 @@ export class DownloadClientsService {
       relations: ['media', 'indexer', 'episode', 'season'],
     });
 
+    // Cleanup profile key per entry, resolved during the match (media.library
+    // is eager-loaded). Side map rather than an entry field so the internal
+    // key never serializes to the client.
+    const profileKeyByEntry = new Map<QueueEntry, StalledCleanupProfileKey>();
+
     for (const entry of results) {
       const match = await this.historyMatcher.matchAndHeal(
         entry,
@@ -376,6 +404,8 @@ export class DownloadClientsService {
         entry.mediaId = match.mediaId;
         entry.mediaTitle = match.media.title;
         entry.mediaType = match.media.type;
+        const profileKey = match.media.library?.stalledCleanupProfile;
+        if (profileKey) profileKeyByEntry.set(entry, profileKey);
       }
       if (match?.indexer) {
         entry.indexerName = match.indexer.name;
@@ -390,6 +420,12 @@ export class DownloadClientsService {
       }
       if (match?.season) {
         entry.seasonNumber = match.season.seasonNumber;
+      }
+      if (match?.episodeId != null) {
+        entry.episodeId = match.episodeId;
+      }
+      if (match?.seasonId != null) {
+        entry.seasonId = match.seasonId;
       }
 
       // App-level status from history
@@ -433,11 +469,62 @@ export class DownloadClientsService {
 
     const total = filtered.length;
     const start = (page - 1) * pageSize;
-    return {
-      items: filtered.slice(start, start + pageSize),
-      total,
-      page,
-      pageSize,
-    };
+    const items = filtered.slice(start, start + pageSize);
+
+    await this.annotateStalledStrikes(items, profileKeyByEntry);
+
+    return { items, total, page, pageSize };
+  }
+
+  /**
+   * Fills `stalledStrikes` / `stalledStrikesRequired` on queue items whose
+   * media→library carries a cleanup profile, using the same no-progress
+   * tolerance and run-length logic as the stalled cleanup. The count is
+   * clamped to the profile's sample target so the display stays "x/N" even
+   * when a torrent outlives the firing threshold (e.g. the client refused
+   * the deletion). Runs on the page slice only — the queue is polled every
+   * 10 s, so queries stay bounded to one page.
+   *
+   * Only torrents currently subject to stall monitoring are annotated:
+   * paused/seeding/imported items would otherwise surface stale snapshots
+   * (rows live until removal or the 24 h prune, not until import).
+   */
+  private async annotateStalledStrikes(
+    items: QueueEntry[],
+    profileKeyByEntry: Map<QueueEntry, StalledCleanupProfileKey>,
+  ): Promise<void> {
+    const eligible = items.filter(
+      (it) =>
+        it.hash &&
+        it.progress < 1 &&
+        STALL_ELIGIBLE_STATES.has(it.state) &&
+        profileKeyByEntry.has(it),
+    );
+    if (!eligible.length) return;
+
+    const profiles = await this.cleanupProfileRepo.find();
+    const profileByKey = new Map(profiles.map((p) => [p.key, p]));
+
+    const hashes = eligible.map((it) => it.hash);
+    const rows = await this.stalledCheckRepo.find({
+      where: { torrentHash: In(hashes) },
+      order: { checkedAt: 'DESC' },
+    });
+    // Global DESC order preserves each hash's own DESC order on grouping.
+    const snapsByHash = new Map<string, StalledCheck[]>();
+    for (const row of rows) {
+      const key = row.torrentHash.toLowerCase();
+      const list = snapsByHash.get(key);
+      if (list) list.push(row);
+      else snapsByHash.set(key, [row]);
+    }
+
+    for (const it of eligible) {
+      const profile = profileByKey.get(profileKeyByEntry.get(it)!);
+      if (!profile) continue;
+      const snaps = snapsByHash.get(it.hash.toLowerCase()) ?? [];
+      it.stalledStrikes = Math.min(countStalledStrikes(snaps), profile.samples);
+      it.stalledStrikesRequired = profile.samples;
+    }
   }
 }
