@@ -2,6 +2,7 @@ import { CountsService } from './counts.service';
 import type { User } from '../users/entities/user.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
+import { Media } from '../media/entities/media.entity';
 import { Action } from '../auth/casl/actions.enum';
 
 describe('CountsService.getCounts', () => {
@@ -10,6 +11,7 @@ describe('CountsService.getCounts', () => {
   function make(opts: {
     canReadDownloadClient: boolean;
     canManageRequests: boolean;
+    canReadMedia?: boolean;
   }) {
     const historyRepo = { count: jest.fn().mockResolvedValue(3) };
     const requestRepo = { count: jest.fn().mockResolvedValue(5) };
@@ -17,6 +19,7 @@ describe('CountsService.getCounts', () => {
       can: jest.fn((action: Action, subject: unknown) => {
         if (subject === DownloadClient) return opts.canReadDownloadClient;
         if (subject === FliksRequest) return opts.canManageRequests;
+        if (subject === Media) return opts.canReadMedia ?? true;
         return false;
       }),
     };
@@ -90,5 +93,17 @@ describe('CountsService.getCounts', () => {
     expect(libraries.getAccessibleLibraryIds).toHaveBeenCalledWith(user);
     expect(mediaService.getCountsByLibrary).toHaveBeenCalledWith([1, 2]);
     expect(counts.mediaByLibrary).toEqual({ 1: 10, 2: 20 });
+  });
+
+  it('returns empty media counts without the media read ability, without querying', async () => {
+    const { service, mediaService, libraries } = make({
+      canReadDownloadClient: true,
+      canManageRequests: false,
+      canReadMedia: false,
+    });
+    const counts = await service.getCounts(user);
+    expect(counts.mediaByLibrary).toEqual({});
+    expect(libraries.getAccessibleLibraryIds).not.toHaveBeenCalled();
+    expect(mediaService.getCountsByLibrary).not.toHaveBeenCalled();
   });
 });

@@ -4,6 +4,7 @@ import { In, Repository } from 'typeorm';
 import { DownloadHistory } from '../media/entities/download-history.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
+import { Media } from '../media/entities/media.entity';
 import { User } from '../users/entities/user.entity';
 import { RequestStatus } from '../../common/enums';
 import {
@@ -43,7 +44,7 @@ export class CountsService {
     const [queueActive, pendingRequests, mediaByLibrary] = await Promise.all([
       this.countActiveQueue(ability),
       this.countPendingRequests(user, ability),
-      this.countMediaByLibrary(user),
+      this.countMediaByLibrary(user, ability),
     ]);
     return { queueActive, pendingRequests, mediaByLibrary };
   }
@@ -52,10 +53,17 @@ export class CountsService {
    * Downloads still doing work, from the history table. `grabbed` and
    * `importing` are the states the queue badge counts; `warning` maps to
    * "Quality not upgraded" and `failed`/`completed` are terminal, all three
-   * excluded from the badge. Unlike the live queue, history can't see
-   * client-side error states (tracker error, missing files), so a torrent
-   * erroring at the client stays counted until its row turns terminal — a
-   * transient over-count accepted in exchange for skipping the live fan-out.
+   * excluded from the badge.
+   *
+   * Known drift vs the live queue, accepted in exchange for skipping the
+   * client fan-out (the badge links to the queue page, where truth lives):
+   * - client-side error states (tracker error, missing files) and torrents
+   *   removed from the client stay counted until the orphan reaper flips
+   *   the row to `failed` (~30 min grace);
+   * - a row stuck in `importing` by a mid-import crash is counted until it
+   *   reaches a terminal status;
+   * - torrents living in the download client without a history row
+   *   (added outside the app) are not counted at all.
    */
   private async countActiveQueue(ability: AppAbility): Promise<number> {
     if (!ability.can(Action.Read, DownloadClient)) return 0;
@@ -81,9 +89,13 @@ export class CountsService {
     });
   }
 
+  /** Mirrors the gating of GET /media/counts-by-library: media.read
+   *  required, then scoped to the user's accessible libraries. */
   private async countMediaByLibrary(
     user: User,
+    ability: AppAbility,
   ): Promise<Record<number, number>> {
+    if (!ability.can(Action.Read, Media)) return {};
     const accessibleLibraryIds =
       await this.libraries.getAccessibleLibraryIds(user);
     return this.mediaService.getCountsByLibrary(accessibleLibraryIds);
