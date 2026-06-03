@@ -266,9 +266,16 @@ public class NativePlayerPlugin extends Plugin {
             final DataSource.Factory dataSourceFactory = offline
                     ? new DefaultDataSource.Factory(getContext(), FlixDownloadUtil.getCacheDataSourceFactory(getContext()))
                     : new DefaultDataSource.Factory(getContext(), httpFactory);
-            // 500ms instead of ExoPlayer's default 2500ms — short-segment LAN HLS.
+            // Buffer sized as multiples of the production ~6s HLS segment: ~3
+            // segments (18s) min, up to ~8 segments (48s) ahead, so a slow
+            // segment fetch on a degraded link doesn't drain to empty and stall.
+            // 48s stays under the backend's 15-segment seek-restart threshold
+            // (~90s at 6s segments), so forward fill never forces an ffmpeg
+            // restart. bufferForPlaybackMs stays 500ms (vs ExoPlayer's 2500ms
+            // default) for a snappy start/seek; resume-after-rebuffer waits one
+            // full segment (6s) to avoid re-stalling mid-segment.
             LoadControl loadControl = new DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(3000, 8000, 500, 3000)
+                    .setBufferDurationsMs(18000, 48000, 500, 6000)
                     .build();
             // Renderers tuned for AV receivers / TVs that decode surround:
             // - setEnableAudioFloatOutput(false) keeps the audio path on 16-bit
