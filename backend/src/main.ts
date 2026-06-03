@@ -1,8 +1,8 @@
 // Must be set before any I/O — libuv initializes the pool on first use.
 process.env.UV_THREADPOOL_SIZE = '16';
 
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { NestFactory, Reflector } from '@nestjs/core';
+import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AppModule } from './app.module';
 import { LogBufferService } from './modules/scheduler/log-buffer.service';
@@ -79,6 +79,10 @@ async function bootstrap() {
       transform: true,
     }),
   );
+  // Honor class-transformer decorators (@Exclude on credential columns) on
+  // every entity instance a controller returns. Plain-object responses pass
+  // through unchanged; @Res()/SSE handlers bypass interceptors entirely.
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
 
   const port = Number(process.env.PORT) || 4848;
   await app.listen(port);
