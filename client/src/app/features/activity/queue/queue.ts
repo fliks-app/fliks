@@ -20,6 +20,7 @@ import {
 import {
   MediaService,
   Media,
+  MovieRelease,
 } from '../../../core/services/api/media.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
@@ -36,10 +37,11 @@ import {
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
+import { ReleasesModalComponent } from '../../media-detail/components/releases-modal/releases-modal.component';
 
 @Component({
   selector: 'app-activity-queue',
-  imports: [TranslateModule, DecimalPipe, NgClass, RouterLink, FormsModule, ResolveUrlPipe, DropdownMenuComponent, PaginationComponent, LucideRotateCcw, LucideLink2, LucideEllipsisVertical, LucideTriangleAlert, LucideDownload, LucideSearch, LucideTrash2, LucideBan],
+  imports: [TranslateModule, DecimalPipe, NgClass, RouterLink, FormsModule, ResolveUrlPipe, DropdownMenuComponent, PaginationComponent, ReleasesModalComponent, LucideRotateCcw, LucideLink2, LucideEllipsisVertical, LucideTriangleAlert, LucideDownload, LucideSearch, LucideTrash2, LucideBan],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './queue.html',
 })
@@ -109,6 +111,32 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
   readonly linkSearching = signal(false);
   readonly linkSelectedMediaId = signal<number | null>(null);
   readonly linkSaving = signal(false);
+
+  // Replacement-release modal: searches the indexers for the same target as
+  // a queue item, so a stuck torrent can be swapped for another release.
+  private readonly replacementModal = viewChild<ReleasesModalComponent>('replacementModal');
+  readonly replacementItem = signal<QueueItem | null>(null);
+  readonly replacementReleases = signal<MovieRelease[]>([]);
+  readonly replacementLoading = signal(false);
+  readonly replacementSearched = signal(false);
+  readonly replacementError = signal('');
+  readonly replacementGrabBusy = signal<string | null>(null);
+  readonly replacementGrabState = signal<Map<string, 'ok' | 'error'>>(new Map());
+
+  readonly replacementTitle = computed(() => {
+    const it = this.replacementItem();
+    if (!it) return '';
+    const base = it.mediaTitle ?? it.name;
+    if (it.episodeNumber != null) {
+      const s = String(it.seasonNumber ?? 0).padStart(2, '0');
+      const e = String(it.episodeNumber).padStart(2, '0');
+      return `${base} — S${s}E${e}`;
+    }
+    if (it.seasonNumber != null) {
+      return `${base} — ${this.translate.instant('activity.season_pack', { season: it.seasonNumber })}`;
+    }
+    return base;
+  });
 
   private intervalId: ReturnType<typeof setInterval> | null = null;
 
@@ -234,6 +262,116 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
     } finally {
       this.linkSaving.set(false);
     }
+  }
+
+  async searchReplacement(item: QueueItem) {
+    if (!item.mediaId) return;
+    // Full reset so reopening for another item never shows stale results.
+    this.replacementItem.set(item);
+    this.replacementReleases.set([]);
+    this.replacementSearched.set(false);
+    this.replacementError.set('');
+    this.replacementGrabBusy.set(null);
+    this.replacementGrabState.set(new Map());
+    this.replacementLoading.set(true);
+    this.replacementModal()?.showModal();
+    try {
+      const rows = await this.loadReplacementReleases(item);
+      this.replacementReleases.set(rows);
+      this.replacementSearched.set(true);
+    } catch (err: unknown) {
+      const httpErr = err as { error?: { message?: string } };
+      this.replacementSearched.set(true);
+      this.replacementError.set(
+        httpErr.error?.message ??
+          this.translate.instant('media_detail.releases_error'),
+      );
+    } finally {
+      this.replacementLoading.set(false);
+    }
+  }
+
+  private loadReplacementReleases(item: QueueItem): Promise<MovieRelease[]> {
+    const mediaId = item.mediaId!;
+    if (item.mediaType === 'series') {
+      if (item.episodeId != null) {
+        return this.mediaService.getEpisodeReleases(mediaId, item.episodeId);
+      }
+      if (item.seasonId != null) {
+        return this.mediaService.getSeasonReleases(mediaId, item.seasonId);
+      }
+      // No episode/season scope resolved — searching the whole series could
+      // grab the wrong thing, so surface the error instead of guessing.
+      return Promise.reject({
+        error: { message: this.translate.instant('activity.search_no_target') },
+      });
+    }
+    return this.mediaService.getMovieReleases(mediaId);
+  }
+
+  async grabReplacement(r: MovieRelease, index: number) {
+    const item = this.replacementItem();
+    if (!item?.mediaId) return;
+    const key = `rep-${index}`;
+    this.replacementGrabBusy.set(key);
+    try {
+      await this.grabReplacementTarget(item, r);
+      this.replacementGrabState.update((s) => new Map(s).set(key, 'ok'));
+      // The replacement is grabbed — retire the stuck torrent without asking:
+      // blockTorrent removes it (files included), blocklists its release and
+      // marks the history failed. The scoped re-search it queues server-side
+      // no-ops since the target is no longer missing.
+      try {
+        await this.downloadApi.blockTorrent(item.hash, item.clientId);
+        this.queue.update((q) => q.filter((i) => i.hash !== item.hash));
+        this.toast.success(this.translate.instant('activity.replacement_grabbed'));
+      } catch {
+        this.toast.warning(
+          this.translate.instant('activity.replacement_grabbed_block_failed'),
+        );
+      }
+      await this.refreshQueue();
+    } catch {
+      this.replacementGrabState.update((s) => new Map(s).set(key, 'error'));
+    } finally {
+      this.replacementGrabBusy.set(null);
+    }
+  }
+
+  private grabReplacementTarget(item: QueueItem, r: MovieRelease): Promise<unknown> {
+    const mediaId = item.mediaId!;
+    const body = {
+      downloadUrl: r.downloadUrl,
+      sourceTitle: r.title,
+      indexerId: r.indexerId,
+    };
+    if (item.mediaType === 'series') {
+      if (item.episodeId != null) {
+        return this.mediaService.grabEpisode(mediaId, item.episodeId, body);
+      }
+      if (item.seasonId != null) {
+        return this.mediaService.grabSeason(mediaId, item.seasonId, body);
+      }
+      return Promise.reject(new Error('no replacement target'));
+    }
+    return this.mediaService.grabMovie(mediaId, body);
+  }
+
+  showStallStrikes(item: QueueItem): boolean {
+    // 1 strike is just the baseline snapshot — only surface the badge once
+    // at least one full interval has passed without progress.
+    return (
+      item.stalledStrikes != null &&
+      item.stalledStrikesRequired != null &&
+      item.stalledStrikes >= 2
+    );
+  }
+
+  /** Warning until the last check before cleanup, then error. */
+  stallStrikeClass(item: QueueItem): string {
+    const current = item.stalledStrikes ?? 0;
+    const required = item.stalledStrikesRequired ?? 0;
+    return current >= required - 1 ? 'badge-error' : 'badge-warning';
   }
 
   async refreshQueue(): Promise<void> {

@@ -885,7 +885,12 @@
     "fstatus_importing": "Import en cours",
     "fstatus_imported": "Importé",
     "fstatus_quality_not_upgraded": "Qualité non améliorée",
-    "fstatus_import_failed": "Échec de l'import"
+    "fstatus_import_failed": "Échec de l'import",
+    "stall_strikes_tooltip": "Nettoyage : {{current}} sur {{required}} vérifications sans progression",
+    "search_another": "Chercher un autre torrent",
+    "search_no_target": "Impossible de déterminer la cible de recherche pour cet élément.",
+    "replacement_grabbed": "Remplacement récupéré — ancien torrent bloqué et supprimé",
+    "replacement_grabbed_block_failed": "Remplacement récupéré, mais la suppression de l'ancien torrent a échoué"
   },
   "tracking": {
     "menu_item": "Voir l'état du suivi",
