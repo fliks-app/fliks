@@ -40,6 +40,13 @@ export class RequestCardComponent {
   readonly approve = output<number>();
   readonly decline = output<number>();
 
+  /** Backdrop art: the request's own stored fanart, falling back to the
+   *  linked media's (both local `/api/images` paths). Null lets the poster
+   *  component fall back to the metadata lookup (pre-existing requests). */
+  readonly fanartArt = computed(
+    () => this.request().fanartUrl ?? this.request().media?.fanartUrl ?? null,
+  );
+
   /** Route to the linked media, or to the add page when not yet imported.
    *  Mirrors `RequestsComponent.mediaLink`. */
   readonly mediaLink = computed<(string | number)[]>(() => {

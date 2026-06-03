@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ForbiddenException,
   ConflictException,
@@ -28,6 +29,8 @@ import { ProfilesService } from '../profiles/profiles.service';
 import { SchedulerService } from '../scheduler/scheduler.service';
 import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
 import { Action } from '../auth/casl/actions.enum';
+import { ImageService } from '../images/image.service';
+import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
 import {
   ACTIVE_REQUEST_STATUSES,
   SATISFIABLE_REQUEST_STATUSES,
@@ -53,7 +56,11 @@ export class RequestsService {
     private readonly profilesService: ProfilesService,
     private readonly scheduler: SchedulerService,
     private readonly caslAbilityFactory: CaslAbilityFactory,
+    private readonly imageService: ImageService,
+    private readonly tmdb: TmdbProvider,
   ) {}
+
+  private readonly logger = new Logger(RequestsService.name);
 
   /** Aligné sur PoliciesGuard / CaslAbilityFactory (manage:all → Manage sur tout). */
   private canManageRequests(user: User): boolean {
@@ -219,7 +226,77 @@ export class RequestsService {
       mediaType: dto.mediaType,
     });
 
+    await this.populateRequestArt(saved);
+
     return saved;
+  }
+
+  /**
+   * Stores the title's poster/fanart through the local image pipeline and
+   * stamps their API paths on the request, so cards render from the cached
+   * `/api/images` endpoint instead of fetching metadata + the TMDB CDN per
+   * card. Art is keyed by tmdbId: requests for the same title share files,
+   * and a repeat request skips the network entirely. Best-effort — any
+   * failure leaves the columns null and the client falls back to the
+   * metadata lookup.
+   */
+  private async populateRequestArt(row: FliksRequest): Promise<void> {
+    try {
+      let posterUrl: string | null = null;
+      let fanartUrl: string | null = null;
+
+      const hasPoster = this.imageService.hasImage(
+        'request',
+        row.tmdbId,
+        'poster',
+      );
+      const hasFanart = this.imageService.hasImage(
+        'request',
+        row.tmdbId,
+        'fanart',
+      );
+      if (hasPoster || hasFanart) {
+        posterUrl = hasPoster
+          ? this.imageService.getApiPath('request', row.tmdbId, 'poster')
+          : null;
+        fanartUrl = hasFanart
+          ? this.imageService.getApiPath('request', row.tmdbId, 'fanart')
+          : null;
+      } else {
+        const details =
+          row.mediaType === MediaType.MOVIE
+            ? await this.tmdb.getMovieDetails(String(row.tmdbId))
+            : await this.tmdb.getTvShowDetails(String(row.tmdbId));
+        [posterUrl, fanartUrl] = await Promise.all([
+          details.posterUrl
+            ? this.imageService.downloadAndStore(
+                details.posterUrl,
+                'request',
+                row.tmdbId,
+                'poster',
+              )
+            : Promise.resolve(null),
+          details.fanartUrl
+            ? this.imageService.downloadAndStore(
+                details.fanartUrl,
+                'request',
+                row.tmdbId,
+                'fanart',
+              )
+            : Promise.resolve(null),
+        ]);
+      }
+
+      if (!posterUrl && !fanartUrl) return;
+      row.posterUrl = posterUrl;
+      row.fanartUrl = fanartUrl;
+      await this.requestRepo.update(row.id, { posterUrl, fanartUrl });
+    } catch (err) {
+      // Never block request creation on artwork.
+      this.logger.warn(
+        `Request #${row.id}: art prefetch failed: ${(err as Error).message}`,
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------

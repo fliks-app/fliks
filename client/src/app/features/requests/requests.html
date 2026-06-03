@@ -38,6 +38,7 @@
               class="absolute inset-0"
               [tmdbId]="row.tmdbId"
               [mediaType]="row.mediaType"
+              [fanart]="row.fanartUrl ?? row.media?.fanartUrl ?? null"
               mode="backdrop"
             />
             <div class="absolute inset-0 bg-gradient-to-b from-base-100/45 via-base-100/80 to-base-100"></div>
@@ -127,6 +128,7 @@
                 [tmdbId]="row.tmdbId"
                 [mediaType]="row.mediaType"
                 [titleText]="row.title"
+                [poster]="row.posterUrl ?? row.media?.posterUrl ?? null"
               />
             } @placeholder {
               <div class="absolute inset-0 skeleton rounded-none"></div>

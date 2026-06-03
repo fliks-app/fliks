@@ -30,6 +30,9 @@ const CACHEABLE_PREFIXES = [
   '/api/libraries',
   '/api/profiles/quality',
   '/api/profiles/language',
+  // Title details barely change; the request-poster fallback (rows without
+  // stored local art) re-fetches them on every cold page open otherwise.
+  '/api/metadata',
 ];
 
 const EXCLUDED_PREFIXES = [

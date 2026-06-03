@@ -37,6 +37,10 @@ export interface RequestMedia {
   id: number;
   title: string;
   year: number | null;
+  /** Local `/api/images` paths of the imported media — secondary art source
+   *  for requests created before local request art existed. */
+  posterUrl: string | null;
+  fanartUrl: string | null;
 }
 
 export interface FliksRequestRow {
@@ -58,6 +62,10 @@ export interface FliksRequestRow {
    *  title (the cached `title` field may be stale or empty). */
   media: RequestMedia | null;
   seasons: number[] | null;
+  /** Local card art (`/api/images/request/...`) stored at creation; null on
+   *  requests that predate local request art (metadata fallback applies). */
+  posterUrl: string | null;
+  fanartUrl: string | null;
   createdAt: string;
   updatedAt: string;
 }
