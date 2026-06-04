@@ -14,6 +14,7 @@ const ORPHAN_MESSAGE = 'Torrent no longer present in download client';
  */
 function buildService(matchByHash: Set<string>) {
   const update = jest.fn().mockResolvedValue(undefined);
+  const emit = jest.fn();
   const service = Object.create(CompletionService.prototype) as CompletionService;
 
   const matcher = {
@@ -30,11 +31,13 @@ function buildService(matchByHash: Set<string>) {
     historyRepo: unknown;
     historyMatcher: unknown;
     log: unknown;
+    events: unknown;
   };
   wired.historyRepo = { update };
   wired.historyMatcher = matcher;
   wired.log = { warn: jest.fn(), log: jest.fn() };
-  return { service, update };
+  wired.events = { emit };
+  return { service, update, emit };
 }
 
 function torrent(hash: string): QbittorrentTorrent {
@@ -56,19 +59,25 @@ function history(over: Partial<DownloadHistory>): DownloadHistory {
 const HOUR_AGO = new Date(Date.now() - 60 * 60_000);
 
 describe('CompletionService.reconcileOrphanHistory', () => {
-  function run(torrents: QbittorrentTorrent[], rows: DownloadHistory[]) {
+  function run(
+    torrents: QbittorrentTorrent[],
+    rows: DownloadHistory[],
+    importingRows: DownloadHistory[] = [],
+  ) {
     const present = new Set(torrents.map((t) => t.hash));
-    const { service, update } = buildService(present);
+    const { service, update, emit } = buildService(present);
     return {
       update,
+      emit,
       done: (
         service as unknown as {
           reconcileOrphanHistory: (
             t: QbittorrentTorrent[],
             g: DownloadHistory[],
+            i: DownloadHistory[],
           ) => Promise<void>;
         }
-      ).reconcileOrphanHistory(torrents, rows),
+      ).reconcileOrphanHistory(torrents, rows, importingRows),
     };
   }
 
@@ -121,5 +130,44 @@ describe('CompletionService.reconcileOrphanHistory', () => {
     const { update, done } = run([torrent('h1')], [row]);
     await done;
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('flips an importing row to failed once its torrent is gone past the grace', async () => {
+    const row = history({
+      id: 12,
+      status: 'importing',
+      torrentHash: 'h2',
+      updatedAt: HOUR_AGO,
+    });
+    const { update, done } = run([], [], [row]);
+    await done;
+    expect(update).toHaveBeenCalledWith([12], {
+      status: 'failed',
+      statusMessage: ORPHAN_MESSAGE,
+    });
+  });
+
+  it('leaves an importing row alone while its torrent is still present', async () => {
+    const row = history({
+      id: 12,
+      status: 'importing',
+      torrentHash: 'h2',
+      updatedAt: HOUR_AGO,
+    });
+    const { update, done } = run([torrent('h2')], [], [row]);
+    await done;
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('emits queue.updated on a change, and stays silent when nothing moved', async () => {
+    const gone = history({ id: 7, status: 'grabbed', updatedAt: HOUR_AGO });
+    const flip = run([], [gone]);
+    await flip.done;
+    expect(flip.emit).toHaveBeenCalledWith({ type: 'queue.updated' });
+
+    const stillThere = history({ id: 8, status: 'grabbed', updatedAt: HOUR_AGO });
+    const noop = run([torrent('h1')], [stillThere]);
+    await noop.done;
+    expect(noop.emit).not.toHaveBeenCalled();
   });
 });
