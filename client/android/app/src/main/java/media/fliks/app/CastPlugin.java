@@ -164,9 +164,10 @@ public class CastPlugin extends Plugin {
         );
     }
 
-    private void notifyJSTime(double time, double duration, boolean paused) {
+    private void notifyJSTime(double time, double duration, boolean paused, boolean buffering) {
         String js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { "
-            + "currentTime: " + time + ", duration: " + duration + ", isPaused: " + paused + " } }));";
+            + "currentTime: " + time + ", duration: " + duration + ", isPaused: " + paused
+            + ", buffering: " + buffering + " } }));";
         getBridge().getWebView().post(() ->
             getBridge().getWebView().evaluateJavascript(js, null)
         );
@@ -641,8 +642,10 @@ public class CastPlugin extends Plugin {
                         double time = client.getApproximateStreamPosition() / 1000.0;
                         double duration = client.getStreamDuration() / 1000.0;
                         boolean paused = client.isPaused();
+                        boolean buffering = state == MediaStatus.PLAYER_STATE_BUFFERING
+                            || state == MediaStatus.PLAYER_STATE_LOADING;
                         if (time > 0) lastGoodPosition = time;
-                        notifyJSTime(time, duration, paused);
+                        notifyJSTime(time, duration, paused, buffering);
                     }
                     pollHandler.postDelayed(this, 1000);
                 } catch (Exception e) {

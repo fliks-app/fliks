@@ -191,6 +191,30 @@ body.native.hero-page {
   animation: slide-up 0.25s ease-out;
 }
 
+/* Indeterminate seekbar loading sweep: a full-width gradient strip whose
+   transparent edges keep the reset from 100%→-100% from reading as a hard
+   gap, so the highlight appears to drift across the track on a loop. */
+@keyframes seekbar-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.animate-seekbar-indeterminate {
+  animation: seekbar-indeterminate 1.4s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Honour reduced-motion: drop the loop, leaving a soft static highlight. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-seekbar-indeterminate {
+    animation: none;
+  }
+}
+
 /* ============================================================================
    Android TV / 10-foot UI overrides — body.tv toggled by TvService
    ============================================================================ */

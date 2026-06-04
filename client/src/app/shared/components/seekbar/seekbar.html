@@ -77,6 +77,13 @@
       [class]="variant() === 'player' ? 'bg-white' : 'bg-info'"
       [style.width.%]="displayPercent()"
     ></div>
+    <!-- Indeterminate loading sweep — a soft highlight crosses the track
+         while the engine is fetching/buffering, so the bar shows activity
+         even when the playhead isn't advancing. Sits above the progress
+         fill but below the chapter ticks. -->
+    @if (loading()) {
+      <div [class]="loadingSweepClass()"></div>
+    }
     <!-- Chapter ticks -->
     @for (t of chapterTicks(); track t.percent) {
       <div

@@ -525,6 +525,11 @@ export class CastPlayerService {
       if (idx >= 0) activeSubtitleTrackId = idx + 1;
     }
 
+    // Show the loading sweep immediately rather than waiting for the first
+    // receiver state tick; the player-state feed reconciles it once playback
+    // (or a rebuffer) actually starts.
+    this.cast.buffering.set(true);
+
     await this.cast.loadMedia({
       url: castUrl,
       contentType,

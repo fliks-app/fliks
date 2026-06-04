@@ -98,6 +98,9 @@ export class CastService implements OnDestroy {
   readonly currentTime = signal(0);
   readonly duration = signal(0);
   readonly isPaused = signal(true);
+  /** Receiver is loading/buffering (not yet playing) — drives the
+   *  indeterminate seekbar sweep in the cast overlay. */
+  readonly buffering = signal(false);
   readonly mediaTitle = signal('');
   /** Base pour sous-titres / URLs Cast ; renseignée dans reloadCastStream via cast-info. */
   readonly castStreamBaseUrl = signal('');
@@ -151,6 +154,7 @@ export class CastService implements OnDestroy {
         const connected = e.detail?.connected ?? false;
         this.isConnected.set(connected);
         if (connected) this.connecting.set(false);
+        else this.buffering.set(false);
       }) as EventListener);
 
       // Picker dismissed without selecting a device
@@ -162,6 +166,7 @@ export class CastService implements OnDestroy {
         this.currentTime.set(e.detail?.currentTime ?? 0);
         this.duration.set(e.detail?.duration ?? 0);
         this.isPaused.set(e.detail?.isPaused ?? true);
+        this.buffering.set(e.detail?.buffering ?? false);
       }) as EventListener);
 
       // The plugin maps the receiver's IDLE/ERROR state to this event —
@@ -223,6 +228,14 @@ export class CastService implements OnDestroy {
         cast.framework.RemotePlayerEventType.DURATION_CHANGED,
         () => this.duration.set(this.remotePlayer.duration ?? 0),
       );
+      this.remotePlayerController.addEventListener(
+        cast.framework.RemotePlayerEventType.PLAYER_STATE_CHANGED,
+        () =>
+          this.buffering.set(
+            this.remotePlayer.playerState ===
+              chrome.cast.media.PlayerState.BUFFERING,
+          ),
+      );
       this.isAvailable.set(true);
     } catch {
       this.isAvailable.set(false);
@@ -233,6 +246,7 @@ export class CastService implements OnDestroy {
     const connected = this.remotePlayer?.isConnected ?? false;
     this.isConnected.set(connected);
     this.connecting.set(false);
+    if (!connected) this.buffering.set(false);
     this.session = connected
       ? cast.framework.CastContext.getInstance().getCurrentSession()
       : null;
