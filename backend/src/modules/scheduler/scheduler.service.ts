@@ -607,6 +607,7 @@ export class SchedulerService implements OnModuleInit {
       indexers,
       qbitClient,
       scoring,
+      fileQualityByEpId,
     );
     const toSearch = coveredByPack.size
       ? episodes.filter((e) => !coveredByPack.has(e.id))
@@ -697,6 +698,7 @@ export class SchedulerService implements OnModuleInit {
     indexers: Indexer[],
     qbitClient: DownloadClient,
     scoring: AutoGrabScoringContext,
+    fileQualityByEpId: Map<number, string>,
   ): Promise<Set<number>> {
     const covered = new Set<number>();
 
@@ -762,10 +764,32 @@ export class SchedulerService implements OnModuleInit {
         .filter((r) => parseSeasonEpisode(r.title).isFullSeason);
       if (!packs.length) continue;
 
+      // Cutoff gate for the pack. The per-episode path hands each file's
+      // quality to classifyForSearch so an at-cutoff episode is skipped; the
+      // pack must do the same or it re-grabs whole seasons already at cutoff.
+      // A genuinely missing episode keeps the empty-files "missing" mode (grab
+      // regardless of upgrade settings); once every covered episode is on disk
+      // we pass the weakest existing quality so a season at/above cutoff
+      // resolves to 'skip' instead of an unbounded "missing" grab.
+      let files: { quality: string | null }[] = [];
+      if (eps.every((e) => e.hasFile)) {
+        let weakest: string | null = null;
+        let weakestRank = Number.POSITIVE_INFINITY;
+        for (const ep of eps) {
+          const q = fileQualityByEpId.get(ep.id) ?? null;
+          const r = rankFromQualityString(q);
+          if (r < weakestRank) {
+            weakestRank = r;
+            weakest = q;
+          }
+        }
+        files = [{ quality: weakest }];
+      }
+
       const epCount = episodeCountBySeason.get(season.id) ?? eps.length;
       const grabbed = await this.autoGrab.tryAutoGrab({
         media,
-        files: [],
+        files,
         releases: packs,
         qbitClient,
         scoring,
