@@ -14,12 +14,18 @@
   [class.pointer-events-none]="!visible()"
 >
   <!-- Left: back + title -->
-  <div class="flex items-center gap-2 min-w-0">
+  <div class="flex items-center gap-4 min-w-0">
     <button type="button" class="btn btn-ghost btn-circle text-white" [class]="isMobileTouch() ? 'btn-sm' : 'btn-md'" [attr.aria-label]="'player.back' | translate" (click)="back.emit()">
       <!-- lucide:chevron-left -->
       <svg lucideChevronLeft [class]="isMobileTouch() ? 'h-6 w-6' : 'h-7 w-7'"></svg>
     </button>
-    <span class="text-white font-semibold truncate" [class]="isMobileTouch() ? 'text-lg' : 'text-xl'">{{ mediaTitle() }}</span>
+    @if (logoUrl()) {
+      <img [src]="logoUrl()! | resolveUrl:'medium'" [alt]="mediaTitle()"
+           class="w-auto object-contain object-left [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.5))]"
+           [class]="isMobileTouch() ? 'h-7' : 'h-9'" />
+    } @else {
+      <span class="text-white font-semibold truncate" [class]="isMobileTouch() ? 'text-lg' : 'text-xl'">{{ mediaTitle() }}</span>
+    }
   </div>
 
   <!-- Right -->

@@ -52,6 +52,30 @@ function pickAdditionalFanarts(
 }
 
 /**
+ * Pick the best "clearlogo" from a TMDB images payload. Logos are
+ * language-tagged transparent PNGs; prefer French, then English, then a
+ * language-neutral / any logo, breaking ties on the community vote. Returns
+ * the original-size URL (the PNG keeps its transparency) or null when the
+ * title has no logo. Requires the details request to set
+ * `include_image_language` so non-`fr-FR` logos are actually returned.
+ */
+function pickLogo(images: TmdbImages | undefined): string | null {
+  const logos = (images?.logos ?? []).filter((l) => l.file_path);
+  if (!logos.length) return null;
+  // Community vote is the best proxy for "the clean official title logo":
+  // promotional banners (cast names, "in theatres" dates) get uploaded but
+  // rarely upvoted, so they sink below the real logo. Language only adds a
+  // small bonus that tips otherwise-close calls toward the user's locale —
+  // never enough to override a clearly better-voted logo in another language.
+  const langBonus = (lang: string | null | undefined): number =>
+    lang === 'fr' ? 0.5 : lang === 'en' ? 0.25 : 0;
+  const score = (l: { vote_average?: number; iso_639_1?: string | null }): number =>
+    (l.vote_average ?? 0) + langBonus(l.iso_639_1);
+  const best = [...logos].sort((a, b) => score(b) - score(a))[0];
+  return `${TMDB_IMAGE_BASE}/original${best.file_path}`;
+}
+
+/**
  * Pull alternative_titles out of a TMDB movie / tv details response.
  * The two endpoints differ on field name (`titles` vs `results`) and item
  * key (`title` vs `name`). Output is deduplicated against `data.title /
@@ -141,6 +165,9 @@ export class TmdbProvider implements IMetadataProvider {
       {
         params: {
           language: 'fr-FR',
+          // Logos are language-tagged; request fr + en + language-neutral so
+          // pickLogo has fallbacks beyond the fr-FR `language` default.
+          include_image_language: 'fr,en,null',
           append_to_response:
             'external_ids,images,release_dates,credits,videos,keywords,alternative_titles',
         },
@@ -164,6 +191,7 @@ export class TmdbProvider implements IMetadataProvider {
       fanartUrl: data.backdrop_path
         ? `${TMDB_IMAGE_BASE}/original${data.backdrop_path}`
         : null,
+      logoUrl: pickLogo(data.images),
       additionalFanartUrls: pickAdditionalFanarts(
         data.images,
         data.backdrop_path,
@@ -224,6 +252,9 @@ export class TmdbProvider implements IMetadataProvider {
       {
         params: {
           language: 'fr-FR',
+          // Logos are language-tagged; request fr + en + language-neutral so
+          // pickLogo has fallbacks beyond the fr-FR `language` default.
+          include_image_language: 'fr,en,null',
           append_to_response:
             'external_ids,images,credits,videos,keywords,alternative_titles',
         },
@@ -244,6 +275,7 @@ export class TmdbProvider implements IMetadataProvider {
       fanartUrl: data.backdrop_path
         ? `${TMDB_IMAGE_BASE}/original${data.backdrop_path}`
         : null,
+      logoUrl: pickLogo(data.images),
       additionalFanartUrls: pickAdditionalFanarts(
         data.images,
         data.backdrop_path,

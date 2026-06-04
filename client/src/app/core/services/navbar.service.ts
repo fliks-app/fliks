@@ -10,6 +10,9 @@ import { DeviceService } from './device.service';
 export class NavbarService {
   /** When set, the navbar shows this title instead of "Fliks" on scroll. */
   readonly heroTitle = signal('');
+  /** Clearlogo for the current hero page, shown in the topbar / back row in
+   *  place of the title text. Null when the page has no logo. */
+  readonly heroLogoUrl = signal<string | null>(null);
   /** Whether the current page has a hero fanart. */
   readonly isHeroPage = signal(false);
   /** Resolved title for non-hero routes (set from route data or by components). */
@@ -172,11 +175,12 @@ export class NavbarService {
   );
 
   /** Mark the current page as having a hero fanart (enables transparent navbar + white icons). */
-  enterHeroPage(title: string) {
+  enterHeroPage(title: string, logoUrl: string | null = null) {
     document.body.classList.add('hero-page');
     this.isHeroPage.set(true);
     this.pageTitle.set('');
     this.heroTitle.set(title);
+    this.heroLogoUrl.set(logoUrl);
     // Re-evaluate scrollAtTop from the actual position. Without this, the
     // navbar stays opaque after returning from /watch — the scroll value
     // is whatever the previous page left it at and no scroll event fires
@@ -190,6 +194,7 @@ export class NavbarService {
     document.body.classList.remove('hero-page');
     this.isHeroPage.set(false);
     this.heroTitle.set('');
+    this.heroLogoUrl.set(null);
   }
 
   toggleSidebarPinned() {

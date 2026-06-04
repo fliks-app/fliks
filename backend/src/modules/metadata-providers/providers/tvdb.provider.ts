@@ -58,6 +58,9 @@ function dedupeAliases(
 /** Artwork type IDs: 2=poster, 3=background/fanart, 7=banner, 12=clearart */
 const ART_POSTER = 2;
 const ART_BACKGROUND = 3;
+// TVDB clearlogo artwork type — distinct id per record kind (series vs movie).
+const ART_CLEARLOGO_SERIES = 23;
+const ART_CLEARLOGO_MOVIE = 25;
 
 @Injectable()
 export class TvdbProvider implements IMetadataProvider {
@@ -152,6 +155,7 @@ export class TvdbProvider implements IMetadataProvider {
       year: m.year ? parseInt(m.year) : null,
       posterUrl: this.pickArtwork(m.artworks, ART_POSTER) ?? m.image ?? null,
       fanartUrl: this.pickArtwork(m.artworks, ART_BACKGROUND) ?? null,
+      logoUrl: this.pickArtwork(m.artworks, ART_CLEARLOGO_MOVIE) ?? null,
       additionalFanartUrls: this.pickArtworks(
         m.artworks,
         ART_BACKGROUND,
@@ -223,6 +227,7 @@ export class TvdbProvider implements IMetadataProvider {
       year: s.year ? parseInt(s.year) : null,
       posterUrl: this.pickArtwork(s.artworks, ART_POSTER) ?? s.image ?? null,
       fanartUrl: this.pickArtwork(s.artworks, ART_BACKGROUND) ?? null,
+      logoUrl: this.pickArtwork(s.artworks, ART_CLEARLOGO_SERIES) ?? null,
       additionalFanartUrls: this.pickArtworks(
         s.artworks,
         ART_BACKGROUND,

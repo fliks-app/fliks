@@ -16,7 +16,6 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
 import {
   LucideCaptions,
-  LucideChevronLeft,
   LucideCheck,
   LucideClipboardList,
   LucideDownload,
@@ -86,7 +85,7 @@ interface AudioTrack {
     TvSelectDirective,
     NgTemplateOutlet,
     DecimalPipe, FormsModule, RouterLink, TranslateModule,
-    LucideCaptions, LucideChevronLeft, LucideCheck, LucideClipboardList, LucideDownload,
+    LucideCaptions, LucideCheck, LucideClipboardList, LucideDownload,
     LucideEllipsisVertical, LucideEye, LucideEyeOff,
     LucideFilm, LucideFolder, LucideListChecks, LucidePlay, LucideRotateCcw, LucideScanLine,
     LucideSearch, LucideSettings, LucideSkipForward, LucideTrash2,
@@ -130,8 +129,8 @@ export class MediaInfoHeaderComponent {
   readonly fanartUrl = input<string | null>(null);
   readonly posterUrl = input<string | null>(null);
   readonly posterMode = input<'poster' | 'still'>('poster');
+  /** Route the title text links to (e.g. the series, from an episode page). */
   readonly backRoute = input<string[]>(['/']);
-  readonly backLabel = input<string | null>(null);
 
   // ── Inputs: subtitles (built by parent from SubtitleFileRow[]) ──
   readonly subtitles = input<MediaInfoHeaderSubtitle[]>([]);
@@ -468,9 +467,6 @@ export class MediaInfoHeaderComponent {
     return `${(bytes / 1_073_741_824).toFixed(2)} GB`;
   }
 
-  goBack() {
-    this.navbar.goBack(this.backRoute());
-  }
 
   async onDeleteFileClick() {
     const fileId = this.selectedFileId();

@@ -34,6 +34,7 @@ import { UserMenuComponent } from '../components/user-menu';
 import { LucideIconComponent } from '../components/lucide-icon';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { BackgroundComponent } from '../components/background/background';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { BackgroundService } from '../../core/services/background.service';
 import { SearchStateService } from '../../core/services/search-state.service';
 import {
@@ -65,6 +66,7 @@ import {
     LucideIconComponent,
     TvRowDirective,
     BackgroundComponent,
+    ResolveUrlPipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './layout.html',

@@ -8,7 +8,11 @@ export type ImageType = 'media' | 'person' | 'episode' | 'season' | 'request';
  *  fanarts kept for randomised page backgrounds — they share `fanart`'s
  *  size pipeline (thumb / medium / full) so frontends can request any
  *  size without an extra round-trip to the source provider. */
-export type MediaImageVariant = 'poster' | 'fanart' | `fanart-${number}`;
+export type MediaImageVariant =
+  | 'poster'
+  | 'fanart'
+  | `fanart-${number}`
+  | 'logo';
 export type ImageSize = 'thumb' | 'medium' | 'full';
 
 /**
@@ -25,6 +29,8 @@ export type ImageSize = 'thumb' | 'medium' | 'full';
 const TMDB_SIZE_MAP: Record<string, Partial<Record<ImageSize, string>>> = {
   'media/poster': { thumb: 'w185', medium: 'w500', full: 'original' },
   'media/fanart': { thumb: 'w300', medium: 'w780', full: 'original' },
+  // Clearlogo (transparent PNG title treatment).
+  'media/logo': { thumb: 'w185', medium: 'w500', full: 'original' },
   // Request card art — keyed by `{mediaType}-{tmdbId}` (TMDB ids are
   // namespaced per media type, so a movie and a series can share the same
   // number). Every request for the same title shares one stored file.
@@ -165,13 +171,16 @@ export class ImageService {
     size: ImageSize = 'full',
   ): string {
     const suffix = size === 'full' ? '' : `-${size}`;
+    // Logos are transparent PNGs — keep the .png extension so sendFile serves
+    // image/png (a .jpg-named PNG would be flattened/blocked under nosniff).
+    const ext = variant === 'logo' ? 'png' : 'jpg';
     switch (type) {
       case 'media':
         return path.join(
           this.baseDir,
           'media',
           String(id),
-          `${variant ?? 'poster'}${suffix}.jpg`,
+          `${variant ?? 'poster'}${suffix}.${ext}`,
         );
       case 'request':
         return path.join(

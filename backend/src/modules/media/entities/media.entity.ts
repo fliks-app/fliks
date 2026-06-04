@@ -118,6 +118,11 @@ export class Media extends BaseEntity {
   @Column({ nullable: true })
   fanartUrl: string;
 
+  /** Transparent PNG "clearlogo" (title treatment), stored as a local API
+   *  path. Null when the provider has no logo for the title. */
+  @Column({ nullable: true })
+  logoUrl: string;
+
   /** Extra fanarts pulled from the provider (top N by score), stored
    *  as local API paths (variants `fanart-1`, `fanart-2`, …). Mixed
    *  with {@link fanartUrl} to randomise the page background. */

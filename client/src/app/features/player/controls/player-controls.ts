@@ -21,6 +21,7 @@ import { BottomSheetComponent } from '../../../shared/components/bottom-sheet';
 import { TranslateModule } from '@ngx-translate/core';
 import { formatTime, SpriteMetadata } from '../../../core/utils/player.utils';
 import { SeekbarComponent } from '../../../shared/components/seekbar/seekbar';
+import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import {
   LucideCaptions,
   LucideCheck,
@@ -63,6 +64,7 @@ import {
     NgTemplateOutlet,
     BottomSheetComponent,
     SeekbarComponent,
+    ResolveUrlPipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player-controls.html',
@@ -147,6 +149,8 @@ export class PlayerControlsComponent {
   readonly volume = input(1);
   readonly playbackRate = input(1);
   readonly mediaTitle = input('');
+  /** Clearlogo shown in place of the title text in the top-left overlay. */
+  readonly logoUrl = input<string | null>(null);
   readonly episodeTitle = input('');
   readonly hasNextEpisode = input(false);
   readonly hasPrevEpisode = input(false);

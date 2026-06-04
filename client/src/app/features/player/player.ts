@@ -420,6 +420,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private activeAudioStreamIndex: number | undefined;
 
   readonly mediaTitle = signal('');
+  /** Clearlogo for the playing media, shown in the player's top-left overlay
+   *  in place of the title text. */
+  readonly mediaLogoUrl = signal<string | null>(null);
   readonly episodeTitle = signal('');
   readonly fanartUrl = signal<string | null>(null);
 
@@ -775,6 +778,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.media = media;
         this.mediaLoadedTick.update(v => v + 1);
         this.mediaTitle.set(media.title);
+        this.mediaLogoUrl.set(media.logoUrl ?? null);
         if (media.fanartUrl) this.fanartUrl.set(this.serverConfig.resolveUrl(media.fanartUrl));
 
         const file = media.files?.find((f: any) => f.id === this.mediaFileId);

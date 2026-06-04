@@ -608,6 +608,15 @@ export class MediaMetadataService {
       );
       if (local) updates.fanartUrl = local;
     }
+    if (details.logoUrl) {
+      const local = await this.imageService.downloadAndStore(
+        details.logoUrl,
+        'media',
+        mediaId,
+        'logo',
+      );
+      if (local) updates.logoUrl = local;
+    }
 
     // Extra fanarts (variants fanart-1..N). Downloaded in parallel
     // since each entry is an independent CDN GET. Slots are
