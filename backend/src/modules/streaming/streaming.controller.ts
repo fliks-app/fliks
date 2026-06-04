@@ -1505,6 +1505,14 @@ export class StreamingController {
         req.user as User,
       );
       const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+      // No resolvable LiveSession means no codec variant to thread into
+      // ffmpeg (player closed / torn down while segment requests were still
+      // in flight — e.g. a rapid open/close — or a stale sid). 410 so the
+      // client re-establishes via playback-info instead of a 500, and we
+      // never spawn a transcode for a stream nobody is watching.
+      if (!ctx.videoVariant) {
+        throw new SessionExpiredException(firstQueryString(req.query, 'sid') ?? null);
+      }
       ctx.spawnReason = 'seg-race';
       const live = this.findRequestSession(req, mediaFileId);
       const deviceType = live?.deviceType ?? 'desktop';
@@ -1838,6 +1846,13 @@ export class StreamingController {
     );
 
     const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+    // No resolvable LiveSession → no codec variant to thread into ffmpeg
+    // (player closed / torn down with segment requests still in flight, or a
+    // stale sid). 410 so the client re-establishes instead of a 500 from
+    // buildFfmpegArgs; nothing is spawned for a stream nobody is watching.
+    if (!ctx.videoVariant) {
+      throw new SessionExpiredException(firstQueryString(req.query, 'sid') ?? null);
+    }
     ctx.spawnReason = 'seg-request';
 
     // Early probe routing: the seg-0/seg-1 init probe a player fires on
