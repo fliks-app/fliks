@@ -76,12 +76,12 @@
           (openTracking)="openTracking({ kind: 'episode', episodeId: ep.id })"
         />
 
-        @if (currentSeasonEpisodes().length > 1) {
+        @if (moreFromSeasonEpisodes().length > 0) {
           <app-media-detail-seasons
             [media]="m"
             [selectedSeason]="s"
             [activeSeasonId]="s.id"
-            [filteredEpisodes]="currentSeasonEpisodes()"
+            [filteredEpisodes]="moreFromSeasonEpisodes()"
             [watchedEpisodeIds]="watchedEpisodeIds()"
             [episodeProgress]="episodeProgress()"
             [hideControls]="true"
