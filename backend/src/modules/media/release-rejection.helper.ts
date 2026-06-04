@@ -388,11 +388,19 @@ export function computeRejections(opts: {
  * 1. No rejections > has rejections
  * 2. Not blocklisted > blocklisted
  * 3. Language allowed > not allowed
- * 4. Freeleech bonus
+ * 4. Alive (seeders > 0) > dead — a zero-seeder release can't be downloaded,
+ *    so it sinks below every live release regardless of quality.
  * 5. Quality rank (higher = better)
- * 6. Custom format score (higher = better)
- * 7. Seeders (more = better, log scale to avoid over-weighting)
- * 8. Size closer to preferred (less deviation = better)
+ * 6. Freeleech bonus
+ * 7. Custom format score (higher = better)
+ * 8. Seeders (more = better, log scale to avoid over-weighting)
+ * 9. Leechers (more = better, same scale) — breaks seeder ties toward the
+ *    busier swarm.
+ * 10. Size closer to preferred (less deviation = better)
+ *
+ * Availability (4, 8, 9) outranks quality only at the dead/alive boundary;
+ * between two live releases quality wins, and seeders/leechers order releases
+ * within the same quality tier ahead of the weaker size-proximity signal.
  */
 export function sortReleasesByRelevance<
   T extends {
@@ -403,10 +411,16 @@ export function sortReleasesByRelevance<
     rejections: ReleaseRejection[];
     customFormatScore: number;
     seeders: number;
+    leechers: number;
     freeleech: boolean;
     sizeDeviation?: number | null;
   },
 >(rows: T[]): T[] {
+  // log2 gap that counts as a real difference (~19%); smaller gaps are noise
+  // and fall through to the next tiebreak rather than flipping the order.
+  const SWARM_EPSILON = 0.25;
+  const swarmScore = (count: number) => Math.log2(Math.max(count, 0) + 1);
+
   return rows.sort((a, b) => {
     // 1. No rejections first
     const aClean = a.rejections.length === 0 ? 1 : 0;
@@ -420,28 +434,38 @@ export function sortReleasesByRelevance<
     if (a.languageAllowed !== b.languageAllowed)
       return a.languageAllowed ? -1 : 1;
 
-    // 4. Quality rank desc
+    // 4. Live releases first — a dead torrent never imports.
+    const aAlive = a.seeders > 0 ? 1 : 0;
+    const bAlive = b.seeders > 0 ? 1 : 0;
+    if (aAlive !== bAlive) return bAlive - aAlive;
+
+    // 5. Quality rank desc
     if (a.rank !== b.rank) return b.rank - a.rank;
 
-    // 5. Freeleech bonus
+    // 6. Freeleech bonus
     if (a.freeleech !== b.freeleech) return a.freeleech ? -1 : 1;
 
-    // 6. Custom format score desc
+    // 7. Custom format score desc
     if (a.customFormatScore !== b.customFormatScore)
       return b.customFormatScore - a.customFormatScore;
 
-    // 7. Closer to preferred size wins (only when both rows expose it
-    //    and the gap is big enough to matter — within 5% of each other
-    //    counts as tied, otherwise tiny noise would flip the order).
+    // 8. Seeders desc (log scale)
+    const aSeed = swarmScore(a.seeders);
+    const bSeed = swarmScore(b.seeders);
+    if (Math.abs(aSeed - bSeed) > SWARM_EPSILON) return bSeed - aSeed;
+
+    // 9. Leechers desc (log scale) — tie-break toward the busier swarm.
+    const aLeech = swarmScore(a.leechers);
+    const bLeech = swarmScore(b.leechers);
+    if (Math.abs(aLeech - bLeech) > SWARM_EPSILON) return bLeech - aLeech;
+
+    // 10. Closer to preferred size wins (only when both rows expose it
+    //     and the gap is big enough to matter — within 5% of each other
+    //     counts as tied, otherwise tiny noise would flip the order).
     if (a.sizeDeviation != null && b.sizeDeviation != null) {
       const diff = Math.abs(a.sizeDeviation - b.sizeDeviation);
       if (diff > 0.05) return a.sizeDeviation - b.sizeDeviation;
     }
-
-    // 8. Seeders desc (log scale)
-    const aSeed = Math.log2(a.seeders + 1);
-    const bSeed = Math.log2(b.seeders + 1);
-    if (Math.abs(aSeed - bSeed) > 0.5) return bSeed - aSeed;
 
     return 0;
   });

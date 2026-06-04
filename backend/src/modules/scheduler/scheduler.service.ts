@@ -598,8 +598,22 @@ export class SchedulerService implements OnModuleInit {
       }
     }
 
-    for (let i = 0; i < episodes.length; i++) {
-      const ep = episodes[i];
+    // Season-pack-first: a season missing more than one episode is better
+    // served by one (usually far better seeded) pack than by scattered
+    // per-episode grabs. Episodes a grabbed pack covers drop out of the
+    // per-episode search below.
+    const coveredByPack = await this.grabMissingSeasonPacks(
+      episodes,
+      indexers,
+      qbitClient,
+      scoring,
+    );
+    const toSearch = coveredByPack.size
+      ? episodes.filter((e) => !coveredByPack.has(e.id))
+      : episodes;
+
+    for (let i = 0; i < toSearch.length; i++) {
+      const ep = toSearch[i];
       const season = (ep as unknown as { season: Season }).season;
       const media = (season as unknown as { media: Media }).media;
       const epLabel = `S${String(season.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
@@ -608,7 +622,7 @@ export class SchedulerService implements OnModuleInit {
         type: 'task.progress',
         command: 'SearchMissing',
         current: i,
-        total: episodes.length,
+        total: toSearch.length,
         message: `${media.title} ${epLabel}`,
       });
 
@@ -663,10 +677,114 @@ export class SchedulerService implements OnModuleInit {
     this.eventsService.emit({
       type: 'task.progress',
       command: 'SearchMissing',
-      current: episodes.length,
-      total: episodes.length,
+      current: toSearch.length,
+      total: toSearch.length,
       message: 'SearchMissing',
     });
+  }
+
+  /**
+   * Season-pack-first pass for SearchMissing. Groups the missing episodes by
+   * season and, for any season missing more than one episode, tries to grab a
+   * single full-season pack instead of scattered per-episode releases — packs
+   * are usually far better seeded and import per-file. Returns the ids of the
+   * episodes a grabbed pack now covers so the caller skips their per-episode
+   * search. A season missing a single episode is left to the per-episode path:
+   * pulling a whole-season pack for one file wastes bandwidth and disk.
+   */
+  private async grabMissingSeasonPacks(
+    episodes: Episode[],
+    indexers: Indexer[],
+    qbitClient: DownloadClient,
+    scoring: AutoGrabScoringContext,
+  ): Promise<Set<number>> {
+    const covered = new Set<number>();
+
+    const groups = new Map<
+      number,
+      { season: Season; media: Media; eps: Episode[] }
+    >();
+    for (const ep of episodes) {
+      const season = (ep as unknown as { season: Season }).season;
+      const media = (season as unknown as { media: Media }).media;
+      const group = groups.get(season.id);
+      if (group) group.eps.push(ep);
+      else groups.set(season.id, { season, media, eps: [ep] });
+    }
+    const multi = [...groups.values()].filter((g) => g.eps.length >= 2);
+    if (!multi.length) return covered;
+
+    // Total episode count per season drives the pack's runtime for the size
+    // check — a pack covers the whole season, not just the missing episodes.
+    const counts = await this.episodeRepo
+      .createQueryBuilder('ep')
+      .select('ep.seasonId', 'seasonId')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('ep.seasonId IN (:...ids)', { ids: multi.map((g) => g.season.id) })
+      .groupBy('ep.seasonId')
+      .getRawMany<{ seasonId: number; cnt: string }>();
+    const episodeCountBySeason = new Map(
+      counts.map((c) => [Number(c.seasonId), Number(c.cnt)]),
+    );
+
+    for (const { season, media, eps } of multi) {
+      const seasonLabel = `S${String(season.seasonNumber).padStart(2, '0')}`;
+
+      // A grabbed pack records a season-scoped history row (no episodeId). If
+      // one is already downloading, the episodes are already covered: mark
+      // them so the per-episode pass doesn't grab singles alongside the pack
+      // (that pass keys off the episode tag, which a pack title doesn't carry).
+      const packPending = await this.historyRepo
+        .createQueryBuilder('h')
+        .where('h.mediaId = :mediaId', { mediaId: media.id })
+        .andWhere('h.status = :status', { status: 'grabbed' })
+        .andWhere('h.seasonId = :seasonId', { seasonId: season.id })
+        .andWhere('h.episodeId IS NULL')
+        .getOne();
+      if (packPending) {
+        for (const ep of eps) covered.add(ep.id);
+        continue;
+      }
+
+      const packBatches = await Promise.allSettled(
+        indexers.map((ix) =>
+          this.torznab.searchSeasonPack(ix, media.title, season.seasonNumber, {
+            tvdbId: media.tvdbId,
+            imdbId: media.imdbId,
+          }),
+        ),
+      );
+      // Indexer `season=` filtering is unreliable (notably text-mode
+      // backends), so keep only releases that parse as a full-season pack —
+      // never a stray single episode that slipped into the result set.
+      const packs = packBatches
+        .flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
+        .filter((r) => parseSeasonEpisode(r.title).isFullSeason);
+      if (!packs.length) continue;
+
+      const epCount = episodeCountBySeason.get(season.id) ?? eps.length;
+      const grabbed = await this.autoGrab.tryAutoGrab({
+        media,
+        files: [],
+        releases: packs,
+        qbitClient,
+        scoring,
+        mediaType: 'series',
+        label: `${media.title} ${seasonLabel} (pack)`,
+        expectedTitle: [media.title, ...(media.alternativeTitles ?? [])],
+        runtimeMinutes: (media.runtime ?? 45) * epCount,
+        seasonNumber: season.seasonNumber,
+        seasonId: season.id,
+      });
+      if (grabbed) {
+        for (const ep of eps) covered.add(ep.id);
+        this.log.log(
+          `SearchMissing: grabbed a ${media.title} ${seasonLabel} pack covering ${eps.length} missing episode(s)`,
+        );
+      }
+    }
+
+    return covered;
   }
 
   private async doRefreshMetadata(): Promise<void> {

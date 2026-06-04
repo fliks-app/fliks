@@ -1,9 +1,7 @@
 import { CompletionService } from './completion.service';
 import { DownloadHistory } from '../media/entities/download-history.entity';
-import {
-  QbittorrentTorrent,
-  TorrentHistoryMatcher,
-} from '../download-clients/qbittorrent.service';
+import { QbittorrentTorrent } from '../download-clients/qbittorrent.service';
+import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
 
 /** The exact stamp the orphan sweep writes — pinned here so the test guards
  *  the user-visible string the queue clears and re-applies. */
@@ -16,9 +14,7 @@ const ORPHAN_MESSAGE = 'Torrent no longer present in download client';
  */
 function buildService(matchByHash: Set<string>) {
   const update = jest.fn().mockResolvedValue(undefined);
-  const service = Object.create(
-    CompletionService.prototype,
-  ) as CompletionService & Record<string, unknown>;
+  const service = Object.create(CompletionService.prototype) as CompletionService;
 
   const matcher = {
     findMatch: (t: QbittorrentTorrent, histories: DownloadHistory[]) => {
@@ -28,9 +24,16 @@ function buildService(matchByHash: Set<string>) {
     },
   } as unknown as TorrentHistoryMatcher;
 
-  service.historyRepo = { update } as unknown as never;
-  service.historyMatcher = matcher as unknown as never;
-  service.log = { warn: jest.fn(), log: jest.fn() } as unknown as never;
+  // Assign the few collaborators the method touches onto the bare instance.
+  // Cast away `private readonly` since there's no constructor to set them.
+  const wired = service as unknown as {
+    historyRepo: unknown;
+    historyMatcher: unknown;
+    log: unknown;
+  };
+  wired.historyRepo = { update };
+  wired.historyMatcher = matcher;
+  wired.log = { warn: jest.fn(), log: jest.fn() };
   return { service, update };
 }
 
