@@ -19,6 +19,12 @@
 const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
 
+// Receiver → sender bus. A fatal player error is forwarded here so web
+// senders can recover (refresh the live-session sid) or toast. Keep in
+// sync with FLIKS_CAST_NAMESPACE in client cast.service.ts. Native senders
+// detect the same fatal state via the Cast SDK's IDLE/ERROR status.
+const FLIKS_NAMESPACE = 'urn:x-cast:media.fliks.app';
+
 // Verbose CAF + Shaka logging — surfaces in chrome://inspect on the
 // receiver, the only practical way to diagnose a Cast freeze or load
 // failure on a real device.
@@ -56,6 +62,24 @@ playerManager.addEventListener(
   (event) => {
     console.error('[fliks-cast] ERROR', JSON.stringify(event));
     document.body.classList.remove('playing');
+    // Forward to web senders so they can refresh the sid and resume; the
+    // sender classifies recoverable (network / 410) vs dead-end errors.
+    try {
+      const info = playerManager.getMediaInformation();
+      const shakaErr = event && event.error;
+      const data = shakaErr && Array.isArray(shakaErr.data) ? shakaErr.data : [];
+      const httpStatus = typeof data[1] === 'number' ? data[1] : undefined;
+      context.sendCustomMessage(FLIKS_NAMESPACE, undefined, {
+        kind: 'player_error',
+        detailedErrorCode: event ? event.detailedErrorCode : undefined,
+        shakaErrorCode: shakaErr ? shakaErr.code : undefined,
+        httpStatus: httpStatus,
+        reason: event ? event.reason : undefined,
+        mediaTitle: info && info.metadata ? info.metadata.title : undefined,
+      });
+    } catch (e) {
+      console.warn('[fliks-cast] error forward failed', e);
+    }
   },
 );
 

@@ -259,6 +259,22 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Refresh `lastBeat` off real stream traffic — a segment or playlist
+   * fetch is itself proof the consumer is alive. Returns false when the
+   * session is unknown so the HLS routes can 410 a stale `?sid=`.
+   *
+   * Without this the registry depends solely on the client's heartbeat
+   * timer; a Cast receiver, whose only keep-alive is a flaky sender-side
+   * beat, gets GC'd mid-playback and 410s on its next segment.
+   */
+  touch(sessionId: string): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+    session.lastBeat = Date.now();
+    return true;
+  }
+
+  /**
    * Apply a partial patch to a session. No-op when the session is
    * unknown (caller is expected to have just created it or to silently
    * fall through to defaults).

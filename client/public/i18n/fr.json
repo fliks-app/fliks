@@ -1839,6 +1839,7 @@
   "cast": {
     "error": {
       "generic": "Erreur de lecture sur le Chromecast (code {{code}}).",
+      "recovery_failed": "Impossible de reprendre la lecture sur le Chromecast. Relance le cast.",
       "shaka_1001": "Le Chromecast n'a pas pu joindre le serveur (code 1001).",
       "shaka_1002": "Délai dépassé en récupérant un segment depuis le Chromecast (code 1002).",
       "shaka_3015": "Le Chromecast a refusé un fragment (code 3015).",

@@ -19,6 +19,7 @@ import com.google.android.gms.cast.CastMediaControlIntent;
 import com.google.android.gms.cast.MediaInfo;
 import com.google.android.gms.cast.MediaLoadRequestData;
 import com.google.android.gms.cast.MediaMetadata;
+import com.google.android.gms.cast.MediaStatus;
 import com.google.android.gms.cast.MediaTrack;
 import com.google.android.gms.cast.TextTrackStyle;
 import com.google.android.gms.cast.framework.CastContext;
@@ -163,9 +164,20 @@ public class CastPlugin extends Plugin {
         );
     }
 
-    private void notifyJSTime(double time, double duration, boolean paused) {
+    private void notifyJSTime(double time, double duration, boolean paused, boolean buffering) {
         String js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { "
-            + "currentTime: " + time + ", duration: " + duration + ", isPaused: " + paused + " } }));";
+            + "currentTime: " + time + ", duration: " + duration + ", isPaused: " + paused
+            + ", buffering: " + buffering + " } }));";
+        getBridge().getWebView().post(() ->
+            getBridge().getWebView().evaluateJavascript(js, null)
+        );
+    }
+
+    /** Tell the sender the receiver hit a fatal error so it can re-establish
+     *  a fresh stream session and resume at {@code position} seconds. */
+    private void notifyCastError(double position) {
+        String js = "window.dispatchEvent(new CustomEvent('castError', { detail: { position: "
+            + position + " } }));";
         getBridge().getWebView().post(() ->
             getBridge().getWebView().evaluateJavascript(js, null)
         );
@@ -345,6 +357,11 @@ public class CastPlugin extends Plugin {
                 Log.w(TAG, "Failed to set track style", e);
             }
         }, 2000);
+
+        // Re-arm error detection for this stream and seed the resume anchor
+        // with the load offset (polling overwrites it once playback ticks).
+        errorReported = false;
+        lastGoodPosition = currentTime;
 
         // Start position/state polling
         startMediaPolling(client);
@@ -586,6 +603,12 @@ public class CastPlugin extends Plugin {
 
     private Handler pollHandler;
     private Runnable pollRunnable;
+    /** Last playhead (seconds) seen while the receiver was actively playing —
+     *  handed to the sender on a fatal error so it resumes at the right spot. */
+    private double lastGoodPosition = 0;
+    /** Latches IDLE/ERROR so one fatal error fires a single castError, not one
+     *  per poll tick. Cleared when the receiver leaves the idle state. */
+    private boolean errorReported = false;
 
     private void startMediaPolling(RemoteMediaClient client) {
         stopMediaPolling();
@@ -599,10 +622,31 @@ public class CastPlugin extends Plugin {
                 }
                 try {
                     if (castSession == null || !castSession.isConnected()) return;
-                    double time = client.getApproximateStreamPosition() / 1000.0;
-                    double duration = client.getStreamDuration() / 1000.0;
-                    boolean paused = client.isPaused();
-                    notifyJSTime(time, duration, paused);
+                    MediaStatus status = client.getMediaStatus();
+                    int state = status != null
+                        ? status.getPlayerState()
+                        : MediaStatus.PLAYER_STATE_UNKNOWN;
+                    // A fatal receiver error (e.g. a segment 410 after the live
+                    // session was GC'd) surfaces as IDLE with reason ERROR.
+                    // Signal JS once so the sender re-establishes a fresh
+                    // session; an in-flight recovery load goes IDLE/INTERRUPTED,
+                    // not ERROR, so it won't misfire.
+                    if (state == MediaStatus.PLAYER_STATE_IDLE
+                            && status.getIdleReason() == MediaStatus.IDLE_REASON_ERROR) {
+                        if (!errorReported) {
+                            errorReported = true;
+                            notifyCastError(lastGoodPosition);
+                        }
+                    } else {
+                        if (state != MediaStatus.PLAYER_STATE_IDLE) errorReported = false;
+                        double time = client.getApproximateStreamPosition() / 1000.0;
+                        double duration = client.getStreamDuration() / 1000.0;
+                        boolean paused = client.isPaused();
+                        boolean buffering = state == MediaStatus.PLAYER_STATE_BUFFERING
+                            || state == MediaStatus.PLAYER_STATE_LOADING;
+                        if (time > 0) lastGoodPosition = time;
+                        notifyJSTime(time, duration, paused, buffering);
+                    }
                     pollHandler.postDelayed(this, 1000);
                 } catch (Exception e) {
                     Log.w(TAG, "Polling error", e);

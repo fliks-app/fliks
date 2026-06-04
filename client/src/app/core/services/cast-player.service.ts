@@ -11,6 +11,7 @@ import { formatAudioLabel, formatSubtitleLabel, parseAudioIndex, SpriteMetadata 
 import { PlayerSettingsService } from './player-settings.service';
 import { TrackManagerService } from './track-manager.service';
 import { MediaService } from './api/media.service';
+import { ToastService } from './toast.service';
 
 export interface CastSubtitleOption {
   id: string;
@@ -102,6 +103,7 @@ export class CastPlayerService {
   private readonly trackManager = inject(TrackManagerService);
   private readonly mediaService = inject(MediaService);
   private readonly translate = inject(TranslateService);
+  private readonly toast = inject(ToastService);
 
   /** Chromecast profile, derived from the receiver-probed MSE codec list
    *  (see `probeReceiverCapabilities`). `videoCodecs: []` keeps every Cast
@@ -381,6 +383,37 @@ export class CastPlayerService {
         void this.probeReceiverCapabilities();
       }
     });
+    // Receiver reported a recoverable playback error (session GC'd → 410 on
+    // the next segment). Re-establish a fresh stream and resume. Root
+    // singleton, so the subscription lives for the app's lifetime.
+    this.cast.playbackError$.subscribe(({ position }) => {
+      void this.recoverFromCastError(position);
+    });
+  }
+
+  /** Recover from a fatal receiver error by reloading with a fresh sid at
+   *  the last known position. Throttled so a genuinely broken stream
+   *  (deleted file, lost ACL) can't drive an endless reload loop: isolated
+   *  errors recover freely, but three inside 30 s give up with a toast. */
+  private recoverAttempts = 0;
+  private lastRecoverAt = 0;
+
+  private async recoverFromCastError(position?: number): Promise<void> {
+    if (!this.hasMedia()) return;
+    const now = Date.now();
+    if (now - this.lastRecoverAt > 30_000) this.recoverAttempts = 0;
+    if (this.recoverAttempts >= 3) {
+      this.toast.error(this.translate.instant('cast.error.recovery_failed'));
+      return;
+    }
+    this.recoverAttempts++;
+    this.lastRecoverAt = now;
+    const pos = position && position > 0 ? position : this.cast.currentTime();
+    try {
+      await this.reloadCastStream(pos);
+    } catch {
+      /* a still-broken stream re-fires the error, subject to the throttle */
+    }
   }
 
   /**
@@ -492,6 +525,11 @@ export class CastPlayerService {
       if (idx >= 0) activeSubtitleTrackId = idx + 1;
     }
 
+    // Show the loading sweep immediately rather than waiting for the first
+    // receiver state tick; the player-state feed reconciles it once playback
+    // (or a rebuffer) actually starts.
+    this.cast.buffering.set(true);
+
     await this.cast.loadMedia({
       url: castUrl,
       contentType,
@@ -552,12 +590,31 @@ export class CastPlayerService {
     const dur = this.cast.duration();
     if (!pos || pos < 1) return;
     try {
-      await this.streamingApi.updatePlaybackState(mId, {
+      // Carry the Cast live-session id so the backend refreshes its
+      // lastBeat. Once the player page is gone this loop is the only
+      // keep-alive for the receiver's session; without the sid the
+      // backend GCs it after the ttl and 410s the next segment, which
+      // the receiver has no way to recover from.
+      const sid = this.liveSessionId();
+      const heartbeat = sid
+        ? {
+            sessionId: sid,
+            state: (this.cast.isPaused() ? 'paused' : 'playing') as
+              | 'paused'
+              | 'playing',
+          }
+        : {};
+      const response = await this.streamingApi.updatePlaybackState(mId, {
         positionSeconds: pos,
         durationSeconds: dur || 0,
         mediaFileId: mfId,
         episodeId: this.episodeId(),
+        ...heartbeat,
       });
+      // Backend lost the session (its keep-alive lapsed, a restart, …).
+      // The receiver can't self-heal a session_expired, so re-issue
+      // playback-info and reload the stream with a fresh sid.
+      if (response?.sessionLost) await this.reloadCastStream(pos);
     } catch { /* ignore */ }
   }
 

@@ -51,6 +51,20 @@ describe('LiveSessionRegistry', () => {
     expect(updated!.quality).toBe('1080p');
   });
 
+  it('touch refreshes lastBeat without mutating playback fields', async () => {
+    const session = svc.create({ ...BASE, position: 7 });
+    const initialBeat = session.lastBeat;
+    await new Promise((r) => setTimeout(r, 5));
+    expect(svc.touch(session.sessionId)).toBe(true);
+    expect(session.lastBeat).toBeGreaterThan(initialBeat);
+    // A fetch is liveness only — it must not touch the playhead.
+    expect(session.position).toBe(7);
+  });
+
+  it('touch returns false for an unknown sessionId', () => {
+    expect(svc.touch('missing')).toBe(false);
+  });
+
   it('stop removes the session and returns true', () => {
     const session = svc.create(BASE);
     expect(svc.stop(session.sessionId)).toBe(true);
@@ -212,6 +226,21 @@ describe('LiveSessionRegistry GC', () => {
     for (let i = 0; i < 4; i++) {
       await new Promise((r) => setTimeout(r, 30));
       svc.heartbeat(session.sessionId, { position: i });
+    }
+    expect(svc.size()).toBe(1);
+  });
+
+  it('keeps sessions kept alive by segment-fetch touches alone', async () => {
+    // No client heartbeat at all — the receiver pulling segments must be
+    // enough to survive the ttl (the Cast crash repro).
+    process.env.STREAM_LIVE_SESSION_TTL_MS = '80';
+    process.env.STREAM_LIVE_SESSION_GC_INTERVAL_MS = '30';
+    svc = new LiveSessionRegistry();
+    svc.onModuleInit();
+    const session = svc.create(BASE);
+    for (let i = 0; i < 4; i++) {
+      await new Promise((r) => setTimeout(r, 30));
+      expect(svc.touch(session.sessionId)).toBe(true);
     }
     expect(svc.size()).toBe(1);
   });

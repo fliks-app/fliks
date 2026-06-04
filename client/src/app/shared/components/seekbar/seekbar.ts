@@ -22,6 +22,10 @@ export class SeekbarComponent {
   readonly variant = input<'player' | 'cast'>('player');
   readonly showTooltip = input(true);
   readonly showBuffered = input(true);
+  /** Drives an indeterminate sweep across the track while the engine is
+   *  fetching/buffering, so the bar reads as "working" even when the
+   *  playhead isn't advancing. */
+  readonly loading = input(false);
   readonly chapters = input<{ startSeconds: number; endSeconds: number; title?: string }[]>([]);
 
   /** Chapter start times as % of duration for seekbar tick rendering. */
@@ -86,6 +90,16 @@ export class SeekbarComponent {
     const thick = this.dragging() || this.hovering();
     const base = 'bg-white/20 group-focus-visible:h-2.5';
     return `${base} ${thick ? 'h-2.5' : 'h-1'}`;
+  });
+
+  /** Full class list for the indeterminate sweep overlay. The player rides on
+   *  top of video (white reads on any frame); the cast card uses theme
+   *  surfaces, so there the sweep tracks the foreground colour to stay visible
+   *  on light + dark. Assembled here (like trackClass) so a single `[class]`
+   *  binding owns the element — no static/bound merge to reason about. */
+  readonly loadingSweepClass = computed(() => {
+    const via = this.variant() === 'cast' ? 'via-base-content/40' : 'via-white/60';
+    return `absolute inset-0 pointer-events-none bg-gradient-to-r from-transparent ${via} to-transparent animate-seekbar-indeterminate`;
   });
 
   // Sprite preview computeds

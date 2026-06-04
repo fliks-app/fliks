@@ -43,6 +43,7 @@
             <app-seekbar #seekbar
               [currentTime]="cast.currentTime()"
               [duration]="cast.duration()"
+              [loading]="cast.buffering()"
               [spriteUrl]="cp.spriteUrl()"
               [spriteMetadata]="cp.spriteMetadata()"
               variant="cast"

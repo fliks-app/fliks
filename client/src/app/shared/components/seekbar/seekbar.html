@@ -69,14 +69,24 @@
         [style.width.%]="duration() ? (bufferedEnd() / duration()) * 100 : 0"
       ></div>
     }
-    <!-- Progress. `rounded-l-full` matches the track's left cap;
-         right side stays square so the progress ends on a crisp
-         vertical edge instead of a curved bulge. -->
-    <div
-      class="absolute inset-y-0 left-0 rounded-l-full"
-      [class]="variant() === 'player' ? 'bg-white' : 'bg-info'"
-      [style.width.%]="displayPercent()"
-    ></div>
+    <!-- Progress. `rounded-l-full` matches the track's left cap; right side
+         stays square so the progress ends on a crisp vertical edge instead of
+         a curved bulge. Hidden while loading so the determinate position fill
+         and the indeterminate sweep never show at once. -->
+    @if (!loading()) {
+      <div
+        class="absolute inset-y-0 left-0 rounded-l-full"
+        [class]="variant() === 'player' ? 'bg-white' : 'bg-base-content'"
+        [style.width.%]="displayPercent()"
+      ></div>
+    }
+    <!-- Indeterminate loading sweep — a soft highlight crosses the track
+         while the engine is fetching/buffering, so the bar shows activity
+         even when the playhead isn't advancing. Replaces the position fill
+         (above); sits below the chapter ticks. -->
+    @if (loading()) {
+      <div [class]="loadingSweepClass()"></div>
+    }
     <!-- Chapter ticks -->
     @for (t of chapterTicks(); track t.percent) {
       <div
