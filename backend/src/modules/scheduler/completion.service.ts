@@ -46,14 +46,16 @@ import { FileTransferService } from '../../common/services/file-transfer.service
 import { MediaService } from '../media/media.service';
 
 /**
- * How long a `grabbed` history row may stay without a matching qBit
- * torrent before we mark it `failed`. Picked at 30 min so a transient
- * mismatch (HTML-entity decode drift between qBit and the indexer's raw
- * title, a brief qBit unavailability, a torrent rename mid-tick) can't
- * trip the orphan handler. The row is NEVER deleted; only its status
+ * How long a `grabbed` or `importing` history row may stay without a
+ * matching qBit torrent before we mark it `failed`. The sweep only runs once
+ * every client has answered (a partial fetch is skipped upstream), so a
+ * torrent's absence is reliable; 5 min then absorbs the short-lived
+ * mismatches that remain — a freshly-grabbed row whose torrent hasn't
+ * surfaced yet, an HTML-entity decode drift between qBit and the indexer's
+ * raw title, a rename mid-tick. The row is NEVER deleted; only its status
  * flips so the user sees the failure in Activities and can re-grab.
  */
-const ORPHAN_GRACE_MS = 30 * 60_000;
+const ORPHAN_GRACE_MS = 5 * 60_000;
 
 /**
  * Status message stamped on a row the orphan sweep flips to `failed`. Kept as
@@ -313,13 +315,20 @@ export class CompletionService {
         { status: 'warning' },
       ],
     });
+    // Importing rows are reconciled too, but kept out of `grabbed`: that array
+    // also feeds Phase 3's matchAndHeal, which must not treat an already-
+    // importing row as a fresh grab to match a completed torrent against.
+    const importing = await this.historyRepo.find({
+      where: { status: 'importing' },
+    });
 
-    // Phase 2 — reconcile grabbed rows against the live torrent list: flip
-    // ones whose torrent has been gone past the grace period to `failed`,
-    // and clear a prior orphan stamp off any row whose torrent reappeared.
-    // Media link is preserved either way. Skipped on a partial fetch.
+    // Phase 2 — reconcile grabbed/importing rows against the live torrent
+    // list: flip ones whose torrent has been gone past the grace period to
+    // `failed`, and clear a prior orphan stamp off any row whose torrent
+    // reappeared. Media link is preserved either way. Skipped on a partial
+    // fetch.
     if (allClientsResponded) {
-      await this.reconcileOrphanHistory(allTorrents, grabbed);
+      await this.reconcileOrphanHistory(allTorrents, grabbed, importing);
     }
 
     // Phase 3 — import the completed torrents.
@@ -410,31 +419,40 @@ export class CompletionService {
   }
 
   /**
-   * Reconcile grabbed/failed rows against the live torrent list. Caller must
-   * pass a complete list (every client responded), since both directions key
-   * off a torrent's presence:
+   * Reconcile grabbed/importing/failed rows against the live torrent list.
+   * Caller must pass a complete list (every client responded), since every
+   * direction keys off a torrent's presence:
    *
-   *  - A `grabbed` row whose torrent has been gone for at least
-   *    {@link ORPHAN_GRACE_MS} flips to `failed`. The grace is measured off
-   *    `updatedAt`, which every status / hash heal write bumps, so a row
+   *  - A `grabbed` or `importing` row whose torrent has been gone for at least
+   *    {@link ORPHAN_GRACE_MS} flips to `failed` — this is what reconciles a
+   *    torrent the user removed from the client by hand. The grace is measured
+   *    off `updatedAt`, which every status / hash heal write bumps, so a row
    *    whose torrent just arrived has a fresh timestamp and won't be flipped.
    *  - A `failed` row carrying the {@link ORPHAN_STATUS_MESSAGE} stamp whose
    *    torrent is matched again returns to `grabbed`, so the activity queue
    *    never shows "no longer present" beside a torrent the client still
    *    reports. A torrent that failed for any other reason keeps its status.
    *
-   * The media link is preserved in both directions.
+   * The media link is preserved in every direction. A `queue.updated` event is
+   * emitted on any change so the sidebar badge refreshes live rather than
+   * staying stale until the next navigation.
    */
   private async reconcileOrphanHistory(
     allTorrents: ReadonlyArray<QbittorrentTorrent>,
     grabbed: DownloadHistory[],
+    importing: DownloadHistory[],
   ): Promise<void> {
-    if (!grabbed.length) return;
+    if (!grabbed.length && !importing.length) return;
+    // Match torrents against both sets so a live torrent keeps either kind of
+    // row off the orphan list.
+    const candidates = [...grabbed, ...importing];
     const matchedHistoryIds = new Set<number>();
     for (const t of allTorrents) {
-      const m = this.historyMatcher.findMatch(t, grabbed);
+      const m = this.historyMatcher.findMatch(t, candidates);
       if (m) matchedHistoryIds.add(m.history.id);
     }
+
+    let changed = false;
 
     const revived = grabbed.filter(
       (h) =>
@@ -447,29 +465,34 @@ export class CompletionService {
         revived.map((h) => h.id),
         { status: 'grabbed', statusMessage: null as unknown as string },
       );
+      changed = true;
       this.log.log(
         `Import: ${revived.length} entries reappeared in qBittorrent — cleared the orphan stamp and re-armed for import`,
       );
     }
 
     const cutoff = Date.now() - ORPHAN_GRACE_MS;
-    const expired = grabbed.filter(
+    const expired = candidates.filter(
       (h) =>
-        h.status === 'grabbed' &&
+        (h.status === 'grabbed' || h.status === 'importing') &&
         !matchedHistoryIds.has(h.id) &&
         h.updatedAt.getTime() < cutoff,
     );
-    if (!expired.length) return;
-    await this.historyRepo.update(
-      expired.map((h) => h.id),
-      {
-        status: 'failed',
-        statusMessage: ORPHAN_STATUS_MESSAGE,
-      },
-    );
-    this.log.warn(
-      `Import: ${expired.length} grabbed entries lost their torrent in qBittorrent for > ${ORPHAN_GRACE_MS / 60_000}min — marked failed (media link preserved)`,
-    );
+    if (expired.length) {
+      await this.historyRepo.update(
+        expired.map((h) => h.id),
+        {
+          status: 'failed',
+          statusMessage: ORPHAN_STATUS_MESSAGE,
+        },
+      );
+      changed = true;
+      this.log.warn(
+        `Import: ${expired.length} grabbed/importing entries lost their torrent in qBittorrent for > ${ORPHAN_GRACE_MS / 60_000}min — marked failed (media link preserved)`,
+      );
+    }
+
+    if (changed) this.events.emit({ type: 'queue.updated' });
   }
 
   private async processOne(
