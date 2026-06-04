@@ -64,6 +64,19 @@ export interface QbittorrentTorrentFile {
   priority: number;
 }
 
+/**
+ * A torrent fetch outcome that separates "the client holds no torrents" from
+ * "the client could not be reached". An unreachable or unauthenticated client
+ * returns the same empty list as one that genuinely holds nothing, so callers
+ * that take destructive action on a torrent's absence (the orphan-history
+ * sweep, stalled-torrent removal) read `ok` to skip a tick built on a fetch
+ * that never succeeded.
+ */
+export interface QbittorrentTorrentsResult {
+  ok: boolean;
+  torrents: QbittorrentTorrent[];
+}
+
 @Injectable()
 export class QbittorrentService {
   private readonly log = new Logger(QbittorrentService.name);
@@ -133,6 +146,19 @@ export class QbittorrentService {
   }
 
   async getTorrents(client: DownloadClient): Promise<QbittorrentTorrent[]> {
+    return (await this.getTorrentsResult(client)).torrents;
+  }
+
+  /**
+   * Fetch a client's torrents while reporting whether the fetch succeeded.
+   * `ok` is false on a missing host, failed auth, unreachable client or
+   * malformed body — every path where the empty list is an artefact of the
+   * failure rather than the client's real contents. See
+   * {@link QbittorrentTorrentsResult}.
+   */
+  async getTorrentsResult(
+    client: DownloadClient,
+  ): Promise<QbittorrentTorrentsResult> {
     const s = client.settings as {
       host?: string;
       username?: string;
@@ -142,7 +168,7 @@ export class QbittorrentService {
       category?: string;
     };
     const base = this.buildBaseUrl(s);
-    if (!base) return [];
+    if (!base) return { ok: false, torrents: [] };
     const http = axios.create({
       timeout: 15_000,
       headers: { 'User-Agent': 'Fliks/1.0' },
@@ -167,14 +193,14 @@ export class QbittorrentService {
         this.log.warn(
           `getTorrents: auth failed for client "${client.name}" at ${base}`,
         );
-        return [];
+        return { ok: false, torrents: [] };
       }
       cookieHeader = cookies.map((c: string) => c.split(';')[0]).join('; ');
     } catch (e) {
       this.log.warn(
         `getTorrents: cannot reach client "${client.name}" at ${base}: ${(e as Error).message}`,
       );
-      return [];
+      return { ok: false, torrents: [] };
     }
 
     try {
@@ -192,20 +218,21 @@ export class QbittorrentService {
         this.log.warn(
           `getTorrents: unexpected response from "${client.name}": ${typeof res.data}`,
         );
-        return [];
+        return { ok: false, torrents: [] };
       }
       // Decode HTML entities baked into the `.torrent` `name` field by
       // misbehaving indexers (`Berl&iacute;n` → `Berlín`). Anything
       // downstream — history matching, activity UI, sourceTitle —
       // gets the human-readable form.
-      return res.data.map((t) =>
+      const torrents = res.data.map((t) =>
         t.name ? { ...t, name: decodeHtmlEntities(t.name) } : t,
       );
+      return { ok: true, torrents };
     } catch (e) {
       this.log.warn(
         `getTorrents: error fetching torrents from "${client.name}": ${(e as Error).message}`,
       );
-      return [];
+      return { ok: false, torrents: [] };
     }
   }
 
