@@ -368,7 +368,10 @@ export class StreamingController {
   private assertFreshSession(req: Request): void {
     const sid = firstQueryString(req.query, 'sid');
     if (!sid) return;
-    if (!this.liveSessions.get(sid)) {
+    // The fetch itself keeps the session warm: an actively-playing
+    // receiver pulls segments straight off these routes, so its session
+    // must not depend on a separate heartbeat channel to survive the ttl.
+    if (!this.liveSessions.touch(sid)) {
       throw new SessionExpiredException(sid);
     }
   }
