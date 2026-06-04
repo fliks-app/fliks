@@ -5,6 +5,7 @@ import { environment } from '../../../environments/environment';
 import { CastSettingsService, CastSubtitleStyle } from './cast-settings.service';
 import { ToastService } from './toast.service';
 import { CAST_SUBTITLE_SIZE_SCALE } from '../utils/subtitle-presets';
+import { Subject } from 'rxjs';
 
 /** Custom Cast message namespace shared between the Fliks receiver and
  *  every sender. Used today for receiver → sender error forwarding;
@@ -21,6 +22,9 @@ interface ReceiverPlayerError {
   detailedErrorCode?: number;
   severity?: number;
   shakaErrorCode?: number;
+  /** HTTP status the failed request returned, when the receiver could read
+   *  it — `410` is the live-session-expired signal a fresh sid recovers. */
+  httpStatus?: number;
   shakaErrorData?: unknown;
   reason?: string;
   mediaTitle?: string;
@@ -98,6 +102,13 @@ export class CastService implements OnDestroy {
   /** Base pour sous-titres / URLs Cast ; renseignée dans reloadCastStream via cast-info. */
   readonly castStreamBaseUrl = signal('');
 
+  /** Fires when the receiver hits a fatal playback error that a fresh
+   *  stream (new sid) can recover — a live session GC'd mid-cast 410s the
+   *  next segment. `position` is the last known playhead to resume from.
+   *  Fed by the native plugin's IDLE/ERROR signal and the web receiver's
+   *  custom error message; consumed by CastPlayerService to reload. */
+  readonly playbackError$ = new Subject<{ position?: number }>();
+
   private readonly isNative = Capacitor.isNativePlatform();
   private readonly castSettings = inject(CastSettingsService);
   private readonly toast = inject(ToastService);
@@ -151,6 +162,12 @@ export class CastService implements OnDestroy {
         this.currentTime.set(e.detail?.currentTime ?? 0);
         this.duration.set(e.detail?.duration ?? 0);
         this.isPaused.set(e.detail?.isPaused ?? true);
+      }) as EventListener);
+
+      // The plugin maps the receiver's IDLE/ERROR state to this event —
+      // the native equivalent of the web receiver's custom error message.
+      window.addEventListener('castError', ((e: CustomEvent) => {
+        this.playbackError$.next({ position: e.detail?.position });
       }) as EventListener);
 
       // Device discovery updates
@@ -237,7 +254,14 @@ export class CastService implements OnDestroy {
       session.addMessageListener(FLIKS_CAST_NAMESPACE, (_ns: string, raw: string) => {
         try {
           const payload = JSON.parse(raw) as ReceiverPlayerError;
-          if (payload?.kind === 'player_error') this.handleReceiverError(payload);
+          if (payload?.kind !== 'player_error') return;
+          // A session-expiry / network failure is recoverable: re-establish
+          // a fresh stream rather than just toasting a dead-end error.
+          if (this.isRecoverableReceiverError(payload)) {
+            this.playbackError$.next({});
+          } else {
+            this.handleReceiverError(payload);
+          }
         } catch {
           /* malformed messages are ignored — receiver is forward-compatible */
         }
@@ -246,6 +270,20 @@ export class CastService implements OnDestroy {
     } catch (err) {
       console.warn('Cast addMessageListener failed', err);
     }
+  }
+
+  /** Whether a receiver error is worth a fresh-stream reload rather than a
+   *  toast: a 410 (live session GC'd), Shaka's NETWORK category (1001-1006,
+   *  the 410 surfaces here as BAD_HTTP_STATUS), or CAF's network/HLS-network
+   *  detailed codes (300-399). Anything else (decode, unsupported codec) a
+   *  reload can't fix, so it falls through to the toast. */
+  private isRecoverableReceiverError(p: ReceiverPlayerError): boolean {
+    if (p.httpStatus === 410) return true;
+    const shaka = p.shakaErrorCode;
+    if (shaka != null && shaka >= 1001 && shaka <= 1006) return true;
+    const detailed = p.detailedErrorCode;
+    if (detailed != null && detailed >= 300 && detailed < 400) return true;
+    return false;
   }
 
   private handleReceiverError(payload: ReceiverPlayerError) {
