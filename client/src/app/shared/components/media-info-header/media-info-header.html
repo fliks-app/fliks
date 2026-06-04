@@ -137,14 +137,6 @@
 
 <!-- ===== DESKTOP layout ===== -->
 <div class="hidden md:block tv:block relative">
-  @if (fanartUrl()) {
-    @if (!navbar.mobileNavbarVisible()) {
-      <button type="button" (click)="goBack()" class="relative z-10 btn btn-ghost btn gap-1 mb-4 text-base-content/80 hover:text-base-content">
-        <svg lucideChevronLeft class="h-4 w-4"></svg>
-        {{ backLabel() ?? ('media_detail.back' | translate) }}
-      </button>
-    }
-  }
 
   <div
     class="flex gap-6 lg:gap-10 relative z-20 tv:pt-24!"

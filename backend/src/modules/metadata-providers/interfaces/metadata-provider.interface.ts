@@ -17,6 +17,9 @@ export interface MetadataDetails extends MetadataSearchResult {
   imdbId: string | null;
   tvdbId: number | null;
   fanartUrl: string | null;
+  /** Transparent PNG "clearlogo" title treatment, when the provider has one
+   *  (TMDB logos). Null otherwise. */
+  logoUrl: string | null;
   /** Extra fanarts (top-N) returned by the provider, used to
    *  randomise the page background. Empty array when the provider
    *  has no additional artwork. */

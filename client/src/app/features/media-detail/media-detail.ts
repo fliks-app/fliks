@@ -835,7 +835,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.episodeMode.set(false);
       this.focusedSeason.set(null);
       this.focusedEpisode.set(null);
-      this.navbarService.enterHeroPage(m.title);
+      this.navbarService.enterHeroPage(m.title, m.logoUrl);
       return;
     }
     const episodeId = Number(episodeIdParam);
@@ -860,6 +860,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const en = String(foundEpisode.episodeNumber).padStart(2, '0');
     this.navbarService.enterHeroPage(
       `${m.title} — S${sn}:E${en} — ${foundEpisode.title ?? ''}`,
+      m.logoUrl,
     );
   }
 

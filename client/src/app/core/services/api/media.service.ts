@@ -92,6 +92,8 @@ export interface Media {
   library?: { id: number; name: string } | null;
   posterUrl: string | null;
   fanartUrl: string | null;
+  /** Transparent PNG clearlogo (title treatment), or null. */
+  logoUrl: string | null;
   /** Extra fanarts kept locally (variants `fanart-1`..`fanart-N`).
    *  Mixed with {@link fanartUrl} for the randomised page background. */
   additionalFanartUrls: string[];

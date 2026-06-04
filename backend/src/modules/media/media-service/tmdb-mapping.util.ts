@@ -51,6 +51,7 @@ export function buildMediaFieldsFromTmdb(
     status: mapTmdbStatusToMediaStatus(type, details.status),
     posterUrl: details.posterUrl ?? undefined,
     fanartUrl: details.fanartUrl ?? undefined,
+    logoUrl: details.logoUrl ?? undefined,
     rating: details.rating ?? undefined,
     genres: details.genres?.length ? details.genres : [],
     runtime: details.runtime ?? undefined,
