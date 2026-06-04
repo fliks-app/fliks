@@ -341,6 +341,16 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   });
 
   /**
+   * Episodes shown in the "Plus de saison X" row — the focused season minus the
+   * episode already open above it: listing the active episode in its own
+   * "more from this season" row is redundant.
+   */
+  readonly moreFromSeasonEpisodes = computed<Episode[]>(() => {
+    const activeId = this.focusedEpisode()?.id;
+    return this.currentSeasonEpisodes().filter((e) => e.id !== activeId);
+  });
+
+  /**
    * Sibling seasons rendered as cards under the "more from season N" row on
    * the episode detail page. Hides the currently-focused season and any
    * empty season (no episodes → no link target).
@@ -364,18 +374,30 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * When the focused episode changes on the episode detail page, center the
-   * "Plus de saison X" scroller on its card. Retries across rAF ticks
-   * because the card and its scroll container mount through
-   * app-media-detail-seasons → app-horizontal-scroller → ng-content, which
-   * can take a couple of change-detection passes to settle — a single rAF
-   * sometimes fires before the element (or its layout) exists.
+   * When the focused episode changes on the episode detail page, bring the
+   * "Plus de saison X" scroller to the episode AFTER the active one — the
+   * active episode is hidden from the row, so we surface what comes next.
+   * When the active episode is the season's last, scroll the row to its end
+   * instead. The setTimeout lets the card and its scroll container mount
+   * through app-media-detail-seasons → app-horizontal-scroller → ng-content
+   * before we measure — they can take a change-detection pass or two to settle.
    */
   private readonly scrollToFocusedEpisodeEffect = effect(() => {
-    const ep = this.focusedEpisode();
-    const hasEpisodes = this.currentSeasonEpisodes().length > 1;
-    if (!ep || !this.episodeMode() || !hasEpisodes) return;
-    setTimeout(() => this.scrollToEpisode(ep.id), 30);
+    const active = this.focusedEpisode();
+    const eps = this.currentSeasonEpisodes();
+    if (
+      !active ||
+      !this.episodeMode() ||
+      this.moreFromSeasonEpisodes().length === 0
+    ) {
+      return;
+    }
+    const idx = eps.findIndex((e) => e.id === active.id);
+    const next = idx >= 0 ? eps[idx + 1] : undefined;
+    setTimeout(() => {
+      if (next) this.scrollToEpisode(next.id);
+      else this.scrollToEpisodesRowEnd();
+    }, 30);
   });
 
   private scrollToEpisode(epId: number): void {
@@ -389,6 +411,20 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       scroller.scrollLeft + (elRect.left - scrollerRect.left)
       - scroller.clientWidth / 2 + el.offsetWidth / 2;
     scroller.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+  }
+
+  /** Scroll the "Plus de saison X" row to its far end — used when the active
+   *  episode (hidden from the row) is the season's last, so there is no "next"
+   *  card to center on. Anchors off the last rendered card to find the row's
+   *  scroller. */
+  private scrollToEpisodesRowEnd(): void {
+    const last = this.moreFromSeasonEpisodes().at(-1);
+    if (!last) return;
+    const el = document.getElementById(`episode-${last.id}`);
+    if (!el) return;
+    const scroller = this.findHorizontalScrollParent(el);
+    if (!scroller) return;
+    scroller.scrollTo({ left: scroller.scrollWidth, behavior: 'smooth' });
   }
 
   private findHorizontalScrollParent(el: HTMLElement): HTMLElement | null {

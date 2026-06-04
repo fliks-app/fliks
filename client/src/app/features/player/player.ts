@@ -2060,6 +2060,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.playbackRate.set(rate);
   }
 
+  /** Whether the episode reached the completion threshold — mirrors the
+   *  backend (within 30s of the end, or past 90%). Drives the "back" target:
+   *  a finished episode returns to the next one. */
+  private episodeFinished(): boolean {
+    const dur = this.duration();
+    const pos = this.currentTime();
+    return dur > 0 && (pos >= dur - 30 || pos >= dur * 0.9);
+  }
+
   onBack() {
     this.savePosition();
     // Explicit navigation rather than history.back() — nav-inside-player
@@ -2073,10 +2082,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       target = '/';
     } else {
       const kind = this.media?.type === 'series' ? 'series' : 'movies';
-      target =
-        this.episodeId && kind === 'series'
-          ? `/series/${this.mediaId}/episode/${this.episodeId}`
-          : `/${kind}/${this.mediaId}`;
+      if (this.episodeId && kind === 'series') {
+        // A finished episode returns to the NEXT episode's detail page so the
+        // user lands ready to continue; an episode left mid-watch returns to
+        // its own page (to resume).
+        const next = this.nextEpisodeContext();
+        const epId =
+          this.episodeFinished() && next ? next.episodeId : this.episodeId;
+        target = `/series/${this.mediaId}/episode/${epId}`;
+      } else {
+        target = `/${kind}/${this.mediaId}`;
+      }
     }
     // If the previous URL is already the target, just pop /watch off the
     // browser stack — replaceUrl would otherwise stack a duplicate
