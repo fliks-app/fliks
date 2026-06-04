@@ -552,12 +552,31 @@ export class CastPlayerService {
     const dur = this.cast.duration();
     if (!pos || pos < 1) return;
     try {
-      await this.streamingApi.updatePlaybackState(mId, {
+      // Carry the Cast live-session id so the backend refreshes its
+      // lastBeat. Once the player page is gone this loop is the only
+      // keep-alive for the receiver's session; without the sid the
+      // backend GCs it after the ttl and 410s the next segment, which
+      // the receiver has no way to recover from.
+      const sid = this.liveSessionId();
+      const heartbeat = sid
+        ? {
+            sessionId: sid,
+            state: (this.cast.isPaused() ? 'paused' : 'playing') as
+              | 'paused'
+              | 'playing',
+          }
+        : {};
+      const response = await this.streamingApi.updatePlaybackState(mId, {
         positionSeconds: pos,
         durationSeconds: dur || 0,
         mediaFileId: mfId,
         episodeId: this.episodeId(),
+        ...heartbeat,
       });
+      // Backend lost the session (its keep-alive lapsed, a restart, …).
+      // The receiver can't self-heal a session_expired, so re-issue
+      // playback-info and reload the stream with a fresh sid.
+      if (response?.sessionLost) await this.reloadCastStream(pos);
     } catch { /* ignore */ }
   }
 
