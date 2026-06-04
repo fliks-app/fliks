@@ -55,6 +55,14 @@ import { MediaService } from '../media/media.service';
  */
 const ORPHAN_GRACE_MS = 30 * 60_000;
 
+/**
+ * Status message stamped on a row the orphan sweep flips to `failed`. Kept as
+ * a constant so the sweep can also recognise its own stamp and clear it when
+ * the torrent reappears, rather than leaving a row reading "no longer present"
+ * next to a torrent the client is still reporting.
+ */
+const ORPHAN_STATUS_MESSAGE = 'Torrent no longer present in download client';
+
 @Injectable()
 export class CompletionService {
   private readonly log = new Logger(CompletionService.name);
@@ -274,14 +282,21 @@ export class CompletionService {
       return;
     }
 
-    const allTorrents = (
-      await Promise.all(
-        qbitClients.map(async (c) => {
-          const torrents = await this.qbittorrent.getTorrents(c);
-          return torrents.map((t) => ({ ...t, _clientId: c.id, _client: c }));
-        }),
-      )
-    ).flat();
+    const fetches = await Promise.all(
+      qbitClients.map(async (c) => {
+        const { ok, torrents } = await this.qbittorrent.getTorrentsResult(c);
+        return {
+          ok,
+          torrents: torrents.map((t) => ({ ...t, _clientId: c.id, _client: c })),
+        };
+      }),
+    );
+    // A failed fetch yields an empty list indistinguishable from a client
+    // that genuinely holds nothing. The orphan sweep declares a torrent gone
+    // by its absence, so it runs only when every client answered — a single
+    // unreachable client would otherwise orphan every in-flight grab.
+    const allClientsResponded = fetches.every((f) => f.ok);
+    const allTorrents = fetches.flatMap((f) => f.torrents);
 
     // Phase 1 — auto-match orphan torrents (creates history rows for
     // qBit torrents that have no DB linkage yet).
@@ -299,10 +314,13 @@ export class CompletionService {
       ],
     });
 
-    // Phase 2 — orphan-history sweep: rows whose torrent has vanished
-    // from qBit for longer than the grace period flip to `failed`.
-    // Media link is preserved.
-    await this.markStaleHistoryAsFailed(allTorrents, grabbed);
+    // Phase 2 — reconcile grabbed rows against the live torrent list: flip
+    // ones whose torrent has been gone past the grace period to `failed`,
+    // and clear a prior orphan stamp off any row whose torrent reappeared.
+    // Media link is preserved either way. Skipped on a partial fetch.
+    if (allClientsResponded) {
+      await this.reconcileOrphanHistory(allTorrents, grabbed);
+    }
 
     // Phase 3 — import the completed torrents.
     const completedTorrents = allTorrents.filter(
@@ -392,14 +410,22 @@ export class CompletionService {
   }
 
   /**
-   * Flip history rows to `failed` when their torrent has been missing
-   * from qBit for at least {@link ORPHAN_GRACE_MS}. Extracted here so
-   * `processCompleted` reads as three crisp phases. The grace is
-   * measured off `updatedAt` because every status / hash heal write
-   * bumps it; a row whose torrent just arrived in qBit has a fresh
-   * timestamp and won't be flipped.
+   * Reconcile grabbed/failed rows against the live torrent list. Caller must
+   * pass a complete list (every client responded), since both directions key
+   * off a torrent's presence:
+   *
+   *  - A `grabbed` row whose torrent has been gone for at least
+   *    {@link ORPHAN_GRACE_MS} flips to `failed`. The grace is measured off
+   *    `updatedAt`, which every status / hash heal write bumps, so a row
+   *    whose torrent just arrived has a fresh timestamp and won't be flipped.
+   *  - A `failed` row carrying the {@link ORPHAN_STATUS_MESSAGE} stamp whose
+   *    torrent is matched again returns to `grabbed`, so the activity queue
+   *    never shows "no longer present" beside a torrent the client still
+   *    reports. A torrent that failed for any other reason keeps its status.
+   *
+   * The media link is preserved in both directions.
    */
-  private async markStaleHistoryAsFailed(
+  private async reconcileOrphanHistory(
     allTorrents: ReadonlyArray<QbittorrentTorrent>,
     grabbed: DownloadHistory[],
   ): Promise<void> {
@@ -409,6 +435,23 @@ export class CompletionService {
       const m = this.historyMatcher.findMatch(t, grabbed);
       if (m) matchedHistoryIds.add(m.history.id);
     }
+
+    const revived = grabbed.filter(
+      (h) =>
+        h.status === 'failed' &&
+        h.statusMessage === ORPHAN_STATUS_MESSAGE &&
+        matchedHistoryIds.has(h.id),
+    );
+    if (revived.length) {
+      await this.historyRepo.update(
+        revived.map((h) => h.id),
+        { status: 'grabbed', statusMessage: null as unknown as string },
+      );
+      this.log.log(
+        `Import: ${revived.length} entries reappeared in qBittorrent — cleared the orphan stamp and re-armed for import`,
+      );
+    }
+
     const cutoff = Date.now() - ORPHAN_GRACE_MS;
     const expired = grabbed.filter(
       (h) =>
@@ -421,7 +464,7 @@ export class CompletionService {
       expired.map((h) => h.id),
       {
         status: 'failed',
-        statusMessage: 'Torrent no longer present in download client',
+        statusMessage: ORPHAN_STATUS_MESSAGE,
       },
     );
     this.log.warn(
