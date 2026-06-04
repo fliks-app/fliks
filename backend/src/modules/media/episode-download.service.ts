@@ -240,7 +240,15 @@ export class EpisodeDownloadService {
     const packs = sortReleasesByRelevance(
       withinProfile.filter((x) => x.isPack).map((x) => x.row),
     );
-    return [...singles, ...packs];
+    // Singles-before-packs holds only among live releases: a dead single
+    // can't import, so a well-seeded pack covering the episode outranks it.
+    const alive = (r: { seeders: number }) => r.seeders > 0;
+    return [
+      ...singles.filter(alive),
+      ...packs.filter(alive),
+      ...singles.filter((r) => !alive(r)),
+      ...packs.filter((r) => !alive(r)),
+    ];
   }
 
   async grabEpisode(
