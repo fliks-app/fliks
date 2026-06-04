@@ -65,6 +65,13 @@ export interface MediaResumeInfo {
  */
 const RESUME_FROM_START_UNDER_SECONDS = 10;
 
+/**
+ * Minimum watched position before a media enters the watch history
+ * (`playedAt` stamp). Keeps an accidental click that's closed within a few
+ * seconds out of the history — only a real watch (≥ 5 s) records.
+ */
+const HISTORY_MIN_WATCH_SECONDS = 5;
+
 /** Postgres foreign-key violation. Library refresh can drop the parent media
  *  row mid-session; cascade clears existing playback_states, then a beacon
  *  arrives for that mediaId and the fresh INSERT trips this FK. */
@@ -270,13 +277,20 @@ export class PlaybackService implements OnModuleInit {
     const dur = body.durationSeconds ?? 0;
     const pos = body.positionSeconds ?? 0;
     const completed = dur > 0 && (pos >= dur - 30 || pos >= dur * 0.9);
+    const now = new Date();
+    // Enter (or refresh) the watch history only once a real watch threshold is
+    // crossed, so an accidental click closed within a few seconds never lands
+    // in history. `playedAt` is the history marker; below the threshold we
+    // leave it untouched (null on a fresh row).
+    const watched = pos >= HISTORY_MIN_WATCH_SECONDS;
 
     if (state) {
       state.positionSeconds = pos;
       if (dur > 0) state.durationSeconds = dur;
       state.completed = completed;
       state.hiddenFromContinueWatching = false;
-      state.lastPlayedAt = new Date();
+      state.lastPlayedAt = now;
+      if (watched) state.playedAt = now;
       state.mediaFile = { id: body.mediaFileId } as MediaFile;
     } else {
       state = this.repo.create({
@@ -288,7 +302,8 @@ export class PlaybackService implements OnModuleInit {
         positionSeconds: pos,
         durationSeconds: dur || 0,
         completed,
-        lastPlayedAt: new Date(),
+        lastPlayedAt: now,
+        playedAt: watched ? now : null,
       });
     }
 
@@ -301,9 +316,11 @@ export class PlaybackService implements OnModuleInit {
   }
 
   /**
-   * Mark a playback session as started. Creates the playback_states row if
-   * missing and stamps `playedAt = NOW()` so the media appears in the user's
-   * watch history (history = sessions started, not a progress threshold).
+   * Mark a playback session as started: ensure the playback_states row exists
+   * and refresh `lastPlayedAt` / the linked file. The watch-history stamp
+   * (`playedAt`) is intentionally NOT set here — a media enters the history
+   * only once {@link HISTORY_MIN_WATCH_SECONDS} of progress is reported through
+   * {@link updateState}, so an instant click-and-close never lands in it.
    * Called by the streaming controller at playback-info time.
    */
   async markSessionStarted(
@@ -315,7 +332,6 @@ export class PlaybackService implements OnModuleInit {
     const state = await this.findState(userId, mediaId, episodeId ?? undefined);
     const now = new Date();
     if (state) {
-      state.playedAt = now;
       state.lastPlayedAt = now;
       if (mediaFileId) state.mediaFileId = mediaFileId;
       await this.repo.save(state);
@@ -329,7 +345,6 @@ export class PlaybackService implements OnModuleInit {
         durationSeconds: 0,
         completed: false,
         lastPlayedAt: now,
-        playedAt: now,
       } as Partial<PlaybackState>);
     }
   }
