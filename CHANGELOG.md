@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.9.0](https://github.com/fliks-app/fliks/compare/v1.8.0...v1.9.0) (2026-06-06)
+
+
+### Features
+
+* **cast:** resilient mid-cast sessions, receiver recovery, and seekbar loading ([c6395dc](https://github.com/fliks-app/fliks/commit/c6395dc116badc4a23fe2cfa0a616376fcb3c992))
+* **clearlogo:** show title clearlogos across the app ([2981a7e](https://github.com/fliks-app/fliks/commit/2981a7e8712d358404b3e8609bdd4e0ebe310b1e))
+* **downloads:** rank releases by availability and prefer season packs ([#405](https://github.com/fliks-app/fliks/issues/405)) ([7664eb5](https://github.com/fliks-app/fliks/commit/7664eb5bb7d2f81ef01e1fcc6f0c4adca9f440e4))
+* **media-detail:** hide the open episode and jump to the next ([cb8075d](https://github.com/fliks-app/fliks/commit/cb8075d031a3be44bac7a9a318bea07a9c0c9ced))
+* **scroller:** reveal large edge arrows on cursor proximity ([#387](https://github.com/fliks-app/fliks/issues/387)) ([a253ecf](https://github.com/fliks-app/fliks/commit/a253ecfdd088da6571333d2a8051cfd767bbbffd))
+* **streaming:** offer a low-consumption quality on desktop ([#389](https://github.com/fliks-app/fliks/issues/389)) ([a8da81f](https://github.com/fliks-app/fliks/commit/a8da81f73b8526b28d038524d507b977d1df2a34))
+* **streaming:** show the low-consumption rung on forced transcode ([#390](https://github.com/fliks-app/fliks/issues/390)) ([d6bdbaf](https://github.com/fliks-app/fliks/commit/d6bdbaf481d5a5d0325b23849553e7145c40e1ab))
+* **streaming:** unify ladders + eco quality controls ([#391](https://github.com/fliks-app/fliks/issues/391)) ([0d62da5](https://github.com/fliks-app/fliks/commit/0d62da51bc39a4bdcd415dac424b8f4ca7bbe88e))
+
+
+### Bug Fixes
+
+* **activity:** stack release name under the badges on phones ([#402](https://github.com/fliks-app/fliks/issues/402)) ([b4816b0](https://github.com/fliks-app/fliks/commit/b4816b0610f823431d3d8849617668d84117b589))
+* **android:** draw under the landscape display cutout ([#394](https://github.com/fliks-app/fliks/issues/394)) ([5367e5f](https://github.com/fliks-app/fliks/commit/5367e5f697947f35a9b9c82d949b82d2db6c3b5e))
+* **android:** keep the status bar edge-to-edge on cold start ([#392](https://github.com/fliks-app/fliks/issues/392)) ([076dc41](https://github.com/fliks-app/fliks/commit/076dc410b19689a7b31d0892865d25d42daab8a4))
+* **downloads:** mint a live session so HLS segments resolve a variant ([#417](https://github.com/fliks-app/fliks/issues/417)) ([9c132d6](https://github.com/fliks-app/fliks/commit/9c132d6bb05357027c831b2ea6d10263dee1f4fe))
+* **downloads:** reconcile the queue badge when torrents vanish ([75b077c](https://github.com/fliks-app/fliks/commit/75b077c2629f71957860945159ae802c7e55aa26))
+* **downloads:** respect cutoff when grabbing season packs ([1dd4fbc](https://github.com/fliks-app/fliks/commit/1dd4fbc7370f63a6dfb46379773cdb782ef271dd))
+* **downloads:** stop orphaning grabs when qBittorrent fetch fails ([#404](https://github.com/fliks-app/fliks/issues/404)) ([8aa16c0](https://github.com/fliks-app/fliks/commit/8aa16c0138ab84fda61afbfc5dd1d7bfd8fed81c))
+* **downloads:** stuck-torrent cleanup reliability and activity queue UX ([#398](https://github.com/fliks-app/fliks/issues/398)) ([8ce6a19](https://github.com/fliks-app/fliks/commit/8ce6a19b8dd4da4b9e9e5385aff433b33c2e5ead))
+* **layout:** align horizontal-scroller bleed with the main padding ([4abaff7](https://github.com/fliks-app/fliks/commit/4abaff7b46cdf3d29b51816ca2245b4dda23a02d))
+* **playback:** only record watch history after 5s of playback ([daf1ed6](https://github.com/fliks-app/fliks/commit/daf1ed6575c21abfcf609f0d00cc72d0e801b274))
+* **player:** faster native startup and play/pause A/V desync hardening ([#416](https://github.com/fliks-app/fliks/issues/416)) ([f029fb8](https://github.com/fliks-app/fliks/commit/f029fb874fbef105e9465b726b0958b2413499dc))
+* **player:** reduce max height of the clearlogo overlay ([#415](https://github.com/fliks-app/fliks/issues/415)) ([9ba996f](https://github.com/fliks-app/fliks/commit/9ba996ff2bdd5d299c9578bdc25e383c96ab7262))
+* **requests:** harden the home-load changes after adversarial review ([e60436d](https://github.com/fliks-app/fliks/commit/e60436db989d11eec38dba5417f88e54e9556230))
+* **streaming:** 410 segment requests with no resolvable live session ([432eda4](https://github.com/fliks-app/fliks/commit/432eda4d6ae1bfe49fd1ed3aebc84e0d217a6ca7))
+* **users:** stop leaking password hashes in api responses ([#399](https://github.com/fliks-app/fliks/issues/399)) ([df9352a](https://github.com/fliks-app/fliks/commit/df9352a976d8f558ba6dcf84ef61db0b73dce2ce))
+* **watch-history:** show the episode still, not the series art ([#395](https://github.com/fliks-app/fliks/issues/395)) ([944fadd](https://github.com/fliks-app/fliks/commit/944fadd84ebcc8a612ae3e80297df644c7dcea1c))
+
+
+### Performance Improvements
+
+* **android:** widen native player buffer for degraded links ([#397](https://github.com/fliks-app/fliks/issues/397)) ([1316c0f](https://github.com/fliks-app/fliks/commit/1316c0f559ec13ff36249a00e63b28145e40dbe2))
+* **layout:** replace home queue fetch with a counts endpoint ([#400](https://github.com/fliks-app/fliks/issues/400)) ([45c6a0f](https://github.com/fliks-app/fliks/commit/45c6a0fc8426407b2858d5a7971fe6f547f162b2))
+* **player:** raise web buffering goal to 30s ([#396](https://github.com/fliks-app/fliks/issues/396)) ([c0a3b75](https://github.com/fliks-app/fliks/commit/c0a3b75ec2ca6c4fba2226378d78e313960e15b0))
+* **requests:** serve request card art from the local image pipeline ([#401](https://github.com/fliks-app/fliks/issues/401)) ([b69ba5e](https://github.com/fliks-app/fliks/commit/b69ba5ea86ad97ed8f71b0be1f49decfb5a2e016))
+
 ## [1.8.0](https://github.com/fliks-app/fliks/compare/v1.7.1...v1.8.0) (2026-06-01)
 
 
