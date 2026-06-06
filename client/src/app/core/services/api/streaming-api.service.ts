@@ -373,6 +373,7 @@ export class StreamingApiService {
     audioStreamIndex?: number,
     startQuality?: string,
     startAt?: number,
+    download?: boolean,
   ): Promise<PlaybackInfoResponse> {
     const token = this.playbackToken;
     let params = token ? `?token=${encodeURIComponent(token)}` : '';
@@ -387,6 +388,9 @@ export class StreamingApiService {
     }
     if (startAt != null) {
       params += (params ? '&' : '?') + `startAt=${startAt}`;
+    }
+    if (download) {
+      params += (params ? '&' : '?') + 'download=1';
     }
     return firstValueFrom(
       this.http.post<PlaybackInfoResponse>(

@@ -7,6 +7,7 @@ import { OfflineStorageService } from './offline-storage.service';
 import { DownloadCacheService, DownloadTask } from './download-cache.service';
 import { DownloadNotificationService } from './download-notification.service';
 import { AuthService } from './auth.service';
+import { BrowserDeviceProfileService } from './browser-device-profile.service';
 
 export interface DownloadEvent {
   type: 'progress' | 'ready' | 'failed' | 'complete';
@@ -38,6 +39,7 @@ export class DownloadManagerService {
   private readonly cache = inject(DownloadCacheService);
   private readonly notif = inject(DownloadNotificationService);
   private readonly auth = inject(AuthService);
+  private readonly deviceProfile = inject(BrowserDeviceProfileService);
 
   private readonly titles = new Map<number, { title: string; episode?: string }>();
   private activeCount = 0;
@@ -119,7 +121,25 @@ export class DownloadManagerService {
     // hours so we can't rely on the 1h access token.
     await this.auth.ensureStreamToken();
 
-    const hlsUrl = this.streamingApi.getHlsUrl(mediaFileId, quality);
+    // Establish a live session the way playback does: the HLS segment routes
+    // resolve the codec variant off the session via ?sid= and reject (410)
+    // any segment request that can't resolve one. Thread the returned sid
+    // into the baked URL; active segment fetches keep the session warm.
+    const playbackInfo = await this.streamingApi.getPlaybackInfo(
+      mediaFileId,
+      this.deviceProfile.getProfile(),
+      undefined,
+      undefined,
+      quality,
+      undefined,
+      /* download */ true,
+    );
+    const hlsUrl = this.streamingApi.getHlsUrl(
+      mediaFileId,
+      quality,
+      undefined,
+      playbackInfo.sessionId,
+    );
     task.hlsUrl = hlsUrl;
 
     this.titles.set(taskId, { title, episode });
