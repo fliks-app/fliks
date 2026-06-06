@@ -273,6 +273,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly chapters = signal<{ startSeconds: number; endSeconds: number; title?: string }[]>([]);
   /** Set after a manual seek to suppress auto-skip for a short window. */
   private autoSkipSuppressedUntil = 0;
+  /** Timestamp of the last processed play/pause toggle — coalesces rapid
+   *  taps so a burst can't interleave a play()/pause() with an in-flight
+   *  MSE append and drift A/V. */
+  private lastTogglePlayAt = 0;
+  /** Coalesce window for play/pause toggles. Sized to bridge an MSE append,
+   *  not human double-tap cadence. */
+  private readonly togglePlayCoalesceMs = 250;
   /** Tracks last episodeId we auto-skipped for to ensure we only auto-skip once per session. */
   private autoSkipFiredForEpisode: number | null = null;
   readonly spriteUrl = signal<string | null>(null);
@@ -936,24 +943,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           const subs = await tvSubsPromise;
           this.availableSubtitles.set(subs);
         } else if (this.isNative) {
-          // Start subtitle fetch in parallel with native engine creation so
-          // the network round-trip doesn't block ExoPlayer's init.
-          const nativeSubsPromise = this.trackManager.loadSubtitles(
+          // Subtitles arrive as HLS SUBTITLES renditions in the master
+          // playlist, so the ExoPlayer MediaItem doesn't depend on this
+          // fetch. Run it in parallel and resolve it after load() (like the
+          // Shaka path below) — awaiting it before load() only adds a network
+          // round-trip to the time-to-first-frame critical path.
+          subsPromise = this.trackManager.loadSubtitles(
             this.mediaId, this.mediaFileId, this.streamingApi, this.media,
           );
 
           await this.createNativeEngine();
 
           this.applyNativeSubtitleStyle();
-
-          // Await subs before building the ExoPlayer MediaItem (preloaded
-          // subs avoid a rebuild). Likely already resolved by this point.
-          const subs = await nativeSubsPromise;
-          this.availableSubtitles.set(subs);
-          const nonBurnInSubs = subs
-            .filter((s) => !s.burnIn && s.url)
-            .map((s) => ({ url: s.url, language: s.language, label: s.label }));
-          (this.engine as NativeEngine).setPreloadedSubtitles(nonBurnInSubs);
 
           const token =
             this.authService.streamToken() ?? this.authService.accessToken;
@@ -1057,8 +1058,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         await this.loadOfflineSubtitles();
         this.loadAudioTracks();
       } else if (!this.availableSubtitles().length) {
-        // subsPromise was started in parallel with engine.load (Shaka path)
-        // For native path, subtitles are already preloaded above
+        // subsPromise was started in parallel with engine.load (Shaka + native);
+        // resolve it here, falling back to a direct fetch if none was started.
         const subs = subsPromise
           ? await subsPromise
           : await this.trackManager.loadSubtitles(this.mediaId, this.mediaFileId, this.streamingApi, this.media);
@@ -1443,7 +1444,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   onTogglePlay() {
     if (!this.engine) return;
-    if (this.paused()) {
+    // Coalesce rapid taps (spacebar / k / button spam): a second toggle
+    // inside this window is dropped so a burst can't interleave a
+    // play()/pause() with an in-flight MSE append and desync A/V.
+    const now = Date.now();
+    if (now - this.lastTogglePlayAt < this.togglePlayCoalesceMs) return;
+    this.lastTogglePlayAt = now;
+    // Decide off the engine's live transport state rather than the `paused()`
+    // signal, which mirrors the async DOM/bridge play/pause events and lags a
+    // tap, so reading it can issue two same-direction commands. On the web
+    // <video> the getter is exact (paused flips synchronously); the native
+    // engine mirrors its bridge state, which the coalesce window covers.
+    if (this.engine.paused) {
       this.engine.play().catch(() => {});
       this.resetHideTimer();
     } else {
