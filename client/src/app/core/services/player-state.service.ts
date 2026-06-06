@@ -66,9 +66,10 @@ export class PlayerStateService {
       }
       // videoStarted is intentionally NOT flipped here — Shaka emits 'playing'
       // on DOM 'play' (= play() called), well before the first frame is
-      // actually painted. PlayerComponent owns the flip per engine: rvfc on
-      // the local <video> for Shaka, stateChanged 'playing' for native (where
-      // ExoPlayer's surface is already painting by then).
+      // actually painted. PlayerComponent owns the flip per engine, always via
+      // the engine 'firstFrame' event: rvfc on the local <video> for Shaka,
+      // ExoPlayer onRenderedFirstFrame (with an onIsPlayingChanged fallback)
+      // for native.
     });
 
     engine.on('timeUpdate', (e) => {
