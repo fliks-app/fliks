@@ -78,6 +78,10 @@ export interface LiveSession {
   encoderPreset: string;
   canCopyVideo: boolean;
   canCopyAudio: boolean;
+  /** Download sessions: kept past the short playback TTL so a paused
+   *  download can resume without its segments 410ing. Active segment fetches
+   *  keep it warm; GC reclaims it after a long idle window. */
+  pinned: boolean;
 }
 
 /** Snapshot returned from {@link LiveSessionRegistry.list} — same shape
@@ -120,6 +124,7 @@ export interface CreateLiveSessionInput {
   encoderPreset?: string;
   canCopyVideo?: boolean;
   canCopyAudio?: boolean;
+  pinned?: boolean;
 }
 
 /** Partial update applied via {@link LiveSessionRegistry.update}. Only
@@ -168,6 +173,10 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
 
   private readonly ttlMs = StreamLifetime.liveSessionTtlMs();
   private readonly gcIntervalMs = StreamLifetime.liveSessionGcIntervalMs();
+  /** Idle window for pinned (download) sessions. Active segment fetches keep
+   *  them warm; this only bounds how long a paused or finished download holds
+   *  its session before GC reclaims it. */
+  private readonly pinnedTtlMs = 60 * 60 * 1000;
 
   onModuleInit(): void {
     this.gcTimer = setInterval(() => this.runGc(), this.gcIntervalMs);
@@ -222,6 +231,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       encoderPreset: input.encoderPreset ?? 'faster',
       canCopyVideo: input.canCopyVideo ?? false,
       canCopyAudio: input.canCopyAudio ?? false,
+      pinned: input.pinned ?? false,
     };
     this.sessions.set(session.sessionId, session);
     return session;
@@ -345,10 +355,11 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
   }
 
   private runGc(): void {
-    const cutoff = Date.now() - this.ttlMs;
+    const now = Date.now();
     const expired: string[] = [];
     for (const [id, session] of this.sessions) {
-      if (session.lastBeat < cutoff) expired.push(id);
+      const ttl = session.pinned ? this.pinnedTtlMs : this.ttlMs;
+      if (session.lastBeat < now - ttl) expired.push(id);
     }
     for (const id of expired) {
       this.sessions.delete(id);

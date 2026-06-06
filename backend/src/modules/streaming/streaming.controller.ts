@@ -885,10 +885,16 @@ export class StreamingController {
     const startQuality = firstQueryString(req.query, 'startQuality');
     const startAtRaw = firstQueryString(req.query, 'startAt');
     const startAt = startAtRaw != null ? parseFloat(startAtRaw) : undefined;
+    // Offline download: the native DownloadManager pulls segments straight off
+    // the HLS routes (no heartbeat channel), and the download can be paused.
+    // Pin the session so it outlives the short playback TTL.
+    const isDownload = firstQueryString(req.query, 'download') === '1';
 
     // Mark a new watch-history entry (history = sessions started).
     // Fire-and-forget — a DB hiccup should not block stream start.
-    if (user?.id && resolved.mediaFile.mediaId) {
+    // Skipped for downloads: fetching for offline isn't watching, so it
+    // shouldn't land in history / "continue watching".
+    if (!isDownload && user?.id && resolved.mediaFile.mediaId) {
       this.playbackService
         .markSessionStarted(
           user.id,
@@ -1019,6 +1025,7 @@ export class StreamingController {
       encoderPreset: ss.qsvPreset,
       canCopyVideo: response.videoCopyStream,
       canCopyAudio: response.audioCopyStream,
+      pinned: isDownload,
     });
 
     // Burn-in subtitle resolves async (PGS extraction + filter build);
