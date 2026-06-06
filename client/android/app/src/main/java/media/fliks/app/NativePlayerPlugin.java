@@ -27,10 +27,12 @@ import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.DecoderCounters;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.LoadControl;
+import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import java.util.ArrayList;
 import java.util.List;
@@ -79,6 +81,17 @@ public class NativePlayerPlugin extends Plugin {
     // programmatic micro-seek in `onTracksChanged` that mimics that
     // path when we detect the failure signature.
     private boolean videoBootstrapDone = false;
+    // Set once the first frame has been signalled to the WebView. Both
+    // onRenderedFirstFrame (unreliable on some devices: fires late or never)
+    // and the onIsPlayingChanged fallback dispatch the event, so this guard
+    // keeps them idempotent and stops a re-dispatch on every later resume.
+    // Reset on each load().
+    private boolean firstFrameSignaled = false;
+    // Set when ExoPlayer's video renderer actually enables. Separates a
+    // healthy-but-slow start (renderer enabled, still fetching bytes) from the
+    // cold-prepare race below where the video renderer never enables — only the
+    // latter warrants the unstick seek. Reset on each load().
+    private boolean videoRendererEnabled = false;
     private final List<MediaItem.SubtitleConfiguration> subtitleConfigs = new ArrayList<>();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private Handler positionHandler;
@@ -331,6 +344,11 @@ public class NativePlayerPlugin extends Plugin {
 
                 @Override public void onIsPlayingChanged(boolean isPlaying) {
                     if (isPlaying) {
+                        // Playback is advancing ⇒ decoded frames are presenting.
+                        // Lift the loading veil now even if onRenderedFirstFrame
+                        // misfired, instead of waiting on the ~1 Hz position
+                        // fallback in native-engine.ts (which can't fire for ~2 s).
+                        emitFirstFrame();
                         emitStateChanged("playing");
                     } else if (player.getPlaybackState() == Player.STATE_BUFFERING) {
                         emitStateChanged("buffering");
@@ -382,20 +400,24 @@ public class NativePlayerPlugin extends Plugin {
                             }
                         }
                         if (videoSelected) {
-                            // Common case: video track picked. Watchdog reads
-                            // playback state 1.5 s later; if the renderer
-                            // actually started (state != BUFFERING) the seek is
-                            // skipped, so healthy playback is untouched. When
-                            // the bug strikes, state is still BUFFERING and we
-                            // issue a 1 ms forward seek — imperceptible drift
-                            // (well below one frame at 24 fps).
+                            // Common case: video track picked. The watchdog only
+                            // issues the 1 ms unstick seek when the video renderer
+                            // never enabled (onVideoEnabled hasn't fired) AND state
+                            // is still BUFFERING — the exact cold-prepare signature.
+                            // A healthy-but-slow start has the renderer enabled and
+                            // is merely fetching, so it is left alone (seeking there
+                            // would cancel in-flight loads and delay the first
+                            // frame). Gating on the renderer signal lets the check
+                            // run early without punishing slow links. The seek is a
+                            // sub-frame nudge (1 ms ≪ one frame at 24 fps).
                             videoBootstrapDone = true;
                             mainHandler.postDelayed(() -> {
                                 if (player == null) return;
-                                if (player.getPlaybackState() == Player.STATE_BUFFERING) {
+                                if (!videoRendererEnabled
+                                        && player.getPlaybackState() == Player.STATE_BUFFERING) {
                                     player.seekTo(player.getCurrentPosition() + 1);
                                 }
-                            }, 1500);
+                            }, 500);
                         } else if (videoSupported) {
                             // Less common signature: the selector dropped the
                             // video group entirely (audio surfaced first, the
@@ -430,6 +452,19 @@ public class NativePlayerPlugin extends Plugin {
 
             });
 
+            // The video renderer enabling is the signal that separates a
+            // healthy start from the cold-prepare race (where the video
+            // renderer never enables). The bootstrap watchdog reads this flag
+            // so it only issues the unstick seek when the renderer is genuinely
+            // stuck, not when a healthy start is merely slow to buffer.
+            player.addAnalyticsListener(new AnalyticsListener() {
+                @Override public void onVideoEnabled(
+                        @NonNull AnalyticsListener.EventTime eventTime,
+                        @NonNull DecoderCounters counters) {
+                    videoRendererEnabled = true;
+                }
+            });
+
             MediaItem.Builder itemBuilder = new MediaItem.Builder()
                     .setUri(Uri.parse(currentHlsUrl));
             if (!subtitleConfigs.isEmpty()) {
@@ -438,6 +473,8 @@ public class NativePlayerPlugin extends Plugin {
             player.setMediaItem(itemBuilder.build());
             lastAudioTrackCount = -1; // Reset so emitTracksChanged fires for new media
             videoBootstrapDone = false; // Arm cold-prepare bug bootstrap
+            firstFrameSignaled = false; // Re-arm the first-frame veil signal
+            videoRendererEnabled = false; // Re-arm the cold-prepare renderer probe
 
             // Disable text tracks by default — user selects via UI
             player.setTrackSelectionParameters(
@@ -894,6 +931,8 @@ public class NativePlayerPlugin extends Plugin {
     }
 
     private void emitFirstFrame() {
+        if (firstFrameSignaled) return;
+        firstFrameSignaled = true;
         getBridge().getWebView().evaluateJavascript(
                 "window.dispatchEvent(new CustomEvent('nativePlayerFirstFrame'));", null);
     }
