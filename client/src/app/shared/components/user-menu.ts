@@ -33,7 +33,7 @@ import {
         class="btn btn-ghost btn-circle"
         [attr.aria-label]="'nav.user_menu' | translate"
       >
-        <svg lucideUser class="h-5 w-5"></svg>
+        <svg lucideUser class="h-5 w-5 md:h-6 md:w-6"></svg>
       </button>
       @if (auth.user(); as user) {
         <div class="border-b border-white/10 pb-1 mb-1">

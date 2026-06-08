@@ -27,7 +27,7 @@
             class="btn btn-square btn-ghost"
             (click)="goBack()"
           >
-            <svg lucideChevronLeft class="h-5 w-5"></svg>
+            <svg lucideChevronLeft class="h-5 w-5 md:h-6 md:w-6"></svg>
           </button>
         }
         @if ((!isNative || device.isTablet()) && !tv.isTv()) {
@@ -35,7 +35,7 @@
                every form-factor except native phone (uses the bottom dock) and
                TV (D-pad nav, drawer is always pinnable from the user menu). -->
           <label for="sidebar" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate">
-            <svg lucideMenu class="h-5 w-5"></svg>
+            <svg lucideMenu class="h-5 w-5 md:h-6 md:w-6"></svg>
           </label>
         }
       </div>
@@ -46,7 +46,7 @@
           <img
             [src]="navbar.heroLogoUrl()! | resolveUrl:'medium'"
             [alt]="navbar.heroTitle()"
-            class="h-7 w-auto max-w-[55%] object-contain object-left pl-2 [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.45))]" />
+            class="h-7 w-auto max-w-[50vw] object-contain object-left pl-1 [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.45))]" />
         } @else if (navbarTransparent() && navbar.heroTitle()) {
           <span
             class="block min-w-0 pl-2 text-lg font-semibold truncate [text-shadow:0_1px_2px_rgb(0_0_0/0.45)]"
@@ -68,7 +68,7 @@
           }
         }
       </div>
-      <div class="flex-none">
+      <div class="flex-none flex items-center gap-1 md:gap-1.5">
         @if (castPlayer.hasMedia()) {
           <button class="btn btn-ghost btn-sm gap-1" (click)="toggleCastOverlay()">
             <svg lucideCast class="h-5 w-5 text-info"></svg>
@@ -79,7 +79,7 @@
             @if (castService.connecting()) {
               <span class="loading loading-spinner loading-sm"></span>
             } @else {
-              <svg lucideCast class="h-6 w-6" [class.text-info]="castService.isConnected()"></svg>
+              <svg lucideCast class="h-5 w-5 md:h-6 md:w-6" [class.text-info]="castService.isConnected()"></svg>
             }
           </button>
         }
@@ -118,7 +118,7 @@
         }
       </div>
       <!-- Cast + user (right) -->
-      <div class="flex items-center gap-1">
+      <div class="flex items-center gap-1.5">
         @if (castPlayer.hasMedia()) {
           <button class="btn btn-ghost btn-sm gap-2" (click)="toggleCastOverlay()">
             <svg lucideCast class="h-5 w-5 text-info"></svg>
@@ -129,7 +129,7 @@
             @if (castService.connecting()) {
               <span class="loading loading-spinner loading-sm"></span>
             } @else {
-              <svg lucideCast class="h-6 w-6" [class.text-info]="castService.isConnected()"></svg>
+              <svg lucideCast class="h-5 w-5 md:h-6 md:w-6" [class.text-info]="castService.isConnected()"></svg>
             }
           </button>
         }
