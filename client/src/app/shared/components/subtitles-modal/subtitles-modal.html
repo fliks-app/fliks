@@ -100,7 +100,7 @@
                       @if (sub.codec) { <span class="badge badge-xs badge-ghost ml-1">{{ sub.codec }}</span> }
                     </td>
                     <td class="text-end">
-                      @if (canGrab() && sub.providerType !== 'embedded') {
+                      @if (canGrab() && rowHasActions(sub)) {
                         <button
                           #actionsTrigger
                           type="button"
@@ -194,14 +194,16 @@
         {{ 'media_detail.action_change_fps' | translate }}
       </button>
       }
-      <button type="button" class="dropdown-item text-warning" (click)="runSubAction(s => blacklistSubtitle(s))">
-        <svg lucideBan class="h-4 w-4 shrink-0 opacity-80" aria-hidden="true"></svg>
-        {{ 'media_detail.action_blacklist' | translate }}
-      </button>
-      <button type="button" class="dropdown-item text-error" (click)="runSubAction(s => deleteSubtitle(s.id))">
-        <svg lucideTrash2 class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
-        {{ 'media_detail.action_delete' | translate }}
-      </button>
+      @if (!actionsSubIsEmbedded()) {
+        <button type="button" class="dropdown-item text-warning" (click)="runSubAction(s => blacklistSubtitle(s))">
+          <svg lucideBan class="h-4 w-4 shrink-0 opacity-80" aria-hidden="true"></svg>
+          {{ 'media_detail.action_blacklist' | translate }}
+        </button>
+        <button type="button" class="dropdown-item text-error" (click)="runSubAction(s => deleteSubtitle(s.id))">
+          <svg lucideTrash2 class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
+          {{ 'media_detail.action_delete' | translate }}
+        </button>
+      }
     </app-popover-menu>
   }
 

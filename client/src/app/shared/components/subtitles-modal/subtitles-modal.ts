@@ -138,6 +138,16 @@ export class SubtitlesModalComponent {
   readonly actionsSubIsImage = computed(() =>
     isImageBasedSubtitleCodec(this.actionsSub()?.codec),
   );
+  /** Embedded tracks have no sidecar file: blacklist/delete don't apply. */
+  readonly actionsSubIsEmbedded = computed(
+    () => this.actionsSub()?.providerType === 'embedded',
+  );
+
+  /** Whether a row should expose the Actions menu — external files always, and
+   *  embedded image tracks so they can be OCR'd to text. */
+  protected rowHasActions(sub: SubtitleFileRow): boolean {
+    return sub.providerType !== 'embedded' || isImageBasedSubtitleCodec(sub.codec);
+  }
 
   protected openSubActions(sub: SubtitleFileRow, anchor: HTMLElement) {
     this.actionsAnchor.set(anchor);
