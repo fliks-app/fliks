@@ -623,6 +623,18 @@ export class MediaController {
     return this.subtitleOcr.ocrSubtitle(subtitleId, body.language);
   }
 
+  @Patch(':id/subtitles/:subtitleId/language')
+  @CheckPolicies((ability) => ability.can(Action.Update, SubtitleFile))
+  async setSubtitleLanguage(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('subtitleId', ParseIntPipe) subtitleId: number,
+    @CurrentUser() user: User,
+    @Body() body: { language: string },
+  ) {
+    await this.assertMediaAccessible(id, user);
+    return this.subtitlesService.setLanguage(subtitleId, body.language);
+  }
+
   @Post(':id/subtitles/download')
   @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
   async downloadSubtitle(

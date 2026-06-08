@@ -82,6 +82,15 @@ export class SubtitlesApiService {
     );
   }
 
+  setLanguage(mediaId: number, subtitleId: number, language: string) {
+    return firstValueFrom(
+      this.http.patch<SubtitleFileRow>(
+        `/api/media/${mediaId}/subtitles/${subtitleId}/language`,
+        { language },
+      ),
+    );
+  }
+
   download(mediaId: number, body: { searchResult: SubtitleSearchResult; mediaFileId: number; episodeId?: number }) {
     return firstValueFrom(
       this.http.post<SubtitleFileRow>(`/api/media/${mediaId}/subtitles/download`, body),

@@ -184,6 +184,9 @@ export class SubtitlesModalComponent {
   ];
   private readonly ocrTargetId = signal<number | null>(null);
   readonly ocrLang = signal('en');
+  /** The language dialog drives both OCR (pick before converting) and relabel
+   *  (reassign an existing subtitle's language afterwards). */
+  readonly langDialogMode = signal<'ocr' | 'relabel'>('ocr');
 
   /** Open the subtitles modal. Called from parent via viewChild. */
   show(): void {
@@ -494,15 +497,32 @@ export class SubtitlesModalComponent {
       void this.triggerOcr(sub.id);
       return;
     }
+    this.langDialogMode.set('ocr');
     this.ocrTargetId.set(sub.id);
     this.ocrLang.set('en');
     this.ocrLangDialog()?.nativeElement.showModal();
   }
 
-  confirmOcr() {
+  /** Reassign a subtitle's language afterwards — e.g. an OCR done with a
+   *  best-guess language on an untagged track. Relabels only; doesn't re-OCR. */
+  changeLanguage(sub: SubtitleFileRow) {
+    const lang = (sub.language ?? '').toLowerCase();
+    this.langDialogMode.set('relabel');
+    this.ocrTargetId.set(sub.id);
+    this.ocrLang.set(lang && lang !== 'und' && lang !== 'undefined' ? lang : 'en');
+    this.ocrLangDialog()?.nativeElement.showModal();
+  }
+
+  confirmLanguage() {
     const id = this.ocrTargetId();
     this.ocrLangDialog()?.nativeElement.close();
-    if (id != null) void this.triggerOcr(id, this.ocrLang());
+    if (id == null) return;
+    if (this.langDialogMode() === 'ocr') {
+      void this.triggerOcr(id, this.ocrLang());
+    } else {
+      void this.subActions
+        .setLanguage(this.mediaId(), id, this.subtitles, this.subtitleActionBusy, this.ocrLang());
+    }
   }
 
   closeOcrLangModal() {

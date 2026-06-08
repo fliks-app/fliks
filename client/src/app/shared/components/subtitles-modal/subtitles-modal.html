@@ -149,6 +149,10 @@
           {{ 'media_detail.action_ocr_extract' | translate }}
         </button>
       } @else {
+      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => changeLanguage(s))">
+        <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.change_language' | translate }}
+      </button>
       <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => openSyncModal(s.id))">
         <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
         {{ 'media_detail.action_sync' | translate }}
@@ -419,8 +423,13 @@
 
 <dialog #ocrLangDialog class="modal">
   <div class="modal-box max-w-sm">
-    <h3 class="text-lg font-bold">{{ 'media_detail.ocr_language_title' | translate }}</h3>
-    <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.ocr_language_hint' | translate }}</p>
+    @if (langDialogMode() === 'relabel') {
+      <h3 class="text-lg font-bold">{{ 'media_detail.change_language_title' | translate }}</h3>
+      <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.change_language_hint' | translate }}</p>
+    } @else {
+      <h3 class="text-lg font-bold">{{ 'media_detail.ocr_language_title' | translate }}</h3>
+      <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.ocr_language_hint' | translate }}</p>
+    }
     <select class="select select-bordered w-full" [ngModel]="ocrLang()" (ngModelChange)="ocrLang.set($event)">
       @for (code of ocrLangCodes; track code) {
         <option [value]="code">{{ code | localizeLanguage }}</option>
@@ -428,8 +437,8 @@
     </select>
     <div class="modal-action">
       <button type="button" class="btn" (click)="closeOcrLangModal()">{{ 'common.cancel' | translate }}</button>
-      <button type="button" class="btn btn-primary" (click)="confirmOcr()">
-        {{ 'media_detail.action_ocr_extract' | translate }}
+      <button type="button" class="btn btn-primary" (click)="confirmLanguage()">
+        {{ (langDialogMode() === 'relabel' ? 'common.save' : 'media_detail.action_ocr_extract') | translate }}
       </button>
     </div>
   </div>
