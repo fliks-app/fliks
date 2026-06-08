@@ -33,6 +33,7 @@ import { FocusMemoryService } from '../../core/services/focus-memory.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
+import { AppResumeService } from '../../core/services/app-resume.service';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown, LucideX, LucideFilm } from '@lucide/angular';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
@@ -91,11 +92,16 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly injector = inject(Injector);
   private readonly translate = inject(TranslateService);
   private readonly reuseStrategy = inject(CachingReuseStrategy);
+  private readonly appResume = inject(AppResumeService);
   private arrivedViaBack = false;
   private navStartSub?: Subscription;
   private attachedSub?: Subscription;
   private detachedSub?: Subscription;
   private queryParamSub?: Subscription;
+  private resumeSub?: Subscription;
+  /** True while this cached instance is detached (some other route is shown).
+   *  Gates the app-resume refresh so only the visible library refetches. */
+  private detached = false;
   /** Set while a state-driven `syncQueryParams` is being applied to the
    *  URL, so the `queryParamMap` subscription that fires right after
    *  can ignore the round-trip instead of re-applying our own write. */
@@ -278,6 +284,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     const ownKey = this.reuseStrategy.keyFor(this.route.snapshot);
     this.attachedSub = this.reuseStrategy.attached$.subscribe((key) => {
       if (key !== ownKey) return;
+      this.detached = false;
       const lib = this.library();
       if (!lib) return;
       const scrollKey = `library-${lib.id}`;
@@ -299,8 +306,16 @@ export class LibraryComponent implements OnInit, OnDestroy {
     });
     this.detachedSub = this.reuseStrategy.detached$.subscribe((key) => {
       if (key !== ownKey) return;
+      this.detached = true;
       const lib = this.library();
       if (lib) this.scrollMemory.deactivateIf(`library-${lib.id}`);
+    });
+    // Native app-resume: refresh the grid when the app returns to the
+    // foreground after a spell away and this library is the visible page.
+    this.resumeSub = this.appResume.resume$.subscribe(() => {
+      if (this.detached) return;
+      const lib = this.library();
+      if (lib) void this.load(lib.id, true);
     });
 
     // Re-apply state on browser back/forward (same route, queryParams
@@ -340,6 +355,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.attachedSub?.unsubscribe();
     this.detachedSub?.unsubscribe();
     this.queryParamSub?.unsubscribe();
+    this.resumeSub?.unsubscribe();
   }
 
   private applyDefaultFocus(libraryId: number) {
