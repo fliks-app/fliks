@@ -175,7 +175,7 @@ await write(await sharp(await icon(iconSvg, 384, { pad: 0.04 })).webp({ quality:
 // Splash — icon only, on the brand base
 for (const [d, [w, h]] of Object.entries(AND_SPLASH)) await write(await splash(iconSvg, w, h, 0.40), `${AND_RES}/${d}/splash.png`);
 for (const f of ['splash-2732x2732.png', 'splash-2732x2732-1.png', 'splash-2732x2732-2.png']) {
-  await write(await splash(iconSvg, 2732, 2732, 0.24), `client/ios/App/App/Assets.xcassets/Splash.imageset/${f}`); // iOS, slightly smaller
+  await write(await splash(iconSvg, 2732, 2732, 0.16), `client/ios/App/App/Assets.xcassets/Splash.imageset/${f}`); // iOS, slightly smaller
 }
 
 // macOS .icns (PNG entries 32→1024) + colour menu-bar icon
