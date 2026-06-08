@@ -8,11 +8,13 @@ import {
   ViewChild,
   ElementRef,
 } from '@angular/core';
+import { Capacitor } from '@capacitor/core';
 import { TranslateModule } from '@ngx-translate/core';
 import {
   StreamingApiService,
   DownloadQuality,
 } from '../../../core/services/api/streaming-api.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { LucideDownload, LucideX } from '@lucide/angular';
 
 @Component({
@@ -49,6 +51,21 @@ import { LucideDownload, LucideX } from '@lucide/angular';
               </button>
             }
           </div>
+
+          @if (!isNative) {
+            <div class="divider my-2"></div>
+            <button
+              class="btn btn-outline justify-start gap-2 w-full"
+              [disabled]="downloading()"
+              (click)="downloadOriginal()"
+            >
+              <svg lucideDownload class="h-4 w-4"></svg>
+              {{ 'downloads.original_file' | translate }}
+            </button>
+            <p class="text-xs text-base-content/60 mt-1">
+              {{ 'downloads.original_file_note' | translate }}
+            </p>
+          }
         }
 
         @if (downloading()) {
@@ -64,6 +81,11 @@ import { LucideDownload, LucideX } from '@lucide/angular';
 })
 export class DownloadQualityModalComponent {
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly auth = inject(AuthService);
+
+  /** Original-file download is a browser save-to-disk — hidden on native,
+   *  which uses the ExoPlayer/AVAsset offline pipeline instead. */
+  readonly isNative = Capacitor.isNativePlatform();
 
   @ViewChild('dialog') dialogRef!: ElementRef<HTMLDialogElement>;
 
@@ -92,6 +114,21 @@ export class DownloadQualityModalComponent {
 
   selectQuality(quality: string) {
     this.download.emit({ mediaFileId: this.mediaFileId, quality });
+    this.close();
+  }
+
+  /** Stream the untouched source file straight to the browser's downloads.
+   *  Mint a long-lived stream token first: the file can be several GB and a
+   *  1h access token would expire on a resumed range request mid-download. */
+  async downloadOriginal() {
+    await this.auth.ensureStreamToken();
+    const url = this.streamingApi.getOriginalDownloadUrl(this.mediaFileId);
+    const a = document.createElement('a');
+    a.href = url;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
     this.close();
   }
 

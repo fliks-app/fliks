@@ -1049,6 +1049,8 @@
     "download": "Télécharger",
     "choose_quality": "Choisir la qualité",
     "original": "Original",
+    "original_file": "Fichier original",
+    "original_file_note": "Les sous-titres externes ne seront pas inclus",
     "started": "Téléchargement lancé",
     "error": "Erreur lors du téléchargement",
     "empty": "Aucun téléchargement",

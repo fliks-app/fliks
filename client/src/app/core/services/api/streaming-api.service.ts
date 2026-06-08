@@ -245,6 +245,20 @@ export class StreamingApiService {
     return url;
   }
 
+  /** Authenticated URL that downloads the raw source file as an attachment.
+   *  Browser-only — the offline pipeline transcodes/remuxes into HLS, this
+   *  hands back the untouched container (embedded streams only, no sidecar
+   *  subtitles). `download=1` flips the backend to a Content-Disposition. */
+  getOriginalDownloadUrl(mediaFileId: number): string {
+    const base = this.serverConfig.isNative
+      ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}`)
+      : `/api/stream/${mediaFileId}`;
+    const params: string[] = ['download=1'];
+    const token = this.playbackToken;
+    if (token) params.push(`token=${encodeURIComponent(token)}`);
+    return `${base}?${params.join('&')}`;
+  }
+
   /** Internal helper for getStreamUrl — keeps the token+sid query
    *  composition consistent with `getHlsUrl`. */
   private withTokenAndSid(base: string, sessionId?: string): string {
