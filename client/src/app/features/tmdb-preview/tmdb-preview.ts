@@ -26,13 +26,13 @@ import { FliksRequestRow, RequestsService } from '../../core/services/api/reques
 import { RequestModalComponent } from './components/request-modal/request-modal.component';
 import { ImportModalComponent } from './components/import-modal/import-modal.component';
 import { MediaType } from '../../core/enums/media-type.enum';
-import { LucideFilm, LucideChevronLeft } from '@lucide/angular';
+import { LucideFilm } from '@lucide/angular';
 import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart-hero';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, ResolveUrlPipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, LucideFilm, LucideChevronLeft],
+  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, ResolveUrlPipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, LucideFilm],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tmdb-preview.html',
 })
@@ -59,12 +59,6 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     }
     this.backgroundService.setBackgrounds([m.fanartUrl]);
   });
-
-  /** Back to the previous in-app URL — falls back to `/` when no history.
-   *  Same contract as media-detail's back button on desktop. */
-  goBack() {
-    this.navbar.goBack(['/']);
-  }
 
   readonly media = signal<MetadataDetails | null>(null);
   readonly loading = signal(true);
@@ -161,7 +155,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     try {
       const details = await this.metadata.getDetails(provider, type, externalId);
       this.media.set(details);
-      this.navbar.enterHeroPage(details.title);
+      this.navbar.enterHeroPage(details.title, details.logoUrl);
       // Only relevant when the Request button could show: admins who can
       // import never see the "déjà demandé" badge anyway.
       if (this.canRequest()) {
