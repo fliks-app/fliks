@@ -15,9 +15,9 @@
 >
   <!-- Left: back + title -->
   <div class="flex items-center gap-4 min-w-0">
-    <button type="button" class="btn btn-ghost btn-circle text-white" [class]="isMobileTouch() ? 'btn-sm' : 'btn-md'" [attr.aria-label]="'player.back' | translate" (click)="back.emit()">
+    <button type="button" class="btn btn-ghost btn-circle btn-md text-white" [attr.aria-label]="'player.back' | translate" (click)="back.emit()">
       <!-- lucide:chevron-left -->
-      <svg lucideChevronLeft [class]="isMobileTouch() ? 'h-6 w-6' : 'h-7 w-7'"></svg>
+      <svg lucideChevronLeft [class]="isMobileTouch() ? 'h-5 w-5' : 'h-7 w-7'"></svg>
     </button>
     @if (logoUrl()) {
       <img [src]="logoUrl()! | resolveUrl:'medium'" [alt]="mediaTitle()"
@@ -53,15 +53,15 @@
     }
     <!-- lucide:picture-in-picture-2 — hidden on TV (no PiP on Android TV) and when permission is revoked -->
     @if (!isTv() && pipAvailable()) {
-      <button type="button" class="btn btn-ghost btn-circle text-white btn-sm lg:btn-md" [attr.aria-label]="'player.pip' | translate" (click)="togglePip.emit()">
+      <button type="button" class="btn btn-ghost btn-circle text-white btn-md" [attr.aria-label]="'player.pip' | translate" (click)="togglePip.emit()">
         <svg lucidePictureInPicture2 [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
       </button>
     }
     <!-- Cast -->
     @if (castAvailable()) {
-      <button type="button" class="btn btn-ghost btn-circle btn-sm lg:btn-md" [class.text-info]="castConnected()" [class.text-white]="!castConnected() && !castConnecting()" [disabled]="castConnecting()" (click)="toggleCast.emit()">
+      <button type="button" class="btn btn-ghost btn-circle btn-md" [class.text-info]="castConnected()" [class.text-white]="!castConnected() && !castConnecting()" [disabled]="castConnecting()" (click)="toggleCast.emit()">
         @if (castConnecting()) {
-          <span class="loading loading-spinner loading-sm lg:loading-md"></span>
+          <span class="loading loading-spinner loading-md"></span>
         } @else {
           <svg lucideCast class="h-5 w-5 lg:h-6 lg:w-6"></svg>
         }
