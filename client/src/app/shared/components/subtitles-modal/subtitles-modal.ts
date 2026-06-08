@@ -29,6 +29,8 @@ import {
 } from '@lucide/angular';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
 import { formatSubtitleLabel } from '../../../core/utils/player.utils';
+import { isImageBasedSubtitleCodec } from '../../../core/utils/subtitle-codecs';
+import { AppSettingsService } from '../../../core/services/app-settings.service';
 import { SubtitleFilenamePipe } from '../../pipes/subtitle-filename.pipe';
 import {
   MediaStream,
@@ -98,6 +100,12 @@ export class SubtitlesModalComponent {
   private readonly toast = inject(ToastService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly sse = inject(SseService);
+  private readonly appSettings = inject(AppSettingsService);
+
+  constructor() {
+    // Header subtitle chips honour the hide-burn-in app setting; load it once.
+    void this.appSettings.ensureLoaded();
+  }
 
   // ── Inputs ──
   readonly mediaId = input.required<number>();
@@ -224,7 +232,10 @@ export class SubtitlesModalComponent {
 
   /** Formatted subtitles for the media-info-header dropdown */
   readonly headerSubtitles = computed<MediaInfoHeaderSubtitle[]>(() => {
-    const subs = this.filteredSubtitles();
+    const hideBurnIn = this.appSettings.hideBurnInSubtitles();
+    const subs = this.filteredSubtitles().filter(
+      (s) => !(hideBurnIn && isImageBasedSubtitleCodec(s.codec)),
+    );
     return subs.map((s) => {
       const id = s.streamIndex != null ? `emb-${s.streamIndex}` : `ext-${s.id}`;
       return {

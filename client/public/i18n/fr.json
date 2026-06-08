@@ -1779,6 +1779,8 @@
       "encode_utf8": "Ré-encoder en UTF-8 après téléchargement",
       "section_cleaning": "Nettoyage",
       "remove_hi_tags": "Supprimer les tags HI ([musique], (soupir), ♪, etc.)",
+      "hide_burn_in": "Masquer les sous-titres à graver (image) du lecteur",
+      "hide_burn_in_hint": "Les sous-titres image (PGS, VOBSUB…) ne peuvent pas être affichés comme du texte et nécessitent une gravure. Tant que la gravure n'est pas disponible, ils sont masqués du sélecteur du lecteur et de la fiche média.",
       "custom_exclusions": "Exclusions personnalisées (regex)",
       "custom_exclusions_placeholder": "opensubtitles\nadvertise\nwww\\.example\\.com",
       "custom_exclusions_hint": "Une regex par ligne. Les sous-titres contenant ces motifs seront supprimés.",

@@ -3,6 +3,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 import { inferLanguageCodeFromTitle } from '../../common/release-parsing/language.parser';
+import { isImageBasedSubtitleCodec } from '../../common/constants/subtitle-codecs';
 
 const execFileAsync = promisify(execFile);
 
@@ -66,13 +67,6 @@ export interface AudioStreamInfo {
   bitRate?: number;
   isDefault?: boolean;
 }
-
-const IMAGE_BASED_SUBTITLE_CODECS = new Set([
-  'hdmv_pgs_subtitle',
-  'dvd_subtitle',
-  'dvb_subtitle',
-  'xsub',
-]);
 
 export interface SubtitleStreamInfo {
   streamIndex: number;
@@ -265,7 +259,7 @@ export class FfprobeService {
         language: resolveStreamLanguage(s),
         forced: s.disposition?.forced === 1,
         hearingImpaired: s.disposition?.hearing_impaired === 1,
-        isImageBased: IMAGE_BASED_SUBTITLE_CODECS.has(s.codec_name ?? ''),
+        isImageBased: isImageBasedSubtitleCodec(s.codec_name),
       }));
     } catch (err) {
       this.logger.warn(
@@ -396,7 +390,7 @@ export class FfprobeService {
           title: tag(s.tags, 'title'),
           forced: s.disposition?.forced === 1,
           hearingImpaired: s.disposition?.hearing_impaired === 1,
-          isImageBased: IMAGE_BASED_SUBTITLE_CODECS.has(s.codec_name ?? ''),
+          isImageBased: isImageBasedSubtitleCodec(s.codec_name),
         }));
 
       const chapters: Chapter[] = (parsed.chapters ?? [])
