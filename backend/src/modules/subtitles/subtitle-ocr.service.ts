@@ -111,7 +111,8 @@ export class SubtitleOcrService {
   /**
    * Auto path used after import / during the missing-search pass: OCR every
    * image-based embedded subtitle on the file that has no text counterpart yet.
-   * Gated by the `subtitle_ocr_burn_in_auto` setting.
+   * Gated by the `subtitle_ocr_burn_in_auto` setting. Language-untagged ('und')
+   * tracks are left to the manual flow — auto can't pick the OCR language.
    */
   async autoOcrForFile(mediaFileId: number): Promise<void> {
     if ((await this.settings.get('subtitle_ocr_burn_in_auto')) !== 'true') return;
@@ -130,6 +131,8 @@ export class SubtitleOcrService {
     for (const sub of subs) {
       if (sub.streamIndex == null) continue;
       if (!isImageBasedSubtitleCodec(sub.codec)) continue;
+      const lang = (sub.language ?? '').toLowerCase();
+      if (!lang || lang === 'und' || lang === 'undefined') continue;
       if (hasText(sub.language)) continue;
       try {
         await this.ocrSubtitle(sub.id);
