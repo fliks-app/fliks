@@ -7,7 +7,7 @@
 <!-- ===== TOP BAR ===== -->
 <div
   class="absolute top-0 left-0 right-0 z-40 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent transition-opacity duration-300 px-10 py-5"
-  style="padding-left: max(var(--ctrl-px), env(safe-area-inset-left)); padding-right: max(var(--ctrl-px), env(safe-area-inset-right)); padding-top: max(var(--ctrl-py), env(safe-area-inset-top));"
+  style="padding-left: max(var(--ctrl-px), env(safe-area-inset-left)); padding-right: max(var(--ctrl-px), env(safe-area-inset-right)); padding-top: calc(env(safe-area-inset-top, 0px) + var(--ctrl-py));"
   [style.--ctrl-px]="'0.5rem'"
   [style.--ctrl-py]="isMobileTouch() ? '0.75rem' : '1.25rem'"
   [class.opacity-0]="!visible()"
