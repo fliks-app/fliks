@@ -150,7 +150,7 @@ export class TrackManagerService {
         if (hideBurnIn && isBitmap) continue;
 
         if (sub.relativePath) {
-          const key = `ext-${sub.language}-${sub.forced}-${sub.hearingImpaired}`;
+          const key = `ext-${sub.id}`;
           if (seen.has(key)) continue;
           seen.add(key);
           options.push({
