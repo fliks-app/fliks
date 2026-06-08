@@ -195,6 +195,11 @@ export class SubtitleOcrService {
         language: source.language,
         provider: 'ocr',
       });
+
+      if ((await this.settings.get('subtitle_ocr_delete_source')) === 'true') {
+        await this.repo.delete(source.id);
+        this.log.log(`OCR: removed source image subtitle #${source.id} after extraction`);
+      }
     } catch (err) {
       this.log.warn(
         `OCR end (failed) — sub #${placeholderId} "${media?.title ?? ''}" [${source.language}]: ${err}`,
