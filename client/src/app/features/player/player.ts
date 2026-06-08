@@ -365,6 +365,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   });
 
+  // A subtitle that lands for this media while the player is open (e.g. an OCR
+  // extraction or a background download finishing) won't be in the menu, which
+  // is built once at playback start — refresh the list so it shows up without
+  // reopening the video. Online playback only; offline uses bundled tracks.
+  private readonly subtitleArrivedEffect = effect(() => {
+    const event = this.sseService.lastEvent();
+    if (!event) return;
+    if (event.type !== 'subtitle.downloaded' && event.type !== 'subtitle.synced') return;
+    if ((event as { mediaId?: number }).mediaId !== this.mediaId) return;
+    if (this.isOfflinePlayback) return;
+    void this.trackManager
+      .loadSubtitles(this.mediaId, this.mediaFileId, this.streamingApi, this.media)
+      .then((subs) => this.availableSubtitles.set(subs))
+      .catch(() => {});
+  });
+
   // Immersive mode: landscape=always, portrait=only while playing with controls hidden
   private readonly immersiveEffect = effect(() => {
     if (!this.isNative || this.inPipMode()) return;
