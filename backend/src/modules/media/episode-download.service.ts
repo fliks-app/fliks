@@ -167,8 +167,9 @@ export class EpisodeDownloadService {
     const { searchTitle: queryTitle, expectedTitles: expectedTitle } =
       resolveSearchTitles(media, customQuery);
     const externalIds = { tvdbId: media.tvdbId, imdbId: media.imdbId };
+    const ready = this.torznab.filterReadyIndexers(indexers);
     const batches = await Promise.all(
-      indexers.map((ix) =>
+      ready.map((ix) =>
         this.torznab.searchSeries(
           ix,
           queryTitle,
@@ -481,8 +482,9 @@ export class EpisodeDownloadService {
     const { searchTitle, expectedTitles: expectedTitle } =
       resolveSearchTitles(media, customQuery);
     const externalIds = { tvdbId: media.tvdbId, imdbId: media.imdbId };
+    const ready = this.torznab.filterReadyIndexers(indexers);
     const batches = await Promise.all(
-      indexers.map((ix) =>
+      ready.map((ix) =>
         this.torznab.searchSeasonPack(
           ix,
           searchTitle,
@@ -634,8 +636,9 @@ export class EpisodeDownloadService {
 
     const externalIds = { tvdbId: media.tvdbId, imdbId: media.imdbId };
     const { searchTitle, expectedTitles } = resolveSearchTitles(media);
+    const ready = this.torznab.filterReadyIndexers(indexers);
     const packBatches = await Promise.all(
-      indexers.map((ix) =>
+      ready.map((ix) =>
         this.torznab.searchSeasonPack(
           ix,
           searchTitle,
@@ -743,7 +746,7 @@ export class EpisodeDownloadService {
       const epLabel = `S${String(season.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
       try {
         const epBatches = await Promise.all(
-          indexers.map((ix) =>
+          ready.map((ix) =>
             this.torznab.searchSeries(
               ix,
               searchTitle,

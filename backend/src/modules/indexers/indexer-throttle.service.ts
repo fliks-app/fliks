@@ -32,6 +32,11 @@ export class IndexerThrottle {
   private nextAllowedAt = new Map<number, number>();
   /** Consecutive failure count — drives progressive cooldown. */
   private failureCount = new Map<number, number>();
+  /** Earliest wall-clock ms a *penalised* indexer may be retried — written
+   *  only by failure backoff and Retry-After, never by routine request
+   *  spacing. Lets searches skip a backing-off indexer instead of queueing
+   *  behind its full cooldown. */
+  private cooldownUntil = new Map<number, number>();
 
   /** Queue `fn` against `indexer`. Returns whatever `fn` resolves to.
    *  Rejections propagate untouched (so callers can pattern-match on
@@ -71,9 +76,7 @@ export class IndexerThrottle {
   setRetryAfter(indexer: Indexer, headerValue: string | undefined): void {
     const ms = parseRetryAfter(headerValue);
     if (ms <= 0) return;
-    const until = Date.now() + ms;
-    const current = this.nextAllowedAt.get(indexer.id) ?? 0;
-    if (until > current) this.nextAllowedAt.set(indexer.id, until);
+    this.bumpCooldown(indexer.id, Date.now() + ms);
     this.log.warn(
       `[${indexer.name}] Retry-After honoured — next request in ${Math.round(ms / 1000)}s`,
     );
@@ -86,9 +89,7 @@ export class IndexerThrottle {
     this.failureCount.set(indexer.id, n);
     const cooldownMs = backoffFor(n);
     if (cooldownMs <= 0) return;
-    const until = Date.now() + cooldownMs;
-    const current = this.nextAllowedAt.get(indexer.id) ?? 0;
-    if (until > current) this.nextAllowedAt.set(indexer.id, until);
+    this.bumpCooldown(indexer.id, Date.now() + cooldownMs);
     this.log.warn(
       `[${indexer.name}] consecutive failure #${n} — cooldown ${Math.round(cooldownMs / 1000)}s`,
     );
@@ -97,6 +98,26 @@ export class IndexerThrottle {
   /** Reset the backoff state for an indexer on confirmed success. */
   notifySuccess(indexerId: number): void {
     this.failureCount.delete(indexerId);
+    this.cooldownUntil.delete(indexerId);
+  }
+
+  /** Remaining failure / Retry-After cooldown for an indexer, in ms (0 when
+   *  ready). Routine request-delay spacing is deliberately excluded so a
+   *  healthy indexer queried seconds ago still reads as ready. */
+  cooldownRemainingMs(indexerId: number): number {
+    const until = this.cooldownUntil.get(indexerId) ?? 0;
+    return Math.max(0, until - Date.now());
+  }
+
+  /** Push a backpressure window onto an indexer: bumps both the queue's
+   *  earliest-start gate (so a request that does get queued still waits) and
+   *  the skip gate (so searches can drop it from the fan-out). Monotonic —
+   *  only ever extends the window, never shortens it. */
+  private bumpCooldown(indexerId: number, until: number): void {
+    const curNext = this.nextAllowedAt.get(indexerId) ?? 0;
+    if (until > curNext) this.nextAllowedAt.set(indexerId, until);
+    const curCooldown = this.cooldownUntil.get(indexerId) ?? 0;
+    if (until > curCooldown) this.cooldownUntil.set(indexerId, until);
   }
 }
 

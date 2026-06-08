@@ -160,6 +160,31 @@ export class TorznabService {
     private readonly throttle: IndexerThrottle,
   ) {}
 
+  /** Drop indexers currently serving a failure / Retry-After cooldown from a
+   *  search fan-out. Without this the throttle would let the next queued call
+   *  sleep out the full backoff (up to 6h) before firing, stalling the whole
+   *  `Promise.all` — and an interactive release search with it — on a single
+   *  broken host. Skipped indexers are picked back up automatically once their
+   *  cooldown lapses; a healthy indexer queried seconds ago is never skipped. */
+  filterReadyIndexers(indexers: Indexer[]): Indexer[] {
+    const ready: Indexer[] = [];
+    const skipped: string[] = [];
+    for (const ix of indexers) {
+      const remainingMs = this.throttle.cooldownRemainingMs(ix.id);
+      if (remainingMs > 0) {
+        skipped.push(`${ix.name} (${Math.ceil(remainingMs / 1000)}s)`);
+      } else {
+        ready.push(ix);
+      }
+    }
+    if (skipped.length) {
+      this.log.warn(
+        `skipping ${skipped.length} indexer(s) in cooldown: ${skipped.join(', ')}`,
+      );
+    }
+    return ready;
+  }
+
   /** Detect Retry-After-bearing responses (429, 503) and feed the
    *  header to the throttle so subsequent queued calls wait. Returns
    *  true if the error was rate-limit-shaped — caller treats it as a
