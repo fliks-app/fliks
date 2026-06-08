@@ -25,12 +25,13 @@ export const STALL_ELIGIBLE_STATES: ReadonlySet<string> = new Set([
 /**
  * Consecutive-snapshot delta below this counts as "no progress".
  *
- * 1 MiB tolerates the trickle of wasted bytes a stalled torrent keeps
- * receiving from churning peers (re-requested / discarded pieces) without
- * masking a genuinely progressing download: the shortest snapshot interval
- * is 20 minutes, where even a crawling 10 KiB/s nets ~11 MiB per interval.
+ * 30 MiB tolerates the trickle of wasted bytes a stalled torrent keeps
+ * receiving from churning peers (re-requested / discarded pieces). Over the
+ * shortest snapshot interval (20 minutes) it draws the progress line at
+ * ~26 KiB/s — a download crawling slower than that across a full window is
+ * treated as stuck.
  */
-export const STALL_PROGRESS_TOLERANCE_BYTES = 1n << 20n; // 1 MiB
+export const STALL_PROGRESS_TOLERANCE_BYTES = 30n << 20n; // 30 MiB
 
 /**
  * Whether the step from `olderBytes` to `newerBytes` counts as no progress.
