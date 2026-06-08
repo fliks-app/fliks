@@ -17,6 +17,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   python3-venv \
   ffmpeg \
   libchromaprint-tools \
+  mkvtoolnix \
+  tesseract-ocr \
+  tesseract-ocr-eng \
+  tesseract-ocr-fra \
+  tesseract-ocr-spa \
+  tesseract-ocr-deu \
+  tesseract-ocr-ita \
+  tesseract-ocr-por \
+  tesseract-ocr-nld \
+  tesseract-ocr-jpn \
+  tesseract-ocr-kor \
+  tesseract-ocr-chi-sim \
+  tesseract-ocr-rus \
+  tesseract-ocr-ara \
   intel-media-va-driver-non-free \
   intel-opencl-icd \
   libmfx-gen1.2 \
@@ -27,7 +41,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   gcc \
   python3-dev \
   libc6-dev \
-  && python3 -m pip install --no-cache-dir --break-system-packages ffsubsync \
+  && python3 -m pip install --no-cache-dir --break-system-packages ffsubsync pgsrip \
   && wget -q -O /usr/local/bin/alass https://github.com/kaegi/alass/releases/download/v2.0.0/alass-linux64 \
   && chmod +x /usr/local/bin/alass \
   && apt-get purge -y wget gcc python3-dev libc6-dev \

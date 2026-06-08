@@ -73,6 +73,15 @@ export class SubtitlesApiService {
     );
   }
 
+  ocr(mediaId: number, subtitleId: number) {
+    return firstValueFrom(
+      this.http.post<SubtitleFileRow | null>(
+        `/api/media/${mediaId}/subtitles/${subtitleId}/ocr`,
+        {},
+      ),
+    );
+  }
+
   download(mediaId: number, body: { searchResult: SubtitleSearchResult; mediaFileId: number; episodeId?: number }) {
     return firstValueFrom(
       this.http.post<SubtitleFileRow>(`/api/media/${mediaId}/subtitles/download`, body),

@@ -97,6 +97,14 @@
         </label>
         <p class="text-xs text-base-content/50 -mt-1 max-w-lg">{{ 'settings.subtitles.hide_burn_in_hint' | translate }}</p>
 
+        <label class="label cursor-pointer justify-start gap-3 max-w-max">
+          <input type="checkbox" class="toggle toggle-sm"
+            [ngModel]="ocrBurnInAuto() === 'true'"
+            (ngModelChange)="ocrBurnInAuto.set($event ? 'true' : 'false')" />
+          <span class="label-text">{{ 'settings.subtitles.ocr_burn_in_auto' | translate }}</span>
+        </label>
+        <p class="text-xs text-base-content/50 -mt-1 max-w-lg">{{ 'settings.subtitles.ocr_burn_in_auto_hint' | translate }}</p>
+
         <label class="form-control w-full max-w-lg">
           <div class="label">
             <span class="label-text">{{ 'settings.subtitles.custom_exclusions' | translate }}</span>

@@ -16,6 +16,7 @@ import {
   resolveHearingImpairedMode,
 } from '../profiles/entities/language-profile.entity';
 import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
+import { SubtitleOcrService } from '../subtitles/subtitle-ocr.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
 
 @Injectable()
@@ -36,6 +37,7 @@ export class SubtitleSchedulerService {
     private readonly notifications: NotificationsService,
     private readonly settings: SettingsService,
     private readonly embeddedSubtitle: EmbeddedSubtitleService,
+    private readonly subtitleOcr: SubtitleOcrService,
     private readonly mediaServers: MediaServersService,
   ) {}
 
@@ -203,6 +205,10 @@ export class SubtitleSchedulerService {
         });
       }
     }
+
+    // Convert any remaining image-based (burn-required) tracks to text via OCR
+    // when enabled; self-gated on the `subtitle_ocr_burn_in_auto` setting.
+    void this.subtitleOcr.autoOcrForFile(file.id);
 
     return downloaded;
   }
@@ -401,6 +407,10 @@ export class SubtitleSchedulerService {
       episodeId,
     );
     const embeddedLangs = new Set(embeddedSubs.map((s) => s.language));
+
+    // OCR image-based tracks to servable text (self-gated on its own setting),
+    // independent of the auto-search toggle below.
+    void this.subtitleOcr.autoOcrForFile(mediaFileId);
 
     const autoSearch = await this.settings.get('subtitle_auto_search');
     if (autoSearch === 'false') return;

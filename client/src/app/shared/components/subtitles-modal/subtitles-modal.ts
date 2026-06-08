@@ -133,6 +133,11 @@ export class SubtitlesModalComponent {
     const id = this.actionsOpenForId();
     return id == null ? null : this.subtitles().find((s) => s.id === id) ?? null;
   });
+  /** The open row is an image-based (burn-required) track — offer OCR instead
+   *  of the text-only post-processing actions. */
+  readonly actionsSubIsImage = computed(() =>
+    isImageBasedSubtitleCodec(this.actionsSub()?.codec),
+  );
 
   protected openSubActions(sub: SubtitleFileRow, anchor: HTMLElement) {
     this.actionsAnchor.set(anchor);
@@ -460,6 +465,11 @@ export class SubtitlesModalComponent {
 
   async blacklistSubtitle(sub: SubtitleFileRow) {
     await this.subActions.blacklist(this.mediaId(), sub, this.subtitles);
+  }
+
+  async ocrSubtitle(sub: SubtitleFileRow) {
+    await this.subActions.ocr(this.mediaId(), sub.id, this.subtitles, this.subtitleActionBusy);
+    this.toast.info(this.translate.instant('media_detail.ocr_started'));
   }
 
   async deleteSubtitle(subtitleId: number) {

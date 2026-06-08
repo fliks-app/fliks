@@ -143,6 +143,12 @@
       placement="top-end"
       (closed)="closeSubActions()"
     >
+      @if (actionsSubIsImage()) {
+        <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => ocrSubtitle(s))">
+          <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+          {{ 'media_detail.action_ocr_extract' | translate }}
+        </button>
+      } @else {
       <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => openSyncModal(s.id))">
         <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
         {{ 'media_detail.action_sync' | translate }}
@@ -187,6 +193,7 @@
         <svg lucideZap class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
         {{ 'media_detail.action_change_fps' | translate }}
       </button>
+      }
       <button type="button" class="dropdown-item text-warning" (click)="runSubAction(s => blacklistSubtitle(s))">
         <svg lucideBan class="h-4 w-4 shrink-0 opacity-80" aria-hidden="true"></svg>
         {{ 'media_detail.action_blacklist' | translate }}

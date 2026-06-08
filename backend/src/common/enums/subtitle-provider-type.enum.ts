@@ -15,4 +15,6 @@ export enum SubtitleProviderType {
   SONARR = 'sonarr',
   /** External subtitle files discovered on disk during rescan */
   DISK = 'disk',
+  /** Text subtitle produced by OCR'ing an image-based (burn-required) track */
+  OCR = 'ocr',
 }
