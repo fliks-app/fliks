@@ -471,8 +471,10 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                     item.select(group.options[index], in: group)
                 }
             } else {
-                // Disable subtitles
+                // Disable subtitles. Deselecting alone only stops cue delivery;
+                // the last cue stays frozen in the overlay, so clear it too.
                 item.select(nil, in: group)
+                self?.subtitleOverlay?.render([])
             }
 
             call.resolve()
