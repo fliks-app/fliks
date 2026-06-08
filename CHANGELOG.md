@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.10.0](https://github.com/fliks-app/fliks/compare/v1.9.0...v1.10.0) (2026-06-08)
+
+
+### Features
+
+* **downloads:** add original-file download to the quality modal ([#419](https://github.com/fliks-app/fliks/issues/419)) ([63612bf](https://github.com/fliks-app/fliks/commit/63612bfaac28ecde850c32f632e4e9ba6dbac13a))
+* **indexers:** skip indexers in cooldown during release searches ([#422](https://github.com/fliks-app/fliks/issues/422)) ([42af83b](https://github.com/fliks-app/fliks/commit/42af83bf265397e7c7831ecc2e19b776a3817271))
+* **native:** refresh data pages when the app resumes from background ([#435](https://github.com/fliks-app/fliks/issues/435)) ([2fb6de8](https://github.com/fliks-app/fliks/commit/2fb6de85377aee892fb2ba65f3be9c92592b2df5))
+* **subtitles:** extract image subtitles to text via OCR ([0a71116](https://github.com/fliks-app/fliks/commit/0a71116559ac3a167f67886fa79bae23d7fb370c))
+* **subtitles:** hide burn-required subtitles behind an app setting ([#427](https://github.com/fliks-app/fliks/issues/427)) ([7f7cbf0](https://github.com/fliks-app/fliks/commit/7f7cbf0311707fa9ef0ce5ccc1be9106cf784673))
+
+
+### Bug Fixes
+
+* **confirmation:** render in the top layer to stack above modals ([#425](https://github.com/fliks-app/fliks/issues/425)) ([c16d6c5](https://github.com/fliks-app/fliks/commit/c16d6c50061743c586ae505554879a621931efe2))
+* **media:** hide the clearlogo img when its image fails to load ([#433](https://github.com/fliks-app/fliks/issues/433)) ([e7f9705](https://github.com/fliks-app/fliks/commit/e7f970509ef81d6e438634a693c1d1cc9c51f802))
+* **player:** align top-bar edge spacing with the app navbar ([#430](https://github.com/fliks-app/fliks/issues/430)) ([99cf414](https://github.com/fliks-app/fliks/commit/99cf414e4e96cc72ce6091671643bd9bedde0e07))
+* **popover-menu:** keep the anchored dropdown inside the viewport ([#426](https://github.com/fliks-app/fliks/issues/426)) ([664ebf9](https://github.com/fliks-app/fliks/commit/664ebf9f7165f9607a6332b442841a2721b70a2c))
+* **subtitles:** clear the iOS overlay when subtitles are disabled ([#432](https://github.com/fliks-app/fliks/issues/432)) ([7c0170d](https://github.com/fliks-app/fliks/commit/7c0170de775bfe913da3b7888d18d084421a7e70))
+* **subtitles:** gate management on subtitles.manage, not media.grab ([#429](https://github.com/fliks-app/fliks/issues/429)) ([009ac5a](https://github.com/fliks-app/fliks/commit/009ac5af608a3b6d0901d79a65d0379aff7d66ba))
+* **subtitles:** normalize score so non-hash matches can clear min-score ([#423](https://github.com/fliks-app/fliks/issues/423)) ([89c58b4](https://github.com/fliks-app/fliks/commit/89c58b4a6f6dd962ab52129348a6e52bce482e17))
+* **subtitles:** search every missing profile language from the modal ([#424](https://github.com/fliks-app/fliks/issues/424)) ([77ec797](https://github.com/fliks-app/fliks/commit/77ec7979f31f1c49a55da8ab79cdfd93f60ad79a))
+* **tmdb-preview:** drop duplicate back arrow and show the clearlogo ([#431](https://github.com/fliks-app/fliks/issues/431)) ([f4bd902](https://github.com/fliks-app/fliks/commit/f4bd90283950ebf1ea22471c5ad0ab6685ae0ab4))
+
 ## [1.9.0](https://github.com/fliks-app/fliks/compare/v1.8.0...v1.9.0) (2026-06-06)
 
 
