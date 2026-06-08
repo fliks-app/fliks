@@ -179,8 +179,9 @@ export class SubtitlesModalComponent {
 
   // OCR language picker (used when an image track is untagged — 'und').
   readonly ocrLangCodes: readonly string[] = [
-    'en', 'fr', 'de', 'es', 'it', 'pt', 'ja', 'ko', 'zh', 'ru',
-    'ar', 'nl', 'pl', 'tr', 'sv', 'da', 'no', 'fi',
+    'en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'sv', 'da', 'no', 'fi',
+    'pl', 'cs', 'sk', 'hu', 'ro', 'el', 'ru', 'uk', 'bg', 'sr', 'hr',
+    'tr', 'ar', 'he', 'fa', 'hi', 'th', 'vi', 'id', 'ja', 'ko', 'zh',
   ];
   private readonly ocrTargetId = signal<number | null>(null);
   readonly ocrLang = signal('en');

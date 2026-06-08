@@ -46,24 +46,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   ffmpeg \
   libchromaprint-tools \
   tesseract-ocr \
-  tesseract-ocr-eng \
-  tesseract-ocr-fra \
-  tesseract-ocr-spa \
-  tesseract-ocr-deu \
-  tesseract-ocr-ita \
-  tesseract-ocr-por \
-  tesseract-ocr-nld \
-  tesseract-ocr-jpn \
-  tesseract-ocr-kor \
-  tesseract-ocr-chi-sim \
-  tesseract-ocr-rus \
-  tesseract-ocr-ara \
-  tesseract-ocr-pol \
-  tesseract-ocr-tur \
-  tesseract-ocr-swe \
-  tesseract-ocr-dan \
-  tesseract-ocr-nor \
-  tesseract-ocr-fin \
+  tesseract-ocr-all \
   wget \
   ca-certificates \
   gcc \

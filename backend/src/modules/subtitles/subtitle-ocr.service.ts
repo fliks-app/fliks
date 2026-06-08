@@ -22,13 +22,16 @@ import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 
 const execFileAsync = promisify(execFile);
 
-/** ISO 639-1 → tesseract (ISO 639-2/T) traineddata names. The matching pack
- *  must be installed in the image (see Dockerfile). Falls back to `eng`. */
+/** ISO 639-1 → tesseract (ISO 639-2/T) traineddata names, for vobsub2srt's
+ *  `--tesseract-lang`. All packs ship via `tesseract-ocr-all`. Falls back to
+ *  `eng`. (pgsrip derives its own language from the staged .sup filename.) */
 const TESSERACT_LANG: Record<string, string> = {
   en: 'eng', fr: 'fra', es: 'spa', de: 'deu', it: 'ita', pt: 'por',
-  nl: 'nld', ja: 'jpn', ko: 'kor', zh: 'chi_sim', ru: 'rus', ar: 'ara',
-  pl: 'pol', sv: 'swe', tr: 'tur', cs: 'ces', da: 'dan', fi: 'fin',
-  el: 'ell', he: 'heb', hu: 'hun', no: 'nor', ro: 'ron', uk: 'ukr',
+  nl: 'nld', sv: 'swe', da: 'dan', no: 'nor', fi: 'fin', pl: 'pol',
+  cs: 'ces', sk: 'slk', hu: 'hun', ro: 'ron', el: 'ell', ru: 'rus',
+  uk: 'ukr', bg: 'bul', sr: 'srp', hr: 'hrv', tr: 'tur', ar: 'ara',
+  he: 'heb', fa: 'fas', hi: 'hin', th: 'tha', vi: 'vie', id: 'ind',
+  ja: 'jpn', ko: 'kor', zh: 'chi_sim',
 };
 
 /**
