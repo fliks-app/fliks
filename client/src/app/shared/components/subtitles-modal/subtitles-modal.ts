@@ -387,16 +387,14 @@ export class SubtitlesModalComponent {
     }
   }
 
-  async autoSubtitle() {
+  async searchMissing() {
     const fileId = this.selectedFileId();
     if (!fileId) return;
-    await this.subActions.autoDownload(
+    await this.subActions.searchMissing(
       this.mediaId(),
       fileId,
-      this.subSearchLang(),
       this.subtitles,
       this.subtitleActionBusy,
-      this.episodeId(),
     );
   }
 

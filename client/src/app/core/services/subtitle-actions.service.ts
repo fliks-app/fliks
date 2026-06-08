@@ -53,14 +53,13 @@ export class SubtitleActionsService {
     }
   }
 
-  async autoDownload(
-    mediaId: number, mediaFileId: number, language: string,
+  async searchMissing(
+    mediaId: number, mediaFileId: number,
     subtitles: WritableSignal<SubtitleFileRow[]>, busy: WritableSignal<boolean>,
-    episodeId?: number,
   ) {
     busy.set(true);
     try {
-      await this.subtitlesApi.autoDownload(mediaId, { mediaFileId, episodeId, language });
+      await this.subtitlesApi.searchMissing(mediaId, { mediaFileId });
       subtitles.set(await this.subtitlesApi.getForMedia(mediaId));
     } finally {
       busy.set(false);

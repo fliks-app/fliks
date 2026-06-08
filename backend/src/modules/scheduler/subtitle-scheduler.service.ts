@@ -64,18 +64,7 @@ export class SubtitleSchedulerService {
     const autoSearch = await this.settings.get('subtitle_auto_search');
     if (autoSearch === 'false') return;
 
-    // `subtitle_min_score` / `subtitle_upgrade_threshold` are now read as
-    // PERCENT (0-100) of the centralised scorer's max — see
-    // `subtitle-scorer.ts`. Existing rows persisted under the previous
-    // per-provider 0-100 scale stay readable; the upgrade pass naturally
-    // re-scores them via the central scorer on the next run.
-    const minScore = Number(
-      (await this.settings.get('subtitle_min_score')) ?? '70',
-    );
-    const autoSyncEnabled =
-      (await this.settings.get('subtitle_auto_sync')) === 'true';
-    const encodeUtf8 =
-      (await this.settings.get('subtitle_encode_utf8')) !== 'false';
+    const opts = await this.resolveSearchOpts();
 
     const mediaList = await this.mediaRepo.find({
       where: { monitored: true },
@@ -88,98 +77,159 @@ export class SubtitleSchedulerService {
     });
 
     for (const media of mediaList) {
-      const subtitleLangs: SubtitleLanguageItem[] =
-        media.languageProfile?.subtitleLanguages ?? [];
-      if (!subtitleLangs.length) continue;
       if (!media.files?.length) continue;
-
       for (const file of media.files) {
-        // Ensure embedded subtitles are detected before checking for missing ones
-        await this.embeddedSubtitle.detectAndStore(
+        await this.searchMissingForFile(media, file, opts);
+      }
+    }
+  }
+
+  /** Read the shared search/download settings in one place (no per-call drift). */
+  private async resolveSearchOpts(): Promise<{
+    minScore: number;
+    autoSyncEnabled: boolean;
+    encodeUtf8: boolean;
+  }> {
+    // `subtitle_min_score` is read as PERCENT (0-100) of the centralised
+    // scorer's max — see `subtitle-scorer.ts`.
+    return {
+      minScore: Number((await this.settings.get('subtitle_min_score')) ?? '70'),
+      autoSyncEnabled:
+        (await this.settings.get('subtitle_auto_sync')) === 'true',
+      encodeUtf8: (await this.settings.get('subtitle_encode_utf8')) !== 'false',
+    };
+  }
+
+  /**
+   * Search and download every required subtitle language still missing on one
+   * file. A non-FAILED sub (downloaded or EMBEDDED) counts as present, so an
+   * embedded track suppresses its language. Shared by the scheduled pass and
+   * the manual "search missing" action. Returns the iso codes downloaded.
+   */
+  private async searchMissingForFile(
+    media: Media,
+    file: MediaFile,
+    opts: { minScore: number; autoSyncEnabled: boolean; encodeUtf8: boolean },
+  ): Promise<string[]> {
+    const subtitleLangs: SubtitleLanguageItem[] =
+      media.languageProfile?.subtitleLanguages ?? [];
+    if (!subtitleLangs.length) return [];
+
+    // Ensure embedded subtitles are detected before checking for missing ones
+    await this.embeddedSubtitle.detectAndStore(
+      media.id,
+      file.id,
+      file.episodeId ?? undefined,
+    );
+
+    const existingSubs = await this.subtitleFileRepo.find({
+      where: { mediaFile: { id: file.id } },
+    });
+
+    const videoReleaseName = path.basename(
+      file.relativePath,
+      path.extname(file.relativePath),
+    );
+    const fileSeason = file.episode?.season?.seasonNumber ?? undefined;
+    const fileEpisode = file.episode?.episodeNumber ?? undefined;
+
+    const downloaded: string[] = [];
+
+    for (const langItem of subtitleLangs) {
+      const hasSub = existingSubs.some(
+        (s) =>
+          s.language === langItem.isoCode &&
+          s.status !== SubtitleStatus.FAILED,
+      );
+      if (hasSub) continue;
+
+      try {
+        const results = await this.subtitlesService.searchSubtitles({
+          imdbId: media.imdbId ?? undefined,
+          tmdbId: media.tmdbId,
+          title: media.title,
+          year: media.year ?? undefined,
+          language: langItem.isoCode,
+          season: fileSeason,
+          episode: fileEpisode,
+          videoReleaseName,
+          moviehash: file.osdbHash ?? undefined,
+          moviebytesize: file.osdbBytesize ?? undefined,
+          hearingImpairedMode: resolveHearingImpairedMode(langItem),
+        });
+
+        const best = results.find((r) => r.score >= opts.minScore);
+        if (!best) continue;
+
+        const sub = await this.subtitlesService.downloadSubtitle(
           media.id,
           file.id,
           file.episodeId ?? undefined,
+          best,
         );
 
-        const existingSubs = await this.subtitleFileRepo.find({
-          where: { mediaFile: { id: file.id } },
+        if (opts.encodeUtf8) {
+          await this.subtitleSync.reencodeToUtf8(sub.id);
+        }
+        if (opts.autoSyncEnabled) {
+          await this.subtitleSync.syncSubtitle(sub.id);
+        }
+
+        void this.notifications.dispatch('subtitle.downloaded', {
+          title: media.title,
+          language: langItem.isoCode,
+          provider: best.providerName,
+          score: best.score,
         });
 
-        const videoReleaseName = path.basename(
-          file.relativePath,
-          path.extname(file.relativePath),
+        void this.mediaServers.dispatch('subtitle.downloaded', {
+          title: media.title,
+          path: media.path,
+        });
+
+        downloaded.push(langItem.isoCode);
+
+        this.log.log(
+          `SubtitleSearch: downloaded ${langItem.isoCode} sub for "${media.title}" (score: ${best.score})`,
         );
-        const fileSeason = file.episode?.season?.seasonNumber ?? undefined;
-        const fileEpisode = file.episode?.episodeNumber ?? undefined;
-
-        for (const langItem of subtitleLangs) {
-          const hasSub = existingSubs.some(
-            (s) =>
-              s.language === langItem.isoCode &&
-              s.status !== SubtitleStatus.FAILED,
-          );
-          if (hasSub) continue;
-
-          try {
-            const results = await this.subtitlesService.searchSubtitles({
-              imdbId: media.imdbId ?? undefined,
-              tmdbId: media.tmdbId,
-              title: media.title,
-              year: media.year ?? undefined,
-              language: langItem.isoCode,
-              season: fileSeason,
-              episode: fileEpisode,
-              videoReleaseName,
-              moviehash: file.osdbHash ?? undefined,
-              moviebytesize: file.osdbBytesize ?? undefined,
-              hearingImpairedMode: resolveHearingImpairedMode(langItem),
-            });
-
-            const best = results.find((r) => r.score >= minScore);
-            if (!best) continue;
-
-            const sub = await this.subtitlesService.downloadSubtitle(
-              media.id,
-              file.id,
-              file.episodeId ?? undefined,
-              best,
-            );
-
-            if (encodeUtf8) {
-              await this.subtitleSync.reencodeToUtf8(sub.id);
-            }
-            if (autoSyncEnabled) {
-              await this.subtitleSync.syncSubtitle(sub.id);
-            }
-
-            void this.notifications.dispatch('subtitle.downloaded', {
-              title: media.title,
-              language: langItem.isoCode,
-              provider: best.providerName,
-              score: best.score,
-            });
-
-            void this.mediaServers.dispatch('subtitle.downloaded', {
-              title: media.title,
-              path: media.path,
-            });
-
-            this.log.log(
-              `SubtitleSearch: downloaded ${langItem.isoCode} sub for "${media.title}" (score: ${best.score})`,
-            );
-          } catch (err) {
-            this.log.warn(
-              `SubtitleSearch: failed for "${media.title}" [${langItem.isoCode}]: ${err}`,
-            );
-            void this.notifications.dispatch('subtitle.failed', {
-              title: media.title,
-              language: langItem.isoCode,
-              error: String(err),
-            });
-          }
-        }
+      } catch (err) {
+        this.log.warn(
+          `SubtitleSearch: failed for "${media.title}" [${langItem.isoCode}]: ${err}`,
+        );
+        void this.notifications.dispatch('subtitle.failed', {
+          title: media.title,
+          language: langItem.isoCode,
+          error: String(err),
+        });
       }
     }
+
+    return downloaded;
+  }
+
+  /**
+   * Manual "search missing" for one media file. Same gap-filling logic as the
+   * scheduled pass, but user-initiated, so it deliberately ignores the
+   * `subtitle_auto_search` toggle (that gate governs only the automatic passes).
+   */
+  async searchMissingForMedia(
+    mediaId: number,
+    mediaFileId: number,
+  ): Promise<{ downloaded: string[] }> {
+    const media = await this.mediaRepo.findOne({
+      where: { id: mediaId },
+      relations: [
+        'languageProfile',
+        'files',
+        'files.episode',
+        'files.episode.season',
+      ],
+    });
+    const file = media?.files?.find((f) => f.id === mediaFileId);
+    if (!media || !file) return { downloaded: [] };
+
+    const opts = await this.resolveSearchOpts();
+    return { downloaded: await this.searchMissingForFile(media, file, opts) };
   }
 
   async upgradeSubtitles(): Promise<void> {

@@ -64,6 +64,15 @@ export class SubtitlesApiService {
     );
   }
 
+  searchMissing(mediaId: number, body: { mediaFileId: number }) {
+    return firstValueFrom(
+      this.http.post<{ downloaded: string[] }>(
+        `/api/media/${mediaId}/subtitles/search-missing`,
+        body,
+      ),
+    );
+  }
+
   download(mediaId: number, body: { searchResult: SubtitleSearchResult; mediaFileId: number; episodeId?: number }) {
     return firstValueFrom(
       this.http.post<SubtitleFileRow>(`/api/media/${mediaId}/subtitles/download`, body),
