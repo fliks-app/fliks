@@ -3,7 +3,9 @@ import { TranslateService } from '@ngx-translate/core';
 import { PlayerSettingsService, normalizeLang } from './player-settings.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { StreamingApiService } from './api/streaming-api.service';
+import { AppSettingsService } from './app-settings.service';
 import { formatSubtitleLabel } from '../utils/player.utils';
+import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
 import type { PlaybackEngine, AudioTrack } from './playback-engine/playback-engine';
 
 export interface SubtitleOption {
@@ -23,6 +25,7 @@ export interface SubtitleOption {
 export class TrackManagerService {
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
+  private readonly appSettings = inject(AppSettingsService);
   private readonly translate = inject(TranslateService);
 
   // ── Audio track methods ──
@@ -135,14 +138,16 @@ export class TrackManagerService {
     if (!mediaId) return [];
 
     try {
+      await this.appSettings.ensureLoaded();
+      const hideBurnIn = this.appSettings.hideBurnInSubtitles();
       const options: SubtitleOption[] = [];
       const subs = await this.subtitlesApi.getForMedia(mediaId);
-      const bitmapCodecs = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle']);
       const seen = new Set<string>();
 
       for (const sub of subs) {
         if (sub.mediaFileId !== mediaFileId) continue;
-        const isBitmap = bitmapCodecs.has(sub.codec ?? '');
+        const isBitmap = isImageBasedSubtitleCodec(sub.codec);
+        if (hideBurnIn && isBitmap) continue;
 
         if (sub.relativePath) {
           const key = `ext-${sub.language}-${sub.forced}-${sub.hearingImpaired}`;
@@ -181,8 +186,7 @@ export class TrackManagerService {
           const key = `emb-${emb.streamIndex}`;
           if (seen.has(key)) continue;
           seen.add(key);
-          const isBitmap = bitmapCodecs.has(emb.codec);
-          if (isBitmap) continue; // Bitmap from streamInfo only (no DB ID for burn-in)
+          if (isImageBasedSubtitleCodec(emb.codec)) continue; // Bitmap from streamInfo only (no DB ID for burn-in)
           options.push({
             id: key,
             label: formatSubtitleLabel(emb, this.translate),

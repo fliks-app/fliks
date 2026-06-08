@@ -4,6 +4,8 @@ import { CastService } from './cast.service';
 import { CastSettingsService } from './cast-settings.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
+import { AppSettingsService } from './app-settings.service';
+import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
 import { AuthService } from './auth.service';
 import { DeviceProfile } from './browser-device-profile.service';
 import { ServerConfigService } from './server-config.service';
@@ -97,6 +99,7 @@ export class CastPlayerService {
   private readonly castSettings = inject(CastSettingsService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
+  private readonly appSettings = inject(AppSettingsService);
   private readonly authService = inject(AuthService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly playerSettings = inject(PlayerSettingsService);
@@ -712,11 +715,13 @@ export class CastPlayerService {
     );
 
     // Build subtitle list from the parallel fetch
+    await this.appSettings.ensureLoaded();
+    const hideBurnIn = this.appSettings.hideBurnInSubtitles();
     const subtitleInfos: SubtitleInfo[] = [];
-    const bitmapCodecs = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle']);
     for (const sub of subsResult) {
       if (sub.mediaFileId !== opts.mediaFileId) continue;
-      const isBitmap = bitmapCodecs.has(sub.codec ?? '');
+      const isBitmap = isImageBasedSubtitleCodec(sub.codec);
+      if (hideBurnIn && isBitmap) continue;
       if (sub.relativePath) {
         subtitleInfos.push({
           id: `ext-${sub.id}`, label: formatSubtitleLabel(sub, this.translate),

@@ -89,6 +89,14 @@
           <span class="label-text">{{ 'settings.subtitles.remove_hi_tags' | translate }}</span>
         </label>
 
+        <label class="label cursor-pointer justify-start gap-3 max-w-max">
+          <input type="checkbox" class="toggle toggle-sm"
+            [ngModel]="hideBurnIn() === 'true'"
+            (ngModelChange)="hideBurnIn.set($event ? 'true' : 'false')" />
+          <span class="label-text">{{ 'settings.subtitles.hide_burn_in' | translate }}</span>
+        </label>
+        <p class="text-xs text-base-content/50 -mt-1 max-w-lg">{{ 'settings.subtitles.hide_burn_in_hint' | translate }}</p>
+
         <label class="form-control w-full max-w-lg">
           <div class="label">
             <span class="label-text">{{ 'settings.subtitles.custom_exclusions' | translate }}</span>

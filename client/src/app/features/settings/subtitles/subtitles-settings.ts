@@ -8,6 +8,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
+import { AppSettingsService } from '../../../core/services/app-settings.service';
 import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
@@ -18,6 +19,7 @@ import { ToastService } from '../../../core/services/toast.service';
 })
 export class SubtitlesSettingsComponent implements OnInit {
   private readonly api = inject(SettingsApiService);
+  private readonly appSettings = inject(AppSettingsService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
 
@@ -32,6 +34,7 @@ export class SubtitlesSettingsComponent implements OnInit {
   readonly autoSync = signal('false');
   readonly encodeUtf8 = signal('true');
   readonly removeHiTags = signal('false');
+  readonly hideBurnIn = signal('true');
   readonly customExclusions = signal('');
 
   async ngOnInit() {
@@ -45,6 +48,7 @@ export class SubtitlesSettingsComponent implements OnInit {
       this.autoSync.set(map['subtitle_auto_sync'] ?? 'false');
       this.encodeUtf8.set(map['subtitle_encode_utf8'] ?? 'true');
       this.removeHiTags.set(map['subtitle_remove_hi_tags'] ?? 'false');
+      this.hideBurnIn.set(map['subtitle_hide_burn_in'] ?? 'true');
       this.customExclusions.set(map['subtitle_custom_exclusions'] ?? '');
     } catch {
       this.toast.error(this.translate.instant('settings.subtitles.load_error'));
@@ -65,8 +69,10 @@ export class SubtitlesSettingsComponent implements OnInit {
         subtitle_auto_sync: this.autoSync(),
         subtitle_encode_utf8: this.encodeUtf8(),
         subtitle_remove_hi_tags: this.removeHiTags(),
+        subtitle_hide_burn_in: this.hideBurnIn(),
         subtitle_custom_exclusions: this.customExclusions(),
       });
+      await this.appSettings.refresh();
       this.toast.success(this.translate.instant('settings.subtitles.saved'));
     } catch {
       // handled by global interceptor

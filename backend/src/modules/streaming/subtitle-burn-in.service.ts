@@ -4,19 +4,13 @@ import { Repository } from 'typeorm';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { StreamingService } from './streaming.service';
 import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
+import { isImageBasedSubtitleCodec } from '../../common/constants/subtitle-codecs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
-
-const IMAGE_BASED_CODECS = new Set([
-  'hdmv_pgs_subtitle',
-  'dvd_subtitle',
-  'dvb_subtitle',
-  'xsub',
-]);
 
 export interface BurnInInfo {
   /** 'text' for SRT/ASS/SSA, 'image' for PGS/VOBSUB */
@@ -55,7 +49,7 @@ export class SubtitleBurnInService {
 
     const resolved = await this.streamingService.resolveFile(mediaFileId);
     const videoPath = resolved.absolutePath;
-    const isImage = IMAGE_BASED_CODECS.has(sub.codec ?? '');
+    const isImage = isImageBasedSubtitleCodec(sub.codec);
 
     if (sub.relativePath) {
       // External subtitle file

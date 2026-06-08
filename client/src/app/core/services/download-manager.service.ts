@@ -3,6 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { MediaService } from './api/media.service';
+import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
 import { OfflineStorageService } from './offline-storage.service';
 import { DownloadCacheService, DownloadTask } from './download-cache.service';
 import { DownloadNotificationService } from './download-notification.service';
@@ -226,10 +227,9 @@ export class DownloadManagerService {
     const task = this.cache.load().find((t) => t.id === taskId);
     if (!task?.mediaId || !task.mediaFileId) return;
     try {
-      const bitmapCodecs = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle']);
       const allSubs = await this.subtitlesApi.getForMedia(task.mediaId);
       const subs = allSubs.filter(
-        (s) => s.mediaFileId === task.mediaFileId && !bitmapCodecs.has(s.codec ?? ''),
+        (s) => s.mediaFileId === task.mediaFileId && !isImageBasedSubtitleCodec(s.codec),
       );
       const offlineSubs: { key: string; language: string; label: string; forced?: boolean }[] = [];
       for (const sub of subs) {
