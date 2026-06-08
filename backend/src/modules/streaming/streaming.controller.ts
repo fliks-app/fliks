@@ -2085,6 +2085,17 @@ export class StreamingController {
     const contentType = resolved.contentType;
     const absolutePath = resolved.absolutePath;
 
+    // Browser "save the original file" path: force an attachment download with
+    // the source container's own name. Only embedded streams travel inside the
+    // container — sidecar subtitle files live next to it and aren't included.
+    if (firstQueryString(req.query, 'download')) {
+      const filename = path.basename(resolved.relativePath);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      );
+    }
+
     if (!range) {
       res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Length', fileSize);
