@@ -6,30 +6,29 @@
 }
 <!-- ===== TOP BAR ===== -->
 <div
-  class="absolute top-0 left-0 right-0 z-40 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent transition-opacity duration-300 px-10 py-5"
-  style="padding-left: max(var(--ctrl-px), env(safe-area-inset-left)); padding-right: max(var(--ctrl-px), env(safe-area-inset-right)); padding-top: calc(env(safe-area-inset-top, 0px) + var(--ctrl-py));"
-  [style.--ctrl-px]="'0.5rem'"
+  class="absolute top-0 left-0 right-0 z-40 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent transition-opacity duration-300 py-5
+         [--ctrl-px:1rem] portrait:[--ctrl-px:0.5rem] xl:[--ctrl-inset:1rem]"
+  style="padding-left: calc(max(var(--ctrl-px), env(safe-area-inset-left)) + var(--ctrl-inset, 0px)); padding-right: calc(max(var(--ctrl-px), env(safe-area-inset-right)) + var(--ctrl-inset, 0px)); padding-top: calc(env(safe-area-inset-top, 0px) + var(--ctrl-py) + var(--ctrl-inset, 0px));"
   [style.--ctrl-py]="isMobileTouch() ? '0.25rem' : '1.25rem'"
   [class.opacity-0]="!visible()"
   [class.pointer-events-none]="!visible()"
 >
   <!-- Left: back + title -->
-  <div class="flex items-center gap-2 min-w-0">
+  <div class="flex items-center gap-1 min-w-0">
     <button type="button" class="btn btn-ghost btn-circle btn-md text-white" [attr.aria-label]="'player.back' | translate" (click)="back.emit()">
       <!-- lucide:chevron-left -->
-      <svg lucideChevronLeft [class]="isMobileTouch() ? 'h-5 w-5' : 'h-7 w-7'"></svg>
+      <svg lucideChevronLeft [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
     </button>
     @if (logoUrl()) {
       <img [src]="logoUrl()! | resolveUrl:'medium'" [alt]="mediaTitle()"
-           class="w-auto max-w-[55%] object-contain object-left [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.5))]"
-           [class]="isMobileTouch() ? 'h-7' : 'h-8'" />
+           class="h-7 w-auto max-w-[50vw] object-contain object-left [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.45))]" />
     } @else {
       <span class="text-white font-semibold truncate" [class]="isMobileTouch() ? 'text-lg' : 'text-xl'">{{ mediaTitle() }}</span>
     }
   </div>
 
   <!-- Right -->
-  <div class="flex items-center">
+  <div class="flex items-center" [class]="isMobileTouch() ? 'gap-1' : 'gap-1.5'">
     @if (!isMobileTouch() && !isTv()) {
       <input
         type="range"
@@ -54,7 +53,7 @@
     <!-- lucide:picture-in-picture-2 — hidden on TV (no PiP on Android TV) and when permission is revoked -->
     @if (!isTv() && pipAvailable()) {
       <button type="button" class="btn btn-ghost btn-circle text-white btn-md" [attr.aria-label]="'player.pip' | translate" (click)="togglePip.emit()">
-        <svg lucidePictureInPicture2 class="h-6 w-6"></svg>
+        <svg lucidePictureInPicture2 [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
       </button>
     }
     <!-- Cast -->
@@ -63,7 +62,7 @@
         @if (castConnecting()) {
           <span class="loading loading-spinner loading-md"></span>
         } @else {
-          <svg lucideCast class="h-6 w-6"></svg>
+          <svg lucideCast [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
         }
       </button>
     }
@@ -124,10 +123,9 @@
 <div
   class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-opacity duration-300 pt-12
          [--ctrl-px:1rem] [--ctrl-pb:0.5rem]
-         sm:[--ctrl-px:2rem] sm:[--ctrl-pb:1rem]
-         lg:[--ctrl-px:2.5rem] lg:[--ctrl-pb:1rem]"
+         sm:[--ctrl-pb:1rem] xl:[--ctrl-inset:1rem]"
   [class]="seekDragging() ? 'z-[55]' : 'z-40'"
-  style="padding-left: max(var(--ctrl-px), env(safe-area-inset-left)); padding-right: max(var(--ctrl-px), env(safe-area-inset-right)); padding-bottom: max(var(--ctrl-pb), env(safe-area-inset-bottom));"
+  style="padding-left: calc(max(var(--ctrl-px), env(safe-area-inset-left)) + 0.25rem + var(--ctrl-inset, 0px)); padding-right: calc(max(var(--ctrl-px), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px)); padding-bottom: calc(max(var(--ctrl-pb), env(safe-area-inset-bottom)) + var(--ctrl-inset, 0px));"
   [class.opacity-0]="!visible()"
   [class.pointer-events-none]="!visible()"
 >
@@ -145,27 +143,27 @@
 
     <!-- Mobile: action buttons aligned right -->
     @if (isMobileTouch()) {
-      <div class="flex items-center gap-0.5 shrink-0" (click)="$event.stopPropagation()">
+      <div class="flex items-center lg:gap-1 shrink-0" (click)="$event.stopPropagation()">
         @if (hasNextEpisode()) {
-          <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" [attr.aria-label]="'player.next_episode' | translate" (click)="nextEpisode.emit()">
+          <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.next_episode' | translate" (click)="nextEpisode.emit()">
             <svg lucideSkipForward class="h-5 w-5"></svg>
           </button>
         }
         @if (availableSubtitles().length > 0) {
-          <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" [attr.aria-label]="'player.subtitles' | translate" (click)="openSheet('subtitles')">
+          <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.subtitles' | translate" (click)="openSheet('subtitles')">
             <svg lucideCaptions class="h-5 w-5"></svg>
           </button>
         }
         @if (availableAudioTracks().length > 1) {
-          <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" [attr.aria-label]="'player.audio' | translate" (click)="openSheet('audio')">
+          <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.audio' | translate" (click)="openSheet('audio')">
             <svg lucideHeadphones class="h-5 w-5"></svg>
           </button>
         }
-        <button type="button" class="btn btn-ghost btn-sm text-white/80 text-sm" [attr.aria-label]="'player.speed' | translate" (click)="openSheet('speed')">{{ playbackRate() }}x</button>
-        <button type="button" class="btn btn-ghost btn-sm btn-circle text-white/80" [attr.aria-label]="'player.settings' | translate" (click)="openSheet('settings')">
+        <button type="button" class="btn btn-ghost text-white/80" [attr.aria-label]="'player.speed' | translate" (click)="openSheet('speed')">{{ playbackRate() }}x</button>
+        <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.settings' | translate" (click)="openSheet('settings')">
           <svg lucideSettings class="h-5 w-5"></svg>
         </button>
-        <ng-container *ngTemplateOutlet="fullscreenBtn; context: { $implicit: 'sm' }"></ng-container>
+        <ng-container *ngTemplateOutlet="fullscreenBtn; context: { $implicit: 'md' }"></ng-container>
       </div>
     }
   </div>
@@ -498,7 +496,7 @@
       [attr.aria-label]="'player.fullscreen' | translate"
       (click)="toggleFullscreen.emit()"
     >
-      <svg lucideMaximize [class.h-5]="isSm" [class.w-5]="isSm" [class.h-6]="!isSm" [class.w-6]="!isSm"></svg>
+      <svg lucideMaximize [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
     </button>
   }
 </ng-template>
