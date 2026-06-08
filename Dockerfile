@@ -45,7 +45,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   python3-venv \
   ffmpeg \
   libchromaprint-tools \
-  mkvtoolnix \
   tesseract-ocr \
   tesseract-ocr-eng \
   tesseract-ocr-fra \
