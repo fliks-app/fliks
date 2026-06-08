@@ -98,7 +98,9 @@ export class SubtitleOcrService {
       providerType: SubtitleProviderType.OCR,
       status: SubtitleStatus.PROCESSING,
       codec: 'subrip',
-      score: 0,
+      // Perfect-match, in-sync text from the source track — score it like an
+      // embedded sub (100) so the upgrade pass leaves it alone.
+      score: 100,
     } as any);
 
     void this.runOcr(placeholder.id, source).catch((err) => {
