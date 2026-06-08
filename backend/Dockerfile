@@ -30,6 +30,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   tesseract-ocr-chi-sim \
   tesseract-ocr-rus \
   tesseract-ocr-ara \
+  tesseract-ocr-pol \
+  tesseract-ocr-tur \
+  tesseract-ocr-swe \
+  tesseract-ocr-dan \
+  tesseract-ocr-nor \
+  tesseract-ocr-fin \
   intel-media-va-driver-non-free \
   intel-opencl-icd \
   libmfx-gen1.2 \
