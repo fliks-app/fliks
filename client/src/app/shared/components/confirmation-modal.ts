@@ -1,4 +1,12 @@
-import { Component, ChangeDetectionStrategy, inject, computed } from '@angular/core';
+import {
+  Component,
+  ChangeDetectionStrategy,
+  inject,
+  computed,
+  effect,
+  viewChild,
+  ElementRef,
+} from '@angular/core';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 
@@ -11,6 +19,9 @@ import { ConfirmationService } from '../../core/services/confirmation.service';
 export class ConfirmationModalComponent {
   readonly confirmService = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
+
+  private readonly dialog =
+    viewChild<ElementRef<HTMLDialogElement>>('dialog');
 
   readonly isOpen = computed(() => !!this.confirmService.state());
   readonly title = computed(() => this.confirmService.state()?.title ?? '');
@@ -41,4 +52,29 @@ export class ConfirmationModalComponent {
     };
     return map[this.variant()] ?? 'btn-primary';
   });
+
+  constructor() {
+    // Open through the native dialog API so the confirmation lands in the
+    // browser top layer — above any modal already opened with showModal()
+    // (e.g. the subtitles modal). A CSS/z-index modal can never sit above a
+    // top-layer one.
+    effect(() => {
+      const el = this.dialog()?.nativeElement;
+      if (!el) return;
+      if (this.isOpen()) {
+        if (!el.open) el.showModal();
+      } else if (el.open) {
+        el.close();
+      }
+    });
+  }
+
+  /** ESC / backdrop dismissal closes the native dialog — resolve the pending
+   *  request the same way the buttons would. No-op when a button already
+   *  resolved it (the service calls are idempotent). */
+  onDialogClose() {
+    if (!this.confirmService.state()) return;
+    if (this.dismissLabel()) this.confirmService.dismiss();
+    else this.confirmService.cancel();
+  }
 }
