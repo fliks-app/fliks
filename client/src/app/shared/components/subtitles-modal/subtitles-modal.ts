@@ -113,7 +113,7 @@ export class SubtitlesModalComponent {
   /** All files for this media (or episode files) — used to filter subtitles + find active file */
   readonly files = input<{ id: number; episodeId?: number | null; streamInfo?: any }[]>([]);
   readonly selectedFileId = input<number | null>(null);
-  readonly canGrab = input(false);
+  readonly canManage = input(false);
   readonly searchDisabled = input(false);
   /** Language profile ID from the media — used to compute required subtitle languages */
   readonly languageProfileId = input<number | null>(null);

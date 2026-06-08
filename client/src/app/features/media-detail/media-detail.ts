@@ -556,6 +556,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly libraryPatchSaved = signal(false);
 
   readonly canGrab = computed(() => this.auth.hasPermission('media.grab'));
+  readonly canManageSubtitles = computed(() => this.auth.hasPermission('subtitles.manage'));
   readonly canEditProfiles = computed(() => this.auth.hasPermission('media.edit'));
   readonly canDelete = computed(() => this.auth.hasPermission('media.delete'));
   readonly isAdmin = computed(() => this.auth.hasPermission('settings.access'));

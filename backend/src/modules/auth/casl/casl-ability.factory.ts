@@ -92,6 +92,7 @@ export class CaslAbilityFactory {
     // --- subtitles ---
     if (perms.has('subtitles.manage')) {
       can(Action.Create, SubtitleFile);
+      can(Action.Update, SubtitleFile);
       can(Action.Delete, SubtitleFile);
     }
 

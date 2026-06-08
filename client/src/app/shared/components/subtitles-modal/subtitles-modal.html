@@ -7,7 +7,7 @@
 
     <section class="space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        @if (canGrab()) {
+        @if (canManage()) {
           <div class="flex gap-2 ml-auto">
             @if (hasMissing()) {
               <button
@@ -100,7 +100,7 @@
                       @if (sub.codec) { <span class="badge badge-xs badge-ghost ml-1">{{ sub.codec }}</span> }
                     </td>
                     <td class="text-end">
-                      @if (canGrab() && rowHasActions(sub)) {
+                      @if (canManage() && rowHasActions(sub)) {
                         <button
                           #actionsTrigger
                           type="button"

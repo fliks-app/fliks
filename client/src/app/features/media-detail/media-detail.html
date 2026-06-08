@@ -116,7 +116,7 @@
           [episodeId]="ep.id"
           [files]="m.files ?? []"
           [selectedFileId]="episodeActiveFileId()"
-          [canGrab]="canGrab()"
+          [canManage]="canManageSubtitles()"
           [searchDisabled]="!ep.hasFile"
           [languageProfileId]="m.languageProfile?.id ?? null"
         />
@@ -197,7 +197,7 @@
             [mediaId]="m.id"
             [files]="mediaFiles()"
             [selectedFileId]="activeFileId()"
-            [canGrab]="canGrab()"
+            [canManage]="canManageSubtitles()"
             [languageProfileId]="m.languageProfile?.id ?? null"
           />
         }
