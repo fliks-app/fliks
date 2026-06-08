@@ -76,6 +76,10 @@ export class SubtitleOcrService {
       );
     }
 
+    this.log.log(
+      `OCR start — sub #${subtitleId} "${source.media?.title ?? '?'}" [${source.language}] codec=${source.codec} stream=${source.streamIndex}`,
+    );
+
     const placeholder = await this.repo.save({
       media: { id: source.mediaId },
       mediaFile: { id: source.mediaFileId },
@@ -174,7 +178,7 @@ export class SubtitleOcrService {
         status: SubtitleStatus.DOWNLOADED,
       });
       this.log.log(
-        `OCR subtitle ready: ${source.language} for "${media.title}" → ${relativePath}`,
+        `OCR end (ok) — sub #${placeholderId} "${media.title}" [${source.language}] → ${relativePath}`,
       );
       this.events.emit({
         type: 'subtitle.downloaded',
@@ -184,7 +188,9 @@ export class SubtitleOcrService {
         provider: 'ocr',
       });
     } catch (err) {
-      this.log.warn(`OCR failed for sub #${source.id}: ${err}`);
+      this.log.warn(
+        `OCR end (failed) — sub #${placeholderId} "${media?.title ?? ''}" [${source.language}]: ${err}`,
+      );
       await this.repo.update(placeholderId, { status: SubtitleStatus.FAILED });
       this.events.emit({
         type: 'subtitle.failed',
