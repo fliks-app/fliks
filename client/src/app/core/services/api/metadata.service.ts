@@ -25,6 +25,8 @@ export interface MetadataDetails extends MetadataSearchResult {
   imdbId: string | null;
   tvdbId: number | null;
   fanartUrl: string | null;
+  /** Transparent PNG "clearlogo" title treatment when the provider has one. */
+  logoUrl: string | null;
   runtime: number | null;
   releaseDate: string | null;
   inCinemas: string | null;
