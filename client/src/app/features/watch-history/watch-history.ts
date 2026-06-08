@@ -8,6 +8,7 @@ import { PlaybackState, StreamingApiService, WatchHistoryItem } from '../../core
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
+import { AppResumeService } from '../../core/services/app-resume.service';
 import { PaginationComponent } from '../../shared/components/pagination/pagination';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 
@@ -24,10 +25,15 @@ export class WatchHistoryComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly reuseStrategy = inject(CachingReuseStrategy);
+  private readonly appResume = inject(AppResumeService);
   private readonly injector = inject(Injector);
   private static readonly SCROLL_KEY = 'history';
   private attachedSub?: Subscription;
   private detachedSub?: Subscription;
+  private resumeSub?: Subscription;
+  /** True while this cached instance is detached (some other route is shown).
+   *  Gates the app-resume refresh so only the visible history refetches. */
+  private detached = false;
 
   readonly loading = signal(true);
   readonly items = signal<WatchHistoryItem[]>([]);
@@ -49,12 +55,20 @@ export class WatchHistoryComponent implements OnInit, OnDestroy {
     const ownKey = this.reuseStrategy.keyFor(this.route.snapshot);
     this.attachedSub = this.reuseStrategy.attached$.subscribe((key) => {
       if (key !== ownKey) return;
+      this.detached = false;
       this.scrollMemory.activate(WatchHistoryComponent.SCROLL_KEY);
       void this.load(true);
       this.scrollMemory.restoreSticky(WatchHistoryComponent.SCROLL_KEY);
     });
     this.detachedSub = this.reuseStrategy.detached$.subscribe((key) => {
-      if (key === ownKey) this.scrollMemory.deactivateIf(WatchHistoryComponent.SCROLL_KEY);
+      if (key !== ownKey) return;
+      this.detached = true;
+      this.scrollMemory.deactivateIf(WatchHistoryComponent.SCROLL_KEY);
+    });
+    // Native app-resume: silently revalidate the current page when the app
+    // returns to the foreground after a spell away and history is on screen.
+    this.resumeSub = this.appResume.resume$.subscribe(() => {
+      if (!this.detached) void this.load(true);
     });
   }
 
@@ -62,6 +76,7 @@ export class WatchHistoryComponent implements OnInit, OnDestroy {
     this.scrollMemory.deactivate();
     this.attachedSub?.unsubscribe();
     this.detachedSub?.unsubscribe();
+    this.resumeSub?.unsubscribe();
   }
 
   async load(silent = false) {

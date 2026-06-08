@@ -17,6 +17,7 @@ import { SelectPickerComponent } from './shared/components/select-picker';
 import { DismissableStackService } from './core/services/dismissable-stack.service';
 import { NavbarService } from './core/services/navbar.service';
 import { PwaAutoUpdateService } from './core/services/pwa-auto-update.service';
+import { AppResumeService } from './core/services/app-resume.service';
 
 @Component({
   selector: 'app-root',
@@ -39,8 +40,10 @@ export class App implements OnInit, OnDestroy {
   private readonly dismissStack = inject(DismissableStackService);
   private readonly navbar = inject(NavbarService);
   private readonly pwaAutoUpdate = inject(PwaAutoUpdateService);
+  private readonly appResume = inject(AppResumeService);
   private backButtonListener?: { remove: () => Promise<void> };
   private resumeListener?: { remove: () => Promise<void> };
+  private pauseListener?: { remove: () => Promise<void> };
   private tvBackKeyListener?: (e: KeyboardEvent) => void;
   private escapeKeyListener?: (e: KeyboardEvent) => void;
 
@@ -87,9 +90,19 @@ export class App implements OnInit, OnDestroy {
         this.backButtonListener = handle;
       });
 
-      // Reconnect SSE when app comes back from background
+      // Stamp the background-entry time so the resume handler can tell a real
+      // away-spell from a momentary interruption (see AppResumeService).
+      CapApp.addListener('pause', () => {
+        this.appResume.markBackgrounded();
+      }).then((handle) => {
+        this.pauseListener = handle;
+      });
+
+      // On return from background: reconnect SSE, and let data pages refresh
+      // themselves if we were away long enough for the backend to have moved on.
       CapApp.addListener('resume', () => {
         this.sse.reconnect();
+        this.appResume.markResumed();
       }).then((handle) => {
         this.resumeListener = handle;
       });
@@ -246,6 +259,7 @@ export class App implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.backButtonListener?.remove();
     this.resumeListener?.remove();
+    this.pauseListener?.remove();
     if (this.tvBackKeyListener) {
       window.removeEventListener('keydown', this.tvBackKeyListener);
     }

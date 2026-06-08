@@ -5,8 +5,10 @@ import {
   inject,
   computed,
   OnInit,
+  OnDestroy,
   viewChild,
 } from '@angular/core';
+import { Subscription } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -20,6 +22,7 @@ import {
 } from '../../core/services/api/requests.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { ToastService } from '../../core/services/toast.service';
+import { AppResumeService } from '../../core/services/app-resume.service';
 import { RequestPosterComponent } from './request-poster';
 import { RequestDeclineModalComponent } from './request-decline-modal/request-decline-modal.component';
 import { RequestViewDeclineModalComponent } from './request-view-decline-modal/request-view-decline-modal.component';
@@ -46,13 +49,15 @@ import { LucideEllipsisVertical, LucidePencil, LucideTrash2 } from '@lucide/angu
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './requests.html',
 })
-export class RequestsComponent implements OnInit {
+export class RequestsComponent implements OnInit, OnDestroy {
   private readonly requestsService = inject(RequestsService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
+  private readonly appResume = inject(AppResumeService);
   readonly auth = inject(AuthService);
+  private resumeSub?: Subscription;
 
   private readonly declineModal = viewChild(RequestDeclineModalComponent);
   private readonly viewDeclineModal = viewChild(RequestViewDeclineModalComponent);
@@ -87,6 +92,9 @@ export class RequestsComponent implements OnInit {
 
   async ngOnInit() {
     this.reload();
+    // Native app-resume: this page only exists while it's the visible route
+    // (no route reuse), so an unguarded reload is always the on-screen one.
+    this.resumeSub = this.appResume.resume$.subscribe(() => this.reload());
     try {
       const [qp, lp] = await Promise.all([
         this.profilesApi.getQualityProfiles(),
@@ -95,6 +103,10 @@ export class RequestsComponent implements OnInit {
       this.qualityProfiles.set(qp.map((p) => ({ id: p.id, name: p.name })));
       this.languageProfiles.set(lp.map((p) => ({ id: p.id, name: p.name })));
     } catch { /* profiles optional */ }
+  }
+
+  ngOnDestroy() {
+    this.resumeSub?.unsubscribe();
   }
 
   onStatusChange(value: string) {

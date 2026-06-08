@@ -24,6 +24,8 @@ import {
 } from '../../../core/services/api/media.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { AppResumeService } from '../../../core/services/app-resume.service';
+import { Subscription } from 'rxjs';
 import {
   LucideRotateCcw,
   LucideLink2,
@@ -51,6 +53,7 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
+  private readonly appResume = inject(AppResumeService);
 
   readonly queue = signal<QueueItem[]>([]);
   readonly queueLoading = signal(true);
@@ -139,15 +142,22 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
   });
 
   private intervalId: ReturnType<typeof setInterval> | null = null;
+  private resumeSub?: Subscription;
 
   ngOnInit() {
     this.refreshQueue();
     this.intervalId = setInterval(() => this.refreshQueue(), 10_000);
+    // Native app-resume: pull the queue immediately on foreground rather than
+    // waiting up to 10s for the next interval tick (timers are throttled while
+    // backgrounded). This page has no route reuse, so it's always the visible
+    // one when alive.
+    this.resumeSub = this.appResume.resume$.subscribe(() => this.refreshQueue());
   }
 
   ngOnDestroy() {
     if (this.intervalId !== null) clearInterval(this.intervalId);
     if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.resumeSub?.unsubscribe();
   }
 
   /** Local YYYY-MM-DD key for grouping (added_on is unix seconds). */

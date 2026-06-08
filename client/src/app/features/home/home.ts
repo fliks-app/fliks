@@ -13,6 +13,7 @@ import { PlayableMediaService } from '../../core/services/playable-media.service
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { FocusMemoryService } from '../../core/services/focus-memory.service';
 import { NavbarService } from '../../core/services/navbar.service';
+import { AppResumeService } from '../../core/services/app-resume.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { DisplaySettingsService } from '../../core/services/display-settings.service';
 import { HomeSettingsService } from '../../core/services/home-settings.service';
@@ -86,6 +87,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly focusMemory = inject(FocusMemoryService);
   private readonly navbar = inject(NavbarService);
+  private readonly appResume = inject(AppResumeService);
   private readonly backgroundService = inject(BackgroundService);
   private readonly displaySettings = inject(DisplaySettingsService);
   private readonly home = inject(HomeSettingsService);
@@ -102,6 +104,10 @@ export class HomeComponent implements OnInit, OnDestroy {
   private navStartSub?: Subscription;
   private attachedSub?: Subscription;
   private detachedSub?: Subscription;
+  private resumeSub?: Subscription;
+  /** True while this cached instance is detached (some other route is shown).
+   *  Gates the app-resume refresh so only the visible home refetches. */
+  private detached = false;
   private readonly declineModal = viewChild(RequestDeclineModalComponent);
 
   readonly libraries = signal<LibrarySummary[]>([]);
@@ -250,6 +256,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     const ownKey = this.reuseStrategy.keyFor(this.route.snapshot);
     this.attachedSub = this.reuseStrategy.attached$.subscribe((key) => {
       if (key !== ownKey) return;
+      this.detached = false;
       this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
       // The cached signals stay visible; refresh cache-first for an instant
       // repaint, then force a network round-trip so a return to home reflects
@@ -270,7 +277,18 @@ export class HomeComponent implements OnInit, OnDestroy {
     // next route already claimed scrollMemory in its own ngOnInit, we leave
     // its key alone.
     this.detachedSub = this.reuseStrategy.detached$.subscribe((key) => {
-      if (key === ownKey) this.scrollMemory.deactivateIf(HomeComponent.SCROLL_KEY);
+      if (key !== ownKey) return;
+      this.detached = true;
+      this.scrollMemory.deactivateIf(HomeComponent.SCROLL_KEY);
+    });
+    // Native app-resume: when the app returns to the foreground after a spell
+    // in the background and home is the page on screen, refresh it. Same
+    // two-pass SWR as the reuse-attach path — cached signals stay visible for
+    // an instant repaint, then a forced round-trip pulls fresh data.
+    this.resumeSub = this.appResume.resume$.subscribe(() => {
+      if (this.detached) return;
+      void this.loadAllSections();
+      queueMicrotask(() => void this.loadAllSections({ force: true }));
     });
   }
 
@@ -279,6 +297,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.navStartSub?.unsubscribe();
     this.attachedSub?.unsubscribe();
     this.detachedSub?.unsubscribe();
+    this.resumeSub?.unsubscribe();
     this.backgroundService.clear();
   }
 
