@@ -99,6 +99,7 @@ export class SubtitleOcrService {
       status: SubtitleStatus.PROCESSING,
       codec: 'subrip',
       score: 100,
+      sourceStreamIndex: source.streamIndex,
     } as any);
 
     void this.runOcr(placeholder.id, source).catch((err) => {

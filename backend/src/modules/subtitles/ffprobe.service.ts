@@ -13,6 +13,8 @@ export interface EmbeddedSubtitleStream {
   language: string;
   forced: boolean;
   hearingImpaired: boolean;
+  /** True for bitmap subtitles (PGS, VOBSUB, DVB) that need burn-in. */
+  isImageBased: boolean;
 }
 
 export interface MediaStream {
