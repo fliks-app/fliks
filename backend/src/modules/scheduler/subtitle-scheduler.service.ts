@@ -409,7 +409,12 @@ export class SubtitleSchedulerService {
         });
 
         const best = results.find((r) => r.score >= minScore);
-        if (!best) continue;
+        if (!best) {
+          this.log.log(
+            `PostImport: no ${langItem.isoCode} subtitle for "${media.title}" cleared min score ${minScore} (best candidate ${results[0]?.score ?? 'none'})`,
+          );
+          continue;
+        }
 
         const sub = await this.subtitlesService.downloadSubtitle(
           mediaId,

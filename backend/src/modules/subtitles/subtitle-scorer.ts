@@ -5,12 +5,13 @@ import {
 } from '../../common/release-parsing';
 
 /**
- * Bazarr-style scoring weights (mirrored from
- * `subliminal_patch/score.py`). Each weight is the credit awarded when
- * the attribute MATCHES between the candidate subtitle and the local
- * video file. `MAX_*` is the sum of all weights for that kind, used to
- * normalise the score to a 0-100 percentage so the user-facing thresholds
- * stay portable across episode / movie regardless of which weights drift.
+ * Scoring weights mirrored from subliminal's `score.py`. Each weight is the
+ * credit awarded when the attribute MATCHES between the candidate subtitle and
+ * the local video file. By construction the `hash` weight equals the sum of
+ * every other weight, so the 0-100 normalisation denominator (`MAX_*`) is the
+ * hash weight: a hash hit — or a perfect non-hash release match — normalises to
+ * 100%, and partial release-name matches scale across the full range. This
+ * keeps the user-facing thresholds portable across episode / movie.
  */
 export const EPISODE_WEIGHTS = {
   hash: 359,
@@ -39,14 +40,8 @@ export const MOVIE_WEIGHTS = {
   hearingImpaired: 1,
 } as const;
 
-export const MAX_EPISODE_SCORE = Object.values(EPISODE_WEIGHTS).reduce(
-  (a, b) => a + b,
-  0,
-);
-export const MAX_MOVIE_SCORE = Object.values(MOVIE_WEIGHTS).reduce(
-  (a, b) => a + b,
-  0,
-);
+export const MAX_EPISODE_SCORE = EPISODE_WEIGHTS.hash;
+export const MAX_MOVIE_SCORE = MOVIE_WEIGHTS.hash;
 
 export interface SubtitleScoreCandidate {
   /** Release name the provider returned for this subtitle (preferred field
@@ -121,22 +116,12 @@ export function scoreSubtitle(
     matches.push(name);
   };
 
-  // Hash matching is treated as Bazarr-style perfect identification:
-  // every "id-style" attribute (series / title / year / season / episode)
-  // is credited because a movie/episode hash collision is effectively
-  // impossible. We DON'T short-circuit — release-name attributes still
-  // get credited below when present, so a hash + perfect-release combo
-  // can reach 100% while hash + missing-release tops out lower.
+  // A hash collision is perfect identification. Mirror subliminal: discard
+  // every other match and score the hash weight alone. Since the hash weight
+  // equals the sum of all other weights, this normalises to exactly 100% —
+  // strictly at or above any non-hash candidate.
   if (candidate.hashMatched) {
-    award('hash', weights.hash);
-    if (isEpisode) {
-      award('series', (weights as typeof EPISODE_WEIGHTS).series);
-      award('season', (weights as typeof EPISODE_WEIGHTS).season);
-      award('episode', (weights as typeof EPISODE_WEIGHTS).episode);
-    } else {
-      award('title', (weights as typeof MOVIE_WEIGHTS).title);
-    }
-    if (context.year) award('year', weights.year);
+    return finalize(weights.hash, max, ['hash']);
   }
 
   // IMDB equivalence: a confirmed imdb-id match means the provider
