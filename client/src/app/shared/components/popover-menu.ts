@@ -56,6 +56,7 @@ import { DismissableStackService } from '../../core/services/dismissable-stack.s
         data-tv-modal
         class="fixed z-[101] bg-base-200 rounded-box shadow-xl overflow-y-auto p-2 [scroll-padding:0.5rem] [scroll-behavior:smooth]"
         [style.top.px]="position().top"
+        [style.bottom.px]="position().bottom"
         [style.left.px]="position().left"
         [style.min-width.px]="position().width"
         [style.max-height.px]="position().maxHeight"
@@ -157,28 +158,52 @@ export class PopoverMenuComponent {
   /** Anchored dropdown only on desktop with a mouse. TV + touch get the sheet. */
   readonly useDropdown = computed(() => !this.tv.isTv() && !this.device.isTouch());
 
-  /** Re-reads `getBoundingClientRect` on every anchor change AND on
-   *  every viewport tick (scroll / resize) so the fixed-positioned box
-   *  follows its trigger when the page moves under it. `maxHeight` is
-   *  capped to the available space between the popover's edge and the
-   *  viewport edge so a long list doesn't overflow off-screen (the
-   *  internal `overflow-y-auto` only scrolls content INSIDE the box). */
+  /** Re-reads `getBoundingClientRect` on every anchor change AND on every
+   *  viewport tick (scroll / resize) so the fixed-positioned box follows its
+   *  trigger when the page moves under it. The box is kept inside the viewport
+   *  on both axes: vertically it opens on the requested side but flips to the
+   *  other when that side can't fit a usable menu (so a tall list near the
+   *  bottom edge doesn't spill off-screen), anchoring with `bottom` when it
+   *  opens upward; horizontally `left` is clamped into the viewport. The
+   *  chosen side's free space caps `maxHeight`, and the internal
+   *  `overflow-y-auto` scrolls the content INSIDE the box. */
   readonly position = computed(() => {
     this.viewportTick(); // dependency: forces recompute on scroll / resize
+    const GUTTER = 8;
+    const WIDTH = 240;
+    const MIN_HEIGHT = 120;
     const a = this.anchor();
-    if (!a) return { top: 0, left: 0, width: 0, maxHeight: 0 };
+    if (!a)
+      return { top: 0 as number | null, bottom: null as number | null, left: 0, width: 0, maxHeight: 0 };
     const r = a.getBoundingClientRect();
     const placement = this.placement();
-    const onTop = placement.startsWith('top');
+    const wantTop = placement.startsWith('top');
     const onEnd = placement.endsWith('end');
-    const GUTTER = 8;
     const viewportH = typeof window !== 'undefined' ? window.innerHeight : 800;
-    const maxHeight = onTop ? r.top - GUTTER * 2 : viewportH - r.bottom - GUTTER * 2;
+    const viewportW = typeof window !== 'undefined' ? window.innerWidth : 1280;
+
+    // Vertical: open on the requested side, but flip when it can't hold a
+    // usable menu and the other side has more room.
+    const spaceBelow = viewportH - r.bottom - GUTTER * 2;
+    const spaceAbove = r.top - GUTTER * 2;
+    const openTop = wantTop
+      ? !(spaceAbove < MIN_HEIGHT && spaceBelow > spaceAbove)
+      : spaceBelow < MIN_HEIGHT && spaceAbove > spaceBelow;
+    const maxHeight = Math.max(MIN_HEIGHT, openTop ? spaceAbove : spaceBelow);
+
+    // Horizontal: anchor to the requested edge, then clamp into the viewport.
+    const rawLeft = onEnd ? r.right - WIDTH : r.left;
+    const left = Math.min(
+      Math.max(GUTTER, rawLeft),
+      Math.max(GUTTER, viewportW - WIDTH - GUTTER),
+    );
+
     return {
-      top: onTop ? r.top - GUTTER : r.bottom + GUTTER,
-      left: onEnd ? r.right - 240 : r.left,
-      width: 240,
-      maxHeight: Math.max(120, maxHeight),
+      top: openTop ? null : r.bottom + GUTTER,
+      bottom: openTop ? viewportH - r.top + GUTTER : null,
+      left,
+      width: WIDTH,
+      maxHeight,
     };
   });
 
