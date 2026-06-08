@@ -203,31 +203,45 @@ export class SubtitleOcrService {
     codec: string,
     language: string,
   ): Promise<string> {
-    const lang = TESSERACT_LANG[(language ?? '').toLowerCase()] ?? 'eng';
+    const lower = (language ?? '').toLowerCase();
+    // pgsrip filters out tracks whose language doesn't intersect `--language`
+    // and picks the tesseract pack from the language baked into the .sup
+    // filename — so the filename and `--language` must carry the same IETF
+    // code. These tracks are usually untagged ('und'); default to English.
+    const ietf = lower.length === 2 ? lower : 'en';
+    // vobsub2srt wants the tesseract (alpha-3) pack name instead.
+    const tess = TESSERACT_LANG[lower] ?? 'eng';
     const base = path.join(this.tmpDir, `ocr-${streamIndex}-${process.hrtime.bigint()}`);
 
     try {
       if (codec === 'hdmv_pgs_subtitle') {
-        const sup = `${base}.sup`;
+        const sup = `${base}.${ietf}.sup`;
         await execFileAsync('ffmpeg', [
           '-y', '-i', videoPath, '-map', `0:${streamIndex}`, '-c:s', 'copy', sup,
         ], { timeout: 120_000 });
-        // pgsrip writes "<sup-without-ext>.srt" next to the input.
-        await execFileAsync('pgsrip', ['--language', lang, sup], {
-          timeout: 600_000,
-          maxBuffer: 1 << 24,
-        });
-        return await fs.readFile(`${base}.srt`, 'utf-8');
+        const { stdout, stderr } = await execFileAsync(
+          'pgsrip',
+          ['--language', ietf, sup],
+          { timeout: 600_000, maxBuffer: 1 << 24 },
+        );
+        // pgsrip names the output "<base>.<lang>.srt" (babelfish's own form),
+        // so find it by prefix rather than reconstructing the exact name.
+        const srt = await this.readProducedSrt(base);
+        if (srt == null) {
+          throw new Error(
+            `pgsrip produced no SRT for language "${ietf}" — ${(stderr || stdout || '').trim().slice(0, 300)}`,
+          );
+        }
+        return srt;
       }
 
       if (codec === 'dvd_subtitle') {
-        // ffmpeg emits the paired .idx/.sub from the .idx output path.
-        const idx = `${base}.idx`;
+        // ffmpeg emits the paired .idx/.sub from the .idx output path;
+        // vobsub2srt takes the basename and writes "<base>.srt".
         await execFileAsync('ffmpeg', [
-          '-y', '-i', videoPath, '-map', `0:${streamIndex}`, '-c:s', 'copy', idx,
+          '-y', '-i', videoPath, '-map', `0:${streamIndex}`, '-c:s', 'copy', `${base}.idx`,
         ], { timeout: 120_000 });
-        // vobsub2srt takes the basename (no extension) and writes "<base>.srt".
-        await execFileAsync('vobsub2srt', ['--tesseract-lang', lang, base], {
+        await execFileAsync('vobsub2srt', ['--tesseract-lang', tess, base], {
           timeout: 600_000,
           maxBuffer: 1 << 24,
         });
@@ -236,11 +250,30 @@ export class SubtitleOcrService {
 
       throw new Error(`OCR not supported for codec "${codec}"`);
     } finally {
-      // Best-effort cleanup of the staged temp artefacts.
-      for (const ext of ['.sup', '.idx', '.sub', '.srt']) {
-        fs.rm(`${base}${ext}`, { force: true }).catch(() => {});
-      }
+      await this.cleanupTemp(base);
     }
+  }
+
+  /** Read the SRT pgsrip produced for `base`, located by prefix (its name
+   *  carries a language tag in babelfish's form). Null when none was written. */
+  private async readProducedSrt(base: string): Promise<string | null> {
+    const dir = path.dirname(base);
+    const prefix = path.basename(base);
+    const entries = await fs.readdir(dir).catch(() => [] as string[]);
+    const match = entries.find((e) => e.startsWith(prefix) && e.endsWith('.srt'));
+    return match ? fs.readFile(path.join(dir, match), 'utf-8') : null;
+  }
+
+  /** Remove every temp artefact staged under `base` (sup/idx/sub/srt/pngs). */
+  private async cleanupTemp(base: string): Promise<void> {
+    const dir = path.dirname(base);
+    const prefix = path.basename(base);
+    const entries = await fs.readdir(dir).catch(() => [] as string[]);
+    await Promise.all(
+      entries
+        .filter((e) => e.startsWith(prefix))
+        .map((e) => fs.rm(path.join(dir, e), { force: true }).catch(() => {})),
+    );
   }
 
   private async exists(p: string): Promise<boolean> {
