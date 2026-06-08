@@ -183,13 +183,14 @@ export class MovieDownloadService {
       this.log.warn(`[searchMovieReleases] no enabled indexers found`);
       return [];
     }
+    const ready = this.torznab.filterReadyIndexers(indexers);
     const customTitle = customQuery?.trim();
     const query = customTitle || this.searchQueryForMedia(media);
     this.log.log(
-      `[searchMovieReleases] "${media.title}" — query="${query}", indexers=[${indexers.map((i) => i.name).join(', ')}]`,
+      `[searchMovieReleases] "${media.title}" — query="${query}", indexers=[${ready.map((i) => i.name).join(', ')}]`,
     );
     const batches = await Promise.all(
-      indexers.map((ix) => this.searchIndexer(ix, query, media)),
+      ready.map((ix) => this.searchIndexer(ix, query, media)),
     );
     const flat = batches.flat();
     this.log.log(
