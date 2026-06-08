@@ -73,11 +73,11 @@ export class SubtitlesApiService {
     );
   }
 
-  ocr(mediaId: number, subtitleId: number) {
+  ocr(mediaId: number, subtitleId: number, language?: string) {
     return firstValueFrom(
       this.http.post<SubtitleFileRow | null>(
         `/api/media/${mediaId}/subtitles/${subtitleId}/ocr`,
-        {},
+        language ? { language } : {},
       ),
     );
   }

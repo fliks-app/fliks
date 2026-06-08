@@ -61,7 +61,10 @@ export class SubtitleOcrService {
    * Manual trigger: OCR a single image-based subtitle. Returns the PROCESSING
    * placeholder immediately; the heavy work runs in the background.
    */
-  async ocrSubtitle(subtitleId: number): Promise<SubtitleFile> {
+  async ocrSubtitle(
+    subtitleId: number,
+    language?: string,
+  ): Promise<SubtitleFile> {
     const source = await this.repo.findOne({
       where: { id: subtitleId },
       relations: ['media', 'mediaFile', 'episode'],
@@ -75,6 +78,11 @@ export class SubtitleOcrService {
         'OCR is only supported for embedded image subtitles',
       );
     }
+
+    // Caller-chosen language wins (used when the track is untagged 'und' and
+    // the language can't be inferred from metadata). It tags the result and
+    // drives the OCR engine's language pack.
+    if (language?.trim()) source.language = language.trim().toLowerCase();
 
     this.log.log(
       `OCR start — sub #${subtitleId} "${source.media?.title ?? '?'}" [${source.language}] codec=${source.codec} stream=${source.streamIndex}`,

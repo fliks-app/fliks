@@ -617,9 +617,10 @@ export class MediaController {
     @Param('id', ParseIntPipe) id: number,
     @Param('subtitleId', ParseIntPipe) subtitleId: number,
     @CurrentUser() user: User,
+    @Body() body: { language?: string },
   ) {
     await this.assertMediaAccessible(id, user);
-    return this.subtitleOcr.ocrSubtitle(subtitleId);
+    return this.subtitleOcr.ocrSubtitle(subtitleId, body.language);
   }
 
   @Post(':id/subtitles/download')

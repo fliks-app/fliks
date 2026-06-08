@@ -69,10 +69,11 @@ export class SubtitleActionsService {
   async ocr(
     mediaId: number, subtitleId: number,
     subtitles: WritableSignal<SubtitleFileRow[]>, busy: WritableSignal<boolean>,
+    language?: string,
   ) {
     busy.set(true);
     try {
-      await this.subtitlesApi.ocr(mediaId, subtitleId);
+      await this.subtitlesApi.ocr(mediaId, subtitleId, language);
       subtitles.set(await this.subtitlesApi.getForMedia(mediaId));
     } finally {
       busy.set(false);

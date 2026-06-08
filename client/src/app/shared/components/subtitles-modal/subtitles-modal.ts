@@ -175,6 +175,15 @@ export class SubtitlesModalComponent {
   private readonly syncDialog = viewChild<ElementRef<HTMLDialogElement>>('syncDialog');
   private readonly adjustDialog = viewChild<ElementRef<HTMLDialogElement>>('adjustDialog');
   private readonly fpsDialog = viewChild<ElementRef<HTMLDialogElement>>('fpsDialog');
+  private readonly ocrLangDialog = viewChild<ElementRef<HTMLDialogElement>>('ocrLangDialog');
+
+  // OCR language picker (used when an image track is untagged — 'und').
+  readonly ocrLangCodes: readonly string[] = [
+    'en', 'fr', 'de', 'es', 'it', 'pt', 'ja', 'ko', 'zh', 'ru',
+    'ar', 'nl', 'pl', 'tr', 'sv', 'da', 'no', 'fi',
+  ];
+  private readonly ocrTargetId = signal<number | null>(null);
+  readonly ocrLang = signal('en');
 
   /** Open the subtitles modal. Called from parent via viewChild. */
   show(): void {
@@ -477,8 +486,37 @@ export class SubtitlesModalComponent {
     await this.subActions.blacklist(this.mediaId(), sub, this.subtitles);
   }
 
-  async ocrSubtitle(sub: SubtitleFileRow) {
-    await this.subActions.ocr(this.mediaId(), sub.id, this.subtitles, this.subtitleActionBusy);
+  /** Image-row OCR. With a known language go straight to it; otherwise let the
+   *  user pick one first — an untagged 'und' track can't be inferred. */
+  ocrSubtitle(sub: SubtitleFileRow) {
+    const lang = (sub.language ?? '').toLowerCase();
+    if (lang && lang !== 'und' && lang !== 'undefined') {
+      void this.triggerOcr(sub.id);
+      return;
+    }
+    this.ocrTargetId.set(sub.id);
+    this.ocrLang.set('en');
+    this.ocrLangDialog()?.nativeElement.showModal();
+  }
+
+  confirmOcr() {
+    const id = this.ocrTargetId();
+    this.ocrLangDialog()?.nativeElement.close();
+    if (id != null) void this.triggerOcr(id, this.ocrLang());
+  }
+
+  closeOcrLangModal() {
+    this.ocrLangDialog()?.nativeElement.close();
+  }
+
+  private async triggerOcr(subtitleId: number, language?: string) {
+    await this.subActions.ocr(
+      this.mediaId(),
+      subtitleId,
+      this.subtitles,
+      this.subtitleActionBusy,
+      language,
+    );
     this.toast.info(this.translate.instant('media_detail.ocr_started'));
   }
 
