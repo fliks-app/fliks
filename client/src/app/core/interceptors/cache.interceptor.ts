@@ -141,7 +141,7 @@ async function putCache(url: string, body: any): Promise<void> {
   } catch { /* ignore */ }
 }
 
-async function invalidatePrefix(prefix: string): Promise<void> {
+export async function invalidatePrefix(prefix: string): Promise<void> {
   try {
     const db = await openDb();
     const tx = db.transaction(STORE_NAME, 'readwrite');

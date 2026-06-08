@@ -16,6 +16,7 @@ import { SubtitleSyncService } from './subtitle-sync.service';
 import { SubtitleProviderFactory } from './providers/subtitle-provider.factory';
 import { FfprobeService } from './ffprobe.service';
 import { EmbeddedSubtitleService } from './embedded-subtitle.service';
+import { SubtitleOcrService } from './subtitle-ocr.service';
 import { SubtitlesController } from './subtitles.controller';
 import { SubtitleActivityController } from './subtitle-activity.controller';
 
@@ -42,6 +43,7 @@ import { SubtitleActivityController } from './subtitle-activity.controller';
     SubtitleProviderFactory,
     FfprobeService,
     EmbeddedSubtitleService,
+    SubtitleOcrService,
   ],
   exports: [
     SubtitlesService,
@@ -49,6 +51,7 @@ import { SubtitleActivityController } from './subtitle-activity.controller';
     SubtitleSyncService,
     EmbeddedSubtitleService,
     FfprobeService,
+    SubtitleOcrService,
   ],
 })
 export class SubtitlesModule {}

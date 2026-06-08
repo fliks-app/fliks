@@ -133,6 +133,21 @@ export class SubtitlesModalComponent {
     const id = this.actionsOpenForId();
     return id == null ? null : this.subtitles().find((s) => s.id === id) ?? null;
   });
+  /** The open row is an image-based (burn-required) track — offer OCR instead
+   *  of the text-only post-processing actions. */
+  readonly actionsSubIsImage = computed(() =>
+    isImageBasedSubtitleCodec(this.actionsSub()?.codec),
+  );
+  /** Embedded tracks have no sidecar file: blacklist/delete don't apply. */
+  readonly actionsSubIsEmbedded = computed(
+    () => this.actionsSub()?.providerType === 'embedded',
+  );
+
+  /** Whether a row should expose the Actions menu — external files always, and
+   *  embedded image tracks so they can be OCR'd to text. */
+  protected rowHasActions(sub: SubtitleFileRow): boolean {
+    return sub.providerType !== 'embedded' || isImageBasedSubtitleCodec(sub.codec);
+  }
 
   protected openSubActions(sub: SubtitleFileRow, anchor: HTMLElement) {
     this.actionsAnchor.set(anchor);
@@ -160,6 +175,19 @@ export class SubtitlesModalComponent {
   private readonly syncDialog = viewChild<ElementRef<HTMLDialogElement>>('syncDialog');
   private readonly adjustDialog = viewChild<ElementRef<HTMLDialogElement>>('adjustDialog');
   private readonly fpsDialog = viewChild<ElementRef<HTMLDialogElement>>('fpsDialog');
+  private readonly ocrLangDialog = viewChild<ElementRef<HTMLDialogElement>>('ocrLangDialog');
+
+  // OCR language picker (used when an image track is untagged — 'und').
+  readonly ocrLangCodes: readonly string[] = [
+    'en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'sv', 'da', 'no', 'fi',
+    'pl', 'cs', 'sk', 'hu', 'ro', 'el', 'ru', 'uk', 'bg', 'sr', 'hr',
+    'tr', 'ar', 'he', 'fa', 'hi', 'th', 'vi', 'id', 'ja', 'ko', 'zh',
+  ];
+  private readonly ocrTargetId = signal<number | null>(null);
+  readonly ocrLang = signal('en');
+  /** The language dialog drives both OCR (pick before converting) and relabel
+   *  (reassign an existing subtitle's language afterwards). */
+  readonly langDialogMode = signal<'ocr' | 'relabel'>('ocr');
 
   /** Open the subtitles modal. Called from parent via viewChild. */
   show(): void {
@@ -460,6 +488,57 @@ export class SubtitlesModalComponent {
 
   async blacklistSubtitle(sub: SubtitleFileRow) {
     await this.subActions.blacklist(this.mediaId(), sub, this.subtitles);
+  }
+
+  /** Image-row OCR. With a known language go straight to it; otherwise let the
+   *  user pick one first — an untagged 'und' track can't be inferred. */
+  ocrSubtitle(sub: SubtitleFileRow) {
+    const lang = (sub.language ?? '').toLowerCase();
+    if (lang && lang !== 'und' && lang !== 'undefined') {
+      void this.triggerOcr(sub.id);
+      return;
+    }
+    this.langDialogMode.set('ocr');
+    this.ocrTargetId.set(sub.id);
+    this.ocrLang.set('en');
+    this.ocrLangDialog()?.nativeElement.showModal();
+  }
+
+  /** Reassign a subtitle's language afterwards — e.g. an OCR done with a
+   *  best-guess language on an untagged track. Relabels only; doesn't re-OCR. */
+  changeLanguage(sub: SubtitleFileRow) {
+    const lang = (sub.language ?? '').toLowerCase();
+    this.langDialogMode.set('relabel');
+    this.ocrTargetId.set(sub.id);
+    this.ocrLang.set(lang && lang !== 'und' && lang !== 'undefined' ? lang : 'en');
+    this.ocrLangDialog()?.nativeElement.showModal();
+  }
+
+  confirmLanguage() {
+    const id = this.ocrTargetId();
+    this.ocrLangDialog()?.nativeElement.close();
+    if (id == null) return;
+    if (this.langDialogMode() === 'ocr') {
+      void this.triggerOcr(id, this.ocrLang());
+    } else {
+      void this.subActions
+        .setLanguage(this.mediaId(), id, this.subtitles, this.subtitleActionBusy, this.ocrLang());
+    }
+  }
+
+  closeOcrLangModal() {
+    this.ocrLangDialog()?.nativeElement.close();
+  }
+
+  private async triggerOcr(subtitleId: number, language?: string) {
+    await this.subActions.ocr(
+      this.mediaId(),
+      subtitleId,
+      this.subtitles,
+      this.subtitleActionBusy,
+      language,
+    );
+    this.toast.info(this.translate.instant('media_detail.ocr_started'));
   }
 
   async deleteSubtitle(subtitleId: number) {

@@ -37,6 +37,7 @@ import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
 import { Media } from './entities/media.entity';
 import { SubtitlesService } from '../subtitles/subtitles.service';
+import { SubtitleOcrService } from '../subtitles/subtitle-ocr.service';
 import { SubtitleSyncService } from '../subtitles/subtitle-sync.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
@@ -55,6 +56,7 @@ export class MediaController {
     private readonly movieDownload: MovieDownloadService,
     private readonly episodeDownload: EpisodeDownloadService,
     private readonly subtitlesService: SubtitlesService,
+    private readonly subtitleOcr: SubtitleOcrService,
     private readonly subtitleSync: SubtitleSyncService,
     private readonly ffprobe: FfprobeService,
     private readonly eventsService: EventsService,
@@ -607,6 +609,30 @@ export class MediaController {
   ) {
     await this.assertMediaAccessible(id, user);
     return this.subtitleScheduler.searchMissingForMedia(id, body.mediaFileId);
+  }
+
+  @Post(':id/subtitles/:subtitleId/ocr')
+  @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
+  async ocrSubtitle(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('subtitleId', ParseIntPipe) subtitleId: number,
+    @CurrentUser() user: User,
+    @Body() body: { language?: string },
+  ) {
+    await this.assertMediaAccessible(id, user);
+    return this.subtitleOcr.ocrSubtitle(subtitleId, body.language);
+  }
+
+  @Patch(':id/subtitles/:subtitleId/language')
+  @CheckPolicies((ability) => ability.can(Action.Update, SubtitleFile))
+  async setSubtitleLanguage(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('subtitleId', ParseIntPipe) subtitleId: number,
+    @CurrentUser() user: User,
+    @Body() body: { language: string },
+  ) {
+    await this.assertMediaAccessible(id, user);
+    return this.subtitlesService.setLanguage(subtitleId, body.language);
   }
 
   @Post(':id/subtitles/download')

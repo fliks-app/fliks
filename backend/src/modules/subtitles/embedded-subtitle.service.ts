@@ -6,6 +6,7 @@ import { SubtitleFile } from './entities/subtitle-file.entity';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { FfprobeService } from './ffprobe.service';
+import { SettingsService } from '../settings/settings.service';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 
 import { ISO_639_2_TO_1 } from '../../common/constants/app-languages';
@@ -30,6 +31,7 @@ export class EmbeddedSubtitleService {
     private readonly mediaRepo: Repository<Media>,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
+    private readonly settings: SettingsService,
   ) {}
 
   async detectAndStore(
@@ -50,6 +52,24 @@ export class EmbeddedSubtitleService {
       `Found ${streams.length} embedded subtitle(s) in "${path.basename(videoPath)}"`,
     );
 
+    // When "delete burn-required after OCR" is on, don't re-add an image track
+    // that was already OCR'd and removed — matched by source stream index, since
+    // such tracks are often language-untagged.
+    let skipIndices = new Set<number>();
+    if ((await this.settings.get('subtitle_ocr_delete_source')) === 'true') {
+      const ocrSubs = await this.subtitleFileRepo.find({
+        where: {
+          mediaFile: { id: mediaFileId },
+          providerType: SubtitleProviderType.OCR,
+        },
+      });
+      skipIndices = new Set(
+        ocrSubs
+          .map((s) => s.sourceStreamIndex)
+          .filter((i): i is number => i != null),
+      );
+    }
+
     // Remove all existing embedded subs for this file, then recreate
     await this.subtitleFileRepo.delete({
       mediaFile: { id: mediaFileId },
@@ -58,7 +78,9 @@ export class EmbeddedSubtitleService {
 
     // repo.save() directly (not create+save) — TypeORM resolves partial
     // relation objects { id: X } to FK columns on save.
-    const toSave = streams.map((stream) => ({
+    const toSave = streams
+      .filter((stream) => !(stream.isImageBased && skipIndices.has(stream.streamIndex)))
+      .map((stream) => ({
       media: { id: mediaId },
       mediaFile: { id: mediaFileId },
       episode: episodeId ? { id: episodeId } : null,

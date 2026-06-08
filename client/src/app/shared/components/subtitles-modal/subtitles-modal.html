@@ -100,7 +100,7 @@
                       @if (sub.codec) { <span class="badge badge-xs badge-ghost ml-1">{{ sub.codec }}</span> }
                     </td>
                     <td class="text-end">
-                      @if (canGrab() && sub.providerType !== 'embedded') {
+                      @if (canGrab() && rowHasActions(sub)) {
                         <button
                           #actionsTrigger
                           type="button"
@@ -143,6 +143,16 @@
       placement="top-end"
       (closed)="closeSubActions()"
     >
+      @if (actionsSubIsImage()) {
+        <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => ocrSubtitle(s))">
+          <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+          {{ 'media_detail.action_ocr_extract' | translate }}
+        </button>
+      } @else {
+      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => changeLanguage(s))">
+        <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.change_language' | translate }}
+      </button>
       <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => openSyncModal(s.id))">
         <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
         {{ 'media_detail.action_sync' | translate }}
@@ -187,14 +197,17 @@
         <svg lucideZap class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
         {{ 'media_detail.action_change_fps' | translate }}
       </button>
-      <button type="button" class="dropdown-item text-warning" (click)="runSubAction(s => blacklistSubtitle(s))">
-        <svg lucideBan class="h-4 w-4 shrink-0 opacity-80" aria-hidden="true"></svg>
-        {{ 'media_detail.action_blacklist' | translate }}
-      </button>
-      <button type="button" class="dropdown-item text-error" (click)="runSubAction(s => deleteSubtitle(s.id))">
-        <svg lucideTrash2 class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
-        {{ 'media_detail.action_delete' | translate }}
-      </button>
+      }
+      @if (!actionsSubIsEmbedded()) {
+        <button type="button" class="dropdown-item text-warning" (click)="runSubAction(s => blacklistSubtitle(s))">
+          <svg lucideBan class="h-4 w-4 shrink-0 opacity-80" aria-hidden="true"></svg>
+          {{ 'media_detail.action_blacklist' | translate }}
+        </button>
+        <button type="button" class="dropdown-item text-error" (click)="runSubAction(s => deleteSubtitle(s.id))">
+          <svg lucideTrash2 class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
+          {{ 'media_detail.action_delete' | translate }}
+        </button>
+      }
     </app-popover-menu>
   }
 
@@ -405,5 +418,31 @@
   </div>
   <form method="dialog" class="modal-backdrop">
     <button type="button" (click)="closeFpsModal()">close</button>
+  </form>
+</dialog>
+
+<dialog #ocrLangDialog class="modal">
+  <div class="modal-box max-w-sm">
+    @if (langDialogMode() === 'relabel') {
+      <h3 class="text-lg font-bold">{{ 'media_detail.change_language_title' | translate }}</h3>
+      <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.change_language_hint' | translate }}</p>
+    } @else {
+      <h3 class="text-lg font-bold">{{ 'media_detail.ocr_language_title' | translate }}</h3>
+      <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.ocr_language_hint' | translate }}</p>
+    }
+    <select class="select select-bordered w-full" [ngModel]="ocrLang()" (ngModelChange)="ocrLang.set($event)">
+      @for (code of ocrLangCodes; track code) {
+        <option [value]="code">{{ code | localizeLanguage }}</option>
+      }
+    </select>
+    <div class="modal-action">
+      <button type="button" class="btn" (click)="closeOcrLangModal()">{{ 'common.cancel' | translate }}</button>
+      <button type="button" class="btn btn-primary" (click)="confirmLanguage()">
+        {{ (langDialogMode() === 'relabel' ? 'common.save' : 'media_detail.action_ocr_extract') | translate }}
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeOcrLangModal()">close</button>
   </form>
 </dialog>

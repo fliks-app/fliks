@@ -45,6 +45,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   python3-venv \
   ffmpeg \
   libchromaprint-tools \
+  tesseract-ocr \
+  tesseract-ocr-all \
   wget \
   ca-certificates \
   gcc \
@@ -58,7 +60,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
          libvpl2 \
          vainfo; \
      fi \
-  && python3 -m pip install --no-cache-dir --break-system-packages ffsubsync \
+  && python3 -m pip install --no-cache-dir --break-system-packages ffsubsync pgsrip \
   && if [ "$TARGETARCH" = "amd64" ]; then \
        wget -q -O /usr/local/bin/alass https://github.com/kaegi/alass/releases/download/v2.0.0/alass-linux64 \
        && chmod +x /usr/local/bin/alass; \

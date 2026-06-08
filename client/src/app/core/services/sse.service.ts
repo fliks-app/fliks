@@ -3,6 +3,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { ToastService } from './toast.service';
 import { ServerConfigService } from './server-config.service';
 import { AuthService } from './auth.service';
+import { invalidatePrefix } from '../interceptors/cache.interceptor';
 
 export interface SseEvent {
   type: string;
@@ -97,7 +98,12 @@ export class SseService implements OnDestroy {
       }
       case 'subtitle.synced':
       case 'subtitle.downloaded':
-        // Handled by media-detail component (only shows toast if on the right page)
+      case 'subtitle.failed':
+        // These land asynchronously (e.g. an OCR or sync finishing minutes after
+        // the request returned), so no client mutation invalidated the cached
+        // subtitle list — drop the media cache here so the next fetch is fresh.
+        void invalidatePrefix('/api/media');
+        // Toasts are handled by the media-detail component (only on the right page).
         break;
       case 'import.complete':
         this.toast.success(

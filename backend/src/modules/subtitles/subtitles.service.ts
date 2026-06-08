@@ -379,6 +379,17 @@ export class SubtitlesService {
     });
   }
 
+  /** Reassign a subtitle's language — used when a track was untagged ('und')
+   *  and the language was only known after the fact (e.g. an OCR result). */
+  async setLanguage(subtitleId: number, language: string): Promise<SubtitleFile> {
+    const sub = await this.repo.findOne({ where: { id: subtitleId } });
+    if (!sub) throw new NotFoundException(`Subtitle #${subtitleId} not found`);
+    const lang = (language ?? '').trim().toLowerCase();
+    if (!lang) throw new BadRequestException('Language is required');
+    sub.language = lang;
+    return this.repo.save(sub);
+  }
+
   /**
    * Called after a media rescan: drop DB rows for external subtitle files that no longer exist on disk,
    * and remove duplicate entries (same path, or same media file + language + forced/HI) keeping the best row.

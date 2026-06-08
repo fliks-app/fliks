@@ -57,6 +57,12 @@ export class SubtitleFile extends BaseEntity {
   @Column({ type: 'int', nullable: true })
   streamIndex: number | null;
 
+  /** For OCR results: the stream index of the source image track they were
+   *  extracted from. Lets a rescan skip re-adding a burn-required track that
+   *  was already OCR'd-and-removed (its language may be undetermined). */
+  @Column({ type: 'int', nullable: true })
+  sourceStreamIndex: number | null;
+
   @Column({ type: 'varchar', nullable: true })
   codec: string | null;
 

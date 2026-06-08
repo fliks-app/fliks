@@ -5,4 +5,6 @@ export enum SubtitleStatus {
   SYNCED = 'synced',
   FAILED = 'failed',
   EMBEDDED = 'embedded',
+  /** OCR extraction of an image-based subtitle is running in the background */
+  PROCESSING = 'processing',
 }
