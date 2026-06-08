@@ -100,6 +100,17 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly keyboardOpen = signal(false);
   readonly navbarHidden = signal(false);
   readonly navbarTransparent = this.navbar.navbarTransparent;
+  /** The hero logo URL whose image failed to load. The backend can hand back a
+   *  logo path for media whose file was never stored (or got cleaned up), so
+   *  the URL is truthy but 404s — fall back to the title instead of a broken
+   *  image. Keyed by URL so it resets automatically on the next hero page. */
+  private readonly failedHeroLogoUrl = signal<string | null>(null);
+  readonly showHeroLogo = computed(
+    () => !!this.navbar.heroLogoUrl() && this.failedHeroLogoUrl() !== this.navbar.heroLogoUrl(),
+  );
+  onHeroLogoError(): void {
+    this.failedHeroLogoUrl.set(this.navbar.heroLogoUrl());
+  }
   readonly isHomeRoute = signal(this.router.url === '/' || this.router.url.startsWith('/?'));
 
   // Sync Android status bar icons with navbar state. App is dark-only, so the

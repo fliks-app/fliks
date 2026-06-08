@@ -151,6 +151,17 @@ export class PlayerControlsComponent {
   readonly mediaTitle = input('');
   /** Clearlogo shown in place of the title text in the top-left overlay. */
   readonly logoUrl = input<string | null>(null);
+  /** The logo URL whose image failed to load. The backend can hand back a
+   *  logo path for media whose file was never stored (or got cleaned up), so
+   *  the URL is truthy but 404s — fall back to the title instead of a broken
+   *  image. Keyed by URL so it resets automatically on the next media. */
+  private readonly failedLogoUrl = signal<string | null>(null);
+  readonly showLogo = computed(
+    () => !!this.logoUrl() && this.failedLogoUrl() !== this.logoUrl(),
+  );
+  onLogoError(): void {
+    this.failedLogoUrl.set(this.logoUrl());
+  }
   readonly episodeTitle = input('');
   readonly hasNextEpisode = input(false);
   readonly hasPrevEpisode = input(false);
