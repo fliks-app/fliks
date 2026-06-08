@@ -15,7 +15,7 @@
                 class="btn btn-ghost btn-sm shrink-0"
                 [disabled]="searchDisabled() || subtitleActionBusy()"
                 [attr.title]="searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null"
-                (click)="autoSubtitle()"
+                (click)="searchMissing()"
               >
                 @if (subtitleActionBusy()) {
                   <span class="loading loading-spinner loading-xs"></span>

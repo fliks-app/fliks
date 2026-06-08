@@ -41,6 +41,7 @@ import { SubtitleSyncService } from '../subtitles/subtitle-sync.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { EventsService } from '../scheduler/events.service';
+import { SubtitleSchedulerService } from '../scheduler/subtitle-scheduler.service';
 import { LibrariesService } from '../libraries/libraries.service';
 import type { User } from '../users/entities/user.entity';
 
@@ -57,6 +58,7 @@ export class MediaController {
     private readonly subtitleSync: SubtitleSyncService,
     private readonly ffprobe: FfprobeService,
     private readonly eventsService: EventsService,
+    private readonly subtitleScheduler: SubtitleSchedulerService,
     private readonly libraries: LibrariesService,
   ) {}
 
@@ -594,6 +596,17 @@ export class MediaController {
         episode,
       },
     );
+  }
+
+  @Post(':id/subtitles/search-missing')
+  @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
+  async searchMissingSubtitles(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+    @Body() body: { mediaFileId: number },
+  ) {
+    await this.assertMediaAccessible(id, user);
+    return this.subtitleScheduler.searchMissingForMedia(id, body.mediaFileId);
   }
 
   @Post(':id/subtitles/download')
