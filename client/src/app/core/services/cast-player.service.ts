@@ -5,7 +5,7 @@ import { CastSettingsService } from './cast-settings.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { AppSettingsService } from './app-settings.service';
-import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
+import { buildSubtitleTracks } from '../utils/subtitle-tracks';
 import { AuthService } from './auth.service';
 import { DeviceProfile } from './browser-device-profile.service';
 import { ServerConfigService } from './server-config.service';
@@ -714,31 +714,26 @@ export class CastPlayerService {
       opts.mediaFileId, audioStreams, opts.mediaId,
     );
 
-    // Build subtitle list from the parallel fetch
+    // Build subtitle list from the parallel fetch (shared with the player).
     await this.appSettings.ensureLoaded();
-    const hideBurnIn = this.appSettings.hideBurnInSubtitles();
-    const subtitleInfos: SubtitleInfo[] = [];
-    for (const sub of subsResult) {
-      if (sub.mediaFileId !== opts.mediaFileId) continue;
-      const isBitmap = isImageBasedSubtitleCodec(sub.codec);
-      if (hideBurnIn && isBitmap) continue;
-      if (sub.relativePath) {
-        subtitleInfos.push({
-          id: `ext-${sub.id}`, label: formatSubtitleLabel(sub, this.translate),
-          language: sub.language, burnIn: false, subtitleDbId: sub.id,
-          url: this.streamingApi.getSubtitleUrl(opts.mediaFileId, sub.id),
-          forced: sub.forced ?? false,
-        });
-      } else if (sub.streamIndex != null) {
-        subtitleInfos.push({
-          id: `emb-${sub.streamIndex}`,
-          label: formatSubtitleLabel(sub, this.translate),
-          language: sub.language, burnIn: isBitmap, subtitleDbId: sub.id,
-          url: isBitmap ? '' : this.streamingApi.getEmbeddedSubtitleUrl(opts.mediaFileId, sub.streamIndex!),
-          forced: sub.forced ?? false,
-        });
-      }
-    }
+    const subtitleInfos: SubtitleInfo[] = buildSubtitleTracks(
+      subsResult,
+      opts.mediaFileId,
+      { hideBurnIn: this.appSettings.hideBurnInSubtitles() },
+    ).map((t) => ({
+      id: t.key,
+      label: formatSubtitleLabel(t, this.translate),
+      language: t.language,
+      burnIn: t.kind === 'embedded' && t.isImage,
+      subtitleDbId: t.subtitleId,
+      url:
+        t.kind === 'external'
+          ? this.streamingApi.getSubtitleUrl(opts.mediaFileId, t.subtitleId)
+          : t.isImage
+            ? ''
+            : this.streamingApi.getEmbeddedSubtitleUrl(opts.mediaFileId, t.streamIndex!),
+      forced: t.forced,
+    }));
 
     const audioTracks = buildCastAudioOptions(streamInfo?.audio, this.translate);
 

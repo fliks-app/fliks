@@ -6,6 +6,7 @@ import { StreamingApiService } from './api/streaming-api.service';
 import { AppSettingsService } from './app-settings.service';
 import { formatSubtitleLabel } from '../utils/player.utils';
 import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
+import { buildSubtitleTracks } from '../utils/subtitle-tracks';
 import type { PlaybackEngine, AudioTrack } from './playback-engine/playback-engine';
 
 export interface SubtitleOption {
@@ -140,43 +141,23 @@ export class TrackManagerService {
     try {
       await this.appSettings.ensureLoaded();
       const hideBurnIn = this.appSettings.hideBurnInSubtitles();
-      const options: SubtitleOption[] = [];
       const subs = await this.subtitlesApi.getForMedia(mediaId);
-      const seen = new Set<string>();
-
-      for (const sub of subs) {
-        if (sub.mediaFileId !== mediaFileId) continue;
-        const isBitmap = isImageBasedSubtitleCodec(sub.codec);
-        if (hideBurnIn && isBitmap) continue;
-
-        if (sub.relativePath) {
-          const key = `ext-${sub.id}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          options.push({
-            id: `ext-${sub.id}`,
-            label: formatSubtitleLabel(sub, this.translate),
-            url: streamingApi.getSubtitleUrl(mediaFileId, sub.id),
-            language: sub.language,
-            burnIn: false,
-            subtitleDbId: sub.id,
-            forced: sub.forced ?? false,
-          });
-        } else if (sub.streamIndex != null) {
-          const key = `emb-${sub.streamIndex}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          options.push({
-            id: key,
-            label: formatSubtitleLabel(sub, this.translate),
-            url: isBitmap ? '' : streamingApi.getEmbeddedSubtitleUrl(mediaFileId, sub.streamIndex!),
-            language: sub.language,
-            burnIn: isBitmap,
-            subtitleDbId: sub.id,
-            forced: sub.forced ?? false,
-          });
-        }
-      }
+      const tracks = buildSubtitleTracks(subs, mediaFileId, { hideBurnIn });
+      const options: SubtitleOption[] = tracks.map((t) => ({
+        id: t.key,
+        label: formatSubtitleLabel(t, this.translate),
+        url:
+          t.kind === 'external'
+            ? streamingApi.getSubtitleUrl(mediaFileId, t.subtitleId)
+            : t.isImage
+              ? ''
+              : streamingApi.getEmbeddedSubtitleUrl(mediaFileId, t.streamIndex!),
+        language: t.language,
+        burnIn: t.kind === 'embedded' && t.isImage,
+        subtitleDbId: t.subtitleId,
+        forced: t.forced,
+      }));
+      const seen = new Set(tracks.map((t) => t.key));
 
       // Also check streamInfo for embedded subs not yet in DB
       const file = media?.files?.find((f) => f.id === mediaFileId);
