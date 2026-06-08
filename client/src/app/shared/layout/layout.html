@@ -48,11 +48,10 @@
             [alt]="navbar.heroTitle()"
             (error)="onHeroLogoError()"
             class="h-7 w-auto max-w-[50vw] object-contain object-left pl-1 [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.45))]" />
-        } @else if (navbarTransparent() && navbar.heroTitle()) {
-          <span
-            class="block min-w-0 pl-2 text-lg font-semibold truncate [text-shadow:0_1px_2px_rgb(0_0_0/0.45)]"
-            [attr.title]="navbar.heroTitle()"
-            >{{ navbar.heroTitle() }}</span>
+        } @else if (navbar.isHeroPage()) {
+          <!-- Hero page without a clearlogo: render nothing. The empty branch
+               keeps it from falling through to the mobile-title / app-name
+               fallbacks below — no title in the clearlogo slot. -->
         } @else if (isNative && isHomeRoute() && navbar.mobileNavTitle()) {
           <span class="flex items-center gap-2 pl-2 text-lg font-bold min-w-0">
             <img src="fliks-mark.png" alt="" class="h-7 w-7 shrink-0" />

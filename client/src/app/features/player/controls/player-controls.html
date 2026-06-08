@@ -19,11 +19,11 @@
       <!-- lucide:chevron-left -->
       <svg lucideChevronLeft [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
     </button>
+    <!-- Clearlogo only — no title fallback. When the media has no logo (or its
+         image 404s) the slot stays empty rather than reverting to title text. -->
     @if (showLogo()) {
       <img [src]="logoUrl()! | resolveUrl:'medium'" [alt]="mediaTitle()" (error)="onLogoError()"
            class="h-7 w-auto max-w-[50vw] object-contain object-left [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.45))]" />
-    } @else {
-      <span class="text-white font-semibold truncate" [class]="isMobileTouch() ? 'text-lg' : 'text-xl'">{{ mediaTitle() }}</span>
     }
   </div>
 
