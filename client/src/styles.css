@@ -188,7 +188,7 @@ body.native.hero-page {
 }
 
 .animate-slide-up {
-  animation: slide-up 0.25s ease-out;
+  animation: slide-up 0.18s ease-out;
 }
 
 /* Indeterminate seekbar loading sweep: a full-width gradient strip whose

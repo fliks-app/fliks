@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
   effect,
   ElementRef,
@@ -63,8 +64,13 @@ import { DismissableStackService } from '../../core/services/dismissable-stack.s
       >
         <ng-container *ngTemplateOutlet="content"></ng-container>
       </div>
-    } @else if (open() && !useDropdown()) {
-      <app-bottom-sheet [open]="true" (closed)="close()">
+    }
+    @if (!useDropdown()) {
+      <!-- Kept mounted so [open]->false plays the sheet's slide-down exit.
+           The sheet gates <ng-content> behind its own @if(visible()), so the
+           projected content (and its bindings) is only instantiated while the
+           sheet is on screen — safe to leave the outlet unguarded here. -->
+      <app-bottom-sheet [open]="open()" (closed)="close()">
         <div data-tv-modal class="px-2 pb-2">
           <ng-container *ngTemplateOutlet="content"></ng-container>
         </div>
@@ -90,8 +96,20 @@ export class PopoverMenuComponent {
    *  `position()` computed re-reads the anchor's `getBoundingClientRect`
    *  and the `position: fixed` box stays glued to the trigger. */
   private readonly viewportTick = signal(0);
+  /** True once the host has been moved out of its Angular-owned position. */
+  private reparented = false;
 
   constructor() {
+    // The host is moved under <html>/the open dialog's top-layer on open (see
+    // the open effect below), so Angular no longer owns its DOM position and
+    // won't remove the relocated node on destroy. Detach it ourselves —
+    // otherwise a popover torn down mid-close (its sheet's slide-down exit
+    // still running) orphans the sheet's full-screen backdrop, which keeps
+    // blocking clicks across the app.
+    inject(DestroyRef).onDestroy(() => {
+      if (this.reparented) this.host.nativeElement.remove();
+    });
+
     // Focus the first focusable inside the menu on every open. autofocus
     // is unreliable on Capacitor's Android WebView for dynamically added
     // content, so we do it programmatically.
@@ -119,6 +137,7 @@ export class PopoverMenuComponent {
         const target = openDialog ?? document.documentElement;
         if (this.host.nativeElement.parentElement !== target) {
           target.appendChild(this.host.nativeElement);
+          this.reparented = true;
         }
       }
       queueMicrotask(() => {
