@@ -73,16 +73,11 @@
   </div>
 
   @if (subHistoryTotalPages > 1) {
-    <div class="flex justify-center mt-4">
-      <div class="join">
-        @for (p of [].constructor(subHistoryTotalPages); track $index) {
-          <button
-            class="join-item btn btn-sm"
-            [class.btn-active]="subHistoryPage() === $index + 1"
-            (click)="loadSubHistory($index + 1)"
-          >{{ $index + 1 }}</button>
-        }
-      </div>
-    </div>
+    <app-pagination
+      class="pt-1"
+      [current]="subHistoryPage()"
+      [total]="subHistoryTotalPages"
+      (pageChange)="loadSubHistory($event)"
+    />
   }
 }
