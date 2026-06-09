@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.10.1](https://github.com/fliks-app/fliks/compare/v1.10.0...v1.10.1) (2026-06-09)
+
+
+### Bug Fixes
+
+* **activity:** use shared pagination in the subtitles tab ([#440](https://github.com/fliks-app/fliks/issues/440)) ([fd9da33](https://github.com/fliks-app/fliks/commit/fd9da33cce31e5e95e80ab1b6bcb48db2bf215d1))
+* **bottom-sheet:** animate slide-down close for every dismiss path ([#439](https://github.com/fliks-app/fliks/issues/439)) ([eb36b42](https://github.com/fliks-app/fliks/commit/eb36b42b8c22d4c665327c4e57d32fb7a816eb20))
+* **subtitles:** canonical language codes and atomic upgrade replace ([#438](https://github.com/fliks-app/fliks/issues/438)) ([171f77a](https://github.com/fliks-app/fliks/commit/171f77a107bcae35ddad43fa1f95a4775acc3ecb))
+* **webos:** use a solid-background store icon and add a splash ([#436](https://github.com/fliks-app/fliks/issues/436)) ([8bcfa4f](https://github.com/fliks-app/fliks/commit/8bcfa4ff15dd366edafe005d25ebfe3f6260268c))
+
 ## [1.10.0](https://github.com/fliks-app/fliks/compare/v1.9.0...v1.10.0) (2026-06-08)
 
 
