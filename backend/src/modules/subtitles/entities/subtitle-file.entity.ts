@@ -4,6 +4,7 @@ import { SubtitleProviderType, SubtitleStatus } from '../../../common/enums';
 import { Media } from '../../media/entities/media.entity';
 import { MediaFile } from '../../media/entities/media-file.entity';
 import { Episode } from '../../media/entities/episode.entity';
+import { normalizeLanguageCode } from '../../../common/constants/app-languages';
 
 @Entity('subtitle_files')
 export class SubtitleFile extends BaseEntity {
@@ -28,7 +29,19 @@ export class SubtitleFile extends BaseEntity {
   @RelationId((sf: SubtitleFile) => sf.mediaFile)
   mediaFileId: number;
 
-  @Column()
+  /**
+   * Stored canonical: the transformer folds every write to an ISO 639-1 code
+   * (regional/script forms like `pt-BR`→`pt`, ISO 639-2 like `fre`→`fr`) so
+   * language matching against a profile isoCode never misses on a variant.
+   * NB: raw QueryBuilder writes bypass transformers — always persist via the
+   * repository so this invariant holds.
+   */
+  @Column({
+    transformer: {
+      to: (value: string | null | undefined) => normalizeLanguageCode(value),
+      from: (value: string) => value,
+    },
+  })
   language: string;
 
   @Column({ default: false })
