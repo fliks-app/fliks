@@ -41,6 +41,11 @@ const iconSrc = resolve(here, 'icon.png');
 const iconFallback = resolve(clientRoot, 'public/fliks-mark.png');
 copyFileSync(existsSync(iconSrc) ? iconSrc : iconFallback, resolve(stage, 'icon.png'));
 
+// Optional 1920x1080 loading splash (appinfo `splashBackground`). Only staged
+// when present so the IPK stays valid even if the asset hasn't been generated.
+const splashSrc = resolve(here, 'splash.png');
+if (existsSync(splashSrc)) copyFileSync(splashSrc, resolve(stage, 'splash.png'));
+
 const distDir = resolve(clientRoot, 'dist');
 mkdirSync(distDir, { recursive: true });
 // `ares-package` is the per-binary entry of `@webosose/ares-cli`
